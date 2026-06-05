@@ -1,0 +1,71 @@
+<section class="admin-page">
+  <h1>Branches</h1>
+
+  <form class="create-form" (ngSubmit)="create()" aria-label="Create branch">
+    <div class="field">
+      <label for="branchCode">Code</label>
+      <input id="branchCode" name="branchCode" type="text" [(ngModel)]="code" required />
+    </div>
+    <div class="field">
+      <label for="branchName">Name</label>
+      <input id="branchName" name="branchName" type="text" [(ngModel)]="name" required />
+    </div>
+    <div class="field check">
+      <label for="makeDefault">
+        <input id="makeDefault" name="makeDefault" type="checkbox" [(ngModel)]="makeDefault" />
+        Set as default
+      </label>
+    </div>
+    <button type="submit" [disabled]="saving()">{{ saving() ? 'Saving…' : 'Add branch' }}</button>
+  </form>
+  @if (formError(); as msg) {
+    <p class="form-error" role="alert">{{ msg }}</p>
+  }
+
+  @switch (state()) {
+    @case ('loading') {
+      <p class="state" aria-live="polite">Loading branches…</p>
+    }
+    @case ('error') {
+      <p class="state error" role="alert">Could not load branches. Please try again.</p>
+    }
+    @default {
+      @if (branches().length === 0) {
+        <p class="state empty">No branches yet. Add one above.</p>
+      } @else {
+        <table class="grid">
+          <caption class="visually-hidden">Branches in this company</caption>
+          <thead>
+            <tr>
+              <th scope="col">Code</th><th scope="col">Name</th><th scope="col">Default</th>
+              <th scope="col">Status</th><th scope="col">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (b of branches(); track b.uid) {
+              <tr>
+                <td>{{ b.code }}</td>
+                <td>{{ b.name }}</td>
+                <td>
+                  @if (b.isDefault) {
+                    <span class="badge-default">Default</span>
+                  } @else {
+                    <button type="button" class="link" (click)="setDefault(b)">
+                      Make default
+                    </button>
+                  }
+                </td>
+                <td>{{ b.status }}</td>
+                <td>
+                  @if (!b.isDefault) {
+                    <button type="button" class="link danger" (click)="archive(b)">Archive</button>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+    }
+  }
+</section>

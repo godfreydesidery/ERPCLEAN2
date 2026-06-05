@@ -1,0 +1,33 @@
+# Secrets — never commit (PROJECT-CONVENTIONS §3.7 / security policy)
+.env
+*.key
+*.pem
+*.pfx
+*.p12
+**/orbix.env
+**/*.local.md
+
+# Backend (Maven / Java)
+backend/target/
+*.class
+hs_err_pid*.log
+
+# Web (Angular / Node)
+web/node_modules/
+web/dist/
+web/.angular/
+npm-debug.log*
+
+# Local infra data
+infra/local-data/
+
+# IDE / OS
+.idea/
+*.iml
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

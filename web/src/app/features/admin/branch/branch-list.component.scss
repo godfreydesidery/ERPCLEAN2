@@ -1,0 +1,20 @@
+@use '../admin.styles';
+
+.admin-page {
+  .check label {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  button.link {
+    background: none;
+    color: #2563eb;
+    padding: 0;
+    text-decoration: underline;
+  }
+
+  button.link.danger {
+    color: #b91c1c;
+  }
+}

@@ -1,0 +1,64 @@
+spring:
+  application:
+    name: erp-api
+  datasource:
+    url: ${ERP_DB_URL:jdbc:postgresql://localhost:5434/erp}
+    username: ${ERP_DB_USER:erp}
+    password: ${ERP_DB_PASSWORD:erp}
+  jpa:
+    hibernate:
+      # PROJECT-CONVENTIONS §3.6: schema owned by Flyway, never auto-managed.
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+server:
+  # 8081 by default (8080 is often taken by another local app); override with ERP_API_PORT.
+  port: ${ERP_API_PORT:8081}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized
+
+erp:
+  jwt:
+    # dev-in-memory: an ephemeral RSA key is generated at startup (rotates each restart → all
+    # tokens invalidated). Fine for dev. PRODUCTION must load a stable RS256 key from a secret
+    # store (signing-mode=file with the key paths) — gating item for security + devops before deploy.
+    signing-mode: ${ERP_JWT_SIGNING_MODE:dev-in-memory}
+    private-key-location: ${ERP_JWT_PRIVATE_KEY:}
+    public-key-location: ${ERP_JWT_PUBLIC_KEY:}
+    access-token-ttl-minutes: 15
+    refresh-token-ttl-days: 7
+    issuer: erp-api
+  security:
+    lockout:
+      max-failed-attempts: 5
+      lock-minutes: 15
+    password:
+      min-length: 8
+  bootstrap:
+    # On a fresh DB (no organisation), create org + company + default branch + root admin from env.
+    enabled: ${ERP_BOOTSTRAP_ENABLED:false}
+    organisation-name: ${ERP_BOOTSTRAP_ORG_NAME:Default Organisation}
+    company-code: ${ERP_BOOTSTRAP_COMPANY_CODE:C1}
+    company-name: ${ERP_BOOTSTRAP_COMPANY_NAME:Default Company}
+    branch-code: ${ERP_BOOTSTRAP_BRANCH_CODE:BR-01}
+    branch-name: ${ERP_BOOTSTRAP_BRANCH_NAME:Head Office}
+    admin-username: ${ERP_BOOTSTRAP_ADMIN_USERNAME:rootadmin}
+    admin-display-name: ${ERP_BOOTSTRAP_ADMIN_DISPLAY_NAME:Root Administrator}
+    # Password MUST be provided (>= 12 chars, not a placeholder) when bootstrap is enabled, or the
+    # app refuses to start. Never defaulted.
+    admin-password: ${ERP_BOOTSTRAP_ADMIN_PASSWORD:}
+    time-zone: ${ERP_BOOTSTRAP_TIME_ZONE:Africa/Dar_es_Salaam}

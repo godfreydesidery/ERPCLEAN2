@@ -1,0 +1,64 @@
+<section class="admin-page">
+  <h1>Companies</h1>
+
+  <!-- Slice 1: enter the organisation uid to scope the list (replaced by user context later). -->
+  <form class="org-bar" (ngSubmit)="load(orgUidInput.value)">
+    <label for="orgUid">Organisation UID</label>
+    <input id="orgUid" #orgUidInput name="orgUid" type="text" [value]="organisationUid()" />
+    <button type="submit">Load</button>
+  </form>
+
+  <!-- Create form -->
+  <form class="create-form" (ngSubmit)="create()" aria-label="Create company">
+    <div class="field">
+      <label for="companyCode">Code</label>
+      <input id="companyCode" name="companyCode" type="text" [(ngModel)]="code" required
+             [disabled]="!organisationUid()" />
+    </div>
+    <div class="field">
+      <label for="companyName">Name</label>
+      <input id="companyName" name="companyName" type="text" [(ngModel)]="name" required
+             [disabled]="!organisationUid()" />
+    </div>
+    <button type="submit" [disabled]="saving() || !organisationUid()">
+      {{ saving() ? 'Saving…' : 'Add company' }}
+    </button>
+  </form>
+  @if (formError(); as msg) {
+    <p class="form-error" role="alert">{{ msg }}</p>
+  }
+
+  <!-- List states: loading / error / empty / populated -->
+  @switch (state()) {
+    @case ('loading') {
+      <p class="state" aria-live="polite">Loading companies…</p>
+    }
+    @case ('error') {
+      <p class="state error" role="alert">Could not load companies. Check the organisation UID and try again.</p>
+    }
+    @default {
+      @if (companies().length === 0) {
+        <p class="state empty">
+          {{ organisationUid() ? 'No companies yet. Add one above.' : 'Enter an organisation UID to begin.' }}
+        </p>
+      } @else {
+        <table class="grid">
+          <caption class="visually-hidden">Companies in this organisation</caption>
+          <thead>
+            <tr><th scope="col">Code</th><th scope="col">Name</th><th scope="col">Status</th><th scope="col">Branches</th></tr>
+          </thead>
+          <tbody>
+            @for (c of companies(); track c.uid) {
+              <tr>
+                <td>{{ c.code }}</td>
+                <td>{{ c.name }}</td>
+                <td>{{ c.status }}</td>
+                <td><a [routerLink]="['/admin/companies', c.uid, 'branches']">Manage branches</a></td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+    }
+  }
+</section>

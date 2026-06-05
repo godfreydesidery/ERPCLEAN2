@@ -1,0 +1,47 @@
+# Local dev stack (Slice 0). Postgres + the API.
+#
+# Two ways to run (see README "Running"):
+#   1. Hot-reload dev: `docker compose up -d db`, then `mvn spring-boot:run` + `ng serve` on the host.
+#   2. Containerised API: `docker compose --profile api up --build` to run the built API in a container.
+#
+# Dev defaults only — NOT production secrets. Production uses a secret store + a stable RS256 key.
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: erp-db
+    environment:
+      POSTGRES_DB: erp
+      POSTGRES_USER: erp
+      POSTGRES_PASSWORD: erp
+    ports:
+      # Host 5434 (5432/5433 are taken by other local projects); container stays 5432.
+      - "5434:5432"
+    volumes:
+      - erp-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U erp -d erp"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    # Opt-in: only starts with `--profile api`. Day-to-day dev runs the API on the host for hot reload.
+    profiles: ["api"]
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: erp-api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ERP_DB_URL: jdbc:postgresql://db:5432/erp
+      ERP_DB_USER: erp
+      ERP_DB_PASSWORD: erp
+      ERP_API_PORT: "8081"
+    ports:
+      - "8081:8081"
+
+volumes:
+  erp-db-data:

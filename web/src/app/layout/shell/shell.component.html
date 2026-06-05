@@ -1,0 +1,25 @@
+<header class="topbar">
+  <span class="brand">ERP</span>
+  <nav class="nav" aria-label="Main">
+    <a routerLink="/admin/companies">Companies</a>
+  </nav>
+  <div class="account">
+    @if (session.user(); as user) {
+      <span class="user" title="{{ user.username }}">
+        {{ user.displayName }}
+        @if (user.activeBranchUid) {
+          <span class="branch">· branch set</span>
+        } @else {
+          <span class="branch no-branch">· no branch</span>
+        }
+      </span>
+      <button type="button" class="logout" (click)="logout()">Sign out</button>
+    }
+    <span class="api-status" [attr.data-state]="state()">
+      API: {{ state() === 'ok' ? health()?.status : state() }}
+    </span>
+  </div>
+</header>
+<main class="content">
+  <router-outlet />
+</main>

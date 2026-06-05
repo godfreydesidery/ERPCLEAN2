@@ -1,0 +1,120 @@
+package com.erp.platform.bootstrap;
+
+import com.erp.modules.iam.domain.entity.AppUser;
+import com.erp.modules.iam.domain.entity.Branch;
+import com.erp.modules.iam.domain.entity.Company;
+import com.erp.modules.iam.domain.entity.Organisation;
+import com.erp.modules.iam.repository.AppUserRepository;
+import com.erp.modules.iam.repository.BranchRepository;
+import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.modules.iam.repository.OrganisationRepository;
+import com.erp.platform.security.password.PasswordPolicy;
+import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.ApplicationRunner;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * On startup, if bootstrap is enabled and the DB has no organisation, creates the initial
+ * organisation + company + default branch + root admin from {@link BootstrapProperties}
+ * (FR-IAM-22). Idempotent: skips if any organisation already exists.
+ *
+ * <p>Fail-closed on a weak/missing admin password: a bootstrap-enabled app with an invalid password
+ * refuses to start, so we never create a root admin with a guessable password.
+ */
+@Component
+@EnableConfigurationProperties(BootstrapProperties.class)
+public class BootstrapRunner implements ApplicationRunner {
+
+    private static final Logger log = LoggerFactory.getLogger(BootstrapRunner.class);
+
+    /** Minimum strength for the root admin specifically (stricter than the general user policy). */
+    private static final int ROOT_MIN_LENGTH = 12;
+    private static final Set<String> PLACEHOLDERS =
+            Set.of("changeme", "password", "admin", "rootadmin", "secret", "changeme123");
+
+    private final BootstrapProperties props;
+    private final OrganisationRepository organisations;
+    private final CompanyRepository companies;
+    private final BranchRepository branches;
+    private final AppUserRepository users;
+    private final PasswordEncoder passwordEncoder;
+    private final PasswordPolicy passwordPolicy;
+
+    public BootstrapRunner(BootstrapProperties props,
+                           OrganisationRepository organisations,
+                           CompanyRepository companies,
+                           BranchRepository branches,
+                           AppUserRepository users,
+                           PasswordEncoder passwordEncoder,
+                           PasswordPolicy passwordPolicy) {
+        this.props = props;
+        this.organisations = organisations;
+        this.companies = companies;
+        this.branches = branches;
+        this.users = users;
+        this.passwordEncoder = passwordEncoder;
+        this.passwordPolicy = passwordPolicy;
+    }
+
+    @Override
+    @Transactional
+    public void run(ApplicationArguments args) {
+        if (!props.enabled()) {
+            return;
+        }
+        if (organisations.count() > 0) {
+            log.info("Bootstrap skipped: organisation already exists.");
+            return;
+        }
+
+        validateAdminPassword(props.adminPassword());
+
+        Organisation org = new Organisation(props.organisationName());
+        org.setDefaultTimeZone(props.timeZone());
+        organisations.save(org);
+
+        Company company = new Company(org, props.companyCode(), props.companyName());
+        company.setTimeZone(props.timeZone());
+        companies.save(company);
+
+        Branch branch = new Branch(company, props.branchCode(), props.branchName());
+        branch.setTimeZone(props.timeZone());
+        branch.setDefault(true);
+        branches.save(branch);
+
+        AppUser root = new AppUser(
+                props.adminUsername().toLowerCase(),
+                passwordEncoder.encode(props.adminPassword()),
+                props.adminDisplayName());
+        root.setRoot(true);
+        root.setDefaultBranchId(branch.getId());
+        users.save(root);
+
+        log.info("Bootstrap complete: organisation '{}', company '{}', branch '{}', root admin '{}'.",
+                org.getName(), company.getCode(), branch.getCode(), root.getUsername());
+    }
+
+    /** Fail-closed: refuse to start with a missing, too-short, or placeholder root password. */
+    private void validateAdminPassword(String password) {
+        if (password == null || password.isBlank()) {
+            throw new IllegalStateException(
+                    "ERP_BOOTSTRAP_ADMIN_PASSWORD must be set when bootstrap is enabled.");
+        }
+        if (password.length() < ROOT_MIN_LENGTH) {
+            throw new IllegalStateException(
+                    "Bootstrap admin password must be at least " + ROOT_MIN_LENGTH + " characters.");
+        }
+        if (PLACEHOLDERS.contains(password.toLowerCase())) {
+            throw new IllegalStateException(
+                    "Bootstrap admin password is a known placeholder; choose a real password.");
+        }
+        // Also apply the general policy (letters + digit).
+        passwordPolicy.validate(password);
+    }
+}
