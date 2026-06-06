@@ -3,6 +3,7 @@ package com.erp.api;
 import com.erp.modules.iam.domain.dto.OrganisationDto;
 import com.erp.modules.iam.service.OrganisationService;
 import java.util.List;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -24,11 +25,15 @@ public class OrganisationController {
     }
 
     @GetMapping
+    @PreAuthorize("hasPermission('COMPANY.VIEW')")
     public List<OrganisationDto> list() {
         return organisations.list();
     }
 
+    // /current is the web shell's bootstrap call (which org am I in?) — any authenticated user may
+    // read it; it carries no sensitive data and is needed before any permission-scoped screen loads.
     @GetMapping("/current")
+    @PreAuthorize("isAuthenticated()")
     public OrganisationDto current() {
         return organisations.current();
     }

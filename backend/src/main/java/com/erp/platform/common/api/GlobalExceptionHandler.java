@@ -36,6 +36,12 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error(ex.getMessage()));
     }
 
+    /** Lacks permission, or acting outside the active scope (service-layer ScopeGuard) → 403. */
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<ApiResponse<Void>> handleForbidden(ForbiddenException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.error(ex.getMessage()));
+    }
+
     /** Password fails policy → 400 with the actionable rule. */
     @ExceptionHandler(com.erp.platform.security.password.WeakPasswordException.class)
     public ResponseEntity<ApiResponse<Void>> handleWeakPassword(

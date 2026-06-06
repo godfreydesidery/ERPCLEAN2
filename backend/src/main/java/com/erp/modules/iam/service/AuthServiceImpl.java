@@ -1,18 +1,23 @@
 package com.erp.modules.iam.service;
 
+import com.erp.modules.iam.domain.dto.MeResponse;
 import com.erp.modules.iam.domain.dto.TokenResponse;
 import com.erp.modules.iam.domain.entity.AppUser;
 import com.erp.modules.iam.domain.entity.Branch;
 import com.erp.modules.iam.domain.entity.RefreshToken;
 import com.erp.modules.iam.repository.AppUserRepository;
 import com.erp.modules.iam.repository.BranchRepository;
+import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.repository.RefreshTokenRepository;
+import com.erp.platform.security.PermissionResolver;
+import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.auth.AuthenticationException;
 import com.erp.platform.security.auth.Tokens;
 import com.erp.platform.security.config.JwtProperties;
 import com.erp.platform.security.jwt.JwtService;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -31,10 +36,12 @@ public class AuthServiceImpl implements AuthService {
     private final AppUserRepository users;
     private final RefreshTokenRepository refreshTokens;
     private final BranchRepository branches;
+    private final CompanyRepository companies;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final JwtProperties jwtProps;
     private final LoginAttemptService loginAttempts;
+    private final PermissionResolver permissionResolver;
 
     /** A bcrypt hash of a random value, computed once, for the constant-time unknown-user path (G3). */
     private final String dummyHash;
@@ -42,17 +49,21 @@ public class AuthServiceImpl implements AuthService {
     public AuthServiceImpl(AppUserRepository users,
                            RefreshTokenRepository refreshTokens,
                            BranchRepository branches,
+                           CompanyRepository companies,
                            PasswordEncoder passwordEncoder,
                            JwtService jwtService,
                            JwtProperties jwtProps,
-                           LoginAttemptService loginAttempts) {
+                           LoginAttemptService loginAttempts,
+                           PermissionResolver permissionResolver) {
         this.users = users;
         this.refreshTokens = refreshTokens;
         this.branches = branches;
+        this.companies = companies;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.jwtProps = jwtProps;
         this.loginAttempts = loginAttempts;
+        this.permissionResolver = permissionResolver;
         this.dummyHash = passwordEncoder.encode(Tokens.newRefreshToken());
     }
 
@@ -125,6 +136,39 @@ public class AuthServiceImpl implements AuthService {
     public void logout(String rawRefreshToken) {
         refreshTokens.findByTokenHash(Tokens.hash(rawRefreshToken))
                 .ifPresent(t -> t.revoke(Instant.now()));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public MeResponse me() {
+        RequestContext.Principal principal = RequestContext.get();
+        if (principal == null || principal.userId() == null) {
+            throw AuthenticationException.invalidCredentials();
+        }
+        AppUser user = users.findById(principal.userId())
+                .orElseThrow(AuthenticationException::invalidCredentials);
+
+        // Effective permission codes for the active scope. Root bypasses scoping, so it carries no
+        // enumerated set — the client keys off isRoot for "can do anything" (D-E).
+        List<String> permissions = user.isRoot()
+                ? List.of()
+                : List.copyOf(permissionResolver.resolve(
+                        principal.userId(), principal.companyId(), principal.branchId(),
+                        System.currentTimeMillis()));
+
+        String companyUid = Optional.ofNullable(principal.companyId())
+                .flatMap(companies::findById).map(c -> c.getUid()).orElse(null);
+        String branchUid = Optional.ofNullable(principal.branchId())
+                .flatMap(branches::findById).map(Branch::getUid).orElse(null);
+
+        return new MeResponse(
+                user.getUid(),
+                user.getUsername(),
+                user.getDisplayName(),
+                user.isRoot(),
+                companyUid,
+                branchUid,
+                permissions);
     }
 
     /** Resolve active scope, issue the access JWT, persist a fresh refresh token, build the response. */

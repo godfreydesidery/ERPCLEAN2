@@ -1,0 +1,83 @@
+package com.erp.api;
+
+import com.erp.modules.iam.domain.dto.CreateRoleRequest;
+import com.erp.modules.iam.domain.dto.PermissionDto;
+import com.erp.modules.iam.domain.dto.RoleDto;
+import com.erp.modules.iam.domain.dto.SetRolePermissionsRequest;
+import com.erp.modules.iam.domain.dto.UpdateRoleRequest;
+import com.erp.modules.iam.service.RoleService;
+import jakarta.validation.Valid;
+import java.util.List;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * Role catalogue CRUD (DATA-MODEL §1.6, ADR-0002). Roles are org-wide; the 1-arg
+ * {@code hasPermission} form is used throughout (no company-scope check needed here).
+ * Returns raw DTOs — {@code ApiResponseAdvice} wraps them in the envelope.
+ */
+@RestController
+@RequestMapping("/api/v1/roles")
+public class RoleController {
+
+    private final RoleService roleService;
+
+    public RoleController(RoleService roleService) {
+        this.roleService = roleService;
+    }
+
+    @GetMapping
+    @PreAuthorize("hasPermission('ROLE.VIEW')")
+    public List<RoleDto> list() {
+        return roleService.list();
+    }
+
+    @GetMapping("/uid/{uid}")
+    @PreAuthorize("hasPermission('ROLE.VIEW')")
+    public RoleDto get(@PathVariable String uid) {
+        return roleService.getByUid(uid);
+    }
+
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasPermission('ROLE.MANAGE')")
+    public RoleDto create(@Valid @RequestBody CreateRoleRequest request) {
+        return roleService.create(request);
+    }
+
+    @PutMapping("/uid/{uid}")
+    @PreAuthorize("hasPermission('ROLE.MANAGE')")
+    public RoleDto update(@PathVariable String uid,
+                          @Valid @RequestBody UpdateRoleRequest request) {
+        return roleService.updateByUid(uid, request);
+    }
+
+    @PutMapping("/uid/{uid}/permissions")
+    @PreAuthorize("hasPermission('ROLE.MANAGE')")
+    public RoleDto setPermissions(@PathVariable String uid,
+                                  @Valid @RequestBody SetRolePermissionsRequest request) {
+        return roleService.setPermissions(uid, request);
+    }
+
+    @DeleteMapping("/uid/{uid}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasPermission('ROLE.MANAGE')")
+    public void archive(@PathVariable String uid) {
+        roleService.archiveByUid(uid);
+    }
+
+    @GetMapping("/permissions")
+    @PreAuthorize("hasPermission('PERMISSION.VIEW')")
+    public List<PermissionDto> listPermissions() {
+        return roleService.listPermissions();
+    }
+}
