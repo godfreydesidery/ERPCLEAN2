@@ -4,22 +4,31 @@ import {
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { Router } from '@angular/router';
+import { vi } from 'vitest';
 import { environment } from '../../../environments/environment';
 import { SessionStore } from '../auth/session.store';
-import { apiResponseInterceptor, authHeaderInterceptor } from './http.interceptors';
+import {
+  apiResponseInterceptor,
+  authErrorInterceptor,
+  authHeaderInterceptor,
+} from './http.interceptors';
 
 describe('http interceptors', () => {
   let http: HttpClient;
   let httpMock: HttpTestingController;
   let session: SessionStore;
+  const navigateByUrl = vi.fn();
 
   beforeEach(() => {
+    navigateByUrl.mockReset();
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(
-          withInterceptors([authHeaderInterceptor, apiResponseInterceptor]),
+          withInterceptors([authErrorInterceptor, authHeaderInterceptor, apiResponseInterceptor]),
         ),
         provideHttpClientTesting(),
+        { provide: Router, useValue: { navigateByUrl } },
       ],
     });
     http = TestBed.inject(HttpClient);
@@ -56,5 +65,45 @@ describe('http interceptors', () => {
     const req = httpMock.expectOne(`${environment.apiBaseUrl}/health`);
     expect(req.request.headers.has('Authorization')).toBe(false);
     req.flush({ data: {}, errors: [] });
+  });
+
+  it('does NOT attach a bearer token to login even when one is stored (stale-token poisoning fix)', () => {
+    session.setAccessToken('stale-token');
+    http.post(`${environment.apiBaseUrl}/auth/login`, { username: 'x', password: 'y' }).subscribe();
+
+    const req = httpMock.expectOne(`${environment.apiBaseUrl}/auth/login`);
+    expect(req.request.headers.has('Authorization')).toBe(false);
+    req.flush({ data: {}, errors: [] });
+  });
+
+  it('does NOT attach a bearer token to refresh even when one is stored', () => {
+    session.setAccessToken('stale-token');
+    http.post(`${environment.apiBaseUrl}/auth/refresh`, {}).subscribe();
+
+    const req = httpMock.expectOne(`${environment.apiBaseUrl}/auth/refresh`);
+    expect(req.request.headers.has('Authorization')).toBe(false);
+    req.flush({ data: {}, errors: [] });
+  });
+
+  it('on 401 from an authenticated call, clears the session and redirects to login', () => {
+    session.setAccessToken('expired-token');
+    http.get(`${environment.apiBaseUrl}/companies`).subscribe({ error: () => undefined });
+
+    const req = httpMock.expectOne(`${environment.apiBaseUrl}/companies`);
+    req.flush({ data: null, errors: ['Unauthorized'] }, { status: 401, statusText: 'Unauthorized' });
+
+    expect(session.isAuthenticated()).toBe(false);
+    expect(navigateByUrl).toHaveBeenCalledWith('/login');
+  });
+
+  it('does NOT redirect on a 401 from the login endpoint (bad credentials is the caller\'s concern)', () => {
+    http.post(`${environment.apiBaseUrl}/auth/login`, { username: 'x', password: 'bad' }).subscribe({
+      error: () => undefined,
+    });
+
+    const req = httpMock.expectOne(`${environment.apiBaseUrl}/auth/login`);
+    req.flush({ data: null, errors: ['Invalid username or password.'] }, { status: 401, statusText: 'Unauthorized' });
+
+    expect(navigateByUrl).not.toHaveBeenCalled();
   });
 });

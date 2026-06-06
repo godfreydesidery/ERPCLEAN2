@@ -5,6 +5,7 @@ import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { routes } from './app.routes';
 import {
   apiResponseInterceptor,
+  authErrorInterceptor,
   authHeaderInterceptor,
 } from './core/api/http.interceptors';
 
@@ -12,9 +13,10 @@ export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideRouter(routes, withComponentInputBinding()),
-    // Order: attach auth/branch headers on the way out, unwrap the envelope on the way back.
+    // Order (outer → inner on the way out): catch 401s and bounce to login, attach auth/branch
+    // headers, then unwrap the envelope on the way back.
     provideHttpClient(
-      withInterceptors([authHeaderInterceptor, apiResponseInterceptor]),
+      withInterceptors([authErrorInterceptor, authHeaderInterceptor, apiResponseInterceptor]),
     ),
   ],
 };
