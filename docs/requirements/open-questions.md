@@ -19,3 +19,39 @@ Each entry: why it matters · who decides · does it block build.
 
 - **OQ-IAM-04** — Time zone of record: store IAM timestamps in UTC and display per branch/company
   tz? Assumed yes (NFR §7). *Decider:* architect. *Blocks build:* no.
+
+## Parties
+
+- **OQ-PARTY-01** — ✅ **RESOLVED (owner):** each party kind has its **own** numbering sequence per
+  company (e.g. customers `CUST-####`, suppliers `SUPP-####`, agents `AGENT-####`) — not a shared
+  sequence. Consistent with the separate-records model (Decision D1). Reflected in FR-PARTY-19 and
+  BR-PARTY-08.
+
+- **OQ-PARTY-02** — Is there a **credit-limit and/or credit-terms approval workflow** for credit/
+  account customers (e.g. a limit that requires manager approval, or terms like net-30)? Out of v1
+  party scope; belongs to Finance/Sales. *Decider:* owner. *Blocks build:* no for parties; yes for
+  credit sales later.
+
+- **OQ-PARTY-03** — Do sales agents have **commission tiers / rates** captured now, or is commission
+  setup deferred to the Sales module? Currently deferred (parties.md §10). Confirm whether even a
+  flat commission rate should live on the agent record in v1. *Decider:* owner. *Blocks build:* no.
+
+- **OQ-PARTY-04** — Should an **Other/Misc party be promotable** to a typed party later (e.g. convert
+  an Other into a Customer, preserving history), or is it always a separate record requiring re-keying
+  when its kind is known? Affects whether "Other" is a transient holding type or permanent.
+  *Decider:* owner. *Blocks build:* no (can ship as separate-record now, add promotion later).
+
+- **OQ-PARTY-05** — ✅ **RESOLVED (owner):** the registration number is **recommended, not
+  mandatory**, and the field is **generalised to a "business registration number"** — NOT
+  BRELA-specific. It captures whatever registrar applies (BRELA or other); the system does not
+  hard-code or require BRELA. Reflected in FR-PARTY-14 and BR-PARTY-04/05.
+
+- **OQ-PARTY-06** — Should the system support a single reusable **default walk-in / anonymous
+  customer** per branch (or per company) for fast counter sales, and if so where is it seeded?
+  Implied by the walk-in sub-kind but not specified. *Decider:* owner. *Blocks build:* no (Sales
+  detail), but informs the cash-sale flow.
+
+- **OQ-PARTY-07** — When a deferred party type (e.g. distributor, import agent) is later prioritised,
+  is it a **new typed party** or a **sub-kind** of an existing one (customer/supplier)? Captured now
+  so the decision is conscious later, not assumed. *Decider:* owner + architect at that round.
+  *Blocks build:* no (future scope).
