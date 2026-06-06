@@ -31,5 +31,15 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./user-role/grant-role.component').then((m) => m.GrantRoleComponent),
   },
+  {
+    path: 'users',
+    loadComponent: () =>
+      import('./user/user-list.component').then((m) => m.UserListComponent),
+  },
+  {
+    path: 'users/:uid',
+    loadComponent: () =>
+      import('./user/user-detail.component').then((m) => m.UserDetailComponent),
+  },
   { path: '', redirectTo: 'companies', pathMatch: 'full' },
 ];

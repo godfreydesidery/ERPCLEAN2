@@ -1,0 +1,32 @@
+/* User detail — Bootstrap-themed (Orbix). Mirrors role-edit layout conventions. */
+
+.admin-page {
+  max-width: 960px;
+}
+
+.page-head {
+  margin-bottom: 1rem;
+}
+
+.back-link {
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.grid {
+  th {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #6b7280;
+  }
+}
+
+.assign-form {
+  h3 {
+    color: #374151;
+  }
+}

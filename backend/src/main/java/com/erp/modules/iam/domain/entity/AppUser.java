@@ -45,10 +45,6 @@ public class AppUser extends UidEntity {
     @Setter
     private boolean root = false;
 
-    @Column(name = "default_branch_id")
-    @Setter
-    private Long defaultBranchId;
-
     @Column(name = "failed_login_count", nullable = false)
     private int failedLoginCount = 0;
 

@@ -15,7 +15,7 @@ import lombok.Getter;
  * optionally one branch ({@code branchId} NULL = all branches in the company, FR-IAM-13).
  * {@code revokedAt} NULL = active. The role is a {@link ManyToOne} (the resolver walks role →
  * permissions); user/company/branch/grantedBy are kept as ids — scoping references, not owned
- * aggregates (matches {@code AppUser.defaultBranchId}).
+ * aggregates (same convention as {@code UserBranch.userId}/{@code assignedBy}).
  *
  * <p>Lombok generates getters only (PROJECT-CONVENTIONS §3.7) — the scoping fields are immutable
  * after the grant; the only legal mutation is {@link #revoke}, kept explicit so revocation can't be

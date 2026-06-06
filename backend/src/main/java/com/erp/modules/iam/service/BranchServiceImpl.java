@@ -5,8 +5,10 @@ import com.erp.modules.iam.domain.dto.CreateBranchRequest;
 import com.erp.modules.iam.domain.dto.UpdateBranchRequest;
 import com.erp.modules.iam.domain.entity.Branch;
 import com.erp.modules.iam.domain.entity.Company;
+import com.erp.modules.iam.domain.entity.UserBranch;
 import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.modules.iam.repository.UserBranchRepository;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.repository.Lookups;
@@ -21,10 +23,13 @@ public class BranchServiceImpl implements BranchService {
 
     private final BranchRepository branches;
     private final CompanyRepository companies;
+    private final UserBranchRepository userBranches;
 
-    public BranchServiceImpl(BranchRepository branches, CompanyRepository companies) {
+    public BranchServiceImpl(BranchRepository branches, CompanyRepository companies,
+                             UserBranchRepository userBranches) {
         this.branches = branches;
         this.companies = companies;
+        this.userBranches = userBranches;
     }
 
     @Override
@@ -88,6 +93,17 @@ public class BranchServiceImpl implements BranchService {
                     "Cannot archive the default branch; set another branch as default first.");
         }
         branch.setStatus(MasterStatus.ARCHIVED);
+
+        // Any user whose DEFAULT is this branch must fall back, so a decommissioned branch can't
+        // scope a future login (security review, Slice 4). Clear the default and promote that user's
+        // earliest remaining assignment (D-D); if they have none, they're left with no active branch.
+        for (UserBranch dflt : userBranches.findByBranchIdAndIsDefaultTrue(branch.getId())) {
+            dflt.clearDefault();
+            userBranches.saveAndFlush(dflt);
+            userBranches
+                    .findFirstByUserIdAndIdNotOrderByAssignedAtAscIdAsc(dflt.getUserId(), dflt.getId())
+                    .ifPresent(UserBranch::markDefault);
+        }
     }
 
     /**

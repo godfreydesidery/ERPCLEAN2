@@ -5,10 +5,12 @@ import com.erp.modules.iam.domain.dto.TokenResponse;
 import com.erp.modules.iam.domain.entity.AppUser;
 import com.erp.modules.iam.domain.entity.Branch;
 import com.erp.modules.iam.domain.entity.RefreshToken;
+import com.erp.modules.iam.domain.entity.UserBranch;
 import com.erp.modules.iam.repository.AppUserRepository;
 import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.repository.RefreshTokenRepository;
+import com.erp.modules.iam.repository.UserBranchRepository;
 import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.auth.AuthenticationException;
@@ -37,6 +39,7 @@ public class AuthServiceImpl implements AuthService {
     private final RefreshTokenRepository refreshTokens;
     private final BranchRepository branches;
     private final CompanyRepository companies;
+    private final UserBranchRepository userBranches;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final JwtProperties jwtProps;
@@ -50,6 +53,7 @@ public class AuthServiceImpl implements AuthService {
                            RefreshTokenRepository refreshTokens,
                            BranchRepository branches,
                            CompanyRepository companies,
+                           UserBranchRepository userBranches,
                            PasswordEncoder passwordEncoder,
                            JwtService jwtService,
                            JwtProperties jwtProps,
@@ -59,6 +63,7 @@ public class AuthServiceImpl implements AuthService {
         this.refreshTokens = refreshTokens;
         this.branches = branches;
         this.companies = companies;
+        this.userBranches = userBranches;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.jwtProps = jwtProps;
@@ -173,8 +178,12 @@ public class AuthServiceImpl implements AuthService {
 
     /** Resolve active scope, issue the access JWT, persist a fresh refresh token, build the response. */
     private TokenResponse issueSession(AppUser user) {
-        Optional<Branch> activeBranch = Optional.ofNullable(user.getDefaultBranchId())
-                .flatMap(branches::findById);
+        // The default branch scopes the session. Skip a non-ACTIVE (archived) branch — a
+        // decommissioned branch must not scope a login (security review, Slice 4). Such a user lands
+        // with no active branch (read-only) until an admin assigns a live default.
+        Optional<Branch> activeBranch = userBranches.findByUserIdAndIsDefaultTrue(user.getId())
+                .map(UserBranch::getBranch)
+                .filter(b -> b.getStatus() == com.erp.platform.common.domain.MasterStatus.ACTIVE);
         Long companyId = activeBranch.map(b -> b.getCompany().getId()).orElse(null);
         Long branchId = activeBranch.map(Branch::getId).orElse(null);
 

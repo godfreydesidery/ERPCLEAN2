@@ -1,0 +1,27 @@
+/* User list — Bootstrap-themed (Orbix). Mirrors the role-list layout conventions. */
+
+.admin-page {
+  max-width: 1100px;
+}
+
+.page-head {
+  margin-bottom: 1rem;
+}
+
+.state {
+  padding: 1rem 0;
+}
+
+.grid {
+  th {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #6b7280;
+  }
+}
+
+.pwd-inline {
+  border-top: 1px solid #e5e7eb;
+  padding-top: 0.5rem;
+}

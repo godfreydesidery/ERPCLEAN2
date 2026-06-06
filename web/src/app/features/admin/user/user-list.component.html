@@ -1,0 +1,206 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Users</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-people me-1" aria-hidden="true"></i>
+      Manage user accounts and branch assignments.
+    </p>
+  </header>
+
+  <!-- Create form -->
+  <form class="create-form card card-body mb-3" (ngSubmit)="create()" aria-label="Create user">
+    <h2 class="h6 mb-3">Add User</h2>
+    <div class="row g-2 align-items-end">
+      <div class="col-sm-3">
+        <label class="form-label small text-muted mb-1" for="newUsername">Username</label>
+        <input id="newUsername" name="newUsername" type="text" class="form-control"
+               [ngModel]="newUsername()" (ngModelChange)="newUsername.set($event)"
+               required [disabled]="saving()" autocomplete="off" />
+      </div>
+      <div class="col-sm-3">
+        <label class="form-label small text-muted mb-1" for="newDisplayName">Display name</label>
+        <input id="newDisplayName" name="newDisplayName" type="text" class="form-control"
+               [ngModel]="newDisplayName()" (ngModelChange)="newDisplayName.set($event)"
+               required [disabled]="saving()" />
+      </div>
+      <div class="col-sm-3">
+        <label class="form-label small text-muted mb-1" for="newPassword">Temporary password</label>
+        <input id="newPassword" name="newPassword" type="password" class="form-control"
+               [ngModel]="newPassword()" (ngModelChange)="newPassword.set($event)"
+               required [disabled]="saving()" autocomplete="new-password" />
+      </div>
+      <div class="col-sm-3">
+        <button type="submit" class="btn btn-primary w-100" [disabled]="saving()">
+          @if (saving()) {
+            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+            Saving…
+          } @else {
+            Add user
+          }
+        </button>
+      </div>
+    </div>
+    @if (formError(); as msg) {
+      <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+    }
+  </form>
+
+  <!-- List states: loading / error / empty / populated -->
+  @switch (state()) {
+    @case ('loading') {
+      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading users…
+      </p>
+    }
+    @case ('error') {
+      <p class="state text-danger" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load users. Please try again.
+      </p>
+    }
+    @default {
+      @if (!hasUsers()) {
+        <p class="state text-muted">No users yet. Add one above.</p>
+      } @else {
+        <div class="table-responsive">
+          <table class="table table-hover align-middle bg-white grid">
+            <caption class="sr-only">User accounts in this system</caption>
+            <thead>
+              <tr>
+                <th scope="col">Username</th>
+                <th scope="col">Display name</th>
+                <th scope="col">Status</th>
+                <th scope="col">Locked</th>
+                <th scope="col">Root</th>
+                <th scope="col"><span class="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (u of users(); track u.uid) {
+                <tr>
+                  <td class="font-monospace">{{ u.username }}</td>
+                  <td>{{ u.displayName }}</td>
+                  <td>
+                    <span class="badge"
+                          [class.text-bg-success]="u.status === 'ACTIVE'"
+                          [class.text-bg-secondary]="u.status !== 'ACTIVE'">
+                      {{ u.status }}
+                    </span>
+                  </td>
+                  <td>
+                    @if (u.locked) {
+                      <span class="badge text-bg-warning">locked</span>
+                    } @else {
+                      <span class="text-muted small">—</span>
+                    }
+                  </td>
+                  <td>
+                    @if (u.isRoot) {
+                      <span class="badge text-bg-danger">root</span>
+                    } @else {
+                      <span class="text-muted small">—</span>
+                    }
+                  </td>
+                  <td>
+                    <div class="d-flex flex-wrap gap-1 align-items-start">
+                      <!-- Disable / Enable — hidden for root users -->
+                      @if (!u.isRoot) {
+                        @if (u.status === 'ACTIVE') {
+                          <button type="button" class="btn btn-sm btn-outline-warning"
+                                  [disabled]="busyUid() !== null"
+                                  (click)="disable(u)"
+                                  [attr.aria-label]="'Disable ' + u.username">
+                            @if (busyUid() === u.uid) {
+                              <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                            }
+                            Disable
+                          </button>
+                        } @else {
+                          <button type="button" class="btn btn-sm btn-outline-success"
+                                  [disabled]="busyUid() !== null"
+                                  (click)="enable(u)"
+                                  [attr.aria-label]="'Enable ' + u.username">
+                            @if (busyUid() === u.uid) {
+                              <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                            }
+                            Enable
+                          </button>
+                        }
+                      }
+
+                      <!-- Unlock — only when locked -->
+                      @if (u.locked) {
+                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                [disabled]="busyUid() !== null"
+                                (click)="unlock(u)"
+                                [attr.aria-label]="'Unlock ' + u.username">
+                          @if (busyUid() === u.uid) {
+                            <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                          }
+                          Unlock
+                        </button>
+                      }
+
+                      <!-- Set password toggle -->
+                      <button type="button" class="btn btn-sm btn-outline-secondary"
+                              (click)="togglePwdForm(u.uid)"
+                              [attr.aria-expanded]="pwdExpandedUid() === u.uid"
+                              [attr.aria-controls]="'pwd-row-' + u.uid"
+                              [attr.aria-label]="'Set password for ' + u.username">
+                        <i class="bi bi-key me-1" aria-hidden="true"></i>
+                        Password
+                      </button>
+
+                      <!-- Manage branches -->
+                      <a class="btn btn-sm btn-outline-primary"
+                         [routerLink]="['/admin/users', u.uid]"
+                         [attr.aria-label]="'Manage branches for ' + u.username">
+                        <i class="bi bi-diagram-2 me-1" aria-hidden="true"></i>
+                        Branches
+                      </a>
+                    </div>
+
+                    <!-- Inline set-password form -->
+                    @if (pwdExpandedUid() === u.uid) {
+                      <div [id]="'pwd-row-' + u.uid" class="pwd-inline mt-2">
+                        <form class="d-flex gap-2 align-items-end"
+                              (ngSubmit)="savePassword(u)"
+                              [attr.aria-label]="'Set password for ' + u.username">
+                          <div>
+                            <label class="form-label small text-muted mb-1"
+                                   [for]="'pwd-input-' + u.uid">New password</label>
+                            <input [id]="'pwd-input-' + u.uid"
+                                   [name]="'pwd-' + u.uid"
+                                   type="password"
+                                   class="form-control form-control-sm"
+                                   [value]="pwdValues()[u.uid] || ''"
+                                   (input)="setPwdValue(u.uid, $any($event.target).value)"
+                                   required
+                                   [disabled]="pwdSavingUid() === u.uid"
+                                   autocomplete="new-password" />
+                          </div>
+                          <button type="submit" class="btn btn-sm btn-primary"
+                                  [disabled]="pwdSavingUid() === u.uid || !(pwdValues()[u.uid] || '').trim()">
+                            @if (pwdSavingUid() === u.uid) {
+                              <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                            }
+                            Save
+                          </button>
+                          <button type="button" class="btn btn-sm btn-outline-secondary"
+                                  (click)="togglePwdForm(u.uid)"
+                                  [attr.aria-label]="'Cancel set password for ' + u.username">
+                            Cancel
+                          </button>
+                        </form>
+                      </div>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    }
+  }
+</section>
