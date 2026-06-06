@@ -36,12 +36,41 @@ mvn spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 Health check: <http://localhost:8081/api/v1/health> → `{"data":{"status":"UP",...},"errors":[]}`.
 
+Hot reload is on via **Spring Boot DevTools** (dev profile): it watches `target/classes` and restarts
+the app context (~1–2 s) whenever classes recompile — new endpoints/beans appear **without** a manual
+stop/start. The catch: a recompile must land in `target/classes`. Make that happen one of two ways:
+- **IDE auto-build** — IntelliJ: enable *Build project automatically* (and registry
+  `compiler.automake.allow.when.app.running`); VS Code Java auto-builds on save. Save a file → restart.
+- **Watch command** — if you don't rely on IDE auto-build, recompile in a *second* terminal
+  alongside `spring-boot:run`. Either re-run `mvn -o compile` after each change, or run this
+  no-extra-plugin PowerShell loop that recompiles whenever a `.java` file changes (each `mvn compile`
+  refreshes `target/classes`, which makes DevTools restart):
+  ```powershell
+  cd backend
+  $fsw = New-Object IO.FileSystemWatcher "src\main\java", "*.java"
+  $fsw.IncludeSubdirectories = $true
+  Write-Host "Watching src\main\java — save a .java file to recompile + hot-reload (Ctrl-C to stop)…"
+  while ($true) {
+    $fsw.WaitForChanged([IO.WatcherChangeTypes]::All) | Out-Null
+    Start-Sleep -Milliseconds 300   # debounce a burst of saves
+    mvn -o -q compile
+  }
+  ```
+
+> If a new endpoint 404s after editing, the running app is on a **stale** `target/classes` — the
+> recompile didn't fire. Trigger a build (save with auto-build on, or `mvn compile`) and DevTools
+> restarts. A full restart is only needed for changes DevTools can't hot-swap (e.g. dependency/`pom`
+> changes).
+
 ### 3. Web client (host, hot reload)
 ```bash
 cd web
 npm install        # first run only
-npm start          # ng serve on http://localhost:4200, /api proxied to :8080
+npm start          # ng serve on http://localhost:4200, /api proxied to :8081
 ```
+Angular's dev server hot-reloads on save out of the box. One exception: changes to **`angular.json`**
+(e.g. adding a global stylesheet) need a dev-server **restart** to take effect.
+
 The shell shows a live **API: UP** badge — proof the web↔API path (interceptors + envelope unwrap)
 works end to end.
 
