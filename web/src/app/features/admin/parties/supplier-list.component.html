@@ -43,7 +43,7 @@
           <input id="supplierSearch" name="supplierSearch" type="search"
                  class="form-control" placeholder="Name, code…"
                  [ngModel]="searchQ()" (ngModelChange)="searchQ.set($event)"
-                 autocomplete="off" />
+                 autocomplete="off" [attr.aria-busy]="state() === 'loading'" />
         </div>
         <div class="align-self-end">
           <button type="submit" class="btn btn-outline-secondary">

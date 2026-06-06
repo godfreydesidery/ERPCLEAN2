@@ -1,7 +1,9 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { debounceTime, distinctUntilChanged, map, merge, skip, Subject, switchMap } from 'rxjs';
 import { PageMeta } from '../../../core/api/api-response.model';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
@@ -12,6 +14,8 @@ import { OrganisationService } from '../organisation/organisation.service';
 import { AgentService } from './agent.service';
 
 const DEFAULT_SIZE = 20;
+
+interface LoadTrigger { q: string; page: number }
 
 @Component({
   selector: 'app-agent-list',
@@ -47,7 +51,37 @@ export class AgentListComponent {
   readonly canManage = computed(() => this.session.hasPermission('AGENT.MANAGE'));
   readonly isEmpty = computed(() => this.state() === 'idle' && this.rows().length === 0);
 
+  private readonly immediateTrigger$ = new Subject<LoadTrigger>();
+
   constructor() {
+    const typingTrigger$ = toObservable(this.searchQ).pipe(
+      skip(1),
+      debounceTime(300),
+      distinctUntilChanged(),
+      map((q): LoadTrigger => ({ q, page: 0 })),
+    );
+
+    merge(typingTrigger$, this.immediateTrigger$)
+      .pipe(
+        switchMap(({ q, page }) => {
+          const companyId = this.selectedCompanyId();
+          if (!companyId) return [];
+          this.state.set('loading');
+          this.currentPage.set(page);
+          return this.agentService.list(companyId, q || undefined, page, DEFAULT_SIZE);
+        }),
+        takeUntilDestroyed(),
+      )
+      .subscribe({
+        next: ({ rows, meta }) => {
+          this.rows.set(rows);
+          this.meta.set(meta);
+          this.state.set('idle');
+        },
+        error: (err) =>
+          this.state.set(err instanceof HttpErrorResponse && err.status === 403 ? 'forbidden' : 'error'),
+      });
+
     this.loadCompanies();
   }
 
@@ -92,20 +126,10 @@ export class AgentListComponent {
     if (this.meta().hasNext) this.load(this.currentPage() + 1);
   }
 
-  private load(page: number): void {
+  load(page: number): void {
     const companyId = this.selectedCompanyId();
     if (!companyId) return;
-    this.state.set('loading');
-    this.currentPage.set(page);
-    this.agentService.list(companyId, this.searchQ() || undefined, page, DEFAULT_SIZE).subscribe({
-      next: ({ rows, meta }) => {
-        this.rows.set(rows);
-        this.meta.set(meta);
-        this.state.set('idle');
-      },
-      error: (err) =>
-        this.state.set(err instanceof HttpErrorResponse && err.status === 403 ? 'forbidden' : 'error'),
-    });
+    this.immediateTrigger$.next({ q: this.searchQ(), page });
   }
 
   toggleCreateForm(): void {

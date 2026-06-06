@@ -1,7 +1,9 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { debounceTime, distinctUntilChanged, map, merge, skip, Subject, switchMap } from 'rxjs';
 import { PageMeta } from '../../../core/api/api-response.model';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
@@ -13,9 +15,15 @@ import { CustomerService } from './customer.service';
 
 const DEFAULT_SIZE = 20;
 
+interface LoadTrigger { q: string; page: number }
+
 /**
  * Paged list of customers scoped to the active company. Provides a search box and an inline
  * create form. All four states (loading / empty / error / forbidden) handled.
+ *
+ * Live search: typing debounces 300 ms then fires via the shared switchMap pipeline.
+ * The Search button / Enter pushes the current query immediately (page 0) through the
+ * same pipeline. switchMap cancels any in-flight request automatically (race-safe).
  */
 @Component({
   selector: 'app-customer-list',
@@ -55,7 +63,48 @@ export class CustomerListComponent {
   readonly canManage = computed(() => this.session.hasPermission('CUSTOMER.MANAGE'));
   readonly isEmpty = computed(() => this.state() === 'idle' && this.rows().length === 0);
 
+  // ── Search pipeline ────────────────────────────────────────────────────────
+  // Immediate trigger: button, Enter, pagination, company-change, post-create.
+  private readonly immediateTrigger$ = new Subject<LoadTrigger>();
+
   constructor() {
+    // Debounced typing path: every searchQ change → wait 300 ms → emit page 0.
+    // toObservable emits the initial value synchronously on subscription, so we
+    // skip the very first emission (the empty-string default) to avoid a double
+    // load on startup — the initial load is fired via immediateTrigger$ once
+    // companies resolve.
+    const typingTrigger$ = toObservable(this.searchQ).pipe(
+      // Skip the initial synchronous emission (empty string on subscribe).
+      // The startup load is fired explicitly via immediateTrigger$ once companies resolve.
+      skip(1),
+      debounceTime(300),
+      distinctUntilChanged(),
+      map((q): LoadTrigger => ({ q, page: 0 })),
+    );
+
+    // Merge the two paths; switchMap gives race-safety: a new emission cancels
+    // any pending HTTP request from the previous one.
+    merge(typingTrigger$, this.immediateTrigger$)
+      .pipe(
+        switchMap(({ q, page }) => {
+          const companyId = this.selectedCompanyId();
+          if (!companyId) return [];
+          this.state.set('loading');
+          this.currentPage.set(page);
+          return this.customerService.list(companyId, q || undefined, page, DEFAULT_SIZE);
+        }),
+        takeUntilDestroyed(),
+      )
+      .subscribe({
+        next: ({ rows, meta }) => {
+          this.rows.set(rows);
+          this.meta.set(meta);
+          this.state.set('idle');
+        },
+        error: (err) =>
+          this.state.set(err instanceof HttpErrorResponse && err.status === 403 ? 'forbidden' : 'error'),
+      });
+
     this.loadCompanies();
   }
 
@@ -84,6 +133,7 @@ export class CustomerListComponent {
     if (id) this.load(0);
   }
 
+  // Called by the Search button / form submit — immediate, no debounce.
   applySearch(): void {
     this.load(0);
   }
@@ -102,20 +152,12 @@ export class CustomerListComponent {
     if (this.meta().hasNext) this.load(this.currentPage() + 1);
   }
 
-  private load(page: number): void {
+  // Pushes an immediate (non-debounced) trigger into the shared switchMap pipeline.
+  // Using the same pipeline ensures a debounced response in-flight is cancelled.
+  load(page: number): void {
     const companyId = this.selectedCompanyId();
     if (!companyId) return;
-    this.state.set('loading');
-    this.currentPage.set(page);
-    this.customerService.list(companyId, this.searchQ() || undefined, page, DEFAULT_SIZE).subscribe({
-      next: ({ rows, meta }) => {
-        this.rows.set(rows);
-        this.meta.set(meta);
-        this.state.set('idle');
-      },
-      error: (err) =>
-        this.state.set(err instanceof HttpErrorResponse && err.status === 403 ? 'forbidden' : 'error'),
-    });
+    this.immediateTrigger$.next({ q: this.searchQ(), page });
   }
 
   toggleCreateForm(): void {
