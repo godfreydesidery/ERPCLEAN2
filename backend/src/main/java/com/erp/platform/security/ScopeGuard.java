@@ -2,6 +2,10 @@ package com.erp.platform.security;
 
 import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.modules.parties.repository.AgentRepository;
+import com.erp.modules.parties.repository.CustomerRepository;
+import com.erp.modules.parties.repository.OtherPartyRepository;
+import com.erp.modules.parties.repository.SupplierRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -17,32 +21,54 @@ import org.springframework.stereotype.Component;
  * directly by services for body-scoped ops (grant/revoke, branch create), so the rule lives exactly
  * once and a forgotten call fails closed (returns/throws "not permitted").
  *
- * <p>Reading the Company/Branch repositories from the security layer mirrors the established
+ * <p>Reading the Company/Branch/Party repositories from the security layer mirrors the established
  * {@link PermissionResolver} pattern (which reads {@code UserRoleRepository}); this is the
- * cross-cutting spine, not a peer module (ArchUnit note in ADR-0002).
+ * cross-cutting spine, not a peer module (ArchUnit note in ADR-0002 and ADR-0006 D-10).
  */
 @Component
 public class ScopeGuard {
 
     private final CompanyRepository companies;
     private final BranchRepository branches;
+    private final CustomerRepository customers;
+    private final SupplierRepository suppliers;
+    private final AgentRepository agents;
+    private final OtherPartyRepository otherParties;
     private final AuditService audit;
 
-    public ScopeGuard(CompanyRepository companies, BranchRepository branches, AuditService audit) {
+    public ScopeGuard(CompanyRepository companies,
+                      BranchRepository branches,
+                      CustomerRepository customers,
+                      SupplierRepository suppliers,
+                      AgentRepository agents,
+                      OtherPartyRepository otherParties,
+                      AuditService audit) {
         this.companies = companies;
         this.branches = branches;
+        this.customers = customers;
+        this.suppliers = suppliers;
+        this.agents = agents;
+        this.otherParties = otherParties;
         this.audit = audit;
     }
 
-    /** Resolve a target uid to its owning company id, per target type (ADR-0002 §2). */
+    /**
+     * Resolve a target uid to its owning company id, per target type (ADR-0002 §2, ADR-0006 D-10).
+     * Extended with the four party target types so that
+     * {@code @perm.scoped(#uid,'customer','CUSTOMER.MANAGE')} gates work correctly.
+     */
     public Optional<Long> companyIdOf(String targetType, String uid) {
         if (targetType == null || uid == null) {
             return Optional.empty();
         }
         return switch (targetType.toLowerCase()) {
-            case "company" -> companies.findByUid(uid).map(c -> c.getId());
-            case "branch" -> branches.findByUid(uid).map(b -> b.getCompany().getId());
-            // organisation is global (root-only, not company-scoped); unknown types resolve to empty.
+            case "company"     -> companies.findByUid(uid).map(c -> c.getId());
+            case "branch"      -> branches.findByUid(uid).map(b -> b.getCompany().getId());
+            case "customer"    -> customers.findCompanyIdByUid(uid);
+            case "supplier"    -> suppliers.findCompanyIdByUid(uid);
+            case "agent"       -> agents.findCompanyIdByUid(uid);
+            case "otherparty"  -> otherParties.findCompanyIdByUid(uid);
+            // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };
     }

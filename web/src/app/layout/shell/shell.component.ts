@@ -114,6 +114,14 @@ export class ShellComponent {
         { label: 'Audit', route: '/admin/audit', icon: 'bi-clipboard-data', available: true, permission: 'AUDIT.VIEW' },
       ],
     },
+    {
+      label: 'Parties',
+      items: [
+        { label: 'Customers', route: '/admin/customers', icon: 'bi-people-fill', available: true, permission: 'CUSTOMER.VIEW' },
+        { label: 'Suppliers', route: '/admin/suppliers', icon: 'bi-truck', available: true, permission: 'SUPPLIER.VIEW' },
+        { label: 'Sales Agents', route: '/admin/agents', icon: 'bi-person-badge', available: true, permission: 'AGENT.VIEW' },
+      ],
+    },
   ];
 
   /** Nav groups with permission-filtered items. Reactive: recomputes when permissions change. */

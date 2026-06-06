@@ -37,4 +37,36 @@ public final class AuditActions {
 
     // -- Root bypass (ADR-0004 D-9) -------------------------------------------
     public static final String ROOT_BYPASS = "ROOT.BYPASS";
+
+    // -- Customer lifecycle (ADR-0006 D-12) -----------------------------------
+    public static final String CUSTOMER_CREATE        = "CUSTOMER.CREATE";
+    public static final String CUSTOMER_UPDATE        = "CUSTOMER.UPDATE";
+    public static final String CUSTOMER_ARCHIVE       = "CUSTOMER.ARCHIVE";
+    public static final String CUSTOMER_RESTORE       = "CUSTOMER.RESTORE";
+    public static final String CUSTOMER_BRANCH_ADD    = "CUSTOMER.BRANCH.ADD";
+    public static final String CUSTOMER_BRANCH_REMOVE = "CUSTOMER.BRANCH.REMOVE";
+
+    // -- Supplier lifecycle ---------------------------------------------------
+    public static final String SUPPLIER_CREATE        = "SUPPLIER.CREATE";
+    public static final String SUPPLIER_UPDATE        = "SUPPLIER.UPDATE";
+    public static final String SUPPLIER_ARCHIVE       = "SUPPLIER.ARCHIVE";
+    public static final String SUPPLIER_RESTORE       = "SUPPLIER.RESTORE";
+    public static final String SUPPLIER_BRANCH_ADD    = "SUPPLIER.BRANCH.ADD";
+    public static final String SUPPLIER_BRANCH_REMOVE = "SUPPLIER.BRANCH.REMOVE";
+
+    // -- Agent lifecycle ------------------------------------------------------
+    public static final String AGENT_CREATE        = "AGENT.CREATE";
+    public static final String AGENT_UPDATE        = "AGENT.UPDATE";
+    public static final String AGENT_ARCHIVE       = "AGENT.ARCHIVE";
+    public static final String AGENT_RESTORE       = "AGENT.RESTORE";
+    public static final String AGENT_BRANCH_ADD    = "AGENT.BRANCH.ADD";
+    public static final String AGENT_BRANCH_REMOVE = "AGENT.BRANCH.REMOVE";
+
+    // -- OtherParty lifecycle -------------------------------------------------
+    public static final String OTHERPARTY_CREATE        = "OTHERPARTY.CREATE";
+    public static final String OTHERPARTY_UPDATE        = "OTHERPARTY.UPDATE";
+    public static final String OTHERPARTY_ARCHIVE       = "OTHERPARTY.ARCHIVE";
+    public static final String OTHERPARTY_RESTORE       = "OTHERPARTY.RESTORE";
+    public static final String OTHERPARTY_BRANCH_ADD    = "OTHERPARTY.BRANCH.ADD";
+    public static final String OTHERPARTY_BRANCH_REMOVE = "OTHERPARTY.BRANCH.REMOVE";
 }

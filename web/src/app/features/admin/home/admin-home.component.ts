@@ -33,6 +33,9 @@ export class AdminHomeComponent {
     { label: 'Users', description: 'Create users, manage status, assign branches and roles.', route: '/admin/users', icon: 'bi-people', permission: 'USER.VIEW' },
     { label: 'Roles', description: 'Define roles and the permissions they grant.', route: '/admin/roles', icon: 'bi-shield-lock', permission: 'ROLE.VIEW' },
     { label: 'Audit', description: 'Review the append-only trail of access changes.', route: '/admin/audit', icon: 'bi-clipboard-data', permission: 'AUDIT.VIEW' },
+    { label: 'Customers', description: 'Manage customer accounts, credit terms, and branch associations.', route: '/admin/customers', icon: 'bi-people-fill', permission: 'CUSTOMER.VIEW' },
+    { label: 'Suppliers', description: 'Manage supplier accounts and branch associations.', route: '/admin/suppliers', icon: 'bi-truck', permission: 'SUPPLIER.VIEW' },
+    { label: 'Sales Agents', description: 'Manage internal and external sales agents.', route: '/admin/agents', icon: 'bi-person-badge', permission: 'AGENT.VIEW' },
   ];
 
   /** Only the cards the user has permission for (root sees all). Reactive to permission changes. */
