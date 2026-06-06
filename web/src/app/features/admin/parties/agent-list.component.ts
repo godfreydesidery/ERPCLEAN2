@@ -172,7 +172,9 @@ export class AgentListComponent {
     this.usersLoaded = true;
     this.usersState.set('loading');
     this.userService.list().subscribe({
-      next: (list) => { this.users.set(list); this.usersState.set('idle'); },
+      // Exclude the super-admin: root is a system user, never a sales agent (BR-PARTY-10).
+      // The backend rejects it too; hiding it here means it's never offered.
+      next: (list) => { this.users.set(list.filter((u) => !u.isRoot)); this.usersState.set('idle'); },
       error: () => this.usersState.set('error'),
     });
   }

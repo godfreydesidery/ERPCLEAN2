@@ -47,8 +47,9 @@ public class UserLookupServiceImpl implements UserLookupService {
         if (userId == null || companyId == null) {
             return false;
         }
-        // Active check first (cheap indexed PK+status); only then test branch membership.
-        return users.existsByIdAndStatus(userId, MasterStatus.ACTIVE)
+        // Must be ACTIVE and NOT the super-admin (root is a system user, never a sales agent —
+        // BR-PARTY-10); only then test company membership. Cheap indexed PK+status+root check first.
+        return users.existsByIdAndStatusAndRootFalse(userId, MasterStatus.ACTIVE)
                 && userBranches.existsByUserIdAndBranchCompanyId(userId, companyId);
     }
 }

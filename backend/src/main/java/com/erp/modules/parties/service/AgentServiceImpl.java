@@ -225,7 +225,8 @@ public class AgentServiceImpl implements AgentService {
             }
             if (!userLookup.isActiveUserInCompany(appUserId, companyId)) {
                 throw new IllegalArgumentException(
-                        "The referenced app user must be ACTIVE and belong to the agent's company (BR-PARTY-10).");
+                        "The referenced app user must be an ACTIVE, non-root user belonging to the "
+                        + "agent's company (BR-PARTY-10). The super-admin cannot be a sales agent.");
             }
         } else {
             if (appUserId != null) {

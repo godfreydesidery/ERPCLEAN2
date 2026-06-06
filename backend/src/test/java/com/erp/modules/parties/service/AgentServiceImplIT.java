@@ -128,6 +128,23 @@ class AgentServiceImplIT extends PostgresIntegrationTest {
     }
 
     // -----------------------------------------------------------------------
+    // BR-PARTY-10: the ROOT super-admin cannot be an internal agent — even when
+    // active and assigned to the company. Rejection is due to root-ness, not membership.
+    // -----------------------------------------------------------------------
+
+    @Test
+    void create_internalAgent_referencingRootUser_throwsIllegalArgument_BR_PARTY_10() {
+        // Give root a valid branch membership in the company so the ONLY disqualifier is root-ness.
+        userBranches.save(new UserBranch(rootId, branch, rootId));
+
+        CreateAgentRequest req = internalRequest("Root As Agent", rootId);
+
+        assertThatThrownBy(() -> agentService.create(req))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("BR-PARTY-10");
+    }
+
+    // -----------------------------------------------------------------------
     // BR-PARTY-10: INTERNAL with no user -> rejected
     // -----------------------------------------------------------------------
 
