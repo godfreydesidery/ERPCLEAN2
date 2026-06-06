@@ -9,7 +9,7 @@ import java.util.Map;
  *
  * <p>Use the static factory for the common authenticated path:
  * <pre>{@code
- *   AuditEvent.of("USER.CREATE", "app_user", user.getId(), user.getUid())
+ *   AuditEvent.of("USER.CREATE", "app_users", user.getId(), user.getUid())
  *             .detail(Map.of("username", username))
  * }</pre>
  */

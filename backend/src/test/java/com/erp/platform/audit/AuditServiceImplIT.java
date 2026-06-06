@@ -149,7 +149,7 @@ class AuditServiceImplIT extends PostgresIntegrationTest {
 
         AuditLog row = rows.get(0);
         assertThat(row.getAction()).isEqualTo(AuditActions.USER_CREATE);
-        assertThat(row.getTargetType()).isEqualTo("app_user");
+        assertThat(row.getTargetType()).isEqualTo("app_users");
         assertThat(row.getTargetUid()).isEqualTo(created.uid());
         assertThat(row.getActorUserId()).isEqualTo(rootUser.getId());
         assertThat(row.getAt()).isNotNull();
@@ -379,7 +379,7 @@ class AuditServiceImplIT extends PostgresIntegrationTest {
     void auditRecord_outsideTransaction_throws() {
         // RequestContext is set (setUp) but there is intentionally NO active Spring transaction.
         // MANDATORY propagation must cause an immediate exception — not a silent no-op.
-        AuditEvent event = AuditEvent.of(AuditActions.USER_CREATE, "app_user", 1L, "FAKE_UID");
+        AuditEvent event = AuditEvent.of(AuditActions.USER_CREATE, "app_users", 1L, "FAKE_UID");
 
         assertThatThrownBy(() -> auditService.record(event))
                 .as("record() outside a transaction must throw due to MANDATORY propagation")
@@ -407,7 +407,7 @@ class AuditServiceImplIT extends PostgresIntegrationTest {
                 .hasSize(1);
 
         AuditLog bypass = bypassRows.get(0);
-        assertThat(bypass.getTargetType()).isEqualTo("company");
+        assertThat(bypass.getTargetType()).isEqualTo("companies");
         assertThat(bypass.getTargetId()).isEqualTo(companyB.getId());
         assertThat(bypass.getActorUserId()).isEqualTo(rootUser.getId());
         assertThat(bypass.getAt()).isNotNull();

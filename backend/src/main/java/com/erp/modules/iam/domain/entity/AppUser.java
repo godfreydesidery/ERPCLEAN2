@@ -20,7 +20,7 @@ import lombok.Setter;
  */
 @Getter
 @Entity
-@Table(name = "app_user")
+@Table(name = "app_users")
 public class AppUser extends UidEntity {
 
     @Column(name = "username", nullable = false, length = 80)

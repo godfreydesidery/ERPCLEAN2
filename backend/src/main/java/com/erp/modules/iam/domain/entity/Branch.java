@@ -24,7 +24,7 @@ import lombok.Setter;
  */
 @Getter
 @Entity
-@Table(name = "branch")
+@Table(name = "branches")
 public class Branch extends UidEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)

@@ -79,7 +79,7 @@ public class ScopeGuard {
         // service methods, so the MANDATORY audit write has a transaction to join.
         if (principal != null && principal.root() && companyId != null
                 && !companyId.equals(principal.companyId())) {
-            audit.record(AuditEvent.of(AuditActions.ROOT_BYPASS, "company", companyId, null)
+            audit.record(AuditEvent.of(AuditActions.ROOT_BYPASS, "companies", companyId, null)
                     .detail(Map.of("activeCompanyId", String.valueOf(principal.companyId()),
                             "targetCompanyId", String.valueOf(companyId))));
         }

@@ -21,7 +21,7 @@ import org.hibernate.type.SqlTypes;
  * public constructor and remain immutable for the lifetime of the instance.
  */
 @Entity
-@Table(name = "audit_log")
+@Table(name = "audit_logs")
 @Getter
 public class AuditLog {
 

@@ -17,7 +17,7 @@ import lombok.Setter;
  * plain accessors (PROJECT-CONVENTIONS §3.7); no {@code @Data} on entities.
  */
 @Entity
-@Table(name = "permission")
+@Table(name = "permissions")
 @Getter
 @Setter
 public class Permission {
