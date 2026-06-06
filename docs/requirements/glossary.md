@@ -105,3 +105,24 @@ One definition per term, used consistently across the team. Add terms as modules
 - Money is always a **monetary amount** (value + currency), never a bare number; say **base currency**
   for a company's reporting currency and **document / transaction currency** for what a transaction is
   expressed in — never conflate the two.
+
+## Products
+
+- **Product / Item** — a catalogue entry the company produces, buys, or sells; the master definition,
+  **not** a stock quantity. "Product" is canonical; "item" is a synonym.
+- **Goods** — a tangible product. **Service** — an intangible product. Every product is one or the other.
+- **Sellable** — may appear on a customer sale. **Stockable** — inventory quantities are tracked (in
+  the future Stock module). Two independent flags; a service is non-stockable, a raw good may be
+  non-sellable.
+- **Unit of measure (UoM)** — how a product is counted. **Base unit** (piece, kg, litre) — stock is
+  held in it. **Bulk pack** (carton, crate) — a larger unit with a **conversion factor** to the base.
+- **Barcode** — a scannable product identifier; a product may have several, one **primary**; unique
+  within the company.
+- **Price list** — a named selling-price set (Retail / Wholesale / Distributor); a product appears on
+  one or more, with a currency-aware price per list. **Cost price** — what the product costs the
+  company, tracked separately.
+- **Composition / Recipe / BOM** — the **components** (other products) and quantities that make up a
+  **composed** product (Ugali Meat = 1 Ugali + 1 Meat). v1 is **single-level** and records structure
+  only — no stock deduction or cost roll-up yet.
+- **Stock-on-hand** — the quantity of a stockable product at a branch. **NOT the Products module** — a
+  future Stock concern. Products are definitions; stock-on-hand is a level. Never conflate them.
