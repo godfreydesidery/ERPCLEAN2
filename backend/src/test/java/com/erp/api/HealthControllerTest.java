@@ -5,11 +5,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.erp.platform.common.api.ApiResponseAdvice;
+import com.erp.platform.security.JwtRequestContextFilter;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration;
 import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.FilterType;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -18,10 +21,16 @@ import org.springframework.test.web.servlet.MockMvc;
  * @WebMvcTest} loads only the web layer (this one controller + the advice) — no JPA, no DataSource,
  * no Flyway, and security auto-config is excluded (the envelope path is what's under test, not auth;
  * health is permitAll anyway). Keeps the test fast and independent of the security spine.
+ *
+ * <p>{@link JwtRequestContextFilter} is excluded from the slice's component scan: it is a security
+ * filter that needs IAM repositories (which this slice deliberately doesn't load), and it's exercised
+ * by the full-context integration/HTTP tests, not here.
  */
 @WebMvcTest(controllers = HealthController.class,
         excludeAutoConfiguration = {SecurityAutoConfiguration.class,
-                OAuth2ResourceServerAutoConfiguration.class})
+                OAuth2ResourceServerAutoConfiguration.class},
+        excludeFilters = @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE,
+                classes = JwtRequestContextFilter.class))
 @Import(ApiResponseAdvice.class)
 class HealthControllerTest {
 
