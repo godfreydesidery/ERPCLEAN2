@@ -4,9 +4,9 @@ import { Router } from '@angular/router';
 import { AuthService } from '../../../core/auth/auth.service';
 
 /**
- * Login screen. On success, routes to the admin area. Shows a single generic error for any auth
- * failure (the backend never discloses which factor failed), and a clear "locked" message when the
- * account is locked.
+ * Login screen (theme adopted from the Orbix Engine reference). On success, routes to the admin
+ * area. Shows a single generic error for any auth failure (the backend never discloses which factor
+ * failed) and a clear "locked" message when the account is locked.
  */
 @Component({
   selector: 'app-login',
@@ -21,7 +21,9 @@ export class LoginComponent {
   readonly username = signal('');
   readonly password = signal('');
   readonly submitting = signal(false);
+  readonly showPassword = signal(false);
   readonly error = signal<string | null>(null);
+  readonly year = new Date().getFullYear();
 
   submit(): void {
     if (!this.username().trim() || !this.password()) {

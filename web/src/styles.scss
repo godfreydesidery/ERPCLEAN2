@@ -1,1 +1,49 @@
-/* You can add global styles to this file, and also import other style files */
+/* Global styles — theme adopted from the Orbix Engine reference app.
+   Bootstrap 5 + bootstrap-icons are loaded via angular.json before this file, so component
+   markup can use Bootstrap utility/component classes; these tokens layer the brand on top. */
+
+:root {
+  --orbix-primary: #1a4fb5;
+  --orbix-primary-deep: #0d2a5b;
+  --orbix-accent: #4178d9;
+  --orbix-secondary: #6c757d;
+  --orbix-surface: #f5f7fb;
+  --orbix-on-surface: #1f2933;
+
+  /* Map Bootstrap's primary onto the brand colour so default .btn-primary / links match. */
+  --bs-primary: #1a4fb5;
+  --bs-primary-rgb: 26, 79, 181;
+  --bs-link-color: #1a4fb5;
+  --bs-link-color-rgb: 26, 79, 181;
+  --bs-link-hover-color: #0d2a5b;
+}
+
+body {
+  margin: 0;
+  font-family: 'Segoe UI', 'Inter', system-ui, sans-serif;
+  background: var(--orbix-surface);
+  color: var(--orbix-on-surface);
+}
+
+/* Brand the Bootstrap primary button to the deep-blue gradient feel. */
+.btn-primary {
+  --bs-btn-bg: #1a4fb5;
+  --bs-btn-border-color: #1a4fb5;
+  --bs-btn-hover-bg: #163f93;
+  --bs-btn-hover-border-color: #163f93;
+  --bs-btn-active-bg: #0d2a5b;
+  --bs-btn-active-border-color: #0d2a5b;
+}
+
+/* Screen-reader-only helper (used by table captions). Mirrors Bootstrap's .visually-hidden. */
+.sr-only {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

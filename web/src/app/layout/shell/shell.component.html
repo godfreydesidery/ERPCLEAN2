@@ -1,25 +1,96 @@
-<header class="topbar">
-  <span class="brand">ERP</span>
-  <nav class="nav" aria-label="Main">
-    <a routerLink="/admin/companies">Companies</a>
-  </nav>
-  <div class="account">
-    @if (session.user(); as user) {
-      <span class="user" title="{{ user.username }}">
-        {{ user.displayName }}
-        @if (user.activeBranchUid) {
-          <span class="branch">· branch set</span>
-        } @else {
-          <span class="branch no-branch">· no branch</span>
-        }
-      </span>
-      <button type="button" class="logout" (click)="logout()">Sign out</button>
-    }
-    <span class="api-status" [attr.data-state]="state()">
+<div class="shell-layout">
+
+  <!-- Top bar -->
+  <header class="topbar">
+    <button class="btn btn-link topbar-toggle d-lg-none" type="button"
+            (click)="sidebarOpen.set(!sidebarOpen())"
+            [attr.aria-label]="sidebarOpen() ? 'Close menu' : 'Open menu'"
+            [attr.aria-expanded]="sidebarOpen()">
+      <i class="bi" [class.bi-list]="!sidebarOpen()" [class.bi-x-lg]="sidebarOpen()" aria-hidden="true"></i>
+    </button>
+
+    <a class="topbar-brand" routerLink="/admin/companies" (click)="closeSidebar()">
+      <span class="brand-mark-sm">E</span>
+      <span class="brand-word d-none d-sm-inline">ERP</span>
+    </a>
+
+    <div class="topbar-spacer"></div>
+
+    <span class="api-status" [attr.data-state]="state()" aria-live="polite">
+      <span class="api-dot" aria-hidden="true"></span>
       API: {{ state() === 'ok' ? health()?.status : state() }}
     </span>
-  </div>
-</header>
-<main class="content">
-  <router-outlet />
-</main>
+
+    @if (session.user(); as user) {
+      <div class="topbar-user">
+        <button class="btn btn-link user-button" type="button"
+                (click)="$event.stopPropagation(); userMenuOpen.set(!userMenuOpen())"
+                [attr.aria-expanded]="userMenuOpen()" aria-label="Account menu">
+          <span class="user-avatar">{{ initials() }}</span>
+          <span class="user-name d-none d-sm-inline">{{ user.displayName }}</span>
+          <i class="bi bi-chevron-down ms-1 small text-muted d-none d-sm-inline" aria-hidden="true"></i>
+        </button>
+        @if (userMenuOpen()) {
+          <div class="user-menu shadow-sm" (click)="$event.stopPropagation()">
+            <div class="user-menu__header px-3 py-2">
+              <div class="fw-semibold small text-dark">{{ user.displayName }}</div>
+              <div class="text-muted small">&#64;{{ user.username }}</div>
+              @if (user.isRoot) {
+                <span class="badge text-bg-primary mt-1">Root administrator</span>
+              }
+            </div>
+            <hr class="my-1" />
+            <button class="user-menu__item user-menu__item--danger" type="button"
+                    (click)="userMenuOpen.set(false); logout()">
+              <i class="bi bi-box-arrow-right me-2" aria-hidden="true"></i>Sign out
+            </button>
+          </div>
+        }
+      </div>
+
+      <!-- Always-visible direct sign-out fallback. -->
+      <button type="button" class="btn btn-link logout-btn d-none d-md-inline-flex"
+              (click)="logout()" title="Sign out" aria-label="Sign out">
+        <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
+      </button>
+    }
+  </header>
+
+  <!-- Sidebar (dark, off-canvas on mobile) -->
+  <aside class="sidebar" [ngClass]="{ 'sidebar-open': sidebarOpen() }">
+    <nav class="sidebar-nav" aria-label="Main">
+      @for (group of nav; track group.label) {
+        <div class="nav-group">
+          <div class="nav-group-label">{{ group.label }}</div>
+          @for (item of group.items; track item.route) {
+            @if (item.available) {
+              <a class="nav-item" [routerLink]="item.route" routerLinkActive="active"
+                 (click)="closeSidebar()">
+                <i class="bi {{ item.icon }} nav-item-icon" aria-hidden="true"></i>
+                <span>{{ item.label }}</span>
+              </a>
+            } @else {
+              <span class="nav-item nav-item--soon" aria-disabled="true">
+                <i class="bi {{ item.icon }} nav-item-icon" aria-hidden="true"></i>
+                <span>{{ item.label }}</span>
+                <span class="soon-badge">soon</span>
+              </span>
+            }
+          }
+        </div>
+      }
+    </nav>
+  </aside>
+
+  <!-- Mobile backdrop -->
+  @if (sidebarOpen()) {
+    <div class="sidebar-backdrop d-lg-none" (click)="closeSidebar()"></div>
+  }
+
+  <!-- Main content -->
+  <main class="shell-main">
+    <div class="shell-main-inner">
+      <router-outlet />
+    </div>
+  </main>
+</div>

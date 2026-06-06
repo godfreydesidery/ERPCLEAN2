@@ -1,64 +1,157 @@
-.login-page {
+/* Login styles — adopted from the Orbix Engine reference login screen. */
+
+.login-shell {
+  min-height: 100vh;
+  /* dvh accounts for mobile browser chrome (URL bar / safe areas) so the
+     gradient fills the actual visible viewport without jumps on scroll. */
+  min-height: 100dvh;
   display: flex;
+  align-items: center;
   justify-content: center;
-  align-items: flex-start;
-  padding-top: 8vh;
+  padding: 1rem;
+  padding-top: max(1rem, env(safe-area-inset-top));
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  background: linear-gradient(135deg, #0d2a5b 0%, #1a4fb5 55%, #4178d9 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.login-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.08), transparent 40%),
+    radial-gradient(circle at 80% 70%, rgba(255, 255, 255, 0.06), transparent 35%);
+  pointer-events: none;
+}
+
+.login-card-wrap {
+  width: 100%;
+  max-width: 420px;
+  position: relative;
+  z-index: 1;
 }
 
 .login-card {
-  width: 100%;
-  max-width: 360px;
+  border-radius: 1rem;
+  backdrop-filter: blur(10px);
+}
+
+.brand-mark {
+  width: 60px;
+  height: 60px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #1a4fb5, #4178d9);
+  color: #fff;
   display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  padding: 2rem;
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  align-items: center;
+  justify-content: center;
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -1px;
+  box-shadow: 0 6px 20px rgba(26, 79, 181, 0.35);
+}
 
-  h1 {
-    font-size: 1.3rem;
-    margin: 0 0 0.5rem;
+.brand-title {
+  letter-spacing: 0.12em;
+  color: #1a4fb5;
+}
+
+.input-group-premium {
+  .input-group-text {
+    background: #f8f9fb;
+    border-right: 0;
+    color: #6c757d;
   }
 
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
-  }
-
-  label {
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: #374151;
-  }
-
-  input {
-    padding: 0.55rem 0.6rem;
-    border: 1px solid #d1d5db;
-    border-radius: 4px;
+  .form-control {
+    border-left: 0;
+    padding-left: 0;
     font-size: 1rem;
   }
 
-  .error {
-    margin: 0;
-    color: #b91c1c;
-    font-size: 0.9rem;
+  .form-control:focus {
+    box-shadow: none;
+    border-color: #1a4fb5;
   }
 
-  button {
-    padding: 0.6rem;
-    border: 0;
-    border-radius: 4px;
-    background: #2563eb;
-    color: #fff;
-    font-size: 1rem;
-    cursor: pointer;
+  &:focus-within .input-group-text {
+    border-color: #1a4fb5;
+    color: #1a4fb5;
   }
 
-  button:disabled {
-    background: #9ca3af;
-    cursor: not-allowed;
+  .btn-outline-secondary {
+    background: #f8f9fb;
+    border-color: #ced4da;
+    border-left: 0;
+    color: #6c757d;
+    /* Larger touch target on mobile. */
+    min-width: 44px;
+  }
+
+  .btn-outline-secondary:hover,
+  .btn-outline-secondary:focus {
+    background: #eef0f3;
+    color: #1a4fb5;
+  }
+}
+
+.login-cta {
+  /* WCAG touch target: 44x44 minimum. */
+  min-height: 44px;
+  padding: 0.6rem 1rem;
+  letter-spacing: 0.02em;
+  box-shadow: 0 4px 14px rgba(26, 79, 181, 0.25);
+  transition: transform 0.08s ease, box-shadow 0.15s ease;
+}
+
+.login-cta:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(26, 79, 181, 0.35);
+}
+
+.login-cta:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.login-copyright {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+/* Tablet down — modest tightening. */
+@media (max-width: 575.98px) {
+  .login-shell {
+    padding: 0.75rem;
+  }
+
+  .brand-mark {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    font-size: 1.5rem;
+  }
+
+  .brand-title {
+    font-size: 1.125rem;
+  }
+}
+
+/* Very short viewports (landscape phones) — top-align so the form
+   isn't pushed below the keyboard / fold. */
+@media (max-height: 600px) {
+  .login-shell {
+    align-items: flex-start;
+    padding-top: 1.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-cta {
+    transition: none;
+  }
+
+  .login-cta:hover:not(:disabled) {
+    transform: none;
   }
 }
