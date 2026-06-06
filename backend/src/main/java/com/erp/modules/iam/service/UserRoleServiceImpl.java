@@ -12,13 +12,18 @@ import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.repository.RoleRepository;
 import com.erp.modules.iam.repository.UserRoleRepository;
+import com.erp.platform.audit.AuditActions;
+import com.erp.platform.audit.AuditEvent;
+import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,6 +38,7 @@ public class UserRoleServiceImpl implements UserRoleService {
     private final BranchRepository branches;
     private final ScopeGuard scopeGuard;
     private final PermissionResolver permissionResolver;
+    private final AuditService audit;
 
     public UserRoleServiceImpl(UserRoleRepository userRoles,
                                AppUserRepository users,
@@ -40,7 +46,8 @@ public class UserRoleServiceImpl implements UserRoleService {
                                CompanyRepository companies,
                                BranchRepository branches,
                                ScopeGuard scopeGuard,
-                               PermissionResolver permissionResolver) {
+                               PermissionResolver permissionResolver,
+                               AuditService audit) {
         this.userRoles = userRoles;
         this.users = users;
         this.roles = roles;
@@ -48,6 +55,7 @@ public class UserRoleServiceImpl implements UserRoleService {
         this.branches = branches;
         this.scopeGuard = scopeGuard;
         this.permissionResolver = permissionResolver;
+        this.audit = audit;
     }
 
     @Override
@@ -80,8 +88,19 @@ public class UserRoleServiceImpl implements UserRoleService {
         userRoles.save(ur);
         permissionResolver.invalidate();
 
-        return toDto(ur, user.getUid(), role.getCode(), company.getUid(),
-                branch != null ? branch.getUid() : null);
+        String branchUid = branch != null ? branch.getUid() : null;
+
+        Map<String, Object> detail = new HashMap<>();
+        detail.put("userUid", user.getUid());
+        detail.put("roleCode", role.getCode());
+        detail.put("companyUid", company.getUid());
+        if (branchUid != null) {
+            detail.put("branchUid", branchUid);
+        }
+        audit.record(AuditEvent.of(AuditActions.ROLE_GRANT, "user_role", ur.getId(), ur.getUid())
+                .detail(detail));
+
+        return toDto(ur, user.getUid(), role.getCode(), company.getUid(), branchUid);
     }
 
     @Override
@@ -91,8 +110,18 @@ public class UserRoleServiceImpl implements UserRoleService {
         if (!ur.isActive()) {
             throw new ConflictException("Assignment already revoked: " + userRoleUid);
         }
+
+        // Capture context before revoke mutates the row.
+        AppUser user = users.findById(ur.getUserId()).orElse(null);
+        String userUid = user != null ? user.getUid() : null;
+        String roleCode = ur.getRole().getCode();
+
         ur.revoke(Instant.now());
         permissionResolver.invalidate();
+
+        audit.record(AuditEvent.of(AuditActions.ROLE_REVOKE, "user_role", ur.getId(), ur.getUid())
+                .detail(Map.of("userUid", userUid != null ? userUid : "",
+                               "roleCode", roleCode)));
     }
 
     @Override

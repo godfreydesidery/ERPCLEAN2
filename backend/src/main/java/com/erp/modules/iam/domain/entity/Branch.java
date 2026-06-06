@@ -52,6 +52,16 @@ public class Branch extends UidEntity {
     @Setter
     private MasterStatus status = MasterStatus.ACTIVE;
 
+    /**
+     * F8 (ADR-0004 D-8): a branch is usable for a session only when both the branch itself and its
+     * parent company are ACTIVE. A branch under an ARCHIVED company must not scope a login or an
+     * override — callers land read-only until an admin assigns a live default.
+     */
+    public boolean isUsableForSession() {
+        return this.status == MasterStatus.ACTIVE
+                && this.company.getStatus() == MasterStatus.ACTIVE;
+    }
+
     protected Branch() {
         // JPA
     }

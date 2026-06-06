@@ -32,6 +32,7 @@ export class AdminHomeComponent {
     { label: 'Companies', description: 'View and manage companies and their branches.', route: '/admin/companies', icon: 'bi-building', permission: 'COMPANY.VIEW' },
     { label: 'Users', description: 'Create users, manage status, assign branches and roles.', route: '/admin/users', icon: 'bi-people', permission: 'USER.VIEW' },
     { label: 'Roles', description: 'Define roles and the permissions they grant.', route: '/admin/roles', icon: 'bi-shield-lock', permission: 'ROLE.VIEW' },
+    { label: 'Audit', description: 'Review the append-only trail of access changes.', route: '/admin/audit', icon: 'bi-clipboard-data', permission: 'AUDIT.VIEW' },
   ];
 
   /** Only the cards the user has permission for (root sees all). Reactive to permission changes. */

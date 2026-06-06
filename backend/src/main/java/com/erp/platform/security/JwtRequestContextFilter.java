@@ -1,6 +1,7 @@
 package com.erp.platform.security;
 
 import com.erp.modules.iam.domain.entity.Branch;
+import com.erp.modules.iam.repository.AppUserRepository;
 import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.UserBranchRepository;
 import com.erp.platform.common.domain.MasterStatus;
@@ -37,12 +38,15 @@ public class JwtRequestContextFilter extends OncePerRequestFilter {
 
     private final BranchRepository branches;
     private final UserBranchRepository userBranches;
+    private final AppUserRepository appUsers;
     private final SecurityErrorResponder errorResponder;
 
     public JwtRequestContextFilter(BranchRepository branches, UserBranchRepository userBranches,
+                                   AppUserRepository appUsers,
                                    SecurityErrorResponder errorResponder) {
         this.branches = branches;
         this.userBranches = userBranches;
+        this.appUsers = appUsers;
         this.errorResponder = errorResponder;
     }
 
@@ -60,11 +64,24 @@ public class JwtRequestContextFilter extends OncePerRequestFilter {
                 // erratum). We render the same ApiResponse 403 envelope directly.
                 RequestContext.Principal principal;
                 try {
-                    principal = resolvePrincipal(jwt, request.getHeader(BRANCH_OVERRIDE_HEADER));
+                    principal = resolvePrincipal(jwt, request.getHeader(BRANCH_OVERRIDE_HEADER),
+                            request.getRemoteAddr());
                 } catch (AccessDeniedException denied) {
                     errorResponder.handle(request, response, denied);
                     return; // do NOT continue the chain — the 403 envelope is already written
                 }
+
+                // F9 (ADR-0004 D-8): re-check the user is still ACTIVE on every request — a
+                // disabled user is rejected (401) immediately rather than after the JWT TTL.
+                // One PK lookup — same order as ADR-0002's accepted per-request read.
+                if (!appUsers.existsByIdAndStatus(principal.userId(),
+                        com.erp.platform.common.domain.MasterStatus.ACTIVE)) {
+                    errorResponder.commence(request, response,
+                            new org.springframework.security.core.AuthenticationException(
+                                    "User account is no longer active.") {});
+                    return;
+                }
+
                 RequestContext.set(principal);
             }
             chain.doFilter(request, response);
@@ -73,8 +90,11 @@ public class JwtRequestContextFilter extends OncePerRequestFilter {
         }
     }
 
-    /** Build the principal, applying the X-Branch-Uid override when present (else the JWT default). */
-    private RequestContext.Principal resolvePrincipal(Jwt jwt, String overrideUid) {
+    /**
+     * Build the principal, applying the X-Branch-Uid override when present (else the JWT default).
+     * IP is threaded in from the request for audit trail population (ADR-0004 D-4).
+     */
+    private RequestContext.Principal resolvePrincipal(Jwt jwt, String overrideUid, String ip) {
         Long userId = parseLong(jwt.getSubject());
         String username = jwt.getClaimAsString("username");
         boolean root = Boolean.TRUE.equals(jwt.getClaim("isRoot"));
@@ -83,12 +103,14 @@ public class JwtRequestContextFilter extends OncePerRequestFilter {
             // No override — keep the default scope minted at login.
             return new RequestContext.Principal(userId, username, root,
                     parseLong(jwt.getClaimAsString("companyId")),
-                    parseLong(jwt.getClaimAsString("branchId")));
+                    parseLong(jwt.getClaimAsString("branchId")),
+                    ip);
         }
 
         // Override present: resolve + validate. Fail closed (403) on any defect.
-        Branch branch = branches.findByUid(overrideUid)
-                .filter(b -> b.getStatus() == MasterStatus.ACTIVE)
+        // F8 (ADR-0004 D-8): a branch under a non-ACTIVE company is not usable — reject it.
+        Branch branch = branches.findWithCompanyByUid(overrideUid)
+                .filter(Branch::isUsableForSession)
                 .orElseThrow(() -> new AccessDeniedException("Branch not available."));
 
         if (!root && userBranches.findByUserIdAndBranchId(userId, branch.getId()).isEmpty()) {
@@ -97,7 +119,7 @@ public class JwtRequestContextFilter extends OncePerRequestFilter {
         }
 
         return new RequestContext.Principal(
-                userId, username, root, branch.getCompany().getId(), branch.getId());
+                userId, username, root, branch.getCompany().getId(), branch.getId(), ip);
     }
 
     private static Long parseLong(String s) {

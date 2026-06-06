@@ -6,12 +6,16 @@ import com.erp.modules.iam.domain.dto.UpdateUserRequest;
 import com.erp.modules.iam.domain.dto.UserDto;
 import com.erp.modules.iam.domain.entity.AppUser;
 import com.erp.modules.iam.repository.AppUserRepository;
+import com.erp.platform.audit.AuditActions;
+import com.erp.platform.audit.AuditEvent;
+import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.security.password.PasswordPolicy;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,13 +33,16 @@ public class UserServiceImpl implements UserService {
     private final AppUserRepository users;
     private final PasswordEncoder passwordEncoder;
     private final PasswordPolicy passwordPolicy;
+    private final AuditService audit;
 
     public UserServiceImpl(AppUserRepository users,
                            PasswordEncoder passwordEncoder,
-                           PasswordPolicy passwordPolicy) {
+                           PasswordPolicy passwordPolicy,
+                           AuditService audit) {
         this.users = users;
         this.passwordEncoder = passwordEncoder;
         this.passwordPolicy = passwordPolicy;
+        this.audit = audit;
     }
 
     @Override
@@ -51,7 +58,12 @@ public class UserServiceImpl implements UserService {
         user.setEmail(request.email());
         user.setPhone(request.phone());
         // is_root stays false by default — never settable via the API.
-        return UserDto.from(users.save(user));
+        AppUser saved = users.save(user);
+
+        audit.record(AuditEvent.of(AuditActions.USER_CREATE, "app_user", saved.getId(), saved.getUid())
+                .detail(Map.of("username", saved.getUsername(), "displayName", saved.getDisplayName())));
+
+        return UserDto.from(saved);
     }
 
     @Override
@@ -72,6 +84,10 @@ public class UserServiceImpl implements UserService {
         user.setDisplayName(request.displayName());
         user.setEmail(request.email());
         user.setPhone(request.phone());
+
+        // D-6: fact-only — no old/new field values in the detail (minimise PII in the trail).
+        audit.record(AuditEvent.of(AuditActions.USER_UPDATE, "app_user", user.getId(), user.getUid()));
+
         return UserDto.from(user); // dirty-checked within the TX
     }
 
@@ -81,23 +97,39 @@ public class UserServiceImpl implements UserService {
         if (user.isRoot()) {
             throw new ConflictException("A root administrator cannot be disabled via the API.");
         }
+        MasterStatus previous = user.getStatus();
         user.setStatus(MasterStatus.INACTIVE);
+
+        audit.record(AuditEvent.of(AuditActions.USER_DISABLE, "app_user", user.getId(), user.getUid())
+                .detail(Map.of("previousStatus", previous.name(), "newStatus", MasterStatus.INACTIVE.name())));
     }
 
     @Override
     public void enableByUid(String uid) {
-        requireByUid(uid).setStatus(MasterStatus.ACTIVE);
+        AppUser user = requireByUid(uid);
+        MasterStatus previous = user.getStatus();
+        user.setStatus(MasterStatus.ACTIVE);
+
+        audit.record(AuditEvent.of(AuditActions.USER_ENABLE, "app_user", user.getId(), user.getUid())
+                .detail(Map.of("previousStatus", previous.name(), "newStatus", MasterStatus.ACTIVE.name())));
     }
 
     @Override
     public void unlockByUid(String uid) {
-        requireByUid(uid).unlock();
+        AppUser user = requireByUid(uid);
+        user.unlock();
+
+        audit.record(AuditEvent.of(AuditActions.USER_UNLOCK, "app_user", user.getId(), user.getUid()));
     }
 
     @Override
     public void setPasswordByUid(String uid, SetPasswordRequest request) {
+        AppUser user = requireByUid(uid);
         passwordPolicy.validate(request.password());
-        requireByUid(uid).changePassword(passwordEncoder.encode(request.password()), Instant.now());
+        user.changePassword(passwordEncoder.encode(request.password()), Instant.now());
+
+        // D-6: NEVER log the password or its hash — empty detail.
+        audit.record(AuditEvent.of(AuditActions.USER_PASSWORD_SET, "app_user", user.getId(), user.getUid()));
     }
 
     private AppUser requireByUid(String uid) {

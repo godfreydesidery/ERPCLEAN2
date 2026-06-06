@@ -83,7 +83,7 @@ class UserRoleServiceImplIT extends PostgresIntegrationTest {
 
         // Default context: root principal active in company A.
         RequestContext.set(new RequestContext.Principal(
-                rootUser.getId(), "root", true, companyA.getId(), branchInA.getId()));
+                rootUser.getId(), "root", true, companyA.getId(), branchInA.getId(), null));
     }
 
     @AfterEach
@@ -117,7 +117,7 @@ class UserRoleServiceImplIT extends PostgresIntegrationTest {
     void grant_nonRootGrantorOutsideOwnCompany_throwsForbidden() {
         // nonRootUser is active in companyA; tries to grant in companyB
         RequestContext.set(new RequestContext.Principal(
-                nonRootUser.getId(), "nonroot", false, companyA.getId(), branchInA.getId()));
+                nonRootUser.getId(), "nonroot", false, companyA.getId(), branchInA.getId(), null));
 
         assertThatThrownBy(() -> userRoleService.grant(new GrantRoleRequest(
                 targetUser.getUid(), testRole.getUid(), companyB.getUid(), null)))
@@ -128,7 +128,7 @@ class UserRoleServiceImplIT extends PostgresIntegrationTest {
     void grant_nonRootGrantorInOwnCompany_succeeds() {
         // nonRootUser is active in companyA; grants in companyA — should succeed
         RequestContext.set(new RequestContext.Principal(
-                nonRootUser.getId(), "nonroot", false, companyA.getId(), branchInA.getId()));
+                nonRootUser.getId(), "nonroot", false, companyA.getId(), branchInA.getId(), null));
 
         UserRoleDto dto = userRoleService.grant(new GrantRoleRequest(
                 targetUser.getUid(), testRole.getUid(), companyA.getUid(), null));
@@ -253,7 +253,7 @@ class UserRoleServiceImplIT extends PostgresIntegrationTest {
 
         // Switch to nonRootUser who is active in companyA — cannot revoke a companyB grant
         RequestContext.set(new RequestContext.Principal(
-                nonRootUser.getId(), "nonroot", false, companyA.getId(), branchInA.getId()));
+                nonRootUser.getId(), "nonroot", false, companyA.getId(), branchInA.getId(), null));
 
         assertThatThrownBy(() -> userRoleService.revoke(dto.uid()))
                 .isInstanceOf(ForbiddenException.class);

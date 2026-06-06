@@ -1,0 +1,42 @@
+/* Audit list — Bootstrap-themed (Orbix). Mirrors the role-list layout conventions. */
+
+.admin-page {
+  max-width: 1200px;
+}
+
+.page-head {
+  margin-bottom: 1rem;
+}
+
+.state {
+  padding: 1rem 0;
+}
+
+.grid {
+  th {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #6b7280;
+  }
+}
+
+.detail-cell {
+  max-width: 220px;
+}
+
+.detail-pre {
+  font-size: 0.72rem;
+  background: #f8f9fa;
+  border: 1px solid #e6e9ee;
+  border-radius: 4px;
+  padding: 0.35rem 0.5rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.paging {
+  padding-bottom: 1rem;
+}

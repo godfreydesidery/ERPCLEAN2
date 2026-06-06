@@ -367,7 +367,7 @@ class Slice5HttpIT extends PostgresIntegrationTest {
     private void grantRoleAsRootInCompany(AppUser user, Role role, Company company, Branch branch) {
         RequestContext.set(new RequestContext.Principal(
                 rootUser.getId(), rootUser.getUsername(), true,
-                company.getId(), branch.getId()));
+                company.getId(), branch.getId(), null));
         try {
             userRoleService.grant(new GrantRoleRequest(
                     user.getUid(), role.getUid(), company.getUid(), branch.getUid()));

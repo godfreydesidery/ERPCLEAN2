@@ -57,4 +57,21 @@ class ModuleBoundaryTest {
                 .allowEmptyShould(true);
         rule.check(CLASSES);
     }
+
+    /**
+     * Append-only audit (ADR-0004 D-5): the audit_log table is written only through
+     * {@code AuditService.record(...)}. Nothing outside {@code com.erp.platform.audit} may touch
+     * {@code AuditRepository} (which inherits delete/save from JpaRepository) — so no code path can
+     * update or delete an audit row. This is the CI-enforced half of the append-only control.
+     */
+    @Test
+    void auditRepositoryIsUsedOnlyWithinTheAuditPackage() {
+        ArchRule rule = noClasses()
+                .that().resideOutsideOfPackage("com.erp.platform.audit..")
+                .should().dependOnClassesThat().haveFullyQualifiedName(
+                        "com.erp.platform.audit.AuditRepository")
+                .as("audit_log is append-only: only com.erp.platform.audit may use AuditRepository")
+                .allowEmptyShould(true);
+        rule.check(CLASSES);
+    }
 }

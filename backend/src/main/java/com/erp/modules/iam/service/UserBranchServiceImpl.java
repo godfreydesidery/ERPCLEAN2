@@ -8,11 +8,16 @@ import com.erp.modules.iam.domain.entity.UserBranch;
 import com.erp.modules.iam.repository.AppUserRepository;
 import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.UserBranchRepository;
+import com.erp.platform.audit.AuditActions;
+import com.erp.platform.audit.AuditEvent;
+import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,15 +36,18 @@ public class UserBranchServiceImpl implements UserBranchService {
     private final AppUserRepository users;
     private final BranchRepository branches;
     private final ScopeGuard scopeGuard;
+    private final AuditService audit;
 
     public UserBranchServiceImpl(UserBranchRepository userBranches,
                                  AppUserRepository users,
                                  BranchRepository branches,
-                                 ScopeGuard scopeGuard) {
+                                 ScopeGuard scopeGuard,
+                                 AuditService audit) {
         this.userBranches = userBranches;
         this.users = users;
         this.branches = branches;
         this.scopeGuard = scopeGuard;
+        this.audit = audit;
     }
 
     @Override
@@ -60,7 +68,11 @@ public class UserBranchServiceImpl implements UserBranchService {
             clearCurrentDefault(user.getId());
             assignment.markDefault();
         }
-        return UserBranchDto.from(userBranches.save(assignment), user.getUid());
+        UserBranch saved = userBranches.save(assignment);
+        audit.record(AuditEvent.of(AuditActions.BRANCH_ASSIGN, "user_branch", saved.getId(), saved.getUid())
+                .detail(Map.of("userUid", user.getUid(), "branchUid", branch.getUid(),
+                        "madeDefault", request.makeDefault())));
+        return UserBranchDto.from(saved, user.getUid());
     }
 
     @Override
@@ -74,6 +86,9 @@ public class UserBranchServiceImpl implements UserBranchService {
             clearCurrentDefault(target.getUserId());
             target.markDefault();
         }
+        audit.record(AuditEvent.of(AuditActions.BRANCH_SET_DEFAULT, "user_branch",
+                        target.getId(), target.getUid())
+                .detail(Map.of("userUid", userUidOf(target), "branchUid", target.getBranch().getUid())));
         return UserBranchDto.from(target, userUidOf(target));
     }
 
@@ -84,15 +99,37 @@ public class UserBranchServiceImpl implements UserBranchService {
 
         Long userId = target.getUserId();
         boolean wasDefault = target.isDefault();
+        // Capture identity BEFORE delete — the row (and its lazy branch) are gone afterward.
+        Long removedId = target.getId();
+        String removedUid = target.getUid();
+        String removedBranchUid = target.getBranch().getUid();
+        String userUid = userUidOf(target);
+
         userBranches.delete(target);
 
+        String fallbackBranchUid = null;
         if (wasDefault) {
             // Auto-fallback: promote the earliest-assigned remaining branch (D-D). If none remain,
             // the user is left with no default → no active branch (read-only state, FR-IAM-19).
             userBranches.flush();
-            userBranches.findFirstByUserIdAndIdNotOrderByAssignedAtAscIdAsc(userId, target.getId())
-                    .ifPresent(UserBranch::markDefault);
+            UserBranch fallback = userBranches
+                    .findFirstByUserIdAndIdNotOrderByAssignedAtAscIdAsc(userId, removedId)
+                    .orElse(null);
+            if (fallback != null) {
+                fallback.markDefault();
+                fallbackBranchUid = fallback.getBranch().getUid();
+            }
         }
+
+        Map<String, Object> detail = new HashMap<>();
+        detail.put("userUid", userUid);
+        detail.put("branchUid", removedBranchUid);
+        detail.put("wasDefault", wasDefault);
+        if (fallbackBranchUid != null) {
+            detail.put("fallbackBranchUid", fallbackBranchUid);
+        }
+        audit.record(AuditEvent.of(AuditActions.BRANCH_UNASSIGN, "user_branch", removedId, removedUid)
+                .detail(detail));
     }
 
     @Override
