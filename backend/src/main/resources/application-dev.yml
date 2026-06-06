@@ -9,6 +9,13 @@ spring:
     properties:
       hibernate:
         format_sql: true
+  # DevTools hot reload (see README "Hot reload"). It watches target/classes and restarts the app
+  # context on recompile. A short quiet period debounces a burst of class writes into one restart.
+  devtools:
+    restart:
+      enabled: true
+      poll-interval: 1000ms
+      quiet-period: 400ms
 logging:
   level:
     org.hibernate.SQL: debug

@@ -1,25 +1,63 @@
-<section class="login-page">
-  <form class="login-card" (ngSubmit)="submit()" aria-label="Sign in">
-    <h1>Sign in</h1>
+<main class="login-shell">
+  <div class="login-card-wrap">
+    <div class="card shadow-lg border-0 login-card">
+      <div class="card-body p-4 p-md-5">
+        <div class="text-center mb-4">
+          <div class="brand-mark mx-auto mb-3">E</div>
+          <h1 class="h4 fw-semibold mb-1 brand-title">ERP</h1>
+          <p class="text-muted small mb-0">Sign in to continue</p>
+        </div>
 
-    <div class="field">
-      <label for="username">Username</label>
-      <input id="username" name="username" type="text" autocomplete="username"
-             [(ngModel)]="username" [disabled]="submitting()" required autofocus />
+        <form (ngSubmit)="submit()" autocomplete="off" novalidate aria-label="Sign in">
+          <div class="mb-3">
+            <label class="form-label small text-muted mb-1" for="username">Username</label>
+            <div class="input-group input-group-premium">
+              <span class="input-group-text"><i class="bi bi-person" aria-hidden="true"></i></span>
+              <input id="username" name="username" type="text" class="form-control"
+                     autocomplete="username" autofocus placeholder="username"
+                     [(ngModel)]="username" [disabled]="submitting()" required />
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label small text-muted mb-1" for="password">Password</label>
+            <div class="input-group input-group-premium">
+              <span class="input-group-text"><i class="bi bi-lock" aria-hidden="true"></i></span>
+              <input id="password" name="password" class="form-control"
+                     [type]="showPassword() ? 'text' : 'password'"
+                     autocomplete="current-password" placeholder="••••••••"
+                     [(ngModel)]="password" [disabled]="submitting()" required />
+              <button type="button" class="btn btn-outline-secondary" tabindex="-1"
+                      [attr.aria-label]="showPassword() ? 'Hide password' : 'Show password'"
+                      (click)="showPassword.set(!showPassword())">
+                <i class="bi" [class.bi-eye]="!showPassword()" [class.bi-eye-slash]="showPassword()"
+                   aria-hidden="true"></i>
+              </button>
+            </div>
+          </div>
+
+          @if (error(); as msg) {
+            <div class="alert alert-danger py-2 small mb-3" role="alert">
+              <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ msg }}
+            </div>
+          }
+
+          <button class="btn btn-primary w-100 fw-semibold login-cta" type="submit"
+                  [disabled]="submitting()">
+            @if (submitting()) {
+              <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+              Signing in…
+            } @else {
+              Sign in
+              <i class="bi bi-arrow-right ms-1" aria-hidden="true"></i>
+            }
+          </button>
+        </form>
+      </div>
     </div>
 
-    <div class="field">
-      <label for="password">Password</label>
-      <input id="password" name="password" type="password" autocomplete="current-password"
-             [(ngModel)]="password" [disabled]="submitting()" required />
-    </div>
-
-    @if (error(); as msg) {
-      <p class="error" role="alert">{{ msg }}</p>
-    }
-
-    <button type="submit" [disabled]="submitting()">
-      {{ submitting() ? 'Signing in…' : 'Sign in' }}
-    </button>
-  </form>
-</section>
+    <p class="text-center small mt-3 mb-0 login-copyright">
+      &copy; {{ year }} ERP. All rights reserved.
+    </p>
+  </div>
+</main>

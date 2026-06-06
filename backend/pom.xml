@@ -40,6 +40,16 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
+        <!-- DevTools: backend hot reload. Watches target/classes and restarts the app context on
+             recompile (under `mvn spring-boot:run`), so new endpoints/beans show without a manual
+             stop/start. optional+runtime keeps it out of the packaged jar's active path. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-devtools</artifactId>
+            <scope>runtime</scope>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Security: in-house JWT (RS256). Resource-server for token validation; oauth2-jose
              brings Nimbus for JwtEncoder/JwtDecoder. -->
         <dependency>

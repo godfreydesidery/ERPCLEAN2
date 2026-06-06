@@ -1,63 +1,88 @@
 <section class="admin-page">
-  <h1>Companies</h1>
-
-  <!-- Slice 1: enter the organisation uid to scope the list (replaced by user context later). -->
-  <form class="org-bar" (ngSubmit)="load(orgUidInput.value)">
-    <label for="orgUid">Organisation UID</label>
-    <input id="orgUid" #orgUidInput name="orgUid" type="text" [value]="organisationUid()" />
-    <button type="submit">Load</button>
-  </form>
-
-  <!-- Create form -->
-  <form class="create-form" (ngSubmit)="create()" aria-label="Create company">
-    <div class="field">
-      <label for="companyCode">Code</label>
-      <input id="companyCode" name="companyCode" type="text" [(ngModel)]="code" required
-             [disabled]="!organisationUid()" />
-    </div>
-    <div class="field">
-      <label for="companyName">Name</label>
-      <input id="companyName" name="companyName" type="text" [(ngModel)]="name" required
-             [disabled]="!organisationUid()" />
-    </div>
-    <button type="submit" [disabled]="saving() || !organisationUid()">
-      {{ saving() ? 'Saving…' : 'Add company' }}
-    </button>
-  </form>
-  @if (formError(); as msg) {
-    <p class="form-error" role="alert">{{ msg }}</p>
-  }
-
-  <!-- List states: loading / error / empty / populated -->
-  @switch (state()) {
-    @case ('loading') {
-      <p class="state" aria-live="polite">Loading companies…</p>
-    }
-    @case ('error') {
-      <p class="state error" role="alert">Could not load companies. Check the organisation UID and try again.</p>
-    }
-    @default {
-      @if (companies().length === 0) {
-        <p class="state empty">
-          {{ organisationUid() ? 'No companies yet. Add one above.' : 'Enter an organisation UID to begin.' }}
+  <header class="page-head">
+    <h1 class="h4 mb-1">Companies</h1>
+    @switch (orgState()) {
+      @case ('loading') {
+        <p class="org-line text-muted mb-0" aria-live="polite">Loading organisation…</p>
+      }
+      @case ('error') {
+        <p class="org-line text-danger mb-0" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load the organisation. Is the API running?
         </p>
-      } @else {
-        <table class="grid">
-          <caption class="visually-hidden">Companies in this organisation</caption>
-          <thead>
-            <tr><th scope="col">Code</th><th scope="col">Name</th><th scope="col">Status</th><th scope="col">Branches</th></tr>
-          </thead>
-          <tbody>
-            @for (c of companies(); track c.uid) {
-              <tr>
-                <td>{{ c.code }}</td>
-                <td>{{ c.name }}</td>
-                <td>{{ c.status }}</td>
-                <td><a [routerLink]="['/admin/companies', c.uid, 'branches']">Manage branches</a></td>
-              </tr>
-            }
-          </tbody>
-        </table>
+      }
+      @default {
+        <p class="org-line text-muted mb-0">
+          <i class="bi bi-diagram-3 me-1" aria-hidden="true"></i>
+          Organisation: <span class="fw-semibold text-dark">{{ organisation()?.name }}</span>
+        </p>
+      }
+    }
+  </header>
+
+  @if (canEdit()) {
+    <!-- Create form -->
+    <form class="create-form card card-body mb-3" (ngSubmit)="create()" aria-label="Create company">
+      <div class="row g-2 align-items-end">
+        <div class="col-sm-3">
+          <label class="form-label small text-muted mb-1" for="companyCode">Code</label>
+          <input id="companyCode" name="companyCode" type="text" class="form-control"
+                 [(ngModel)]="code" required [disabled]="saving()" />
+        </div>
+        <div class="col-sm-6">
+          <label class="form-label small text-muted mb-1" for="companyName">Name</label>
+          <input id="companyName" name="companyName" type="text" class="form-control"
+                 [(ngModel)]="name" required [disabled]="saving()" />
+        </div>
+        <div class="col-sm-3">
+          <button type="submit" class="btn btn-primary w-100" [disabled]="saving()">
+            {{ saving() ? 'Saving…' : 'Add company' }}
+          </button>
+        </div>
+      </div>
+      @if (formError(); as msg) {
+        <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+      }
+    </form>
+
+    <!-- List states: loading / error / empty / populated -->
+    @switch (state()) {
+      @case ('loading') {
+        <p class="state text-muted" aria-live="polite">Loading companies…</p>
+      }
+      @case ('error') {
+        <p class="state text-danger" role="alert">Could not load companies. Please try again.</p>
+      }
+      @default {
+        @if (companies().length === 0) {
+          <p class="state text-muted">No companies yet. Add one above.</p>
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-hover align-middle bg-white grid">
+              <caption class="sr-only">Companies in this organisation</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Code</th>
+                  <th scope="col">Name</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Branches</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (c of companies(); track c.uid) {
+                  <tr>
+                    <td class="font-monospace">{{ c.code }}</td>
+                    <td>{{ c.name }}</td>
+                    <td><span class="badge text-bg-light border">{{ c.status }}</span></td>
+                    <td>
+                      <a [routerLink]="['/admin/companies', c.uid, 'branches']">Manage branches</a>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
       }
     }
   }
