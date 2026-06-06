@@ -7,14 +7,17 @@ import jakarta.persistence.Id;
 import jakarta.persistence.MappedSuperclass;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Version;
+import lombok.Getter;
 
 /**
  * Base class for every externally exposed entity (PROJECT-CONVENTIONS §3.3, ADR-0001 D-G):
  * a numeric {@code id} for internal/body joins and a stable {@code uid} (ULID) for URLs and
  * cross-system references. The {@code uid} is assigned on persist if not already set.
  *
- * <p>Entities do NOT use Lombok (PROJECT-CONVENTIONS §3.7) — explicit accessors here.
+ * <p>{@code @Getter} generates read-only accessors for {@code id}, {@code uid}, and
+ * {@code version}. No Lombok setter is generated; {@code setUid} is protected for test use only.
  */
+@Getter
 @MappedSuperclass
 public abstract class UidEntity {
 
@@ -36,20 +39,8 @@ public abstract class UidEntity {
         }
     }
 
-    public Long getId() {
-        return id;
-    }
-
-    public String getUid() {
-        return uid;
-    }
-
     /** For tests that must set a uid before persist (set via reflection in unit tests). */
     protected void setUid(String uid) {
         this.uid = uid;
-    }
-
-    public Long getVersion() {
-        return version;
     }
 }

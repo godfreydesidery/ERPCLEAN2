@@ -114,10 +114,13 @@ REST controllers live flat under `com.erp.api..`, one per resource.
      the DB rather than stacking corrective migrations. Ask before adding a migration on top if
      unsure whether the schema is stable.
 
-7. **Coding standards.** Java: Google Java Style, `final` where reasonable, records for DTOs,
-   Lombok only on DTOs/builders (not domain entities). TypeScript: strict, no `any` without a
-   justification comment, ESLint + Prettier. Conventional Commits, one logical change per PR,
-   mandatory review.
+7. **Coding standards.** Java: Google Java Style, `final` where reasonable, records for DTOs.
+   **Lombok** is used to remove getter/setter boilerplate on JPA entities and elsewhere: annotate
+   entities with `@Getter @Setter` (NOT `@Data`/`@EqualsAndHashCode`/`@ToString` on entities — they
+   break JPA identity/lazy loading). Hand-write constructors and any behaviour methods (invariants,
+   state transitions); Lombok generates only the plain accessors. TypeScript: strict, no `any`
+   without a justification comment, ESLint + Prettier. Conventional Commits, one logical change per
+   PR, mandatory review.
 
 8. **Accessibility.** Web ships WCAG 2.1 AA. axe-core runs in CI against representative routes;
    new serious/critical violations fail the build.
