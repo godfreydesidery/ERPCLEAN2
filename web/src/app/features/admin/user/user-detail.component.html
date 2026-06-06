@@ -197,4 +197,163 @@
       }
     </form>
   </div>
+
+  <!-- Role assignment panel -->
+  <div class="card card-body mb-3">
+    <h2 class="h6 mb-3">Role Assignments</h2>
+
+    <!-- Role grants list -->
+    @switch (roleGrantsState()) {
+      @case ('loading') {
+        <p class="text-muted small d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading role assignments…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger small" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load role assignments. Please try again.
+        </p>
+      }
+      @default {
+        @if (!hasRoleGrants()) {
+          <p class="text-muted small">No roles granted yet.</p>
+        } @else {
+          <div class="table-responsive mb-3">
+            <table class="table table-hover align-middle bg-white grid">
+              <caption class="sr-only">Role assignments for this user</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Role</th>
+                  <th scope="col">Company</th>
+                  <th scope="col">Branch</th>
+                  <th scope="col">Granted at</th>
+                  <th scope="col"><span class="sr-only">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (g of roleGrants(); track g.uid) {
+                  <tr>
+                    <td class="font-monospace">{{ g.roleCode }}</td>
+                    <td>{{ companyName()(g.companyUid) }}</td>
+                    <td class="text-muted small">
+                      @if (g.branchUid) {
+                        {{ g.branchUid }}
+                      } @else {
+                        <span class="fst-italic">All branches</span>
+                      }
+                    </td>
+                    <td class="small text-muted">{{ g.grantedAt }}</td>
+                    <td>
+                      <button type="button" class="btn btn-sm btn-outline-danger"
+                              [disabled]="roleRowBusyUid() !== null"
+                              (click)="revokeGrant(g)"
+                              [attr.aria-label]="'Revoke ' + g.roleCode + ' role grant'">
+                        @if (roleRowBusyUid() === g.uid) {
+                          <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                        }
+                        Revoke
+                      </button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      }
+    }
+
+    <!-- Grant form -->
+    <form class="assign-form border-top pt-3" (ngSubmit)="grantRole()" aria-label="Grant a role to this user">
+      <h3 class="h6 mb-3">Grant Role</h3>
+
+      @switch (rolesState()) {
+        @case ('loading') {
+          <p class="text-muted small d-flex align-items-center gap-2" aria-live="polite">
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading roles…
+          </p>
+        }
+        @case ('error') {
+          <p class="text-danger small" role="alert">Could not load roles. Refresh to try again.</p>
+        }
+        @default {
+          <div class="row g-2 align-items-end">
+            <div class="col-sm-3">
+              <label class="form-label small text-muted mb-1" for="grantRole">Role</label>
+              <select id="grantRole" name="grantRole" class="form-select"
+                      [ngModel]="grantRoleUid()"
+                      (ngModelChange)="grantRoleUid.set($event)"
+                      [disabled]="granting()">
+                <option value="">— select role —</option>
+                @for (r of roles(); track r.uid) {
+                  <option [value]="r.uid">{{ r.name }}</option>
+                }
+              </select>
+            </div>
+            <div class="col-sm-3">
+              <label class="form-label small text-muted mb-1" for="grantCompany">Company</label>
+              @switch (companiesState()) {
+                @case ('loading') {
+                  <div class="form-control d-flex align-items-center gap-2 text-muted small">
+                    <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+                  </div>
+                }
+                @case ('error') {
+                  <p class="text-danger small mt-1 mb-0" role="alert">Could not load companies.</p>
+                }
+                @default {
+                  <select id="grantCompany" name="grantCompany" class="form-select"
+                          [ngModel]="grantCompanyUid()"
+                          (ngModelChange)="onGrantCompanyChange($event)"
+                          [disabled]="granting()">
+                    <option value="">— select company —</option>
+                    @for (c of companies(); track c.uid) {
+                      <option [value]="c.uid">{{ c.name }}</option>
+                    }
+                  </select>
+                }
+              }
+            </div>
+            <div class="col-sm-3">
+              <label class="form-label small text-muted mb-1" for="grantBranch">Branch</label>
+              @if (grantBranchesState() === 'loading') {
+                <div class="form-control d-flex align-items-center gap-2 text-muted small">
+                  <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+                </div>
+              } @else {
+                <select id="grantBranch" name="grantBranch" class="form-select"
+                        [ngModel]="grantBranchUid()"
+                        (ngModelChange)="grantBranchUid.set($event)"
+                        [disabled]="granting() || !grantCompanyUid()">
+                  <option value="">— All branches (company-wide) —</option>
+                  @for (b of grantBranches(); track b.uid) {
+                    <option [value]="b.uid">{{ b.code }} — {{ b.name }}</option>
+                  }
+                </select>
+              }
+              @if (grantBranchesState() === 'error') {
+                <p class="text-danger small mt-1 mb-0" role="alert">Could not load branches.</p>
+              }
+            </div>
+            <div class="col-sm-3">
+              <button type="submit" class="btn btn-primary w-100"
+                      [disabled]="granting() || !grantRoleUid() || !grantCompanyUid()">
+                @if (granting()) {
+                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  Granting…
+                } @else {
+                  Grant
+                }
+              </button>
+            </div>
+          </div>
+        }
+      }
+
+      @if (grantError(); as msg) {
+        <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+      }
+    </form>
+  </div>
 </section>
