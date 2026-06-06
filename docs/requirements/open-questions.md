@@ -80,3 +80,34 @@ Each entry: why it matters · who decides · does it block build.
   added later? It is an *optional* attribute (multicurrency.md §5); capturing it in v1 lets documents
   default to a party's currency, but adds a field to the party master now. *Decider:* owner. *Blocks
   build:* no (party master can ship without it; add when foreign-currency documents are switched on).
+
+## Products
+
+- **OQ-PROD-01** — **Product numbering scheme**: a single per-company sequence (`PROD-####`), or a
+  category/type-prefixed sequence (goods vs services, or per category)? Affects the code scheme and
+  uniqueness scope (BR-PROD-08). *Decider:* owner. *Blocks build:* no (generated either way) — close
+  before Sales/Purchases reference product codes on documents.
+- **OQ-PROD-02** — **Barcode uniqueness scope**: unique within the **company** (assumed, BR-PROD-07)
+  or ever org-wide? Company is the consistent tenancy choice; org-wide only matters if the same
+  physical barcode must resolve identically across companies. *Decider:* owner. *Blocks build:* no
+  (company-scope ships; widen later if needed).
+- **OQ-PROD-03** — **Is a price required at product create, or only at sale-time?** Assumed sale-time
+  (BR-PROD-11): a product may be created un-priced and priced later; Sales blocks selling an un-priced
+  product. Confirm vs requiring at least one price to save a sellable product. *Decider:* owner.
+  *Blocks build:* no.
+- **OQ-PROD-04** — **Product categories / groups in v1 or later?** Grouping products (Beverages,
+  Spare Parts, Kitchen) aids browsing/reporting and often drives default tax/pricing. Not in current
+  v1 scope; pull in now or defer. *Decider:* owner. *Blocks build:* no (additive later).
+- **OQ-PROD-05** — **Per-product tax / VAT applicability**: should a product carry its VAT status
+  (standard-rated / exempt / zero-rated) and/or a tax code now? Highly relevant for TZ VAT, needed by
+  Sales/fiscalisation soon. Cheap to capture in v1; deferring risks a later product-master change.
+  *Decider:* owner (with finance/tax input). *Blocks build:* no for Products; likely yes for Sales.
+  **(One of the most useful to answer before the architect models the product master.)**
+- **OQ-PROD-06** — **Composed-product pricing**: confirmed v1 = a composed product is **independently
+  priced** as a sellable line (components recorded for display + future stock-deduction, not to derive
+  price). Re-confirm no v1 requirement to compute a composed product's price from its components.
+  *Decider:* owner. *Blocks build:* no (assumption recorded in products.md §9).
+- **OQ-PROD-07** — **Unit precision / fractional base units**: can a base unit be sold/stocked in
+  fractions (0.5 kg, 1.25 litre), and to how many decimal places? Affects quantity precision across
+  Products/Stock/Sales. *Decider:* owner. *Blocks build:* low — a default (allow fractional, fixed dp)
+  can ship; confirm before Stock/Sales quantity math.
