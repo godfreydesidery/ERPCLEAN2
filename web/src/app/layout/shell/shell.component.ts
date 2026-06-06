@@ -111,7 +111,7 @@ export class ShellComponent {
           available: true,
           permission: 'ROLE.VIEW',
         },
-        { label: 'Audit', route: '/admin/audit', icon: 'bi-clipboard-data', available: false },
+        { label: 'Audit', route: '/admin/audit', icon: 'bi-clipboard-data', available: true, permission: 'AUDIT.VIEW' },
       ],
     },
   ];

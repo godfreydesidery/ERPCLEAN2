@@ -87,7 +87,7 @@ class PermissionResolverIT extends PostgresIntegrationTest {
 
         // Root principal so grant() passes ScopeGuard during @BeforeEach and test-body grants.
         RequestContext.set(new RequestContext.Principal(
-                rootUser.getId(), "root", true, companyA.getId(), branchA1.getId()));
+                rootUser.getId(), "root", true, companyA.getId(), branchA1.getId(), null));
     }
 
     @AfterEach
@@ -184,7 +184,7 @@ class PermissionResolverIT extends PostgresIntegrationTest {
     @Test
     void hasPermission_rootPrincipal_alwaysTrueWithoutAnyGrant() {
         var rootPrincipal = new RequestContext.Principal(
-                rootUser.getId(), "root", true, companyA.getId(), branchA1.getId());
+                rootUser.getId(), "root", true, companyA.getId(), branchA1.getId(), null);
         assertThat(resolver.hasPermission(rootPrincipal, "COMPANY.MANAGE", NOW)).isTrue();
         assertThat(resolver.hasPermission(rootPrincipal, "ANYTHING.MADE_UP", NOW)).isTrue();
     }

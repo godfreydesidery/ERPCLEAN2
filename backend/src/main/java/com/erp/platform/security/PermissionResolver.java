@@ -65,9 +65,11 @@ public class PermissionResolver {
             return false;
         }
         if (principal.root()) {
-            // Interim audit trail for the super-admin bypass until the Slice-6 audit aspect lands
-            // (security review HIGH). Every root-granted action leaves at least this line.
-            log.info("ROOT bypass: user={} (id={}) granted '{}' in company={} branch={}",
+            // Root bypasses scoping (ADR-0001 D-E). The AUDIT trail of root activity is the
+            // audit_log: every root ACTION is recorded by its own action row (actor=root), and a
+            // distinct ROOT.BYPASS row is written when root acts cross-company (ADR-0004 D-9). This
+            // per-check line is DEBUG-only observability — not the audit record — so it can't flood.
+            log.debug("ROOT bypass: user={} (id={}) '{}' in company={} branch={}",
                     principal.username(), principal.userId(), permissionCode,
                     principal.companyId(), principal.branchId());
             return true;

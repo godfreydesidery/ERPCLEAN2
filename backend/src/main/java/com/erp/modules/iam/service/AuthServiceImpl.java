@@ -74,7 +74,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    public TokenResponse login(String username, String rawPassword) {
+    public TokenResponse login(String username, String rawPassword, String ip) {
         Instant now = Instant.now();
         AppUser user = users.findByUsername(username == null ? null : username.toLowerCase())
                 .orElse(null);
@@ -84,6 +84,8 @@ public class AuthServiceImpl implements AuthService {
             // from "wrong password" by response time (G3). Hash against a per-startup decoy of a
             // random value, then fail generically.
             passwordEncoder.matches(rawPassword, dummyHash);
+            // Audit the unknown-username attempt in its own REQUIRES_NEW tx (ADR-0004 D-3).
+            loginAttempts.recordUnknownUserFailure(username, ip, now);
             throw AuthenticationException.invalidCredentials();
         }
 
@@ -99,11 +101,11 @@ public class AuthServiceImpl implements AuthService {
         if (!passwordEncoder.matches(rawPassword, user.getPasswordHash())) {
             // Persist the failed-attempt/lockout bookkeeping in a SEPARATE transaction so it
             // survives the rollback caused by the exception we throw next (LoginAttemptService).
-            loginAttempts.recordFailure(user.getId(), now);
+            loginAttempts.recordFailure(user.getId(), ip, now);
             throw AuthenticationException.invalidCredentials();
         }
 
-        loginAttempts.recordSuccess(user.getId(), now);
+        loginAttempts.recordSuccess(user.getId(), ip, now);
         return issueSession(user);
     }
 
@@ -195,12 +197,12 @@ public class AuthServiceImpl implements AuthService {
 
     /** Resolve active scope, issue the access JWT, persist a fresh refresh token, build the response. */
     private TokenResponse issueSession(AppUser user) {
-        // The default branch scopes the session. Skip a non-ACTIVE (archived) branch — a
-        // decommissioned branch must not scope a login (security review, Slice 4). Such a user lands
-        // with no active branch (read-only) until an admin assigns a live default.
+        // The default branch scopes the session. F8 (ADR-0004 D-8): use isUsableForSession() so a
+        // branch under an ARCHIVED company is also excluded — not just an archived branch itself.
+        // Such a user lands with no active branch (read-only) until an admin assigns a live default.
         Optional<Branch> activeBranch = userBranches.findByUserIdAndIsDefaultTrue(user.getId())
                 .map(UserBranch::getBranch)
-                .filter(b -> b.getStatus() == com.erp.platform.common.domain.MasterStatus.ACTIVE);
+                .filter(Branch::isUsableForSession);
         Long companyId = activeBranch.map(b -> b.getCompany().getId()).orElse(null);
         Long branchId = activeBranch.map(Branch::getId).orElse(null);
 

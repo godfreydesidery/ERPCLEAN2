@@ -8,6 +8,7 @@ import { AlertService } from '../feedback/alert.service';
 import { LoadingService } from '../feedback/loading.service';
 import { ToastService } from '../feedback/toast.service';
 import { ApiResponse } from './api-response.model';
+import { SKIP_UNWRAP } from './http-context.tokens';
 
 /**
  * Endpoints that are reached WITHOUT a session and must never carry a bearer token. Attaching a
@@ -45,9 +46,15 @@ export const authHeaderInterceptor: HttpInterceptorFn = (req, next) => {
 /**
  * Unwraps the backend `ApiResponse<T>` envelope so feature services receive the raw `T`
  * (PROJECT-CONVENTIONS §3.1). Only applies to our API responses; other responses pass through.
+ *
+ * Callers that need the full envelope (e.g. paginated endpoints where `meta` carries paging info)
+ * can opt out by setting the {@link SKIP_UNWRAP} context token to `true` on their request.
  */
 export const apiResponseInterceptor: HttpInterceptorFn = (req, next) => {
   if (!req.url.startsWith(environment.apiBaseUrl)) {
+    return next(req);
+  }
+  if (req.context.get(SKIP_UNWRAP)) {
     return next(req);
   }
   return next(req).pipe(

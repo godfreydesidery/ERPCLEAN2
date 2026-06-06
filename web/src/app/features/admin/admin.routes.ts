@@ -57,5 +57,11 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./user/user-detail.component').then((m) => m.UserDetailComponent),
   },
+  {
+    path: 'audit',
+    canActivate: [requirePermission('AUDIT.VIEW')],
+    loadComponent: () =>
+      import('./audit/audit-list.component').then((m) => m.AuditListComponent),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];

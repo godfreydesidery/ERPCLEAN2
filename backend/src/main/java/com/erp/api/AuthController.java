@@ -6,6 +6,7 @@ import com.erp.modules.iam.domain.dto.RefreshRequest;
 import com.erp.modules.iam.domain.dto.TokenResponse;
 import com.erp.modules.iam.domain.dto.UserBranchDto;
 import com.erp.modules.iam.service.AuthService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -33,8 +34,9 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public TokenResponse login(@Valid @RequestBody LoginRequest request) {
-        return auth.login(request.username(), request.password());
+    public TokenResponse login(@Valid @RequestBody LoginRequest request,
+                               HttpServletRequest httpRequest) {
+        return auth.login(request.username(), request.password(), httpRequest.getRemoteAddr());
     }
 
     @PostMapping("/refresh")

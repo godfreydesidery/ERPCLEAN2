@@ -90,7 +90,7 @@ class UserBranchServiceImplIT extends PostgresIntegrationTest {
 
         // Set ROOT context: ScopeGuard.assertCanActIn passes for root in any company.
         RequestContext.set(new RequestContext.Principal(
-                rootUser.getId(), "root_s4", true, company.getId(), b1.getId()));
+                rootUser.getId(), "root_s4", true, company.getId(), b1.getId(), null));
     }
 
     @AfterEach
@@ -261,7 +261,7 @@ class UserBranchServiceImplIT extends PostgresIntegrationTest {
         assign(b1, true);
 
         // Verify login works and sets a branch before archiving
-        TokenResponse beforeArchive = authService.login("target_s4", PASSWORD);
+        TokenResponse beforeArchive = authService.login("target_s4", PASSWORD, null);
         assertThat(beforeArchive.user().hasBranch()).isTrue();
         assertThat(beforeArchive.user().activeBranchUid()).isNotBlank();
 
@@ -272,7 +272,7 @@ class UserBranchServiceImplIT extends PostgresIntegrationTest {
         branches.saveAndFlush(branch1);
 
         // Now login — the archived branch must NOT scope the session
-        TokenResponse afterArchive = authService.login("target_s4", PASSWORD);
+        TokenResponse afterArchive = authService.login("target_s4", PASSWORD, null);
         assertThat(afterArchive.user().hasBranch())
                 .as("An archived default branch must not scope the session (hasBranch must be false)")
                 .isFalse();

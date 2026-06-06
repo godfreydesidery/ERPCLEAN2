@@ -55,7 +55,7 @@ class ScopeGuardIT extends PostgresIntegrationTest {
 
     @Test
     void canActOn_rootPrincipal_alwaysTrue() {
-        var root = new RequestContext.Principal(1L, "root", true, null, null);
+        var root = new RequestContext.Principal(1L, "root", true, null, null, null);
 
         assertThat(scopeGuard.canActOn(root, "company", companyA.getUid())).isTrue();
         assertThat(scopeGuard.canActOn(root, "company", companyB.getUid())).isTrue();
@@ -133,7 +133,7 @@ class ScopeGuardIT extends PostgresIntegrationTest {
 
     @Test
     void canActIn_root_isAlwaysTrue() {
-        var root = new RequestContext.Principal(1L, "root", true, null, null);
+        var root = new RequestContext.Principal(1L, "root", true, null, null, null);
         assertThat(scopeGuard.canActIn(root, companyA.getId())).isTrue();
         assertThat(scopeGuard.canActIn(root, companyB.getId())).isTrue();
     }
@@ -182,6 +182,6 @@ class ScopeGuardIT extends PostgresIntegrationTest {
     // --- private helpers ---
 
     private static RequestContext.Principal principalFor(Company company) {
-        return new RequestContext.Principal(99L, "nonroot", false, company.getId(), null);
+        return new RequestContext.Principal(99L, "nonroot", false, company.getId(), null, null);
     }
 }

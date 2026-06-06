@@ -10,7 +10,7 @@ package com.erp.platform.security;
  */
 public final class RequestContext {
 
-    public record Principal(Long userId, String username, boolean root, Long companyId, Long branchId) {
+    public record Principal(Long userId, String username, boolean root, Long companyId, Long branchId, String ip) {
     }
 
     private static final ThreadLocal<Principal> CURRENT = new ThreadLocal<>();

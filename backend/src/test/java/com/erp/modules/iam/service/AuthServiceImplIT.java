@@ -61,7 +61,7 @@ class AuthServiceImplIT extends PostgresIntegrationTest {
 
     @Test
     void login_withValidCredentials_returnsTokensAndLandsInDefaultBranch() {
-        TokenResponse res = authService.login("alice", PASSWORD);
+        TokenResponse res = authService.login("alice", PASSWORD, null);
         assertThat(res.accessToken()).isNotBlank();
         assertThat(res.refreshToken()).isNotBlank();
         assertThat(res.user().username()).isEqualTo("alice");
@@ -71,13 +71,13 @@ class AuthServiceImplIT extends PostgresIntegrationTest {
 
     @Test
     void login_usernameIsCaseInsensitive() {
-        TokenResponse res = authService.login("ALICE", PASSWORD);
+        TokenResponse res = authService.login("ALICE", PASSWORD, null);
         assertThat(res.user().username()).isEqualTo("alice");
     }
 
     @Test
     void login_wrongPassword_throwsGenericAndIncrementsCounter() {
-        assertThatThrownBy(() -> authService.login("alice", "wrong"))
+        assertThatThrownBy(() -> authService.login("alice", "wrong", null))
                 .isInstanceOf(AuthenticationException.class)
                 .hasMessageContaining("Invalid username or password");
         assertThat(users.findByUsername("alice").orElseThrow().getFailedLoginCount()).isEqualTo(1);
@@ -86,11 +86,11 @@ class AuthServiceImplIT extends PostgresIntegrationTest {
     @Test
     void login_fiveFailures_locksAccount() {
         for (int i = 0; i < 5; i++) {
-            assertThatThrownBy(() -> authService.login("alice", "wrong"))
+            assertThatThrownBy(() -> authService.login("alice", "wrong", null))
                     .isInstanceOf(AuthenticationException.class);
         }
         // 6th attempt — even with the CORRECT password — is refused because the account is locked.
-        assertThatThrownBy(() -> authService.login("alice", PASSWORD))
+        assertThatThrownBy(() -> authService.login("alice", PASSWORD, null))
                 .isInstanceOf(AuthenticationException.class)
                 .hasMessageContaining("locked");
         assertThat(users.findByUsername("alice").orElseThrow().getLockedUntil()).isNotNull();
@@ -98,14 +98,14 @@ class AuthServiceImplIT extends PostgresIntegrationTest {
 
     @Test
     void login_unknownUser_throwsGeneric() {
-        assertThatThrownBy(() -> authService.login("nobody", "whatever"))
+        assertThatThrownBy(() -> authService.login("nobody", "whatever", null))
                 .isInstanceOf(AuthenticationException.class)
                 .hasMessageContaining("Invalid username or password");
     }
 
     @Test
     void refresh_rotatesToken_andSuccessorWorks() {
-        TokenResponse first = authService.login("alice", PASSWORD);
+        TokenResponse first = authService.login("alice", PASSWORD, null);
         TokenResponse second = authService.refresh(first.refreshToken());
 
         assertThat(second.refreshToken()).isNotEqualTo(first.refreshToken());
@@ -117,7 +117,7 @@ class AuthServiceImplIT extends PostgresIntegrationTest {
 
     @Test
     void refresh_reuseOfConsumedToken_revokesWholeChain() {
-        TokenResponse first = authService.login("alice", PASSWORD);
+        TokenResponse first = authService.login("alice", PASSWORD, null);
         TokenResponse second = authService.refresh(first.refreshToken()); // first now consumed
 
         // Reuse the consumed first token → theft response: revoke all the user's tokens.
@@ -131,7 +131,7 @@ class AuthServiceImplIT extends PostgresIntegrationTest {
 
     @Test
     void logout_revokesRefreshToken() {
-        TokenResponse res = authService.login("alice", PASSWORD);
+        TokenResponse res = authService.login("alice", PASSWORD, null);
         authService.logout(res.refreshToken());
         assertThatThrownBy(() -> authService.refresh(res.refreshToken()))
                 .isInstanceOf(AuthenticationException.class);

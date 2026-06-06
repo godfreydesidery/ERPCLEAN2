@@ -12,7 +12,7 @@ import java.util.List;
  */
 public interface AuthService {
 
-    TokenResponse login(String username, String rawPassword);
+    TokenResponse login(String username, String rawPassword, String ip);
 
     TokenResponse refresh(String rawRefreshToken);
 
