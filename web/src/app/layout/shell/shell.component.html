@@ -27,6 +27,75 @@
       <span class="brand-word d-none d-sm-inline">ERP</span>
     </a>
 
+    <!-- Branch selector chip — always rendered once branches load; switchable only when >1 branch -->
+    @if (branches().length > 0) {
+      <div class="branch-chip-wrap">
+        <button type="button"
+                class="branch-chip"
+                [class.is-switchable]="branches().length > 1"
+                [class.is-open]="branchMenuOpen()"
+                [disabled]="switching() || branches().length <= 1"
+                (click)="$event.stopPropagation(); branchMenuOpen.set(!branchMenuOpen())"
+                [attr.aria-label]="'Active branch: ' + (activeBranch()?.branchName ?? 'none')"
+                [attr.aria-expanded]="branches().length > 1 ? branchMenuOpen() : null"
+                [attr.aria-haspopup]="branches().length > 1 ? 'listbox' : null">
+          <span class="branch-chip__icon" aria-hidden="true">
+            <i class="bi bi-building"></i>
+          </span>
+          <span class="branch-chip__body">
+            <span class="branch-chip__eyebrow">Branch</span>
+            <span class="branch-chip__name">
+              {{ activeBranch()?.branchName ?? 'Select…' }}
+              @if (activeBranch()?.branchCode) {
+                <span class="branch-chip__code d-none d-sm-inline">{{ activeBranch()!.branchCode }}</span>
+              }
+            </span>
+          </span>
+          @if (branches().length > 1) {
+            <i class="bi bi-chevron-down branch-chip__chev"
+               [class.flip]="branchMenuOpen()"
+               aria-hidden="true"></i>
+          }
+        </button>
+
+        @if (branchMenuOpen()) {
+          <div class="branch-menu shadow"
+               role="menu"
+               aria-label="Select branch"
+               (click)="$event.stopPropagation()"
+               (keydown)="$event.stopPropagation()">
+            <div class="branch-menu__header" aria-hidden="true">Switch branch</div>
+            @for (branch of branches(); track branch.uid) {
+              <button type="button"
+                      class="branch-menu__item"
+                      role="menuitemradio"
+                      [class.is-active]="branch.branchUid === activeBranch()?.branchUid"
+                      [attr.aria-checked]="branch.branchUid === activeBranch()?.branchUid"
+                      [disabled]="switching()"
+                      (click)="onBranchPick(branch.branchUid)">
+                <span class="branch-menu__dot" aria-hidden="true"></span>
+                <span class="flex-grow-1 text-truncate">
+                  <span class="fw-semibold">{{ branch.branchName }}</span>
+                  <span class="small text-muted ms-1 font-monospace">{{ branch.branchCode }}</span>
+                </span>
+                @if (branch.branchUid === activeBranch()?.branchUid) {
+                  <i class="bi bi-check2 text-primary" aria-hidden="true"></i>
+                }
+              </button>
+            }
+          </div>
+        }
+      </div>
+    } @else if (branches().length === 0 && session.user() && !session.user()?.hasBranch) {
+      <span class="branch-chip branch-chip--none" aria-label="No branch assigned">
+        <i class="bi bi-building branch-chip__icon branch-chip__icon--sm" aria-hidden="true"></i>
+        <span class="branch-chip__body">
+          <span class="branch-chip__eyebrow">Branch</span>
+          <span class="branch-chip__name branch-chip__name--none">No branch</span>
+        </span>
+      </span>
+    }
+
     <div class="topbar-spacer"></div>
 
     <span class="api-status" [attr.data-state]="state()" aria-live="polite">

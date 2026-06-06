@@ -113,6 +113,208 @@
   flex: 1;
 }
 
+/* ------- Branch chip + dropdown ------- */
+.branch-chip-wrap {
+  position: relative;
+}
+
+.branch-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.3rem 0.75rem 0.3rem 0.3rem;
+  background: #f1f5fb;
+  border: 1px solid #dde6f3;
+  border-radius: 999px;
+  color: #0d2a5b;
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.branch-chip.is-switchable:hover {
+  background: #e8eff9;
+  border-color: #b9c8df;
+}
+
+.branch-chip.is-open {
+  border-color: #1a4fb5;
+  background: #fff;
+  box-shadow: 0 0 0 0.2rem rgba(26, 79, 181, 0.12);
+}
+
+.branch-chip:disabled {
+  cursor: default;
+  opacity: 0.85;
+}
+
+/* No-branch indicator — amber, read-only */
+.branch-chip--none {
+  cursor: default;
+  background: #fffbeb;
+  border-color: #fcd34d;
+  color: #92400e;
+}
+
+.branch-chip__icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #1a4fb5, #4178d9);
+  color: #fff;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.branch-chip--none .branch-chip__icon {
+  background: #fde68a;
+  color: #92400e;
+}
+
+.branch-chip__icon--sm {
+  width: 24px;
+  height: 24px;
+  font-size: 0.8rem;
+}
+
+.branch-chip__body {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  line-height: 1.1;
+  min-width: 0;
+}
+
+.branch-chip__eyebrow {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6b7d96;
+}
+
+.branch-chip__name {
+  font-size: 0.92rem;
+  font-weight: 600;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branch-chip__name--none {
+  color: #b45309;
+}
+
+.branch-chip__code {
+  margin-left: 0.4rem;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #6b7d96;
+}
+
+.branch-chip__chev {
+  font-size: 0.85rem;
+  color: #6b7d96;
+  transition: transform 0.15s ease;
+}
+
+.branch-chip__chev.flip {
+  transform: rotate(180deg);
+}
+
+.branch-menu {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  min-width: 280px;
+  max-width: 360px;
+  max-height: 60vh;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #dde6f3;
+  border-radius: 12px;
+  padding: 0.5rem 0;
+  z-index: 1040;
+}
+
+.branch-menu__header {
+  padding: 0.25rem 1rem 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6b7d96;
+  border-bottom: 1px solid #f3f4f6;
+  margin-bottom: 0.25rem;
+}
+
+.branch-menu__item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.55rem 1rem;
+  background: transparent;
+  border: none;
+  text-align: left;
+  font-size: 0.9rem;
+  color: #1f2933;
+  cursor: pointer;
+}
+
+.branch-menu__item:hover {
+  background: #f4f6fa;
+}
+
+.branch-menu__item.is-active {
+  background: #eef4ff;
+}
+
+.branch-menu__item:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.branch-menu__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #cbd5e1;
+  flex-shrink: 0;
+}
+
+.branch-menu__item.is-active .branch-menu__dot {
+  background: #1a4fb5;
+}
+
+@media (max-width: 575.98px) {
+  .branch-chip__eyebrow {
+    display: none;
+  }
+
+  .branch-chip__name {
+    font-size: 0.85rem;
+    max-width: 120px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .branch-chip,
+  .branch-chip__chev {
+    transition: none;
+  }
+}
+
 /* ------- API status badge ------- */
 .api-status {
   display: inline-flex;

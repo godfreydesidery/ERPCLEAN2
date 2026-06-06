@@ -7,6 +7,7 @@ import { SessionStore } from '../../core/auth/session.store';
 import { LoadingService } from '../../core/feedback/loading.service';
 import { ToastContainerComponent } from '../../core/feedback/toast-container.component';
 import { AlertHostComponent } from '../../core/feedback/alert-host.component';
+import { UserBranch } from '../../features/admin/models/user-branch.model';
 
 /**
  * A single sidebar navigation entry.
@@ -58,6 +59,24 @@ export class ShellComponent {
   readonly state = signal<'loading' | 'ok' | 'error'>('loading');
   readonly sidebarOpen = signal(false);
   readonly userMenuOpen = signal(false);
+  readonly branchMenuOpen = signal(false);
+  readonly branches = signal<UserBranch[]>([]);
+  readonly switching = signal(false);
+
+  /**
+   * The branch from the loaded list whose branchUid matches the session's activeBranchUid.
+   * Falls back to the default branch, then to the first in the list. Null until branches load.
+   */
+  readonly activeBranch = computed<UserBranch | null>(() => {
+    const list = this.branches();
+    if (list.length === 0) return null;
+    const activeUid = this.session.activeBranchUid();
+    if (activeUid) {
+      const match = list.find((b) => b.branchUid === activeUid);
+      if (match) return match;
+    }
+    return list.find((b) => b.isDefault) ?? list[0];
+  });
 
   readonly initials = computed(() => {
     const name = this.session.user()?.displayName ?? '';
@@ -120,7 +139,25 @@ export class ShellComponent {
     // still authenticated; they just get a conservative (empty) permission set until next login.
     if (this.session.isAuthenticated()) {
       this.auth.me().subscribe({ error: () => undefined });
+      this.auth.myBranches().subscribe({
+        next: (list) => this.branches.set(list),
+        error: () => this.branches.set([]),
+      });
     }
+  }
+
+  onBranchPick(branchUid: string): void {
+    const active = this.activeBranch();
+    if (active?.branchUid === branchUid) {
+      this.branchMenuOpen.set(false);
+      return;
+    }
+    this.switching.set(true);
+    this.branchMenuOpen.set(false);
+    this.auth.switchBranch(branchUid).subscribe({
+      next: () => this.switching.set(false),
+      error: () => this.switching.set(false),
+    });
   }
 
   closeSidebar(): void {
@@ -133,14 +170,14 @@ export class ShellComponent {
   onEscape(): void {
     this.closeSidebar();
     this.userMenuOpen.set(false);
+    this.branchMenuOpen.set(false);
   }
 
-  // Close the user menu on any outside click; the menu stops propagation on its own click.
+  // Close any open dropdown on an outside click; each menu stops propagation on its own click.
   @HostListener('document:click')
   onDocumentClick(): void {
-    if (this.userMenuOpen()) {
-      this.userMenuOpen.set(false);
-    }
+    if (this.userMenuOpen()) this.userMenuOpen.set(false);
+    if (this.branchMenuOpen()) this.branchMenuOpen.set(false);
   }
 
   logout(): void {

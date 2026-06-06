@@ -4,6 +4,7 @@ import { Observable, catchError, of, switchMap, tap } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { LoginRequest, MeResponse, TokenResponse } from './auth.model';
 import { SessionStore } from './session.store';
+import { UserBranch } from '../../features/admin/models/user-branch.model';
 
 /**
  * Authentication façade: calls the auth API and keeps the SessionStore in sync. Login/refresh store
@@ -58,6 +59,32 @@ export class AuthService {
       tap({
         next: () => this.session.clear(),
         error: () => this.session.clear(), // clear locally even if the server call fails
+      }),
+    );
+  }
+
+  /**
+   * Returns the authenticated caller's own active branch assignments from GET /auth/my-branches.
+   * Used by the shell branch selector (Slice 5). The interceptor unwraps the ApiResponse envelope,
+   * so the observable emits UserBranch[] directly.
+   */
+  myBranches(): Observable<UserBranch[]> {
+    return this.http.get<UserBranch[]>(`${this.base}/my-branches`);
+  }
+
+  /**
+   * Switches the active branch client-side: persists the new branchUid to SessionStore (which the
+   * authHeaderInterceptor will send as X-Branch-Uid on all subsequent requests), then re-fetches
+   * /auth/me so the effective permission set re-resolves for the new branch scope. If me() fails,
+   * the branchUid is reverted to the previous value so the session stays consistent.
+   */
+  switchBranch(branchUid: string): Observable<MeResponse> {
+    const previous = this.session.activeBranchUid();
+    this.session.setActiveBranchUid(branchUid);
+    return this.me().pipe(
+      catchError((err: unknown) => {
+        this.session.setActiveBranchUid(previous);
+        throw err;
       }),
     );
   }

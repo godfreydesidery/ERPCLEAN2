@@ -8,6 +8,7 @@ import { environment } from '../../../environments/environment';
 import { AuthService } from './auth.service';
 import { SessionStore } from './session.store';
 import { TokenResponse } from './auth.model';
+import { UserBranch } from '../../features/admin/models/user-branch.model';
 
 describe('AuthService', () => {
   let auth: AuthService;
@@ -98,5 +99,58 @@ describe('AuthService', () => {
 
     expect(session.isAuthenticated()).toBe(false);
     expect(session.user()).toBeNull();
+  });
+
+  // ---- Slice 5: branch selector ----
+
+  it('myBranches returns the unwrapped UserBranch array', () => {
+    const branches: UserBranch[] = [
+      {
+        id: '1', uid: 'UB1', userUid: 'U1', branchUid: 'BR1',
+        branchCode: 'HQ', branchName: 'Head Office',
+        companyUid: 'C1', isDefault: true, assignedAt: '2024-01-01T00:00:00Z',
+      },
+      {
+        id: '2', uid: 'UB2', userUid: 'U1', branchUid: 'BR2',
+        branchCode: 'WH', branchName: 'Warehouse',
+        companyUid: 'C1', isDefault: false, assignedAt: '2024-01-02T00:00:00Z',
+      },
+    ];
+
+    let result: UserBranch[] | undefined;
+    auth.myBranches().subscribe((b) => (result = b));
+    httpMock.expectOne(`${base}/my-branches`).flush(branches);
+
+    expect(result).toEqual(branches);
+  });
+
+  it('switchBranch sets activeBranchUid and re-fetches /auth/me', () => {
+    session.setSession(sample.accessToken, sample.refreshToken, sample.user);
+
+    auth.switchBranch('BR2').subscribe();
+
+    expect(session.activeBranchUid()).toBe('BR2');
+    httpMock.expectOne(`${base}/me`).flush({
+      uid: 'U1', username: 'alice', displayName: 'Alice',
+      isRoot: false, activeCompanyUid: 'C1', activeBranchUid: 'BR2',
+      permissions: ['COMPANY.VIEW'],
+    });
+
+    expect(session.activeBranchUid()).toBe('BR2');
+    expect(session.permissions()).toEqual(['COMPANY.VIEW']);
+  });
+
+  it('switchBranch reverts activeBranchUid when me() errors', () => {
+    session.setSession(sample.accessToken, sample.refreshToken, sample.user);
+    const originalUid = session.activeBranchUid(); // 'B1' from sample
+
+    let errored = false;
+    auth.switchBranch('BR-INVALID').subscribe({ error: () => (errored = true) });
+
+    expect(session.activeBranchUid()).toBe('BR-INVALID'); // set optimistically
+    httpMock.expectOne(`${base}/me`).flush('', { status: 403, statusText: 'Forbidden' });
+
+    expect(errored).toBe(true);
+    expect(session.activeBranchUid()).toBe(originalUid); // reverted
   });
 });
