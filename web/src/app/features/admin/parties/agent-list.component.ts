@@ -9,8 +9,10 @@ import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import { Company } from '../models/company.model';
 import { AgentKind, AgentModel, CreateAgentRequest, PartyType } from '../models/party.model';
+import { User } from '../models/user.model';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
+import { UserService } from '../user/user.service';
 import { AgentService } from './agent.service';
 
 const DEFAULT_SIZE = 20;
@@ -27,6 +29,7 @@ export class AgentListComponent {
   private readonly agentService = inject(AgentService);
   private readonly companyService = inject(CompanyService);
   private readonly organisationService = inject(OrganisationService);
+  private readonly userService = inject(UserService);
   private readonly alerts = inject(AlertService);
   protected readonly session = inject(SessionStore);
 
@@ -44,6 +47,7 @@ export class AgentListComponent {
   readonly newDisplayName = signal('');
   readonly newPartyType = signal<PartyType>('INDIVIDUAL');
   readonly newAgentKind = signal<AgentKind>('EXTERNAL');
+  readonly newAppUserId = signal('');
   // Identity fields — conditional on partyType (BR-PARTY-04/05/06).
   readonly newLegalName = signal('');
   readonly newTin = signal('');
@@ -53,6 +57,11 @@ export class AgentListComponent {
   readonly saving = signal(false);
   readonly formError = signal<string | null>(null);
   readonly showCreateForm = signal(false);
+
+  // ── Users list — loaded lazily when INTERNAL kind is first needed ─────────
+  readonly users = signal<User[]>([]);
+  readonly usersState = signal<'loading' | 'idle' | 'error'>('idle');
+  private usersLoaded = false;
 
   readonly canManage = computed(() => this.session.hasPermission('AGENT.MANAGE'));
   readonly isEmpty = computed(() => this.state() === 'idle' && this.rows().length === 0);
@@ -139,14 +148,40 @@ export class AgentListComponent {
   }
 
   toggleCreateForm(): void {
+    const opening = !this.showCreateForm();
     this.showCreateForm.update((v) => !v);
     this.formError.set(null);
+    // Lazy-load users when the form is first opened so the picker is ready.
+    if (opening) this.ensureUsersLoaded();
+  }
+
+  /** Called from the kind <select> (ngModelChange). */
+  onNewAgentKindChange(kind: AgentKind): void {
+    this.newAgentKind.set(kind);
+    if (kind === 'EXTERNAL') {
+      // BR-PARTY-11: external must have no user; clear the picker.
+      this.newAppUserId.set('');
+    } else {
+      // Lazy-load when kind switches to INTERNAL in case form was already open.
+      this.ensureUsersLoaded();
+    }
+  }
+
+  private ensureUsersLoaded(): void {
+    if (this.usersLoaded) return;
+    this.usersLoaded = true;
+    this.usersState.set('loading');
+    this.userService.list().subscribe({
+      next: (list) => { this.users.set(list); this.usersState.set('idle'); },
+      error: () => this.usersState.set('error'),
+    });
   }
 
   private resetCreateForm(): void {
     this.newDisplayName.set('');
     this.newPartyType.set('INDIVIDUAL');
     this.newAgentKind.set('EXTERNAL');
+    this.newAppUserId.set('');
     this.newLegalName.set('');
     this.newTin.set('');
     this.newVatRegistered.set(false);
@@ -171,9 +206,15 @@ export class AgentListComponent {
       this.formError.set('A business party must have a TIN (BR-PARTY-04).');
       return;
     }
+    // BR-PARTY-10: INTERNAL agent must reference an app user.
+    if (this.newAgentKind() === 'INTERNAL' && !this.newAppUserId()) {
+      this.formError.set('An internal agent must reference an app user (BR-PARTY-10).');
+      return;
+    }
     this.saving.set(true);
     this.formError.set(null);
     const vatRegistered = this.newVatRegistered();
+    const isInternal = this.newAgentKind() === 'INTERNAL';
     const request: CreateAgentRequest = {
       companyId,
       partyType: this.newPartyType(),
@@ -185,6 +226,8 @@ export class AgentListComponent {
       vrn: vatRegistered ? (this.newVrn().trim() || undefined) : undefined,
       businessRegNo: this.newBusinessRegNo().trim() || undefined,
       agentKind: this.newAgentKind(),
+      // BR-PARTY-10/11: send appUserId only for INTERNAL; omit entirely for EXTERNAL.
+      appUserId: isInternal ? this.newAppUserId() : undefined,
     };
     this.agentService.create(request).subscribe({
       next: (created) => {
