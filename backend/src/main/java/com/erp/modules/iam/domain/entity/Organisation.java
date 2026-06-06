@@ -16,7 +16,7 @@ import lombok.Setter;
  */
 @Getter
 @Entity
-@Table(name = "organisation")
+@Table(name = "organisations")
 public class Organisation extends UidEntity {
 
     @Column(name = "name", nullable = false, length = 160)

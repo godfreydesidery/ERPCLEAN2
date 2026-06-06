@@ -60,7 +60,7 @@ public class UserServiceImpl implements UserService {
         // is_root stays false by default — never settable via the API.
         AppUser saved = users.save(user);
 
-        audit.record(AuditEvent.of(AuditActions.USER_CREATE, "app_user", saved.getId(), saved.getUid())
+        audit.record(AuditEvent.of(AuditActions.USER_CREATE, "app_users", saved.getId(), saved.getUid())
                 .detail(Map.of("username", saved.getUsername(), "displayName", saved.getDisplayName())));
 
         return UserDto.from(saved);
@@ -86,7 +86,7 @@ public class UserServiceImpl implements UserService {
         user.setPhone(request.phone());
 
         // D-6: fact-only — no old/new field values in the detail (minimise PII in the trail).
-        audit.record(AuditEvent.of(AuditActions.USER_UPDATE, "app_user", user.getId(), user.getUid()));
+        audit.record(AuditEvent.of(AuditActions.USER_UPDATE, "app_users", user.getId(), user.getUid()));
 
         return UserDto.from(user); // dirty-checked within the TX
     }
@@ -100,7 +100,7 @@ public class UserServiceImpl implements UserService {
         MasterStatus previous = user.getStatus();
         user.setStatus(MasterStatus.INACTIVE);
 
-        audit.record(AuditEvent.of(AuditActions.USER_DISABLE, "app_user", user.getId(), user.getUid())
+        audit.record(AuditEvent.of(AuditActions.USER_DISABLE, "app_users", user.getId(), user.getUid())
                 .detail(Map.of("previousStatus", previous.name(), "newStatus", MasterStatus.INACTIVE.name())));
     }
 
@@ -110,7 +110,7 @@ public class UserServiceImpl implements UserService {
         MasterStatus previous = user.getStatus();
         user.setStatus(MasterStatus.ACTIVE);
 
-        audit.record(AuditEvent.of(AuditActions.USER_ENABLE, "app_user", user.getId(), user.getUid())
+        audit.record(AuditEvent.of(AuditActions.USER_ENABLE, "app_users", user.getId(), user.getUid())
                 .detail(Map.of("previousStatus", previous.name(), "newStatus", MasterStatus.ACTIVE.name())));
     }
 
@@ -119,7 +119,7 @@ public class UserServiceImpl implements UserService {
         AppUser user = requireByUid(uid);
         user.unlock();
 
-        audit.record(AuditEvent.of(AuditActions.USER_UNLOCK, "app_user", user.getId(), user.getUid()));
+        audit.record(AuditEvent.of(AuditActions.USER_UNLOCK, "app_users", user.getId(), user.getUid()));
     }
 
     @Override
@@ -129,7 +129,7 @@ public class UserServiceImpl implements UserService {
         user.changePassword(passwordEncoder.encode(request.password()), Instant.now());
 
         // D-6: NEVER log the password or its hash — empty detail.
-        audit.record(AuditEvent.of(AuditActions.USER_PASSWORD_SET, "app_user", user.getId(), user.getUid()));
+        audit.record(AuditEvent.of(AuditActions.USER_PASSWORD_SET, "app_users", user.getId(), user.getUid()));
     }
 
     private AppUser requireByUid(String uid) {

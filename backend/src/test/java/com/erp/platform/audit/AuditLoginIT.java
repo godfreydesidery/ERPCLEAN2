@@ -85,7 +85,7 @@ class AuditLoginIT extends PostgresIntegrationTest {
 
         AuditLog row = rows.get(0);
         assertThat(row.getActorUserId()).isEqualTo(testUser.getId());
-        assertThat(row.getTargetType()).isEqualTo("app_user");
+        assertThat(row.getTargetType()).isEqualTo("app_users");
         assertThat(row.getTargetId()).isEqualTo(testUser.getId());
         assertThat(row.getIp()).isEqualTo(CLIENT_IP);
         assertThat(row.getAt()).isNotNull();

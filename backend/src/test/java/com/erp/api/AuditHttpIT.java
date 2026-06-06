@@ -51,7 +51,7 @@ import org.springframework.test.web.servlet.MockMvc;
  *   <li>ROOT bypasses the gate -> 200, $.data array + $.meta present with all paging fields.
  *   <li>Non-root user with AUDIT.VIEW granted -> 200 (gate flip).
  *   <li>Filter ?action=USER.CREATE -> only USER.CREATE rows returned.
- *   <li>Filter ?targetType=app_user -> all rows have targetType==app_user.
+ *   <li>Filter ?targetType=app_users -> all rows have targetType==app_users.
  *   <li>Paging: size=2 with >2 rows -> meta.totalPages > 1 and meta.hasNext==true on page 0;
  *       page=1 returns the next slice.
  *   <li>Default sort newest-first: first row's at >= second row's at.
@@ -203,18 +203,18 @@ class AuditHttpIT extends PostgresIntegrationTest {
     }
 
     // ===================================================================
-    // Test 5 — Filter ?targetType=app_user -> all rows have targetType==app_user
+    // Test 5 — Filter ?targetType=app_users -> all rows have targetType==app_users
     // ===================================================================
 
     @Test
     void getAudit_filterByTargetType_returnsOnlyMatchingRows() throws Exception {
         mockMvc.perform(get("/api/v1/audit")
-                        .param("targetType", "app_user")
+                        .param("targetType", "app_users")
                         .header("Authorization", "Bearer " + rootToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").isArray())
-                .andExpect(jsonPath("$.data[?(@.targetType != 'app_user')]").doesNotExist())
-                .andExpect(jsonPath("$.data[0].targetType").value("app_user"));
+                .andExpect(jsonPath("$.data[?(@.targetType != 'app_users')]").doesNotExist())
+                .andExpect(jsonPath("$.data[0].targetType").value("app_users"));
     }
 
     // ===================================================================

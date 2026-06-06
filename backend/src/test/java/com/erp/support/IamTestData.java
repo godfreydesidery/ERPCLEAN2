@@ -21,22 +21,22 @@ public class IamTestData {
 
     @Transactional
     public void clearAll() {
-        // 1. Clear all role grants (FK child of role, app_user, company, branch).
+        // 1. Clear all role grants (FK child of roles, app_users, companies, branches).
         em.createNativeQuery("TRUNCATE user_role RESTART IDENTITY CASCADE").executeUpdate();
         // 2. Remove role_permission rows for test-created (non-system) roles so that the role
         //    delete below is not blocked by fk_role_permission_role. ORG_ADMIN (is_system) rows
         //    are intentionally left intact — Flyway seeded them once and won't re-seed mid-run.
         em.createNativeQuery(
-                "DELETE FROM role_permission WHERE role_id IN (SELECT id FROM role WHERE is_system = false)")
+                "DELETE FROM role_permission WHERE role_id IN (SELECT id FROM roles WHERE is_system = false)")
                 .executeUpdate();
         // 3. Delete test-created roles (system roles stay).
-        em.createNativeQuery("DELETE FROM role WHERE is_system = false").executeUpdate();
+        em.createNativeQuery("DELETE FROM roles WHERE is_system = false").executeUpdate();
         // 4. Clear the rest of the IAM tables (CASCADE handles FK order within this set).
         //    audit_log has a NULLABLE FK to app_user (ON DELETE SET NULL per schema) so it does not
         //    block the app_user truncate, but its rows must be cleared so audit-count assertions in
         //    AuditServiceImplIT start from zero.
         em.createNativeQuery(
-                "TRUNCATE audit_log, refresh_token, user_branch, app_user, branch, company, organisation RESTART IDENTITY CASCADE")
+                "TRUNCATE audit_logs, refresh_tokens, user_branch, app_users, branches, companies, organisations RESTART IDENTITY CASCADE")
                 .executeUpdate();
     }
 }

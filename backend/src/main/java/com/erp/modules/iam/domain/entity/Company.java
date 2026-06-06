@@ -19,7 +19,7 @@ import lombok.Setter;
  */
 @Getter
 @Entity
-@Table(name = "company")
+@Table(name = "companies")
 public class Company extends UidEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)

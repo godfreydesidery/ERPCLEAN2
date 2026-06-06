@@ -57,12 +57,12 @@ public class LoginAttemptService {
             users.save(user);
 
             audit.record(
-                    AuditEvent.of(AuditActions.LOGIN_FAIL, "app_user", userId, user.getUid()),
+                    AuditEvent.of(AuditActions.LOGIN_FAIL, "app_users", userId, user.getUid()),
                     userId, ip);
 
             if (user.isLocked(now)) {
                 audit.record(
-                        AuditEvent.of(AuditActions.ACCOUNT_LOCKED, "app_user", userId, user.getUid())
+                        AuditEvent.of(AuditActions.ACCOUNT_LOCKED, "app_users", userId, user.getUid())
                                   .detail(Map.of(
                                           "failedCount", user.getFailedLoginCount(),
                                           "lockedUntil", user.getLockedUntil().toString())),
@@ -81,7 +81,7 @@ public class LoginAttemptService {
             users.save(user);
 
             audit.record(
-                    AuditEvent.of(AuditActions.LOGIN_SUCCESS, "app_user", userId, user.getUid()),
+                    AuditEvent.of(AuditActions.LOGIN_SUCCESS, "app_users", userId, user.getUid()),
                     userId, ip);
         });
     }
@@ -94,7 +94,7 @@ public class LoginAttemptService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordUnknownUserFailure(String usernameAttempted, String ip, Instant now) {
         audit.record(
-                AuditEvent.of(AuditActions.LOGIN_FAIL, "app_user")
+                AuditEvent.of(AuditActions.LOGIN_FAIL, "app_users")
                           .detail(Map.of("usernameAttempted",
                                   usernameAttempted != null ? usernameAttempted : "")),
                 null, ip);

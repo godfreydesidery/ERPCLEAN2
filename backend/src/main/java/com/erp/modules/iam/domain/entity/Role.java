@@ -23,7 +23,7 @@ import lombok.Setter;
  * accessors (PROJECT-CONVENTIONS §3.7); the constructor and the add/remove behaviour are explicit.
  */
 @Entity
-@Table(name = "role")
+@Table(name = "roles")
 @Getter
 @Setter
 public class Role extends UidEntity {
