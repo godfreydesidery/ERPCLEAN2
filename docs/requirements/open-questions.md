@@ -55,3 +55,28 @@ Each entry: why it matters · who decides · does it block build.
   is it a **new typed party** or a **sub-kind** of an existing one (customer/supplier)? Captured now
   so the decision is conscious later, not assumed. *Decider:* owner + architect at that round.
   *Blocks build:* no (future scope).
+
+## Multicurrency
+
+- **OQ-CUR-01** — Is there **one base currency per company** only, or do we also need a separate
+  **group / reporting currency at the organisation level** (consolidating several companies' books
+  into one reporting currency)? v1 assumes company-base only. Matters because a group reporting
+  currency adds a second conversion layer to every consolidated report. *Decider:* owner. *Blocks
+  build:* no (company-base ships now; org-level reporting is a later round). See multicurrency.md §1.
+- **OQ-CUR-02** — Will we ever need to **settle/pay a document in a currency different from the one it
+  was billed in** (cross-currency settlement), and if so **when**? This introduces **realised FX
+  gain/loss** and is the single biggest deferred item. Matters because it touches Finance posting and
+  the payment flow. *Decider:* owner. *Blocks build:* no for v1 (deferred, FR-CUR-11); yes for any
+  future multi-currency settlement round.
+- **OQ-CUR-03** — **Rounding policy per currency**: which **rounding mode** (half-up, half-even/
+  banker's, half-down) applies, and confirm the **decimal places for TZS** (0 in practice vs a nominal
+  2). Matters because backend and frontend must round identically (multicurrency.md §6) and the mode
+  affects every total. *Decider:* owner (with finance input). *Blocks build:* low — a default
+  (half-up, TZS = 0 dp) can ship and be revisited; confirm before Sales/Finance go live.
+- **OQ-CUR-04** — **Which currencies to seed initially** in the currency master? Proposed: **TZS**
+  (base), **USD**, **EUR**; candidates **KES**, **UGX**, **RWF**, **GBP**, **ZAR**. Matters only for
+  the seed list, not the model. *Decider:* owner. *Blocks build:* no (seed list is easily amended).
+- **OQ-CUR-05** — Do **parties get a default/preferred transacting currency in v1**, or is that field
+  added later? It is an *optional* attribute (multicurrency.md §5); capturing it in v1 lets documents
+  default to a party's currency, but adds a field to the party master now. *Decider:* owner. *Blocks
+  build:* no (party master can ship without it; add when foreign-currency documents are switched on).

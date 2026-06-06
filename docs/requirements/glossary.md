@@ -70,6 +70,30 @@ One definition per term, used consistently across the team. Add terms as modules
 - **Creditor-as-lens** — **Not a party type.** A *finance view* of a supplier we currently owe (a
   payable balance). Derived from supplier balances; never a separate master record.
 
+## Multicurrency
+
+- **Monetary amount** — A *value together with the currency it is denominated in* — never a bare
+  number. The atomic unit of money in the system; the technical "amount + currency" type lives in
+  ADR-0005. An amount without a currency is invalid (BR-CUR-01).
+- **Base / reporting currency** — The single currency a **company** reports and values in. One per
+  company, configurable (default TZS for TZ deployments, **never hard-coded**), set once at company
+  setup; changing it is a controlled operation (BR-CUR-02).
+- **Transaction / document currency** — The currency a specific transaction or document is *expressed
+  in*. Usually equals the company base in v1; may differ from base (then it is a *foreign* currency).
+- **Foreign currency** — Any currency other than the company's base currency. A foreign-currency
+  transaction records its base-currency equivalent + the rate used, on the transaction (FR-CUR-09).
+  The *capability* exists in v1; foreign-currency *operations* are largely deferred.
+- **Exchange rate** — The rate converting a foreign-currency amount into the base currency, recorded
+  **with** the transaction and immutable thereafter (BR-CUR-05). v1 does **not** source rates from any
+  feed (FR-CUR-10); a needed rate is entered/known with the transaction.
+- **ISO 4217** — The international standard for currency codes (`TZS`, `USD`, `EUR`) and minor units.
+  Each currency in the master carries its ISO 4217 code (FR-CUR-01).
+- **Minor units** — The number of decimal places a currency uses (USD/EUR = 2, TZS/JPY = 0,
+  KWD/BHD = 3). Comes from the currency record; the system never assumes "2" (FR-CUR-05, BR-CUR-03).
+- **FX gain/loss** — **Deferred.** The gain or loss arising when a foreign-currency balance is settled
+  at a different rate than it was billed (*realised*) or re-stated at period end (*unrealised*). Out
+  of scope for v1 (FR-CUR-11/12); not precluded by the v1 model.
+
 ## Terminology rulings (pick one, stay consistent)
 - Use **user** (not "account") for the login identity; "account" only when discussing lockout state.
 - Use **company** for the legal entity, **branch** for the location — never interchangeably.
@@ -78,3 +102,6 @@ One definition per term, used consistently across the team. Add terms as modules
   agent**) when you mean one. Never call a debtor or creditor a "party" — they are finance *lenses*.
 - Use **app user** for the login identity, **employee** for an HR record (deferred), **party** for an
   external counterparty — three distinct things; never blur them.
+- Money is always a **monetary amount** (value + currency), never a bare number; say **base currency**
+  for a company's reporting currency and **document / transaction currency** for what a transaction is
+  expressed in — never conflate the two.
