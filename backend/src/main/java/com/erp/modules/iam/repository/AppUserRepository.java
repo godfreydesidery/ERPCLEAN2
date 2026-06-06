@@ -21,4 +21,10 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
      * user is still active on every authenticated request.
      */
     boolean existsByIdAndStatus(Long id, MasterStatus status);
+
+    /**
+     * Whether a user is active AND NOT the super-admin. Used to forbid binding the root user as an
+     * internal sales agent (BR-PARTY-10): root is a system super-user, not a salesperson.
+     */
+    boolean existsByIdAndStatusAndRootFalse(Long id, MasterStatus status);
 }
