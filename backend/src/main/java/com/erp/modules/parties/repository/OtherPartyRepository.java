@@ -22,7 +22,7 @@ public interface OtherPartyRepository extends JpaRepository<OtherParty, Long> {
             SELECT o FROM OtherParty o
             WHERE o.companyId = :companyId
               AND (:q IS NULL OR
-                   LOWER(o.displayName) LIKE LOWER(CONCAT(:q, '%'))
+                   LOWER(o.displayName) LIKE LOWER(CONCAT('%', :q, '%'))
                    OR o.tin = :q
                    OR o.phone = :q
                    OR o.code = :q)

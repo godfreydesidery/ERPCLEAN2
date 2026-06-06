@@ -25,7 +25,7 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
             SELECT c FROM Customer c
             WHERE c.companyId = :companyId
               AND (:q IS NULL OR
-                   LOWER(c.displayName) LIKE LOWER(CONCAT(:q, '%'))
+                   LOWER(c.displayName) LIKE LOWER(CONCAT('%', :q, '%'))
                    OR c.tin = :q
                    OR c.phone = :q
                    OR c.code = :q)

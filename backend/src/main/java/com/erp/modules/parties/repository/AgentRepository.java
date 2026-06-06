@@ -22,7 +22,7 @@ public interface AgentRepository extends JpaRepository<Agent, Long> {
             SELECT a FROM Agent a
             WHERE a.companyId = :companyId
               AND (:q IS NULL OR
-                   LOWER(a.displayName) LIKE LOWER(CONCAT(:q, '%'))
+                   LOWER(a.displayName) LIKE LOWER(CONCAT('%', :q, '%'))
                    OR a.tin = :q
                    OR a.phone = :q
                    OR a.code = :q)
