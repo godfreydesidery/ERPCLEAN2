@@ -84,7 +84,7 @@ export class ShellComponent {
           available: true,
           permission: 'COMPANY.VIEW',
         },
-        { label: 'Users', route: '/admin/users', icon: 'bi-people', available: false },
+        { label: 'Users', route: '/admin/users', icon: 'bi-people', available: true, permission: 'USER.VIEW' },
         {
           label: 'Roles',
           route: '/admin/roles',
