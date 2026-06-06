@@ -62,6 +62,12 @@
       @case ('error') {
         <p class="state text-danger" role="alert">Could not load companies. Please try again.</p>
       }
+      @case ('forbidden') {
+        <p class="state text-muted d-flex align-items-center gap-2">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view companies.
+        </p>
+      }
       @default {
         @if (companies().length === 0) {
           <p class="state text-muted">No companies yet. Add one above.</p>

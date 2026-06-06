@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -28,7 +29,7 @@ export class CompanyListComponent {
   readonly orgState = signal<'loading' | 'ready' | 'error'>('loading');
 
   readonly companies = signal<Company[]>([]);
-  readonly state = signal<'idle' | 'loading' | 'error'>('idle');
+  readonly state = signal<'idle' | 'loading' | 'error' | 'forbidden'>('idle');
   readonly formError = signal<string | null>(null);
 
   // Create form
@@ -56,7 +57,11 @@ export class CompanyListComponent {
         this.companies.set(rows);
         this.state.set('idle');
       },
-      error: () => this.state.set('error'),
+      // A 403 means "you can't view companies" — show a calm panel, not a generic error
+      // (the global interceptor no longer pops the red modal for 403). The route guard normally
+      // keeps a permissionless user off this screen; this is the in-page backstop.
+      error: (err) =>
+        this.state.set(err instanceof HttpErrorResponse && err.status === 403 ? 'forbidden' : 'error'),
     });
   }
 

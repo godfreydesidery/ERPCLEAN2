@@ -88,9 +88,15 @@ export const authErrorInterceptor: HttpInterceptorFn = (req, next) => {
         }
         return throwError(() => err);
       }
-      // Auto-surface every other API error as a centered alert the user must acknowledge, so a
-      // failure can't be missed. Auth endpoints (login/refresh) are exempt — the login form shows
-      // its own inline message.
+      // A 403 is an authorization fact, not a system failure — do NOT pop the red modal. The
+      // screen renders its own calm "no permission" state, and route guards keep users off pages
+      // they can't use. (The rejected request still propagates so the component's error handler runs.)
+      if (err instanceof HttpErrorResponse && err.status === 403) {
+        return throwError(() => err);
+      }
+      // Auto-surface every other API error (5xx, network, unexpected 4xx) as a centered alert the
+      // user must acknowledge, so a real failure can't be missed. Auth endpoints (login/refresh)
+      // are exempt — the login form shows its own inline message.
       if (err instanceof HttpErrorResponse && !isAuthEndpoint) {
         alerts.error('Something went wrong', errorMessageOf(err));
       }
