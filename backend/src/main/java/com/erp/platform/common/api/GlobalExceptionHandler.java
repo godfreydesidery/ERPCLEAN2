@@ -36,6 +36,25 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error(ex.getMessage()));
     }
 
+    /** Lacks permission, or acting outside the active scope (service-layer ScopeGuard) → 403. */
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<ApiResponse<Void>> handleForbidden(ForbiddenException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.error(ex.getMessage()));
+    }
+
+    /**
+     * Method-security denial from {@code @PreAuthorize} (Spring throws AuthorizationDeniedException,
+     * a subtype of AccessDeniedException) → 403. Without this, the catch-all below would map it to
+     * 500. The message is generic — never name the missing permission (no enumeration), matching
+     * {@link com.erp.platform.security.config.SecurityErrorResponder} for filter-level denials.
+     */
+    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAccessDenied(
+            org.springframework.security.access.AccessDeniedException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.error("You do not have permission to perform this action."));
+    }
+
     /** Password fails policy → 400 with the actionable rule. */
     @ExceptionHandler(com.erp.platform.security.password.WeakPasswordException.class)
     public ResponseEntity<ApiResponse<Void>> handleWeakPassword(

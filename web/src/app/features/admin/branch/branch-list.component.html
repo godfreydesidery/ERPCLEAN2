@@ -16,7 +16,14 @@
         Set as default
       </label>
     </div>
-    <button type="submit" [disabled]="saving()">{{ saving() ? 'Saving…' : 'Add branch' }}</button>
+    <button type="submit" class="btn btn-primary" [disabled]="saving()">
+      @if (saving()) {
+        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+        Saving…
+      } @else {
+        Add branch
+      }
+    </button>
   </form>
   @if (formError(); as msg) {
     <p class="form-error" role="alert">{{ msg }}</p>
@@ -24,7 +31,9 @@
 
   @switch (state()) {
     @case ('loading') {
-      <p class="state" aria-live="polite">Loading branches…</p>
+      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading branches…
+      </p>
     }
     @case ('error') {
       <p class="state error" role="alert">Could not load branches. Please try again.</p>
@@ -50,7 +59,12 @@
                   @if (b.isDefault) {
                     <span class="badge-default">Default</span>
                   } @else {
-                    <button type="button" class="link" (click)="setDefault(b)">
+                    <button type="button" class="link"
+                            [disabled]="busyUid() !== null"
+                            (click)="setDefault(b)">
+                      @if (busyUid() === b.uid) {
+                        <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                      }
                       Make default
                     </button>
                   }
@@ -58,7 +72,14 @@
                 <td>{{ b.status }}</td>
                 <td>
                   @if (!b.isDefault) {
-                    <button type="button" class="link danger" (click)="archive(b)">Archive</button>
+                    <button type="button" class="link danger"
+                            [disabled]="busyUid() !== null"
+                            (click)="archive(b)">
+                      @if (busyUid() === b.uid) {
+                        <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                      }
+                      Archive
+                    </button>
                   }
                 </td>
               </tr>

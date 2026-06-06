@@ -3,7 +3,9 @@
     <h1 class="h4 mb-1">Companies</h1>
     @switch (orgState()) {
       @case ('loading') {
-        <p class="org-line text-muted mb-0" aria-live="polite">Loading organisation…</p>
+        <p class="org-line text-muted mb-0 d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading organisation…
+        </p>
       }
       @case ('error') {
         <p class="org-line text-danger mb-0" role="alert">
@@ -36,7 +38,12 @@
         </div>
         <div class="col-sm-3">
           <button type="submit" class="btn btn-primary w-100" [disabled]="saving()">
-            {{ saving() ? 'Saving…' : 'Add company' }}
+            @if (saving()) {
+              <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+              Saving…
+            } @else {
+              Add company
+            }
           </button>
         </div>
       </div>
@@ -48,7 +55,9 @@
     <!-- List states: loading / error / empty / populated -->
     @switch (state()) {
       @case ('loading') {
-        <p class="state text-muted" aria-live="polite">Loading companies…</p>
+        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+        </p>
       }
       @case ('error') {
         <p class="state text-danger" role="alert">Could not load companies. Please try again.</p>

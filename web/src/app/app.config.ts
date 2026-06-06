@@ -7,16 +7,22 @@ import {
   apiResponseInterceptor,
   authErrorInterceptor,
   authHeaderInterceptor,
+  loadingInterceptor,
 } from './core/api/http.interceptors';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideRouter(routes, withComponentInputBinding()),
-    // Order (outer → inner on the way out): catch 401s and bounce to login, attach auth/branch
-    // headers, then unwrap the envelope on the way back.
+    // Order (outer → inner on the way out): track loading for the progress bar, catch 401s/auto-toast
+    // errors, attach auth/branch headers, then unwrap the envelope on the way back.
     provideHttpClient(
-      withInterceptors([authErrorInterceptor, authHeaderInterceptor, apiResponseInterceptor]),
+      withInterceptors([
+        loadingInterceptor,
+        authErrorInterceptor,
+        authHeaderInterceptor,
+        apiResponseInterceptor,
+      ]),
     ),
   ],
 };

@@ -8,6 +8,8 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import lombok.Getter;
+import lombok.Setter;
 
 /**
  * A login identity (DATA-MODEL §1.4). Org-wide; {@code username} is org-unique and stored
@@ -16,6 +18,7 @@ import java.time.Instant;
  * <p>Lockout state lives on the entity ({@code failedLoginCount}, {@code lockedUntil}) with the
  * transition logic here so it can't be applied inconsistently across call sites.
  */
+@Getter
 @Entity
 @Table(name = "app_user")
 public class AppUser extends UidEntity {
@@ -27,18 +30,23 @@ public class AppUser extends UidEntity {
     private String passwordHash;
 
     @Column(name = "display_name", nullable = false, length = 160)
+    @Setter
     private String displayName;
 
     @Column(name = "email", length = 160)
+    @Setter
     private String email;
 
     @Column(name = "phone", length = 40)
+    @Setter
     private String phone;
 
     @Column(name = "is_root", nullable = false)
+    @Setter
     private boolean root = false;
 
     @Column(name = "default_branch_id")
+    @Setter
     private Long defaultBranchId;
 
     @Column(name = "failed_login_count", nullable = false)
@@ -55,6 +63,7 @@ public class AppUser extends UidEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
+    @Setter
     private MasterStatus status = MasterStatus.ACTIVE;
 
     protected AppUser() {
@@ -101,75 +110,5 @@ public class AppUser extends UidEntity {
     public void changePassword(String newHash, Instant now) {
         this.passwordHash = newHash;
         this.passwordChangedAt = now;
-    }
-
-    // --- accessors ---
-
-    public String getUsername() {
-        return username;
-    }
-
-    public String getPasswordHash() {
-        return passwordHash;
-    }
-
-    public String getDisplayName() {
-        return displayName;
-    }
-
-    public void setDisplayName(String displayName) {
-        this.displayName = displayName;
-    }
-
-    public String getEmail() {
-        return email;
-    }
-
-    public void setEmail(String email) {
-        this.email = email;
-    }
-
-    public String getPhone() {
-        return phone;
-    }
-
-    public void setPhone(String phone) {
-        this.phone = phone;
-    }
-
-    public boolean isRoot() {
-        return root;
-    }
-
-    public void setRoot(boolean root) {
-        this.root = root;
-    }
-
-    public Long getDefaultBranchId() {
-        return defaultBranchId;
-    }
-
-    public void setDefaultBranchId(Long defaultBranchId) {
-        this.defaultBranchId = defaultBranchId;
-    }
-
-    public int getFailedLoginCount() {
-        return failedLoginCount;
-    }
-
-    public Instant getLockedUntil() {
-        return lockedUntil;
-    }
-
-    public Instant getLastLoginAt() {
-        return lastLoginAt;
-    }
-
-    public MasterStatus getStatus() {
-        return status;
-    }
-
-    public void setStatus(MasterStatus status) {
-        this.status = status;
     }
 }

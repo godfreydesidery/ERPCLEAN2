@@ -4,17 +4,22 @@ import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/rou
 import { HealthService } from '../../core/health/health.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { SessionStore } from '../../core/auth/session.store';
+import { LoadingService } from '../../core/feedback/loading.service';
+import { ToastContainerComponent } from '../../core/feedback/toast-container.component';
+import { AlertHostComponent } from '../../core/feedback/alert-host.component';
 
 /**
- * A single sidebar navigation entry. {@code available} marks features that are built; not-yet-built
- * areas render as disabled "soon" items so the shell shows where the product is going without
- * pretending those routes exist.
+ * A single sidebar navigation entry.
+ * - `available`: false renders the item as a "soon" badge (route does not exist yet).
+ * - `permission`: when set, the item is hidden from users who lack that permission (root sees all).
+ *   Items without a `permission` key are always shown to authenticated users.
  */
 interface NavItem {
   readonly label: string;
   readonly route: string;
   readonly icon: string;
   readonly available: boolean;
+  readonly permission?: string;
 }
 
 interface NavGroup {
@@ -25,12 +30,20 @@ interface NavGroup {
 /**
  * The application shell (theme adopted from the Orbix Engine reference): a fixed white topbar
  * (brand, current-user menu, live API status) and a dark off-canvas sidebar with grouped nav, plus
- * a router outlet for feature pages. The branch selector and permission-gated nav arrive in later
- * slices; for now the nav lists the IAM admin areas (Companies is live; the rest are "soon").
+ * a router outlet for feature pages. On construction the shell calls /auth/me to re-hydrate the
+ * effective permission codes after a page refresh (the login flow already populates them, but they
+ * would be lost without this call on reload).
  */
 @Component({
   selector: 'app-shell',
-  imports: [NgClass, RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [
+    NgClass,
+    RouterLink,
+    RouterLinkActive,
+    RouterOutlet,
+    ToastContainerComponent,
+    AlertHostComponent,
+  ],
   templateUrl: './shell.component.html',
   styleUrl: './shell.component.scss',
 })
@@ -39,6 +52,7 @@ export class ShellComponent {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   protected readonly session = inject(SessionStore);
+  protected readonly loading = inject(LoadingService);
 
   readonly health = signal<{ status: string; service: string } | null>(null);
   readonly state = signal<'loading' | 'ok' | 'error'>('loading');
@@ -59,17 +73,39 @@ export class ShellComponent {
     return (first + last.charAt(0)).toUpperCase();
   });
 
-  readonly nav: readonly NavGroup[] = [
+  private readonly allNav: readonly NavGroup[] = [
     {
       label: 'Administration',
       items: [
-        { label: 'Companies', route: '/admin/companies', icon: 'bi-building', available: true },
+        {
+          label: 'Companies',
+          route: '/admin/companies',
+          icon: 'bi-building',
+          available: true,
+          permission: 'COMPANY.VIEW',
+        },
         { label: 'Users', route: '/admin/users', icon: 'bi-people', available: false },
-        { label: 'Roles', route: '/admin/roles', icon: 'bi-shield-lock', available: false },
+        {
+          label: 'Roles',
+          route: '/admin/roles',
+          icon: 'bi-shield-lock',
+          available: true,
+          permission: 'ROLE.VIEW',
+        },
         { label: 'Audit', route: '/admin/audit', icon: 'bi-clipboard-data', available: false },
       ],
     },
   ];
+
+  /** Nav groups with permission-filtered items. Reactive: recomputes when permissions change. */
+  readonly nav = computed<readonly NavGroup[]>(() =>
+    this.allNav.map((group) => ({
+      ...group,
+      items: group.items.filter(
+        (item) => !item.permission || this.session.hasPermission(item.permission),
+      ),
+    })),
+  );
 
   constructor() {
     this.healthService.getHealth().subscribe({
@@ -79,6 +115,12 @@ export class ShellComponent {
       },
       error: () => this.state.set('error'),
     });
+
+    // Re-hydrate effective permissions after a page refresh. Failure is non-fatal — the user is
+    // still authenticated; they just get a conservative (empty) permission set until next login.
+    if (this.session.isAuthenticated()) {
+      this.auth.me().subscribe({ error: () => undefined });
+    }
   }
 
   closeSidebar(): void {

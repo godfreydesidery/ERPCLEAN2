@@ -1,0 +1,148 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Role Grants</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-person-badge me-1" aria-hidden="true"></i>
+      Assign roles to users or look up existing grants.
+    </p>
+  </header>
+
+  <!-- Grant form -->
+  <form class="card card-body mb-3" (ngSubmit)="grant()" aria-label="Grant role to user">
+    <h2 class="h6 mb-3">Grant a Role</h2>
+
+    @switch (rolesState()) {
+      @case ('loading') {
+        <p class="text-muted small d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading roles…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger small" role="alert">Could not load roles. Refresh to try again.</p>
+      }
+      @default {
+        <div class="row g-2 align-items-end">
+          <div class="col-sm-4">
+            <label class="form-label small text-muted mb-1" for="grantUserUid">User UID</label>
+            <input id="grantUserUid" name="grantUserUid" type="text" class="form-control"
+                   [(ngModel)]="userUid" required [disabled]="saving()"
+                   placeholder="e.g. abc-123-def" />
+          </div>
+          <div class="col-sm-3">
+            <label class="form-label small text-muted mb-1" for="grantRole">Role</label>
+            <select id="grantRole" name="grantRole" class="form-select"
+                    [(ngModel)]="roleUid" required [disabled]="saving()">
+              <option value="">— select —</option>
+              @for (r of roles(); track r.uid) {
+                <option [value]="r.uid">{{ r.code }} — {{ r.name }}</option>
+              }
+            </select>
+          </div>
+          <div class="col-sm-3">
+            <label class="form-label small text-muted mb-1" for="grantCompanyUid">Company UID</label>
+            <input id="grantCompanyUid" name="grantCompanyUid" type="text" class="form-control"
+                   [(ngModel)]="companyUid" required [disabled]="saving()"
+                   placeholder="e.g. xyz-456-uvw" />
+          </div>
+          <div class="col-sm-2">
+            <button type="submit" class="btn btn-primary w-100" [disabled]="saving()">
+              @if (saving()) {
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                Granting…
+              } @else {
+                Grant
+              }
+            </button>
+          </div>
+        </div>
+        <div class="row g-2 mt-0">
+          <div class="col-sm-4">
+            <label class="form-label small text-muted mb-1" for="grantBranchUid">
+              Branch UID <span class="text-muted">(optional)</span>
+            </label>
+            <input id="grantBranchUid" name="grantBranchUid" type="text" class="form-control"
+                   [(ngModel)]="branchUid" [disabled]="saving()"
+                   placeholder="leave blank for company-level" />
+          </div>
+        </div>
+      }
+    }
+
+    @if (formError(); as msg) {
+      <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+    }
+  </form>
+
+  <!-- Grant lookup -->
+  <div class="card card-body">
+    <h2 class="h6 mb-3">Look Up Grants</h2>
+    <form class="d-flex gap-2 align-items-end mb-3"
+          (ngSubmit)="searchGrants()" aria-label="Look up grants for user">
+      <div class="flex-grow-1" style="max-width:340px">
+        <label class="form-label small text-muted mb-1" for="lookupUid">User UID</label>
+        <input id="lookupUid" name="lookupUid" type="text" class="form-control"
+               [(ngModel)]="lookupUid" required placeholder="Enter user UID" />
+      </div>
+      <button type="submit" class="btn btn-outline-secondary">
+        <i class="bi bi-search me-1" aria-hidden="true"></i>Search
+      </button>
+    </form>
+
+    @if (grantsSearched()) {
+      @switch (grantsState()) {
+        @case ('loading') {
+          <p class="text-muted small d-flex align-items-center gap-2" aria-live="polite">
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading grants…
+          </p>
+        }
+        @case ('error') {
+          <p class="text-danger small" role="alert">Could not load grants. Please try again.</p>
+        }
+        @default {
+          @if (grants().length === 0) {
+            <p class="text-muted small">No grants found for this user.</p>
+          } @else {
+            <div class="table-responsive">
+              <table class="table table-hover align-middle bg-white grid">
+                <caption class="sr-only">Role grants for the searched user</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Role</th>
+                    <th scope="col">Company UID</th>
+                    <th scope="col">Branch UID</th>
+                    <th scope="col">Granted at</th>
+                    <th scope="col"><span class="sr-only">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (g of grants(); track g.uid) {
+                    <tr>
+                      <td class="font-monospace">{{ g.roleCode }}</td>
+                      <td class="font-monospace small">{{ g.companyUid }}</td>
+                      <td class="font-monospace small">{{ g.branchUid ?? '—' }}</td>
+                      <td class="small">{{ g.grantedAt }}</td>
+                      <td>
+                        <button type="button" class="btn btn-sm btn-outline-danger"
+                                [disabled]="revokeUid() !== null"
+                                (click)="revoke(g.uid)"
+                                [attr.aria-label]="'Revoke ' + g.roleCode + ' grant'">
+                          @if (revokeUid() === g.uid) {
+                            <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                          }
+                          Revoke
+                        </button>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        }
+      }
+      @if (revokeError(); as msg) {
+        <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+      }
+    }
+  </div>
+</section>

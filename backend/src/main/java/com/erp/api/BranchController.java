@@ -7,6 +7,7 @@ import com.erp.modules.iam.service.BranchService;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -20,7 +21,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Branch CRUD by uid, plus the set-default action (ARCHITECTURE §7). Permission gate
- * (BRANCH.MANAGE) wired in Slice 3.
+ * (BRANCH.MANAGE) wired in Slice 3. list/create scope to the company uid; target ops scope to the
+ * branch uid. Uses {@code @perm.scoped} throughout (ADR-0002 Bug-1 fix).
  */
 @RestController
 @RequestMapping("/api/v1/branches")
@@ -33,34 +35,40 @@ public class BranchController {
     }
 
     @GetMapping
+    @PreAuthorize("@perm.scoped(#companyUid, 'company', 'BRANCH.VIEW')")
     public List<BranchDto> list(@RequestParam String companyUid) {
         return branches.listByCompanyUid(companyUid);
     }
 
     @GetMapping("/uid/{uid}")
+    @PreAuthorize("@perm.scoped(#uid, 'branch', 'BRANCH.VIEW')")
     public BranchDto get(@PathVariable String uid) {
         return branches.getByUid(uid);
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("@perm.scoped(#request.companyUid(), 'company', 'BRANCH.MANAGE')")
     public BranchDto create(@Valid @RequestBody CreateBranchRequest request) {
         return branches.create(request);
     }
 
     @PutMapping("/uid/{uid}")
+    @PreAuthorize("@perm.scoped(#uid, 'branch', 'BRANCH.MANAGE')")
     public BranchDto update(@PathVariable String uid,
                             @Valid @RequestBody UpdateBranchRequest request) {
         return branches.updateByUid(uid, request);
     }
 
     @PutMapping("/uid/{uid}/default")
+    @PreAuthorize("@perm.scoped(#uid, 'branch', 'BRANCH.MANAGE')")
     public BranchDto setDefault(@PathVariable String uid) {
         return branches.setDefault(uid);
     }
 
     @DeleteMapping("/uid/{uid}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("@perm.scoped(#uid, 'branch', 'BRANCH.MANAGE')")
     public void archive(@PathVariable String uid) {
         branches.archiveByUid(uid);
     }

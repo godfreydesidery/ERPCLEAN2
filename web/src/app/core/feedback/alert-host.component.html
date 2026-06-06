@@ -1,0 +1,33 @@
+@if (alerts.current(); as a) {
+  <div class="alert-backdrop" (click)="alerts.dismiss()">
+    <div class="alert-card alert-{{ a.kind }}" role="alertdialog" aria-modal="true"
+         aria-labelledby="alertTitle" (click)="$event.stopPropagation()">
+
+      @if (a.kind === 'success') {
+        <!-- Animated tick: ring scales in, check stroke draws itself. -->
+        <svg class="alert-icon" viewBox="0 0 52 52" aria-hidden="true">
+          <circle class="alert-icon__ring" cx="26" cy="26" r="24" fill="none" />
+          <path class="alert-icon__check" fill="none" d="M14 27 l8 8 l16 -18" />
+        </svg>
+      } @else {
+        <!-- Animated cross: ring scales in, two strokes draw in. -->
+        <svg class="alert-icon" viewBox="0 0 52 52" aria-hidden="true">
+          <circle class="alert-icon__ring" cx="26" cy="26" r="24" fill="none" />
+          <path class="alert-icon__x" fill="none" d="M17 17 L35 35" />
+          <path class="alert-icon__x alert-icon__x--2" fill="none" d="M35 17 L17 35" />
+        </svg>
+      }
+
+      <h2 id="alertTitle" class="alert-title">{{ a.title }}</h2>
+      @if (a.message) {
+        <p class="alert-message">{{ a.message }}</p>
+      }
+
+      @if (a.requireAck) {
+        <button type="button" class="btn btn-primary alert-ok" (click)="alerts.dismiss()" autofocus>
+          OK
+        </button>
+      }
+    </div>
+  </div>
+}

@@ -1,5 +1,18 @@
 <div class="shell-layout">
 
+  <!-- Global progress bar — a decorative indeterminate "working" stripe shown while any API request
+       is in flight (LoadingService). Purely visual (aria-hidden): the actual busy/result state is
+       announced by section loaders and the completion/error toasts, so this needs no ARIA role. -->
+  @if (loading.active()) {
+    <div class="global-progress" aria-hidden="true"></div>
+  }
+
+  <!-- Toast notifications (lightweight, non-blocking info). -->
+  <app-toast-container />
+
+  <!-- Centered animated confirmation (SweetAlert-style): success auto-dismisses, errors wait for OK. -->
+  <app-alert-host />
+
   <!-- Top bar -->
   <header class="topbar">
     <button class="btn btn-link topbar-toggle d-lg-none" type="button"
@@ -59,7 +72,7 @@
   <!-- Sidebar (dark, off-canvas on mobile) -->
   <aside class="sidebar" [ngClass]="{ 'sidebar-open': sidebarOpen() }">
     <nav class="sidebar-nav" aria-label="Main">
-      @for (group of nav; track group.label) {
+      @for (group of nav(); track group.label) {
         <div class="nav-group">
           <div class="nav-group-label">{{ group.label }}</div>
           @for (item of group.items; track item.route) {

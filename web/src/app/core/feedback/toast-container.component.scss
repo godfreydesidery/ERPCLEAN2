@@ -1,0 +1,91 @@
+/* Toast stack — fixed top-right, above the shell (Orbix theme colours). */
+.toast-stack {
+  position: fixed;
+  top: calc(var(--tb-height, 56px) + 0.75rem);
+  right: 1rem;
+  z-index: 1080;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: min(380px, calc(100vw - 2rem));
+  pointer-events: none;
+}
+
+.toast-item {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid #e6e9ee;
+  border-left: 4px solid #6b7d96;
+  box-shadow: 0 6px 20px rgba(13, 42, 91, 0.15);
+  font-size: 0.9rem;
+  animation: toast-in 0.18s ease;
+}
+
+.toast-icon {
+  font-size: 1.05rem;
+  line-height: 1.3;
+  flex-shrink: 0;
+}
+
+.toast-message {
+  flex: 1;
+  color: #1f2933;
+}
+
+.toast-close {
+  flex-shrink: 0;
+  background: transparent;
+  border: 0;
+  color: #9aa6b6;
+  cursor: pointer;
+  padding: 0 0.1rem;
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+.toast-close:hover {
+  color: #1f2933;
+}
+
+.toast-success {
+  border-left-color: #16a34a;
+}
+.toast-success .toast-icon {
+  color: #16a34a;
+}
+
+.toast-error {
+  border-left-color: #dc2626;
+}
+.toast-error .toast-icon {
+  color: #dc2626;
+}
+
+.toast-info {
+  border-left-color: #1a4fb5;
+}
+.toast-info .toast-icon {
+  color: #1a4fb5;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast-item {
+    animation: none;
+  }
+}

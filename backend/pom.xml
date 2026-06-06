@@ -80,7 +80,8 @@
             <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
 
-        <!-- Lombok: DTOs/builders only, not domain entities (PROJECT-CONVENTIONS §3.7) -->
+        <!-- Lombok: @Getter/@Setter on entities + accessor boilerplate (PROJECT-CONVENTIONS §3.7).
+             Compile-only (optional); excluded from the repackaged jar by the boot plugin below. -->
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
