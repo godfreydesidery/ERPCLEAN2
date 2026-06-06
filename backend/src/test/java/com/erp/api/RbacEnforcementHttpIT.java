@@ -13,12 +13,14 @@ import com.erp.modules.iam.domain.entity.Company;
 import com.erp.modules.iam.domain.entity.Organisation;
 import com.erp.modules.iam.domain.entity.Permission;
 import com.erp.modules.iam.domain.entity.Role;
+import com.erp.modules.iam.domain.entity.UserBranch;
 import com.erp.modules.iam.repository.AppUserRepository;
 import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.repository.OrganisationRepository;
 import com.erp.modules.iam.repository.PermissionRepository;
 import com.erp.modules.iam.repository.RoleRepository;
+import com.erp.modules.iam.repository.UserBranchRepository;
 import com.erp.modules.iam.service.UserRoleService;
 import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
@@ -70,6 +72,7 @@ class RbacEnforcementHttpIT extends PostgresIntegrationTest {
     @Autowired private RoleRepository roles;
     @Autowired private PermissionRepository permissions;
 
+    @Autowired private UserBranchRepository userBranches;
     @Autowired private UserRoleService userRoleService;
     @Autowired private JwtService jwtService;
     @Autowired private PasswordEncoder passwordEncoder;
@@ -113,13 +116,17 @@ class RbacEnforcementHttpIT extends PostgresIntegrationTest {
         // ROOT user — is_root=true, active scope = company A / branch A
         rootUser = new AppUser("rbac_root", passwordEncoder.encode(ROOT_PASS), "Rbac Root");
         rootUser.setRoot(true);
-        rootUser.setDefaultBranchId(branchA.getId());
         rootUser = users.save(rootUser);
+        UserBranch rootAssignment = new UserBranch(rootUser.getId(), branchA, rootUser.getId());
+        rootAssignment.markDefault();
+        userBranches.save(rootAssignment);
 
         // NON-ROOT user — no roles yet, active scope = company A / branch A
         nonRootUser = new AppUser("rbac_user", passwordEncoder.encode(USER_PASS), "Rbac User");
-        nonRootUser.setDefaultBranchId(branchA.getId());
         nonRootUser = users.save(nonRootUser);
+        UserBranch nonRootAssignment = new UserBranch(nonRootUser.getId(), branchA, nonRootUser.getId());
+        nonRootAssignment.markDefault();
+        userBranches.save(nonRootAssignment);
 
         // Mint tokens the same way login does (companyId + branchId from the default branch)
         rootToken = jwtService

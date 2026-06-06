@@ -8,11 +8,13 @@ import com.erp.modules.iam.domain.entity.AppUser;
 import com.erp.modules.iam.domain.entity.Branch;
 import com.erp.modules.iam.domain.entity.Company;
 import com.erp.modules.iam.domain.entity.Organisation;
+import com.erp.modules.iam.domain.entity.UserBranch;
 import com.erp.modules.iam.repository.AppUserRepository;
 import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.repository.OrganisationRepository;
 import com.erp.modules.iam.repository.RefreshTokenRepository;
+import com.erp.modules.iam.repository.UserBranchRepository;
 import com.erp.platform.security.auth.AuthenticationException;
 import com.erp.support.IamTestData;
 import com.erp.support.PostgresIntegrationTest;
@@ -34,6 +36,7 @@ class AuthServiceImplIT extends PostgresIntegrationTest {
     @Autowired private OrganisationRepository organisations;
     @Autowired private CompanyRepository companies;
     @Autowired private BranchRepository branches;
+    @Autowired private UserBranchRepository userBranches;
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private IamTestData testData;
 
@@ -49,9 +52,11 @@ class AuthServiceImplIT extends PostgresIntegrationTest {
         branch.setDefault(true);
         branches.save(branch);
 
-        AppUser user = new AppUser("alice", passwordEncoder.encode(PASSWORD), "Alice");
-        user.setDefaultBranchId(branch.getId());
-        users.save(user);
+        AppUser user = users.save(new AppUser("alice", passwordEncoder.encode(PASSWORD), "Alice"));
+
+        UserBranch assignment = new UserBranch(user.getId(), branch, user.getId());
+        assignment.markDefault();
+        userBranches.save(assignment);
     }
 
     @Test

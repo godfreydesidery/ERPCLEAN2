@@ -33,7 +33,7 @@ public class IamTestData {
         em.createNativeQuery("DELETE FROM role WHERE is_system = false").executeUpdate();
         // 4. Clear the rest of the IAM tables (CASCADE handles FK order within this set).
         em.createNativeQuery(
-                "TRUNCATE refresh_token, app_user, branch, company, organisation RESTART IDENTITY CASCADE")
+                "TRUNCATE refresh_token, user_branch, app_user, branch, company, organisation RESTART IDENTITY CASCADE")
                 .executeUpdate();
     }
 }
