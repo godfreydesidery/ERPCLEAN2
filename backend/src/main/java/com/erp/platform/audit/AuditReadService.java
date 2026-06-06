@@ -3,10 +3,8 @@ package com.erp.platform.audit;
 import com.erp.modules.iam.repository.AppUserRepository;
 import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
-import jakarta.persistence.criteria.Predicate;
+import com.erp.platform.security.RequestContext;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -46,31 +44,38 @@ public class AuditReadService {
 
     public Page<AuditLogDto> search(Long actorUserId, String action, String targetType,
                                     String targetUid, Instant from, Instant to, Pageable pageable) {
-        // Build the predicate dynamically — add a clause ONLY for a supplied filter. This avoids the
-        // (:p IS NULL OR col = :p) form whose null bind Postgres can't type (SQLState 42P18).
-        Specification<AuditLog> spec = (root, query, cb) -> {
-            List<Predicate> predicates = new ArrayList<>();
-            if (actorUserId != null) {
-                predicates.add(cb.equal(root.get("actorUserId"), actorUserId));
-            }
-            if (blankToNull(action) != null) {
-                predicates.add(cb.equal(root.get("action"), action));
-            }
-            if (blankToNull(targetType) != null) {
-                predicates.add(cb.equal(root.get("targetType"), targetType));
-            }
-            if (blankToNull(targetUid) != null) {
-                predicates.add(cb.equal(root.get("targetUid"), targetUid));
-            }
-            if (from != null) {
-                predicates.add(cb.greaterThanOrEqualTo(root.get("at"), from));
-            }
-            if (to != null) {
-                predicates.add(cb.lessThanOrEqualTo(root.get("at"), to));
-            }
-            return cb.and(predicates.toArray(Predicate[]::new));
-        };
+        // Tenant scope (F10, ADR-0004 D-7 follow-up): root reads org-wide; a non-root AUDIT.VIEW
+        // holder is confined to their ACTIVE COMPANY's rows — mirroring ScopeGuard's same-company
+        // rule everywhere else. Fail closed: a non-root caller with no active company matches nothing
+        // (companyId == null => company_id = NULL predicate, which no row satisfies), never org-wide.
+        RequestContext.Principal caller = RequestContext.get();
+        boolean isRoot = caller != null && caller.root();
+        Long scopeCompanyId = caller != null ? caller.companyId() : null;
+
+        // Compose one Specification per active filter (null/blank dropped — avoids the
+        // (:p IS NULL OR col = :p) null-bind that Postgres can't type, SQLState 42P18).
+        Specification<AuditLog> spec = isRoot ? null : eq("companyId", scopeCompanyId);
+        spec = and(spec, actorUserId == null ? null : eq("actorUserId", actorUserId));
+        spec = and(spec, blankToNull(action) == null ? null : eq("action", action));
+        spec = and(spec, blankToNull(targetType) == null ? null : eq("targetType", targetType));
+        spec = and(spec, blankToNull(targetUid) == null ? null : eq("targetUid", targetUid));
+        spec = and(spec, from == null ? null : (r, q, cb) -> cb.greaterThanOrEqualTo(r.get("at"), from));
+        spec = and(spec, to == null ? null : (r, q, cb) -> cb.lessThanOrEqualTo(r.get("at"), to));
+
         return audit.findAll(spec, pageable).map(this::toDto);
+    }
+
+    /** An equality Specification on one attribute; {@code value} may be null (renders {@code = NULL}). */
+    private static Specification<AuditLog> eq(String attribute, Object value) {
+        return (root, query, cb) -> cb.equal(root.get(attribute), value);
+    }
+
+    /** Combine two Specifications with AND, tolerating nulls (a null side contributes nothing). */
+    private static Specification<AuditLog> and(Specification<AuditLog> a, Specification<AuditLog> b) {
+        if (a == null) {
+            return b;
+        }
+        return b == null ? a : a.and(b);
     }
 
     private AuditLogDto toDto(AuditLog a) {

@@ -268,6 +268,48 @@ class AuditHttpIT extends PostgresIntegrationTest {
     }
 
     // ===================================================================
+    // Test 8 — F10 tenant isolation: a non-root AUDIT.VIEW holder scoped to company A
+    //          must NOT see company B's audit rows (only root reads org-wide).
+    // ===================================================================
+
+    @Test
+    void getAudit_nonRootHolder_seesOnlyOwnCompanyRows() throws Exception {
+        // Company B with its own branch + an audit row (a USER.CREATE under B, by root).
+        Company companyB = companies.save(new Company(org, "AHC-B", "AuditHttp Co B"));
+        Branch branchB = new Branch(companyB, "AH-B2", "AuditHttp B HQ");
+        branchB.setDefault(true);
+        branchB = branches.save(branchB);
+        RequestContext.set(new RequestContext.Principal(
+                rootUser.getId(), rootUser.getUsername(), true,
+                companyB.getId(), branchB.getId(), null));
+        try {
+            userService.create(new CreateUserRequest("ah_b_user", "AH B User", "UserPassB1!", null, null));
+        } finally {
+            RequestContext.clear();
+        }
+
+        // Grant the plain user (default scope = company A) a role with AUDIT.VIEW, scoped to company A.
+        grantRoleAsRoot(plainUser, buildRole("AH_AUDIT_VIEWER_A", "AUDIT.VIEW"));
+
+        // The plain user reads /audit while scoped to company A. They must see A's rows and NONE of
+        // company B's — every returned row's companyUid is A's (or null for unscoped system rows),
+        // and no row carries company B's uid.
+        mockMvc.perform(get("/api/v1/audit")
+                        .header("Authorization", "Bearer " + plainToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").isArray())
+                .andExpect(jsonPath("$.data[?(@.companyUid == '" + companyB.getUid() + "')]").doesNotExist());
+
+        // Sanity: ROOT, by contrast, DOES see company B's row (org-wide), proving the row exists and
+        // it's the non-root scoping — not an empty table — that hid it from the plain user.
+        mockMvc.perform(get("/api/v1/audit")
+                        .param("companyUid", "")  // no company filter; root sees all
+                        .header("Authorization", "Bearer " + rootToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.companyUid == '" + companyB.getUid() + "')]").exists());
+    }
+
+    // ===================================================================
     // Private helpers
     // ===================================================================
 
