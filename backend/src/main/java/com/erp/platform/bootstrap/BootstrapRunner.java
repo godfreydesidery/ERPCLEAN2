@@ -4,10 +4,12 @@ import com.erp.modules.iam.domain.entity.AppUser;
 import com.erp.modules.iam.domain.entity.Branch;
 import com.erp.modules.iam.domain.entity.Company;
 import com.erp.modules.iam.domain.entity.Organisation;
+import com.erp.modules.iam.domain.entity.UserBranch;
 import com.erp.modules.iam.repository.AppUserRepository;
 import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.repository.OrganisationRepository;
+import com.erp.modules.iam.repository.UserBranchRepository;
 import com.erp.platform.security.password.PasswordPolicy;
 import java.util.Set;
 import org.slf4j.Logger;
@@ -43,6 +45,7 @@ public class BootstrapRunner implements ApplicationRunner {
     private final CompanyRepository companies;
     private final BranchRepository branches;
     private final AppUserRepository users;
+    private final UserBranchRepository userBranches;
     private final PasswordEncoder passwordEncoder;
     private final PasswordPolicy passwordPolicy;
 
@@ -51,6 +54,7 @@ public class BootstrapRunner implements ApplicationRunner {
                            CompanyRepository companies,
                            BranchRepository branches,
                            AppUserRepository users,
+                           UserBranchRepository userBranches,
                            PasswordEncoder passwordEncoder,
                            PasswordPolicy passwordPolicy) {
         this.props = props;
@@ -58,6 +62,7 @@ public class BootstrapRunner implements ApplicationRunner {
         this.companies = companies;
         this.branches = branches;
         this.users = users;
+        this.userBranches = userBranches;
         this.passwordEncoder = passwordEncoder;
         this.passwordPolicy = passwordPolicy;
     }
@@ -93,8 +98,11 @@ public class BootstrapRunner implements ApplicationRunner {
                 passwordEncoder.encode(props.adminPassword()),
                 props.adminDisplayName());
         root.setRoot(true);
-        root.setDefaultBranchId(branch.getId());
-        users.save(root);
+        users.save(root);  // save first so root.getId() is populated
+
+        UserBranch defaultAssignment = new UserBranch(root.getId(), branch, root.getId());
+        defaultAssignment.markDefault();
+        userBranches.save(defaultAssignment);
 
         log.info("Bootstrap complete: organisation '{}', company '{}', branch '{}', root admin '{}'.",
                 org.getName(), company.getCode(), branch.getCode(), root.getUsername());
