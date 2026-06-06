@@ -44,6 +44,12 @@ export class AgentListComponent {
   readonly newDisplayName = signal('');
   readonly newPartyType = signal<PartyType>('INDIVIDUAL');
   readonly newAgentKind = signal<AgentKind>('EXTERNAL');
+  // Identity fields — conditional on partyType (BR-PARTY-04/05/06).
+  readonly newLegalName = signal('');
+  readonly newTin = signal('');
+  readonly newVatRegistered = signal(false);
+  readonly newVrn = signal('');
+  readonly newBusinessRegNo = signal('');
   readonly saving = signal(false);
   readonly formError = signal<string | null>(null);
   readonly showCreateForm = signal(false);
@@ -137,6 +143,22 @@ export class AgentListComponent {
     this.formError.set(null);
   }
 
+  private resetCreateForm(): void {
+    this.newDisplayName.set('');
+    this.newPartyType.set('INDIVIDUAL');
+    this.newAgentKind.set('EXTERNAL');
+    this.newLegalName.set('');
+    this.newTin.set('');
+    this.newVatRegistered.set(false);
+    this.newVrn.set('');
+    this.newBusinessRegNo.set('');
+  }
+
+  onNewVatRegisteredChange(checked: boolean): void {
+    this.newVatRegistered.set(checked);
+    if (!checked) this.newVrn.set('');
+  }
+
   create(): void {
     const companyId = this.selectedCompanyId();
     const displayName = this.newDisplayName().trim();
@@ -144,20 +166,30 @@ export class AgentListComponent {
       this.formError.set('Company and display name are required.');
       return;
     }
+    // BR-PARTY-04: BUSINESS must have a TIN — client guard saves a round-trip.
+    if (this.newPartyType() === 'BUSINESS' && !this.newTin().trim()) {
+      this.formError.set('A business party must have a TIN (BR-PARTY-04).');
+      return;
+    }
     this.saving.set(true);
     this.formError.set(null);
+    const vatRegistered = this.newVatRegistered();
     const request: CreateAgentRequest = {
       companyId,
       partyType: this.newPartyType(),
       displayName,
+      legalName: this.newLegalName().trim() || undefined,
+      tin: this.newTin().trim() || undefined,
+      vatRegistered: vatRegistered || undefined,
+      // BR-PARTY-06: VRN only valid when vatRegistered is true.
+      vrn: vatRegistered ? (this.newVrn().trim() || undefined) : undefined,
+      businessRegNo: this.newBusinessRegNo().trim() || undefined,
       agentKind: this.newAgentKind(),
     };
     this.agentService.create(request).subscribe({
       next: (created) => {
         this.saving.set(false);
-        this.newDisplayName.set('');
-        this.newPartyType.set('INDIVIDUAL');
-        this.newAgentKind.set('EXTERNAL');
+        this.resetCreateForm();
         this.showCreateForm.set(false);
         this.alerts.success('Agent created', created.displayName);
         this.load(this.currentPage());

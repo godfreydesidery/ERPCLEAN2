@@ -11,6 +11,7 @@
  *  3. applySearch (button/Enter) fires immediately, no debounce wait.
  *  4. clearSearch resets the query and fires immediately.
  *  5. Race-safety: stale response discarded; only latest query result lands.
+ *  6. BR-PARTY-04 guard: BUSINESS without TIN sets formError, does NOT call create.
  */
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -72,6 +73,115 @@ function makeBed(listImpl: () => any) {
 }
 
 // ── Spec ───────────────────────────────────────────────────────────────────────
+
+// ── BR-PARTY-04 guard ─────────────────────────────────────────────────────────
+
+describe('CustomerListComponent — BR-PARTY-04 client-side guard', () => {
+  let createSpy: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    createSpy = vi.fn(() => of({}));
+
+    TestBed.configureTestingModule({
+      imports: [CustomerListComponent],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        {
+          provide: CustomerService,
+          useValue: { list: vi.fn(() => of(emptyPage())), create: createSpy },
+        },
+        {
+          provide: OrganisationService,
+          useValue: { current: vi.fn(() => of({ uid: 'ORG1', id: '1', name: 'Acme' })) },
+        },
+        {
+          provide: CompanyService,
+          useValue: { list: vi.fn(() => of([{ uid: 'CO1', id: '10', name: 'Main Co' }])) },
+        },
+        { provide: AlertService, useValue: { success: vi.fn(), error: vi.fn() } },
+        {
+          provide: SessionStore,
+          useValue: {
+            hasPermission: vi.fn(() => false),
+            isAuthenticated: signal(true),
+            user: signal(null),
+            permissions: signal([]),
+            activeBranchUid: signal(null),
+          },
+        },
+      ],
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    TestBed.resetTestingModule();
+  });
+
+  it('sets formError and does NOT call create when partyType=BUSINESS and TIN is blank', async () => {
+    const fixture = TestBed.createComponent(CustomerListComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync(); // let startup settle
+
+    comp.newDisplayName.set('Acme Ltd');
+    comp.newPartyType.set('BUSINESS');
+    comp.newTin.set(''); // blank TIN — should trigger BR-PARTY-04 guard
+
+    comp.create();
+
+    expect(comp.formError()).toBe('A business party must have a TIN (BR-PARTY-04).');
+    expect(createSpy).not.toHaveBeenCalled();
+  });
+
+  it('calls create when partyType=BUSINESS and TIN is provided', async () => {
+    const fixture = TestBed.createComponent(CustomerListComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.newDisplayName.set('Acme Ltd');
+    comp.newPartyType.set('BUSINESS');
+    comp.newTin.set('123-456-789');
+
+    comp.create();
+
+    expect(comp.formError()).toBeNull();
+    expect(createSpy).toHaveBeenCalledOnce();
+  });
+
+  it('calls create for INDIVIDUAL without TIN (BR-PARTY-05: optional)', async () => {
+    const fixture = TestBed.createComponent(CustomerListComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.newDisplayName.set('John Doe');
+    comp.newPartyType.set('INDIVIDUAL');
+    comp.newTin.set(''); // blank is fine for individual
+
+    comp.create();
+
+    expect(comp.formError()).toBeNull();
+    expect(createSpy).toHaveBeenCalledOnce();
+  });
+
+  it('clears VRN when VAT registered is unchecked (BR-PARTY-06)', async () => {
+    const fixture = TestBed.createComponent(CustomerListComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.newVatRegistered.set(true);
+    comp.newVrn.set('VRN-999');
+
+    comp.onNewVatRegisteredChange(false);
+
+    expect(comp.newVatRegistered()).toBe(false);
+    expect(comp.newVrn()).toBe('');
+  });
+});
+
+// ── Live search ───────────────────────────────────────────────────────────────
 
 describe('CustomerListComponent — live search', () => {
   let listSpy: ReturnType<typeof vi.fn>;
