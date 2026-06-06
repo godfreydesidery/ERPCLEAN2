@@ -2,6 +2,8 @@ package com.erp.modules.iam.service;
 
 import com.erp.modules.iam.domain.dto.MeResponse;
 import com.erp.modules.iam.domain.dto.TokenResponse;
+import com.erp.modules.iam.domain.dto.UserBranchDto;
+import java.util.List;
 
 /**
  * Authentication: login, refresh (with single-use rotation + reuse detection), logout, and the
@@ -18,4 +20,10 @@ public interface AuthService {
 
     /** The current caller's identity + effective permission codes for the active scope (D-E). */
     MeResponse me();
+
+    /**
+     * The caller's own ACTIVE branch assignments — the switchable branches for the shell selector
+     * (ADR-0003 D-6). Self-scoped: reading your own branches needs only authentication, not USER.VIEW.
+     */
+    List<UserBranchDto> myBranches();
 }

@@ -2,6 +2,7 @@ package com.erp.modules.iam.service;
 
 import com.erp.modules.iam.domain.dto.MeResponse;
 import com.erp.modules.iam.domain.dto.TokenResponse;
+import com.erp.modules.iam.domain.dto.UserBranchDto;
 import com.erp.modules.iam.domain.entity.AppUser;
 import com.erp.modules.iam.domain.entity.Branch;
 import com.erp.modules.iam.domain.entity.RefreshToken;
@@ -174,6 +175,22 @@ public class AuthServiceImpl implements AuthService {
                 companyUid,
                 branchUid,
                 permissions);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<UserBranchDto> myBranches() {
+        RequestContext.Principal principal = RequestContext.get();
+        if (principal == null || principal.userId() == null) {
+            throw new AuthenticationException("Authentication is required.");
+        }
+        AppUser user = users.findById(principal.userId())
+                .orElseThrow(AuthenticationException::invalidCredentials);
+        // Only ACTIVE branches are switchable — don't offer a branch the user can't actually enter.
+        return userBranches.findByUserIdOrderByAssignedAtAscIdAsc(user.getId()).stream()
+                .filter(ub -> ub.getBranch().getStatus() == com.erp.platform.common.domain.MasterStatus.ACTIVE)
+                .map(ub -> UserBranchDto.from(ub, user.getUid()))
+                .toList();
     }
 
     /** Resolve active scope, issue the access JWT, persist a fresh refresh token, build the response. */
