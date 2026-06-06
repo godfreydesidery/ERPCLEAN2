@@ -22,11 +22,10 @@ Each entry: why it matters · who decides · does it block build.
 
 ## Parties
 
-- **OQ-PARTY-01** — Do customers and suppliers **share one numbering sequence** per company, or does
-  each party kind have its own sequence (e.g. customers `C-###`, suppliers `S-###`)? Affects the
-  code/identifier scheme and uniqueness scope (BR-PARTY-08). *Decider:* owner. *Blocks build:* no
-  (codes can be generated either way) — but should close before Sales/Purchases reference codes on
-  documents.
+- **OQ-PARTY-01** — ✅ **RESOLVED (owner):** each party kind has its **own** numbering sequence per
+  company (e.g. customers `CUST-####`, suppliers `SUPP-####`, agents `AGENT-####`) — not a shared
+  sequence. Consistent with the separate-records model (Decision D1). Reflected in FR-PARTY-19 and
+  BR-PARTY-08.
 
 - **OQ-PARTY-02** — Is there a **credit-limit and/or credit-terms approval workflow** for credit/
   account customers (e.g. a limit that requires manager approval, or terms like net-30)? Out of v1
@@ -42,9 +41,10 @@ Each entry: why it matters · who decides · does it block build.
   when its kind is known? Affects whether "Other" is a transient holding type or permanent.
   *Decider:* owner. *Blocks build:* no (can ship as separate-record now, add promotion later).
 
-- **OQ-PARTY-05** — Is **BRELA mandatory** for a business party, or only strongly recommended?
-  Currently TIN mandatory / BRELA recommended (BR-PARTY-04). Confirm whether to harden BRELA to
-  mandatory for businesses. *Decider:* owner. *Blocks build:* no (validation flag).
+- **OQ-PARTY-05** — ✅ **RESOLVED (owner):** the registration number is **recommended, not
+  mandatory**, and the field is **generalised to a "business registration number"** — NOT
+  BRELA-specific. It captures whatever registrar applies (BRELA or other); the system does not
+  hard-code or require BRELA. Reflected in FR-PARTY-14 and BR-PARTY-04/05.
 
 - **OQ-PARTY-06** — Should the system support a single reusable **default walk-in / anonymous
   customer** per branch (or per company) for fast counter sales, and if so where is it seeded?

@@ -128,7 +128,7 @@ to it on account.
 **As a** cashier (with quick-create permission) **I want** to create a walk-in cash customer with
 just a name **so that** I can complete a counter sale without full tax details.
 - **AC1** Given an **individual**, **cash/walk-in** customer, when I save with only a name (and
-  optionally a phone), then it is accepted with no TIN/BRELA/VRN required (BR-PARTY-05).
+  optionally a phone), then it is accepted with no TIN / registration number / VRN required (BR-PARTY-05).
 - **AC2** The customer is created in my active company and associated with my active branch.
 
 ### US-PARTY-03 — Create a goods supplier
@@ -196,7 +196,7 @@ supplier, or agent **so that** I am never blocked when something must be capture
 **As a** master-data administrator **I want** the system to enforce identifier rules based on
 individual-vs-business type **so that** records are tax-complete where they must be.
 - **AC1** Given a **business** party, when I save without a TIN, then it is rejected (BR-PARTY-04).
-- **AC2** Given an **individual** party, when I save without TIN/BRELA/VRN, then it is accepted
+- **AC2** Given an **individual** party, when I save without TIN / registration number / VRN, then it is accepted
   (BR-PARTY-05).
 - **AC3** Given a duplicate **VRN** within the same company, then it is flagged (BR-PARTY-13).
 - **AC4** Given a duplicate **TIN** within the same company across customer and supplier, then it is

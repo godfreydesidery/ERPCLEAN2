@@ -61,8 +61,9 @@ Cross-cutting for all of the above:
   branch sees and uses only the parties associated with it.
 - **Individual-vs-business typing** — each party is either an individual (person) or a
   business / organisation; the type drives which identifiers are mandatory.
-- **Tanzanian identifiers** — TIN, VRN, mobile-money number, BRELA number, plus standard contact
-  (phone, email, physical/postal address, region/district).
+- **Tanzanian identifiers** — TIN, VRN, mobile-money number, and a general business registration
+  number (registrar-agnostic; BRELA in TZ), plus standard contact (phone, email, physical/postal
+  address, region/district).
 - Standard master-data lifecycle: create, read, update, **archive** (soft-delete), restore.
 
 ### Out of scope for v1 — Deferred parties (captured, not built)
@@ -210,8 +211,9 @@ sub-kind, an import agent a supplier sub-kind).
   - **TIN** — Taxpayer Identification Number.
   - **VRN** — VAT Registration Number (only for VAT-registered parties).
   - **Mobile-money number** — M-Pesa / Tigo Pesa / Airtel Money number used for payments.
-  - **BRELA number** — Business Registrations and Licensing Agency registration number (registered
-    businesses).
+  - **Business registration number** — a general company/business registration number for registered
+    businesses. Kept registrar-agnostic (BRELA in Tanzania, or another registrar elsewhere) — the
+    system does NOT hard-code BRELA. Recommended, not mandatory (OQ-PARTY-05, BR-PARTY-04).
 - **FR-PARTY-15** Each party record can capture **standard contact** details: phone, email,
   physical address, postal address, **region** and **district**.
 - **FR-PARTY-16** The system enforces which identifiers are **mandatory vs optional** based on the
@@ -230,8 +232,10 @@ sub-kind, an import agent a supplier sub-kind).
 ### Identification & search
 
 - **FR-PARTY-19** Each party has a human-usable **code/identifier unique within its company** for
-  selection and reference on documents (BR-PARTY-08). The system supports search by code, name, TIN,
-  and phone when selecting a party.
+  selection and reference on documents (BR-PARTY-08). **Each party kind has its OWN numbering
+  sequence** per company (e.g. `CUST-####`, `SUPP-####`, `AGENT-####`) — not a shared sequence
+  (OQ-PARTY-01, consistent with the separate-records model D1). The system supports search by code,
+  name, TIN, and phone when selecting a party.
 
 ### Permissions (gating)
 
@@ -249,17 +253,22 @@ sub-kind, an import agent a supplier sub-kind).
   independent records even when they represent the same real-world entity; the system does not
   auto-merge or auto-link them (see accepted-risk note §9).
 - **BR-PARTY-04** A **business** party (individual-vs-business = business) **must have a TIN**, and
-  **should have a BRELA number**; TIN is mandatory, BRELA strongly recommended (configurable as
-  mandatory later). (Owner ruling D6.)
-- **BR-PARTY-05** An **individual** party **may have neither TIN nor BRELA**; neither is mandatory for
-  an individual. A walk-in cash customer in particular may carry only a name and optionally a phone.
+  **should have a business registration number** (recommended, not enforced — OQ-PARTY-05). The
+  registration number is a general, registrar-agnostic field (BRELA or other), not hard-coded to any
+  one registrar. (Owner rulings D6, OQ-PARTY-05.)
+- **BR-PARTY-05** An **individual** party **may have neither TIN nor a registration number**; neither
+  is mandatory for an individual. A walk-in cash customer in particular may carry only a name and
+  optionally a phone.
 - **BR-PARTY-06** **VRN is only meaningful for a VAT-registered party.** A VRN may be captured only
   when the party is marked VAT-registered; a VRN without VAT-registration is invalid.
 - **BR-PARTY-07** A **credit / account customer** must be sufficiently identified (at minimum a name
   and, if a business, a TIN per BR-PARTY-04) before it can be used on a credit sale. A **cash /
   walk-in customer** has no such minimum beyond a name.
 - **BR-PARTY-08** A party's **code/identifier is unique within its company** (per party master).
-  Uniqueness is per company, not org-wide (two companies may each have a customer coded `C001`).
+  Uniqueness is per company, not org-wide (two companies may each have a customer coded `CUST-0001`).
+  **Each party kind keeps its own numbering sequence** (customers, suppliers, agents number
+  independently — OQ-PARTY-01), so a customer and a supplier in the same company may share the same
+  numeric suffix without collision because their code prefixes differ.
 - **BR-PARTY-09** An **archived (inactive) party cannot be selected on a new transaction.** It remains
   on historical documents and can be restored. Selection lists exclude archived parties by default.
 - **BR-PARTY-10** An **internal sales agent must reference an active IAM user.** If the referenced

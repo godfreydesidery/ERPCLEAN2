@@ -57,8 +57,9 @@ One definition per term, used consistently across the team. Add terms as modules
   party's branches must all belong to its company. (A relationship, not a join table.)
 - **TIN** — Taxpayer Identification Number (Tanzania). Mandatory for a business party.
 - **VRN** — VAT Registration Number (Tanzania). Captured only for a VAT-registered party.
-- **BRELA number** — Registration number from the Business Registrations and Licensing Agency, for
-  registered businesses.
+- **Business registration number** — A general, registrar-agnostic company/business registration
+  number for registered businesses (BRELA in Tanzania, or another registrar elsewhere). Recommended,
+  not mandatory; the system does not hard-code BRELA.
 - **Walk-in / cash customer** — A customer who pays at point of sale, no credit terms; minimal
   identification (often just a name). May be a reusable anonymous counter-sale customer.
 - **Credit / account customer** — A customer who buys on account with a balance and (later) credit
