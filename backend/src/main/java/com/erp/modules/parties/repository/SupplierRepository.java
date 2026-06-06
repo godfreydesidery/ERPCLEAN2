@@ -22,7 +22,7 @@ public interface SupplierRepository extends JpaRepository<Supplier, Long> {
             SELECT s FROM Supplier s
             WHERE s.companyId = :companyId
               AND (:q IS NULL OR
-                   LOWER(s.displayName) LIKE LOWER(CONCAT(:q, '%'))
+                   LOWER(s.displayName) LIKE LOWER(CONCAT('%', :q, '%'))
                    OR s.tin = :q
                    OR s.phone = :q
                    OR s.code = :q)

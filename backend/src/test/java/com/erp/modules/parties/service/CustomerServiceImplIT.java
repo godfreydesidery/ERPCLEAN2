@@ -315,6 +315,32 @@ class CustomerServiceImplIT extends PostgresIntegrationTest {
     }
 
     // -----------------------------------------------------------------------
+    // Search: name match is CONTAINS (substring), case-insensitive — not prefix-only.
+    // Regression for "cannot filter customers": a mid-name word must match.
+    // -----------------------------------------------------------------------
+
+    @Test
+    void search_byMidNameWord_matchesContains_caseInsensitive() {
+        customerService.create(businessCreditRequest(companyA.getId(), "Acme Traders Ltd",
+                "TIN-ACME", false, null, null, null));
+        customerService.create(businessCreditRequest(companyA.getId(), "Bob Mtu Supplies",
+                "TIN-BOB", false, null, null, null));
+
+        // Prefix still works
+        assertThat(customerService.list(companyA.getId(), "Acme", Pageable.unpaged()).getContent())
+                .extracting(CustomerDto::displayName).containsExactly("Acme Traders Ltd");
+        // Mid-name word matches (the bug: previously empty under prefix-only LIKE 'q%')
+        assertThat(customerService.list(companyA.getId(), "Traders", Pageable.unpaged()).getContent())
+                .extracting(CustomerDto::displayName).containsExactly("Acme Traders Ltd");
+        // Case-insensitive substring
+        assertThat(customerService.list(companyA.getId(), "mtu", Pageable.unpaged()).getContent())
+                .extracting(CustomerDto::displayName).containsExactly("Bob Mtu Supplies");
+        // No spurious match
+        assertThat(customerService.list(companyA.getId(), "zzz", Pageable.unpaged()).getContent())
+                .isEmpty();
+    }
+
+    // -----------------------------------------------------------------------
     // Private helpers
     // -----------------------------------------------------------------------
 
