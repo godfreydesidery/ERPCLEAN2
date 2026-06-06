@@ -56,6 +56,12 @@ export class CustomerListComponent {
   readonly newDisplayName = signal('');
   readonly newPartyType = signal<PartyType>('INDIVIDUAL');
   readonly newCustomerKind = signal<CustomerKind>('CASH_WALK_IN');
+  // Identity fields — conditional on partyType (BR-PARTY-04/05/06).
+  readonly newLegalName = signal('');
+  readonly newTin = signal('');
+  readonly newVatRegistered = signal(false);
+  readonly newVrn = signal('');
+  readonly newBusinessRegNo = signal('');
   readonly saving = signal(false);
   readonly formError = signal<string | null>(null);
   readonly showCreateForm = signal(false);
@@ -165,6 +171,22 @@ export class CustomerListComponent {
     this.formError.set(null);
   }
 
+  private resetCreateForm(): void {
+    this.newDisplayName.set('');
+    this.newPartyType.set('INDIVIDUAL');
+    this.newCustomerKind.set('CASH_WALK_IN');
+    this.newLegalName.set('');
+    this.newTin.set('');
+    this.newVatRegistered.set(false);
+    this.newVrn.set('');
+    this.newBusinessRegNo.set('');
+  }
+
+  onNewVatRegisteredChange(checked: boolean): void {
+    this.newVatRegistered.set(checked);
+    if (!checked) this.newVrn.set('');
+  }
+
   create(): void {
     const companyId = this.selectedCompanyId();
     const displayName = this.newDisplayName().trim();
@@ -172,20 +194,30 @@ export class CustomerListComponent {
       this.formError.set('Company and display name are required.');
       return;
     }
+    // BR-PARTY-04: BUSINESS must have a TIN — client guard saves a round-trip.
+    if (this.newPartyType() === 'BUSINESS' && !this.newTin().trim()) {
+      this.formError.set('A business party must have a TIN (BR-PARTY-04).');
+      return;
+    }
     this.saving.set(true);
     this.formError.set(null);
+    const vatRegistered = this.newVatRegistered();
     const request: CreateCustomerRequest = {
       companyId,
       partyType: this.newPartyType(),
       displayName,
+      legalName: this.newLegalName().trim() || undefined,
+      tin: this.newTin().trim() || undefined,
+      vatRegistered: vatRegistered || undefined,
+      // BR-PARTY-06: VRN only valid when vatRegistered is true.
+      vrn: vatRegistered ? (this.newVrn().trim() || undefined) : undefined,
+      businessRegNo: this.newBusinessRegNo().trim() || undefined,
       customerKind: this.newCustomerKind(),
     };
     this.customerService.create(request).subscribe({
       next: (created) => {
         this.saving.set(false);
-        this.newDisplayName.set('');
-        this.newPartyType.set('INDIVIDUAL');
-        this.newCustomerKind.set('CASH_WALK_IN');
+        this.resetCreateForm();
         this.showCreateForm.set(false);
         this.alerts.success('Customer created', created.displayName);
         this.load(this.currentPage());

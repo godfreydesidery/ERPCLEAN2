@@ -75,7 +75,8 @@
             (ngSubmit)="create()" aria-label="Create agent">
         <h2 class="h6 mb-3">New Agent</h2>
         <p class="small text-muted mb-2">To link an internal agent to an IAM user, save first then edit the agent record.</p>
-        <div class="row g-2 align-items-end">
+        <!-- Row 1: core fields -->
+        <div class="row g-2 align-items-end mb-2">
           <div class="col-sm-4">
             <label class="form-label small text-muted mb-1" for="newDisplayName">Display name</label>
             <input id="newDisplayName" name="newDisplayName" type="text" class="form-control"
@@ -111,6 +112,65 @@
             </button>
           </div>
         </div>
+
+        <!-- Row 2: identity fields — BUSINESS shows required TIN + VAT/VRN/regNo/legalName;
+             INDIVIDUAL shows optional TIN only. -->
+        @if (newPartyType() === 'BUSINESS') {
+          <div class="row g-2 align-items-end mb-2">
+            <div class="col-sm-3">
+              <label class="form-label small text-muted mb-1" for="newTin">
+                TIN <span class="text-danger" aria-hidden="true">*</span>
+                <span class="sr-only">(required for business)</span>
+              </label>
+              <input id="newTin" name="newTin" type="text" class="form-control"
+                     [ngModel]="newTin()" (ngModelChange)="newTin.set($event)"
+                     [disabled]="saving()" autocomplete="off"
+                     aria-required="true" />
+            </div>
+            <div class="col-sm-3">
+              <label class="form-label small text-muted mb-1" for="newLegalName">Legal name</label>
+              <input id="newLegalName" name="newLegalName" type="text" class="form-control"
+                     [ngModel]="newLegalName()" (ngModelChange)="newLegalName.set($event)"
+                     [disabled]="saving()" autocomplete="off" />
+            </div>
+            <div class="col-sm-3">
+              <label class="form-label small text-muted mb-1" for="newBusinessRegNo">Business reg. no.</label>
+              <input id="newBusinessRegNo" name="newBusinessRegNo" type="text" class="form-control"
+                     [ngModel]="newBusinessRegNo()" (ngModelChange)="newBusinessRegNo.set($event)"
+                     [disabled]="saving()" autocomplete="off" />
+            </div>
+            <div class="col-sm-3 align-self-end">
+              <div class="form-check mb-1">
+                <input id="newVatRegistered" name="newVatRegistered" type="checkbox" class="form-check-input"
+                       [ngModel]="newVatRegistered()"
+                       (ngModelChange)="onNewVatRegisteredChange($event)"
+                       [disabled]="saving()" />
+                <label class="form-check-label small" for="newVatRegistered">VAT registered</label>
+              </div>
+            </div>
+          </div>
+          @if (newVatRegistered()) {
+            <div class="row g-2 mb-2">
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="newVrn">VRN</label>
+                <input id="newVrn" name="newVrn" type="text" class="form-control"
+                       [ngModel]="newVrn()" (ngModelChange)="newVrn.set($event)"
+                       [disabled]="saving()" autocomplete="off" />
+              </div>
+            </div>
+          }
+        } @else {
+          <!-- INDIVIDUAL: TIN is optional -->
+          <div class="row g-2 mb-2">
+            <div class="col-sm-3">
+              <label class="form-label small text-muted mb-1" for="newTin">TIN <span class="text-muted">(optional)</span></label>
+              <input id="newTin" name="newTin" type="text" class="form-control"
+                     [ngModel]="newTin()" (ngModelChange)="newTin.set($event)"
+                     [disabled]="saving()" autocomplete="off" />
+            </div>
+          </div>
+        }
+
         @if (formError(); as msg) {
           <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
         }
