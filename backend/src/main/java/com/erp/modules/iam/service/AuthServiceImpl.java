@@ -143,7 +143,7 @@ public class AuthServiceImpl implements AuthService {
     public MeResponse me() {
         RequestContext.Principal principal = RequestContext.get();
         if (principal == null || principal.userId() == null) {
-            throw AuthenticationException.invalidCredentials();
+            throw new AuthenticationException("Authentication is required.");
         }
         AppUser user = users.findById(principal.userId())
                 .orElseThrow(AuthenticationException::invalidCredentials);

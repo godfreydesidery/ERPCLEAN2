@@ -18,10 +18,10 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Role-assignment lifecycle: grant, revoke, list (DATA-MODEL §1.8, ADR-0002 D-3). The 1-arg
- * {@code hasPermission} form is used — scope enforcement (the grant's company == active company)
- * is delegated to {@code UserRoleServiceImpl} via {@code ScopeGuard.assertCanActIn}.
- * Returns raw DTOs — {@code ApiResponseAdvice} wraps them in the envelope.
+ * Role-assignment lifecycle: grant, revoke, list (DATA-MODEL §1.8, ADR-0002 D-3). Uses
+ * {@code @perm.has} — scope enforcement (the grant's company == active company) is delegated to
+ * {@code UserRoleServiceImpl} via {@code ScopeGuard.assertCanActIn}. Returns raw DTOs —
+ * {@code ApiResponseAdvice} wraps them in the envelope. Uses {@code @perm.has} (ADR-0002 Bug-1 fix).
  */
 @RestController
 @RequestMapping("/api/v1/user-roles")
@@ -35,20 +35,20 @@ public class UserRoleController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasPermission('ROLE.MANAGE')")
+    @PreAuthorize("@perm.has('ROLE.MANAGE')")
     public UserRoleDto grant(@Valid @RequestBody GrantRoleRequest request) {
         return userRoleService.grant(request);
     }
 
     @DeleteMapping("/uid/{uid}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @PreAuthorize("hasPermission('ROLE.MANAGE')")
+    @PreAuthorize("@perm.has('ROLE.MANAGE')")
     public void revoke(@PathVariable String uid) {
         userRoleService.revoke(uid);
     }
 
     @GetMapping
-    @PreAuthorize("hasPermission('ROLE.VIEW')")
+    @PreAuthorize("@perm.has('ROLE.VIEW')")
     public List<UserRoleDto> listForUser(@RequestParam String userUid) {
         return userRoleService.listForUser(userUid);
     }

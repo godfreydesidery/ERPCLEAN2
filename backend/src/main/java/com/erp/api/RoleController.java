@@ -21,9 +21,9 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Role catalogue CRUD (DATA-MODEL §1.6, ADR-0002). Roles are org-wide; the 1-arg
- * {@code hasPermission} form is used throughout (no company-scope check needed here).
- * Returns raw DTOs — {@code ApiResponseAdvice} wraps them in the envelope.
+ * Role catalogue CRUD (DATA-MODEL §1.6, ADR-0002). Roles are org-wide; {@code @perm.has} is used
+ * throughout (no company-scope check needed here). Returns raw DTOs — {@code ApiResponseAdvice}
+ * wraps them in the envelope. Uses {@code @perm.has} (ADR-0002 Bug-1 fix).
  */
 @RestController
 @RequestMapping("/api/v1/roles")
@@ -36,33 +36,33 @@ public class RoleController {
     }
 
     @GetMapping
-    @PreAuthorize("hasPermission('ROLE.VIEW')")
+    @PreAuthorize("@perm.has('ROLE.VIEW')")
     public List<RoleDto> list() {
         return roleService.list();
     }
 
     @GetMapping("/uid/{uid}")
-    @PreAuthorize("hasPermission('ROLE.VIEW')")
+    @PreAuthorize("@perm.has('ROLE.VIEW')")
     public RoleDto get(@PathVariable String uid) {
         return roleService.getByUid(uid);
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasPermission('ROLE.MANAGE')")
+    @PreAuthorize("@perm.has('ROLE.MANAGE')")
     public RoleDto create(@Valid @RequestBody CreateRoleRequest request) {
         return roleService.create(request);
     }
 
     @PutMapping("/uid/{uid}")
-    @PreAuthorize("hasPermission('ROLE.MANAGE')")
+    @PreAuthorize("@perm.has('ROLE.MANAGE')")
     public RoleDto update(@PathVariable String uid,
                           @Valid @RequestBody UpdateRoleRequest request) {
         return roleService.updateByUid(uid, request);
     }
 
     @PutMapping("/uid/{uid}/permissions")
-    @PreAuthorize("hasPermission('ROLE.MANAGE')")
+    @PreAuthorize("@perm.has('ROLE.MANAGE')")
     public RoleDto setPermissions(@PathVariable String uid,
                                   @Valid @RequestBody SetRolePermissionsRequest request) {
         return roleService.setPermissions(uid, request);
@@ -70,13 +70,13 @@ public class RoleController {
 
     @DeleteMapping("/uid/{uid}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @PreAuthorize("hasPermission('ROLE.MANAGE')")
+    @PreAuthorize("@perm.has('ROLE.MANAGE')")
     public void archive(@PathVariable String uid) {
         roleService.archiveByUid(uid);
     }
 
     @GetMapping("/permissions")
-    @PreAuthorize("hasPermission('PERMISSION.VIEW')")
+    @PreAuthorize("@perm.has('PERMISSION.VIEW')")
     public List<PermissionDto> listPermissions() {
         return roleService.listPermissions();
     }

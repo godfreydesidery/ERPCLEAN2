@@ -21,8 +21,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Company CRUD by uid (ARCHITECTURE §7). Returns raw DTOs — {@code ApiResponseAdvice} wraps them in
- * the envelope. Permission-gated (ADR-0002): list/create are org-level (1-arg {@code hasPermission}),
- * target ops add the same-company scope check (2-arg {@code hasPermission(#uid,'company',CODE)}).
+ * the envelope. Permission-gated (ADR-0002): list/create use {@code @perm.has} (no target uid),
+ * target ops add the same-company scope check via {@code @perm.scoped(#uid,'company',CODE)}.
  */
 @RestController
 @RequestMapping("/api/v1/companies")
@@ -35,26 +35,26 @@ public class CompanyController {
     }
 
     @GetMapping
-    @PreAuthorize("hasPermission('COMPANY.VIEW')")
+    @PreAuthorize("@perm.has('COMPANY.VIEW')")
     public List<CompanyDto> list(@RequestParam String organisationUid) {
         return companies.listByOrganisationUid(organisationUid);
     }
 
     @GetMapping("/uid/{uid}")
-    @PreAuthorize("hasPermission(#uid, 'company', 'COMPANY.VIEW')")
+    @PreAuthorize("@perm.scoped(#uid, 'company', 'COMPANY.VIEW')")
     public CompanyDto get(@PathVariable String uid) {
         return companies.getByUid(uid);
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasPermission('COMPANY.MANAGE')")
+    @PreAuthorize("@perm.has('COMPANY.MANAGE')")
     public CompanyDto create(@Valid @RequestBody CreateCompanyRequest request) {
         return companies.create(request);
     }
 
     @PutMapping("/uid/{uid}")
-    @PreAuthorize("hasPermission(#uid, 'company', 'COMPANY.MANAGE')")
+    @PreAuthorize("@perm.scoped(#uid, 'company', 'COMPANY.MANAGE')")
     public CompanyDto update(@PathVariable String uid,
                              @Valid @RequestBody UpdateCompanyRequest request) {
         return companies.updateByUid(uid, request);
@@ -62,7 +62,7 @@ public class CompanyController {
 
     @DeleteMapping("/uid/{uid}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @PreAuthorize("hasPermission(#uid, 'company', 'COMPANY.MANAGE')")
+    @PreAuthorize("@perm.scoped(#uid, 'company', 'COMPANY.MANAGE')")
     public void archive(@PathVariable String uid) {
         companies.archiveByUid(uid);
     }

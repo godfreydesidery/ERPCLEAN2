@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 /**
  * The single home for tenant-scope enforcement (ADR-0002, building on ADR-0001 D-A). Answers one
  * question: may the caller act on a target that lives in company X? Yes iff the caller is root, or
- * the caller's active company equals X. Used by {@link ErpPermissionEvaluator} for path-uid ops and
+ * the caller's active company equals X. Used by {@link PermissionChecks} for path-uid ops and
  * directly by services for body-scoped ops (grant/revoke, branch create), so the rule lives exactly
  * once and a forgotten call fails closed (returns/throws "not permitted").
  *

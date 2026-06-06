@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
  * Organisation read endpoints (ARCHITECTURE §7). The organisation is created by bootstrap, so this
  * is read-only. {@code /current} lets the web resolve the deployment's single organisation (by name)
  * instead of requiring an admin to paste a uid. Returns raw DTOs — {@code ApiResponseAdvice} wraps
- * them. Permission gate (COMPANY.VIEW / a future ORG.VIEW) wired in Slice 3 when RBAC turns on.
+ * them. Permission gate uses {@code @perm.has} (ADR-0002 Bug-1 fix).
  */
 @RestController
 @RequestMapping("/api/v1/organisations")
@@ -25,7 +25,7 @@ public class OrganisationController {
     }
 
     @GetMapping
-    @PreAuthorize("hasPermission('COMPANY.VIEW')")
+    @PreAuthorize("@perm.has('COMPANY.VIEW')")
     public List<OrganisationDto> list() {
         return organisations.list();
     }
