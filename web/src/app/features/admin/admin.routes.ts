@@ -63,5 +63,42 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./audit/audit-list.component').then((m) => m.AuditListComponent),
   },
+  // ── Parties ───────────────────────────────────────────────────────────────
+  {
+    path: 'customers',
+    canActivate: [requirePermission('CUSTOMER.VIEW')],
+    loadComponent: () =>
+      import('./parties/customer-list.component').then((m) => m.CustomerListComponent),
+  },
+  {
+    path: 'customers/uid/:uid',
+    canActivate: [requirePermission('CUSTOMER.VIEW')],
+    loadComponent: () =>
+      import('./parties/customer-detail.component').then((m) => m.CustomerDetailComponent),
+  },
+  {
+    path: 'suppliers',
+    canActivate: [requirePermission('SUPPLIER.VIEW')],
+    loadComponent: () =>
+      import('./parties/supplier-list.component').then((m) => m.SupplierListComponent),
+  },
+  {
+    path: 'suppliers/uid/:uid',
+    canActivate: [requirePermission('SUPPLIER.VIEW')],
+    loadComponent: () =>
+      import('./parties/supplier-detail.component').then((m) => m.SupplierDetailComponent),
+  },
+  {
+    path: 'agents',
+    canActivate: [requirePermission('AGENT.VIEW')],
+    loadComponent: () =>
+      import('./parties/agent-list.component').then((m) => m.AgentListComponent),
+  },
+  {
+    path: 'agents/uid/:uid',
+    canActivate: [requirePermission('AGENT.VIEW')],
+    loadComponent: () =>
+      import('./parties/agent-detail.component').then((m) => m.AgentDetailComponent),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];

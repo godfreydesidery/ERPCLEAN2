@@ -31,7 +31,15 @@ public class IamTestData {
                 .executeUpdate();
         // 3. Delete test-created roles (system roles stay).
         em.createNativeQuery("DELETE FROM roles WHERE is_system = false").executeUpdate();
-        // 4. Clear the rest of the IAM tables (CASCADE handles FK order within this set).
+        // 4. Clear parties link tables first (FK children of master party tables and branches/app_users).
+        em.createNativeQuery(
+                "TRUNCATE customer_branch, supplier_branch, agent_branch, other_party_branch RESTART IDENTITY CASCADE")
+                .executeUpdate();
+        // 5. Clear party master tables and the code-sequence counter.
+        em.createNativeQuery(
+                "TRUNCATE customers, suppliers, agents, other_parties, party_code_sequence RESTART IDENTITY CASCADE")
+                .executeUpdate();
+        // 6. Clear the rest of the IAM tables (CASCADE handles FK order within this set).
         //    audit_log has a NULLABLE FK to app_user (ON DELETE SET NULL per schema) so it does not
         //    block the app_user truncate, but its rows must be cleared so audit-count assertions in
         //    AuditServiceImplIT start from zero.

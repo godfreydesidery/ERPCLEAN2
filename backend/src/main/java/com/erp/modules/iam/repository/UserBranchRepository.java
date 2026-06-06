@@ -30,4 +30,17 @@ public interface UserBranchRepository extends JpaRepository<UserBranch, Long> {
      * longer scope anyone's session (security review, Slice 4).
      */
     List<UserBranch> findByBranchIdAndIsDefaultTrue(Long branchId);
+
+    /**
+     * Returns {@code true} iff {@code userId} has at least one branch assignment in a branch that
+     * belongs to {@code companyId}. Used to scope the internal-agent user check to the agent's own
+     * company (security fix, finding 4).
+     */
+    @org.springframework.data.jpa.repository.Query("""
+            SELECT COUNT(ub) > 0
+            FROM UserBranch ub
+            WHERE ub.userId = :userId
+              AND ub.branch.company.id = :companyId
+            """)
+    boolean existsByUserIdAndBranchCompanyId(Long userId, Long companyId);
 }
