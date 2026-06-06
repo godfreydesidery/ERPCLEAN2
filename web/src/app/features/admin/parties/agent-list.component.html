@@ -74,7 +74,6 @@
       <form id="createAgentForm" class="create-form card card-body mb-3"
             (ngSubmit)="create()" aria-label="Create agent">
         <h2 class="h6 mb-3">New Agent</h2>
-        <p class="small text-muted mb-2">To link an internal agent to an IAM user, save first then edit the agent record.</p>
         <!-- Row 1: core fields -->
         <div class="row g-2 align-items-end mb-2">
           <div class="col-sm-4">
@@ -93,9 +92,9 @@
             </select>
           </div>
           <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="newAgentKind">Kind</label>
+            <label class="form-label small text-muted mb-1" for="newAgentKind">Agent kind</label>
             <select id="newAgentKind" name="newAgentKind" class="form-select"
-                    [ngModel]="newAgentKind()" (ngModelChange)="newAgentKind.set($event)"
+                    [ngModel]="newAgentKind()" (ngModelChange)="onNewAgentKindChange($event)"
                     [disabled]="saving()">
               <option value="EXTERNAL">External</option>
               <option value="INTERNAL">Internal (IAM user)</option>
@@ -112,6 +111,53 @@
             </button>
           </div>
         </div>
+
+        <!-- Row 1b: app-user picker — INTERNAL only (BR-PARTY-10) -->
+        @if (newAgentKind() === 'INTERNAL') {
+          <div class="row g-2 align-items-end mb-2">
+            <div class="col-sm-6">
+              <label class="form-label small text-muted mb-1" for="newAppUserId">
+                App user
+                <span class="text-danger" aria-hidden="true">*</span>
+                <span class="visually-hidden">(required for internal agent)</span>
+              </label>
+              @switch (usersState()) {
+                @case ('loading') {
+                  <select id="newAppUserId" name="newAppUserId" class="form-select"
+                          disabled aria-disabled="true" aria-busy="true">
+                    <option value="">Loading users…</option>
+                  </select>
+                }
+                @case ('error') {
+                  <p class="text-danger small mb-0" role="alert">
+                    <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+                    Could not load users.
+                  </p>
+                }
+                @default {
+                  <select id="newAppUserId" name="newAppUserId" class="form-select"
+                          [ngModel]="newAppUserId()" (ngModelChange)="newAppUserId.set($event)"
+                          [disabled]="saving()"
+                          required aria-required="true">
+                    <option value="">— select a user —</option>
+                    @for (u of users(); track u.id) {
+                      <option [value]="u.id">{{ u.displayName }} ({{ u.username }})</option>
+                    }
+                    @if (users().length === 0) {
+                      <option value="" disabled>No active users available</option>
+                    }
+                  </select>
+                }
+              }
+            </div>
+            <div class="col-sm-6">
+              <p class="small text-muted mb-0">
+                <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
+                The user must be <strong>ACTIVE</strong> and belong to this company (BR-PARTY-10).
+              </p>
+            </div>
+          </div>
+        }
 
         <!-- Row 2: identity fields — BUSINESS shows required TIN + VAT/VRN/regNo/legalName;
              INDIVIDUAL shows optional TIN only. -->
