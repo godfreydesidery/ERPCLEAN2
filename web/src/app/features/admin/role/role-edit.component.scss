@@ -1,0 +1,45 @@
+/* Role edit — Bootstrap-themed (Orbix). Mirrors company-list layout conventions. */
+
+.admin-page {
+  max-width: 960px;
+}
+
+.page-head {
+  margin-bottom: 1rem;
+}
+
+.back-link {
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.system-note {
+  color: #6b7280;
+}
+
+.perm-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.25rem;
+}
+
+.perm-group {
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  min-width: 0;
+}
+
+.perm-group-legend {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6b7280;
+  padding: 0 0.25rem;
+  float: none;
+  width: auto;
+}

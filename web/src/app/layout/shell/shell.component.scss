@@ -19,6 +19,37 @@
   background: var(--content-bg);
 }
 
+/* Global indeterminate progress stripe — fixed at the very top, above the topbar. */
+.global-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  z-index: 1100;
+  background: linear-gradient(90deg, transparent, var(--sb-accent, #4178d9), transparent);
+  background-size: 40% 100%;
+  background-repeat: no-repeat;
+  animation: global-progress-slide 1.1s ease-in-out infinite;
+}
+
+@keyframes global-progress-slide {
+  0% {
+    background-position: -40% 0;
+  }
+  100% {
+    background-position: 140% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .global-progress {
+    animation: none;
+    background: var(--sb-accent, #4178d9);
+    opacity: 0.6;
+  }
+}
+
 /* ------- Topbar ------- */
 .topbar {
   position: fixed;

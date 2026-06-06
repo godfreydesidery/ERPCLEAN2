@@ -1,9 +1,12 @@
 import { HttpErrorResponse, HttpInterceptorFn, HttpResponse } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { Router } from '@angular/router';
-import { catchError, map, throwError } from 'rxjs';
+import { catchError, finalize, map, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { SessionStore } from '../auth/session.store';
+import { AlertService } from '../feedback/alert.service';
+import { LoadingService } from '../feedback/loading.service';
+import { ToastService } from '../feedback/toast.service';
 import { ApiResponse } from './api-response.model';
 
 /**
@@ -71,18 +74,57 @@ export const authErrorInterceptor: HttpInterceptorFn = (req, next) => {
   }
   const session = inject(SessionStore);
   const router = inject(Router);
+  const toasts = inject(ToastService);
+  const alerts = inject(AlertService);
   return next(req).pipe(
     catchError((err: unknown) => {
       const isAuthEndpoint = UNAUTHENTICATED_PATHS.some((path) => req.url.includes(path));
       if (err instanceof HttpErrorResponse && err.status === 401 && !isAuthEndpoint) {
         if (session.isAuthenticated()) {
           session.clear();
+          // Mid-redirect to /login — a lightweight toast, not a blocking modal.
+          toasts.error('Your session has expired. Please sign in again.');
           void router.navigateByUrl('/login');
         }
+        return throwError(() => err);
+      }
+      // Auto-surface every other API error as a centered alert the user must acknowledge, so a
+      // failure can't be missed. Auth endpoints (login/refresh) are exempt — the login form shows
+      // its own inline message.
+      if (err instanceof HttpErrorResponse && !isAuthEndpoint) {
+        alerts.error('Something went wrong', errorMessageOf(err));
       }
       return throwError(() => err);
     }),
   );
+};
+
+/** A user-safe message from a failed response: the envelope's first error, else a status fallback. */
+function errorMessageOf(err: HttpErrorResponse): string {
+  const errors = (err.error as ApiResponse<unknown> | null)?.errors;
+  if (Array.isArray(errors) && errors.length > 0) {
+    return errors[0];
+  }
+  if (err.status === 0) {
+    return 'Cannot reach the server — check your connection and try again.';
+  }
+  if (err.status === 403) {
+    return 'You do not have permission to perform this action.';
+  }
+  return 'Something went wrong. Please try again.';
+}
+
+/**
+ * Brackets every API request with the {@link LoadingService} counter (via finalize, so it always
+ * decrements — success, error, or cancel) to drive the shell's global top progress bar.
+ */
+export const loadingInterceptor: HttpInterceptorFn = (req, next) => {
+  if (!req.url.startsWith(environment.apiBaseUrl)) {
+    return next(req);
+  }
+  const loading = inject(LoadingService);
+  loading.begin();
+  return next(req).pipe(finalize(() => loading.end()));
 };
 
 function isEnvelope(body: unknown): body is ApiResponse<unknown> {

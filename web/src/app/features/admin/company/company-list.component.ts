@@ -5,6 +5,7 @@ import { Company } from '../models/company.model';
 import { Organisation } from '../models/organisation.model';
 import { CompanyService } from './company.service';
 import { OrganisationService } from '../organisation/organisation.service';
+import { AlertService } from '../../../core/feedback/alert.service';
 
 /**
  * Lists companies for the deployment's organisation and creates new ones. The organisation is
@@ -21,6 +22,7 @@ import { OrganisationService } from '../organisation/organisation.service';
 export class CompanyListComponent {
   private readonly companyService = inject(CompanyService);
   private readonly organisationService = inject(OrganisationService);
+  private readonly alerts = inject(AlertService);
 
   readonly organisation = signal<Organisation | null>(null);
   readonly orgState = signal<'loading' | 'ready' | 'error'>('loading');
@@ -74,6 +76,7 @@ export class CompanyListComponent {
           this.code.set('');
           this.name.set('');
           this.saving.set(false);
+          this.alerts.success('Company created', created.name);
         },
         error: (err) => {
           this.formError.set(this.messageFrom(err));
