@@ -1,0 +1,39 @@
+.admin-page {
+  max-width: 960px;
+}
+
+.home-card {
+  border: 1px solid #e6e9ee;
+  border-radius: 10px;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, transform 0.08s ease;
+}
+
+.home-card:hover,
+.home-card:focus-visible {
+  border-color: var(--orbix-accent, #4178d9);
+  box-shadow: 0 4px 14px rgba(13, 42, 91, 0.1);
+  transform: translateY(-1px);
+}
+
+.home-card__icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #e8eef9;
+  color: var(--orbix-primary, #1a4fb5);
+  font-size: 1.15rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-card {
+    transition: none;
+  }
+  .home-card:hover,
+  .home-card:focus-visible {
+    transform: none;
+  }
+}
