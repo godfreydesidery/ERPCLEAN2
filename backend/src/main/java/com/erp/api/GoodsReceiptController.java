@@ -55,7 +55,7 @@ public class GoodsReceiptController {
 
     /** Paged list / search for a company. */
     @GetMapping
-    @PreAuthorize("hasAuthority('PURCHASE.GOODS_RECEIPT.VIEW')")
+    @PreAuthorize("@perm.has('PURCHASE.GOODS_RECEIPT.VIEW')")
     public ApiResponse<List<GoodsReceiptDto>> list(
             @RequestParam Long companyId,
             @RequestParam(required = false) String q,
