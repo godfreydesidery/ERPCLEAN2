@@ -144,5 +144,43 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./sales/tax-rate-list.component').then((m) => m.TaxRateListComponent),
   },
+  // ── Stock ─────────────────────────────────────────────────────────────────
+  {
+    path: 'stock',
+    canActivate: [requirePermission('STOCK.VIEW')],
+    loadComponent: () =>
+      import('./stock/stock-list.component').then((m) => m.StockListComponent),
+  },
+  // ── Purchases ─────────────────────────────────────────────────────────────
+  {
+    path: 'purchase-orders',
+    canActivate: [requirePermission('PURCHASE.ORDER.VIEW')],
+    loadComponent: () =>
+      import('./purchases/purchase-order-list.component').then((m) => m.PurchaseOrderListComponent),
+  },
+  {
+    path: 'purchase-orders/uid/:uid',
+    canActivate: [requirePermission('PURCHASE.ORDER.VIEW')],
+    loadComponent: () =>
+      import('./purchases/purchase-order-detail.component').then((m) => m.PurchaseOrderDetailComponent),
+  },
+  {
+    path: 'goods-receipts',
+    canActivate: [requirePermission('PURCHASE.ORDER.VIEW')],
+    loadComponent: () =>
+      import('./purchases/goods-receipt-list.component').then((m) => m.GoodsReceiptListComponent),
+  },
+  {
+    path: 'goods-receipts/create',
+    canActivate: [requirePermission('PURCHASE.RECEIVE')],
+    loadComponent: () =>
+      import('./purchases/goods-receipt-create.component').then((m) => m.GoodsReceiptCreateComponent),
+  },
+  {
+    path: 'goods-receipts/uid/:uid',
+    canActivate: [requirePermission('PURCHASE.ORDER.VIEW')],
+    loadComponent: () =>
+      import('./purchases/goods-receipt-detail.component').then((m) => m.GoodsReceiptDetailComponent),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];

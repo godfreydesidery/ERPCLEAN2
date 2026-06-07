@@ -1,0 +1,222 @@
+<section class="admin-page">
+  <header class="page-head">
+    <a class="back-link text-muted small" routerLink="/admin/goods-receipts">
+      <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Goods Receipts
+    </a>
+    <h1 class="h4 mb-1 mt-1">Receive Goods</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      Record stock received against a purchase order.
+    </p>
+  </header>
+
+  <!-- Company selector (shown when no poUid was pre-filled) -->
+  @if (!po()) {
+    @switch (companyState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-3" role="alert">Could not load companies.</p>
+      }
+      @default {
+        @if (companies().length > 1) {
+          <div class="mb-3" style="max-width:320px">
+            <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+            <select id="companyPicker" name="companyPicker" class="form-select"
+                    [ngModel]="selectedCompanyId()"
+                    (ngModelChange)="selectedCompanyId.set($event)">
+              @for (c of companies(); track c.uid) {
+                <option [value]="c.id">{{ c.name }}</option>
+              }
+            </select>
+          </div>
+        }
+
+        <!-- PO picker -->
+        <div class="mb-3 position-relative" style="max-width:420px">
+          <label class="form-label small text-muted mb-1" for="poSearch">
+            Purchase Order <span class="text-danger" aria-hidden="true">*</span>
+          </label>
+          <input id="poSearch" name="poSearch" type="search"
+                 class="form-control"
+                 placeholder="Search ordered PO by number or supplier…"
+                 [ngModel]="poSearchQ()"
+                 (ngModelChange)="onPoSearchChange($event)"
+                 autocomplete="off"
+                 [attr.aria-expanded]="poResults().length > 0"
+                 aria-haspopup="listbox"
+                 aria-autocomplete="list" />
+          @if (poResults().length > 0) {
+            <ul class="list-group position-absolute shadow-sm mt-1 w-100" role="listbox"
+                aria-label="Purchase order suggestions" style="z-index:1050;max-height:220px;overflow-y:auto;">
+              @for (p of poResults(); track p.uid) {
+                <li class="list-group-item list-group-item-action small py-2"
+                    role="option" style="cursor:pointer"
+                    (click)="selectPo(p)"
+                    (keydown.enter)="selectPo(p)"
+                    tabindex="0">
+                  <strong class="font-monospace">{{ p.orderNumber ?? 'DRAFT' }}</strong>
+                  — {{ p.supplierName }}
+                  <span class="badge text-bg-light border ms-1">{{ p.status }}</span>
+                </li>
+              }
+            </ul>
+          }
+        </div>
+      }
+    }
+  }
+
+  <!-- PO context banner (shown once a PO is loaded) -->
+  @if (poState() === 'loading') {
+    <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+      <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading order…
+    </p>
+  }
+  @if (poState() === 'error') {
+    <p class="text-danger" role="alert">
+      <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+      Could not load purchase order.
+    </p>
+  }
+
+  @if (po(); as p) {
+    <div class="card card-body mb-3 bg-light border-0">
+      <dl class="row g-1 mb-0" style="font-size:0.875rem">
+        <dt class="col-sm-2 text-muted fw-normal">PO #</dt>
+        <dd class="col-sm-10 mb-0 font-monospace">{{ p.orderNumber ?? 'DRAFT' }}</dd>
+        <dt class="col-sm-2 text-muted fw-normal">Supplier</dt>
+        <dd class="col-sm-10 mb-0">{{ p.supplierCode }} — {{ p.supplierName }}</dd>
+        <dt class="col-sm-2 text-muted fw-normal">Currency</dt>
+        <dd class="col-sm-10 mb-0">{{ p.currency }}</dd>
+        <dt class="col-sm-2 text-muted fw-normal">Status</dt>
+        <dd class="col-sm-10 mb-0">{{ p.status }}</dd>
+      </dl>
+    </div>
+
+    <!-- Lines to receive -->
+    @switch (linesState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading lines…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger" role="alert">Could not load purchase order lines.</p>
+      }
+      @default {
+        @if (receiveLines().length === 0) {
+          <div class="alert alert-warning" role="alert">
+            <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
+            All lines on this order are already fully received. Nothing to receive.
+          </div>
+        } @else {
+          <form (ngSubmit)="submit()" aria-label="Create goods receipt">
+            <h2 class="h6 mb-2">Lines to Receive</h2>
+            <p class="small text-muted mb-2">
+              Quantities default to the outstanding amount. Adjust as needed.
+              Uncheck lines you are not receiving in this delivery.
+            </p>
+
+            <div class="table-responsive mb-3">
+              <table class="table table-sm table-bordered align-middle">
+                <caption class="visually-hidden">Lines to receive</caption>
+                <thead class="table-light">
+                  <tr>
+                    <th scope="col" style="width:40px">
+                      <span class="visually-hidden">Include</span>
+                    </th>
+                    <th scope="col">Product</th>
+                    <th scope="col">Unit</th>
+                    <th scope="col" class="text-end">Ordered</th>
+                    <th scope="col" class="text-end">Previously Received</th>
+                    <th scope="col" class="text-end">Outstanding</th>
+                    <th scope="col" style="width:140px">Receive Qty</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (entry of receiveLines(); track entry.line.uid; let i = $index) {
+                    <tr [class.table-secondary]="!entry.include">
+                      <td class="text-center">
+                        <div class="form-check mb-0">
+                          <input class="form-check-input" type="checkbox"
+                                 [id]="'inc-' + entry.line.uid"
+                                 [name]="'inc-' + entry.line.uid"
+                                 [ngModel]="entry.include"
+                                 (ngModelChange)="toggleLineInclude(i, $event)"
+                                 [attr.aria-label]="'Include ' + entry.line.productName" />
+                          <label class="form-check-label visually-hidden"
+                                 [for]="'inc-' + entry.line.uid">Include</label>
+                        </div>
+                      </td>
+                      <td>
+                        <span class="font-monospace small">{{ entry.line.productCode }}</span>
+                        <br /><span class="small text-muted">{{ entry.line.productName }}</span>
+                      </td>
+                      <td class="small">{{ entry.line.unitName }}</td>
+                      <td class="text-end font-monospace">{{ entry.line.orderedQty }}</td>
+                      <td class="text-end font-monospace">{{ entry.line.receivedQtyInBase }}</td>
+                      <td class="text-end font-monospace fw-semibold">{{ entry.line.outstandingQtyInBase }}</td>
+                      <td>
+                        <div>
+                          <label class="visually-hidden"
+                                 [for]="'qty-' + entry.line.uid">
+                            Receive qty for {{ entry.line.productName }}
+                          </label>
+                          <input [id]="'qty-' + entry.line.uid"
+                                 [name]="'qty-' + entry.line.uid"
+                                 type="number" min="0.001" step="any"
+                                 class="form-control form-control-sm"
+                                 [class.is-invalid]="lineErrors()[entry.line.uid]"
+                                 [ngModel]="entry.receivedQty"
+                                 (ngModelChange)="updateLineQty(i, $event)"
+                                 [disabled]="!entry.include || submitting()" />
+                          @if (lineErrors()[entry.line.uid]; as lineErr) {
+                            <div class="invalid-feedback">{{ lineErr }}</div>
+                          }
+                        </div>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Notes -->
+            <div class="mb-3" style="max-width:480px">
+              <label class="form-label small text-muted mb-1" for="grNotes">Notes</label>
+              <input id="grNotes" name="grNotes" type="text" class="form-control"
+                     [ngModel]="notes()" (ngModelChange)="notes.set($event)"
+                     [disabled]="submitting()" autocomplete="off" />
+            </div>
+
+            <!-- Error banner -->
+            @if (formError(); as msg) {
+              <div class="alert alert-danger" role="alert">
+                <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
+                {{ msg }}
+              </div>
+            }
+
+            <!-- Submit -->
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-success"
+                      [disabled]="submitting() || !hasIncludedLines()">
+                @if (submitting()) {
+                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  Recording…
+                } @else {
+                  <i class="bi bi-box-arrow-in-down me-1" aria-hidden="true"></i>
+                  Record Receipt
+                }
+              </button>
+              <a class="btn btn-outline-secondary" routerLink="/admin/goods-receipts">Cancel</a>
+            </div>
+          </form>
+        }
+      }
+    }
+  }
+</section>

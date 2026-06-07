@@ -109,4 +109,22 @@ public final class AuditActions {
     public static final String SALES_INVOICE_PAYMENT_REMOVE  = "SALES.INVOICE.PAYMENT.REMOVE";
     public static final String SALES_INVOICE_VOID            = "SALES.INVOICE.VOID";
     public static final String TAXRATE_UPDATE                = "TAXRATE.UPDATE";
+
+    // -- Stock module (ADR-0010 D-12; target_type = plural table names) -------
+    public static final String STOCK_ADJUST      = "STOCK.ADJUST";
+    public static final String STOCK_OPENING     = "STOCK.OPENING";
+    public static final String STOCK_REORDER_SET = "STOCK.REORDER.SET";
+
+    // -- Purchases module (ADR-0011 D-13; target_type = plural table names) --
+    public static final String PURCHASE_ORDER_CREATE      = "PURCHASE.ORDER.CREATE";
+    public static final String PURCHASE_ORDER_UPDATE      = "PURCHASE.ORDER.UPDATE";
+    public static final String PURCHASE_ORDER_LINE_ADD    = "PURCHASE.ORDER.LINE.ADD";
+    public static final String PURCHASE_ORDER_LINE_UPDATE = "PURCHASE.ORDER.LINE.UPDATE";
+    public static final String PURCHASE_ORDER_LINE_REMOVE = "PURCHASE.ORDER.LINE.REMOVE";
+    public static final String PURCHASE_ORDER_PLACE       = "PURCHASE.ORDER.PLACE";
+    public static final String PURCHASE_ORDER_CLOSE       = "PURCHASE.ORDER.CLOSE";
+    public static final String PURCHASE_ORDER_VOID        = "PURCHASE.ORDER.VOID";
+    public static final String PURCHASE_GR_CREATE         = "PURCHASE.GOODS_RECEIPT.CREATE";
+    public static final String PURCHASE_GR_RECEIVE        = "PURCHASE.GOODS_RECEIPT.RECEIVE";
+    public static final String PURCHASE_GR_VOID           = "PURCHASE.GOODS_RECEIPT.VOID";
 }

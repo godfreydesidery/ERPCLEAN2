@@ -18,6 +18,8 @@ import com.erp.modules.sales.domain.dto.AddPaymentRequest;
 import com.erp.modules.sales.domain.dto.CreateSalesInvoiceRequest;
 import com.erp.modules.sales.domain.dto.FinaliseInvoiceRequest;
 import com.erp.modules.sales.domain.dto.OverrideLinePriceRequest;
+import com.erp.modules.sales.domain.dto.SaleFinalisedPayload;
+import com.erp.modules.sales.domain.dto.SaleVoidedPayload;
 import com.erp.modules.sales.domain.dto.SalesInvoiceDto;
 import com.erp.modules.sales.domain.dto.SalesInvoiceLineDto;
 import com.erp.modules.sales.domain.dto.SalesInvoicePaymentDto;
@@ -25,6 +27,8 @@ import com.erp.modules.sales.domain.dto.TaxRateDto;
 import com.erp.modules.sales.domain.dto.UpdateInvoiceLineRequest;
 import com.erp.modules.sales.domain.dto.UpdateTaxRateRequest;
 import com.erp.modules.sales.domain.dto.VoidInvoiceRequest;
+import com.erp.platform.events.DomainEventType;
+import com.erp.platform.events.OutboxPublisher;
 import com.erp.modules.sales.domain.entity.SalesInvoice;
 import com.erp.modules.sales.domain.entity.SalesInvoiceLine;
 import com.erp.modules.sales.domain.entity.SalesInvoicePayment;
@@ -79,6 +83,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     private final InvoiceTotalsCalculator totalsCalc;
     private final ScopeGuard scopeGuard;
     private final AuditService audit;
+    private final OutboxPublisher outbox;
 
     public SalesInvoiceServiceImpl(SalesInvoiceRepository invoices,
                                    SalesInvoiceLineRepository lines,
@@ -94,7 +99,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                                    SalesInvoiceCodeGenerator codeGen,
                                    InvoiceTotalsCalculator totalsCalc,
                                    ScopeGuard scopeGuard,
-                                   AuditService audit) {
+                                   AuditService audit,
+                                   OutboxPublisher outbox) {
         this.invoices = invoices;
         this.lines = lines;
         this.payments = payments;
@@ -110,6 +116,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         this.totalsCalc = totalsCalc;
         this.scopeGuard = scopeGuard;
         this.audit = audit;
+        this.outbox = outbox;
     }
 
     // -------------------------------------------------------------------------
@@ -195,7 +202,36 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         inv.setUpdatedAt(Instant.now());
         inv.setUpdatedBy(actorId());
 
-        // TODO(stock): emit SALE.FINALISED outbox event — ADR-0008 D-9
+        // Emit SALE.FINALISED outbox event (ADR-0008 D-9, ADR-0009 D-3) — inside the finalise TX.
+        // Build line items: look up product uid for each line (scalar, batch by id).
+        Map<Long, String> productUids = products.findAllById(
+                        lineList.stream().map(SalesInvoiceLine::getProductId).toList())
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        com.erp.modules.products.domain.entity.Product::getId,
+                        com.erp.modules.products.domain.entity.Product::getUid));
+
+        List<SaleFinalisedPayload.LineItem> payloadLines = lineList.stream()
+                .map(l -> new SaleFinalisedPayload.LineItem(
+                        l.getProductId(),
+                        productUids.getOrDefault(l.getProductId(), ""),
+                        l.getUnitId(),
+                        l.getQtyInBase()))
+                .toList();
+
+        outbox.publish(
+                DomainEventType.SALE_FINALISED,
+                DomainEventType.AGG_SALES_INVOICE,
+                inv.getId(),
+                inv.getUid(),
+                inv.getCompanyId(),
+                inv.getBranchId(),
+                new SaleFinalisedPayload(
+                        inv.getUid(),
+                        inv.getCompanyId(),
+                        inv.getBranchId(),
+                        inv.getFinalisedAt(),
+                        payloadLines));
 
         audit.record(AuditEvent.of(AuditActions.SALES_INVOICE_FINALISE, "sales_invoices",
                         inv.getId(), inv.getUid())
@@ -219,6 +255,18 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         inv.setVoidReason(req.reason());
         inv.setUpdatedAt(Instant.now());
         inv.setUpdatedBy(actorId());
+
+        // Emit SALE.VOIDED in the same TX (ADR-0009 D-3) — Stock reverses the issued movements
+        // for this invoice from its own ledger (OQ-STOCK-10). No-op if the invoice never issued
+        // stock (i.e. nothing was emitted at finalise time — Stock dedupes/anomaly-logs).
+        outbox.publish(
+                DomainEventType.SALE_VOIDED,
+                DomainEventType.AGG_SALES_INVOICE,
+                inv.getId(),
+                inv.getUid(),
+                inv.getCompanyId(),
+                inv.getBranchId(),
+                new SaleVoidedPayload(inv.getUid(), inv.getCompanyId(), inv.getBranchId()));
 
         audit.record(AuditEvent.of(AuditActions.SALES_INVOICE_VOID, "sales_invoices",
                         inv.getId(), inv.getUid())

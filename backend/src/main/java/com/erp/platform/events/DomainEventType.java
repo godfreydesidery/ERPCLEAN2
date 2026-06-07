@@ -1,0 +1,38 @@
+package com.erp.platform.events;
+
+/**
+ * Canonical event-type and aggregate-type string constants for the transactional outbox
+ * (ADR-0009 D-3). Both producers and consumers reference the same constant so a typo cannot
+ * silently misroute an event.
+ *
+ * <p>New event types are added here under their owning module's ADR. Do not scatter string literals
+ * in producer / consumer code.
+ */
+public final class DomainEventType {
+
+    // ---------------------------------------------------------------------------
+    // Event types (MODULE.EVENT form)
+    // ---------------------------------------------------------------------------
+
+    /** Sales invoice finalised — stock deduction trigger (ADR-0008 D-9, ADR-0009 D-3). */
+    public static final String SALE_FINALISED         = "SALE.FINALISED";
+
+    /** Sales invoice voided — compensating reversal trigger (ADR-0008 D-9, ADR-0009 D-3). */
+    public static final String SALE_VOIDED            = "SALE.VOIDED";
+
+    /** Goods receipt received — stock receipt trigger (ADR-0009 D-3; built by ADR-0011). */
+    public static final String STOCK_RECEIVED         = "STOCK.RECEIVED";
+
+    /** Goods receipt voided — compensating receipt reversal (ADR-0009 D-3; built by ADR-0011). */
+    public static final String STOCK_RECEIPT_VOIDED   = "STOCK.RECEIPT.VOIDED";
+
+    // ---------------------------------------------------------------------------
+    // Aggregate types (the producing aggregate kind — used for diagnostics/replay)
+    // ---------------------------------------------------------------------------
+
+    public static final String AGG_SALES_INVOICE = "SALES_INVOICE";
+    public static final String AGG_GOODS_RECEIPT = "GOODS_RECEIPT";
+
+    private DomainEventType() {
+    }
+}

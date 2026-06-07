@@ -31,14 +31,26 @@ public class IamTestData {
                 .executeUpdate();
         // 3. Delete test-created roles (system roles stay).
         em.createNativeQuery("DELETE FROM roles WHERE is_system = false").executeUpdate();
-        // 4a. Clear sales tables (FK children before parents; before products/parties).
+        // 4. Clear the transactional-outbox tables (platform.events; no FK into business tables).
+        em.createNativeQuery(
+                "TRUNCATE domain_events, processed_events RESTART IDENTITY CASCADE")
+                .executeUpdate();
+        // 4a. Clear purchases tables BEFORE products/parties (GR/PO lines FK → products/suppliers/units).
+        em.createNativeQuery(
+                "TRUNCATE goods_receipt_lines, goods_receipts, purchase_order_lines, purchase_orders RESTART IDENTITY CASCADE")
+                .executeUpdate();
+        // 4b. Clear stock tables BEFORE products/sales (stock_movements + stock_on_hand FK → products/branches/companies).
+        em.createNativeQuery(
+                "TRUNCATE stock_movements, stock_on_hand RESTART IDENTITY CASCADE")
+                .executeUpdate();
+        // 4c. Clear sales tables (FK children before parents; before products/parties).
         //     tax_rates after invoices because invoices do NOT FK into tax_rates; payments/lines first.
         em.createNativeQuery(
                 "TRUNCATE sales_invoice_payments, sales_invoice_lines, sales_invoices, tax_rates RESTART IDENTITY CASCADE")
                 .executeUpdate();
-        // 4b. Clear products tables (FK children first, then masters, then sequence counter).
-        //    units_of_measure is included here because products.base_unit_id and
-        //    product_bulk_packs.unit_id FK into it (UoM cutover V4).
+        // 4d. Clear products tables (FK children first, then masters, then sequence counter).
+        //     units_of_measure is included here because products.base_unit_id and
+        //     product_bulk_packs.unit_id FK into it (UoM cutover V4).
         em.createNativeQuery(
                 "TRUNCATE product_branch, product_barcodes, product_prices, product_components, product_bulk_packs RESTART IDENTITY CASCADE")
                 .executeUpdate();
