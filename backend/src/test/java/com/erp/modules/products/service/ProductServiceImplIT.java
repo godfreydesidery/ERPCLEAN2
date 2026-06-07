@@ -13,9 +13,14 @@ import com.erp.modules.iam.repository.OrganisationRepository;
 import com.erp.modules.products.domain.dto.AddBarcodeRequest;
 import com.erp.modules.products.domain.dto.AddComponentRequest;
 import com.erp.modules.products.domain.dto.AssignProductBranchRequest;
+import com.erp.modules.products.domain.dto.CreateBulkPackRequest;
+import com.erp.modules.products.domain.dto.CreatePriceListRequest;
 import com.erp.modules.products.domain.dto.CreateProductRequest;
+import com.erp.modules.products.domain.dto.PriceListDto;
 import com.erp.modules.products.domain.dto.ProductBarcodeDto;
+import com.erp.modules.products.domain.dto.ProductBulkPackDto;
 import com.erp.modules.products.domain.dto.ProductDto;
+import com.erp.modules.products.domain.dto.SetProductPriceRequest;
 import com.erp.modules.products.domain.enums.ProductType;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditLog;
@@ -46,6 +51,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 class ProductServiceImplIT extends PostgresIntegrationTest {
 
     @Autowired private ProductService productService;
+    @Autowired private PriceListService priceListService;
     @Autowired private AuditRepository auditRepository;
     @Autowired private OrganisationRepository organisations;
     @Autowired private CompanyRepository companies;
@@ -416,6 +422,87 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
                 .extracting(ProductDto::name).containsExactly("Mineral Water Bottle");
         assertThat(productService.list(companyA.getId(), "zzz", Pageable.unpaged()).getContent())
                 .isEmpty();
+    }
+
+    // -----------------------------------------------------------------------
+    // Security regression — F15: price list must be same-company as the product
+    // (setPrice/removePrice must not resolve a cross-tenant price list)
+    // -----------------------------------------------------------------------
+
+    @Test
+    void setPrice_crossCompanyPriceList_throwsNotFound() {
+        // company A product, company B price list — must NOT link (SR finding F15).
+        Company companyB = companies.save(new Company(org, "PRCG", "Product Co G"));
+        branches.save(new Branch(companyB, "PR-G1", "Prod Branch G1"));
+
+        ProductDto prodA = productService.create(goodsRequest(companyA.getUid(), "Priced A"));
+
+        // create a price list owned by company B (root may act in B)
+        RequestContext.set(new RequestContext.Principal(
+                rootId, "prod_root", true, companyB.getId(), null, null));
+        PriceListDto plB = priceListService.create(
+                new CreatePriceListRequest(companyB.getUid(), "RETAIL_G", "Retail G"));
+
+        // back to acting in company A, try to price the A product against B's list
+        RequestContext.set(new RequestContext.Principal(
+                rootId, "prod_root", true, companyA.getId(), branchA.getId(), null));
+
+        assertThatThrownBy(() -> productService.setPrice(prodA.uid(),
+                new SetProductPriceRequest(plB.uid(), new MoneyDto("1000.00", "TZS"))))
+                .isInstanceOf(com.erp.platform.common.api.NotFoundException.class);
+
+        // and no price row leaked through
+        assertThat(productService.listPrices(prodA.uid())).isEmpty();
+    }
+
+    @Test
+    void setPrice_sameCompanyPriceList_succeedsAndShowsListMetadata() {
+        ProductDto prodA = productService.create(goodsRequest(companyA.getUid(), "Priced A2"));
+        PriceListDto plA = priceListService.create(
+                new CreatePriceListRequest(companyA.getUid(), "RETAIL_A2", "Retail A2"));
+
+        productService.setPrice(prodA.uid(),
+                new SetProductPriceRequest(plA.uid(), new MoneyDto("3000.00", "TZS")));
+
+        var prices = productService.listPrices(prodA.uid());
+        assertThat(prices).hasSize(1);
+        assertThat(prices.get(0).priceListUid()).isEqualTo(plA.uid());
+        assertThat(prices.get(0).priceListCode()).isEqualTo("RETAIL_A2");
+    }
+
+    // -----------------------------------------------------------------------
+    // Security regression — F16: child remove must be scoped to the parent product
+    // (removeBarcode/removeBulkPack must not delete another product's child)
+    // -----------------------------------------------------------------------
+
+    @Test
+    void removeBarcode_otherProductsBarcode_throwsNotFound() {
+        ProductDto owner = productService.create(goodsRequest(companyA.getUid(), "Owner Prod"));
+        ProductDto other = productService.create(goodsRequest(companyA.getUid(), "Other Prod"));
+        ProductBarcodeDto otherBarcode = productService.addBarcode(other.uid(),
+                new AddBarcodeRequest("EAN-OTHER-1", false));
+
+        // try to delete OTHER's barcode via OWNER's URL — must fail (SR finding F16)
+        assertThatThrownBy(() -> productService.removeBarcode(owner.uid(), otherBarcode.uid()))
+                .isInstanceOf(com.erp.platform.common.api.NotFoundException.class);
+
+        // the barcode is still there under its real parent
+        assertThat(productService.listBarcodes(other.uid()))
+                .extracting(ProductBarcodeDto::barcode).contains("EAN-OTHER-1");
+    }
+
+    @Test
+    void removeBulkPack_otherProductsBulkPack_throwsNotFound() {
+        ProductDto owner = productService.create(goodsRequest(companyA.getUid(), "Owner Prod BP"));
+        ProductDto other = productService.create(goodsRequest(companyA.getUid(), "Other Prod BP"));
+        ProductBulkPackDto otherPack = productService.addBulkPack(other.uid(),
+                new CreateBulkPackRequest("crate", new BigDecimal("12")));
+
+        assertThatThrownBy(() -> productService.removeBulkPack(owner.uid(), otherPack.uid()))
+                .isInstanceOf(com.erp.platform.common.api.NotFoundException.class);
+
+        assertThat(productService.listBulkPacks(other.uid()))
+                .extracting(ProductBulkPackDto::name).contains("crate");
     }
 
     // -----------------------------------------------------------------------

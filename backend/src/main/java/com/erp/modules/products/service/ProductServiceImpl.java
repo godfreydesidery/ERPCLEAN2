@@ -244,7 +244,9 @@ public class ProductServiceImpl implements ProductService {
     public void removeBulkPack(String productUid, String bulkPackUid) {
         Product p = require(productUid);
         scopeGuard.assertCanActIn(RequestContext.get(), p.getCompanyId());
-        ProductBulkPack bp = bulkPacks.findByUid(bulkPackUid)
+        // Security: resolve the child scoped to its parent product (SR finding 2) — a global
+        // findByUid would let a caller delete another product's (or tenant's) bulk pack via this URL.
+        ProductBulkPack bp = bulkPacks.findByUidAndProductId(bulkPackUid, p.getId())
                 .orElseThrow(() -> new NotFoundException("BulkPack not found: " + bulkPackUid));
         bulkPacks.delete(bp);
         audit.record(AuditEvent.of(AuditActions.PRODUCT_UPDATE, "products", p.getId(), p.getUid())
@@ -282,7 +284,9 @@ public class ProductServiceImpl implements ProductService {
     public void removeBarcode(String productUid, String barcodeUid) {
         Product p = require(productUid);
         scopeGuard.assertCanActIn(RequestContext.get(), p.getCompanyId());
-        ProductBarcode barcode = barcodes.findByUid(barcodeUid)
+        // Security: resolve the child scoped to its parent product (SR finding 2) — a global
+        // findByUid would let a caller delete another product's (or tenant's) barcode via this URL.
+        ProductBarcode barcode = barcodes.findByUidAndProductId(barcodeUid, p.getId())
                 .orElseThrow(() -> new NotFoundException("Barcode not found: " + barcodeUid));
         barcodes.delete(barcode);
         audit.record(AuditEvent.of(AuditActions.PRODUCT_BARCODE_REMOVE, "product_barcodes",
@@ -320,7 +324,10 @@ public class ProductServiceImpl implements ProductService {
         Product p = require(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), p.getCompanyId());
 
-        var priceList = priceLists.findByUid(req.priceListUid())
+        // Security: resolve the price list scoped to the product's company (SR finding 1, BR-PROD-06/09).
+        // A global findByUid would let a caller link a product to another tenant's price list, leaking
+        // that price list's code/name on every price read and creating a corrupt cross-tenant FK.
+        var priceList = priceLists.findByCompanyIdAndUid(p.getCompanyId(), req.priceListUid())
                 .orElseThrow(() -> new NotFoundException("PriceList not found: " + req.priceListUid()));
 
         // upsert: one price per (product, price_list)
@@ -343,7 +350,8 @@ public class ProductServiceImpl implements ProductService {
     public void removePrice(String productUid, String priceListUid) {
         Product p = require(productUid);
         scopeGuard.assertCanActIn(RequestContext.get(), p.getCompanyId());
-        var priceList = priceLists.findByUid(priceListUid)
+        // Security: scope the price list to the product's company (SR finding 1).
+        var priceList = priceLists.findByCompanyIdAndUid(p.getCompanyId(), priceListUid)
                 .orElseThrow(() -> new NotFoundException("PriceList not found: " + priceListUid));
         prices.findByProductIdAndPriceListId(p.getId(), priceList.getId())
                 .ifPresent(pp -> {

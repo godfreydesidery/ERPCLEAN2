@@ -9,5 +9,11 @@ public interface ProductBulkPackRepository extends JpaRepository<ProductBulkPack
 
     Optional<ProductBulkPack> findByUid(String uid);
 
+    /**
+     * Ownership-scoped lookup: resolves a bulk pack only when it belongs to the given product.
+     * Used by remove so a child cannot be deleted via a different product's URL (SR finding 2).
+     */
+    Optional<ProductBulkPack> findByUidAndProductId(String uid, Long productId);
+
     List<ProductBulkPack> findByProductId(Long productId);
 }
