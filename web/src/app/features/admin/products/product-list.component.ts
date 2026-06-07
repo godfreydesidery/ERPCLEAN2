@@ -15,6 +15,7 @@ import {
   ProductStatus,
   ProductType,
   UnitOfMeasureDto,
+  VatStatus,
 } from '../models/product.model';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
@@ -73,6 +74,7 @@ export class ProductListComponent {
   readonly newBaseUnitUid = signal('');
   readonly newCostAmount = signal('');
   readonly newCostCurrency = signal('TZS');
+  readonly newVatStatus = signal<VatStatus>('STANDARD');
   readonly saving = signal(false);
   readonly formError = signal<string | null>(null);
   readonly showCreateForm = signal(false);
@@ -233,6 +235,7 @@ export class ProductListComponent {
     this.newBaseUnitUid.set('');
     this.newCostAmount.set('');
     this.newCostCurrency.set('TZS');
+    this.newVatStatus.set('STANDARD');
   }
 
   onNewTypeChange(type: ProductType): void {
@@ -284,6 +287,7 @@ export class ProductListComponent {
       stockable: this.newType() === 'SERVICE' ? false : this.newStockable(),
       baseUnitUid,
       cost,
+      vatStatus: this.newVatStatus(),
     };
 
     this.productService.create(request).subscribe({

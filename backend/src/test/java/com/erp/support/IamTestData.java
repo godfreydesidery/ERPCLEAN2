@@ -31,7 +31,12 @@ public class IamTestData {
                 .executeUpdate();
         // 3. Delete test-created roles (system roles stay).
         em.createNativeQuery("DELETE FROM roles WHERE is_system = false").executeUpdate();
-        // 4. Clear products tables (FK children first, then masters, then sequence counter).
+        // 4a. Clear sales tables (FK children before parents; before products/parties).
+        //     tax_rates after invoices because invoices do NOT FK into tax_rates; payments/lines first.
+        em.createNativeQuery(
+                "TRUNCATE sales_invoice_payments, sales_invoice_lines, sales_invoices, tax_rates RESTART IDENTITY CASCADE")
+                .executeUpdate();
+        // 4b. Clear products tables (FK children first, then masters, then sequence counter).
         //    units_of_measure is included here because products.base_unit_id and
         //    product_bulk_packs.unit_id FK into it (UoM cutover V4).
         em.createNativeQuery(

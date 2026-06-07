@@ -1,6 +1,7 @@
 package com.erp.modules.products.domain.entity;
 
 import com.erp.modules.products.domain.enums.ProductType;
+import com.erp.modules.products.domain.enums.VatStatus;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.domain.UidEntity;
 import com.erp.platform.common.money.Money;
@@ -82,6 +83,16 @@ public class Product extends UidEntity {
     })
     @Setter
     private Money cost;
+
+    /**
+     * VAT classification of this product (FR-SALES-10, ADR-0008 D-5a).
+     * Default STANDARD — additive safe; existing rows become standard-rated.
+     * Stored as VARCHAR(20) matching every other enum column.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "vat_status", nullable = false, length = 20)
+    @Setter
+    private VatStatus vatStatus = VatStatus.STANDARD;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)

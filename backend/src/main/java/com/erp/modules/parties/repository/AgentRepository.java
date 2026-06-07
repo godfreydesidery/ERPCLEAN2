@@ -33,4 +33,20 @@ public interface AgentRepository extends JpaRepository<Agent, Long> {
 
     @Query("SELECT a.companyId FROM Agent a WHERE a.uid = :uid")
     Optional<Long> findCompanyIdByUid(@Param("uid") String uid);
+
+    /**
+     * Auto-default agent: resolves the ACTIVE internal-agent id for the logged-in user in the given
+     * company (FR-SALES-15, ADR-0008 D-6). Returns empty if the user has no ACTIVE INTERNAL agent
+     * record here — so an archived internal agent is not silently auto-attached (BR-PARTY-10); the
+     * caller then falls back to requiring an explicit agentUid (BR-SALES-06).
+     */
+    @Query("""
+            SELECT a.id FROM Agent a
+            WHERE a.companyId = :companyId
+              AND a.agentKind = com.erp.modules.parties.domain.enums.AgentKind.INTERNAL
+              AND a.appUserId = :appUserId
+              AND a.status = com.erp.platform.common.domain.MasterStatus.ACTIVE
+            """)
+    Optional<Long> findInternalAgentIdByCompanyAndUser(@Param("companyId") Long companyId,
+                                                       @Param("appUserId") Long appUserId);
 }

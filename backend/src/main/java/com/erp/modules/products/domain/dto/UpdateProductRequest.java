@@ -1,6 +1,7 @@
 package com.erp.modules.products.domain.dto;
 
 import com.erp.modules.products.domain.enums.ProductType;
+import com.erp.modules.products.domain.enums.VatStatus;
 import com.erp.platform.common.money.MoneyDto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -9,6 +10,7 @@ import jakarta.validation.constraints.NotNull;
  * Request DTO to update an existing Product's profile.
  * code and companyId are not updatable (BR-PROD-02/08).
  * {@code baseUnitUid} references a UnitOfMeasure uid scoped to the same company (UoM cutover).
+ * {@code vatStatus} defaults to STANDARD when null (ADR-0008 D-5a).
  */
 public record UpdateProductRequest(
         @NotBlank String name,
@@ -17,6 +19,7 @@ public record UpdateProductRequest(
         boolean sellable,
         boolean stockable,
         @NotBlank String baseUnitUid,
-        MoneyDto cost
+        MoneyDto cost,
+        VatStatus vatStatus
 ) {
 }

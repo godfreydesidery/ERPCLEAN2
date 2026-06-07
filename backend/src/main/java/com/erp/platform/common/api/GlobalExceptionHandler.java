@@ -75,6 +75,16 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(ApiResponse.error(ex.getMessage()));
     }
 
+    /**
+     * Business-rule state conflict (operation not valid for the resource's current state) → 409.
+     * e.g. finalising an unpaid or empty invoice, mutating a finalised invoice, voiding a
+     * non-finalised invoice. Surfaces the rule message to the caller instead of a generic 500.
+     */
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<ApiResponse<Void>> handleIllegalState(IllegalStateException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error(ex.getMessage()));
+    }
+
     /** Anything unexpected → 500 with a generic message; details go to logs, not the client. */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleUnexpected(Exception ex) {

@@ -217,13 +217,23 @@
           </div>
         </div>
 
-        <!-- Row 2: description + cost -->
+        <!-- Row 2: description + cost + vatStatus -->
         <div class="row g-2 mb-2">
-          <div class="col-sm-5">
+          <div class="col-sm-4">
             <label class="form-label small text-muted mb-1" for="newDescription">Description</label>
             <input id="newDescription" name="newDescription" type="text" class="form-control"
                    [ngModel]="newDescription()" (ngModelChange)="newDescription.set($event)"
                    [disabled]="saving()" autocomplete="off" />
+          </div>
+          <div class="col-sm-2">
+            <label class="form-label small text-muted mb-1" for="newVatStatus">VAT Status</label>
+            <select id="newVatStatus" name="newVatStatus" class="form-select"
+                    [ngModel]="newVatStatus()" (ngModelChange)="newVatStatus.set($event)"
+                    [disabled]="saving()">
+              <option value="STANDARD">Standard</option>
+              <option value="ZERO_RATED">Zero Rated</option>
+              <option value="EXEMPT">Exempt</option>
+            </select>
           </div>
           <div class="col-sm-3">
             <label class="form-label small text-muted mb-1" for="newCostAmount">Cost amount</label>

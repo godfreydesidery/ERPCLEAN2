@@ -9,6 +9,8 @@ import com.erp.modules.parties.repository.SupplierRepository;
 import com.erp.modules.products.repository.PriceListRepository;
 import com.erp.modules.products.repository.ProductRepository;
 import com.erp.modules.products.repository.UnitOfMeasureRepository;
+import com.erp.modules.sales.repository.SalesInvoiceRepository;
+import com.erp.modules.sales.repository.TaxRateRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -27,6 +29,7 @@ import org.springframework.stereotype.Component;
  * <p>Reading the Company/Branch/Party repositories from the security layer mirrors the established
  * {@link PermissionResolver} pattern (which reads {@code UserRoleRepository}); this is the
  * cross-cutting spine, not a peer module (ArchUnit note in ADR-0002 and ADR-0006 D-10).
+ * Sales repositories are added here following the same pattern (ADR-0008 D-10).
  */
 @Component
 public class ScopeGuard {
@@ -40,6 +43,8 @@ public class ScopeGuard {
     private final ProductRepository products;
     private final PriceListRepository priceLists;
     private final UnitOfMeasureRepository units;
+    private final SalesInvoiceRepository salesInvoices;
+    private final TaxRateRepository taxRates;
     private final AuditService audit;
 
     public ScopeGuard(CompanyRepository companies,
@@ -51,6 +56,8 @@ public class ScopeGuard {
                       ProductRepository products,
                       PriceListRepository priceLists,
                       UnitOfMeasureRepository units,
+                      SalesInvoiceRepository salesInvoices,
+                      TaxRateRepository taxRates,
                       AuditService audit) {
         this.companies = companies;
         this.branches = branches;
@@ -61,13 +68,15 @@ public class ScopeGuard {
         this.products = products;
         this.priceLists = priceLists;
         this.units = units;
+        this.salesInvoices = salesInvoices;
+        this.taxRates = taxRates;
         this.audit = audit;
     }
 
     /**
-     * Resolve a target uid to its owning company id, per target type (ADR-0002 §2, ADR-0006 D-10).
-     * Extended with the four party target types so that
-     * {@code @perm.scoped(#uid,'customer','CUSTOMER.MANAGE')} gates work correctly.
+     * Resolve a target uid to its owning company id, per target type (ADR-0002 §2, ADR-0006 D-10,
+     * ADR-0008 D-10). Extended with sales target types so that
+     * {@code @perm.scoped(#uid,'invoice','SALES.INVOICE.VIEW')} gates work correctly.
      */
     public Optional<Long> companyIdOf(String targetType, String uid) {
         if (targetType == null || uid == null) {
@@ -83,6 +92,8 @@ public class ScopeGuard {
             case "product"     -> products.findCompanyIdByUid(uid);
             case "pricelist"   -> priceLists.findCompanyIdByUid(uid);
             case "unit"        -> units.findCompanyIdByUid(uid);
+            case "invoice"     -> salesInvoices.findCompanyIdByUid(uid);
+            case "taxrate"     -> taxRates.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };

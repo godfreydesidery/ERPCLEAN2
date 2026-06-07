@@ -9,6 +9,8 @@
 export type ProductType = 'GOODS' | 'SERVICE';
 export type ProductStatus = 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
 export type UomStatus = 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+/** VAT classification for a product. Mirrors VatStatus on the backend. */
+export type VatStatus = 'STANDARD' | 'ZERO_RATED' | 'EXEMPT';
 
 // ── UnitOfMeasureDto ──────────────────────────────────────────────────────────
 
@@ -60,6 +62,8 @@ export interface ProductModel {
   baseUnitCode: string;
   baseUnitName: string;
   cost: Money | null;
+  /** VAT classification — added in sales module iteration. Defaults to STANDARD. */
+  vatStatus: VatStatus;
   status: ProductStatus;
   version: string | null;
   createdAt: string | null;
@@ -83,6 +87,8 @@ export interface CreateProductRequest {
   /** uid of a units_of_measure row scoped to the same company. */
   baseUnitUid: string;
   cost?: Money;
+  /** VAT classification. Defaults to STANDARD on the backend if omitted. */
+  vatStatus?: VatStatus;
 }
 
 // ── UpdateProductRequest ──────────────────────────────────────────────────────
@@ -96,6 +102,8 @@ export interface UpdateProductRequest {
   /** uid of a units_of_measure row scoped to the same company. */
   baseUnitUid: string;
   cost?: Money;
+  /** VAT classification. Defaults to STANDARD on the backend if omitted. */
+  vatStatus?: VatStatus;
 }
 
 // ── ProductBarcodeDto ─────────────────────────────────────────────────────────

@@ -96,4 +96,17 @@ public final class AuditActions {
     public static final String UOM_UPDATE               = "UOM.UPDATE";
     public static final String UOM_ARCHIVE              = "UOM.ARCHIVE";
     public static final String UOM_RESTORE              = "UOM.RESTORE";
+
+    // -- Sales Invoice lifecycle (ADR-0008 D-13; target_type = plural table names) ------------
+    public static final String SALES_INVOICE_CREATE          = "SALES.INVOICE.CREATE";
+    public static final String SALES_INVOICE_UPDATE          = "SALES.INVOICE.UPDATE";
+    public static final String SALES_INVOICE_LINE_ADD        = "SALES.INVOICE.LINE.ADD";
+    public static final String SALES_INVOICE_LINE_UPDATE     = "SALES.INVOICE.LINE.UPDATE";
+    public static final String SALES_INVOICE_LINE_REMOVE     = "SALES.INVOICE.LINE.REMOVE";
+    public static final String SALES_INVOICE_LINE_OVERRIDE   = "SALES.INVOICE.LINE.OVERRIDE";
+    public static final String SALES_INVOICE_FINALISE        = "SALES.INVOICE.FINALISE";
+    public static final String SALES_INVOICE_PAYMENT_ADD     = "SALES.INVOICE.PAYMENT.ADD";
+    public static final String SALES_INVOICE_PAYMENT_REMOVE  = "SALES.INVOICE.PAYMENT.REMOVE";
+    public static final String SALES_INVOICE_VOID            = "SALES.INVOICE.VOID";
+    public static final String TAXRATE_UPDATE                = "TAXRATE.UPDATE";
 }

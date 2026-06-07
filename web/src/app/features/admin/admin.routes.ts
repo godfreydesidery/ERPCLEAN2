@@ -125,5 +125,24 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./products/units-of-measure-list.component').then((m) => m.UnitsOfMeasureListComponent),
   },
+  // ── Sales ─────────────────────────────────────────────────────────────────
+  {
+    path: 'sales-invoices',
+    canActivate: [requirePermission('SALES.INVOICE.VIEW')],
+    loadComponent: () =>
+      import('./sales/sales-invoice-list.component').then((m) => m.SalesInvoiceListComponent),
+  },
+  {
+    path: 'sales-invoices/uid/:uid',
+    canActivate: [requirePermission('SALES.INVOICE.VIEW')],
+    loadComponent: () =>
+      import('./sales/sales-invoice-detail.component').then((m) => m.SalesInvoiceDetailComponent),
+  },
+  {
+    path: 'tax-rates',
+    canActivate: [requirePermission('TAXRATE.VIEW')],
+    loadComponent: () =>
+      import('./sales/tax-rate-list.component').then((m) => m.TaxRateListComponent),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];

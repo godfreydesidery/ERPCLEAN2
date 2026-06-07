@@ -11,6 +11,7 @@ import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.repository.OrganisationRepository;
 import com.erp.modules.iam.repository.UserBranchRepository;
 import com.erp.modules.products.service.UnitOfMeasureSeeder;
+import com.erp.modules.sales.service.TaxRateSeeder;
 import com.erp.platform.security.password.PasswordPolicy;
 import java.util.Set;
 import org.slf4j.Logger;
@@ -50,6 +51,7 @@ public class BootstrapRunner implements ApplicationRunner {
     private final PasswordEncoder passwordEncoder;
     private final PasswordPolicy passwordPolicy;
     private final UnitOfMeasureSeeder unitSeeder;
+    private final TaxRateSeeder taxRateSeeder;
 
     public BootstrapRunner(BootstrapProperties props,
                            OrganisationRepository organisations,
@@ -59,7 +61,8 @@ public class BootstrapRunner implements ApplicationRunner {
                            UserBranchRepository userBranches,
                            PasswordEncoder passwordEncoder,
                            PasswordPolicy passwordPolicy,
-                           UnitOfMeasureSeeder unitSeeder) {
+                           UnitOfMeasureSeeder unitSeeder,
+                           TaxRateSeeder taxRateSeeder) {
         this.props = props;
         this.organisations = organisations;
         this.companies = companies;
@@ -69,6 +72,7 @@ public class BootstrapRunner implements ApplicationRunner {
         this.passwordEncoder = passwordEncoder;
         this.passwordPolicy = passwordPolicy;
         this.unitSeeder = unitSeeder;
+        this.taxRateSeeder = taxRateSeeder;
     }
 
     @Override
@@ -94,6 +98,9 @@ public class BootstrapRunner implements ApplicationRunner {
 
         // Seed default units of measure for the bootstrap company (brief §New company → seed defaults).
         unitSeeder.seedDefaults(company.getId());
+
+        // Seed default VAT rates for the bootstrap company (ADR-0008 D-5b).
+        taxRateSeeder.seedDefaults(company.getId());
 
         Branch branch = new Branch(company, props.branchCode(), props.branchName());
         branch.setTimeZone(props.timeZone());
