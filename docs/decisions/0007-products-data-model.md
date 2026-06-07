@@ -122,7 +122,7 @@ row** — a product is company-scoped and *associated with many branches* via `p
 | `cost_currency` | VARCHAR(3) | YES | ISO 4217 code; null/non-null **together** with `cost_amount` (CHECK + `Money` embeddable) |
 | `status` | VARCHAR(32) | NO | `MasterStatus` ACTIVE \| INACTIVE \| ARCHIVED; archive = soft-delete (FR-PROD-02, BR-PROD-10) |
 | `version` | BIGINT | NO | optimistic lock, DEFAULT 0 |
-| `created_at` / `created_by` / `updated_at` / `updated_by` | TIMESTAMPTZ / BIGINT | mixed | standard audit columns (`*_by` → `app_user.id`) |
+| `created_at` / `created_by` / `updated_at` / `updated_by` | TIMESTAMPTZ / BIGINT | mixed | standard audit columns (`*_by` → `app_users.id`) |
 
 **Constraints on `products`:**
 - `uq_product_uid UNIQUE (uid)` — ULID, global.
@@ -140,13 +140,13 @@ row** — a product is company-scoped and *associated with many branches* via `p
 > already lives in one column. One table is the boring, normal-form choice. The accepted nuance: a non-stockable
 > good and a service differ only by flags, which is exactly what the spec wants (independent flags, §2).
 
-### D-3 — Unit of measure: **free-text base unit on the product + a `product_bulk_pack` child table** (no unit master, no enum) for v1
+### D-3 — Unit of measure: **free-text base unit on the product + a `product_bulk_packs` child table** (no unit master, no enum) for v1
 
 The base unit is a **free-text `VARCHAR(40)` column on `products`** (`base_unit`, NOT NULL); bulk packs are rows in
-a child table **`product_bulk_pack`**, each a named larger unit with a conversion factor to base. **No per-company
+a child table **`product_bulk_packs`**, each a named larger unit with a conversion factor to base. **No per-company
 unit master table, no enum.**
 
-`product_bulk_pack` (child of `products`):
+`product_bulk_packs` (child of `products`):
 
 | column | type | null? | notes |
 | --- | --- | --- | --- |
@@ -157,13 +157,13 @@ unit master table, no enum.**
 | `factor_to_base` | NUMERIC(19,6) | NO | units of base per one pack, e.g. 24 (carton of 24 pieces); CHECK `> 0` (BR-PROD-03, FR-PROD-07) |
 | `created_at` / `created_by` / `updated_at` / `updated_by` | TIMESTAMPTZ / BIGINT | mixed | audit columns |
 
-**Constraints / indexes on `product_bulk_pack`:**
+**Constraints / indexes on `product_bulk_packs`:**
 - `uq_product_bulk_pack_uid UNIQUE (uid)`.
 - `uq_product_bulk_pack_name UNIQUE (product_id, name)` — two bulk packs of the same product must have distinct
   names (BR-PROD-03 last sentence).
 - `fk_product_bulk_pack_product FOREIGN KEY (product_id) REFERENCES products (id)`.
 - `chk_product_bulk_pack_factor CHECK (factor_to_base > 0)` — BR-PROD-03 / FR-PROD-07 at the DB.
-- `ix_product_bulk_pack_product (product_id)` — list a product's packs.
+- `ix_product_bulk_packs_product (product_id)` — list a product's packs.
 
 **Why free-text base unit, not a unit master, for v1 (the recommendation):**
 1. The owner has **not** asked for unit administration (no FR for managing a unit catalogue; units appear only as a
@@ -179,7 +179,7 @@ unit master table, no enum.**
    costs nothing now.
 - **`factor_to_base` scale is NUMERIC(19,6)** (quantity precision, not money) — 6 decimals gives headroom for
   fractional conversions (e.g. a 0.5 kg pack of a kg-based product). This ties to **OQ-PROD-07** (fractional unit
-  precision): the same scale choice governs `product_component.quantity` (D-8). Flagged below — if the owner wants
+  precision): the same scale choice governs `product_components.quantity` (D-8). Flagged below — if the owner wants
   a different quantity scale, it is one edit before V3 ships, not after.
 
 > Bulk packs carry a `uid` (unlike branch link rows) because they are **independently editable child records** the
@@ -217,10 +217,10 @@ active company. **FR-PROD-22 selectability** ("usable only at associated branche
 (the selection query joins `product_branch` and filters `status='ACTIVE'`, BR-PROD-10), not a NOT NULL — a product
 with zero associations is valid but appears in no branch's selection list.
 
-### D-5 — Barcodes: child table `product_barcode`, one primary, unique-per-company (partial unique index)
+### D-5 — Barcodes: child table `product_barcodes`, one primary, unique-per-company (partial unique index)
 
 Multiple barcodes per product, exactly one primary (FR-PROD-08), unique within the company (FR-PROD-09, BR-PROD-07).
-Child table **`product_barcode`**:
+Child table **`product_barcodes`**:
 
 | column | type | null? | notes |
 | --- | --- | --- | --- |
@@ -240,18 +240,18 @@ Child table **`product_barcode`**:
   (FR-PROD-08), the established Postgres partial-unique pattern (cf. `uq_branch_company_default`,
   `uq_user_branch_default` in IAM).
 - `fk_product_barcode_product`, `fk_product_barcode_company` (→ `companies`).
-- **`ix_product_barcode_company_value (company_id, barcode)`** — satisfied by the unique constraint above; it *is*
+- **`ix_product_barcodes_company_value (company_id, barcode)`** — satisfied by the unique constraint above; it *is*
   the fast exact-lookup index for POS scanning (NFR-PROD-01). A scan resolves with
   `WHERE company_id = :activeCompany AND barcode = :scanned` — a single index probe.
-- `ix_product_barcode_product (product_id)` — list a product's barcodes.
+- `ix_product_barcodes_product (product_id)` — list a product's barcodes.
 
-> **Why `company_id` is denormalised onto `product_barcode`:** the per-company uniqueness (BR-PROD-07) and the POS
+> **Why `company_id` is denormalised onto `product_barcodes`:** the per-company uniqueness (BR-PROD-07) and the POS
 > lookup (NFR-PROD-01) are both **company-scoped**, and the barcode value lives on the child, not the product. To
 > enforce "unique per company" as a DB constraint and to index the hot lookup without a join to `products`, the
-> `company_id` must be a column on `product_barcode`. It is **set from the product at write time and immutable**
+> `company_id` must be a column on `product_barcodes`. It is **set from the product at write time and immutable**
 > (a product's company never changes — BR-PROD-02), so the denormalisation cannot drift. This is a deliberate,
 > documented denormalisation for a hard uniqueness rule + a hot path, not incidental duplication. The same applies
-> to `product_price` (D-7). The service sets it; a CHECK cannot assert it equals the parent's, so it is a service
+> to `product_prices` (D-7). The service sets it; a CHECK cannot assert it equals the parent's, so it is a service
 > invariant (set-once-from-parent), backstopped by the FK to `companies`.
 
 ### D-6 — Per-company numbering: a generic `code_sequence` table, allocated under `SELECT FOR UPDATE`
@@ -296,9 +296,9 @@ generic table starts clean with Products. (A later, optional housekeeping ADR co
 > hang on yet. If categories land and the owner wants `FOOD-0001`, the `entity_kind` discriminator already supports
 > per-prefix counters additively (e.g. `entity_kind = 'PRODUCT:FOOD'`), with no schema change. Flagged below.
 
-### D-7 — Pricing: `price_list` master (per company) + `product_price` child; cost price is a `Money` pair on `products`
+### D-7 — Pricing: `price_lists` master (per company) + `product_prices` child; cost price is a `Money` pair on `products`
 
-**`price_list`** — a named selling-price set per company (FR-PROD-10), a small master in `UidEntity` style:
+**`price_lists`** — a named selling-price set per company (FR-PROD-10), a small master in `UidEntity` style:
 
 | column | type | null? | notes |
 | --- | --- | --- | --- |
@@ -312,18 +312,18 @@ generic table starts clean with Products. (A later, optional housekeeping ADR co
 | audit cols | | | created/updated by/at |
 
 - `uq_price_list_uid UNIQUE (uid)`; `uq_price_list_company_code UNIQUE (company_id, code)`;
-  `fk_price_list_company`; `ix_price_list_company (company_id)`.
+  `fk_price_list_company`; `ix_price_lists_company (company_id)`.
 - Price-list `code` is **user-supplied** (short mnemonic like `RETAIL`), not auto-numbered — there are few lists per
   company and they want meaningful codes; unique-per-company enforces no collision. (No `code_sequence` row for
   price lists in v1; if auto-numbering is later wanted, `entity_kind='PRICELIST'` is ready.)
 
-**`product_price`** — a product's price on a list (FR-PROD-10/11), a child with a `Money` pair:
+**`product_prices`** — a product's price on a list (FR-PROD-10/11), a child with a `Money` pair:
 
 | column | type | null? | notes |
 | --- | --- | --- | --- |
 | `id` | BIGINT IDENTITY PK | NO | |
 | `product_id` | BIGINT | NO | FK → `products(id)` |
-| `price_list_id` | BIGINT | NO | FK → `price_list(id)` |
+| `price_list_id` | BIGINT | NO | FK → `price_lists(id)` |
 | `company_id` | BIGINT | NO | **denormalised** (D-5 rationale) — both parents are same-company; column anchors same-company integrity + scoped reads |
 | `amount` | NUMERIC(19,4) | NO | `Money.amount` (ADR-0005 D-2) |
 | `currency` | VARCHAR(3) | NO | `Money.currency`, ISO 4217 code (ADR-0005 D-3); a price is always amount + currency (FR-PROD-11, BR-PROD-04) |
@@ -336,8 +336,8 @@ generic table starts clean with Products. (A later, optional housekeeping ADR co
   CHECK is needed — but the `Money` embeddable still maps `amount`/`currency` (no `@AttributeOverride` to
   `*_amount`; the columns are bare `amount`/`currency` because the row *is* a single price, matching `Money`'s own
   default column names in [Money.java](../../backend/src/main/java/com/erp/platform/common/money/Money.java)).
-- `ix_product_price_product (product_id)` (a product's prices across lists); `ix_product_price_list (price_list_id)`
-  (a list's prices); `ix_product_price_company (company_id)` (scoped reads).
+- `ix_product_prices_product (product_id)` (a product's prices across lists); `ix_product_prices_list (price_list_id)`
+  (a list's prices); `ix_product_prices_company (company_id)` (scoped reads).
 
 **Cost price** is exactly one money value per product, so it is the `Money` pair **`cost_amount` / `cost_currency`
 on the `products` row** (D-2), not a child table. Rationale: cost has no multiplicity (one cost per product, unlike
@@ -347,14 +347,14 @@ gratuitous (the same reasoning ADR-0005 used to reject a `Money` table). It maps
 
 > **BR-PROD-11** ("a sellable product should have a price before it can be sold") is **not** enforced at
 > product-create (a product may be created and priced later — OQ-PROD-03); it is a **sale-time** rule the Sales
-> module enforces. The schema permits a sellable product with zero `product_price` rows. Recorded here as the
+> module enforces. The schema permits a sellable product with zero `product_prices` rows. Recorded here as the
 > expectation Sales consumes; no constraint in V3.
 
-### D-8 — Composition: self-referential child `product_component`, structure only, with self-/same-company guards
+### D-8 — Composition: self-referential child `product_components`, structure only, with self-/same-company guards
 
 Single-level composition records a composed product's components + quantities (FR-PROD-14), structure only — **no
 stock movement, no cost roll-up, no nesting** (FR-PROD-17, products.md §9). Self-referential child
-**`product_component`**:
+**`product_components`**:
 
 | column | type | null? | notes |
 | --- | --- | --- | --- |
@@ -370,7 +370,7 @@ stock movement, no cost roll-up, no nesting** (FR-PROD-17, products.md §9). Sel
 - **`chk_product_component_not_self CHECK (composed_product_id <> component_product_id)`** — BR-PROD-05
   no self-composition, at the DB (a cheap single-row CHECK — Postgres can compare two columns of the same row).
 - `chk_product_component_qty CHECK (quantity > 0)`.
-- `ix_product_component_composed (composed_product_id)` (read a recipe); `ix_product_component_component
+- `ix_product_components_composed (composed_product_id)` (read a recipe); `ix_product_components_component
   (component_product_id)` ("where is this product used as a component" — supports future impact analysis).
 - **`quantity` is NUMERIC(19,6)** — same quantity scale as `factor_to_base` (D-3), governed by **OQ-PROD-07**.
 
@@ -385,7 +385,7 @@ stock movement, no cost roll-up, no nesting** (FR-PROD-17, products.md §9). Sel
   (A→B→A) cannot arise — there is no expansion. The self-reference CHECK is the only structural guard v1 needs.
   When nesting is introduced under a future ADR, cycle detection (a recursive CTE walk or a closure table) is added
   then. The model deliberately does **not** carry a "is_composed" flag — a product is composed iff it has
-  `product_component` rows (derive, don't denormalise a flag that can drift).
+  `product_components` rows (derive, don't denormalise a flag that can drift).
 
 ### D-9 — Enforcement split: DB enforces the unconditional/single-row, service enforces the cross-entity
 
@@ -404,7 +404,7 @@ Consistent with ADR-0006 D-6 and ADR-0005:
 | BR-PROD-10 archived not selectable | **service / query** | selection queries filter `status='ACTIVE'` |
 | BR-PROD-11 sellable needs a price | **Sales (sale-time)** | not enforced in Products; recorded expectation |
 | one primary barcode per product | **DB** | `uq_product_barcode_primary` partial unique |
-| cost / price money is (amount,currency) | **DB CHECK + Money** | `chk_product_cost_pair`; `product_price` columns NOT NULL together |
+| cost / price money is (amount,currency) | **DB CHECK + Money** | `chk_product_cost_pair`; `product_prices` columns NOT NULL together |
 
 ### D-10 — `ScopeGuard.companyIdOf`: add `product` (and `pricelist`) target types
 
@@ -499,10 +499,10 @@ filters read naturally on the table name):
 | `PRODUCT.UPDATE` | `products` | on profile edit | minimal/fact-only |
 | `PRODUCT.ARCHIVE` / `PRODUCT.RESTORE` | `products` | status transition | before/after `status` |
 | `PRODUCT.BRANCH.ADD` / `PRODUCT.BRANCH.REMOVE` | `products` | association change | `branchUid` added/removed |
-| `PRODUCT.BARCODE.ADD` / `PRODUCT.BARCODE.REMOVE` / `PRODUCT.BARCODE.SETPRIMARY` | `product_barcode` | barcode change | `barcode`, `isPrimary` |
-| `PRODUCT.PRICE.SET` / `PRODUCT.PRICE.REMOVE` | `product_price` | price change | `priceListUid`, the `Money` set (NFR-PROD-04 — price changes audited) |
-| `PRODUCT.COMPONENT.ADD` / `PRODUCT.COMPONENT.REMOVE` | `product_component` | recipe change | `componentUid`, `quantity` |
-| `PRICELIST.CREATE` / `PRICELIST.UPDATE` / `PRICELIST.ARCHIVE` | `price_list` | list lifecycle | `code`, `name` |
+| `PRODUCT.BARCODE.ADD` / `PRODUCT.BARCODE.REMOVE` / `PRODUCT.BARCODE.SETPRIMARY` | `product_barcodes` | barcode change | `barcode`, `isPrimary` |
+| `PRODUCT.PRICE.SET` / `PRODUCT.PRICE.REMOVE` | `product_prices` | price change | `priceListUid`, the `Money` set (NFR-PROD-04 — price changes audited) |
+| `PRODUCT.COMPONENT.ADD` / `PRODUCT.COMPONENT.REMOVE` | `product_components` | recipe change | `componentUid`, `quantity` |
+| `PRICELIST.CREATE` / `PRICELIST.UPDATE` / `PRICELIST.ARCHIVE` | `price_lists` | list lifecycle | `code`, `name` |
 
 - **Price and branch-association changes ARE audited** (NFR-PROD-04 names them explicitly). Bulk-pack edits emit
   `PRODUCT.UPDATE` against `products` (a unit definition is a product-shape change), to keep the action catalogue
@@ -519,9 +519,9 @@ IAM is `V1` (frozen); Parties is `V2`. Products is a **new** module → purely *
 **must not** edit `V1__baseline.sql` or `V2__parties.sql`. Ordering within V3:
 1. `products` (master) with FK to `companies`, the `type`/`service-stockable`/`cost-pair` CHECKs.
 2. `code_sequence` (generic numbering, D-6).
-3. `price_list` (master) with FK to `companies`.
-4. Child tables: `product_bulk_pack`, `product_barcode`, `product_price`, `product_component`, `product_branch`
-   (FKs to `products`, `price_list`, `branches`, `app_users`, `companies` — all of which already exist in V1/V2).
+3. `price_lists` (master) with FK to `companies`.
+4. Child tables: `product_bulk_packs`, `product_barcodes`, `product_prices`, `product_components`, `product_branch`
+   (FKs to `products`, `price_lists`, `branches`, `app_users`, `companies` — all of which already exist in V1/V2).
 5. Indexes incl. partial (`uq_product_barcode_primary`) and the lookup/scoped indexes.
 6. Permission seed + additive ORG_ADMIN grant.
 
@@ -533,7 +533,7 @@ All FK targets (`companies`, `branches`, `app_users`) already exist in frozen V1
 - **Currency-safe and tenant-safe from day one:** cost and every price are `Money` pairs (ADR-0005), `products`
   is `company_id`-scoped under the §3.2 predicate, associations are company-consistent by `ProductBranchGuard`.
 - **POS barcode scan is a single index probe** (`uq_product_barcode_company_value` doubles as the lookup index) —
-  NFR-PROD-01 met without a join, at the documented cost of a `company_id` denormalised onto `product_barcode`.
+  NFR-PROD-01 met without a join, at the documented cost of a `company_id` denormalised onto `product_barcodes`.
 - **BR-PROD-01 (service ⇒ non-stockable) and BR-PROD-05 (no self-composition) are DB-true** as cheap single-row
   CHECKs — a code bug becomes a constraint violation; the cross-entity rules (branch/component company,
   archived-component) live in service guards where they are legible and evolvable.
@@ -545,7 +545,7 @@ All FK targets (`companies`, `branches`, `app_users`) already exist in frozen V1
   input the future component-deduction + cost-roll-up needs, with the mechanics cleanly deferred.
 
 **Harder / to watch:**
-- **`company_id` is denormalised onto `product_barcode` and `product_price`** for per-company uniqueness + hot
+- **`company_id` is denormalised onto `product_barcodes` and `product_prices`** for per-company uniqueness + hot
   lookup. It is **set-once-from-parent and immutable** (the product's company never changes), so it cannot drift —
   but this is a service invariant the implementation must honour and test (a barcode/price row whose `company_id`
   disagrees with its product is a defect no CHECK catches; an integration test should assert they always match).
@@ -558,17 +558,17 @@ All FK targets (`companies`, `branches`, `app_users`) already exist in frozen V1
   path to a unit master reserved. No cross-product unit consistency in v1.
 - **`MoneyDto` home:** reusing the Parties `MoneyDto` would breach the module boundary; it should be promoted to
   `platform.common.money` (D-12). Until then Products carries its own — a small, knowingly-temporary duplication.
-- **No `is_composed` flag:** "is this product composed" is derived from `product_component` rows, so any read that
+- **No `is_composed` flag:** "is this product composed" is derived from `product_components` rows, so any read that
   needs it does a (cheap, indexed) existence check rather than reading a flag — correct, but reviewers should not
   "optimise" by adding a denormalised flag that can drift.
 
 **Migration / delivery cost:**
-- 1 additive Flyway file (`V3__products.sql`): 1 master (`products`) + 1 master (`price_list`) + 1 numbering table
-  (`code_sequence`) + 5 child/link tables (`product_bulk_pack`, `product_barcode`, `product_price`,
-  `product_component`, `product_branch`) = **8 tables**, their FKs/uniques/CHECKs, ~3 indexes on `products` plus
+- 1 additive Flyway file (`V3__products.sql`): 1 master (`products`) + 1 master (`price_lists`) + 1 numbering table
+  (`code_sequence`) + 5 child/link tables (`product_bulk_packs`, `product_barcodes`, `product_prices`,
+  `product_components`, `product_branch`) = **8 tables**, their FKs/uniques/CHECKs, ~3 indexes on `products` plus
   the child/link indexes, 5 permission rows + 1 additive grant.
 - Backend: the `products` entity set (entity + DTOs + repository + service interface/Impl + controller) and the
-  `price_list` set, sharing a `ProductCodeGenerator` (on the new `code_sequence`) and a `ProductBranchGuard`
+  `price_lists` set, sharing a `ProductCodeGenerator` (on the new `code_sequence`) and a `ProductBranchGuard`
   (+ composition guard); the ADR-0002 `ScopeGuard` extension (D-10); the `MoneyDto` promotion (D-12); the
   `companyUid`-in-create-body convention (D-12).
 - Web: a product master-admin screen (list/search incl. barcode scan, create/edit/archive) with sub-screens for
@@ -588,7 +588,7 @@ All FK targets (`companies`, `branches`, `app_users`) already exist in frozen V1
   nothing now. An **enum** of units was rejected outright (every business invents its own units; an enum is too
   rigid and would need a code change per new unit).
 
-- **A "cost price list" (cost as a `product_price` row on a reserved COST list) instead of a `Money` pair on the
+- **A "cost price list" (cost as a `product_prices` row on a reserved COST list) instead of a `Money` pair on the
   product.** Symmetric with selling prices, one pricing mechanism. **Not chosen (D-7):** cost has no multiplicity
   (one cost per product), so it would be a join + a reserved-list convention for a single value — gratuitous, and
   it muddies "price lists are *selling* prices" (FR-PROD-12 separates cost from selling prices). The `Money` pair
@@ -629,7 +629,7 @@ These do **not** block the engineer building the tables above; they are policy r
    numbering is deferred with categories (OQ-PROD-04); the `code_sequence.entity_kind` discriminator already
    supports per-prefix counters additively if/when the owner wants them. **Not blocking.**
 3. **OQ-PROD-07 (fractional unit precision) — affects the quantity scale.** This ADR sets quantity scale to
-   **NUMERIC(19,6)** for both `product_bulk_pack.factor_to_base` and `product_component.quantity` (6 decimals,
+   **NUMERIC(19,6)** for both `product_bulk_packs.factor_to_base` and `product_components.quantity` (6 decimals,
    distinct from money's scale 4 — quantities are not money, ADR-0005). If the owner needs finer (e.g. 8 decimals
    for tiny-unit recipes) or coarser precision, it is **one edit before V3 ships**. **Confirm the quantity scale**
    — recommend 6 unless a domain reason argues otherwise. **Mildly blocking (set the scale before the migration is

@@ -13,9 +13,13 @@ grows one module at a time; **IAM** is first.
 - Money/quantity `NUMERIC(18,4)` (none in IAM yet).
 - Master status enum stored as `VARCHAR(32)`: `ACTIVE` | `INACTIVE` | `ARCHIVED`.
 - Audit columns on mutable masters: `created_at`, `created_by`, `updated_at`, `updated_by`
-  (`*_by` → `app_user.id`).
-- Names `snake_case`, singular. Junctions named after both sides. FK constraints named
-  `fk_<table>_<ref>`; unique `uq_<table>_<cols>`; index `ix_<table>_<cols>`.
+  (`*_by` → `app_users.id`).
+- Table names `snake_case`, **plural** for masters and owned-child tables (`companies`, `customers`,
+  `app_users`, `product_barcodes`); **singular** for junctions/utility tables, named after both sides
+  (`user_branch`, `role_permission`, `customer_branch`, `party_code_sequence`). FK constraints named
+  `fk_<entity>_<ref>`, unique `uq_<entity>_<cols>` — using the **singular entity root** (`uq_customer_uid`
+  on table `customers`); standalone indexes `ix_<table>_<cols>` use the **plural table name**
+  (`ix_customers_company`). Columns are always singular (`company_id`, `price_list_id`).
 
 ---
 
