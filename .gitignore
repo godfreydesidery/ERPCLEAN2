@@ -6,6 +6,10 @@
 *.p12
 **/orbix.env
 **/*.local.md
+# QA deploy secrets (kept locally + on the box, never committed). The committed
+# templates qa.env.example / deploy.env are safe; qa.env / deploy.env.local are not.
+**/qa.env
+**/deploy.env.local
 
 # Backend (Maven / Java)
 backend/target/

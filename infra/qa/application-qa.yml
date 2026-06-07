@@ -1,0 +1,17 @@
+# QA overrides for the single-container ERPCLEAN2 deployment.
+# Layered on application.yml via SPRING_PROFILES_ACTIVE=qa. The datasource URL,
+# user, and password are supplied as env vars by the entrypoint (ERP_DB_URL /
+# ERP_DB_USER / ERP_DB_PASSWORD), pointing at the in-container Postgres on
+# 127.0.0.1:5432. Bootstrap (ERP_BOOTSTRAP_*) comes from --env-file qa.env.
+
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+
+logging:
+  level:
+    root: INFO
+    com.erp: INFO
+    org.hibernate.SQL: WARN
