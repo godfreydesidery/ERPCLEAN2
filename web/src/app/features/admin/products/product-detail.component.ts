@@ -25,6 +25,7 @@ import {
   SetProductPriceRequest,
   UnitOfMeasureDto,
   UpdateProductRequest,
+  VatStatus,
 } from '../models/product.model';
 import { BranchService } from '../branch/branch.service';
 import { CompanyService } from '../company/company.service';
@@ -69,6 +70,7 @@ export class ProductDetailComponent {
   readonly fBaseUnitUid = signal('');
   readonly fCostAmount = signal('');
   readonly fCostCurrency = signal('TZS');
+  readonly fVatStatus = signal<VatStatus>('STANDARD');
 
   readonly saving = signal(false);
   readonly saveError = signal<string | null>(null);
@@ -247,6 +249,7 @@ export class ProductDetailComponent {
     this.fBaseUnitUid.set(p.baseUnitUid ?? '');
     this.fCostAmount.set(p.cost?.amount ?? '');
     this.fCostCurrency.set(p.cost?.currency ?? 'TZS');
+    this.fVatStatus.set(p.vatStatus ?? 'STANDARD');
   }
 
   onTypeChange(type: ProductType): void {
@@ -627,6 +630,7 @@ export class ProductDetailComponent {
       stockable: this.fType() === 'SERVICE' ? false : this.fStockable(),
       baseUnitUid,
       cost,
+      vatStatus: this.fVatStatus(),
     };
 
     this.productService.update(this.uid(), request).subscribe({

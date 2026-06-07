@@ -130,6 +130,13 @@ export class ShellComponent {
         { label: 'Units of Measure', route: '/admin/units', icon: 'bi-rulers', available: true, permission: 'UOM.VIEW' },
       ],
     },
+    {
+      label: 'Sales',
+      items: [
+        { label: 'Invoices', route: '/admin/sales-invoices', icon: 'bi-receipt', available: true, permission: 'SALES.INVOICE.VIEW' },
+        { label: 'Tax Rates', route: '/admin/tax-rates', icon: 'bi-percent', available: true, permission: 'TAXRATE.VIEW' },
+      ],
+    },
   ];
 
   /** Nav groups with permission-filtered items. Reactive: recomputes when permissions change. */

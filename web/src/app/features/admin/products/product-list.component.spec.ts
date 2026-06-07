@@ -69,7 +69,7 @@ function makeBed(listImpl?: () => any, canManage = false) {
         useValue: {
           list: vi.fn(listImpl ?? (() => of(emptyPage()))),
           listUnits: vi.fn(() => of(unitPage())),
-          create: vi.fn(() => of({ uid: 'P1', name: 'Widget', code: 'W001', type: 'GOODS', sellable: true, stockable: true, status: 'ACTIVE', baseUnitUid: 'U1', baseUnitCode: 'PCS', baseUnitName: 'Pieces' })),
+          create: vi.fn(() => of({ uid: 'P1', name: 'Widget', code: 'W001', type: 'GOODS', sellable: true, stockable: true, status: 'ACTIVE', baseUnitUid: 'U1', baseUnitCode: 'PCS', baseUnitName: 'Pieces', vatStatus: 'STANDARD' })),
         },
       },
       {
@@ -168,6 +168,37 @@ describe('ProductListComponent — BR-PROD-01 SERVICE stockable guard', () => {
 
     expect(comp.formError()).toBeTruthy();
     expect(productSvc.create).not.toHaveBeenCalled();
+  });
+
+  it('create sends vatStatus=STANDARD by default', async () => {
+    const fixture = TestBed.createComponent(ProductListComponent);
+    const comp = fixture.componentInstance;
+    const productSvc = TestBed.inject(ProductService) as any;
+    await vi.runAllTimersAsync();
+
+    comp.newName.set('Widget');
+    comp.newBaseUnitUid.set('U1');
+    comp.create();
+
+    expect(productSvc.create).toHaveBeenCalledOnce();
+    const req = productSvc.create.mock.calls[0][0];
+    expect(req.vatStatus).toBe('STANDARD');
+  });
+
+  it('create sends vatStatus=ZERO_RATED when selected', async () => {
+    const fixture = TestBed.createComponent(ProductListComponent);
+    const comp = fixture.componentInstance;
+    const productSvc = TestBed.inject(ProductService) as any;
+    await vi.runAllTimersAsync();
+
+    comp.newName.set('Export Goods');
+    comp.newBaseUnitUid.set('U1');
+    comp.newVatStatus.set('ZERO_RATED');
+    comp.create();
+
+    expect(productSvc.create).toHaveBeenCalledOnce();
+    const req = productSvc.create.mock.calls[0][0];
+    expect(req.vatStatus).toBe('ZERO_RATED');
   });
 });
 

@@ -1,0 +1,259 @@
+/**
+ * TaxRateListComponent spec.
+ * Mirrors units-of-measure-list.component.spec.ts (Vitest + vi.useFakeTimers).
+ *
+ * Covers:
+ *  1. Startup: loads companies then tax rates on init.
+ *  2. canManage=false: edit button absent.
+ *  3. startEdit / cancelEdit / saveEdit round-trip.
+ *  4. saveEdit() validation: requires a numeric rate.
+ *  5. saveEdit() calls salesService.updateTaxRate.
+ *  6. 403 response sets state to 'forbidden'.
+ */
+import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { signal } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
+import { of, throwError } from 'rxjs';
+import { AlertService } from '../../../core/feedback/alert.service';
+import { SessionStore } from '../../../core/auth/session.store';
+import { CompanyService } from '../company/company.service';
+import { OrganisationService } from '../organisation/organisation.service';
+import { SalesService } from './sales.service';
+import { TaxRateListComponent } from './tax-rate-list.component';
+import type { TaxRateDto } from '../models/sales.model';
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+function makeTaxRate(overrides: Partial<TaxRateDto> = {}): TaxRateDto {
+  return {
+    id: '1',
+    uid: 'TR1',
+    companyId: '10',
+    vatStatus: 'STANDARD',
+    rate: '18.00',
+    version: null,
+    createdAt: null,
+    createdBy: null,
+    updatedAt: null,
+    updatedBy: null,
+    ...overrides,
+  };
+}
+
+function makeSessionStore(canManage = false) {
+  return {
+    hasPermission: vi.fn(() => canManage),
+    isAuthenticated: signal(true),
+    user: signal(null),
+    permissions: signal([]),
+    activeBranchUid: signal(null),
+  };
+}
+
+function makeBed(opts: { canManage?: boolean; listImpl?: () => any } = {}) {
+  const { canManage = false, listImpl = () => of([makeTaxRate()]) } = opts;
+  const sessionStore = makeSessionStore(canManage);
+
+  TestBed.configureTestingModule({
+    imports: [TaxRateListComponent],
+    providers: [
+      provideHttpClient(),
+      provideHttpClientTesting(),
+      provideRouter([]),
+      {
+        provide: SalesService,
+        useValue: {
+          listTaxRates: vi.fn(listImpl),
+          updateTaxRate: vi.fn(() => of(makeTaxRate({ rate: '20.00' }))),
+        },
+      },
+      {
+        provide: OrganisationService,
+        useValue: { current: vi.fn(() => of({ uid: 'ORG1', id: '1', name: 'Acme' })) },
+      },
+      {
+        provide: CompanyService,
+        useValue: { list: vi.fn(() => of([{ uid: 'CO1', id: '10', name: 'Main Co' }])) },
+      },
+      {
+        provide: AlertService,
+        useValue: { success: vi.fn(), error: vi.fn() },
+      },
+      { provide: SessionStore, useValue: sessionStore },
+    ],
+  });
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+
+describe('TaxRateListComponent — init', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    makeBed();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    TestBed.resetTestingModule();
+  });
+
+  it('loads companies and tax rates on startup', async () => {
+    const comp = TestBed.createComponent(TaxRateListComponent).componentInstance;
+    const svc = TestBed.inject(SalesService) as any;
+    await vi.runAllTimersAsync();
+
+    expect(comp.companies().length).toBe(1);
+    expect(svc.listTaxRates).toHaveBeenCalledWith('10');
+    expect(comp.state()).toBe('idle');
+    expect(comp.rows().length).toBe(1);
+  });
+
+  it('isEmpty is false when rows are returned', async () => {
+    const comp = TestBed.createComponent(TaxRateListComponent).componentInstance;
+    await vi.runAllTimersAsync();
+    expect(comp.isEmpty()).toBe(false);
+  });
+});
+
+// ── canManage=false ────────────────────────────────────────────────────────────
+
+describe('TaxRateListComponent — canManage=false', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    makeBed({ canManage: false });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    TestBed.resetTestingModule();
+  });
+
+  it('canManage is false', async () => {
+    const comp = TestBed.createComponent(TaxRateListComponent).componentInstance;
+    await vi.runAllTimersAsync();
+    expect(comp.canManage()).toBe(false);
+  });
+});
+
+// ── Inline edit ────────────────────────────────────────────────────────────────
+
+describe('TaxRateListComponent — inline edit', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    makeBed({ canManage: true });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    TestBed.resetTestingModule();
+  });
+
+  it('startEdit sets editingUid and editRate', async () => {
+    const comp = TestBed.createComponent(TaxRateListComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    const tr = comp.rows()[0];
+    comp.startEdit(tr);
+
+    expect(comp.editingUid()).toBe(tr.uid);
+    expect(comp.editRate()).toBe(tr.rate);
+  });
+
+  it('cancelEdit clears editingUid', async () => {
+    const comp = TestBed.createComponent(TaxRateListComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.startEdit(comp.rows()[0]);
+    comp.cancelEdit();
+
+    expect(comp.editingUid()).toBeNull();
+  });
+
+  it('saveEdit() validation: requires numeric rate', async () => {
+    const comp = TestBed.createComponent(TaxRateListComponent).componentInstance;
+    const svc = TestBed.inject(SalesService) as any;
+    await vi.runAllTimersAsync();
+
+    const tr = comp.rows()[0];
+    comp.startEdit(tr);
+    comp.editRate.set('');
+    comp.saveEdit(tr);
+
+    expect(comp.editError()).toBeTruthy();
+    expect(svc.updateTaxRate).not.toHaveBeenCalled();
+  });
+
+  it('saveEdit() rejects non-numeric input', async () => {
+    const comp = TestBed.createComponent(TaxRateListComponent).componentInstance;
+    const svc = TestBed.inject(SalesService) as any;
+    await vi.runAllTimersAsync();
+
+    const tr = comp.rows()[0];
+    comp.startEdit(tr);
+    comp.editRate.set('abc');
+    comp.saveEdit(tr);
+
+    expect(comp.editError()).toBeTruthy();
+    expect(svc.updateTaxRate).not.toHaveBeenCalled();
+  });
+
+  it('saveEdit() calls updateTaxRate with uid and rate', async () => {
+    const comp = TestBed.createComponent(TaxRateListComponent).componentInstance;
+    const svc = TestBed.inject(SalesService) as any;
+    await vi.runAllTimersAsync();
+
+    const tr = comp.rows()[0];
+    comp.startEdit(tr);
+    comp.editRate.set('20.00');
+    comp.saveEdit(tr);
+
+    expect(svc.updateTaxRate).toHaveBeenCalledOnce();
+    expect(svc.updateTaxRate.mock.calls[0][0]).toBe(tr.uid);
+    expect(svc.updateTaxRate.mock.calls[0][1]).toEqual({ rate: '20.00' });
+  });
+
+  it('saveEdit() clears editingUid on success', async () => {
+    const comp = TestBed.createComponent(TaxRateListComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    const tr = comp.rows()[0];
+    comp.startEdit(tr);
+    comp.editRate.set('20.00');
+    comp.saveEdit(tr);
+
+    expect(comp.editingUid()).toBeNull();
+  });
+
+  it('saveEdit() updates the row in place on success', async () => {
+    const comp = TestBed.createComponent(TaxRateListComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    const tr = comp.rows()[0];
+    comp.startEdit(tr);
+    comp.editRate.set('20.00');
+    comp.saveEdit(tr);
+
+    expect(comp.rows()[0].rate).toBe('20.00');
+  });
+});
+
+// ── 403 forbidden ──────────────────────────────────────────────────────────────
+
+describe('TaxRateListComponent — 403 forbidden', () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => {
+    vi.useRealTimers();
+    TestBed.resetTestingModule();
+  });
+
+  it('sets state to forbidden when listTaxRates returns 403', async () => {
+    makeBed({
+      listImpl: () =>
+        throwError(() => new HttpErrorResponse({ status: 403, statusText: 'Forbidden' })),
+    });
+
+    const comp = TestBed.createComponent(TaxRateListComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    expect(comp.state()).toBe('forbidden');
+  });
+});

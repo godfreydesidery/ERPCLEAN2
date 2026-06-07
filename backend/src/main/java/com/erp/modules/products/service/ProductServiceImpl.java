@@ -21,6 +21,7 @@ import com.erp.modules.products.domain.entity.ProductBulkPack;
 import com.erp.modules.products.domain.entity.ProductComponent;
 import com.erp.modules.products.domain.entity.ProductPrice;
 import com.erp.modules.products.domain.entity.UnitOfMeasure;
+import com.erp.modules.products.domain.enums.VatStatus;
 import com.erp.modules.products.repository.PriceListRepository;
 import com.erp.modules.products.repository.ProductBarcodeRepository;
 import com.erp.modules.products.repository.ProductBranchRepository;
@@ -124,6 +125,7 @@ public class ProductServiceImpl implements ProductService {
                 req.sellable(), req.stockable(), baseUnit, actorId());
         p.setDescription(req.description());
         p.setCost(MoneyDto.toMoney(req.cost()));
+        p.setVatStatus(req.vatStatus() != null ? req.vatStatus() : VatStatus.STANDARD);
 
         Product saved = products.save(p);
         audit.record(AuditEvent.of(AuditActions.PRODUCT_CREATE, "products",
@@ -170,6 +172,7 @@ public class ProductServiceImpl implements ProductService {
         p.setStockable(req.stockable());
         p.setBaseUnit(baseUnit);
         p.setCost(MoneyDto.toMoney(req.cost()));
+        p.setVatStatus(req.vatStatus() != null ? req.vatStatus() : VatStatus.STANDARD);
         p.setUpdatedAt(Instant.now());
         p.setUpdatedBy(actorId());
 

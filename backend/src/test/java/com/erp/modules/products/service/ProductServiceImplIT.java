@@ -136,7 +136,7 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
     void create_withSuppliedCode_usesItUppercased() {
         ProductDto dto = productService.create(new CreateProductRequest(
                 companyA.getUid(), "wtr-500", "Water 500ml", null,
-                ProductType.GOODS, true, true, pcsUid, null));
+                ProductType.GOODS, true, true, pcsUid, null, null));
         assertThat(dto.code()).isEqualTo("WTR-500");
     }
 
@@ -144,11 +144,11 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
     void create_withDuplicateSuppliedCode_throwsConflict() {
         productService.create(new CreateProductRequest(
                 companyA.getUid(), "DUP-1", "First", null,
-                ProductType.GOODS, true, true, pcsUid, null));
+                ProductType.GOODS, true, true, pcsUid, null, null));
 
         assertThatThrownBy(() -> productService.create(new CreateProductRequest(
                 companyA.getUid(), "dup-1", "Second", null,
-                ProductType.GOODS, true, true, pcsUid, null)))
+                ProductType.GOODS, true, true, pcsUid, null, null)))
                 .isInstanceOf(com.erp.platform.common.api.ConflictException.class);
     }
 
@@ -170,7 +170,7 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
                 new CreateUnitOfMeasureRequest(companyB.getUid(), "PCS", "Pieces"));
         ProductDto prodB = productService.create(
                 new CreateProductRequest(companyB.getUid(), null, "B Item", null,
-                        ProductType.GOODS, true, true, pcsB.uid(), null));
+                        ProductType.GOODS, true, true, pcsB.uid(), null, null));
 
         assertThat(prodA.code()).isEqualTo("PROD-0001");
         assertThat(prodB.code()).isEqualTo("PROD-0001");
@@ -193,7 +193,7 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
         UnitOfMeasureDto pcsB = unitService.create(
                 new CreateUnitOfMeasureRequest(companyB.getUid(), "PCS", "Pieces"));
         productService.create(new CreateProductRequest(companyB.getUid(), null, "B Product", null,
-                ProductType.GOODS, true, true, pcsB.uid(), null));
+                ProductType.GOODS, true, true, pcsB.uid(), null, null));
 
         // back to A context: list for A must see only A's product
         RequestContext.set(new RequestContext.Principal(
@@ -233,7 +233,7 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
         UnitOfMeasureDto pcsB = unitService.create(
                 new CreateUnitOfMeasureRequest(companyB.getUid(), "PCS", "Pieces"));
         ProductDto prodB = productService.create(new CreateProductRequest(
-                companyB.getUid(), null, "B Product E", null, ProductType.GOODS, true, true, pcsB.uid(), null));
+                companyB.getUid(), null, "B Product E", null, ProductType.GOODS, true, true, pcsB.uid(), null, null));
 
         com.erp.modules.iam.domain.entity.AppUser userA =
                 new com.erp.modules.iam.domain.entity.AppUser(
@@ -260,7 +260,7 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
         UnitOfMeasureDto pcsB = unitService.create(
                 new CreateUnitOfMeasureRequest(companyB.getUid(), "PCS", "Pieces"));
         ProductDto prodB = productService.create(new CreateProductRequest(
-                companyB.getUid(), null, "B Product F", null, ProductType.GOODS, true, true, pcsB.uid(), null));
+                companyB.getUid(), null, "B Product F", null, ProductType.GOODS, true, true, pcsB.uid(), null, null));
 
         com.erp.modules.iam.domain.entity.AppUser userA =
                 new com.erp.modules.iam.domain.entity.AppUser(
@@ -301,7 +301,7 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
         CreateProductRequest req = new CreateProductRequest(
                 companyA.getUid(), null, "Repair Service", null, ProductType.SERVICE,
                 true, true,  // stockable=true for a SERVICE → DB CHECK fails
-                pcsUid, null);
+                pcsUid, null, null);
 
         assertThatThrownBy(() -> productService.create(req))
                 .isInstanceOf(Exception.class);
@@ -348,7 +348,7 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
         UnitOfMeasureDto pcsB = unitService.create(
                 new CreateUnitOfMeasureRequest(companyB.getUid(), "PCS", "Pieces"));
         ProductDto componentB = productService.create(new CreateProductRequest(
-                companyB.getUid(), null, "Component B", null, ProductType.GOODS, true, true, pcsB.uid(), null));
+                companyB.getUid(), null, "Component B", null, ProductType.GOODS, true, true, pcsB.uid(), null, null));
 
         RequestContext.set(new RequestContext.Principal(
                 rootId, "prod_root", true, companyA.getId(), branchA.getId(), null));
@@ -448,7 +448,7 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
     void create_withCost_costRoundTrips() {
         CreateProductRequest req = new CreateProductRequest(
                 companyA.getUid(), null, "Costed Product", null, ProductType.GOODS,
-                true, true, pcsUid, new MoneyDto("2500.00", "TZS"));
+                true, true, pcsUid, new MoneyDto("2500.00", "TZS"), null);
 
         ProductDto dto = productService.create(req);
 
@@ -537,7 +537,7 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
 
         assertThatThrownBy(() -> productService.create(new CreateProductRequest(
                 companyA.getUid(), null, "Cross Unit Product", null,
-                ProductType.GOODS, true, true, foreignUnit.uid(), null)))
+                ProductType.GOODS, true, true, foreignUnit.uid(), null, null)))
                 .isInstanceOf(com.erp.platform.common.api.NotFoundException.class);
     }
 
@@ -605,6 +605,6 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
     /** Creates a GOODS product request using companyA's seeded PCS unit (code auto-assigned). */
     private CreateProductRequest goodsRequest(String companyUid, String name) {
         return new CreateProductRequest(
-                companyUid, null, name, null, ProductType.GOODS, true, true, pcsUid, null);
+                companyUid, null, name, null, ProductType.GOODS, true, true, pcsUid, null, null);
     }
 }

@@ -2,6 +2,7 @@ package com.erp.modules.products.domain.dto;
 
 import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.domain.enums.ProductType;
+import com.erp.modules.products.domain.enums.VatStatus;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.money.MoneyDto;
 
@@ -10,6 +11,7 @@ import com.erp.platform.common.money.MoneyDto;
  * Carries both {@code id} (JSON string via global Long-as-string config) and {@code uid}.
  * baseUnit fields are enriched from the UnitOfMeasure association (UoM cutover), mirroring
  * how ProductPriceDto carries priceList code/name.
+ * vatStatus added in V5 (ADR-0008 D-5a).
  */
 public record ProductDto(
         Long id,
@@ -25,6 +27,7 @@ public record ProductDto(
         String baseUnitCode,
         String baseUnitName,
         MoneyDto cost,
+        VatStatus vatStatus,
         MasterStatus status,
         Long version,
         String createdAt,
@@ -48,6 +51,7 @@ public record ProductDto(
                 p.getBaseUnit() != null ? p.getBaseUnit().getCode() : null,
                 p.getBaseUnit() != null ? p.getBaseUnit().getName() : null,
                 MoneyDto.from(p.getCost()),
+                p.getVatStatus(),
                 p.getStatus(),
                 p.getVersion(),
                 p.getCreatedAt() != null ? p.getCreatedAt().toString() : null,
