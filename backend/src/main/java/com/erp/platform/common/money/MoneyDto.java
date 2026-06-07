@@ -1,16 +1,17 @@
-package com.erp.modules.parties.domain.dto;
+package com.erp.platform.common.money;
 
-import com.erp.platform.common.money.Money;
 import java.math.BigDecimal;
 
 /**
- * Wire representation of a {@link Money} pair per ADR-0005 D-7.
+ * Wire representation of a {@link Money} pair per ADR-0005 D-7:
+ * {@code { "amount": "1500.0000", "currency": "TZS" }}.
+ * {@code amount} is a String to avoid IEEE-754 precision loss in JavaScript.
+ * Null when no money value is set (e.g. no credit limit on a walk-in customer).
  *
- * @deprecated Use {@link com.erp.platform.common.money.MoneyDto} — the canonical location
- *     since ADR-0007 D-12 promoted it to platform.common.money. This alias is kept so
- *     existing Parties code and tests compile without a bulk rename.
+ * <p>Promoted from {@code com.erp.modules.parties.domain.dto} to
+ * {@code com.erp.platform.common.money} (ADR-0007 D-12) so every money-bearing module
+ * shares one wire DTO without a cross-module import.
  */
-@Deprecated(forRemoval = false)
 public record MoneyDto(String amount, String currency) {
 
     public static MoneyDto from(Money money) {

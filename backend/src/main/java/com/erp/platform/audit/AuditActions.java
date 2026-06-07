@@ -69,4 +69,31 @@ public final class AuditActions {
     public static final String OTHERPARTY_RESTORE       = "OTHERPARTY.RESTORE";
     public static final String OTHERPARTY_BRANCH_ADD    = "OTHERPARTY.BRANCH.ADD";
     public static final String OTHERPARTY_BRANCH_REMOVE = "OTHERPARTY.BRANCH.REMOVE";
+
+    // -- Product lifecycle (ADR-0007 D-13) ------------------------------------
+    public static final String PRODUCT_CREATE           = "PRODUCT.CREATE";
+    public static final String PRODUCT_UPDATE           = "PRODUCT.UPDATE";
+    public static final String PRODUCT_ARCHIVE          = "PRODUCT.ARCHIVE";
+    public static final String PRODUCT_RESTORE          = "PRODUCT.RESTORE";
+    public static final String PRODUCT_BRANCH_ADD       = "PRODUCT.BRANCH.ADD";
+    public static final String PRODUCT_BRANCH_REMOVE    = "PRODUCT.BRANCH.REMOVE";
+    public static final String PRODUCT_BARCODE_ADD      = "PRODUCT.BARCODE.ADD";
+    public static final String PRODUCT_BARCODE_REMOVE   = "PRODUCT.BARCODE.REMOVE";
+    public static final String PRODUCT_BARCODE_SETPRIMARY = "PRODUCT.BARCODE.SETPRIMARY";
+    public static final String PRODUCT_PRICE_SET        = "PRODUCT.PRICE.SET";
+    public static final String PRODUCT_PRICE_REMOVE     = "PRODUCT.PRICE.REMOVE";
+    public static final String PRODUCT_COMPONENT_ADD    = "PRODUCT.COMPONENT.ADD";
+    public static final String PRODUCT_COMPONENT_REMOVE = "PRODUCT.COMPONENT.REMOVE";
+
+    // -- PriceList lifecycle --------------------------------------------------
+    public static final String PRICELIST_CREATE         = "PRICELIST.CREATE";
+    public static final String PRICELIST_UPDATE         = "PRICELIST.UPDATE";
+    public static final String PRICELIST_ARCHIVE        = "PRICELIST.ARCHIVE";
+    public static final String PRICELIST_RESTORE        = "PRICELIST.RESTORE";
+
+    // -- UnitOfMeasure lifecycle (brief §AuditActions) ------------------------
+    public static final String UOM_CREATE               = "UOM.CREATE";
+    public static final String UOM_UPDATE               = "UOM.UPDATE";
+    public static final String UOM_ARCHIVE              = "UOM.ARCHIVE";
+    public static final String UOM_RESTORE              = "UOM.RESTORE";
 }

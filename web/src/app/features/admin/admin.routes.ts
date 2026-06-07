@@ -100,5 +100,30 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./parties/agent-detail.component').then((m) => m.AgentDetailComponent),
   },
+  // ── Products ──────────────────────────────────────────────────────────────
+  {
+    path: 'products',
+    canActivate: [requirePermission('PRODUCT.VIEW')],
+    loadComponent: () =>
+      import('./products/product-list.component').then((m) => m.ProductListComponent),
+  },
+  {
+    path: 'products/uid/:uid',
+    canActivate: [requirePermission('PRODUCT.VIEW')],
+    loadComponent: () =>
+      import('./products/product-detail.component').then((m) => m.ProductDetailComponent),
+  },
+  {
+    path: 'price-lists',
+    canActivate: [requirePermission('PRICELIST.VIEW')],
+    loadComponent: () =>
+      import('./products/price-list-list.component').then((m) => m.PriceListListComponent),
+  },
+  {
+    path: 'units',
+    canActivate: [requirePermission('UOM.VIEW')],
+    loadComponent: () =>
+      import('./products/units-of-measure-list.component').then((m) => m.UnitsOfMeasureListComponent),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];

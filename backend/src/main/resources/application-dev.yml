@@ -5,6 +5,15 @@ spring:
     url: jdbc:postgresql://localhost:5434/erp
     username: erp
     password: erp
+
+# Dev convenience: bootstrap a fresh DB without needing env vars. On an empty schema this
+# creates org + company C1 + default branch BR-01 (with seeded default units) + root admin.
+# Idempotent — skipped once an organisation exists. Env vars still override (e.g. to change
+# the dev password). NEVER use these literal credentials outside local dev.
+erp:
+  bootstrap:
+    enabled: ${ERP_BOOTSTRAP_ENABLED:true}
+    admin-password: ${ERP_BOOTSTRAP_ADMIN_PASSWORD:RootPass12345}
   jpa:
     properties:
       hibernate:

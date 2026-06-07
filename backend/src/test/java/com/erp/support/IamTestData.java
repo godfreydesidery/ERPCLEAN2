@@ -31,15 +31,24 @@ public class IamTestData {
                 .executeUpdate();
         // 3. Delete test-created roles (system roles stay).
         em.createNativeQuery("DELETE FROM roles WHERE is_system = false").executeUpdate();
-        // 4. Clear parties link tables first (FK children of master party tables and branches/app_users).
+        // 4. Clear products tables (FK children first, then masters, then sequence counter).
+        //    units_of_measure is included here because products.base_unit_id and
+        //    product_bulk_packs.unit_id FK into it (UoM cutover V4).
+        em.createNativeQuery(
+                "TRUNCATE product_branch, product_barcodes, product_prices, product_components, product_bulk_packs RESTART IDENTITY CASCADE")
+                .executeUpdate();
+        em.createNativeQuery(
+                "TRUNCATE products, price_lists, units_of_measure, code_sequence RESTART IDENTITY CASCADE")
+                .executeUpdate();
+        // 5. Clear parties link tables first (FK children of master party tables and branches/app_users).
         em.createNativeQuery(
                 "TRUNCATE customer_branch, supplier_branch, agent_branch, other_party_branch RESTART IDENTITY CASCADE")
                 .executeUpdate();
-        // 5. Clear party master tables and the code-sequence counter.
+        // 6. Clear party master tables and the code-sequence counter.
         em.createNativeQuery(
                 "TRUNCATE customers, suppliers, agents, other_parties, party_code_sequence RESTART IDENTITY CASCADE")
                 .executeUpdate();
-        // 6. Clear the rest of the IAM tables (CASCADE handles FK order within this set).
+        // 7. Clear the rest of the IAM tables (CASCADE handles FK order within this set).
         //    audit_log has a NULLABLE FK to app_user (ON DELETE SET NULL per schema) so it does not
         //    block the app_user truncate, but its rows must be cleared so audit-count assertions in
         //    AuditServiceImplIT start from zero.
