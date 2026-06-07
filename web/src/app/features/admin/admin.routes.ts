@@ -100,5 +100,24 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./parties/agent-detail.component').then((m) => m.AgentDetailComponent),
   },
+  // ── Products ──────────────────────────────────────────────────────────────
+  {
+    path: 'products',
+    canActivate: [requirePermission('PRODUCT.VIEW')],
+    loadComponent: () =>
+      import('./products/product-list.component').then((m) => m.ProductListComponent),
+  },
+  {
+    path: 'products/uid/:uid',
+    canActivate: [requirePermission('PRODUCT.VIEW')],
+    loadComponent: () =>
+      import('./products/product-detail.component').then((m) => m.ProductDetailComponent),
+  },
+  {
+    path: 'price-lists',
+    canActivate: [requirePermission('PRICELIST.VIEW')],
+    loadComponent: () =>
+      import('./products/price-list-list.component').then((m) => m.PriceListListComponent),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];

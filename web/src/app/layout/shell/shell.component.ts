@@ -122,6 +122,13 @@ export class ShellComponent {
         { label: 'Sales Agents', route: '/admin/agents', icon: 'bi-person-badge', available: true, permission: 'AGENT.VIEW' },
       ],
     },
+    {
+      label: 'Products',
+      items: [
+        { label: 'Products', route: '/admin/products', icon: 'bi-box-seam', available: true, permission: 'PRODUCT.VIEW' },
+        { label: 'Price Lists', route: '/admin/price-lists', icon: 'bi-tags', available: true, permission: 'PRICELIST.VIEW' },
+      ],
+    },
   ];
 
   /** Nav groups with permission-filtered items. Reactive: recomputes when permissions change. */

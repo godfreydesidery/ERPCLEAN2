@@ -1,0 +1,727 @@
+<section class="admin-page">
+  <header class="page-head">
+    <a class="back-link text-muted small" routerLink="/admin/products">
+      <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Products
+    </a>
+
+    @switch (productState()) {
+      @case ('loading') {
+        <h1 class="h4 mb-0 mt-1 d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading product…
+        </h1>
+      }
+      @case ('error') {
+        <h1 class="h4 mb-0 mt-1">Product Detail</h1>
+        <p class="text-danger mt-2" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load product.
+        </p>
+      }
+      @default {
+        @if (product(); as p) {
+          <h1 class="h4 mb-0 mt-1">
+            <span class="font-monospace text-primary">{{ p.code }}</span>
+            <span class="text-muted fw-normal ms-2">— {{ p.name }}</span>
+          </h1>
+          <div class="d-flex gap-2 mt-1 flex-wrap align-items-center">
+            <span class="badge"
+                  [class.text-bg-success]="p.status === 'ACTIVE'"
+                  [class.text-bg-warning]="p.status === 'INACTIVE'"
+                  [class.text-bg-secondary]="p.status === 'ARCHIVED'">
+              {{ p.status }}
+            </span>
+            <span class="badge text-bg-light border">{{ p.type }}</span>
+            @if (canManage()) {
+              @if (p.status === 'ACTIVE' || p.status === 'INACTIVE') {
+                <button type="button" class="btn btn-sm btn-outline-secondary ms-2"
+                        [disabled]="archiving()"
+                        (click)="archive()">
+                  @if (archiving()) {
+                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                  }
+                  Archive
+                </button>
+              } @else {
+                <button type="button" class="btn btn-sm btn-outline-success ms-2"
+                        [disabled]="archiving()"
+                        (click)="restore()">
+                  @if (archiving()) {
+                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                  }
+                  Restore
+                </button>
+              }
+            }
+          </div>
+        }
+      }
+    }
+  </header>
+
+  @if (productState() !== 'loading' && product()) {
+    <!-- ── Edit form ──────────────────────────────────────────────────────── -->
+    <div class="card card-body mb-3">
+      <h2 class="h6 mb-3">Details</h2>
+      <form (ngSubmit)="save()" aria-label="Edit product">
+        <div class="row g-3">
+
+          <!-- Name -->
+          <div class="col-sm-6">
+            <label class="form-label small text-muted mb-1" for="fName">
+              Name <span aria-hidden="true" class="text-danger">*</span>
+            </label>
+            <input id="fName" name="fName" type="text" class="form-control"
+                   [ngModel]="fName()" (ngModelChange)="fName.set($event)"
+                   required [disabled]="saving() || !canManage()" />
+          </div>
+
+          <!-- Description -->
+          <div class="col-sm-6">
+            <label class="form-label small text-muted mb-1" for="fDescription">Description</label>
+            <input id="fDescription" name="fDescription" type="text" class="form-control"
+                   [ngModel]="fDescription()" (ngModelChange)="fDescription.set($event)"
+                   [disabled]="saving() || !canManage()" />
+          </div>
+
+          <!-- Type -->
+          <div class="col-sm-3">
+            <label class="form-label small text-muted mb-1" for="fType">
+              Type <span aria-hidden="true" class="text-danger">*</span>
+            </label>
+            <select id="fType" name="fType" class="form-select"
+                    [ngModel]="fType()" (ngModelChange)="onTypeChange($event)"
+                    [disabled]="saving() || !canManage()">
+              <option value="GOODS">Goods</option>
+              <option value="SERVICE">Service</option>
+            </select>
+          </div>
+
+          <!-- Base unit -->
+          <div class="col-sm-3">
+            <label class="form-label small text-muted mb-1" for="fBaseUnit">
+              Base unit <span aria-hidden="true" class="text-danger">*</span>
+            </label>
+            <input id="fBaseUnit" name="fBaseUnit" type="text" class="form-control"
+                   placeholder="e.g. PCS"
+                   [ngModel]="fBaseUnit()" (ngModelChange)="fBaseUnit.set($event)"
+                   required [disabled]="saving() || !canManage()" />
+          </div>
+
+          <!-- Sellable -->
+          <div class="col-sm-2 d-flex align-items-end pb-1">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="fSellable" name="fSellable"
+                     [ngModel]="fSellable()" (ngModelChange)="fSellable.set($event)"
+                     [disabled]="saving() || !canManage()" />
+              <label class="form-check-label" for="fSellable">Sellable</label>
+            </div>
+          </div>
+
+          <!-- Stockable (BR-PROD-01: disabled for SERVICE) -->
+          <div class="col-sm-2 d-flex align-items-end pb-1">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="fStockable" name="fStockable"
+                     [ngModel]="fStockable()" (ngModelChange)="fStockable.set($event)"
+                     [disabled]="saving() || !canManage() || stockableDisabled()"
+                     [attr.aria-disabled]="stockableDisabled() || null" />
+              <label class="form-check-label" for="fStockable">
+                Stockable
+                @if (stockableDisabled()) {
+                  <span class="text-muted small" aria-hidden="true"> (N/A)</span>
+                }
+              </label>
+            </div>
+          </div>
+
+          <!-- Cost -->
+          <div class="col-sm-3">
+            <label class="form-label small text-muted mb-1" for="fCostAmount">Cost amount</label>
+            <input id="fCostAmount" name="fCostAmount" type="text" class="form-control"
+                   placeholder="e.g. 1000.00"
+                   [ngModel]="fCostAmount()" (ngModelChange)="fCostAmount.set($event)"
+                   [disabled]="saving() || !canManage()" />
+          </div>
+          <div class="col-sm-2">
+            <label class="form-label small text-muted mb-1" for="fCostCurrency">Currency</label>
+            <input id="fCostCurrency" name="fCostCurrency" type="text" class="form-control"
+                   placeholder="TZS"
+                   [ngModel]="fCostCurrency()" (ngModelChange)="fCostCurrency.set($event)"
+                   [disabled]="saving() || !canManage()" />
+          </div>
+        </div>
+
+        @if (saveError(); as msg) {
+          <p class="text-danger small mt-3 mb-0" role="alert">{{ msg }}</p>
+        }
+
+        @if (canManage()) {
+          <div class="mt-3">
+            <button type="submit" class="btn btn-primary" [disabled]="saving()">
+              @if (saving()) {
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                Saving…
+              } @else {
+                Save changes
+              }
+            </button>
+          </div>
+        }
+      </form>
+    </div>
+
+    <!-- ── Barcodes ──────────────────────────────────────────────────────── -->
+    <div class="card card-body mb-3">
+      <h2 class="h6 mb-3">Barcodes</h2>
+
+      @switch (barcodesState()) {
+        @case ('loading') {
+          <p class="text-muted small d-flex align-items-center gap-2" aria-live="polite">
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading barcodes…
+          </p>
+        }
+        @case ('error') {
+          <p class="text-danger small" role="alert">
+            <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+            Could not load barcodes.
+          </p>
+        }
+        @default {
+          @if (!hasBarcodes()) {
+            <p class="text-muted small">No barcodes yet.</p>
+          } @else {
+            <div class="table-responsive mb-3">
+              <table class="table table-hover align-middle bg-white grid">
+                <caption class="sr-only">Barcodes for this product</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Barcode</th>
+                    <th scope="col">Primary</th>
+                    @if (canManage()) {
+                      <th scope="col"><span class="sr-only">Actions</span></th>
+                    }
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (bc of barcodes(); track bc.uid) {
+                    <tr>
+                      <td class="font-monospace">{{ bc.barcode }}</td>
+                      <td>
+                        @if (bc.primary) {
+                          <span class="badge text-bg-success">Primary</span>
+                        } @else {
+                          <span class="badge text-bg-light border">Secondary</span>
+                        }
+                      </td>
+                      @if (canManage()) {
+                        <td>
+                          <button type="button" class="btn btn-sm btn-outline-danger"
+                                  [disabled]="rowBusyBarcodeId() !== null"
+                                  (click)="removeBarcode(bc)"
+                                  [attr.aria-label]="'Remove barcode ' + bc.barcode">
+                            @if (rowBusyBarcodeId() === bc.uid) {
+                              <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                            }
+                            Remove
+                          </button>
+                        </td>
+                      }
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        }
+      }
+
+      @if (canManage()) {
+        <form class="border-top pt-3" (ngSubmit)="addBarcode()" aria-label="Add barcode">
+          <h3 class="h6 mb-3">Add Barcode</h3>
+          <div class="row g-2 align-items-end">
+            <div class="col-sm-5">
+              <label class="form-label small text-muted mb-1" for="newBarcode">
+                Barcode value <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="newBarcode" name="newBarcode" type="text" class="form-control"
+                     [ngModel]="newBarcode()" (ngModelChange)="newBarcode.set($event)"
+                     [disabled]="addingBarcode()" autocomplete="off" />
+            </div>
+            <div class="col-sm-3 d-flex align-items-end pb-1">
+              <div class="form-check">
+                <input id="newBarcodePrimary" name="newBarcodePrimary" type="checkbox" class="form-check-input"
+                       [ngModel]="newBarcodePrimary()" (ngModelChange)="newBarcodePrimary.set($event)"
+                       [disabled]="addingBarcode()" />
+                <label class="form-check-label small" for="newBarcodePrimary">Set as primary</label>
+              </div>
+            </div>
+            <div class="col-sm-4">
+              <button type="submit" class="btn btn-primary w-100" [disabled]="addingBarcode()">
+                @if (addingBarcode()) {
+                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  Adding…
+                } @else {
+                  Add Barcode
+                }
+              </button>
+            </div>
+          </div>
+          @if (barcodeFormError(); as msg) {
+            <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+          }
+        </form>
+      }
+    </div>
+
+    <!-- ── Bulk Packs ─────────────────────────────────────────────────────── -->
+    <div class="card card-body mb-3">
+      <h2 class="h6 mb-3">Bulk Packs</h2>
+
+      @switch (bulkPacksState()) {
+        @case ('loading') {
+          <p class="text-muted small d-flex align-items-center gap-2" aria-live="polite">
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading bulk packs…
+          </p>
+        }
+        @case ('error') {
+          <p class="text-danger small" role="alert">
+            <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+            Could not load bulk packs.
+          </p>
+        }
+        @default {
+          @if (!hasBulkPacks()) {
+            <p class="text-muted small">No bulk packs yet.</p>
+          } @else {
+            <div class="table-responsive mb-3">
+              <table class="table table-hover align-middle bg-white grid">
+                <caption class="sr-only">Bulk packs for this product</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Name</th>
+                    <th scope="col">Factor to base</th>
+                    @if (canManage()) {
+                      <th scope="col"><span class="sr-only">Actions</span></th>
+                    }
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (bp of bulkPacks(); track bp.uid) {
+                    <tr>
+                      <td>{{ bp.name }}</td>
+                      <td class="font-monospace">{{ bp.factorToBase }}</td>
+                      @if (canManage()) {
+                        <td>
+                          <button type="button" class="btn btn-sm btn-outline-danger"
+                                  [disabled]="rowBusyBulkPackId() !== null"
+                                  (click)="removeBulkPack(bp)"
+                                  [attr.aria-label]="'Remove bulk pack ' + bp.name">
+                            @if (rowBusyBulkPackId() === bp.uid) {
+                              <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                            }
+                            Remove
+                          </button>
+                        </td>
+                      }
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        }
+      }
+
+      @if (canManage()) {
+        <form class="border-top pt-3" (ngSubmit)="addBulkPack()" aria-label="Add bulk pack">
+          <h3 class="h6 mb-3">Add Bulk Pack</h3>
+          <div class="row g-2 align-items-end">
+            <div class="col-sm-4">
+              <label class="form-label small text-muted mb-1" for="newBulkPackName">
+                Name <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="newBulkPackName" name="newBulkPackName" type="text" class="form-control"
+                     placeholder="e.g. Carton"
+                     [ngModel]="newBulkPackName()" (ngModelChange)="newBulkPackName.set($event)"
+                     [disabled]="addingBulkPack()" autocomplete="off" />
+            </div>
+            <div class="col-sm-3">
+              <label class="form-label small text-muted mb-1" for="newBulkPackFactor">
+                Factor to base <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="newBulkPackFactor" name="newBulkPackFactor" type="text" class="form-control"
+                     placeholder="e.g. 12"
+                     [ngModel]="newBulkPackFactor()" (ngModelChange)="newBulkPackFactor.set($event)"
+                     [disabled]="addingBulkPack()" autocomplete="off" />
+            </div>
+            <div class="col-sm-5">
+              <button type="submit" class="btn btn-primary w-100" [disabled]="addingBulkPack()">
+                @if (addingBulkPack()) {
+                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  Adding…
+                } @else {
+                  Add Bulk Pack
+                }
+              </button>
+            </div>
+          </div>
+          @if (bulkPackFormError(); as msg) {
+            <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+          }
+        </form>
+      }
+    </div>
+
+    <!-- ── Prices ─────────────────────────────────────────────────────────── -->
+    <div class="card card-body mb-3">
+      <h2 class="h6 mb-3">Prices</h2>
+
+      @switch (pricesState()) {
+        @case ('loading') {
+          <p class="text-muted small d-flex align-items-center gap-2" aria-live="polite">
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading prices…
+          </p>
+        }
+        @case ('error') {
+          <p class="text-danger small" role="alert">
+            <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+            Could not load prices.
+          </p>
+        }
+        @default {
+          @if (!hasPrices()) {
+            <p class="text-muted small">No prices set yet.</p>
+          } @else {
+            <div class="table-responsive mb-3">
+              <table class="table table-hover align-middle bg-white grid">
+                <caption class="sr-only">Prices for this product</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Price list</th>
+                    <th scope="col">Price</th>
+                    @if (canManage()) {
+                      <th scope="col"><span class="sr-only">Actions</span></th>
+                    }
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (pp of prices(); track pp.id) {
+                    <tr>
+                      <td>{{ priceListLabel(pp) }}</td>
+                      <td class="font-monospace">{{ pp.price.amount }} {{ pp.price.currency }}</td>
+                      @if (canManage()) {
+                        <td>
+                          <button type="button" class="btn btn-sm btn-outline-danger"
+                                  [disabled]="rowBusyPriceId() !== null"
+                                  (click)="removePrice(pp)"
+                                  [attr.aria-label]="'Remove price for ' + priceListLabel(pp)">
+                            @if (rowBusyPriceId() === pp.id) {
+                              <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                            }
+                            Remove
+                          </button>
+                        </td>
+                      }
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        }
+      }
+
+      @if (canManage()) {
+        <form class="border-top pt-3" (ngSubmit)="setPrice()" aria-label="Set product price">
+          <h3 class="h6 mb-3">Set Price</h3>
+          @switch (priceListsState()) {
+            @case ('loading') {
+              <p class="text-muted small d-flex align-items-center gap-2" aria-live="polite">
+                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading price lists…
+              </p>
+            }
+            @case ('error') {
+              <p class="text-danger small" role="alert">Could not load price lists.</p>
+            }
+            @default {
+              <div class="row g-2 align-items-end">
+                <div class="col-sm-4">
+                  <label class="form-label small text-muted mb-1" for="newPriceList">
+                    Price list <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <select id="newPriceList" name="newPriceList" class="form-select"
+                          [ngModel]="newPriceListUid()" (ngModelChange)="newPriceListUid.set($event)"
+                          [disabled]="settingPrice()">
+                    <option value="">— select price list —</option>
+                    @for (pl of priceLists(); track pl.uid) {
+                      <option [value]="pl.uid">{{ pl.code }} — {{ pl.name }}</option>
+                    }
+                  </select>
+                </div>
+                <div class="col-sm-3">
+                  <label class="form-label small text-muted mb-1" for="newPriceAmount">
+                    Amount <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <input id="newPriceAmount" name="newPriceAmount" type="text" class="form-control"
+                         placeholder="e.g. 5000.00"
+                         [ngModel]="newPriceAmount()" (ngModelChange)="newPriceAmount.set($event)"
+                         [disabled]="settingPrice()" autocomplete="off" />
+                </div>
+                <div class="col-sm-2">
+                  <label class="form-label small text-muted mb-1" for="newPriceCurrency">Currency</label>
+                  <input id="newPriceCurrency" name="newPriceCurrency" type="text" class="form-control"
+                         placeholder="TZS"
+                         [ngModel]="newPriceCurrency()" (ngModelChange)="newPriceCurrency.set($event)"
+                         [disabled]="settingPrice()" autocomplete="off" />
+                </div>
+                <div class="col-sm-3">
+                  <button type="submit" class="btn btn-primary w-100"
+                          [disabled]="settingPrice() || !newPriceListUid()">
+                    @if (settingPrice()) {
+                      <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                      Saving…
+                    } @else {
+                      Set Price
+                    }
+                  </button>
+                </div>
+              </div>
+            }
+          }
+          @if (priceFormError(); as msg) {
+            <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+          }
+        </form>
+      }
+    </div>
+
+    <!-- ── Components / Recipe ────────────────────────────────────────────── -->
+    <div class="card card-body mb-3">
+      <h2 class="h6 mb-3">Recipe / Components</h2>
+
+      @switch (componentsState()) {
+        @case ('loading') {
+          <p class="text-muted small d-flex align-items-center gap-2" aria-live="polite">
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading components…
+          </p>
+        }
+        @case ('error') {
+          <p class="text-danger small" role="alert">
+            <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+            Could not load components.
+          </p>
+        }
+        @default {
+          @if (!hasComponents()) {
+            <p class="text-muted small">No components defined.</p>
+          } @else {
+            <div class="table-responsive mb-3">
+              <table class="table table-hover align-middle bg-white grid">
+                <caption class="sr-only">Components/recipe for this product</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Code</th>
+                    <th scope="col">Name</th>
+                    <th scope="col">Quantity</th>
+                    @if (canManage()) {
+                      <th scope="col"><span class="sr-only">Actions</span></th>
+                    }
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (comp of components(); track comp.id) {
+                    <tr>
+                      <td class="font-monospace">{{ comp.componentProductCode }}</td>
+                      <td>{{ comp.componentProductName }}</td>
+                      <td class="font-monospace">{{ comp.quantity }}</td>
+                      @if (canManage()) {
+                        <td>
+                          <button type="button" class="btn btn-sm btn-outline-danger"
+                                  [disabled]="rowBusyComponentId() !== null"
+                                  (click)="removeComponent(comp)"
+                                  [attr.aria-label]="'Remove component ' + comp.componentProductName">
+                            @if (rowBusyComponentId() === comp.id) {
+                              <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                            }
+                            Remove
+                          </button>
+                        </td>
+                      }
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        }
+      }
+
+      @if (canManage()) {
+        <form class="border-top pt-3" (ngSubmit)="addComponent()" aria-label="Add component">
+          <h3 class="h6 mb-3">Add Component</h3>
+          <div class="row g-2 align-items-end">
+            <div class="col-sm-5">
+              <label class="form-label small text-muted mb-1" for="newComponentUid">
+                Component product UID <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="newComponentUid" name="newComponentUid" type="text" class="form-control"
+                     placeholder="Product UID"
+                     [ngModel]="newComponentProductUid()" (ngModelChange)="newComponentProductUid.set($event)"
+                     [disabled]="addingComponent()" autocomplete="off" />
+            </div>
+            <div class="col-sm-3">
+              <label class="form-label small text-muted mb-1" for="newComponentQty">
+                Quantity <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="newComponentQty" name="newComponentQty" type="text" class="form-control"
+                     placeholder="e.g. 2"
+                     [ngModel]="newComponentQuantity()" (ngModelChange)="newComponentQuantity.set($event)"
+                     [disabled]="addingComponent()" autocomplete="off" />
+            </div>
+            <div class="col-sm-4">
+              <button type="submit" class="btn btn-primary w-100" [disabled]="addingComponent()">
+                @if (addingComponent()) {
+                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  Adding…
+                } @else {
+                  Add Component
+                }
+              </button>
+            </div>
+          </div>
+          @if (componentFormError(); as msg) {
+            <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+          }
+        </form>
+      }
+    </div>
+
+    <!-- ── Branch Associations ────────────────────────────────────────────── -->
+    <div class="card card-body mb-3">
+      <h2 class="h6 mb-3">Branch Associations</h2>
+
+      @switch (branchesState()) {
+        @case ('loading') {
+          <p class="text-muted small d-flex align-items-center gap-2" aria-live="polite">
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading branch associations…
+          </p>
+        }
+        @case ('error') {
+          <p class="text-danger small" role="alert">
+            <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+            Could not load branch associations.
+          </p>
+        }
+        @default {
+          @if (!hasBranches()) {
+            <p class="text-muted small">No branches associated yet.</p>
+          } @else {
+            <div class="table-responsive mb-3">
+              <table class="table table-hover align-middle bg-white grid">
+                <caption class="sr-only">Branch associations for this product</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Branch</th>
+                    <th scope="col">Assigned at</th>
+                    @if (canAssign()) {
+                      <th scope="col"><span class="sr-only">Actions</span></th>
+                    }
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (pb of branches(); track pb.branchId) {
+                    <tr>
+                      <td>{{ branchDisplay(pb.branchId) }}</td>
+                      <td class="small text-muted">{{ pb.assignedAt ?? '—' }}</td>
+                      @if (canAssign()) {
+                        <td>
+                          <button type="button" class="btn btn-sm btn-outline-danger"
+                                  [disabled]="rowBusyBranchId() !== null"
+                                  (click)="removeBranch(pb)"
+                                  [attr.aria-label]="'Remove branch ' + branchDisplay(pb.branchId)">
+                            @if (rowBusyBranchId() === pb.branchId) {
+                              <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                            }
+                            Remove
+                          </button>
+                        </td>
+                      }
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        }
+      }
+
+      @if (canAssign()) {
+        <form class="assign-form border-top pt-3" (ngSubmit)="assign()" aria-label="Associate a branch with this product">
+          <h3 class="h6 mb-3">Associate Branch</h3>
+
+          @switch (companiesState()) {
+            @case ('loading') {
+              <p class="text-muted small d-flex align-items-center gap-2" aria-live="polite">
+                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+              </p>
+            }
+            @case ('error') {
+              <p class="text-danger small" role="alert">Could not load companies. Refresh to try again.</p>
+            }
+            @default {
+              <div class="row g-2 align-items-end">
+                <div class="col-sm-4">
+                  <label class="form-label small text-muted mb-1" for="assignCompany">Company</label>
+                  <select id="assignCompany" name="assignCompany" class="form-select"
+                          [ngModel]="selectedCompanyUid()"
+                          (ngModelChange)="onCompanyChange($event)"
+                          [disabled]="assigning()">
+                    <option value="">— select company —</option>
+                    @for (c of companies(); track c.uid) {
+                      <option [value]="c.uid">{{ c.name }}</option>
+                    }
+                  </select>
+                </div>
+                <div class="col-sm-4">
+                  <label class="form-label small text-muted mb-1" for="assignBranch">Branch</label>
+                  @if (companyBranchesState() === 'loading') {
+                    <div class="form-control d-flex align-items-center gap-2 text-muted small">
+                      <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+                    </div>
+                  } @else {
+                    <select id="assignBranch" name="assignBranch" class="form-select"
+                            [ngModel]="selectedBranchUid()"
+                            (ngModelChange)="selectedBranchUid.set($event)"
+                            [disabled]="assigning() || !selectedCompanyUid()">
+                      <option value="">— select branch —</option>
+                      @for (b of companyBranches(); track b.uid) {
+                        <option [value]="b.uid">{{ b.code }} — {{ b.name }}</option>
+                      }
+                    </select>
+                  }
+                  @if (companyBranchesState() === 'error') {
+                    <p class="text-danger small mt-1 mb-0" role="alert">Could not load branches.</p>
+                  }
+                </div>
+                <div class="col-sm-4">
+                  <button type="submit" class="btn btn-primary w-100"
+                          [disabled]="assigning() || !selectedBranchUid()">
+                    @if (assigning()) {
+                      <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                      Assigning…
+                    } @else {
+                      Assign
+                    }
+                  </button>
+                </div>
+              </div>
+            }
+          }
+
+          @if (assignError(); as msg) {
+            <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+          }
+        </form>
+      }
+    </div>
+  }
+</section>

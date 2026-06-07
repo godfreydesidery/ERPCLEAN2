@@ -1,0 +1,326 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Products</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-box-seam me-1" aria-hidden="true"></i>
+      Manage products, pricing, and inventory settings.
+    </p>
+  </header>
+
+  <!-- Company selector -->
+  @switch (companyState()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mb-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load companies. Is the API running?
+      </p>
+    }
+    @default {
+      @if (companies().length > 1) {
+        <div class="mb-3" style="max-width:320px">
+          <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+          <select id="companyPicker" name="companyPicker" class="form-select"
+                  [ngModel]="selectedCompanyId()"
+                  (ngModelChange)="onCompanyChange($event)">
+            @for (c of companies(); track c.uid) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+          </select>
+        </div>
+      }
+    }
+  }
+
+  @if (selectedCompanyId()) {
+    <!-- Search bar + barcode lookup + create toggle -->
+    <div class="d-flex flex-wrap gap-2 mb-3 align-items-end">
+      <form class="d-flex gap-2" (ngSubmit)="applySearch()" aria-label="Search products">
+        <div>
+          <label class="form-label small text-muted mb-1" for="productSearch">Search</label>
+          <input id="productSearch" name="productSearch" type="search"
+                 class="form-control" placeholder="Name, code…"
+                 [ngModel]="searchQ()" (ngModelChange)="searchQ.set($event)"
+                 autocomplete="off" [attr.aria-busy]="state() === 'loading'" />
+        </div>
+        <div class="align-self-end">
+          <button type="submit" class="btn btn-outline-secondary">
+            <i class="bi bi-search" aria-hidden="true"></i>
+            <span class="sr-only">Search</span>
+          </button>
+        </div>
+        @if (searchQ()) {
+          <div class="align-self-end">
+            <button type="button" class="btn btn-outline-secondary" (click)="clearSearch()">Clear</button>
+          </div>
+        }
+      </form>
+
+      <!-- Barcode lookup -->
+      <form class="d-flex gap-2" (ngSubmit)="lookupBarcode()" aria-label="Barcode lookup">
+        <div>
+          <label class="form-label small text-muted mb-1" for="barcodeSearch">
+            <i class="bi bi-upc-scan me-1" aria-hidden="true"></i>Barcode
+          </label>
+          <input id="barcodeSearch" name="barcodeSearch" type="search"
+                 class="form-control" placeholder="Scan or enter barcode…"
+                 [ngModel]="barcodeQ()" (ngModelChange)="barcodeQ.set($event)"
+                 autocomplete="off" style="width:200px" />
+        </div>
+        <div class="align-self-end">
+          <button type="submit" class="btn btn-outline-secondary"
+                  [disabled]="!barcodeQ() || barcodeState() === 'loading'">
+            @if (barcodeState() === 'loading') {
+              <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+            } @else {
+              <i class="bi bi-upc-scan" aria-hidden="true"></i>
+            }
+            <span class="sr-only">Lookup barcode</span>
+          </button>
+        </div>
+        @if (barcodeQ()) {
+          <div class="align-self-end">
+            <button type="button" class="btn btn-outline-secondary" (click)="clearBarcodeSearch()">Clear</button>
+          </div>
+        }
+      </form>
+
+      @if (canManage()) {
+        <div class="ms-auto align-self-end">
+          <button type="button" class="btn btn-primary"
+                  (click)="toggleCreateForm()"
+                  [attr.aria-expanded]="showCreateForm()"
+                  aria-controls="createProductForm">
+            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+            New Product
+          </button>
+        </div>
+      }
+    </div>
+
+    <!-- Barcode result -->
+    @if (barcodeState() === 'notfound') {
+      <p class="text-muted small mb-3" role="status">
+        <i class="bi bi-question-circle me-1" aria-hidden="true"></i>
+        No product found for that barcode.
+      </p>
+    }
+    @if (barcodeState() === 'error') {
+      <p class="text-danger small mb-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Barcode lookup failed. Please try again.
+      </p>
+    }
+    @if (barcodeResult(); as bp) {
+      <div class="alert alert-info d-flex align-items-center gap-3 mb-3" role="status">
+        <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
+        <div>
+          <strong>{{ bp.code }}</strong> — {{ bp.name }}
+          <span class="badge text-bg-light border ms-2">{{ bp.type }}</span>
+        </div>
+        <a class="btn btn-sm btn-outline-primary ms-auto"
+           [routerLink]="['/admin/products/uid', bp.uid]"
+           [attr.aria-label]="'View product ' + bp.name">View</a>
+      </div>
+    }
+
+    <!-- Create form -->
+    @if (showCreateForm()) {
+      <form id="createProductForm" class="create-form card card-body mb-3"
+            (ngSubmit)="create()" aria-label="Create product">
+        <h2 class="h6 mb-3">New Product</h2>
+
+        <!-- Row 1: name, type, base unit, submit -->
+        <div class="row g-2 align-items-end mb-2">
+          <div class="col-sm-4">
+            <label class="form-label small text-muted mb-1" for="newName">
+              Name <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="newName" name="newName" type="text" class="form-control"
+                   [ngModel]="newName()" (ngModelChange)="newName.set($event)"
+                   required [disabled]="saving()" autocomplete="off" />
+          </div>
+          <div class="col-sm-2">
+            <label class="form-label small text-muted mb-1" for="newType">Type</label>
+            <select id="newType" name="newType" class="form-select"
+                    [ngModel]="newType()" (ngModelChange)="onNewTypeChange($event)"
+                    [disabled]="saving()">
+              <option value="GOODS">Goods</option>
+              <option value="SERVICE">Service</option>
+            </select>
+          </div>
+          <div class="col-sm-2">
+            <label class="form-label small text-muted mb-1" for="newBaseUnit">
+              Base unit <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="newBaseUnit" name="newBaseUnit" type="text" class="form-control"
+                   placeholder="e.g. PCS" [ngModel]="newBaseUnit()" (ngModelChange)="newBaseUnit.set($event)"
+                   required [disabled]="saving()" autocomplete="off" />
+          </div>
+          <div class="col-sm-2 d-flex flex-column gap-1">
+            <div class="form-check">
+              <input id="newSellable" name="newSellable" type="checkbox" class="form-check-input"
+                     [ngModel]="newSellable()" (ngModelChange)="newSellable.set($event)"
+                     [disabled]="saving()" />
+              <label class="form-check-label small" for="newSellable">Sellable</label>
+            </div>
+            <div class="form-check">
+              <input id="newStockable" name="newStockable" type="checkbox" class="form-check-input"
+                     [ngModel]="newStockable()" (ngModelChange)="newStockable.set($event)"
+                     [disabled]="saving() || stockableDisabled()"
+                     [attr.aria-disabled]="stockableDisabled() || null" />
+              <label class="form-check-label small" for="newStockable">
+                Stockable
+                @if (stockableDisabled()) {
+                  <span class="text-muted" aria-hidden="true"> (N/A for service)</span>
+                }
+              </label>
+            </div>
+          </div>
+          <div class="col-sm-2">
+            <button type="submit" class="btn btn-primary w-100" [disabled]="saving()">
+              @if (saving()) {
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                Saving…
+              } @else {
+                Create
+              }
+            </button>
+          </div>
+        </div>
+
+        <!-- Row 2: description + cost -->
+        <div class="row g-2 mb-2">
+          <div class="col-sm-5">
+            <label class="form-label small text-muted mb-1" for="newDescription">Description</label>
+            <input id="newDescription" name="newDescription" type="text" class="form-control"
+                   [ngModel]="newDescription()" (ngModelChange)="newDescription.set($event)"
+                   [disabled]="saving()" autocomplete="off" />
+          </div>
+          <div class="col-sm-3">
+            <label class="form-label small text-muted mb-1" for="newCostAmount">Cost amount</label>
+            <input id="newCostAmount" name="newCostAmount" type="text" class="form-control"
+                   placeholder="e.g. 1000.00"
+                   [ngModel]="newCostAmount()" (ngModelChange)="newCostAmount.set($event)"
+                   [disabled]="saving()" autocomplete="off" />
+          </div>
+          <div class="col-sm-2">
+            <label class="form-label small text-muted mb-1" for="newCostCurrency">Currency</label>
+            <input id="newCostCurrency" name="newCostCurrency" type="text" class="form-control"
+                   placeholder="TZS"
+                   [ngModel]="newCostCurrency()" (ngModelChange)="newCostCurrency.set($event)"
+                   [disabled]="saving()" autocomplete="off" />
+          </div>
+        </div>
+
+        @if (formError(); as msg) {
+          <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+        }
+      </form>
+    }
+
+    <!-- List states -->
+    @switch (state()) {
+      @case ('loading') {
+        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading products…
+        </p>
+      }
+      @case ('error') {
+        <p class="state text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load products. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="state text-muted d-flex align-items-center gap-2">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view products.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <p class="state text-muted">No products yet. Add one above.</p>
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-hover align-middle bg-white grid">
+              <caption class="sr-only">Products in this company</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Code</th>
+                  <th scope="col">Name</th>
+                  <th scope="col">Type</th>
+                  <th scope="col">Base Unit</th>
+                  <th scope="col">Sellable</th>
+                  <th scope="col">Stockable</th>
+                  <th scope="col">Status</th>
+                  <th scope="col"><span class="sr-only">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (p of rows(); track p.uid) {
+                  <tr>
+                    <td class="font-monospace">{{ p.code }}</td>
+                    <td>{{ p.name }}</td>
+                    <td><span class="badge text-bg-light border">{{ p.type }}</span></td>
+                    <td class="small text-muted">{{ p.baseUnit }}</td>
+                    <td>
+                      @if (p.sellable) {
+                        <i class="bi bi-check-circle-fill text-success" aria-label="Yes"></i>
+                      } @else {
+                        <i class="bi bi-dash-circle text-muted" aria-label="No"></i>
+                      }
+                    </td>
+                    <td>
+                      @if (p.stockable) {
+                        <i class="bi bi-check-circle-fill text-success" aria-label="Yes"></i>
+                      } @else {
+                        <i class="bi bi-dash-circle text-muted" aria-label="No"></i>
+                      }
+                    </td>
+                    <td>
+                      <span class="badge" [class]="statusBadgeClass(p.status)">{{ p.status }}</span>
+                    </td>
+                    <td>
+                      <a class="btn btn-sm btn-outline-primary"
+                         [routerLink]="['/admin/products/uid', p.uid]"
+                         [attr.aria-label]="'Edit product ' + p.name">
+                        <i class="bi bi-pencil me-1" aria-hidden="true"></i>Edit
+                      </a>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Pagination -->
+          @if (meta().totalPages > 1) {
+            <nav aria-label="Product list pagination" class="d-flex align-items-center gap-3 mt-2">
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      [disabled]="currentPage() === 0"
+                      (click)="prevPage()">
+                <i class="bi bi-chevron-left" aria-hidden="true"></i>
+                <span class="sr-only">Previous page</span>
+              </button>
+              <span class="small text-muted">
+                Page {{ meta().page + 1 }} of {{ meta().totalPages }}
+                ({{ meta().totalElements }} total)
+              </span>
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      [disabled]="!meta().hasNext"
+                      (click)="nextPage()">
+                <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                <span class="sr-only">Next page</span>
+              </button>
+            </nav>
+          }
+        }
+      }
+    }
+  }
+</section>

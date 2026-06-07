@@ -6,6 +6,8 @@ import com.erp.modules.parties.repository.AgentRepository;
 import com.erp.modules.parties.repository.CustomerRepository;
 import com.erp.modules.parties.repository.OtherPartyRepository;
 import com.erp.modules.parties.repository.SupplierRepository;
+import com.erp.modules.products.repository.PriceListRepository;
+import com.erp.modules.products.repository.ProductRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -34,6 +36,8 @@ public class ScopeGuard {
     private final SupplierRepository suppliers;
     private final AgentRepository agents;
     private final OtherPartyRepository otherParties;
+    private final ProductRepository products;
+    private final PriceListRepository priceLists;
     private final AuditService audit;
 
     public ScopeGuard(CompanyRepository companies,
@@ -42,6 +46,8 @@ public class ScopeGuard {
                       SupplierRepository suppliers,
                       AgentRepository agents,
                       OtherPartyRepository otherParties,
+                      ProductRepository products,
+                      PriceListRepository priceLists,
                       AuditService audit) {
         this.companies = companies;
         this.branches = branches;
@@ -49,6 +55,8 @@ public class ScopeGuard {
         this.suppliers = suppliers;
         this.agents = agents;
         this.otherParties = otherParties;
+        this.products = products;
+        this.priceLists = priceLists;
         this.audit = audit;
     }
 
@@ -68,6 +76,8 @@ public class ScopeGuard {
             case "supplier"    -> suppliers.findCompanyIdByUid(uid);
             case "agent"       -> agents.findCompanyIdByUid(uid);
             case "otherparty"  -> otherParties.findCompanyIdByUid(uid);
+            case "product"     -> products.findCompanyIdByUid(uid);
+            case "pricelist"   -> priceLists.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };
