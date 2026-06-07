@@ -7,17 +7,20 @@ import jakarta.validation.constraints.NotNull;
 
 /**
  * Request DTO to create a new Product.
- * Carries {@code companyUid} (String) per ADR-0007 D-12 — the convention-consistent choice
- * (addresses company by its external uid, not the internal numeric id).
+ * Carries {@code companyUid} (String) per ADR-0007 D-12.
+ * {@code baseUnitUid} references a UnitOfMeasure uid scoped to the same company (UoM cutover).
+ * {@code code} is OPTIONAL: blank → the system auto-assigns PROD-#### (FR-PROD-23); a supplied
+ * value is used as-is (trimmed/uppercased) and must be unique within the company (BR-PROD-08).
  */
 public record CreateProductRequest(
         @NotBlank String companyUid,
+        String code,
         @NotBlank String name,
         String description,
         @NotNull ProductType type,
         boolean sellable,
         boolean stockable,
-        @NotBlank String baseUnit,
+        @NotBlank String baseUnitUid,
         MoneyDto cost
 ) {
 }

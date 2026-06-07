@@ -1,0 +1,216 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Units of Measure</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-rulers me-1" aria-hidden="true"></i>
+      Manage units used as base units and bulk-pack units for products.
+    </p>
+  </header>
+
+  <!-- Company selector -->
+  @switch (companyState()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mb-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load companies. Is the API running?
+      </p>
+    }
+    @default {
+      @if (companies().length > 1) {
+        <div class="mb-3" style="max-width:320px">
+          <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+          <select id="companyPicker" name="companyPicker" class="form-select"
+                  [ngModel]="selectedCompanyId()"
+                  (ngModelChange)="onCompanyChange($event)">
+            @for (c of companies(); track c.uid) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+          </select>
+        </div>
+      }
+    }
+  }
+
+  @if (selectedCompanyId()) {
+    <!-- Toolbar -->
+    <div class="d-flex mb-3">
+      @if (canManage()) {
+        <button type="button" class="btn btn-primary ms-auto"
+                (click)="toggleCreateForm()"
+                [attr.aria-expanded]="showCreateForm()"
+                aria-controls="createUomForm">
+          <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+          New Unit
+        </button>
+      }
+    </div>
+
+    <!-- Create form -->
+    @if (showCreateForm()) {
+      <form id="createUomForm" class="create-form card card-body mb-3"
+            (ngSubmit)="create()" aria-label="Create unit of measure">
+        <h2 class="h6 mb-3">New Unit of Measure</h2>
+        <div class="row g-2 align-items-end">
+          <div class="col-sm-3">
+            <label class="form-label small text-muted mb-1" for="newCode">
+              Code <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="newCode" name="newCode" type="text" class="form-control"
+                   placeholder="e.g. PCS"
+                   [ngModel]="newCode()" (ngModelChange)="newCode.set($event)"
+                   required [disabled]="saving()" autocomplete="off" />
+          </div>
+          <div class="col-sm-5">
+            <label class="form-label small text-muted mb-1" for="newName">
+              Name <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="newName" name="newName" type="text" class="form-control"
+                   placeholder="e.g. Pieces"
+                   [ngModel]="newName()" (ngModelChange)="newName.set($event)"
+                   required [disabled]="saving()" autocomplete="off" />
+          </div>
+          <div class="col-sm-4">
+            <button type="submit" class="btn btn-primary w-100" [disabled]="saving()">
+              @if (saving()) {
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                Saving…
+              } @else {
+                Create
+              }
+            </button>
+          </div>
+        </div>
+        @if (formError(); as msg) {
+          <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+        }
+      </form>
+    }
+
+    <!-- List states -->
+    @switch (state()) {
+      @case ('loading') {
+        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading units…
+        </p>
+      }
+      @case ('error') {
+        <p class="state text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load units. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="state text-muted d-flex align-items-center gap-2">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view units.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <p class="state text-muted">No units yet. Add one above.</p>
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-hover align-middle bg-white grid">
+              <caption class="sr-only">Units of measure in this company</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Code</th>
+                  <th scope="col">Name</th>
+                  <th scope="col">Status</th>
+                  @if (canManage()) {
+                    <th scope="col"><span class="sr-only">Actions</span></th>
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                @for (u of rows(); track u.uid) {
+                  <tr>
+                    <td class="font-monospace">{{ u.code }}</td>
+                    <td>
+                      @if (editingUid() === u.uid) {
+                        <form class="d-flex gap-2 align-items-center"
+                              (ngSubmit)="saveEdit(u)" aria-label="Edit unit name">
+                          <label class="sr-only" [for]="'editName-' + u.uid">Name</label>
+                          <input [id]="'editName-' + u.uid" name="editName" type="text"
+                                 class="form-control form-control-sm"
+                                 [ngModel]="editName()" (ngModelChange)="editName.set($event)"
+                                 [disabled]="editSaving()" style="max-width:200px"
+                                 autocomplete="off" />
+                          <button type="submit" class="btn btn-sm btn-primary"
+                                  [disabled]="editSaving()"
+                                  [attr.aria-label]="'Save name for ' + u.name">
+                            @if (editSaving()) {
+                              <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                            } @else {
+                              <i class="bi bi-check-lg" aria-hidden="true"></i>
+                            }
+                            <span class="sr-only">Save</span>
+                          </button>
+                          <button type="button" class="btn btn-sm btn-outline-secondary"
+                                  (click)="cancelEdit()"
+                                  [attr.aria-label]="'Cancel editing ' + u.name">
+                            <i class="bi bi-x-lg" aria-hidden="true"></i>
+                            <span class="sr-only">Cancel</span>
+                          </button>
+                        </form>
+                        @if (editError(); as msg) {
+                          <p class="text-danger small mt-1 mb-0" role="alert">{{ msg }}</p>
+                        }
+                      } @else {
+                        {{ u.name }}
+                      }
+                    </td>
+                    <td>
+                      <span class="badge" [class]="statusBadgeClass(u.status)">{{ u.status }}</span>
+                    </td>
+                    @if (canManage()) {
+                      <td>
+                        <div class="d-flex gap-2">
+                          @if (editingUid() !== u.uid) {
+                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                                    (click)="startEdit(u)"
+                                    [disabled]="rowBusyUid() !== null"
+                                    [attr.aria-label]="'Edit ' + u.name">
+                              <i class="bi bi-pencil" aria-hidden="true"></i>
+                              <span class="sr-only">Edit</span>
+                            </button>
+                          }
+                          @if (u.status === 'ACTIVE') {
+                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                                    [disabled]="rowBusyUid() !== null"
+                                    (click)="archive(u)"
+                                    [attr.aria-label]="'Archive ' + u.name">
+                              @if (rowBusyUid() === u.uid) {
+                                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                              }
+                              Archive
+                            </button>
+                          } @else {
+                            <button type="button" class="btn btn-sm btn-outline-success"
+                                    [disabled]="rowBusyUid() !== null"
+                                    (click)="restore(u)"
+                                    [attr.aria-label]="'Restore ' + u.name">
+                              @if (rowBusyUid() === u.uid) {
+                                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                              }
+                              Restore
+                            </button>
+                          }
+                        </div>
+                      </td>
+                    }
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      }
+    }
+  }
+</section>

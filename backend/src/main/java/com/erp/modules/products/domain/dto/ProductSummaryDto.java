@@ -6,6 +6,7 @@ import com.erp.platform.common.domain.MasterStatus;
 
 /**
  * Lightweight product DTO for list/search results (NFR-PROD-02).
+ * Shows baseUnitCode (enriched from UnitOfMeasure) instead of free-text baseUnit.
  */
 public record ProductSummaryDto(
         Long id,
@@ -16,7 +17,7 @@ public record ProductSummaryDto(
         ProductType type,
         boolean sellable,
         boolean stockable,
-        String baseUnit,
+        String baseUnitCode,
         MasterStatus status
 ) {
 
@@ -30,7 +31,7 @@ public record ProductSummaryDto(
                 p.getType(),
                 p.isSellable(),
                 p.isStockable(),
-                p.getBaseUnit(),
+                p.getBaseUnit() != null ? p.getBaseUnit().getCode() : null,
                 p.getStatus()
         );
     }

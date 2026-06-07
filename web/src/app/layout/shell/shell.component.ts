@@ -127,6 +127,7 @@ export class ShellComponent {
       items: [
         { label: 'Products', route: '/admin/products', icon: 'bi-box-seam', available: true, permission: 'PRODUCT.VIEW' },
         { label: 'Price Lists', route: '/admin/price-lists', icon: 'bi-tags', available: true, permission: 'PRICELIST.VIEW' },
+        { label: 'Units of Measure', route: '/admin/units', icon: 'bi-rulers', available: true, permission: 'UOM.VIEW' },
       ],
     },
   ];

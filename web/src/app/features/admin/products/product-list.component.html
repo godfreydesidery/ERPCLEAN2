@@ -134,9 +134,17 @@
             (ngSubmit)="create()" aria-label="Create product">
         <h2 class="h6 mb-3">New Product</h2>
 
-        <!-- Row 1: name, type, base unit, submit -->
+        <!-- Row 1: code (optional), name, type, base unit, submit -->
         <div class="row g-2 align-items-end mb-2">
-          <div class="col-sm-4">
+          <div class="col-sm-2">
+            <label class="form-label small text-muted mb-1" for="newCode">Code</label>
+            <input id="newCode" name="newCode" type="text" class="form-control"
+                   placeholder="auto" [ngModel]="newCode()" (ngModelChange)="newCode.set($event)"
+                   [disabled]="saving()" autocomplete="off"
+                   aria-describedby="newCodeHelp" />
+            <span id="newCodeHelp" class="form-text small text-muted">Blank = PROD-####</span>
+          </div>
+          <div class="col-sm-3">
             <label class="form-label small text-muted mb-1" for="newName">
               Name <span class="text-danger" aria-hidden="true">*</span>
             </label>
@@ -157,9 +165,25 @@
             <label class="form-label small text-muted mb-1" for="newBaseUnit">
               Base unit <span class="text-danger" aria-hidden="true">*</span>
             </label>
-            <input id="newBaseUnit" name="newBaseUnit" type="text" class="form-control"
-                   placeholder="e.g. PCS" [ngModel]="newBaseUnit()" (ngModelChange)="newBaseUnit.set($event)"
-                   required [disabled]="saving()" autocomplete="off" />
+            @if (unitsState() === 'loading') {
+              <div class="form-control d-flex align-items-center gap-2 text-muted small">
+                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+              </div>
+            } @else if (companyUnits().length === 0) {
+              <p class="text-muted small mb-0 mt-1">
+                No units yet.
+                <a routerLink="/admin/units">Create units first</a>
+              </p>
+            } @else {
+              <select id="newBaseUnit" name="newBaseUnit" class="form-select"
+                      [ngModel]="newBaseUnitUid()" (ngModelChange)="newBaseUnitUid.set($event)"
+                      required [disabled]="saving()">
+                <option value="">— select unit —</option>
+                @for (u of companyUnits(); track u.uid) {
+                  <option [value]="u.uid">{{ u.code }} — {{ u.name }}</option>
+                }
+              </select>
+            }
           </div>
           <div class="col-sm-2 d-flex flex-column gap-1">
             <div class="form-check">
@@ -267,7 +291,7 @@
                     <td class="font-monospace">{{ p.code }}</td>
                     <td>{{ p.name }}</td>
                     <td><span class="badge text-bg-light border">{{ p.type }}</span></td>
-                    <td class="small text-muted">{{ p.baseUnit }}</td>
+                    <td class="small text-muted">{{ p.baseUnitCode }}</td>
                     <td>
                       @if (p.sellable) {
                         <i class="bi bi-check-circle-fill text-success" aria-label="Yes"></i>

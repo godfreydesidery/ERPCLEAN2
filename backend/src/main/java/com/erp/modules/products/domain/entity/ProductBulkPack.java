@@ -17,10 +17,11 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * A named bulk-pack unit with a conversion factor to base (FR-PROD-06, ADR-0007 D-3).
- * e.g. carton = 24 pieces. factor_to_base must be > 0 (BR-PROD-03).
+ * A bulk-pack unit with a conversion factor to base (FR-PROD-06, ADR-0007 D-3).
+ * e.g. a CARTON pack links to the CARTON UnitOfMeasure, factor_to_base = 24.
+ * factor_to_base must be > 0 (BR-PROD-03, DB CHECK).
  * Does NOT extend {@link com.erp.platform.common.domain.UidEntity} — bulk packs are child records
- * without an optimistic-lock version column in the schema (brief §2.4).
+ * without an optimistic-lock version column in the schema.
  */
 @Getter
 @Entity
@@ -38,9 +39,13 @@ public class ProductBulkPack {
     @JoinColumn(name = "product_id", nullable = false, updatable = false)
     private Product product;
 
-    @Column(name = "name", nullable = false, length = 40)
-    @Setter
-    private String name;
+    /**
+     * FK → units_of_measure.id; the unit for this bulk pack (UoM cutover).
+     * e.g. a CARTON pack links to the CARTON unit, factor_to_base = 24.
+     */
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "unit_id", nullable = false)
+    private UnitOfMeasure unit;
 
     /** Units of base per one pack; must be > 0 (DB CHECK). */
     @Column(name = "factor_to_base", nullable = false, precision = 19, scale = 6)
@@ -72,9 +77,9 @@ public class ProductBulkPack {
         // JPA
     }
 
-    public ProductBulkPack(Product product, String name, BigDecimal factorToBase, Long createdBy) {
+    public ProductBulkPack(Product product, UnitOfMeasure unit, BigDecimal factorToBase, Long createdBy) {
         this.product = product;
-        this.name = name;
+        this.unit = unit;
         this.factorToBase = factorToBase;
         this.createdBy = createdBy;
     }

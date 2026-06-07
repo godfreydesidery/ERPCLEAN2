@@ -8,6 +8,33 @@
 
 export type ProductType = 'GOODS' | 'SERVICE';
 export type ProductStatus = 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+export type UomStatus = 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+
+// ── UnitOfMeasureDto ──────────────────────────────────────────────────────────
+
+export interface UnitOfMeasureDto {
+  id: string;
+  uid: string;
+  companyId: string;
+  code: string;
+  name: string;
+  status: UomStatus;
+  version: string | null;
+  createdAt: string | null;
+  createdBy: string | null;
+  updatedAt: string | null;
+  updatedBy: string | null;
+}
+
+export interface CreateUnitOfMeasureRequest {
+  companyUid: string;
+  code: string;
+  name: string;
+}
+
+export interface UpdateUnitOfMeasureRequest {
+  name: string;
+}
 
 // ── Money (ADR-0005 D-7) ──────────────────────────────────────────────────────
 
@@ -28,7 +55,10 @@ export interface ProductModel {
   type: ProductType;
   sellable: boolean;
   stockable: boolean;
-  baseUnit: string;
+  /** Replaced by FK references; backend now returns baseUnitUid / baseUnitCode / baseUnitName. */
+  baseUnitUid: string;
+  baseUnitCode: string;
+  baseUnitName: string;
   cost: Money | null;
   status: ProductStatus;
   version: string | null;
@@ -43,12 +73,15 @@ export interface ProductModel {
 
 export interface CreateProductRequest {
   companyUid: string;
+  /** Optional; blank → backend auto-assigns PROD-####. */
+  code?: string;
   name: string;
   description?: string;
   type: ProductType;
   sellable: boolean;
   stockable: boolean;
-  baseUnit: string;
+  /** uid of a units_of_measure row scoped to the same company. */
+  baseUnitUid: string;
   cost?: Money;
 }
 
@@ -60,7 +93,8 @@ export interface UpdateProductRequest {
   type: ProductType;
   sellable: boolean;
   stockable: boolean;
-  baseUnit: string;
+  /** uid of a units_of_measure row scoped to the same company. */
+  baseUnitUid: string;
   cost?: Money;
 }
 
@@ -86,12 +120,16 @@ export interface ProductBulkPackDto {
   id: string;
   uid: string;
   productId: string;
-  name: string;
+  /** uid / code / name of the units_of_measure row (replaces free-text name). */
+  unitUid: string;
+  unitCode: string;
+  unitName: string;
   factorToBase: string;
 }
 
 export interface CreateBulkPackRequest {
-  name: string;
+  /** uid of a units_of_measure row scoped to the same company. */
+  unitUid: string;
   factorToBase: string;
 }
 

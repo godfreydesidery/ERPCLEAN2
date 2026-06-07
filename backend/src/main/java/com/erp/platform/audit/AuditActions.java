@@ -90,4 +90,10 @@ public final class AuditActions {
     public static final String PRICELIST_UPDATE         = "PRICELIST.UPDATE";
     public static final String PRICELIST_ARCHIVE        = "PRICELIST.ARCHIVE";
     public static final String PRICELIST_RESTORE        = "PRICELIST.RESTORE";
+
+    // -- UnitOfMeasure lifecycle (brief §AuditActions) ------------------------
+    public static final String UOM_CREATE               = "UOM.CREATE";
+    public static final String UOM_UPDATE               = "UOM.UPDATE";
+    public static final String UOM_ARCHIVE              = "UOM.ARCHIVE";
+    public static final String UOM_RESTORE              = "UOM.RESTORE";
 }

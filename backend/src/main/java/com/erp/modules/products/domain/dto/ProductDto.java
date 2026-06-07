@@ -8,7 +8,8 @@ import com.erp.platform.common.money.MoneyDto;
 /**
  * Full response DTO for a Product (ADR-0007 D-12).
  * Carries both {@code id} (JSON string via global Long-as-string config) and {@code uid}.
- * Money fields follow ADR-0005 D-7 via the promoted {@code platform.common.money.MoneyDto}.
+ * baseUnit fields are enriched from the UnitOfMeasure association (UoM cutover), mirroring
+ * how ProductPriceDto carries priceList code/name.
  */
 public record ProductDto(
         Long id,
@@ -20,7 +21,9 @@ public record ProductDto(
         ProductType type,
         boolean sellable,
         boolean stockable,
-        String baseUnit,
+        String baseUnitUid,
+        String baseUnitCode,
+        String baseUnitName,
         MoneyDto cost,
         MasterStatus status,
         Long version,
@@ -41,7 +44,9 @@ public record ProductDto(
                 p.getType(),
                 p.isSellable(),
                 p.isStockable(),
-                p.getBaseUnit(),
+                p.getBaseUnit() != null ? p.getBaseUnit().getUid()  : null,
+                p.getBaseUnit() != null ? p.getBaseUnit().getCode() : null,
+                p.getBaseUnit() != null ? p.getBaseUnit().getName() : null,
                 MoneyDto.from(p.getCost()),
                 p.getStatus(),
                 p.getVersion(),

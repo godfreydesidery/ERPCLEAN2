@@ -12,7 +12,7 @@
  *  6. BR-PROD-01: SERVICE type sets stockableDisabled, create sends stockable=false.
  *  7. 403 response sets state to 'forbidden'.
  */
-import { provideHttpClient } from '@angular/common/http';
+import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
@@ -25,7 +25,6 @@ import { OrganisationService } from '../organisation/organisation.service';
 import { ProductService } from './product.service';
 import type { ProductPage } from './product.service';
 import { ProductListComponent } from './product-list.component';
-import { HttpErrorResponse } from '@angular/common/http';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -44,6 +43,16 @@ function makeSessionStore() {
   };
 }
 
+const emptyUnitPage = () => ({
+  rows: [],
+  meta: { page: 0, size: 200, totalElements: 0, totalPages: 0, hasNext: false },
+});
+
+const unitPage = () => ({
+  rows: [{ id: '1', uid: 'U1', companyId: '10', code: 'PCS', name: 'Pieces', status: 'ACTIVE', version: null, createdAt: null, createdBy: null, updatedAt: null, updatedBy: null }],
+  meta: { page: 0, size: 200, totalElements: 1, totalPages: 1, hasNext: false },
+});
+
 function makeBed(listImpl?: () => any, canManage = false) {
   const sessionStore = makeSessionStore();
   if (canManage) {
@@ -59,7 +68,8 @@ function makeBed(listImpl?: () => any, canManage = false) {
         provide: ProductService,
         useValue: {
           list: vi.fn(listImpl ?? (() => of(emptyPage()))),
-          create: vi.fn(() => of({ uid: 'P1', name: 'Widget', code: 'W001', type: 'GOODS', sellable: true, stockable: true, status: 'ACTIVE', baseUnit: 'PCS' })),
+          listUnits: vi.fn(() => of(unitPage())),
+          create: vi.fn(() => of({ uid: 'P1', name: 'Widget', code: 'W001', type: 'GOODS', sellable: true, stockable: true, status: 'ACTIVE', baseUnitUid: 'U1', baseUnitCode: 'PCS', baseUnitName: 'Pieces' })),
         },
       },
       {
@@ -122,7 +132,7 @@ describe('ProductListComponent — BR-PROD-01 SERVICE stockable guard', () => {
     comp.newName.set('Consulting');
     comp.newType.set('SERVICE');
     comp.newStockable.set(true); // would be overridden
-    comp.newBaseUnit.set('HR');
+    comp.newBaseUnitUid.set('U1');
 
     comp.create();
 
@@ -139,21 +149,21 @@ describe('ProductListComponent — BR-PROD-01 SERVICE stockable guard', () => {
     await vi.runAllTimersAsync();
 
     comp.newName.set('');
-    comp.newBaseUnit.set('PCS');
+    comp.newBaseUnitUid.set('U1');
     comp.create();
 
     expect(comp.formError()).toBeTruthy();
     expect(productSvc.create).not.toHaveBeenCalled();
   });
 
-  it('create validation: requires base unit', async () => {
+  it('create validation: requires base unit uid', async () => {
     const fixture = TestBed.createComponent(ProductListComponent);
     const comp = fixture.componentInstance;
     const productSvc = TestBed.inject(ProductService) as any;
     await vi.runAllTimersAsync();
 
     comp.newName.set('Widget');
-    comp.newBaseUnit.set('');
+    comp.newBaseUnitUid.set('');
     comp.create();
 
     expect(comp.formError()).toBeTruthy();
@@ -180,6 +190,7 @@ describe('ProductListComponent — live search', () => {
           provide: ProductService,
           useValue: {
             list: listSpy,
+            listUnits: vi.fn(() => of(emptyUnitPage())),
             create: vi.fn(() => of({})),
           },
         },
@@ -311,7 +322,7 @@ describe('ProductListComponent — live search', () => {
         provideRouter([]),
         {
           provide: ProductService,
-          useValue: { list: raceSpy, create: vi.fn(() => of({})) },
+          useValue: { list: raceSpy, listUnits: vi.fn(() => of(emptyUnitPage())), create: vi.fn(() => of({})) },
         },
         { provide: OrganisationService, useValue: { current: vi.fn(() => of({ uid: 'ORG1', id: '1', name: 'Acme' })) } },
         { provide: CompanyService, useValue: { list: vi.fn(() => of([{ uid: 'CO1', id: '10', name: 'Main Co' }])) } },
@@ -365,7 +376,7 @@ describe('ProductListComponent — live search', () => {
         provideRouter([]),
         {
           provide: ProductService,
-          useValue: { list: forbiddenSpy, create: vi.fn(() => of({})) },
+          useValue: { list: forbiddenSpy, listUnits: vi.fn(() => of(emptyUnitPage())), create: vi.fn(() => of({})) },
         },
         { provide: OrganisationService, useValue: { current: vi.fn(() => of({ uid: 'ORG1', id: '1', name: 'Acme' })) } },
         { provide: CompanyService, useValue: { list: vi.fn(() => of([{ uid: 'CO1', id: '10', name: 'Main Co' }])) } },

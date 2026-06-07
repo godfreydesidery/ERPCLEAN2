@@ -1,7 +1,9 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, input, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { debounceTime, distinctUntilChanged, Subject, switchMap } from 'rxjs';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import { Branch } from '../models/branch.model';
@@ -21,6 +23,7 @@ import {
   ProductPriceDto,
   ProductType,
   SetProductPriceRequest,
+  UnitOfMeasureDto,
   UpdateProductRequest,
 } from '../models/product.model';
 import { BranchService } from '../branch/branch.service';
@@ -63,7 +66,7 @@ export class ProductDetailComponent {
   readonly fType = signal<ProductType>('GOODS');
   readonly fSellable = signal(true);
   readonly fStockable = signal(true);
-  readonly fBaseUnit = signal('');
+  readonly fBaseUnitUid = signal('');
   readonly fCostAmount = signal('');
   readonly fCostCurrency = signal('TZS');
 
@@ -88,7 +91,7 @@ export class ProductDetailComponent {
   // ── Bulk packs ────────────────────────────────────────────────────────────
   readonly bulkPacks = signal<ProductBulkPackDto[]>([]);
   readonly bulkPacksState = signal<LoadState>('loading');
-  readonly newBulkPackName = signal('');
+  readonly newBulkPackUnitUid = signal('');
   readonly newBulkPackFactor = signal('');
   readonly addingBulkPack = signal(false);
   readonly bulkPackFormError = signal<string | null>(null);
@@ -106,14 +109,25 @@ export class ProductDetailComponent {
   readonly priceFormError = signal<string | null>(null);
   readonly rowBusyPriceId = signal<string | null>(null);
 
+  // ── Company units (base-unit + bulk-pack selects) ─────────────────────────
+  readonly companyUnits = signal<UnitOfMeasureDto[]>([]);
+  readonly unitsState = signal<'idle' | 'loading' | 'error'>('idle');
+
   // ── Components / Recipe ───────────────────────────────────────────────────
   readonly components = signal<ProductComponentDto[]>([]);
   readonly componentsState = signal<LoadState>('loading');
-  readonly newComponentProductUid = signal('');
+  /** Free-text search query for the component picker. */
+  readonly componentSearchQ = signal('');
+  /** Results from the debounced component search. */
+  readonly componentResults = signal<ProductModel[]>([]);
+  /** The product selected from componentResults; holds uid + display label. */
+  readonly selectedComponent = signal<{ uid: string; label: string } | null>(null);
   readonly newComponentQuantity = signal('');
   readonly addingComponent = signal(false);
   readonly componentFormError = signal<string | null>(null);
   readonly rowBusyComponentId = signal<string | null>(null);
+
+  private readonly componentSearch$ = new Subject<string>();
 
   // ── Branch associations ────────────────────────────────────────────────────
   readonly branches = signal<ProductBranchDto[]>([]);
@@ -154,6 +168,32 @@ export class ProductDetailComponent {
   }
 
   constructor() {
+    // Debounced component-product search (Fix 2).
+    this.componentSearch$
+      .pipe(
+        debounceTime(300),
+        distinctUntilChanged(),
+        switchMap((q) => {
+          const companyId = this.product()?.companyId;
+          if (!companyId || !q.trim()) {
+            this.componentResults.set([]);
+            return [];
+          }
+          return this.productService.list(companyId, q.trim(), 0, 10);
+        }),
+        takeUntilDestroyed(),
+      )
+      .subscribe({
+        next: ({ rows }) => {
+          const currentUid = this.product()?.uid;
+          // BR-PROD-05: exclude self; exclude ARCHIVED.
+          this.componentResults.set(
+            rows.filter((r) => r.uid !== currentUid && r.status !== 'ARCHIVED'),
+          );
+        },
+        error: () => this.componentResults.set([]),
+      });
+
     queueMicrotask(() => this.init());
   }
 
@@ -174,10 +214,27 @@ export class ProductDetailComponent {
         this.product.set(p);
         this.productState.set('idle');
         this.patchForm(p);
-        // Load price lists for the product's company.
+        // Load price lists and units for the product's company.
         this.loadPriceLists(p.companyId);
+        this.loadUnits(p.companyId);
       },
       error: () => this.productState.set('error'),
+    });
+  }
+
+  private loadUnits(companyId: string): void {
+    this.unitsState.set('loading');
+    this.productService.listUnits(companyId).subscribe({
+      next: ({ rows }) => {
+        this.companyUnits.set(rows.filter((u) => u.status === 'ACTIVE'));
+        this.unitsState.set('idle');
+        // Preselect the product's current base unit once units are loaded.
+        const p = this.product();
+        if (p && !this.fBaseUnitUid()) {
+          this.fBaseUnitUid.set(p.baseUnitUid ?? '');
+        }
+      },
+      error: () => this.unitsState.set('error'),
     });
   }
 
@@ -187,7 +244,7 @@ export class ProductDetailComponent {
     this.fType.set(p.type);
     this.fSellable.set(p.sellable);
     this.fStockable.set(p.stockable);
-    this.fBaseUnit.set(p.baseUnit ?? '');
+    this.fBaseUnitUid.set(p.baseUnitUid ?? '');
     this.fCostAmount.set(p.cost?.amount ?? '');
     this.fCostCurrency.set(p.cost?.currency ?? 'TZS');
   }
@@ -264,18 +321,18 @@ export class ProductDetailComponent {
   }
 
   addBulkPack(): void {
-    const name = this.newBulkPackName().trim();
+    const unitUid = this.newBulkPackUnitUid();
     const factor = this.newBulkPackFactor().trim();
-    if (!name || !factor) {
-      this.bulkPackFormError.set('Name and factor are required.');
+    if (!unitUid || !factor) {
+      this.bulkPackFormError.set('Unit and factor are required.');
       return;
     }
     this.addingBulkPack.set(true);
     this.bulkPackFormError.set(null);
-    const request: CreateBulkPackRequest = { name, factorToBase: factor };
+    const request: CreateBulkPackRequest = { unitUid, factorToBase: factor };
     this.productService.addBulkPack(this.uid(), request).subscribe({
       next: () => {
-        this.newBulkPackName.set('');
+        this.newBulkPackUnitUid.set('');
         this.newBulkPackFactor.set('');
         this.addingBulkPack.set(false);
         this.alerts.success('Bulk pack added');
@@ -380,19 +437,34 @@ export class ProductDetailComponent {
     });
   }
 
+  onComponentSearchChange(q: string): void {
+    this.componentSearchQ.set(q);
+    // Clear the selection when the user edits the search box.
+    this.selectedComponent.set(null);
+    this.componentSearch$.next(q);
+  }
+
+  selectComponent(product: ProductModel): void {
+    this.selectedComponent.set({ uid: product.uid, label: `${product.code} — ${product.name}` });
+    this.componentResults.set([]);
+    this.componentSearchQ.set(`${product.code} — ${product.name}`);
+  }
+
   addComponent(): void {
-    const componentProductUid = this.newComponentProductUid().trim();
+    const selected = this.selectedComponent();
     const quantity = this.newComponentQuantity().trim();
-    if (!componentProductUid || !quantity) {
-      this.componentFormError.set('Component product UID and quantity are required.');
+    if (!selected || !quantity) {
+      this.componentFormError.set('Select a component product and enter a quantity.');
       return;
     }
     this.addingComponent.set(true);
     this.componentFormError.set(null);
-    const request: AddComponentRequest = { componentProductUid, quantity };
+    const request: AddComponentRequest = { componentProductUid: selected.uid, quantity };
     this.productService.addComponent(this.uid(), request).subscribe({
       next: () => {
-        this.newComponentProductUid.set('');
+        this.selectedComponent.set(null);
+        this.componentSearchQ.set('');
+        this.componentResults.set([]);
         this.newComponentQuantity.set('');
         this.addingComponent.set(false);
         this.alerts.success('Component added');
@@ -533,8 +605,8 @@ export class ProductDetailComponent {
       this.saveError.set('Name is required.');
       return;
     }
-    const baseUnit = this.fBaseUnit().trim();
-    if (!baseUnit) {
+    const baseUnitUid = this.fBaseUnitUid();
+    if (!baseUnitUid) {
       this.saveError.set('Base unit is required.');
       return;
     }
@@ -553,7 +625,7 @@ export class ProductDetailComponent {
       sellable: this.fSellable(),
       // BR-PROD-01: SERVICE is never stockable regardless of checkbox.
       stockable: this.fType() === 'SERVICE' ? false : this.fStockable(),
-      baseUnit,
+      baseUnitUid,
       cost,
     };
 

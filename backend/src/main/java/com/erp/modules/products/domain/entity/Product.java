@@ -11,6 +11,9 @@ import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import lombok.Getter;
@@ -59,10 +62,14 @@ public class Product extends UidEntity {
     @Setter
     private boolean stockable = true;
 
-    /** Base unit of measure label (D-3, FR-PROD-05). */
-    @Column(name = "base_unit", nullable = false, length = 40)
+    /**
+     * FK → units_of_measure.id; base unit of measure (D-3, FR-PROD-05, UoM cutover).
+     * Loaded LAZY; use the convenience accessors on ProductDto for code/name.
+     */
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "base_unit_id", nullable = false)
     @Setter
-    private String baseUnit;
+    private UnitOfMeasure baseUnit;
 
     /**
      * Cost price — null when not set (ADR-0005 D-1).
@@ -100,7 +107,7 @@ public class Product extends UidEntity {
     }
 
     public Product(Long companyId, String code, String name, ProductType type,
-                   boolean sellable, boolean stockable, String baseUnit, Long createdBy) {
+                   boolean sellable, boolean stockable, UnitOfMeasure baseUnit, Long createdBy) {
         this.companyId = companyId;
         this.code = code;
         this.name = name;

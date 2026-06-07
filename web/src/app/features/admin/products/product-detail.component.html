@@ -101,10 +101,22 @@
             <label class="form-label small text-muted mb-1" for="fBaseUnit">
               Base unit <span aria-hidden="true" class="text-danger">*</span>
             </label>
-            <input id="fBaseUnit" name="fBaseUnit" type="text" class="form-control"
-                   placeholder="e.g. PCS"
-                   [ngModel]="fBaseUnit()" (ngModelChange)="fBaseUnit.set($event)"
-                   required [disabled]="saving() || !canManage()" />
+            @if (unitsState() === 'loading') {
+              <div class="form-control d-flex align-items-center gap-2 text-muted small">
+                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+              </div>
+            } @else if (unitsState() === 'error') {
+              <p class="text-danger small mb-0" role="alert">Could not load units.</p>
+            } @else {
+              <select id="fBaseUnit" name="fBaseUnit" class="form-select"
+                      [ngModel]="fBaseUnitUid()" (ngModelChange)="fBaseUnitUid.set($event)"
+                      required [disabled]="saving() || !canManage()">
+                <option value="">— select unit —</option>
+                @for (u of companyUnits(); track u.uid) {
+                  <option [value]="u.uid">{{ u.code }} — {{ u.name }}</option>
+                }
+              </select>
+            }
           </div>
 
           <!-- Sellable -->
@@ -297,7 +309,7 @@
                 <caption class="sr-only">Bulk packs for this product</caption>
                 <thead>
                   <tr>
-                    <th scope="col">Name</th>
+                    <th scope="col">Unit</th>
                     <th scope="col">Factor to base</th>
                     @if (canManage()) {
                       <th scope="col"><span class="sr-only">Actions</span></th>
@@ -307,14 +319,14 @@
                 <tbody>
                   @for (bp of bulkPacks(); track bp.uid) {
                     <tr>
-                      <td>{{ bp.name }}</td>
+                      <td class="font-monospace">{{ bp.unitCode }} — {{ bp.unitName }}</td>
                       <td class="font-monospace">{{ bp.factorToBase }}</td>
                       @if (canManage()) {
                         <td>
                           <button type="button" class="btn btn-sm btn-outline-danger"
                                   [disabled]="rowBusyBulkPackId() !== null"
                                   (click)="removeBulkPack(bp)"
-                                  [attr.aria-label]="'Remove bulk pack ' + bp.name">
+                                  [attr.aria-label]="'Remove bulk pack ' + bp.unitCode">
                             @if (rowBusyBulkPackId() === bp.uid) {
                               <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
                             }
@@ -336,13 +348,28 @@
           <h3 class="h6 mb-3">Add Bulk Pack</h3>
           <div class="row g-2 align-items-end">
             <div class="col-sm-4">
-              <label class="form-label small text-muted mb-1" for="newBulkPackName">
-                Name <span class="text-danger" aria-hidden="true">*</span>
+              <label class="form-label small text-muted mb-1" for="newBulkPackUnit">
+                Unit <span class="text-danger" aria-hidden="true">*</span>
               </label>
-              <input id="newBulkPackName" name="newBulkPackName" type="text" class="form-control"
-                     placeholder="e.g. Carton"
-                     [ngModel]="newBulkPackName()" (ngModelChange)="newBulkPackName.set($event)"
-                     [disabled]="addingBulkPack()" autocomplete="off" />
+              @if (unitsState() === 'loading') {
+                <div class="form-control d-flex align-items-center gap-2 text-muted small">
+                  <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+                </div>
+              } @else if (companyUnits().length === 0) {
+                <p class="text-muted small mb-0 mt-1">
+                  No units yet.
+                  <a routerLink="/admin/units">Create units first</a>
+                </p>
+              } @else {
+                <select id="newBulkPackUnit" name="newBulkPackUnit" class="form-select"
+                        [ngModel]="newBulkPackUnitUid()" (ngModelChange)="newBulkPackUnitUid.set($event)"
+                        [disabled]="addingBulkPack()">
+                  <option value="">— select unit —</option>
+                  @for (u of companyUnits(); track u.uid) {
+                    <option [value]="u.uid">{{ u.code }} — {{ u.name }}</option>
+                  }
+                </select>
+              }
             </div>
             <div class="col-sm-3">
               <label class="form-label small text-muted mb-1" for="newBulkPackFactor">
@@ -560,13 +587,34 @@
           <h3 class="h6 mb-3">Add Component</h3>
           <div class="row g-2 align-items-end">
             <div class="col-sm-5">
-              <label class="form-label small text-muted mb-1" for="newComponentUid">
-                Component product UID <span class="text-danger" aria-hidden="true">*</span>
+              <label class="form-label small text-muted mb-1" for="componentSearch">
+                Search product <span class="text-danger" aria-hidden="true">*</span>
               </label>
-              <input id="newComponentUid" name="newComponentUid" type="text" class="form-control"
-                     placeholder="Product UID"
-                     [ngModel]="newComponentProductUid()" (ngModelChange)="newComponentProductUid.set($event)"
+              <input id="componentSearch" name="componentSearch" type="search" class="form-control"
+                     placeholder="Type to search…"
+                     [ngModel]="componentSearchQ()" (ngModelChange)="onComponentSearchChange($event)"
                      [disabled]="addingComponent()" autocomplete="off" />
+              @if (componentResults().length > 0) {
+                <ul class="list-group mt-1 position-absolute z-3 w-auto"
+                    aria-label="Product search results"
+                    style="max-width:400px; max-height:200px; overflow-y:auto">
+                  @for (r of componentResults(); track r.uid) {
+                    <li class="list-group-item list-group-item-action p-2">
+                      <button type="button" class="btn btn-link p-0 text-start w-100 text-decoration-none text-body"
+                              (click)="selectComponent(r)"
+                              [attr.aria-label]="'Select component ' + r.code + ' ' + r.name">
+                        <span class="font-monospace small me-2">{{ r.code }}</span>{{ r.name }}
+                      </button>
+                    </li>
+                  }
+                </ul>
+              }
+              @if (selectedComponent()) {
+                <p class="text-success small mt-1 mb-0">
+                  <i class="bi bi-check-circle-fill me-1" aria-hidden="true"></i>
+                  Selected: {{ selectedComponent()!.label }}
+                </p>
+              }
             </div>
             <div class="col-sm-3">
               <label class="form-label small text-muted mb-1" for="newComponentQty">
@@ -578,7 +626,8 @@
                      [disabled]="addingComponent()" autocomplete="off" />
             </div>
             <div class="col-sm-4">
-              <button type="submit" class="btn btn-primary w-100" [disabled]="addingComponent()">
+              <button type="submit" class="btn btn-primary w-100"
+                      [disabled]="addingComponent() || !selectedComponent() || !newComponentQuantity().trim()">
                 @if (addingComponent()) {
                   <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
                   Adding…

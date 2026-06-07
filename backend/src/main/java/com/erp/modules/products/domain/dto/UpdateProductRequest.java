@@ -8,6 +8,7 @@ import jakarta.validation.constraints.NotNull;
 /**
  * Request DTO to update an existing Product's profile.
  * code and companyId are not updatable (BR-PROD-02/08).
+ * {@code baseUnitUid} references a UnitOfMeasure uid scoped to the same company (UoM cutover).
  */
 public record UpdateProductRequest(
         @NotBlank String name,
@@ -15,7 +16,7 @@ public record UpdateProductRequest(
         @NotNull ProductType type,
         boolean sellable,
         boolean stockable,
-        @NotBlank String baseUnit,
+        @NotBlank String baseUnitUid,
         MoneyDto cost
 ) {
 }

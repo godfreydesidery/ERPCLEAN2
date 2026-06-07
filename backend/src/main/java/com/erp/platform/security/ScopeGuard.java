@@ -8,6 +8,7 @@ import com.erp.modules.parties.repository.OtherPartyRepository;
 import com.erp.modules.parties.repository.SupplierRepository;
 import com.erp.modules.products.repository.PriceListRepository;
 import com.erp.modules.products.repository.ProductRepository;
+import com.erp.modules.products.repository.UnitOfMeasureRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -38,6 +39,7 @@ public class ScopeGuard {
     private final OtherPartyRepository otherParties;
     private final ProductRepository products;
     private final PriceListRepository priceLists;
+    private final UnitOfMeasureRepository units;
     private final AuditService audit;
 
     public ScopeGuard(CompanyRepository companies,
@@ -48,6 +50,7 @@ public class ScopeGuard {
                       OtherPartyRepository otherParties,
                       ProductRepository products,
                       PriceListRepository priceLists,
+                      UnitOfMeasureRepository units,
                       AuditService audit) {
         this.companies = companies;
         this.branches = branches;
@@ -57,6 +60,7 @@ public class ScopeGuard {
         this.otherParties = otherParties;
         this.products = products;
         this.priceLists = priceLists;
+        this.units = units;
         this.audit = audit;
     }
 
@@ -78,6 +82,7 @@ public class ScopeGuard {
             case "otherparty"  -> otherParties.findCompanyIdByUid(uid);
             case "product"     -> products.findCompanyIdByUid(uid);
             case "pricelist"   -> priceLists.findCompanyIdByUid(uid);
+            case "unit"        -> units.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };

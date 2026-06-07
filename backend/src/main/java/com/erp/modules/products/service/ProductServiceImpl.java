@@ -20,6 +20,7 @@ import com.erp.modules.products.domain.entity.ProductBranch;
 import com.erp.modules.products.domain.entity.ProductBulkPack;
 import com.erp.modules.products.domain.entity.ProductComponent;
 import com.erp.modules.products.domain.entity.ProductPrice;
+import com.erp.modules.products.domain.entity.UnitOfMeasure;
 import com.erp.modules.products.repository.PriceListRepository;
 import com.erp.modules.products.repository.ProductBarcodeRepository;
 import com.erp.modules.products.repository.ProductBranchRepository;
@@ -27,6 +28,7 @@ import com.erp.modules.products.repository.ProductBulkPackRepository;
 import com.erp.modules.products.repository.ProductComponentRepository;
 import com.erp.modules.products.repository.ProductPriceRepository;
 import com.erp.modules.products.repository.ProductRepository;
+import com.erp.modules.products.repository.UnitOfMeasureRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -50,6 +52,7 @@ import org.springframework.transaction.annotation.Transactional;
  * Security: assertCanActIn on every read path (brief §3.1 — three patched findings).
  * Guards: ProductBranchGuard (BR-PROD-09), ProductCompositionGuard (BR-PROD-05/06).
  * Denormalisation invariant: barcode/price company_id always set from product.companyId.
+ * UoM cutover: baseUnit resolved via units.findByCompanyIdAndUid (cross-tenant safe, brief §F15).
  */
 @Service
 @Transactional
@@ -62,6 +65,7 @@ public class ProductServiceImpl implements ProductService {
     private final ProductPriceRepository prices;
     private final ProductComponentRepository components;
     private final PriceListRepository priceLists;
+    private final UnitOfMeasureRepository units;
     private final CompanyRepository companies;
     private final ProductCodeGenerator codeGen;
     private final ProductBranchGuard branchGuard;
@@ -76,6 +80,7 @@ public class ProductServiceImpl implements ProductService {
                               ProductPriceRepository prices,
                               ProductComponentRepository components,
                               PriceListRepository priceLists,
+                              UnitOfMeasureRepository units,
                               CompanyRepository companies,
                               ProductCodeGenerator codeGen,
                               ProductBranchGuard branchGuard,
@@ -89,6 +94,7 @@ public class ProductServiceImpl implements ProductService {
         this.prices = prices;
         this.components = components;
         this.priceLists = priceLists;
+        this.units = units;
         this.companies = companies;
         this.codeGen = codeGen;
         this.branchGuard = branchGuard;
@@ -107,9 +113,15 @@ public class ProductServiceImpl implements ProductService {
         Long companyId = resolveCompanyId(req.companyUid());
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
 
-        String code = codeGen.next(companyId);
+        // Resolve baseUnitUid scoped to this company (cross-tenant safe — brief §F15 pattern)
+        UnitOfMeasure baseUnit = resolveUnit(companyId, req.baseUnitUid());
+
+        // Code: optional user override (hybrid). Blank → auto-assign PROD-#### (FR-PROD-23);
+        // a supplied value is trimmed/uppercased and must be unique per company (BR-PROD-08).
+        // uq_product_company_code is the DB backstop against a concurrent duplicate.
+        String code = resolveCode(companyId, req.code());
         Product p = new Product(companyId, code, req.name(), req.type(),
-                req.sellable(), req.stockable(), req.baseUnit(), actorId());
+                req.sellable(), req.stockable(), baseUnit, actorId());
         p.setDescription(req.description());
         p.setCost(MoneyDto.toMoney(req.cost()));
 
@@ -148,12 +160,15 @@ public class ProductServiceImpl implements ProductService {
         Product p = require(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), p.getCompanyId());
 
+        // Resolve baseUnitUid scoped to the product's company (cross-tenant safe)
+        UnitOfMeasure baseUnit = resolveUnit(p.getCompanyId(), req.baseUnitUid());
+
         p.setName(req.name());
         p.setDescription(req.description());
         p.setType(req.type());
         p.setSellable(req.sellable());
         p.setStockable(req.stockable());
-        p.setBaseUnit(req.baseUnit());
+        p.setBaseUnit(baseUnit);
         p.setCost(MoneyDto.toMoney(req.cost()));
         p.setUpdatedAt(Instant.now());
         p.setUpdatedBy(actorId());
@@ -234,9 +249,13 @@ public class ProductServiceImpl implements ProductService {
     public ProductBulkPackDto addBulkPack(String uid, CreateBulkPackRequest req) {
         Product p = require(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), p.getCompanyId());
-        ProductBulkPack bp = bulkPacks.save(new ProductBulkPack(p, req.name(), req.factorToBase(), actorId()));
+
+        // Resolve unitUid scoped to the product's company (cross-tenant safe — brief addBulkPack_crossCompanyUnit)
+        UnitOfMeasure unit = resolveUnit(p.getCompanyId(), req.unitUid());
+
+        ProductBulkPack bp = bulkPacks.save(new ProductBulkPack(p, unit, req.factorToBase(), actorId()));
         audit.record(AuditEvent.of(AuditActions.PRODUCT_UPDATE, "products", p.getId(), p.getUid())
-                .detail(Map.of("action", "BULK_PACK_ADD", "packName", req.name())));
+                .detail(Map.of("action", "BULK_PACK_ADD", "unitUid", req.unitUid())));
         return ProductBulkPackDto.from(bp);
     }
 
@@ -244,8 +263,7 @@ public class ProductServiceImpl implements ProductService {
     public void removeBulkPack(String productUid, String bulkPackUid) {
         Product p = require(productUid);
         scopeGuard.assertCanActIn(RequestContext.get(), p.getCompanyId());
-        // Security: resolve the child scoped to its parent product (SR finding 2) — a global
-        // findByUid would let a caller delete another product's (or tenant's) bulk pack via this URL.
+        // Security: resolve the child scoped to its parent product (SR finding F16).
         ProductBulkPack bp = bulkPacks.findByUidAndProductId(bulkPackUid, p.getId())
                 .orElseThrow(() -> new NotFoundException("BulkPack not found: " + bulkPackUid));
         bulkPacks.delete(bp);
@@ -284,8 +302,7 @@ public class ProductServiceImpl implements ProductService {
     public void removeBarcode(String productUid, String barcodeUid) {
         Product p = require(productUid);
         scopeGuard.assertCanActIn(RequestContext.get(), p.getCompanyId());
-        // Security: resolve the child scoped to its parent product (SR finding 2) — a global
-        // findByUid would let a caller delete another product's (or tenant's) barcode via this URL.
+        // Security: resolve the child scoped to its parent product (SR finding F16).
         ProductBarcode barcode = barcodes.findByUidAndProductId(barcodeUid, p.getId())
                 .orElseThrow(() -> new NotFoundException("Barcode not found: " + barcodeUid));
         barcodes.delete(barcode);
@@ -308,7 +325,7 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Transactional(readOnly = true)
     public ProductBarcodeDto lookupBarcode(Long companyId, String barcode) {
-        // Security fix (barcode lookup): constrain by active company — cross-tenant leak if not (brief §3.1)
+        // Security fix (barcode lookup): constrain by active company — cross-tenant leak if not.
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
         return barcodes.findByCompanyIdAndBarcode(companyId, barcode)
                 .map(ProductBarcodeDto::from)
@@ -324,9 +341,7 @@ public class ProductServiceImpl implements ProductService {
         Product p = require(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), p.getCompanyId());
 
-        // Security: resolve the price list scoped to the product's company (SR finding 1, BR-PROD-06/09).
-        // A global findByUid would let a caller link a product to another tenant's price list, leaking
-        // that price list's code/name on every price read and creating a corrupt cross-tenant FK.
+        // Security: resolve price list scoped to the product's company (SR finding F15).
         var priceList = priceLists.findByCompanyIdAndUid(p.getCompanyId(), req.priceListUid())
                 .orElseThrow(() -> new NotFoundException("PriceList not found: " + req.priceListUid()));
 
@@ -350,7 +365,7 @@ public class ProductServiceImpl implements ProductService {
     public void removePrice(String productUid, String priceListUid) {
         Product p = require(productUid);
         scopeGuard.assertCanActIn(RequestContext.get(), p.getCompanyId());
-        // Security: scope the price list to the product's company (SR finding 1).
+        // Security: scope the price list to the product's company (SR finding F15).
         var priceList = priceLists.findByCompanyIdAndUid(p.getCompanyId(), priceListUid)
                 .orElseThrow(() -> new NotFoundException("PriceList not found: " + priceListUid));
         prices.findByProductIdAndPriceListId(p.getId(), priceList.getId())
@@ -442,6 +457,31 @@ public class ProductServiceImpl implements ProductService {
         return companies.findByUid(companyUid)
                 .map(c -> c.getId())
                 .orElseThrow(() -> new NotFoundException("Company not found: " + companyUid));
+    }
+
+    /**
+     * Hybrid product code: a blank request code auto-assigns the next PROD-#### for the company
+     * (FR-PROD-23); a supplied code is trimmed/uppercased and must be unique within the company
+     * (BR-PROD-08). The uq_product_company_code constraint is the DB backstop against a race.
+     */
+    private String resolveCode(Long companyId, String requestedCode) {
+        if (requestedCode == null || requestedCode.isBlank()) {
+            return codeGen.next(companyId);
+        }
+        String code = requestedCode.trim().toUpperCase();
+        if (products.existsByCompanyIdAndCode(companyId, code)) {
+            throw new ConflictException("Product code already exists in this company: " + code);
+        }
+        return code;
+    }
+
+    /**
+     * Resolve a UnitOfMeasure uid scoped to {@code companyId} — cross-tenant safe (brief §F15 pattern).
+     * Throws NotFoundException (mapped to 404) if the uid belongs to a different company or doesn't exist.
+     */
+    private UnitOfMeasure resolveUnit(Long companyId, String unitUid) {
+        return units.findByCompanyIdAndUid(companyId, unitUid)
+                .orElseThrow(() -> new NotFoundException("UnitOfMeasure not found: " + unitUid));
     }
 
     private Long actorId() {

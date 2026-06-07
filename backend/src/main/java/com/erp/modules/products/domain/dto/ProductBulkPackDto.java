@@ -3,12 +3,17 @@ package com.erp.modules.products.domain.dto;
 import com.erp.modules.products.domain.entity.ProductBulkPack;
 import java.math.BigDecimal;
 
-/** Response DTO for a product bulk pack unit (FR-PROD-06). */
+/**
+ * Response DTO for a product bulk pack unit (FR-PROD-06).
+ * unitUid/unitCode/unitName are enriched from the UnitOfMeasure association (UoM cutover).
+ */
 public record ProductBulkPackDto(
         Long id,
         String uid,
         Long productId,
-        String name,
+        String unitUid,
+        String unitCode,
+        String unitName,
         BigDecimal factorToBase
 ) {
 
@@ -17,7 +22,9 @@ public record ProductBulkPackDto(
                 bp.getId(),
                 bp.getUid(),
                 bp.getProduct().getId(),
-                bp.getName(),
+                bp.getUnit() != null ? bp.getUnit().getUid()  : null,
+                bp.getUnit() != null ? bp.getUnit().getCode() : null,
+                bp.getUnit() != null ? bp.getUnit().getName() : null,
                 bp.getFactorToBase()
         );
     }

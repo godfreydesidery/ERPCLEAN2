@@ -14,6 +14,7 @@ import {
   ProductModel,
   ProductStatus,
   ProductType,
+  UnitOfMeasureDto,
 } from '../models/product.model';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
@@ -62,17 +63,23 @@ export class ProductListComponent {
   readonly barcodeState = signal<'idle' | 'loading' | 'notfound' | 'error'>('idle');
 
   // ── Create form ────────────────────────────────────────────────────────────
+  /** Optional product code; blank → backend auto-assigns PROD-####. */
+  readonly newCode = signal('');
   readonly newName = signal('');
   readonly newDescription = signal('');
   readonly newType = signal<ProductType>('GOODS');
   readonly newSellable = signal(true);
   readonly newStockable = signal(true);
-  readonly newBaseUnit = signal('');
+  readonly newBaseUnitUid = signal('');
   readonly newCostAmount = signal('');
   readonly newCostCurrency = signal('TZS');
   readonly saving = signal(false);
   readonly formError = signal<string | null>(null);
   readonly showCreateForm = signal(false);
+
+  // ── Company units (for base-unit <select>) ────────────────────────────────
+  readonly companyUnits = signal<UnitOfMeasureDto[]>([]);
+  readonly unitsState = signal<'idle' | 'loading' | 'error'>('idle');
 
   // BR-PROD-01: SERVICE cannot be stockable.
   readonly stockableDisabled = computed(() => this.newType() === 'SERVICE');
@@ -125,6 +132,7 @@ export class ProductListComponent {
             this.companyState.set('idle');
             if (list.length > 0) {
               this.selectedCompanyId.set(list[0].id);
+              this.loadUnits(list[0].id);
               this.load(0);
             }
           },
@@ -137,7 +145,22 @@ export class ProductListComponent {
 
   onCompanyChange(id: string): void {
     this.selectedCompanyId.set(id);
-    if (id) this.load(0);
+    if (id) {
+      this.newBaseUnitUid.set('');
+      this.loadUnits(id);
+      this.load(0);
+    }
+  }
+
+  private loadUnits(companyId: string): void {
+    this.unitsState.set('loading');
+    this.productService.listUnits(companyId).subscribe({
+      next: ({ rows }) => {
+        this.companyUnits.set(rows.filter((u) => u.status === 'ACTIVE'));
+        this.unitsState.set('idle');
+      },
+      error: () => this.unitsState.set('error'),
+    });
   }
 
   applySearch(): void {
@@ -201,12 +224,13 @@ export class ProductListComponent {
   }
 
   private resetCreateForm(): void {
+    this.newCode.set('');
     this.newName.set('');
     this.newDescription.set('');
     this.newType.set('GOODS');
     this.newSellable.set(true);
     this.newStockable.set(true);
-    this.newBaseUnit.set('');
+    this.newBaseUnitUid.set('');
     this.newCostAmount.set('');
     this.newCostCurrency.set('TZS');
   }
@@ -222,13 +246,13 @@ export class ProductListComponent {
   create(): void {
     const companyId = this.selectedCompanyId();
     const name = this.newName().trim();
-    const baseUnit = this.newBaseUnit().trim();
+    const baseUnitUid = this.newBaseUnitUid();
 
     if (!companyId || !name) {
       this.formError.set('Company and name are required.');
       return;
     }
-    if (!baseUnit) {
+    if (!baseUnitUid) {
       this.formError.set('Base unit is required.');
       return;
     }
@@ -250,13 +274,15 @@ export class ProductListComponent {
 
     const request: CreateProductRequest = {
       companyUid: company.uid,
+      // Optional code; blank → backend auto-assigns PROD-####.
+      code: this.newCode().trim() || undefined,
       name,
       description: this.newDescription().trim() || undefined,
       type: this.newType(),
       sellable: this.newSellable(),
       // BR-PROD-01: SERVICE is never stockable regardless of checkbox.
       stockable: this.newType() === 'SERVICE' ? false : this.newStockable(),
-      baseUnit,
+      baseUnitUid,
       cost,
     };
 

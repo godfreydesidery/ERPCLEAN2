@@ -119,5 +119,11 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./products/price-list-list.component').then((m) => m.PriceListListComponent),
   },
+  {
+    path: 'units',
+    canActivate: [requirePermission('UOM.VIEW')],
+    loadComponent: () =>
+      import('./products/units-of-measure-list.component').then((m) => m.UnitsOfMeasureListComponent),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];

@@ -16,11 +16,13 @@ import com.erp.modules.products.domain.dto.AssignProductBranchRequest;
 import com.erp.modules.products.domain.dto.CreateBulkPackRequest;
 import com.erp.modules.products.domain.dto.CreatePriceListRequest;
 import com.erp.modules.products.domain.dto.CreateProductRequest;
+import com.erp.modules.products.domain.dto.CreateUnitOfMeasureRequest;
 import com.erp.modules.products.domain.dto.PriceListDto;
 import com.erp.modules.products.domain.dto.ProductBarcodeDto;
 import com.erp.modules.products.domain.dto.ProductBulkPackDto;
 import com.erp.modules.products.domain.dto.ProductDto;
 import com.erp.modules.products.domain.dto.SetProductPriceRequest;
+import com.erp.modules.products.domain.dto.UnitOfMeasureDto;
 import com.erp.modules.products.domain.enums.ProductType;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditLog;
@@ -47,11 +49,14 @@ import org.springframework.security.crypto.password.PasswordEncoder;
  * <p>Covers: per-company PROD-#### code generation; cross-tenant list blocked; getByUid scope;
  * child-list scope; barcode-lookup scope; DB CHECK/unique fires; guards throw cross-company;
  * numbering per-company isolation; denormalisation invariant; audit written on create.
+ * UoM cutover: goodsRequest() uses baseUnitUid; bulk-pack tests pass unitUid.
+ * Regression: setBaseUnit_crossCompanyUnit, addBulkPack_crossCompanyUnit (brief §Tests).
  */
 class ProductServiceImplIT extends PostgresIntegrationTest {
 
     @Autowired private ProductService productService;
     @Autowired private PriceListService priceListService;
+    @Autowired private UnitOfMeasureService unitService;
     @Autowired private AuditRepository auditRepository;
     @Autowired private OrganisationRepository organisations;
     @Autowired private CompanyRepository companies;
@@ -64,6 +69,8 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
     private Company companyA;
     private Branch branchA;
     private Long rootId;
+    /** A PCS unit seeded in companyA — used by goodsRequest(). */
+    private String pcsUid;
 
     @BeforeEach
     void setUp() {
@@ -81,6 +88,11 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
 
         RequestContext.set(new RequestContext.Principal(
                 rootId, "prod_root", true, companyA.getId(), branchA.getId(), null));
+
+        // Seed a default unit for companyA so goodsRequest() has a valid baseUnitUid (UoM cutover).
+        UnitOfMeasureDto pcs = unitService.create(
+                new CreateUnitOfMeasureRequest(companyA.getUid(), "PCS", "Pieces"));
+        pcsUid = pcs.uid();
     }
 
     @AfterEach
@@ -103,6 +115,10 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
         assertThat(dto.stockable()).isTrue();
         assertThat(dto.status()).isEqualTo(MasterStatus.ACTIVE);
         assertThat(dto.uid()).isNotBlank();
+        // UoM enrichment
+        assertThat(dto.baseUnitUid()).isEqualTo(pcsUid);
+        assertThat(dto.baseUnitCode()).isEqualTo("PCS");
+        assertThat(dto.baseUnitName()).isEqualTo("Pieces");
     }
 
     @Test
@@ -110,6 +126,30 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
         productService.create(goodsRequest(companyA.getUid(), "Item One"));
         ProductDto second = productService.create(goodsRequest(companyA.getUid(), "Item Two"));
         assertThat(second.code()).isEqualTo("PROD-0002");
+    }
+
+    // -----------------------------------------------------------------------
+    // Hybrid code: optional user-supplied code (blank → auto), uppercased, unique per company
+    // -----------------------------------------------------------------------
+
+    @Test
+    void create_withSuppliedCode_usesItUppercased() {
+        ProductDto dto = productService.create(new CreateProductRequest(
+                companyA.getUid(), "wtr-500", "Water 500ml", null,
+                ProductType.GOODS, true, true, pcsUid, null));
+        assertThat(dto.code()).isEqualTo("WTR-500");
+    }
+
+    @Test
+    void create_withDuplicateSuppliedCode_throwsConflict() {
+        productService.create(new CreateProductRequest(
+                companyA.getUid(), "DUP-1", "First", null,
+                ProductType.GOODS, true, true, pcsUid, null));
+
+        assertThatThrownBy(() -> productService.create(new CreateProductRequest(
+                companyA.getUid(), "dup-1", "Second", null,
+                ProductType.GOODS, true, true, pcsUid, null)))
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class);
     }
 
     // -----------------------------------------------------------------------
@@ -123,9 +163,14 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
 
         ProductDto prodA = productService.create(goodsRequest(companyA.getUid(), "A Item"));
 
+        // Switch to companyB context and seed a unit for it
         RequestContext.set(new RequestContext.Principal(
                 rootId, "prod_root", true, companyB.getId(), branchB.getId(), null));
-        ProductDto prodB = productService.create(goodsRequest(companyB.getUid(), "B Item"));
+        UnitOfMeasureDto pcsB = unitService.create(
+                new CreateUnitOfMeasureRequest(companyB.getUid(), "PCS", "Pieces"));
+        ProductDto prodB = productService.create(
+                new CreateProductRequest(companyB.getUid(), null, "B Item", null,
+                        ProductType.GOODS, true, true, pcsB.uid(), null));
 
         assertThat(prodA.code()).isEqualTo("PROD-0001");
         assertThat(prodB.code()).isEqualTo("PROD-0001");
@@ -145,7 +190,10 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
 
         RequestContext.set(new RequestContext.Principal(
                 rootId, "prod_root", true, companyB.getId(), branchB.getId(), null));
-        productService.create(goodsRequest(companyB.getUid(), "B Product"));
+        UnitOfMeasureDto pcsB = unitService.create(
+                new CreateUnitOfMeasureRequest(companyB.getUid(), "PCS", "Pieces"));
+        productService.create(new CreateProductRequest(companyB.getUid(), null, "B Product", null,
+                ProductType.GOODS, true, true, pcsB.uid(), null));
 
         // back to A context: list for A must see only A's product
         RequestContext.set(new RequestContext.Principal(
@@ -159,7 +207,6 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
     void list_crossCompany_withNonRootToken_throwsForbidden() {
         Company companyB = companies.save(new Company(org, "PRCD", "Product Co D"));
 
-        // Non-root principal locked to companyA
         com.erp.modules.iam.domain.entity.AppUser userA =
                 new com.erp.modules.iam.domain.entity.AppUser(
                         "user_a_pr", passwordEncoder.encode("Pass1!"), "User A");
@@ -181,12 +228,13 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
         Company companyB = companies.save(new Company(org, "PRCE", "Product Co E"));
         Branch branchB = branches.save(new Branch(companyB, "PR-E1", "Prod Branch E1"));
 
-        // Create product in companyB
         RequestContext.set(new RequestContext.Principal(
                 rootId, "prod_root", true, companyB.getId(), branchB.getId(), null));
-        ProductDto prodB = productService.create(goodsRequest(companyB.getUid(), "B Product E"));
+        UnitOfMeasureDto pcsB = unitService.create(
+                new CreateUnitOfMeasureRequest(companyB.getUid(), "PCS", "Pieces"));
+        ProductDto prodB = productService.create(new CreateProductRequest(
+                companyB.getUid(), null, "B Product E", null, ProductType.GOODS, true, true, pcsB.uid(), null));
 
-        // Switch to non-root companyA user
         com.erp.modules.iam.domain.entity.AppUser userA =
                 new com.erp.modules.iam.domain.entity.AppUser(
                         "user_a_pr2", passwordEncoder.encode("Pass1!"), "User A2");
@@ -209,9 +257,11 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
 
         RequestContext.set(new RequestContext.Principal(
                 rootId, "prod_root", true, companyB.getId(), branchB.getId(), null));
-        ProductDto prodB = productService.create(goodsRequest(companyB.getUid(), "B Product F"));
+        UnitOfMeasureDto pcsB = unitService.create(
+                new CreateUnitOfMeasureRequest(companyB.getUid(), "PCS", "Pieces"));
+        ProductDto prodB = productService.create(new CreateProductRequest(
+                companyB.getUid(), null, "B Product F", null, ProductType.GOODS, true, true, pcsB.uid(), null));
 
-        // Switch to non-root companyA user
         com.erp.modules.iam.domain.entity.AppUser userA =
                 new com.erp.modules.iam.domain.entity.AppUser(
                         "user_a_pr3", passwordEncoder.encode("Pass1!"), "User A3");
@@ -231,7 +281,6 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
     void lookupBarcode_crossCompany_throwsForbidden() {
         Company companyB = companies.save(new Company(org, "PRCG", "Product Co G"));
 
-        // Non-root user locked to companyA
         com.erp.modules.iam.domain.entity.AppUser userA =
                 new com.erp.modules.iam.domain.entity.AppUser(
                         "user_a_pr4", passwordEncoder.encode("Pass1!"), "User A4");
@@ -239,7 +288,6 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
         RequestContext.set(new RequestContext.Principal(
                 userA.getId(), "user_a_pr4", false, companyA.getId(), branchA.getId(), null));
 
-        // Try to look up barcode scoped to companyB
         assertThatThrownBy(() -> productService.lookupBarcode(companyB.getId(), "EAN-001"))
                 .isInstanceOf(ForbiddenException.class);
     }
@@ -251,12 +299,12 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
     @Test
     void create_serviceStockable_throwsConstraintViolation() {
         CreateProductRequest req = new CreateProductRequest(
-                companyA.getUid(), "Repair Service", null, ProductType.SERVICE,
+                companyA.getUid(), null, "Repair Service", null, ProductType.SERVICE,
                 true, true,  // stockable=true for a SERVICE → DB CHECK fails
-                "unit", null);
+                pcsUid, null);
 
         assertThatThrownBy(() -> productService.create(req))
-                .isInstanceOf(Exception.class); // DB constraint violation
+                .isInstanceOf(Exception.class);
     }
 
     // -----------------------------------------------------------------------
@@ -297,7 +345,10 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
 
         RequestContext.set(new RequestContext.Principal(
                 rootId, "prod_root", true, companyB.getId(), branchB.getId(), null));
-        ProductDto componentB = productService.create(goodsRequest(companyB.getUid(), "Component B"));
+        UnitOfMeasureDto pcsB = unitService.create(
+                new CreateUnitOfMeasureRequest(companyB.getUid(), "PCS", "Pieces"));
+        ProductDto componentB = productService.create(new CreateProductRequest(
+                companyB.getUid(), null, "Component B", null, ProductType.GOODS, true, true, pcsB.uid(), null));
 
         RequestContext.set(new RequestContext.Principal(
                 rootId, "prod_root", true, companyA.getId(), branchA.getId(), null));
@@ -396,8 +447,8 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
     @Test
     void create_withCost_costRoundTrips() {
         CreateProductRequest req = new CreateProductRequest(
-                companyA.getUid(), "Costed Product", null, ProductType.GOODS,
-                true, true, "piece", new MoneyDto("2500.00", "TZS"));
+                companyA.getUid(), null, "Costed Product", null, ProductType.GOODS,
+                true, true, pcsUid, new MoneyDto("2500.00", "TZS"));
 
         ProductDto dto = productService.create(req);
 
@@ -426,24 +477,20 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
 
     // -----------------------------------------------------------------------
     // Security regression — F15: price list must be same-company as the product
-    // (setPrice/removePrice must not resolve a cross-tenant price list)
     // -----------------------------------------------------------------------
 
     @Test
     void setPrice_crossCompanyPriceList_throwsNotFound() {
-        // company A product, company B price list — must NOT link (SR finding F15).
         Company companyB = companies.save(new Company(org, "PRCG", "Product Co G"));
         branches.save(new Branch(companyB, "PR-G1", "Prod Branch G1"));
 
         ProductDto prodA = productService.create(goodsRequest(companyA.getUid(), "Priced A"));
 
-        // create a price list owned by company B (root may act in B)
         RequestContext.set(new RequestContext.Principal(
                 rootId, "prod_root", true, companyB.getId(), null, null));
         PriceListDto plB = priceListService.create(
                 new CreatePriceListRequest(companyB.getUid(), "RETAIL_G", "Retail G"));
 
-        // back to acting in company A, try to price the A product against B's list
         RequestContext.set(new RequestContext.Principal(
                 rootId, "prod_root", true, companyA.getId(), branchA.getId(), null));
 
@@ -451,7 +498,6 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
                 new SetProductPriceRequest(plB.uid(), new MoneyDto("1000.00", "TZS"))))
                 .isInstanceOf(com.erp.platform.common.api.NotFoundException.class);
 
-        // and no price row leaked through
         assertThat(productService.listPrices(prodA.uid())).isEmpty();
     }
 
@@ -471,8 +517,32 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
     }
 
     // -----------------------------------------------------------------------
+    // Security regression — F15 (UoM): baseUnit must be same-company
+    // -----------------------------------------------------------------------
+
+    @Test
+    void create_crossCompanyUnit_throwsNotFound() {
+        // Unit owned by companyB — must not be usable when creating a companyA product.
+        Company companyB = companies.save(new Company(org, "PRCX", "Product Co X"));
+        Branch branchB = branches.save(new Branch(companyB, "PR-X1", "Prod Branch X1"));
+
+        RequestContext.set(new RequestContext.Principal(
+                rootId, "prod_root", true, companyB.getId(), branchB.getId(), null));
+        UnitOfMeasureDto foreignUnit = unitService.create(
+                new CreateUnitOfMeasureRequest(companyB.getUid(), "KG", "Kilogram"));
+
+        // Back to companyA — try to use companyB's unit uid
+        RequestContext.set(new RequestContext.Principal(
+                rootId, "prod_root", true, companyA.getId(), branchA.getId(), null));
+
+        assertThatThrownBy(() -> productService.create(new CreateProductRequest(
+                companyA.getUid(), null, "Cross Unit Product", null,
+                ProductType.GOODS, true, true, foreignUnit.uid(), null)))
+                .isInstanceOf(com.erp.platform.common.api.NotFoundException.class);
+    }
+
+    // -----------------------------------------------------------------------
     // Security regression — F16: child remove must be scoped to the parent product
-    // (removeBarcode/removeBulkPack must not delete another product's child)
     // -----------------------------------------------------------------------
 
     @Test
@@ -482,11 +552,9 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
         ProductBarcodeDto otherBarcode = productService.addBarcode(other.uid(),
                 new AddBarcodeRequest("EAN-OTHER-1", false));
 
-        // try to delete OTHER's barcode via OWNER's URL — must fail (SR finding F16)
         assertThatThrownBy(() -> productService.removeBarcode(owner.uid(), otherBarcode.uid()))
                 .isInstanceOf(com.erp.platform.common.api.NotFoundException.class);
 
-        // the barcode is still there under its real parent
         assertThat(productService.listBarcodes(other.uid()))
                 .extracting(ProductBarcodeDto::barcode).contains("EAN-OTHER-1");
     }
@@ -496,21 +564,47 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
         ProductDto owner = productService.create(goodsRequest(companyA.getUid(), "Owner Prod BP"));
         ProductDto other = productService.create(goodsRequest(companyA.getUid(), "Other Prod BP"));
         ProductBulkPackDto otherPack = productService.addBulkPack(other.uid(),
-                new CreateBulkPackRequest("crate", new BigDecimal("12")));
+                new CreateBulkPackRequest(pcsUid, new BigDecimal("12")));
 
         assertThatThrownBy(() -> productService.removeBulkPack(owner.uid(), otherPack.uid()))
                 .isInstanceOf(com.erp.platform.common.api.NotFoundException.class);
 
         assertThat(productService.listBulkPacks(other.uid()))
-                .extracting(ProductBulkPackDto::name).contains("crate");
+                .extracting(ProductBulkPackDto::unitCode).contains("PCS");
+    }
+
+    // -----------------------------------------------------------------------
+    // UoM cutover — addBulkPack cross-company unit must be rejected
+    // -----------------------------------------------------------------------
+
+    @Test
+    void addBulkPack_crossCompanyUnit_throwsNotFound() {
+        Company companyB = companies.save(new Company(org, "PRCY", "Product Co Y"));
+        Branch branchB = branches.save(new Branch(companyB, "PR-Y1", "Prod Branch Y1"));
+
+        // Seed a unit in companyB
+        RequestContext.set(new RequestContext.Principal(
+                rootId, "prod_root", true, companyB.getId(), branchB.getId(), null));
+        UnitOfMeasureDto foreignUnit = unitService.create(
+                new CreateUnitOfMeasureRequest(companyB.getUid(), "BOX", "Box"));
+
+        // Back in companyA — create product then try to add bulk pack using companyB's unit
+        RequestContext.set(new RequestContext.Principal(
+                rootId, "prod_root", true, companyA.getId(), branchA.getId(), null));
+        ProductDto prod = productService.create(goodsRequest(companyA.getUid(), "Bulk Pack Product"));
+
+        assertThatThrownBy(() -> productService.addBulkPack(prod.uid(),
+                new CreateBulkPackRequest(foreignUnit.uid(), new BigDecimal("12"))))
+                .isInstanceOf(com.erp.platform.common.api.NotFoundException.class);
     }
 
     // -----------------------------------------------------------------------
     // Private helpers
     // -----------------------------------------------------------------------
 
-    private static CreateProductRequest goodsRequest(String companyUid, String name) {
+    /** Creates a GOODS product request using companyA's seeded PCS unit (code auto-assigned). */
+    private CreateProductRequest goodsRequest(String companyUid, String name) {
         return new CreateProductRequest(
-                companyUid, name, null, ProductType.GOODS, true, true, "piece", null);
+                companyUid, null, name, null, ProductType.GOODS, true, true, pcsUid, null);
     }
 }

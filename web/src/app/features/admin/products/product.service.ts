@@ -11,6 +11,7 @@ import {
   CreateBulkPackRequest,
   CreatePriceListRequest,
   CreateProductRequest,
+  CreateUnitOfMeasureRequest,
   PriceListDto,
   ProductBarcodeDto,
   ProductBranchDto,
@@ -19,8 +20,10 @@ import {
   ProductModel,
   ProductPriceDto,
   SetProductPriceRequest,
+  UnitOfMeasureDto,
   UpdatePriceListRequest,
   UpdateProductRequest,
+  UpdateUnitOfMeasureRequest,
 } from '../models/product.model';
 
 export interface ProductPage {
@@ -153,6 +156,47 @@ export class ProductService {
 
   removeBranch(uid: string, branchUid: string): Observable<void> {
     return this.http.delete<void>(`${this.base}/uid/${uid}/branches/${branchUid}`);
+  }
+
+  // ── Units of Measure ─────────────────────────────────────────────────────
+
+  private readonly unitBase = `${environment.apiBaseUrl}/units`;
+
+  listUnits(companyId: string, q?: string, page = 0, size = 200): Observable<{ rows: UnitOfMeasureDto[]; meta: PageMeta }> {
+    let params = new HttpParams()
+      .set('companyId', companyId)
+      .set('page', String(page))
+      .set('size', String(size));
+    if (q?.trim()) params = params.set('q', q.trim());
+    const context = new HttpContext().set(SKIP_UNWRAP, true);
+    return this.http
+      .get<ApiResponse<UnitOfMeasureDto[]>>(this.unitBase, { params, context })
+      .pipe(
+        map((env) => ({
+          rows: env.data ?? [],
+          meta: env.meta ?? { page, size, totalElements: env.data?.length ?? 0, totalPages: 1, hasNext: false },
+        })),
+      );
+  }
+
+  getUnitByUid(uid: string): Observable<UnitOfMeasureDto> {
+    return this.http.get<UnitOfMeasureDto>(`${this.unitBase}/uid/${uid}`);
+  }
+
+  createUnit(request: CreateUnitOfMeasureRequest): Observable<UnitOfMeasureDto> {
+    return this.http.post<UnitOfMeasureDto>(this.unitBase, request);
+  }
+
+  updateUnit(uid: string, request: UpdateUnitOfMeasureRequest): Observable<UnitOfMeasureDto> {
+    return this.http.put<UnitOfMeasureDto>(`${this.unitBase}/uid/${uid}`, request);
+  }
+
+  archiveUnit(uid: string): Observable<UnitOfMeasureDto> {
+    return this.http.put<UnitOfMeasureDto>(`${this.unitBase}/uid/${uid}/archive`, {});
+  }
+
+  restoreUnit(uid: string): Observable<UnitOfMeasureDto> {
+    return this.http.put<UnitOfMeasureDto>(`${this.unitBase}/uid/${uid}/restore`, {});
   }
 
   // ── Price Lists ───────────────────────────────────────────────────────────
