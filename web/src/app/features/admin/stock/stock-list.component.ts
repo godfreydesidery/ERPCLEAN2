@@ -324,7 +324,7 @@ export class StockListComponent {
 
   submitAdjust(): void {
     const selected = this.adjustSelectedProduct();
-    const qty = this.adjustQty().trim();
+    const qty = this.asStr(this.adjustQty());
     if (!selected?.uid) { this.adjustError.set('Select a product.'); return; }
     if (!qty || isNaN(Number(qty)) || Number(qty) === 0) {
       this.adjustError.set('Enter a non-zero quantity (positive or negative).');
@@ -380,9 +380,18 @@ export class StockListComponent {
     this.openingProductQ.set(`${p.code} — ${p.name}`);
   }
 
+  /**
+   * Coerce a signal value bound to a number-typed input to a trimmed string.
+   * Angular's ngModel on `type="number"` emits a number, so `.trim()` on the raw value
+   * throws; the backend DTOs take quantity/reorderLevel as strings on the wire.
+   */
+  private asStr(v: unknown): string {
+    return v === null || v === undefined ? '' : String(v).trim();
+  }
+
   submitOpeningBalance(): void {
     const selected = this.openingSelectedProduct();
-    const qty = this.openingQty().trim();
+    const qty = this.asStr(this.openingQty());
     if (!selected) { this.openingError.set('Select a product.'); return; }
     if (!qty || isNaN(Number(qty)) || Number(qty) <= 0) {
       this.openingError.set('Quantity must be greater than zero.');
@@ -424,7 +433,7 @@ export class StockListComponent {
   }
 
   saveReorderLevel(row: StockOnHandDto): void {
-    const val = this.reorderEditValue().trim();
+    const val = this.asStr(this.reorderEditValue());
     const level = val === '' ? null : val;
     if (level !== null && (isNaN(Number(level)) || Number(level) < 0)) {
       this.reorderError.set('Reorder level must be zero or positive (leave blank to clear).');

@@ -58,7 +58,7 @@ public class PurchaseOrderController {
 
     /** Paged list / search for a company. */
     @GetMapping
-    @PreAuthorize("hasAuthority('PURCHASE.ORDER.VIEW')")
+    @PreAuthorize("@perm.has('PURCHASE.ORDER.VIEW')")
     public ApiResponse<List<PurchaseOrderDto>> list(
             @RequestParam Long companyId,
             @RequestParam(required = false) String q,
