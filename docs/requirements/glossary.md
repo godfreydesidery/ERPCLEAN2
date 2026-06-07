@@ -182,3 +182,90 @@ One definition per term, used consistently across the team. Add terms as modules
   with the POS channel.
 - **Document number** — a sale's identifier, **unique within its company**, allocated from the generic
   `code_sequence` numbering primitive (ADR-0007). Not the same as a TRA fiscal receipt number.
+
+## Stock
+
+> Status: **Ratified 2026-06-07** — terms reflect the owner-confirmed v1 in stock.md. Built with
+> Purchases this round.
+
+- **On-hand / stock-on-hand** — the current quantity of a **stockable** product **at a branch**, in
+  the product's **base unit**. The level the Stock module owns. A non-stockable product or service
+  **never** has on-hand. Never conflate with the Products **catalogue** (a definition, not a level).
+- **Stock movement** — one recorded, **immutable** change to on-hand: a row in an **append-only
+  ledger** carrying a **type**, a **signed quantity** (base units), the product, the branch, a
+  timestamp, the actor, and a **reference** to its cause. On-hand is the running sum of movements; a
+  movement is never edited or deleted (corrected by a compensating movement).
+- **Movement type** — *why* a movement happened: **GOODS_RECEIPT** (IN, from a purchase),
+  **SALE_ISSUE** (OUT, from a finalised sale), **SALE_REVERSAL** (IN, compensating a voided sale),
+  **ADJUSTMENT** (± manual, reasoned), **OPENING_BALANCE** (initial seed). **TRANSFER_OUT /
+  TRANSFER_IN** (branch-to-branch) are reserved but **deferred** in v1.
+- **Base unit (in Stock)** — the unit on-hand and every movement are expressed in (Products
+  FR-PROD-05). A bulk-pack quantity (crate, carton) converts to base **before** it touches stock.
+- **Negative on-hand** — on-hand below zero. **Valid and flagged in v1** (overselling allowed): more
+  was issued than recorded as received. A surfaced data-accuracy signal, **never** a blocked sale.
+- **Overselling** — issuing more than is on-hand. **Allowed** in v1: the sale proceeds, on-hand goes
+  negative, the negative level is flagged. Stock never blocks a sale (sales.md FR-SALES-21).
+- **Recipe explosion** — when a **composed** product is sold, deducting its **component** products'
+  on-hand per the single-level recipe (Products §9), **not** the composed product itself. A
+  non-stockable component is skipped (recorded).
+- **Adjustment** — a manual ± stock movement with a **mandatory reason** (count correction / damage /
+  shrinkage / other), permission-gated and audited. The v1 way to correct on-hand.
+- **Opening balance** — an initial on-hand seeded for a never-before-tracked stockable product at a
+  branch (an `OPENING_BALANCE` movement).
+- **Idempotency (stock consumption)** — processing the same outbox event twice yields the **same**
+  on-hand: a redelivered `SALE.FINALISED` / `SALE.VOIDED` / `STOCK.RECEIVED` does **not** move stock
+  again. A v1 release blocker if violated.
+- **Quantity-only valuation** — v1 Stock tracks **quantity** and movement history only — **no** FIFO /
+  weighted-average / standard cost, **no** stock value, **no** COGS, **no** composed-cost roll-up.
+  Deferred to a Finance-aware round; the v1 model must not preclude it.
+- **Transactional outbox (`domain_event`)** — the platform mechanism by which one module's change
+  (a sale finalising, a purchase receipting) reliably triggers another module's effect: the producer
+  writes an event row in the **same transaction**; a poller/dispatcher delivers it; **never** an
+  in-memory event (lost on crash). **Built this round** (own ADR); **Stock is its first consumer**.
+- **`SALE.FINALISED` / `SALE.VOIDED`** — outbox events Sales emits (contract fixed in ADR-0008 D-9);
+  Stock consumes them to issue / reverse stock. **`STOCK.RECEIVED`** — the outbox event Purchases'
+  **Goods Receipt** emits on finalise; Stock consumes it to receive stock IN.
+
+## Purchases
+
+> Status: **Ratified 2026-06-07** — terms reflect the owner-confirmed v1 in purchases.md (a
+> **two-document** flow: Purchase Order, then a separate Goods Receipt). Built with Stock this round.
+
+- **Purchase** — the act and record of buying products from a supplier; the umbrella term covering a
+  Purchase Order and the Goods Receipt(s) raised against it.
+- **Purchase Order (PO)** — the **v1 ordering document**: a commitment to buy from a supplier, raised
+  **before** goods arrive, with **ordered lines** (product × ordered-qty × unit × unit-cost). A PO
+  **moves no stock**. Lifecycle DRAFT → ORDERED → (partially/fully) RECEIVED → CLOSED / VOID. Numbered
+  `PO-####`.
+- **Goods Receipt (GR / GRN)** — the **v1 receiving document**: records the actual arrival of goods
+  **against a PO**, receiving some or all of the ordered quantity. **Finalising a Goods Receipt pushes
+  stock IN** (emits `STOCK.RECEIVED`; Stock posts a `GOODS_RECEIPT` movement). Lifecycle DRAFT →
+  RECEIVED → VOID. Numbered `GRN-####`, assigned at receive. (NOT the same as a single-step GRN — in v1
+  a Goods Receipt is always raised against a PO.)
+- **PO line** — one ordered product on a PO: product, **ordered quantity** (base/bulk unit), **unit**,
+  **unit cost** (a monetary amount), line total. Quantity converts to base per Products FR-PROD-06.
+  Each PO line tracks an **outstanding quantity**.
+- **GR line** — one received product on a Goods Receipt: against a specific PO line, with a **received
+  quantity** ≤ that PO line's outstanding quantity.
+- **Partial receipt** — receiving **less than** the ordered quantity in one Goods Receipt; the
+  remainder stays **outstanding** and can be received on a later Goods Receipt against the same PO,
+  until fully received.
+- **Outstanding quantity** — per PO line, ordered **minus** cumulative received across all (non-void)
+  Goods Receipts against it. Drives the PO's RECEIVED / CLOSED state.
+- **Goods receipt (the act)** — receiving purchased goods into inventory: the event that pushes stock
+  **IN** (a `GOODS_RECEIPT` movement via the `STOCK.RECEIVED` outbox event). In v1 it is the act of
+  finalising a **Goods Receipt** document against a PO.
+- **Cost** — the purchase price the supplier charges, a **monetary amount** (amount + currency).
+  Recorded on the PO/GR line; in v1 **not** turned into a stock value, VAT, or a payable.
+- **Supplier invoice / bill** — the supplier's **demand for payment** (an accounts-payable document),
+  distinct from the PO and the Goods Receipt. **Deferred in v1** (AP/Finance); a v1 purchase owes
+  nothing.
+- **3-way match** — matching PO ↔ Goods Receipt ↔ supplier invoice before paying. **Deferred in v1**;
+  v1 builds the PO ↔ Goods Receipt match (ordered-vs-received) only, no invoice leg.
+- **Return to supplier / debit note** — sending goods back and reversing the receipt. **Deferred in
+  v1**; the v1 correction path is a permissioned **void** of the Goods Receipt.
+- **Landed cost** — the full cost of getting goods to the shelf (purchase price + freight + duty +
+  insurance). **Deferred**; v1 records the supplier's line cost only.
+- **Void (purchase)** — a permissioned, audited reversal of a received Goods Receipt (and its
+  stock-in), or of a PO, mirroring the Sales void. Voiding a Goods Receipt **restores** the received
+  quantity to the PO's outstanding. The v1 correction path; full returns-to-supplier are deferred.
