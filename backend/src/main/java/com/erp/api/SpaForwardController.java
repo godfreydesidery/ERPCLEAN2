@@ -1,5 +1,6 @@
 package com.erp.api;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 
@@ -8,22 +9,41 @@ import org.springframework.web.bind.annotation.GetMapping;
  * client-side (HTML5) routing, so a deep link like {@code /login} or {@code /admin/products}
  * must return {@code index.html} (the SPA boots and routes client-side) rather than 404.
  *
- * <p>This forwards any non-file, non-API path to {@code /index.html}. It deliberately does NOT
- * match {@code /api/**} (those are REST endpoints, handled by @RestController and gated by
- * security) nor paths containing a dot (static files like {@code app.js}, served directly from
- * the classpath {@code static/}). Spring resolves the most specific handler first, so real API
- * routes and static resources are never shadowed by this fallback.
+ * <p>It forwards only "route-like" GETs to index.html and leaves everything else to Spring's
+ * default handlers:
+ * <ul>
+ *   <li>{@code /api/**} and {@code /actuator/**} → not matched (REST endpoints / management).</li>
+ *   <li>Static files (any path whose last segment contains a {@code .} — {@code app.js},
+ *       {@code media/bootstrap-icons-*.woff2}, {@code favicon.ico}, …) → not forwarded, so the
+ *       classpath {@code static/} resource handler serves the real bytes. This is the fix for the
+ *       earlier bug where {@code /media/*.woff2} fonts were wrongly forwarded to index.html, which
+ *       broke Bootstrap-Icons glyphs.</li>
+ * </ul>
  */
 @Controller
 public class SpaForwardController {
 
-    /**
-     * Forward SPA client-side routes to index.html.
-     * Pattern: one or more path segments that contain no '.' (so it never catches static files
-     * like {@code main-ABC.js}); the negative lookahead excludes {@code /api/...} and {@code /actuator/...}.
-     */
-    @GetMapping(value = {"/{path:^(?!api|actuator)[^.]*}", "/{path:^(?!api|actuator)[^.]*}/**"})
-    public String forward() {
+    /** Low-priority catch-all; the in-method check decides whether to actually forward. */
+    @GetMapping("/**")
+    public String forward(HttpServletRequest request) {
+        String path = request.getRequestURI();
+
+        // Leave API + management + the SPA shell itself to their own handlers.
+        if (path.startsWith("/api/") || path.startsWith("/actuator/")
+                || path.equals("/index.html")) {
+            return "forward:/index.html"; // index.html resolves to the static resource directly
+        }
+
+        // A dot in the LAST segment means a file (foo.js, icons.woff2, favicon.ico) — let the
+        // static resource handler serve it; do NOT forward to index.html.
+        String lastSegment = path.substring(path.lastIndexOf('/') + 1);
+        if (lastSegment.contains(".")) {
+            // Returning the file path lets Spring's resource resolver try to serve it; if absent
+            // it 404s (correct — a missing asset should not masquerade as the SPA).
+            return "forward:" + path;
+        }
+
+        // Route-like path (no extension): hand to the SPA shell for client-side routing.
         return "forward:/index.html";
     }
 }
