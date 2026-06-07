@@ -171,3 +171,79 @@ Each entry: why it matters · who decides · does it block build.
 - **OQ-CUR-03** — *(carried)* confirm **rounding mode + TZS decimals** before Sales computes totals;
   backend and frontend must round identically (NFR-SALES-02). *Recommended default:* half-up, TZS = 0 dp.
   *Decider:* owner (finance input). *Blocks ADR-0008:* **NO** for the model; **confirm before go-live**.
+
+## Stock
+
+> **FULLY RATIFIED 2026-06-07.** Built with Purchases this round to close the "a sale must update
+> stock" gap. **Four headline decisions RATIFIED** (owner): (1) build Stock + Purchases together,
+> stock-in = real goods-receipt; (2) overselling ALLOWED (on-hand may go negative, flagged, not
+> blocked); (3) composed-product sale EXPLODES the recipe to deduct components; (4) QUANTITIES ONLY in
+> v1 — no valuation/COGS. **Every second-order OQ (OQ-STOCK-01..10) is now RESOLVED at the recommended
+> default, and OQ-STOCK-09 RESOLVED = YES (build the outbox this round, own platform ADR).** stock.md is
+> **Ratified**. **No ADR-0009-blocking question remains.** solutions-architect may start the
+> platform-outbox ADR + ADR-0009 now.
+
+- **OQ-STOCK-01** — ✅ **RESOLVED (owner): maintained on-hand row + append-only movement ledger** (fast
+  read + full history; on-hand == Σ movements). Pure-derived not chosen. Reflected in FR-STOCK-03,
+  stock.md §3.1.
+- **OQ-STOCK-02** — ✅ **RESOLVED (owner): negative on-hand allowed EVERYWHERE — no per-product block** in
+  v1; negatives flagged. A per-product block is not precluded but not built. Reflected in FR-STOCK-04,
+  BR-STOCK-03.
+- **OQ-STOCK-03** — ✅ **RESOLVED (owner): non-stockable component on explosion = SKIP + RECORD** (no
+  on-hand to deduct); deduct only stockable components. Reflected in FR-STOCK-08, BR-STOCK-04.
+- **OQ-STOCK-04** — ✅ **RESOLVED (owner): small fixed reason list, reason MANDATORY, NO approval
+  threshold** in v1 (permission `STOCK.ADJUST` alone gates). Reflected in FR-STOCK-09, BR-STOCK-05.
+- **OQ-STOCK-05** — ✅ **RESOLVED (owner): MANUAL opening balance** in v1 (one `OPENING_BALANCE` per
+  product/branch); bulk import is a later additive convenience. Reflected in FR-STOCK-10.
+- **OQ-STOCK-06** — ✅ **RESOLVED (owner): OPTIONAL reorder level, INDICATOR-ONLY** (no auto-reorder, no
+  purchase suggestion). Reflected in FR-STOCK-11.
+- **OQ-STOCK-07** — ✅ **RESOLVED (owner): manual ADJUSTMENT only** in v1; a formal stock-count /
+  stocktake workflow is deferred. Reflected in stock.md §2 deferred list.
+- **OQ-STOCK-08** — ✅ **RESOLVED (owner): branch-to-branch transfers DEFERRED** (the TRANSFER_OUT /
+  TRANSFER_IN vocabulary is reserved so it is additive); v1 moves stock in/out/± only. Reflected in
+  stock.md §2/§3.2.
+- **OQ-STOCK-09** — ✅ **RESOLVED (owner) = YES: build the transactional outbox THIS ROUND under its own
+  PLATFORM ADR.** `domain_event` + poller/dispatcher; **at-least-once delivery + consumer-side
+  idempotency (dedupe on event id)**; **Sales wired to actually emit** `SALE.FINALISED` / `SALE.VOIDED`
+  (closing the ADR-0008 D-9 seam); **Purchases' Goods Receipt emits** `STOCK.RECEIVED`; Stock is the
+  consumer. Reflected in stock.md §3.4, FR-STOCK-13. **(Was the one hard prerequisite — now closed.)**
+- **OQ-STOCK-10** — ✅ **RESOLVED (owner): reverse only what was issued; if nothing matches, record an
+  ANOMALY** for review rather than posting a phantom negative. Confirmed with the platform-outbox ADR.
+  Reflected in stock.md §7.5.
+
+## Purchases
+
+> **FULLY RATIFIED 2026-06-07.** Built with Stock this round. The round-level decisions are RATIFIED
+> (build together; stock-in = real goods-receipt). **Every Purchases OQ (OQ-PURCH-01..08) is now
+> RESOLVED by the owner**, and **OQ-PURCH-01 CHANGED from the recommended default to a TWO-DOCUMENT
+> flow: Purchase Order + separate Goods Receipt (with partial receipts).** purchases.md is **Ratified**.
+> **No ADR-0010-blocking question remains.** solutions-architect may start ADR-0010 now.
+
+- **OQ-PURCH-01** — ✅ **RESOLVED (owner) = PURCHASE ORDER + SEPARATE GOODS RECEIPT (two documents, two
+  steps)** — **NOT** the single-step GRN that was the recommended default. A **PO** is raised first
+  (supplier + ordered lines: product × ordered-qty × unit × unit-cost; lifecycle DRAFT → ORDERED →
+  partially/fully RECEIVED → CLOSED / VOID; numbered `PO-####`). A separate **Goods Receipt (GR/GRN)** is
+  recorded **against the PO** (some/all of the ordered qty) and **pushes stock IN** (emits
+  `STOCK.RECEIVED`; numbered `GRN-####` at receive; lifecycle DRAFT → RECEIVED → VOID). **Partial
+  receipts** (multiple GRs per PO) with **received-vs-ordered / outstanding-qty** tracking are in scope.
+  **Deferred:** multi-step PO approval; the supplier-invoice leg of a 3-way match (with AP). Reflected
+  throughout purchases.md (FR-PURCH-01a/01b, 02a/02b, 07; BR-PURCH-10; §3, §7, §10).
+  *(Was the shape-defining question — now closed as PO + separate receipt.)*
+- **OQ-PURCH-02** — ✅ **RESOLVED (owner): two lifecycles.** **PO: DRAFT → ORDERED → (partially/fully)
+  RECEIVED → CLOSED / VOID** (FR-PURCH-02a). **Goods Receipt: DRAFT → RECEIVED → VOID** (FR-PURCH-02b).
+- **OQ-PURCH-03** — ✅ **RESOLVED (owner): PO `PO-####` and Goods Receipt `GRN-####`, both per-company**
+  via `code_sequence` (PO number at order-placement; GRN number at receive). Reflected in FR-PURCH-12,
+  BR-PURCH-07.
+- **OQ-PURCH-04** — ✅ **RESOLVED (owner): NO purchase VAT in v1** (input-VAT recovery is Finance/AP,
+  deferred); **cost REQUIRED on a goods line** (zero only for a free/sample line with a reason).
+  Reflected in FR-PURCH-05, FR-PURCH-13, BR-PURCH-08.
+- **OQ-PURCH-05** — ✅ **RESOLVED (owner): AP / supplier invoices / payments DEFERRED.** v1 records cost
+  on the PO/GR, creates **no payable**, takes **no payment**; the supplier-invoice leg of a 3-way match
+  lands with a Finance-aware round. Reflected in BR-PURCH-08, §2 deferred.
+- **OQ-PURCH-06** — ✅ **RESOLVED (owner): returns to supplier / debit notes DEFERRED.** v1 correction is
+  a permissioned **void** of the Goods Receipt (reversing the stock-in, restoring the PO outstanding);
+  partial returns with a supplier credit/debit note are a later round. Reflected in FR-PURCH-09.
+- **OQ-PURCH-07** — ✅ **RESOLVED (owner): landed cost DEFERRED.** v1 records the supplier's line cost
+  only; apportioning freight/duty/insurance ties to the deferred valuation work (stock.md §10).
+- **OQ-PURCH-08** — ✅ **RESOLVED (owner): GOODS-ONLY.** v1 PO/GR are for **goods that move stock**;
+  service / expense purchases are deferred to AP/expenses.

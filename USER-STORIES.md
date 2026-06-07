@@ -345,3 +345,242 @@ I cannot transact across branches or companies by mistake.
   pick-lists update to the new branch without re-login (mirrors US-IAM-003, US-PARTY-07).
 - **AC3** Given any attempt to read or write a sale outside my scope, then it is refused; cross-tenant
   sale data never appears (NFR-SALES-01, BR-SALES-01).
+
+---
+
+## Stock — inventory on-hand & movement
+
+Requirements: [docs/requirements/stock.md](docs/requirements/stock.md). Status: **Ratified
+(owner-confirmed 2026-06-07).** Built **with Purchases** this round to close the "a sale must update
+stock" gap. v1 = on-hand quantity per (stockable product, branch) in base units + an append-only
+movement ledger; **overselling allowed (on-hand may go negative, flagged)**; composed-product sale
+**explodes the recipe** to deduct components; **quantities only — NO valuation/COGS** (deferred). Stock
+is the **first consumer of the transactional outbox** — it consumes `SALE.FINALISED` / `SALE.VOIDED`
+(from Sales, ADR-0008 D-9) and `STOCK.RECEIVED` (from Purchases' **Goods Receipt**). Depends on IAM,
+Products (stockable/base unit/recipe §9), the outbox (built this round, OQ-STOCK-09 RESOLVED). Scoped
+per company + active branch. (All OQ-STOCK-01..10 RESOLVED — see open-questions.md.)
+
+### US-STOCK-01 — Receive goods from a purchase increases on-hand (stock IN)
+**As the** deployment owner **I want** finalising a purchase Goods Receipt (against a PO) to increase
+on-hand **so that** inventory reflects what was actually received — the gap Sales left open.
+- **AC1** Given a **Goods Receipt** is finalised against a PO in Purchases (US-PURCH-02), then a
+  `STOCK.RECEIVED` outbox event is written in the same transaction with lines of `productId` +
+  `qtyInBase` (FR-PURCH-08, FR-STOCK-06).
+- **AC2** Given Stock consumes the event, then for each **stockable** line it posts a `GOODS_RECEIPT`
+  in-movement (signed +, base units) and **increments on-hand** for that (product, branch)
+  (FR-STOCK-06, BR-STOCK-01).
+- **AC3** Given a line names a **non-stockable** product, then **no** stock movement is posted for it
+  and the skip is recorded (BR-STOCK-02).
+- **AC4** Given the event is **redelivered**, then on-hand is **not** incremented again (idempotent;
+  FR-STOCK-13, BR-STOCK-08).
+- **AC5** Given the receipt posts, then on-hand at the branch equals the signed sum of its movements
+  (BR-STOCK-01, NFR-STOCK-02).
+
+### US-STOCK-02 — Finalising a sale decreases on-hand (stock OUT)
+**As the** deployment owner **I want** finalising a sale to decrease on-hand **so that** selling
+draws inventory down — closing the accepted risk in sales.md §10.
+- **AC1** Given a sale is finalised in Sales, then a `SALE.FINALISED` outbox event is written (payload
+  per ADR-0008 D-9), and Stock consumes it (FR-STOCK-07).
+- **AC2** Given a **simple stockable** product line, then Stock posts a `SALE_ISSUE` out-movement
+  (signed −, `qtyInBase`) and **decrements on-hand** (FR-STOCK-07).
+- **AC3** Given the issue exceeds on-hand, then on-hand goes **negative**, the negative level is
+  **flagged**, and the sale is **not** blocked or reversed (overselling allowed; FR-STOCK-04,
+  BR-STOCK-03).
+- **AC4** Given a **non-stockable** product line (not composed), then **no** movement is posted
+  (BR-STOCK-02).
+- **AC5** Given the event is **redelivered**, then on-hand is **not** decremented again (idempotent;
+  FR-STOCK-13).
+
+### US-STOCK-03 — Selling a composed product deducts its components (recipe explosion)
+**As the** deployment owner **I want** selling a composed product to deduct its recipe components
+**so that** a restaurant dish draws down its ingredients, not a phantom "dish" stock.
+- **AC1** Given a `SALE.FINALISED` line names a **composed** product (Products FR-PROD-14), then Stock
+  reads its single-level recipe and posts a `SALE_ISSUE` for **each component** (qty = line
+  `qtyInBase` × recipe qty, in the component's base unit), **not** for the composed product itself
+  (FR-STOCK-08, BR-STOCK-04).
+- **AC2** Given a recipe component is itself **non-stockable**, then it is **skipped** (no on-hand to
+  deduct) and the skip is recorded; stockable components are still deducted (BR-STOCK-04,
+  `[OQ-STOCK-03]`).
+- **AC3** Given the composed product itself is non-stockable (e.g. a service dish), then it gets **no**
+  movement of its own (only its components do) (BR-STOCK-04).
+- **AC4** Given Products is single-level (FR-PROD-16), then no nested explosion occurs in v1.
+
+### US-STOCK-04 — Void a sale reverses the stock issue (compensation)
+**As the** deployment owner **I want** voiding a sale to put the issued stock back **so that** a
+corrected sale does not permanently understate on-hand.
+- **AC1** Given a finalised sale is voided in Sales, then a `SALE.VOIDED` outbox event is emitted and
+  Stock consumes it (FR-STOCK-12).
+- **AC2** Given Stock consumes it, then it posts `SALE_REVERSAL` in-movements reversing the original
+  `SALE_ISSUE`(s) for that sale (including component issues of a composed product), restoring on-hand
+  (FR-STOCK-12, BR-STOCK-06).
+- **AC3** Given the void event is **redelivered**, then the reversal happens **only once** (idempotent;
+  FR-STOCK-13).
+- **AC4** Given a movement is reversed, then it is reversed by a **compensating movement**, never by
+  editing or deleting the original (append-only; BR-STOCK-06).
+
+### US-STOCK-05 — Adjust stock manually with a reason (permissioned)
+**As a** stock controller **I want** to record a manual ± adjustment with a reason **so that** counts,
+damage, and shrinkage are corrected and traceable.
+- **AC1** Given `STOCK.ADJUST` and an active branch, when I post a signed (±) adjustment against a
+  (product, branch) with a **mandatory reason**, then an `ADJUSTMENT` movement is posted and on-hand
+  updated (FR-STOCK-09, BR-STOCK-05).
+- **AC2** Given I omit the reason, then the adjustment is **rejected** (BR-STOCK-05).
+- **AC3** Given I lack `STOCK.ADJUST`, then the adjustment is refused (FR-STOCK-15).
+- **AC4** Given an adjustment posts, then it is written to the audit trail with actor, product/branch,
+  signed quantity, reason, and timestamp (NFR-STOCK-05). `[reason set / approval threshold OQ-STOCK-04]`
+
+### US-STOCK-06 — Seed an opening balance
+**As a** stock controller **I want** to seed an initial on-hand for a product at a branch **so that**
+pre-existing physical stock is reflected from go-live.
+- **AC1** Given a never-tracked stockable product at my branch, when I record an `OPENING_BALANCE`
+  in-movement, then on-hand is seeded to that quantity (FR-STOCK-10).
+- **AC2** Given on-hand was already seeded/moved, then a further opening balance is handled per policy
+  (recommended: treat additional changes as adjustments, not a second opening) (`[OQ-STOCK-05]`).
+- **AC3** Given the seed posts, then on-hand equals the signed sum of its movements (BR-STOCK-01).
+
+### US-STOCK-07 — View on-hand and movement history; negative/low flagged
+**As a** stock controller **I want** to see current on-hand and the movement history per product at my
+branch **so that** I can monitor levels and investigate negatives.
+- **AC1** Given my active branch, when I view on-hand, then I see current quantity per stockable
+  product, with a **negative flag** where on-hand < 0 (FR-STOCK-11, FR-STOCK-04).
+- **AC2** Given a product, when I open its movement history, then I see the chronological ledger (type,
+  signed qty, source reference, actor, timestamp) for that (product, branch) (FR-STOCK-11).
+- **AC3** Given a reorder level is set (if adopted), then on-hand below it is flagged **low**
+  (indicator-only, no auto-reorder) (`[OQ-STOCK-06]`).
+- **AC4** Given I switch my active branch (IAM branch-override), then on-hand and history update to the
+  new branch without re-login (FR-STOCK-14, mirrors US-IAM-003).
+
+### US-STOCK-08 — Stock is quantity-only in v1 (NO valuation — owner-ruled)
+**As the** deployment owner **I want** v1 Stock to track quantities without valuation **so that** the
+module ships before Finance — a ruling I have made (2026-06-07).
+- **AC1** Given any on-hand or movement, then it carries **quantity only** — no stock value, no unit
+  cost, no COGS anywhere in v1 (FR-STOCK-16, §10).
+- **AC2** Given a composed product is sold, then its components are deducted by **quantity**; **no**
+  cost is rolled up from components (FR-STOCK-16, Products §9).
+- **AC3** Given a purchase records cost on its GRN, then that cost is **not** carried into a stock
+  value in v1 (BR-STOCK-10, BR-PURCH-09).
+- **AC4** Given the future Finance round, then the v1 quantity model does **not preclude** adding
+  per-movement cost and a valuation method (FIFO/avg) and COGS (NFR-STOCK-06).
+
+### US-STOCK-09 — Stock is branch-scoped and tenant-isolated end to end
+**As a** branch operator **I want** stock confined to my active branch **so that** I never see or move
+another branch's or company's inventory.
+- **AC1** Given I am active in branch B1, then on-hand, movements, and adjustments are for B1 in B1's
+  company only (FR-STOCK-14, BR-STOCK-07).
+- **AC2** Given any attempt to read or move stock outside my scope, then it is refused; cross-tenant
+  stock never appears (NFR-STOCK-01).
+- **AC3** Given branch-to-branch transfers are **deferred** (OQ-STOCK-08), then v1 moves stock only
+  in (receipt), out (sale), and ± (adjustment) within a single branch.
+
+---
+
+## Purchases — buying from suppliers
+
+Requirements: [docs/requirements/purchases.md](docs/requirements/purchases.md). Status: **Ratified
+(owner-confirmed 2026-06-07).** Built **with Stock** this round. v1 is a **two-document** flow (owner
+ruling, OQ-PURCH-01 RESOLVED): a **Purchase Order (PO)** is raised first (the commitment to buy;
+ordered lines; `PO-####`; moves no stock), then a separate **Goods Receipt (GR/GRN)** is recorded
+**against the PO** (`GRN-####`) to receive some or all of the ordered quantity — **the Goods Receipt
+pushes stock IN** via the `STOCK.RECEIVED` outbox event (real stock-in from day one). **Partial
+receipts** (multiple GRs per PO) with received-vs-ordered (outstanding) tracking are supported. v1
+records **cost (money) on the PO/GR** but computes **no stock valuation, no VAT, no payable** (AP
+deferred). Multi-step PO approval, supplier invoices/AP + the 3-way-match invoice leg,
+returns-to-supplier, and landed cost are **deferred**. Depends on IAM, Parties (Supplier master),
+Products, Multicurrency (ADR-0005), the outbox (built this round). Scoped per company + active branch.
+(All OQ-PURCH-01..08 RESOLVED — see open-questions.md.)
+
+### US-PURCH-01 — Raise a Purchase Order to a supplier (no stock effect)
+**As a** purchasing officer **I want** to raise a Purchase Order with ordered quantities and costs
+**so that** the supplier is committed and we have a record of what is on order before goods arrive.
+- **AC1** Given `PURCHASE.CREATE` and an active branch, when I start a new PO, then it opens scoped to
+  my company + branch (FR-PURCH-01a, NFR-PURCH-01).
+- **AC2** Given I select a **supplier** associated with my branch (same company), then it is accepted;
+  an archived or non-branch supplier is not selectable (FR-PURCH-03, BR-PURCH-02).
+- **AC3** Given I add a product associated with my branch with an **ordered quantity + unit** and a
+  **unit cost**, then a PO line is created, the quantity converts to base units (Products FR-PROD-06),
+  and the cost carries its currency (FR-PURCH-04/05, BR-PURCH-04).
+- **AC4** Given I **place the order**, then the PO gets a **number unique within the company**
+  (`PO-####` via `code_sequence`), its ordered lines **freeze**, and it moves to **ORDERED**; **no
+  stock moves** (FR-PURCH-02a, FR-PURCH-12, BR-PURCH-05).
+- **AC5** Given the order is placed, then each PO line's **outstanding quantity = ordered** (nothing
+  received yet) (FR-PURCH-07).
+- **AC6** Given two officers place orders simultaneously, then they get **distinct** `PO-####` numbers
+  (NFR-PURCH-04).
+- **AC7** Given the PO is placed, then create→order is written to the audit trail (NFR-PURCH-03).
+
+### US-PURCH-02 — Receive goods against a PO, in full or in part (stock IN)
+**As a** storekeeper **I want** to record a Goods Receipt against a PO when goods arrive — receiving
+all or only part of what was ordered **so that** on-hand reflects the actual delivery and the
+remainder stays on order.
+- **AC1** Given `PURCHASE.RECEIVE` and an active branch, when I start a **Goods Receipt against an
+  outstanding PO**, then it opens with the PO's lines and their **outstanding quantities**
+  (FR-PURCH-01b, FR-PURCH-07).
+- **AC2** Given I enter, per line, a **received quantity ≤ the PO line's outstanding quantity**, then it
+  is accepted; an over-receipt (more than outstanding) is **rejected** (FR-PURCH-07, BR-PURCH-10).
+- **AC3** Given I **receive** (finalise) the Goods Receipt, then it gets a **number unique within the
+  company** (`GRN-####` via `code_sequence`) and its content becomes immutable (FR-PURCH-12,
+  BR-PURCH-05, BR-PURCH-07).
+- **AC4** Given the Goods Receipt is received, then in the **same transaction** a `STOCK.RECEIVED`
+  outbox event is written (lines of `productId` + `qtyInBase`) and Stock increments on-hand
+  (FR-PURCH-08, US-STOCK-01).
+- **AC5** Given a **partial receipt**, then the PO advances to **partially RECEIVED**, the received
+  quantity is deducted from each line's outstanding, and the remainder can be received on a **later
+  Goods Receipt against the same PO** until fully received (FR-PURCH-02a, FR-PURCH-07).
+- **AC6** Given all lines are fully received, then the PO is **fully RECEIVED** (and may be CLOSED)
+  (FR-PURCH-02a).
+- **AC7** Given two storekeepers receive against the same PO simultaneously, then they get **distinct**
+  `GRN-####` numbers and the outstanding quantity stays consistent — no over-receipt (NFR-PURCH-04,
+  NFR-PURCH-07).
+- **AC8** Given the Goods Receipt is received, then it is written to the audit trail (NFR-PURCH-03).
+
+### US-PURCH-03 — Cost is recorded but inventory is not valued (v1)
+**As the** deployment owner **I want** the PO/GR to record what goods cost without valuing inventory
+**so that** Purchases ships before Finance, consistent with quantity-only Stock.
+- **AC1** Given a PO line, then a **unit cost** (a monetary amount) is recorded and the PO totals the
+  lines; a Goods Receipt inherits the PO line's cost (FR-PURCH-05, FR-PURCH-06).
+- **AC2** Given a Goods Receipt is received, then the recorded cost is **not** carried into a stock
+  value, and no COGS or valuation is computed anywhere (FR-PURCH-13, BR-PURCH-09, stock.md §10).
+- **AC3** Given a placed PO / received GR, then it creates **no accounts-payable balance and takes no
+  payment** and **no input VAT is computed**; the cost is captured for the record and the future
+  AP/valuation rounds (BR-PURCH-08). `[OQ-PURCH-04 RESOLVED = no VAT, cost required; OQ-PURCH-05
+  RESOLVED = AP deferred]`
+- **AC4** Given a goods line, then a **unit cost is required** (zero only for a free/sample line with a
+  reason) (FR-PURCH-05, OQ-PURCH-04 RESOLVED).
+- **AC5** Given the future Finance round, then the v1 model does **not preclude** carrying cost into
+  valuation or raising a payable (NFR-PURCH-05).
+
+### US-PURCH-04 — A purchase line may name a non-stockable product
+**As a** purchasing officer **I want** to record buying a non-stockable item on a PO/GR **so that** the
+purchase is captured even when it moves no stock.
+- **AC1** Given a line names a **non-stockable** product, then it is recorded on the PO/GR with its cost
+  (BR-PURCH-03).
+- **AC2** Given the Goods Receipt is received, then the non-stockable line emits **no** stock movement
+  (Stock skips it) while stockable lines still increment on-hand (FR-PURCH-08, BR-STOCK-02).
+- **AC3** Given service/expense purchases are **deferred** (OQ-PURCH-08 RESOLVED), then v1's PO/GR are
+  intended for **goods that move stock**; buying a pure service is out of v1 scope.
+
+### US-PURCH-05 — Void a received Goods Receipt (reverses the stock-in)
+**As a** branch manager **I want** to void a wrongly-received Goods Receipt **so that** the erroneous
+stock-in is backed out without editing a finalised document, and the PO returns to outstanding.
+- **AC1** Given `PURCHASE.VOID` and a received Goods Receipt within the permitted window, when I void
+  it, then the GR is reversed, a compensating stock event is emitted, and Stock reverses the
+  `GOODS_RECEIPT` (FR-PURCH-09).
+- **AC2** Given a Goods Receipt is voided, then the received quantity is **restored to the PO lines'
+  outstanding**, so the PO can be re-received (FR-PURCH-09, BR-PURCH-10).
+- **AC3** Given I lack `PURCHASE.VOID`, then the void is refused (FR-PURCH-11).
+- **AC4** Given a received Goods Receipt, when I try to **edit** its lines/costs directly, then it is
+  refused; the only v1 correction is a void (BR-PURCH-05).
+- **AC5** Given v1, then **returns to supplier / debit notes** are out of scope — void is the sole
+  correction path (OQ-PURCH-06 RESOLVED).
+- **AC6** Given the void event is redelivered, then Stock reverses only once (idempotent, BR-PURCH-06).
+
+### US-PURCH-06 — Purchases are branch-scoped and tenant-isolated
+**As a** branch operator **I want** POs, GRs, and their pick-lists confined to my active branch **so
+that** I cannot purchase across branches or companies by mistake.
+- **AC1** Given I am active in branch B1, when I create a PO or a Goods Receipt, then it is recorded at
+  B1 in B1's company, and supplier/product/PO selection shows only B1-associated, same-company records
+  (FR-PURCH-10, Parties FR-PARTY-12, Products FR-PROD-22).
+- **AC2** Given I switch my active branch via the IAM branch-override header, then my PO/GR views and
+  pick-lists update to the new branch without re-login (mirrors US-IAM-003).
+- **AC3** Given any attempt to read or write a PO/GR outside my scope, then it is refused; cross-tenant
+  purchase data never appears (NFR-PURCH-01, BR-PURCH-01).
