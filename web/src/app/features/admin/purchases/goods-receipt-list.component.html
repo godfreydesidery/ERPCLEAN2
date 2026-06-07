@@ -1,0 +1,153 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Goods Receipts</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-box-arrow-in-down me-1" aria-hidden="true"></i>
+      Stock receipts against purchase orders.
+    </p>
+  </header>
+
+  <!-- Company selector -->
+  @switch (companyState()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mb-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load companies. Is the API running?
+      </p>
+    }
+    @default {
+      @if (companies().length > 1) {
+        <div class="mb-3" style="max-width:320px">
+          <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+          <select id="companyPicker" name="companyPicker" class="form-select"
+                  [ngModel]="selectedCompanyId()"
+                  (ngModelChange)="onCompanyChange($event)">
+            @for (c of companies(); track c.uid) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+          </select>
+        </div>
+      }
+    }
+  }
+
+  @if (selectedCompanyId()) {
+    <!-- Search + create link -->
+    <div class="d-flex flex-wrap gap-2 mb-3 align-items-end">
+      <form class="d-flex gap-2" (ngSubmit)="load(0)" aria-label="Search goods receipts">
+        <div>
+          <label class="form-label small text-muted mb-1" for="grSearch">Search</label>
+          <input id="grSearch" name="grSearch" type="search"
+                 class="form-control" placeholder="Receipt number, PO…"
+                 [ngModel]="searchQ()" (ngModelChange)="searchQ.set($event)"
+                 autocomplete="off" [attr.aria-busy]="state() === 'loading'" />
+        </div>
+        <div class="align-self-end">
+          <button type="submit" class="btn btn-outline-secondary">
+            <i class="bi bi-search" aria-hidden="true"></i>
+            <span class="visually-hidden">Search</span>
+          </button>
+        </div>
+      </form>
+
+      @if (canReceive()) {
+        <div class="ms-auto align-self-end">
+          <a class="btn btn-primary" routerLink="/admin/goods-receipts/create"
+             aria-label="Create a new goods receipt">
+            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+            New Receipt
+          </a>
+        </div>
+      }
+    </div>
+
+    <!-- List states -->
+    @switch (state()) {
+      @case ('loading') {
+        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading receipts…
+        </p>
+      }
+      @case ('error') {
+        <p class="state text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load goods receipts. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="state text-muted d-flex align-items-center gap-2">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view goods receipts.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <p class="state text-muted">No goods receipts yet.</p>
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-hover align-middle bg-white grid">
+              <caption class="visually-hidden">Goods receipts</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Receipt #</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">PO</th>
+                  <th scope="col">Received At</th>
+                  <th scope="col">Notes</th>
+                  <th scope="col"><span class="visually-hidden">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (gr of rows(); track gr.uid) {
+                  <tr>
+                    <td class="font-monospace">{{ gr.receiptNumber }}</td>
+                    <td>
+                      <span class="badge" [class]="statusBadgeClass(gr.status)">{{ gr.status }}</span>
+                    </td>
+                    <td class="small text-muted font-monospace">{{ gr.purchaseOrderId }}</td>
+                    <td class="small text-muted">{{ gr.receivedAt | date:'dd/MM/yyyy HH:mm' }}</td>
+                    <td class="small text-muted">{{ gr.notes ?? '—' }}</td>
+                    <td>
+                      <a class="btn btn-sm btn-outline-primary"
+                         [routerLink]="['/admin/goods-receipts/uid', gr.uid]"
+                         [attr.aria-label]="'Open receipt ' + gr.receiptNumber">
+                        <i class="bi bi-eye me-1" aria-hidden="true"></i>Open
+                      </a>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Pagination -->
+          @if (meta().totalPages > 1) {
+            <nav aria-label="Goods receipt list pagination" class="d-flex align-items-center gap-3 mt-2">
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      [disabled]="currentPage() === 0"
+                      (click)="prevPage()">
+                <i class="bi bi-chevron-left" aria-hidden="true"></i>
+                <span class="visually-hidden">Previous page</span>
+              </button>
+              <span class="small text-muted">
+                Page {{ meta().page + 1 }} of {{ meta().totalPages }}
+                ({{ meta().totalElements }} total)
+              </span>
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      [disabled]="!meta().hasNext"
+                      (click)="nextPage()">
+                <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                <span class="visually-hidden">Next page</span>
+              </button>
+            </nav>
+          }
+        }
+      }
+    }
+  }
+</section>

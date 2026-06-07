@@ -1,0 +1,227 @@
+/**
+ * GoodsReceiptCreateComponent — key behaviour specs.
+ *
+ * Covers:
+ *  1. Loads PO lines from query param poUid on init.
+ *  2. Outstanding qty defaulted to receivedQty for each line.
+ *  3. Submit builds correct CreateGoodsReceiptRequest (included lines only).
+ *  4. 409 over-receipt error surfaced in formError.
+ *  5. Zero qty → per-line validation error, createReceipt NOT called.
+ */
+import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { Component, signal } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { ActivatedRoute, provideRouter, Route } from '@angular/router';
+import { of, throwError } from 'rxjs';
+import { AlertService } from '../../../core/feedback/alert.service';
+import { SessionStore } from '../../../core/auth/session.store';
+import { CompanyService } from '../company/company.service';
+import { OrganisationService } from '../organisation/organisation.service';
+import { PurchasesService } from './purchases.service';
+import { GoodsReceiptCreateComponent } from './goods-receipt-create.component';
+
+@Component({ template: '', standalone: true })
+class StubRouteComponent {}
+
+const STUB_ROUTES: Route[] = [
+  { path: '**', component: StubRouteComponent },
+];
+
+// ── Stubs ─────────────────────────────────────────────────────────────────────
+
+const STUB_ORG = { uid: 'ORG1', id: '1', name: 'Acme' };
+const STUB_COMPANY = { uid: 'CO1', id: '10', name: 'Main Co' };
+
+const STUB_PO = {
+  uid: 'PO-UID-1', id: '1', companyId: '10', branchId: '1',
+  orderNumber: 'PO-0001', status: 'ORDERED', supplierId: '2',
+  supplierCode: 'SUP001', supplierName: 'Supplier A',
+  currency: 'TZS', orderTotalAmount: '50000',
+  expectedDate: null, notes: null, orderedAt: null,
+  voidedAt: null, voidReason: null, closedAt: null,
+  createdAt: null, lines: null,
+};
+
+const STUB_LINE = {
+  uid: 'LINE-UID-1', id: '11', purchaseOrderId: '1', lineNo: 1,
+  productId: '5', productCode: 'P001', productName: 'Widget',
+  unitId: '1', unitName: 'Each',
+  orderedQty: '100', orderedQtyInBase: '100',
+  receivedQtyInBase: '40', outstandingQtyInBase: '60',
+  fullyReceived: false,
+  unitCostAmount: '500', lineTotalAmount: '50000', currency: 'TZS',
+};
+
+const STUB_GR = {
+  uid: 'GR-UID-1', id: '21', companyId: '10', branchId: '1',
+  purchaseOrderId: '1', receiptNumber: 'GR-0001', status: 'RECEIVED',
+  supplierId: '2', receivedAt: null, voidedAt: null, voidReason: null,
+  notes: null, createdAt: null, lines: null,
+};
+
+function makeBed(overrides: {
+  poUid?: string;
+  getOrderByUidSpy?: ReturnType<typeof vi.fn>;
+  listOrderLinesSpy?: ReturnType<typeof vi.fn>;
+  createReceiptSpy?: ReturnType<typeof vi.fn>;
+} = {}) {
+  const poUid = overrides.poUid ?? 'PO-UID-1';
+  const getOrderByUidSpy = overrides.getOrderByUidSpy ?? vi.fn(() => of(STUB_PO));
+  const listOrderLinesSpy = overrides.listOrderLinesSpy ?? vi.fn(() => of([STUB_LINE]));
+  const createReceiptSpy = overrides.createReceiptSpy ?? vi.fn(() => of(STUB_GR));
+
+  TestBed.configureTestingModule({
+    imports: [GoodsReceiptCreateComponent],
+    providers: [
+      provideHttpClient(),
+      provideHttpClientTesting(),
+      provideRouter(STUB_ROUTES),
+      {
+        provide: ActivatedRoute,
+        useValue: {
+          snapshot: {
+            queryParamMap: {
+              get: (key: string) => (key === 'poUid' ? poUid : null),
+            },
+          },
+        },
+      },
+      {
+        provide: PurchasesService,
+        useValue: {
+          getOrderByUid: getOrderByUidSpy,
+          listOrderLines: listOrderLinesSpy,
+          listOrders: vi.fn(() => of({ rows: [], meta: { page: 0, size: 10, totalElements: 0, totalPages: 0, hasNext: false } })),
+          createReceipt: createReceiptSpy,
+        },
+      },
+      {
+        provide: OrganisationService,
+        useValue: { current: vi.fn(() => of(STUB_ORG)) },
+      },
+      {
+        provide: CompanyService,
+        useValue: { list: vi.fn(() => of([STUB_COMPANY])) },
+      },
+      { provide: AlertService, useValue: { success: vi.fn(), error: vi.fn() } },
+      {
+        provide: SessionStore,
+        useValue: {
+          hasPermission: vi.fn(() => true),
+          isAuthenticated: signal(true),
+          user: signal(null),
+          permissions: signal([]),
+          activeBranchUid: signal(null),
+        },
+      },
+    ],
+  });
+
+  return { getOrderByUidSpy, listOrderLinesSpy, createReceiptSpy };
+}
+
+// ── Specs ─────────────────────────────────────────────────────────────────────
+
+describe('GoodsReceiptCreateComponent', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  // ── 1. Loads PO and lines from query param ─────────────────────────────────
+
+  it('loads the PO and its outstanding lines from the poUid query param', async () => {
+    const { getOrderByUidSpy, listOrderLinesSpy } = makeBed();
+    const fixture = TestBed.createComponent(GoodsReceiptCreateComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    expect(getOrderByUidSpy).toHaveBeenCalledWith('PO-UID-1');
+    expect(listOrderLinesSpy).toHaveBeenCalledWith('PO-UID-1');
+    expect(comp.po()?.uid).toBe('PO-UID-1');
+    // Only non-fully-received lines included
+    expect(comp.receiveLines()).toHaveLength(1);
+  });
+
+  // ── 2. Outstanding qty defaulted ──────────────────────────────────────────
+
+  it('defaults receivedQty to outstandingQtyInBase for each line', async () => {
+    makeBed();
+    const fixture = TestBed.createComponent(GoodsReceiptCreateComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    const entry = comp.receiveLines()[0];
+    expect(entry.receivedQty).toBe(STUB_LINE.outstandingQtyInBase);
+    expect(entry.include).toBe(true);
+  });
+
+  // ── 3. Submit builds correct request ──────────────────────────────────────
+
+  it('calls createReceipt with correct payload for included lines', async () => {
+    const { createReceiptSpy } = makeBed();
+    const fixture = TestBed.createComponent(GoodsReceiptCreateComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.notes.set('Test delivery');
+    comp.submit();
+    await vi.runAllTimersAsync();
+
+    expect(createReceiptSpy).toHaveBeenCalledOnce();
+    const req = createReceiptSpy.mock.calls[0][0];
+    expect(req.purchaseOrderUid).toBe('PO-UID-1');
+    expect(req.notes).toBe('Test delivery');
+    expect(req.lines).toHaveLength(1);
+    expect(req.lines[0].purchaseOrderLineUid).toBe(STUB_LINE.uid);
+    expect(req.lines[0].receivedQty).toBe(STUB_LINE.outstandingQtyInBase);
+  });
+
+  // ── 4. 409 over-receipt surfaces in formError ──────────────────────────────
+
+  it('sets formError with over-receipt message on 409', async () => {
+    const createReceiptSpy = vi.fn(() =>
+      throwError(() => new HttpErrorResponse({ status: 409, error: { errors: ['Over-receipt'] } })),
+    );
+    makeBed({ createReceiptSpy });
+    const fixture = TestBed.createComponent(GoodsReceiptCreateComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.submit();
+    await vi.runAllTimersAsync();
+
+    expect(comp.formError()).toContain('Over-receipt');
+    expect(comp.formError()).toContain('outstanding');
+  });
+
+  // ── 5. Zero qty validation ─────────────────────────────────────────────────
+
+  it('does NOT call createReceipt when receivedQty is zero', async () => {
+    const { createReceiptSpy } = makeBed();
+    const fixture = TestBed.createComponent(GoodsReceiptCreateComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    // Set qty to 0
+    comp.updateLineQty(0, '0');
+    comp.submit();
+
+    expect(comp.lineErrors()[STUB_LINE.uid]).toBeTruthy();
+    expect(createReceiptSpy).not.toHaveBeenCalled();
+  });
+
+  // ── 6. Excluding all lines → formError ────────────────────────────────────
+
+  it('sets formError when all lines are excluded', async () => {
+    const { createReceiptSpy } = makeBed();
+    const fixture = TestBed.createComponent(GoodsReceiptCreateComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.toggleLineInclude(0, false);
+    comp.submit();
+
+    expect(comp.formError()).toContain('at least one line');
+    expect(createReceiptSpy).not.toHaveBeenCalled();
+  });
+});

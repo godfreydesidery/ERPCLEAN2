@@ -1,0 +1,470 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Stock On-Hand</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-boxes me-1" aria-hidden="true"></i>
+      Current inventory levels by product.
+    </p>
+  </header>
+
+  <!-- Company selector -->
+  @switch (companyState()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mb-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load companies. Is the API running?
+      </p>
+    }
+    @default {
+      @if (companies().length > 1) {
+        <div class="mb-3" style="max-width:320px">
+          <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+          <select id="companyPicker" name="companyPicker" class="form-select"
+                  [ngModel]="selectedCompanyId()"
+                  (ngModelChange)="onCompanyChange($event)">
+            @for (c of companies(); track c.uid) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+          </select>
+        </div>
+      }
+    }
+  }
+
+  @if (selectedCompanyId()) {
+    <!-- Branch filter + search + actions toolbar -->
+    <div class="d-flex flex-wrap gap-2 mb-3 align-items-end">
+      @if (branches().length > 0) {
+        <div>
+          <label class="form-label small text-muted mb-1" for="branchFilter">Branch</label>
+          <select id="branchFilter" name="branchFilter" class="form-select"
+                  style="min-width:160px"
+                  [ngModel]="selectedBranchId()"
+                  (ngModelChange)="onBranchChange($event)">
+            <option value="">All branches</option>
+            @for (b of branches(); track b.uid) {
+              <option [value]="b.id">{{ b.name }}</option>
+            }
+          </select>
+        </div>
+      }
+
+      <form class="d-flex gap-2" (ngSubmit)="load(0)" aria-label="Search stock">
+        <div>
+          <label class="form-label small text-muted mb-1" for="stockSearch">Search</label>
+          <input id="stockSearch" name="stockSearch" type="search"
+                 class="form-control" placeholder="Product…"
+                 [ngModel]="searchQ()" (ngModelChange)="searchQ.set($event)"
+                 autocomplete="off" [attr.aria-busy]="state() === 'loading'" />
+        </div>
+        <div class="align-self-end">
+          <button type="submit" class="btn btn-outline-secondary">
+            <i class="bi bi-search" aria-hidden="true"></i>
+            <span class="visually-hidden">Search</span>
+          </button>
+        </div>
+      </form>
+
+      @if (canOpening()) {
+        <div class="ms-auto align-self-end">
+          <button type="button" class="btn btn-outline-primary"
+                  (click)="toggleOpeningForm()"
+                  [attr.aria-expanded]="showOpeningForm()"
+                  aria-controls="openingBalanceForm">
+            <i class="bi bi-box-arrow-in-down me-1" aria-hidden="true"></i>
+            Opening Balance
+          </button>
+        </div>
+      }
+    </div>
+
+    <!-- Opening balance form -->
+    @if (showOpeningForm()) {
+      <form id="openingBalanceForm" class="create-form card card-body mb-3"
+            (ngSubmit)="submitOpeningBalance()" aria-label="Record opening balance">
+        <h2 class="h6 mb-3">Opening Balance</h2>
+        <div class="row g-2 align-items-start mb-2">
+          <!-- Product picker -->
+          <div class="col-sm-5 position-relative">
+            <label class="form-label small text-muted mb-1" for="openingProductSearch">
+              Product <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="openingProductSearch" name="openingProductSearch" type="search"
+                   class="form-control"
+                   placeholder="Search by name or code…"
+                   [ngModel]="openingProductQ()"
+                   (ngModelChange)="onOpeningProductSearchChange($event)"
+                   [disabled]="openingBusy()"
+                   autocomplete="off"
+                   [attr.aria-expanded]="openingProductResults().length > 0"
+                   aria-haspopup="listbox"
+                   aria-autocomplete="list" />
+            @if (openingSelectedProduct()) {
+              <div class="d-flex align-items-center gap-1 mt-1">
+                <i class="bi bi-check-circle-fill text-success small" aria-hidden="true"></i>
+                <span class="small text-muted">{{ openingSelectedProduct()!.label }}</span>
+              </div>
+            }
+            @if (openingProductResults().length > 0) {
+              <ul class="list-group position-absolute shadow-sm mt-1 w-100" role="listbox"
+                  aria-label="Product suggestions" style="z-index:1050;max-height:220px;overflow-y:auto;">
+                @for (p of openingProductResults(); track p.uid) {
+                  <li class="list-group-item list-group-item-action small py-2"
+                      role="option"
+                      style="cursor:pointer"
+                      (click)="selectOpeningProduct(p)"
+                      (keydown.enter)="selectOpeningProduct(p)"
+                      tabindex="0"
+                      [attr.aria-label]="p.code + ' — ' + p.name">
+                    <strong>{{ p.code }}</strong> — {{ p.name }}
+                  </li>
+                }
+              </ul>
+            }
+          </div>
+          <!-- Qty -->
+          <div class="col-sm-2">
+            <label class="form-label small text-muted mb-1" for="openingQty">
+              Quantity <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="openingQty" name="openingQty" type="number" min="0.001" step="any"
+                   class="form-control"
+                   [ngModel]="openingQty()" (ngModelChange)="openingQty.set($event)"
+                   [disabled]="openingBusy()" />
+          </div>
+          <!-- Note -->
+          <div class="col-sm-3">
+            <label class="form-label small text-muted mb-1" for="openingNote">Note</label>
+            <input id="openingNote" name="openingNote" type="text" class="form-control"
+                   [ngModel]="openingNote()" (ngModelChange)="openingNote.set($event)"
+                   [disabled]="openingBusy()" autocomplete="off" />
+          </div>
+          <div class="col-sm-2 d-flex align-items-end">
+            <button type="submit" class="btn btn-primary w-100" [disabled]="openingBusy()">
+              @if (openingBusy()) {
+                <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+              }
+              Record
+            </button>
+          </div>
+        </div>
+        @if (openingError(); as msg) {
+          <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+        }
+      </form>
+    }
+
+    <!-- List states -->
+    @switch (state()) {
+      @case ('loading') {
+        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading stock…
+        </p>
+      }
+      @case ('error') {
+        <p class="state text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load stock. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="state text-muted d-flex align-items-center gap-2">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view stock.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <p class="state text-muted">No stock records found.</p>
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-hover align-middle bg-white grid">
+              <caption class="visually-hidden">Stock on-hand</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Product</th>
+                  <th scope="col" class="text-end">Quantity</th>
+                  <th scope="col" class="text-end">Reorder Level</th>
+                  <th scope="col">Flags</th>
+                  <th scope="col"><span class="visually-hidden">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of rows(); track row.uid) {
+                  <tr>
+                    <td class="font-monospace small">{{ productLabel(row.productId) }}</td>
+                    <td class="text-end font-monospace">
+                      <span [class.text-danger]="row.negative">{{ row.quantity }}</span>
+                    </td>
+                    <td class="text-end font-monospace small text-muted">
+                      <!-- Inline reorder edit -->
+                      @if (reorderEditUid() === row.uid) {
+                        <form class="d-inline-flex gap-1 align-items-center"
+                              (ngSubmit)="saveReorderLevel(row)"
+                              aria-label="Set reorder level for {{ productLabel(row.productId) }}">
+                          <label class="visually-hidden" [for]="'rl-' + row.uid">Reorder level</label>
+                          <input [id]="'rl-' + row.uid" [name]="'rl-' + row.uid"
+                                 type="number" min="0" step="any" class="form-control form-control-sm"
+                                 style="width:90px"
+                                 [ngModel]="reorderEditValue()"
+                                 (ngModelChange)="reorderEditValue.set($event)"
+                                 [disabled]="reorderSaving()"
+                                 placeholder="—" />
+                          <button type="submit" class="btn btn-sm btn-success"
+                                  [disabled]="reorderSaving()"
+                                  aria-label="Save reorder level">
+                            <i class="bi bi-check-lg" aria-hidden="true"></i>
+                          </button>
+                          <button type="button" class="btn btn-sm btn-outline-secondary"
+                                  (click)="cancelReorderEdit()" aria-label="Cancel">
+                            <i class="bi bi-x-lg" aria-hidden="true"></i>
+                          </button>
+                        </form>
+                        @if (reorderError(); as msg) {
+                          <span class="text-danger small d-block mt-1" role="alert">{{ msg }}</span>
+                        }
+                      } @else {
+                        {{ row.reorderLevel ?? '—' }}
+                        @if (canAdjust()) {
+                          <button type="button" class="btn btn-link btn-sm p-0 ms-1"
+                                  (click)="startReorderEdit(row)"
+                                  [attr.aria-label]="'Set reorder level for ' + productLabel(row.productId)">
+                            <i class="bi bi-pencil-square small" aria-hidden="true"></i>
+                          </button>
+                        }
+                      }
+                    </td>
+                    <td>
+                      @if (row.negative) {
+                        <span class="badge text-bg-danger me-1">Negative</span>
+                      }
+                      @if (row.low && !row.negative) {
+                        <span class="badge text-bg-warning">Low</span>
+                      }
+                    </td>
+                    <td>
+                      <div class="d-flex gap-1 flex-wrap">
+                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                (click)="openMovements(row)"
+                                [attr.aria-label]="'View movements for ' + productLabel(row.productId)"
+                                [attr.aria-expanded]="movementsUid() === row.uid">
+                          <i class="bi bi-list-ul me-1" aria-hidden="true"></i>Ledger
+                        </button>
+                        @if (canAdjust()) {
+                          <button type="button" class="btn btn-sm btn-outline-primary"
+                                  (click)="openAdjustForm(row)"
+                                  [attr.aria-label]="'Adjust stock for ' + productLabel(row.productId)">
+                            <i class="bi bi-plus-slash-minus me-1" aria-hidden="true"></i>Adjust
+                          </button>
+                        }
+                      </div>
+                    </td>
+                  </tr>
+
+                  <!-- Adjust form (inline below the row) -->
+                  @if (adjustingUid() === row.uid) {
+                    <tr>
+                      <td colspan="5">
+                        <form class="card card-body py-2 px-3 mb-0"
+                              (ngSubmit)="submitAdjust()"
+                              aria-label="Adjust stock for {{ productLabel(row.productId) }}">
+                          <h3 class="h6 mb-2">Adjust Stock</h3>
+                          <div class="row g-2 align-items-start">
+                            <!-- Product picker -->
+                            <div class="col-sm-4 position-relative">
+                              <label class="form-label small text-muted mb-1" for="adjustProduct">Product</label>
+                              <input id="adjustProduct" name="adjustProduct" type="search"
+                                     class="form-control form-control-sm"
+                                     [ngModel]="adjustProductQ()"
+                                     (ngModelChange)="onAdjustProductSearchChange($event)"
+                                     [disabled]="adjusting()"
+                                     autocomplete="off"
+                                     aria-autocomplete="list"
+                                     [attr.aria-expanded]="adjustProductResults().length > 0" />
+                              @if (adjustProductResults().length > 0) {
+                                <ul class="list-group position-absolute shadow-sm mt-1 w-100" role="listbox"
+                                    style="z-index:1050;max-height:180px;overflow-y:auto;">
+                                  @for (p of adjustProductResults(); track p.uid) {
+                                    <li class="list-group-item list-group-item-action small py-1"
+                                        role="option" style="cursor:pointer"
+                                        (click)="selectAdjustProduct(p)"
+                                        (keydown.enter)="selectAdjustProduct(p)"
+                                        tabindex="0">
+                                      <strong>{{ p.code }}</strong> — {{ p.name }}
+                                    </li>
+                                  }
+                                </ul>
+                              }
+                            </div>
+                            <!-- Qty (signed) -->
+                            <div class="col-sm-2">
+                              <label class="form-label small text-muted mb-1" for="adjustQty">
+                                Qty (±) <span class="text-danger" aria-hidden="true">*</span>
+                              </label>
+                              <input id="adjustQty" name="adjustQty" type="number" step="any"
+                                     class="form-control form-control-sm"
+                                     [ngModel]="adjustQty()" (ngModelChange)="adjustQty.set($event)"
+                                     [disabled]="adjusting()" />
+                            </div>
+                            <!-- Reason -->
+                            <div class="col-sm-2">
+                              <label class="form-label small text-muted mb-1" for="adjustReason">
+                                Reason <span class="text-danger" aria-hidden="true">*</span>
+                              </label>
+                              <select id="adjustReason" name="adjustReason" class="form-select form-select-sm"
+                                      [ngModel]="adjustReason()"
+                                      (ngModelChange)="adjustReason.set($event)"
+                                      [disabled]="adjusting()">
+                                @for (r of adjustmentReasons; track r) {
+                                  <option [value]="r">{{ r }}</option>
+                                }
+                              </select>
+                            </div>
+                            <!-- Note -->
+                            <div class="col-sm-2">
+                              <label class="form-label small text-muted mb-1" for="adjustNote">Note</label>
+                              <input id="adjustNote" name="adjustNote" type="text"
+                                     class="form-control form-control-sm"
+                                     [ngModel]="adjustNote()" (ngModelChange)="adjustNote.set($event)"
+                                     [disabled]="adjusting()" autocomplete="off" />
+                            </div>
+                            <!-- Buttons -->
+                            <div class="col-sm-2 d-flex align-items-end gap-1">
+                              <button type="submit" class="btn btn-sm btn-primary" [disabled]="adjusting()">
+                                @if (adjusting()) {
+                                  <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                }
+                                Save
+                              </button>
+                              <button type="button" class="btn btn-sm btn-outline-secondary"
+                                      (click)="closeAdjustForm()" [disabled]="adjusting()">
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                          @if (adjustError(); as msg) {
+                            <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+                          }
+                        </form>
+                      </td>
+                    </tr>
+                  }
+
+                  <!-- Movements drawer (inline below the row) -->
+                  @if (movementsUid() === row.uid) {
+                    <tr>
+                      <td colspan="5">
+                        <div class="card card-body py-2 px-3 mb-0">
+                          <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h3 class="h6 mb-0">Ledger — {{ movementsProductLabel() }}</h3>
+                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                                    (click)="closeMovements()" aria-label="Close ledger">
+                              <i class="bi bi-x-lg" aria-hidden="true"></i>
+                            </button>
+                          </div>
+                          @switch (movementsState()) {
+                            @case ('loading') {
+                              <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+                                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+                              </p>
+                            }
+                            @case ('error') {
+                              <p class="text-danger small" role="alert">Could not load movements.</p>
+                            }
+                            @default {
+                              @if (movementRows().length === 0) {
+                                <p class="text-muted small">No movements recorded yet.</p>
+                              } @else {
+                                <div class="table-responsive">
+                                  <table class="table table-sm table-borderless align-middle mb-1">
+                                    <caption class="visually-hidden">Stock movements ledger</caption>
+                                    <thead class="table-light">
+                                      <tr>
+                                        <th scope="col">Date</th>
+                                        <th scope="col">Type</th>
+                                        <th scope="col">Dir</th>
+                                        <th scope="col" class="text-end">Qty</th>
+                                        <th scope="col">Reason</th>
+                                        <th scope="col">Note</th>
+                                        <th scope="col">Source Doc</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      @for (m of movementRows(); track m.uid) {
+                                        <tr>
+                                          <td class="small text-muted">{{ m.occurredAt | date:'dd/MM/yyyy HH:mm' }}</td>
+                                          <td class="small font-monospace">{{ m.movementType }}</td>
+                                          <td>
+                                            <span class="badge" [class]="directionBadge(m.direction)">{{ m.direction }}</span>
+                                          </td>
+                                          <td class="text-end font-monospace">{{ m.quantity }}</td>
+                                          <td class="small">{{ m.reasonCode ?? '—' }}</td>
+                                          <td class="small text-muted">{{ m.note ?? '—' }}</td>
+                                          <td class="small font-monospace text-muted">{{ m.sourceDocumentType ?? '—' }}</td>
+                                        </tr>
+                                      }
+                                    </tbody>
+                                  </table>
+                                </div>
+                                @if (movementMeta().totalPages > 1) {
+                                  <nav aria-label="Movements pagination" class="d-flex align-items-center gap-2 mt-1">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                                            [disabled]="movementsPage() === 0"
+                                            (click)="movementsPrevPage()">
+                                      <i class="bi bi-chevron-left" aria-hidden="true"></i>
+                                      <span class="visually-hidden">Previous</span>
+                                    </button>
+                                    <span class="small text-muted">
+                                      Page {{ movementMeta().page + 1 }} of {{ movementMeta().totalPages }}
+                                    </span>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                                            [disabled]="!movementMeta().hasNext"
+                                            (click)="movementsNextPage()">
+                                      <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                                      <span class="visually-hidden">Next</span>
+                                    </button>
+                                  </nav>
+                                }
+                              }
+                            }
+                          }
+                        </div>
+                      </td>
+                    </tr>
+                  }
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Pagination -->
+          @if (meta().totalPages > 1) {
+            <nav aria-label="Stock list pagination" class="d-flex align-items-center gap-3 mt-2">
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      [disabled]="currentPage() === 0"
+                      (click)="prevPage()">
+                <i class="bi bi-chevron-left" aria-hidden="true"></i>
+                <span class="visually-hidden">Previous page</span>
+              </button>
+              <span class="small text-muted">
+                Page {{ meta().page + 1 }} of {{ meta().totalPages }}
+                ({{ meta().totalElements }} total)
+              </span>
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      [disabled]="!meta().hasNext"
+                      (click)="nextPage()">
+                <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                <span class="visually-hidden">Next page</span>
+              </button>
+            </nav>
+          }
+        }
+      }
+    }
+  }
+</section>
