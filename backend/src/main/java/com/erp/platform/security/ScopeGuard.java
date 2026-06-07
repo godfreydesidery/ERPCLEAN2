@@ -9,8 +9,12 @@ import com.erp.modules.parties.repository.SupplierRepository;
 import com.erp.modules.products.repository.PriceListRepository;
 import com.erp.modules.products.repository.ProductRepository;
 import com.erp.modules.products.repository.UnitOfMeasureRepository;
+import com.erp.modules.purchases.repository.GoodsReceiptRepository;
+import com.erp.modules.purchases.repository.PurchaseOrderRepository;
 import com.erp.modules.sales.repository.SalesInvoiceRepository;
 import com.erp.modules.sales.repository.TaxRateRepository;
+import com.erp.modules.stock.repository.StockMovementRepository;
+import com.erp.modules.stock.repository.StockOnHandRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -30,22 +34,27 @@ import org.springframework.stereotype.Component;
  * {@link PermissionResolver} pattern (which reads {@code UserRoleRepository}); this is the
  * cross-cutting spine, not a peer module (ArchUnit note in ADR-0002 and ADR-0006 D-10).
  * Sales repositories are added here following the same pattern (ADR-0008 D-10).
+ * Purchases repositories added per ADR-0011 D-10 ({@code purchaseorder}/{@code goodsreceipt}).
  */
 @Component
 public class ScopeGuard {
 
-    private final CompanyRepository companies;
-    private final BranchRepository branches;
-    private final CustomerRepository customers;
-    private final SupplierRepository suppliers;
-    private final AgentRepository agents;
-    private final OtherPartyRepository otherParties;
-    private final ProductRepository products;
-    private final PriceListRepository priceLists;
-    private final UnitOfMeasureRepository units;
-    private final SalesInvoiceRepository salesInvoices;
-    private final TaxRateRepository taxRates;
-    private final AuditService audit;
+    private final CompanyRepository        companies;
+    private final BranchRepository         branches;
+    private final CustomerRepository       customers;
+    private final SupplierRepository       suppliers;
+    private final AgentRepository          agents;
+    private final OtherPartyRepository     otherParties;
+    private final ProductRepository        products;
+    private final PriceListRepository      priceLists;
+    private final UnitOfMeasureRepository  units;
+    private final SalesInvoiceRepository   salesInvoices;
+    private final TaxRateRepository        taxRates;
+    private final StockOnHandRepository    stockOnHands;
+    private final StockMovementRepository  stockMovements;
+    private final PurchaseOrderRepository  purchaseOrders;
+    private final GoodsReceiptRepository   goodsReceipts;
+    private final AuditService             audit;
 
     public ScopeGuard(CompanyRepository companies,
                       BranchRepository branches,
@@ -58,42 +67,55 @@ public class ScopeGuard {
                       UnitOfMeasureRepository units,
                       SalesInvoiceRepository salesInvoices,
                       TaxRateRepository taxRates,
+                      StockOnHandRepository stockOnHands,
+                      StockMovementRepository stockMovements,
+                      PurchaseOrderRepository purchaseOrders,
+                      GoodsReceiptRepository goodsReceipts,
                       AuditService audit) {
-        this.companies = companies;
-        this.branches = branches;
-        this.customers = customers;
-        this.suppliers = suppliers;
-        this.agents = agents;
-        this.otherParties = otherParties;
-        this.products = products;
-        this.priceLists = priceLists;
-        this.units = units;
-        this.salesInvoices = salesInvoices;
-        this.taxRates = taxRates;
-        this.audit = audit;
+        this.companies      = companies;
+        this.branches       = branches;
+        this.customers      = customers;
+        this.suppliers      = suppliers;
+        this.agents         = agents;
+        this.otherParties   = otherParties;
+        this.products       = products;
+        this.priceLists     = priceLists;
+        this.units          = units;
+        this.salesInvoices  = salesInvoices;
+        this.taxRates       = taxRates;
+        this.stockOnHands   = stockOnHands;
+        this.stockMovements = stockMovements;
+        this.purchaseOrders = purchaseOrders;
+        this.goodsReceipts  = goodsReceipts;
+        this.audit          = audit;
     }
 
     /**
      * Resolve a target uid to its owning company id, per target type (ADR-0002 §2, ADR-0006 D-10,
-     * ADR-0008 D-10). Extended with sales target types so that
-     * {@code @perm.scoped(#uid,'invoice','SALES.INVOICE.VIEW')} gates work correctly.
+     * ADR-0008 D-10, ADR-0011 D-10). Extended with purchases target types so that
+     * {@code @perm.scoped(#uid,'purchaseorder','PURCHASE.ORDER.CREATE')} gates work correctly.
      */
     public Optional<Long> companyIdOf(String targetType, String uid) {
         if (targetType == null || uid == null) {
             return Optional.empty();
         }
         return switch (targetType.toLowerCase()) {
-            case "company"     -> companies.findByUid(uid).map(c -> c.getId());
-            case "branch"      -> branches.findByUid(uid).map(b -> b.getCompany().getId());
-            case "customer"    -> customers.findCompanyIdByUid(uid);
-            case "supplier"    -> suppliers.findCompanyIdByUid(uid);
-            case "agent"       -> agents.findCompanyIdByUid(uid);
-            case "otherparty"  -> otherParties.findCompanyIdByUid(uid);
-            case "product"     -> products.findCompanyIdByUid(uid);
-            case "pricelist"   -> priceLists.findCompanyIdByUid(uid);
-            case "unit"        -> units.findCompanyIdByUid(uid);
-            case "invoice"     -> salesInvoices.findCompanyIdByUid(uid);
-            case "taxrate"     -> taxRates.findCompanyIdByUid(uid);
+            case "company"        -> companies.findByUid(uid).map(c -> c.getId());
+            case "branch"         -> branches.findByUid(uid).map(b -> b.getCompany().getId());
+            case "customer"       -> customers.findCompanyIdByUid(uid);
+            case "supplier"       -> suppliers.findCompanyIdByUid(uid);
+            case "agent"          -> agents.findCompanyIdByUid(uid);
+            case "otherparty"     -> otherParties.findCompanyIdByUid(uid);
+            case "product"        -> products.findCompanyIdByUid(uid);
+            case "pricelist"      -> priceLists.findCompanyIdByUid(uid);
+            case "unit"           -> units.findCompanyIdByUid(uid);
+            case "invoice"        -> salesInvoices.findCompanyIdByUid(uid);
+            case "taxrate"        -> taxRates.findCompanyIdByUid(uid);
+            case "stockonhand"    -> stockOnHands.findCompanyIdByUid(uid);
+            case "stockmovement"  -> stockMovements.findCompanyIdByUid(uid);
+            // Purchases target types (ADR-0011 D-10)
+            case "purchaseorder"  -> purchaseOrders.findCompanyIdByUid(uid);
+            case "goodsreceipt"   -> goodsReceipts.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };
