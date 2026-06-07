@@ -126,3 +126,59 @@ One definition per term, used consistently across the team. Add terms as modules
   only — no stock deduction or cost roll-up yet.
 - **Stock-on-hand** — the quantity of a stockable product at a branch. **NOT the Products module** — a
   future Stock concern. Products are definitions; stock-on-hand is a level. Never conflate them.
+
+## Sales
+
+> Status: **RATIFIED 2026-06-07** — terms reflect the ratified v1 in sales.md.
+
+- **Sale** — the act and record of selling priced products to a customer; the umbrella term. The
+  recorded instance is a **sales document**.
+- **Sales document** — a recorded sale. v1's canonical sales document is the **Invoice**. A **Sales
+  Order** and a **POS sale/receipt** are other sales-document kinds (channels), both **deferred**.
+- **Channel** — *how* a sale is captured: **Sales Order (SO)**, **Invoice**, or **POS till**. They
+  share the sale spine and differ in lifecycle, who captures them, and how money is taken. **v1 builds
+  the Invoice only**; POS and SO are deferred.
+- **Invoice** — the canonical v1 sale: the demand/record of a sale (may be unpaid). Distinct from a
+  **receipt**. Carries customer, attached agent, lines, VAT, totals, document number.
+- **Receipt** — evidence that **money was taken** against a sale. A cash sale produces an invoice and a
+  receipt at once; a credit invoice produces a receipt later when paid. **Invoice ≠ receipt** — never
+  use them interchangeably.
+- **Sales line** — one product on a sale: product, quantity (in a chosen base/bulk unit), unit price,
+  line discount, line VAT, line total. Every amount is a monetary amount (amount + currency).
+- **Attached sales agent** — the agent (internal app-user or external broker) a sale is **attached to**
+  (Parties). Distinct from the **operator** (the logged-in user who keys the sale). Internal agent
+  auto-defaults to the operator when the operator is that agent. v1 captures the attachment only; it
+  does **not** compute commission.
+- **Operator** — the logged-in user creating the sale; not necessarily the attached agent.
+- **Tender** — a means of payment taken against a sale. **v1: cash and mobile money** (card deferred).
+  A sale may be settled by one tender or **split** across several, **paid in full at finalise**.
+- **Settlement** — recording payment against a sale. A fully-paid sale is **settled**; **v1 takes
+  payment in full at finalise**, so there is **no part-settled / outstanding-balance state** until
+  credit sales land (deferred).
+- **Credit sale** — a sale where an account customer does not pay now; an amount becomes a
+  **receivable** drawn against the customer's credit limit. **Deferred in v1** (paid-at-sale only;
+  lands with a Finance-aware round); a **walk-in customer can never take credit**.
+- **Discount** — a reduction applied to a sale, at **line level** and/or **document level** (percent or
+  amount). Applied **before VAT** on the taxable base. Both supported in v1.
+- **Price override** — a permission-gated, **audited** manual change to a line's unit price away from
+  the price-list value (original and applied price both recorded). An override beyond a configured
+  threshold may require supervisor approval (threshold value OQ-SALES-10).
+- **Commission (on a sale)** — the agent's earning on a sale. v1 **records/captures** a commission
+  record but **does not compute** it (rates deferred, OQ-PARTY-03).
+- **VAT status (of a product)** — **standard-rated** (TZ standard rate), **zero-rated** (0% but a
+  taxable supply), or **exempt** (no VAT, outside the taxable base). A **field on the product master**
+  (resolves Products OQ-PROD-05 = yes); the rate is maintained data, **never hard-coded**. v1 computes
+  VAT per line from this status.
+- **VAT invoice** — an invoice carrying seller VRN, customer details, per-line tax, and a VAT summary
+  by rate band. v1 produces this. **Not** the same as a fiscal receipt.
+- **Fiscalisation (TRA EFD/VFD)** — applying TRA electronic-fiscal-device rules: a fiscal receipt
+  number, signing/QR, and the TRA-mandated format. **Deferred in v1** as a separable later integration;
+  a v1 VAT invoice is **not** a TRA fiscal receipt until that integration lands.
+- **Void** — a permissioned, audited reversal of a finalised sale (and its receipt). **The only v1
+  correction path.** **Return / credit note / refund** (partial reversal with restocking and reverse
+  tender) is **deferred**.
+- **Till / POS session (shift)** — a cash point and the open period a cashier works it, opened with a
+  **float** and closed with a **cash-drawer reconciliation** (X/Z report). A POS concept; **deferred**
+  with the POS channel.
+- **Document number** — a sale's identifier, **unique within its company**, allocated from the generic
+  `code_sequence` numbering primitive (ADR-0007). Not the same as a TRA fiscal receipt number.

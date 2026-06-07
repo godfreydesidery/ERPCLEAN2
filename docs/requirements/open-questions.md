@@ -98,11 +98,12 @@ Each entry: why it matters · who decides · does it block build.
 - **OQ-PROD-04** — **Product categories / groups in v1 or later?** Grouping products (Beverages,
   Spare Parts, Kitchen) aids browsing/reporting and often drives default tax/pricing. Not in current
   v1 scope; pull in now or defer. *Decider:* owner. *Blocks build:* no (additive later).
-- **OQ-PROD-05** — **Per-product tax / VAT applicability**: should a product carry its VAT status
-  (standard-rated / exempt / zero-rated) and/or a tax code now? Highly relevant for TZ VAT, needed by
-  Sales/fiscalisation soon. Cheap to capture in v1; deferring risks a later product-master change.
-  *Decider:* owner (with finance/tax input). *Blocks build:* no for Products; likely yes for Sales.
-  **(One of the most useful to answer before the architect models the product master.)**
+- **OQ-PROD-05** — ✅ **RESOLVED 2026-06-07 = yes (with Sales ratification).** The product master gains
+  a **VAT-status field** (standard-rated / zero-rated / exempt) — a clean **additive** change to the
+  product master, **designed with Sales** in ADR-0008. Sales computes VAT per line from this status
+  (sales.md FR-SALES-10). A tax-code attribute beyond the three-way status is deferred until a richer
+  tax-code scheme is needed. *Note:* products.md §10 still lists this as pending — update when ADR-0008
+  lands the field.
 - **OQ-PROD-06** — **Composed-product pricing**: confirmed v1 = a composed product is **independently
   priced** as a sellable line (components recorded for display + future stock-deduction, not to derive
   price). Re-confirm no v1 requirement to compute a composed product's price from its components.
@@ -111,3 +112,62 @@ Each entry: why it matters · who decides · does it block build.
   fractions (0.5 kg, 1.25 litre), and to how many decimal places? Affects quantity precision across
   Products/Stock/Sales. *Decider:* owner. *Blocks build:* low — a default (allow fractional, fixed dp)
   can ship; confirm before Stock/Sales quantity math.
+
+## Sales
+
+> **FULLY RATIFIED 2026-06-07.** All eight headline decision areas **and the two ADR-blocking detail
+> rulings — OQ-SALES-03b (VAT entry = tax-EXCLUSIVE) and OQ-SALES-12 (numbering = single per-company
+> `INV-####`)** — are **RESOLVED** (owner rulings below). sales.md is fully ratified. **No
+> ADR-0008-blocking open question remains** for Sales. The remaining Sales OQs are **non-blocking**
+> detail (confirm before go-live, not before ADR). **solutions-architect may start ADR-0008 now.**
+
+### Resolved (owner, 2026-06-07)
+
+- **OQ-SALES-01** — ✅ **RESOLVED: Invoice only in v1.** POS till and Sales Order **deferred** (both
+  reuse the Invoice spine). Reflected in sales.md §2/§3, FR-SALES-01.
+- **OQ-SALES-02** — ✅ **RESOLVED: sales agent mandatory on every sale**; auto-defaults to the logged-in
+  user when they are an INTERNAL agent (overridable); **commission recorded/captured but NOT computed**
+  in v1 (rates deferred → OQ-PARTY-03). Reflected in FR-SALES-14/15/16, BR-SALES-06.
+- **OQ-SALES-03** — ✅ **RESOLVED: v1 computes VAT per line; TRA EFD/VFD fiscalisation deferred** as a
+  separable later integration. v1 prints a proper VAT invoice. Reflected in FR-SALES-10/11/13, §10.
+- **OQ-SALES-04** — ✅ **RESOLVED:** price from a **company default price list, optionally overridden per
+  customer**; **manual line-price override allowed, permission-gated and audited**; **line + document
+  discounts, applied before VAT.** Reflected in FR-SALES-07/08/09, BR-SALES-09.
+- **OQ-SALES-05** — ✅ **RESOLVED:** tenders = **cash + mobile money**, **split allowed**, **paid in full
+  at finalise**; card deferred; no partial-payment / outstanding-balance state in v1. Reflected in
+  FR-SALES-17/18, BR-SALES-07.
+- **OQ-SALES-06** — ✅ **RESOLVED: credit sales / receivables / credit-limit enforcement DEFERRED.** v1
+  is paid-at-sale only; lands with a Finance-aware round (→ OQ-PARTY-02). Reflected in FR-SALES-20.
+- **OQ-SALES-07** — ✅ **RESOLVED: permissioned VOID only in v1**; returns / credit notes / refunds
+  deferred. Reflected in FR-SALES-03/22, BR-SALES-08. *(Void-window value is an architect detail.)*
+- **OQ-SALES-08** — ✅ **N/A in v1** (POS deferred per OQ-SALES-01). Retained for the future POS round
+  (tills, sessions/shifts, cash-drawer reconciliation X/Z, offline).
+- **OQ-SALES-09** — ✅ **RESOLVED & ACCEPTED RISK (owner-accepted):** v1 records sold quantities, deducts
+  **no** inventory, is stock-agnostic (no over-sell warning); deduction designed to fire via the
+  transactional outbox when Stock lands. Made prominent in sales.md §10. Reflected in FR-SALES-21,
+  BR-SALES-11.
+- **OQ-SALES-12** — ✅ **RESOLVED 2026-06-07 (owner): single per-company series `INV-####`** via the
+  generic `code_sequence` (entity_kind `SALES_INVOICE`), mirroring Products/Parties. Per-branch /
+  per-channel numbering can be added later **additively** via the `entity_kind` discriminator. Reflected
+  in sales.md FR-SALES-23, BR-SALES-12, §2, §7. **(Was the last lightly-blocking ADR-0008 question.)**
+- **OQ-SALES-03b** — ✅ **RESOLVED 2026-06-07 (owner): tax-EXCLUSIVE.** Line prices are **net**; VAT is
+  **added on top** to reach the gross total (gross = net + VAT). A tax-inclusive entry mode is **not**
+  built in v1 (revisit for the deferred POS channel, additively). Reflected in sales.md FR-SALES-09/11/12,
+  the VAT vocabulary, §2 scope, §7 totals flow. **(Was the last ADR-0008-blocking question.)**
+
+### Still open — NON-blocking detail (recommended defaults stand; confirm before go-live, NOT before ADR-0008)
+
+> **None of these block ADR-0008.** solutions-architect may proceed now; each refines a value inside an
+> already-ratified feature and lands additively or is confirmed during build / before go-live.
+
+- **OQ-SALES-10** — **Override / approval threshold value.** The permission-gated, audited override is
+  ratified; the **threshold above which a supervisor must approve** (e.g. discount > X% or price below
+  cost) and its value are open. *Recommended default:* single configurable percent threshold, owner-set;
+  ship the permissioned override regardless. *Decider:* owner. *Blocks ADR-0008:* **NO** (additive) —
+  confirm value before go-live.
+- **OQ-SALES-11** — **Number-assignment point.** Draft state confirmed; confirm the document number is
+  **assigned at finalise** (so drafts don't consume numbers). *Recommended default:* number at finalise
+  (the architect models to this default). *Decider:* owner. *Blocks ADR-0008:* **NO** — default stands.
+- **OQ-CUR-03** — *(carried)* confirm **rounding mode + TZS decimals** before Sales computes totals;
+  backend and frontend must round identically (NFR-SALES-02). *Recommended default:* half-up, TZS = 0 dp.
+  *Decider:* owner (finance input). *Blocks ADR-0008:* **NO** for the model; **confirm before go-live**.
