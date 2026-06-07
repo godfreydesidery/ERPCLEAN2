@@ -200,11 +200,17 @@ export class PurchaseOrderDetailComponent {
     this.productSearchQ.set(`${product.code} — ${product.name}`);
   }
 
+  /** Coerce a number-typed-input signal value to a trimmed string (ngModel on type="number"
+   *  emits a number, so raw .trim() throws; the backend takes qty/cost as strings on the wire). */
+  private asStr(v: unknown): string {
+    return v === null || v === undefined ? '' : String(v).trim();
+  }
+
   addLine(): void {
     const selected = this.selectedProduct();
     const unitUid = this.newLineUnitUid();
-    const qty = this.newLineQty().trim();
-    const cost = this.newLineUnitCost().trim();
+    const qty = this.asStr(this.newLineQty());
+    const cost = this.asStr(this.newLineUnitCost());
 
     if (!selected) { this.lineFormError.set('Select a product.'); return; }
     if (!unitUid) { this.lineFormError.set('Select a unit.'); return; }

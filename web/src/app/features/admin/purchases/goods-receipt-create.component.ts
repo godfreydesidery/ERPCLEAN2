@@ -194,9 +194,12 @@ export class GoodsReceiptCreateComponent {
 
   // ── Line editing ───────────────────────────────────────────────────────────
 
-  updateLineQty(index: number, qty: string): void {
+  updateLineQty(index: number, qty: number | string | null): void {
+    // ngModel on type="number" emits a number; keep receivedQty a string (the field type +
+    // the downstream .trim()/wire contract expect a string).
+    const qtyStr = qty === null || qty === undefined ? '' : String(qty);
     this.receiveLines.update((entries) =>
-      entries.map((e, i) => (i === index ? { ...e, receivedQty: qty } : e)),
+      entries.map((e, i) => (i === index ? { ...e, receivedQty: qtyStr } : e)),
     );
   }
 
