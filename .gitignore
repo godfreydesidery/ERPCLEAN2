@@ -35,3 +35,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# SPA bundle injected at Docker build time — never commit
+backend/src/main/resources/static/
