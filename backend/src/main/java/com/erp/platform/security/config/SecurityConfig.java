@@ -40,9 +40,18 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable) // stateless API, token-based — no CSRF cookie
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(reg -> reg
+                        // API endpoints: only auth + health are public; everything else needs a
+                        // bearer token AND passes method-security (@PreAuthorize) on the controller.
                         .requestMatchers("/api/v1/auth/login", "/api/v1/auth/refresh",
-                                "/api/v1/auth/logout", "/api/v1/health", "/actuator/**")
+                                "/api/v1/auth/logout", "/api/v1/health")
                         .permitAll()
+                        .requestMatchers("/api/**").authenticated()
+                        .requestMatchers("/actuator/**").permitAll()
+                        // Co-located Angular SPA (QA single-container): the shell, built assets, and
+                        // client-side routes (forwarded to index.html by SpaForwardController) are all
+                        // GETs OUTSIDE /api — serve them publicly so the UI loads and deep-links work.
+                        // The API above is unaffected (it is matched first and stays gated).
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/**").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth -> oauth.jwt(jwt -> {
                 }))
