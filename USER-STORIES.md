@@ -203,3 +203,145 @@ individual-vs-business type **so that** records are tax-complete where they must
   **warned** but allowed (separate-records model, BR-PARTY-13 / §9).
 - **AC5** Given a party **code** that already exists in the same company, then it is rejected
   (BR-PARTY-08); the same code in a different company is allowed.
+
+---
+
+## Sales — selling to customers
+
+Requirements: [docs/requirements/sales.md](docs/requirements/sales.md). Status: **RATIFIED
+(owner-confirmed 2026-06-07).** v1 = Invoice channel only; VAT computed per line from per-product VAT
+status (TRA fiscalisation deferred); cash + mobile-money tenders, split allowed, paid in full at
+finalise; sales agent mandatory + auto-default (commission captured not computed); company default
+price list optionally overridden per customer; permissioned audited price override; line + document
+discounts before VAT; **no stock deduction (accepted risk)**; permissioned void only; credit deferred.
+Remaining detail-level OQs (numbering scheme OQ-SALES-12, VAT-inclusive/-exclusive OQ-SALES-03b,
+override threshold OQ-SALES-10, rounding OQ-CUR-03) refine values, not scope. Depends on IAM, Parties,
+Products, Multicurrency (ADR-0005). Sales are scoped per company and per active branch.
+
+### US-SALES-01 — Create and finalise a cash invoice (happy path)
+**As a** sales clerk **I want** to ring up a customer's products, apply VAT, and finalise the invoice
+**so that** the sale is recorded with correct tax and a unique document number.
+- **AC1** Given I am logged in with `SALES.CREATE` and an active branch, when I start a new sale, then
+  it opens scoped to my company + branch (FR-SALES-01, NFR-SALES-01).
+- **AC2** Given I add a sellable, non-archived product associated with my branch with a quantity and
+  unit, then a line is created and the quantity converts to base units per Products (FR-SALES-04).
+- **AC3** Given the product is on the applicable price list, then the line unit price defaults from
+  that list (FR-SALES-07); given the product has **no** price, then the line is rejected with a
+  "product not priced" message (FR-SALES-05, BR-SALES-03).
+- **AC4** Given the lines are entered, when I view totals, then the system shows **net, VAT (by rate
+  band), and gross**, each amount carrying its currency and rounded to the currency's minor units
+  (FR-SALES-11, BR-SALES-04). `[rounding mode OQ-CUR-03]`
+- **AC5** Given I finalise the sale, then it receives a **document number unique within the company**
+  (allocated from the generic `code_sequence`), and its commercial content becomes immutable
+  (FR-SALES-23, BR-SALES-08, BR-SALES-12).
+- **AC6** Given two clerks finalise simultaneously, then they receive **distinct** document numbers
+  (NFR-SALES-04).
+- **AC7** Given the sale is finalised, then create→finalise is written to the audit trail with actor,
+  branch, and timestamp (NFR-SALES-03).
+
+### US-SALES-02 — Anonymous counter sale to the walk-in customer
+**As a** cashier **I want** to sell to an anonymous walk-in without keying full customer details
+**so that** counter sales are fast.
+- **AC1** Given a walk-in sale, when I select the reusable **walk-in customer** (Parties OQ-PARTY-06),
+  then the sale proceeds with no customer tax details required (BR-SALES-10).
+- **AC2** Given v1 is paid-at-sale only (credit deferred), when I sell to the walk-in customer, then the
+  sale is **paid in full at finalise** like any v1 sale; no receivable is created (FR-SALES-20).
+- **AC3** Given credit sales arrive in a later round, then a walk-in customer must **never** be able to
+  take credit (BR-SALES-10, BR-PARTY-07) — recorded now so the future credit feature enforces it.
+
+### US-SALES-03 — Attach a sales agent (auto-default when the operator is an internal agent)
+**As a** sales clerk who is also an internal sales agent **I want** the sale's agent to default to me
+**so that** every sale is correctly attributed without extra keying.
+- **AC1** Given I am logged in and my user is referenced by an **internal** agent record, when I start
+  a sale, then the sale's agent **auto-defaults to my agent record** (FR-SALES-15).
+- **AC2** Given I have permission, when I change the agent, then I may select another **selectable**
+  agent (branch-associated; if internal, its IAM user active) (FR-SALES-14, BR-SALES-06).
+- **AC3** Given an internal agent whose IAM user is **disabled**, then it is **not selectable**
+  (Parties BR-PARTY-10).
+- **AC4** Given a sale with no agent (agent is **mandatory**), when I finalise, then it is blocked until
+  an agent is attached (FR-SALES-14, BR-SALES-06).
+- **AC5** Given the sale is finalised, then the agent attachment **and a commission record** are
+  captured, but **no commission is computed or accrued** in v1 (FR-SALES-16). `[rates OQ-PARTY-03]`
+
+### US-SALES-04 — VAT by product status (standard / zero-rated / exempt)
+**As a** sales clerk **I want** each line taxed by its product's VAT status **so that** the invoice's
+tax is correct for TRA.
+- **AC1** Given a **standard-rated** product (VAT status carried on the product master, OQ-PROD-05
+  resolved = yes), then the line bears VAT at the **maintained** TZ standard rate (not hard-coded)
+  (FR-SALES-10, BR-SALES-05).
+- **AC2** Given a **zero-rated** product, then the line bears 0% VAT but is counted as a taxable
+  supply in the VAT summary (BR-SALES-05).
+- **AC3** Given an **exempt** product, then the line bears no VAT and is excluded from the taxable base
+  (BR-SALES-05).
+- **AC4** Given a mix of statuses on one sale, then the document shows a **VAT summary by rate band**
+  (FR-SALES-11), and the printed invoice carries the seller VRN and per-line tax (FR-SALES-13).
+- **AC5** Given v1, then the invoice is a **VAT invoice but NOT a TRA EFD/VFD fiscal receipt** (no
+  fiscal number/signing) — fiscalisation deferred, an accepted gap (FR-SALES-13, §10).
+- **AC6** Given line prices are entered VAT-exclusive or VAT-inclusive (entry mode OQ-SALES-03b), then
+  net/VAT/gross compute consistently with the chosen mode (FR-SALES-12). `[OQ-SALES-03b]`
+
+### US-SALES-05 — Price override and line discount (permissioned, recorded)
+**As a** sales clerk with override permission **I want** to adjust a line's price or apply a discount
+**so that** I can honour an agreed price, with the change auditable.
+- **AC1** Given a line, then the unit price **defaults from the company default price list, or the
+  customer's price list if the customer has one** (FR-SALES-07).
+- **AC2** Given `SALES.OVERRIDE`, when I change a line's unit price, then the override is accepted and
+  **both the original list price and the applied price are recorded and audited** with operator + time
+  (FR-SALES-08, BR-SALES-09, NFR-SALES-03).
+- **AC3** Given I lack `SALES.OVERRIDE`, when I try to change the price, then it is refused
+  (FR-SALES-25).
+- **AC4** Given a **line discount** (percent or amount), then it is applied to the taxable base
+  **before VAT** (FR-SALES-09).
+- **AC5** Given a **document-level discount** (percent or amount), then it too is applied **before VAT**
+  and the VAT recompute reflects it (FR-SALES-09).
+- **AC6** Given a configured approval threshold and an override beyond it, then finalisation is blocked
+  pending supervisor approval (BR-SALES-09). `[threshold value OQ-SALES-10]`
+
+### US-SALES-06 — Take payment (cash + mobile money, split allowed) and issue a receipt
+**As a** cashier **I want** to settle a sale by one or more tenders **so that** the customer pays and
+gets a receipt.
+- **AC1** Given a finalised sale, when I take payment by **cash** and/or **mobile money** covering the
+  gross total, then the sale becomes **settled** and a **receipt** is produced (FR-SALES-17/18).
+- **AC2** Given a split (part cash + part mobile money) that covers the total, then it is accepted as
+  one settlement (FR-SALES-17).
+- **AC3** Given **cash over-tender**, then **change** is computed and shown; the balance does not go
+  negative (BR-SALES-07).
+- **AC4** Given a payment, then it settles the sale **in the sale's own currency**; a different
+  currency is refused (FR-SALES-19, BR-CUR-06).
+- **AC5** Given credit is deferred in v1, then a sale must be **paid in full at finalise** to settle;
+  there is **no partial-payment / outstanding-balance** state (FR-SALES-18).
+- **AC6** Given tenders covering **less than** the gross total, then the sale **cannot finalise as
+  settled** — it is held or cancelled (no receivable created) (FR-SALES-18, FR-SALES-20).
+
+### US-SALES-07 — Sale records quantities but does not move stock (v1 — ACCEPTED RISK)
+**As the** deployment owner **I want** v1 sales to record quantities without deducting stock **so
+that** Sales ships before the Stock module — an **accepted risk** I have signed off (2026-06-07).
+- **AC1** Given a finalised sale, then quantities sold are recorded but **no stock-on-hand is deducted
+  anywhere** — an explicit accepted risk (FR-SALES-21, BR-SALES-11, §10).
+- **AC2** Given a **composed product**, then it is sold as a **single priced line** and its recipe
+  components are **not** deducted or cost-rolled-up (FR-SALES-06, Products §9).
+- **AC3** Given the future Stock module, then finalising a sale is designed to emit a stock-deduction
+  effect (composed-product component deduction included) via the **transactional outbox** without
+  reworking the sale model (NFR-SALES-07).
+
+### US-SALES-08 — Void a finalised sale (basic correction)
+**As a** sales supervisor **I want** to void a wrongly-finalised sale within the permitted window **so
+that** mistakes are corrected without editing finalised records.
+- **AC1** Given `SALES.VOID` and a sale within the void window, when I void it, then the sale (and any
+  receipt) is reversed and the void is audited (FR-SALES-22, NFR-SALES-03). `[void-window value: architect detail]`
+- **AC2** Given I lack `SALES.VOID`, when I try to void a sale, then it is refused (FR-SALES-25).
+- **AC3** Given a finalised sale, when I try to **edit** its lines/prices directly, then it is refused;
+  the **only** v1 correction is a void (FR-SALES-03, BR-SALES-08).
+- **AC4** Given v1, then **returns, credit notes, and refunds are out of scope** — void is the sole
+  correction path (§12).
+
+### US-SALES-09 — Sales are branch-scoped end to end
+**As a** branch operator **I want** sales and their pick-lists confined to my active branch **so that**
+I cannot transact across branches or companies by mistake.
+- **AC1** Given I am active in branch B1, when I create a sale, then it is recorded at B1 in B1's
+  company, and customer/agent/product selection shows only B1-associated, same-company records
+  (FR-SALES-24, Parties FR-PARTY-12, Products FR-PROD-22).
+- **AC2** Given I switch my active branch via the IAM branch-override header, then my sales view and
+  pick-lists update to the new branch without re-login (mirrors US-IAM-003, US-PARTY-07).
+- **AC3** Given any attempt to read or write a sale outside my scope, then it is refused; cross-tenant
+  sale data never appears (NFR-SALES-01, BR-SALES-01).
