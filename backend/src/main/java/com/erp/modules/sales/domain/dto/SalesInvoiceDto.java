@@ -9,7 +9,8 @@ import java.math.BigDecimal;
  * Full response DTO for a SalesInvoice header (ADR-0008 D-12).
  * Carries both {@code id} (JSON string via global Long-as-string config) and {@code uid}.
  * Cross-module IDs are included for the frontend to display names; enrichment fields
- * (customerName, agentName) are populated by the service, not stored on the header.
+ * (customerName, agentName, routeUid/routeCode/routeName) are populated by the service.
+ * Route fields are nullable (BR-ROUTE-05 — a sale is never blocked when the route is blank).
  */
 public record SalesInvoiceDto(
         Long id,
@@ -36,6 +37,11 @@ public record SalesInvoiceDto(
         Long voidedBy,
         String voidReason,
         String notes,
+        // Route reference — nullable (ADR-0012 D-6d, FR-ROUTE-13)
+        Long routeId,
+        String routeUid,
+        String routeCode,
+        String routeName,
         Long version,
         String createdAt,
         Long createdBy,
@@ -43,8 +49,9 @@ public record SalesInvoiceDto(
         Long updatedBy
 ) {
 
-    /** Build from entity with enriched names. */
-    public static SalesInvoiceDto from(SalesInvoice inv, String customerName, String agentName) {
+    /** Build from entity with enriched customer, agent, and optional route fields. */
+    public static SalesInvoiceDto from(SalesInvoice inv, String customerName, String agentName,
+                                       String routeUid, String routeCode, String routeName) {
         return new SalesInvoiceDto(
                 inv.getId(),
                 inv.getUid(),
@@ -70,6 +77,10 @@ public record SalesInvoiceDto(
                 inv.getVoidedBy(),
                 inv.getVoidReason(),
                 inv.getNotes(),
+                inv.getRouteId(),
+                routeUid,
+                routeCode,
+                routeName,
                 inv.getVersion(),
                 inv.getCreatedAt() != null ? inv.getCreatedAt().toString() : null,
                 inv.getCreatedBy(),

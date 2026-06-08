@@ -127,4 +127,18 @@ public final class AuditActions {
     public static final String PURCHASE_GR_CREATE         = "PURCHASE.GOODS_RECEIPT.CREATE";
     public static final String PURCHASE_GR_RECEIVE        = "PURCHASE.GOODS_RECEIPT.RECEIVE";
     public static final String PURCHASE_GR_VOID           = "PURCHASE.GOODS_RECEIPT.VOID";
+
+    // -- Routes module (ADR-0012 D-12; target_type = plural table names) ----
+    public static final String ROUTE_CREATE            = "ROUTE.CREATE";
+    public static final String ROUTE_UPDATE            = "ROUTE.UPDATE";
+    public static final String ROUTE_ARCHIVE           = "ROUTE.ARCHIVE";
+    public static final String ROUTE_RESTORE           = "ROUTE.RESTORE";
+    public static final String ROUTE_CUSTOMER_ADD      = "ROUTE.CUSTOMER.ADD";
+    public static final String ROUTE_CUSTOMER_REMOVE   = "ROUTE.CUSTOMER.REMOVE";
+    public static final String ROUTE_AGENT_ADD         = "ROUTE.AGENT.ADD";
+    public static final String ROUTE_AGENT_REMOVE      = "ROUTE.AGENT.REMOVE";
+    public static final String ROUTE_AGENT_SETPRIMARY  = "ROUTE.AGENT.SETPRIMARY";
+    public static final String ROUTE_AGENT_CLEARPRIMARY = "ROUTE.AGENT.CLEARPRIMARY";
+    public static final String ROUTE_BRANCH_ADD        = "ROUTE.BRANCH.ADD";
+    public static final String ROUTE_BRANCH_REMOVE     = "ROUTE.BRANCH.REMOVE";
 }

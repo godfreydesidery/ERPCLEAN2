@@ -526,7 +526,7 @@ class StockServiceImplIT extends PostgresIntegrationTest {
 
     private SalesInvoiceDto makeDraftWithLine(String productUid, BigDecimal qty) {
         SalesInvoiceDto draft = salesInvoiceService.create(new CreateSalesInvoiceRequest(
-                companyA.getUid(), customerUid, agentUid, "TZS", null));
+                companyA.getUid(), customerUid, agentUid, "TZS", null, null));
         salesInvoiceService.addLine(draft.uid(),
                 new AddInvoiceLineRequest(productUid, pcsUid, qty, null, null));
         // 500 TZS × qty × 1.18 VAT

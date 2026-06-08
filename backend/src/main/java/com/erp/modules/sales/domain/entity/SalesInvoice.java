@@ -124,6 +124,15 @@ public class SalesInvoice extends UidEntity {
     @Setter
     private String notes;
 
+    /**
+     * FK → routes.id; nullable (BR-ROUTE-05 — a sale is never blocked when the route is blank).
+     * Defaulted at create from the selling agent's primary route (FR-ROUTE-13, ADR-0012 D-6).
+     * Captured-not-validated (BR-ROUTE-09, §10 accepted risk).
+     */
+    @Column(name = "route_id")
+    @Setter
+    private Long routeId;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
