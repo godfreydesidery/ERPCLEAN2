@@ -20,6 +20,7 @@ import com.erp.modules.sales.domain.dto.AddInvoiceLineRequest;
 import com.erp.modules.sales.domain.dto.AddPaymentRequest;
 import com.erp.modules.sales.domain.dto.CreateSalesInvoiceRequest;
 import com.erp.modules.sales.domain.dto.FinaliseInvoiceRequest;
+import com.erp.modules.sales.domain.dto.InvoicePostingTotalsDto;
 import com.erp.modules.sales.domain.dto.OverrideLinePriceRequest;
 import com.erp.modules.sales.domain.dto.SaleFinalisedPayload;
 import com.erp.modules.sales.domain.dto.SaleVoidedPayload;
@@ -533,6 +534,28 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                         "after", req.rate().toPlainString())));
 
         return TaxRateDto.from(rate);
+    }
+
+    // -------------------------------------------------------------------------
+    // GL posting read (ADR-0013 D-12)
+    // -------------------------------------------------------------------------
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<InvoicePostingTotalsDto> findPostingTotalsByUidAndCompany(
+            String invoiceUid, Long companyId) {
+        return invoices.findByUidAndCompanyId(invoiceUid, companyId)
+                .map(inv -> new InvoicePostingTotalsDto(
+                        inv.getUid(),
+                        inv.getStatus().name(),
+                        inv.getCurrency(),
+                        inv.getCustomerId(),
+                        true,  // v1: all sales are paid-in-full (cash), OQ-GL-02
+                        inv.getNetTotalAmount(),
+                        inv.getVatTotalAmount(),
+                        inv.getGrossTotalAmount(),
+                        inv.getFinalisedAt()
+                ));
     }
 
     // -------------------------------------------------------------------------

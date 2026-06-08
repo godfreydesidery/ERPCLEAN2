@@ -35,6 +35,11 @@ public class IamTestData {
         em.createNativeQuery(
                 "TRUNCATE domain_events, processed_events RESTART IDENTITY CASCADE")
                 .executeUpdate();
+        // 4-GL. Clear GL tables BEFORE companies (journal_lines/entries/configs/periods/accounts FK → companies).
+        //       FK order within GL: lines → entries → batches; gl_configs → accounts; periods → fiscal_years.
+        em.createNativeQuery(
+                "TRUNCATE journal_lines, journal_entries, journal_batches, gl_configs, fiscal_periods, fiscal_years, chart_of_accounts RESTART IDENTITY CASCADE")
+                .executeUpdate();
         // 4a. Clear purchases tables BEFORE products/parties (GR/PO lines FK → products/suppliers/units).
         em.createNativeQuery(
                 "TRUNCATE goods_receipt_lines, goods_receipts, purchase_order_lines, purchase_orders RESTART IDENTITY CASCADE")

@@ -46,6 +46,11 @@ public class Company extends UidEntity {
     @Setter
     private String timeZone = "Africa/Dar_es_Salaam";
 
+    /** Company base currency (ADR-0005 D-4, ADR-0013 D-9). Added by V10. Default TZS. */
+    @Column(name = "base_currency", nullable = false, length = 3)
+    @Setter
+    private String baseCurrency = "TZS";
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     @Setter

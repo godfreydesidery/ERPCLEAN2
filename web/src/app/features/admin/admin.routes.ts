@@ -195,5 +195,48 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./purchases/goods-receipt-detail.component').then((m) => m.GoodsReceiptDetailComponent),
   },
+  // ── General Ledger (Accounting) ───────────────────────────────────────────
+  {
+    path: 'gl/accounts',
+    canActivate: [requirePermission('GL.VIEW')],
+    loadComponent: () =>
+      import('./gl/chart-of-accounts-list.component').then((m) => m.ChartOfAccountsListComponent),
+  },
+  {
+    path: 'gl/journals',
+    canActivate: [requirePermission('GL.VIEW')],
+    loadComponent: () =>
+      import('./gl/journal-entry-list.component').then((m) => m.JournalEntryListComponent),
+  },
+  {
+    path: 'gl/journals/post',
+    canActivate: [requirePermission('GL.POST')],
+    loadComponent: () =>
+      import('./gl/post-journal.component').then((m) => m.PostJournalComponent),
+  },
+  {
+    path: 'gl/journals/uid/:uid',
+    canActivate: [requirePermission('GL.VIEW')],
+    loadComponent: () =>
+      import('./gl/journal-entry-detail.component').then((m) => m.JournalEntryDetailComponent),
+  },
+  {
+    path: 'gl/trial-balance',
+    canActivate: [requirePermission('GL.VIEW')],
+    loadComponent: () =>
+      import('./gl/trial-balance.component').then((m) => m.TrialBalanceComponent),
+  },
+  {
+    path: 'gl/periods',
+    canActivate: [requirePermission('GL.VIEW')],
+    loadComponent: () =>
+      import('./gl/fiscal-periods.component').then((m) => m.FiscalPeriodsComponent),
+  },
+  {
+    path: 'gl/config',
+    canActivate: [requirePermission('GL.MANAGE')],
+    loadComponent: () =>
+      import('./gl/gl-config.component').then((m) => m.GlConfigComponent),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];

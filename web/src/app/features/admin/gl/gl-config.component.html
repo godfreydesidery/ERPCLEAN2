@@ -1,0 +1,165 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">
+      <i class="bi bi-gear me-2" aria-hidden="true"></i>Posting Accounts
+    </h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      Map config keys to GL accounts. These mappings drive automated journal posting for sales,
+      purchases, and other system transactions.
+    </p>
+  </header>
+
+  @if (!canManage()) {
+    <p class="text-muted d-flex align-items-center gap-2 mt-3" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to manage GL configuration.
+    </p>
+  } @else {
+
+    <!-- Company selector -->
+    @switch (companyState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-3" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load companies.
+        </p>
+      }
+      @default {
+        @if (companies().length > 1) {
+          <div class="mb-3" style="max-width:320px">
+            <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+            <select id="companyPicker" name="companyPicker" class="form-select"
+                    [ngModel]="selectedCompanyId()"
+                    (ngModelChange)="onCompanyChange($event)">
+              @for (c of companies(); track c.uid) {
+                <option [value]="c.id">{{ c.name }}</option>
+              }
+            </select>
+          </div>
+        }
+      }
+    }
+
+    @if (selectedCompanyId()) {
+
+      <!-- Set config form -->
+      @if (showSetForm()) {
+        <form class="card card-body mb-3"
+              (ngSubmit)="saveConfig()" aria-label="Set posting account">
+          <h2 class="h6 mb-3">
+            Set Posting Account —
+            <span class="font-monospace text-primary">{{ setConfigKey() }}</span>
+          </h2>
+          <div class="row g-2 align-items-end">
+            <div class="col-sm-5">
+              <label class="form-label small text-muted mb-1" for="setAccountPicker">
+                Account <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              @if (accountsState() === 'loading') {
+                <div class="form-control d-flex align-items-center gap-2 text-muted small">
+                  <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+                </div>
+              } @else {
+                <select id="setAccountPicker" name="setAccountPicker" class="form-select"
+                        [ngModel]="setAccountUid()" (ngModelChange)="setAccountUid.set($event)"
+                        required [disabled]="setting()">
+                  <option value="">— select account —</option>
+                  @for (a of accounts(); track a.uid) {
+                    <option [value]="a.uid">
+                      {{ a.accountCode }} — {{ a.name }} ({{ a.accountType }})
+                    </option>
+                  }
+                </select>
+              }
+            </div>
+            <div class="col-sm-2">
+              <button type="submit" class="btn btn-primary w-100" [disabled]="setting()">
+                @if (setting()) {
+                  <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                  Saving…
+                } @else {
+                  Save
+                }
+              </button>
+            </div>
+            <div class="col-sm-2">
+              <button type="button" class="btn btn-outline-secondary w-100"
+                      [disabled]="setting()" (click)="cancelSetForm()">
+                Cancel
+              </button>
+            </div>
+          </div>
+          @if (setError(); as msg) {
+            <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+          }
+        </form>
+      }
+
+      <!-- Configs table -->
+      @switch (configsState()) {
+        @case ('loading') {
+          <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading config…
+          </p>
+        }
+        @case ('error') {
+          <p class="state text-danger" role="alert">
+            <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+            Could not load posting accounts.
+          </p>
+        }
+        @default {
+          @if (configs().length === 0) {
+            <p class="state text-muted">
+              No posting accounts configured yet. Use the button below to add the first mapping.
+            </p>
+          } @else {
+            <div class="table-responsive mb-3">
+              <table class="table table-hover align-middle bg-white grid">
+                <caption class="visually-hidden">GL posting account mappings</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Config Key</th>
+                    <th scope="col">Account Code</th>
+                    <th scope="col">Account Name</th>
+                    <th scope="col"><span class="visually-hidden">Edit</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (cfg of configs(); track cfg.uid) {
+                    <tr>
+                      <td class="font-monospace small fw-semibold">{{ cfg.configKey ?? '—' }}</td>
+                      <td class="font-monospace small">{{ cfg.accountCode }}</td>
+                      <td class="small">{{ cfg.accountName }}</td>
+                      <td>
+                        <button type="button" class="btn btn-sm btn-outline-primary"
+                                (click)="openSetForm(cfg.configKey ?? '')"
+                                [attr.aria-label]="'Edit posting account for ' + cfg.configKey">
+                          <i class="bi bi-pencil me-1" aria-hidden="true"></i>Edit
+                        </button>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+
+          <!-- Add new config key button -->
+          <div>
+            <button type="button" class="btn btn-outline-primary btn-sm"
+                    (click)="openSetForm('')">
+              <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+              Add Posting Account
+            </button>
+          </div>
+        }
+      }
+    }
+  }
+</section>

@@ -1,0 +1,275 @@
+<section class="admin-page">
+  <div class="mb-3">
+    <a routerLink="/admin/gl/journals" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Journals
+    </a>
+  </div>
+
+  <header class="page-head">
+    <h1 class="h4 mb-1">
+      <i class="bi bi-pencil-square me-2" aria-hidden="true"></i>Post Manual Journal Entry
+    </h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      Enter balanced debit/credit lines. The entry will be posted immediately.
+    </p>
+  </header>
+
+  @if (!canPost()) {
+    <p class="text-muted d-flex align-items-center gap-2 mt-3" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to post journal entries.
+    </p>
+  } @else {
+
+    <!-- Company selector -->
+    @switch (companyState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-3" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load companies.
+        </p>
+      }
+      @default {
+        @if (companies().length > 1) {
+          <div class="mb-3" style="max-width:320px">
+            <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+            <select id="companyPicker" name="companyPicker" class="form-select"
+                    [ngModel]="selectedCompanyId()"
+                    (ngModelChange)="onCompanyChange($event)">
+              @for (c of companies(); track c.uid) {
+                <option [value]="c.id">{{ c.name }}</option>
+              }
+            </select>
+          </div>
+        }
+      }
+    }
+
+    @if (selectedCompanyId()) {
+      <form (ngSubmit)="post()" aria-label="Post manual journal entry">
+
+        <!-- Header fields -->
+        <div class="card mb-3">
+          <div class="card-header small fw-semibold text-muted">Entry Header</div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-sm-3">
+                <label class="form-label" for="postingDate">
+                  Posting Date <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="postingDate" name="postingDate" type="date"
+                       class="form-control"
+                       [ngModel]="postingDate()"
+                       (ngModelChange)="postingDate.set($event)"
+                       required [disabled]="posting()" />
+              </div>
+              <div class="col-sm-5">
+                <label class="form-label" for="description">
+                  Description <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="description" name="description" type="text"
+                       class="form-control" placeholder="e.g. Monthly depreciation"
+                       [ngModel]="description()"
+                       (ngModelChange)="description.set($event)"
+                       required [disabled]="posting()" autocomplete="off" />
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label" for="sourceRef">
+                  Source Reference <span class="text-muted small">(optional)</span>
+                </label>
+                <input id="sourceRef" name="sourceRef" type="text"
+                       class="form-control" placeholder="e.g. DOC-001"
+                       [ngModel]="sourceRef()"
+                       (ngModelChange)="sourceRef.set($event)"
+                       [disabled]="posting()" autocomplete="off" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lines editor -->
+        <div class="card mb-3">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span class="small fw-semibold text-muted">
+              <i class="bi bi-list-ul me-1" aria-hidden="true"></i>
+              Lines ({{ lines().length }})
+            </span>
+            <button type="button" class="btn btn-sm btn-outline-primary"
+                    (click)="addLine()" [disabled]="posting()">
+              <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add Line
+            </button>
+          </div>
+          <div class="card-body p-0">
+
+            @if (accountsState() === 'loading') {
+              <p class="text-muted small p-3 mb-0 d-flex align-items-center gap-2">
+                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                Loading accounts…
+              </p>
+            } @else if (accountsState() === 'error') {
+              <p class="text-danger small p-3 mb-0" role="alert">
+                Could not load accounts. Reload the page.
+              </p>
+            } @else {
+
+              <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0" aria-label="Journal entry lines">
+                  <thead class="table-light">
+                    <tr>
+                      <th scope="col" style="min-width:260px">Account <span class="text-danger" aria-hidden="true">*</span></th>
+                      <th scope="col" style="min-width:140px" class="text-end">Debit</th>
+                      <th scope="col" style="min-width:140px" class="text-end">Credit</th>
+                      <th scope="col" style="min-width:180px">Memo</th>
+                      <th scope="col" style="width:48px"><span class="visually-hidden">Remove</span></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (line of lines(); track line.localId; let i = $index) {
+                      <tr>
+                        <td>
+                          <label [for]="'lineAccount_' + line.localId" class="visually-hidden">
+                            Line {{ i + 1 }} account
+                          </label>
+                          <select [id]="'lineAccount_' + line.localId"
+                                  [name]="'lineAccount_' + line.localId"
+                                  class="form-select form-select-sm"
+                                  [ngModel]="line.accountUid"
+                                  (ngModelChange)="updateLine(line.localId, 'accountUid', $event)"
+                                  [disabled]="posting()"
+                                  required>
+                            <option value="">— select account —</option>
+                            @for (a of accounts(); track a.uid) {
+                              <option [value]="a.uid">
+                                {{ a.accountCode }} — {{ a.name }}
+                              </option>
+                            }
+                          </select>
+                        </td>
+                        <td>
+                          <label [for]="'lineDebit_' + line.localId" class="visually-hidden">
+                            Line {{ i + 1 }} debit amount
+                          </label>
+                          <input [id]="'lineDebit_' + line.localId"
+                                 [name]="'lineDebit_' + line.localId"
+                                 type="text" inputmode="decimal"
+                                 class="form-control form-control-sm text-end font-monospace"
+                                 placeholder="0.00"
+                                 [ngModel]="line.debitAmount"
+                                 (ngModelChange)="updateLine(line.localId, 'debitAmount', $event)"
+                                 [disabled]="posting()"
+                                 autocomplete="off" />
+                        </td>
+                        <td>
+                          <label [for]="'lineCreditAmt_' + line.localId" class="visually-hidden">
+                            Line {{ i + 1 }} credit amount
+                          </label>
+                          <input [id]="'lineCreditAmt_' + line.localId"
+                                 [name]="'lineCreditAmt_' + line.localId"
+                                 type="text" inputmode="decimal"
+                                 class="form-control form-control-sm text-end font-monospace"
+                                 placeholder="0.00"
+                                 [ngModel]="line.creditAmount"
+                                 (ngModelChange)="updateLine(line.localId, 'creditAmount', $event)"
+                                 [disabled]="posting()"
+                                 autocomplete="off" />
+                        </td>
+                        <td>
+                          <label [for]="'lineMemo_' + line.localId" class="visually-hidden">
+                            Line {{ i + 1 }} memo
+                          </label>
+                          <input [id]="'lineMemo_' + line.localId"
+                                 [name]="'lineMemo_' + line.localId"
+                                 type="text" class="form-control form-control-sm"
+                                 placeholder="Optional note…"
+                                 [ngModel]="line.lineMemo"
+                                 (ngModelChange)="updateLine(line.localId, 'lineMemo', $event)"
+                                 [disabled]="posting()"
+                                 autocomplete="off" />
+                        </td>
+                        <td class="text-center">
+                          @if (lines().length > 2) {
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-danger"
+                                    [disabled]="posting()"
+                                    (click)="removeLine(line.localId)"
+                                    [attr.aria-label]="'Remove line ' + (i + 1)">
+                              <i class="bi bi-trash" aria-hidden="true"></i>
+                            </button>
+                          }
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- Running totals -->
+              <div class="totals-bar border-top p-3 d-flex flex-wrap gap-4 align-items-center">
+                <div class="d-flex gap-1 align-items-baseline">
+                  <span class="small text-muted me-1">Debits:</span>
+                  <span class="fw-semibold font-monospace">{{ fmtAmount(totalDebits()) }}</span>
+                </div>
+                <div class="d-flex gap-1 align-items-baseline">
+                  <span class="small text-muted me-1">Credits:</span>
+                  <span class="fw-semibold font-monospace">{{ fmtAmount(totalCredits()) }}</span>
+                </div>
+                <div class="d-flex gap-1 align-items-baseline">
+                  <span class="small text-muted me-1">Difference:</span>
+                  <span class="fw-semibold font-monospace"
+                        [class.text-danger]="!isBalanced() && totalDebits() > 0"
+                        [class.text-success]="isBalanced()">
+                    {{ fmtAmount(difference()) }}
+                  </span>
+                </div>
+                @if (isBalanced()) {
+                  <span class="badge text-bg-success ms-auto">
+                    <i class="bi bi-check-circle me-1" aria-hidden="true"></i>Balanced
+                  </span>
+                } @else {
+                  <span class="badge text-bg-warning ms-auto" aria-live="polite">
+                    <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
+                    Not balanced
+                  </span>
+                }
+              </div>
+            }
+          </div>
+        </div>
+
+        <!-- Error + submit -->
+        @if (formError(); as msg) {
+          <p class="text-danger small mb-2" role="alert">
+            <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ msg }}
+          </p>
+        }
+
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary"
+                  [disabled]="postDisabled()"
+                  [attr.aria-describedby]="!isBalanced() ? 'balanceHint' : null">
+            @if (posting()) {
+              <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+              Posting…
+            } @else {
+              <i class="bi bi-check-lg me-1" aria-hidden="true"></i>
+              Post Journal
+            }
+          </button>
+          <a routerLink="/admin/gl/journals" class="btn btn-outline-secondary">Cancel</a>
+        </div>
+
+        @if (!isBalanced() && totalDebits() > 0) {
+          <p id="balanceHint" class="text-muted small mt-2" aria-live="polite">
+            <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
+            Total debits must equal total credits before you can post.
+          </p>
+        }
+      </form>
+    }
+  }
+</section>

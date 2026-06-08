@@ -10,6 +10,9 @@ import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.repository.OrganisationRepository;
 import com.erp.modules.iam.repository.UserBranchRepository;
+import com.erp.modules.gl.service.ChartOfAccountService;
+import com.erp.modules.gl.service.FiscalCalendarService;
+import com.erp.modules.gl.service.GlConfigService;
 import com.erp.modules.products.service.UnitOfMeasureSeeder;
 import com.erp.modules.sales.service.TaxRateSeeder;
 import com.erp.platform.security.password.PasswordPolicy;
@@ -52,6 +55,10 @@ public class BootstrapRunner implements ApplicationRunner {
     private final PasswordPolicy passwordPolicy;
     private final UnitOfMeasureSeeder unitSeeder;
     private final TaxRateSeeder taxRateSeeder;
+    // GL seeders (ADR-0013 D-15)
+    private final ChartOfAccountService chartOfAccountService;
+    private final FiscalCalendarService fiscalCalendarService;
+    private final GlConfigService glConfigService;
 
     public BootstrapRunner(BootstrapProperties props,
                            OrganisationRepository organisations,
@@ -62,7 +69,10 @@ public class BootstrapRunner implements ApplicationRunner {
                            PasswordEncoder passwordEncoder,
                            PasswordPolicy passwordPolicy,
                            UnitOfMeasureSeeder unitSeeder,
-                           TaxRateSeeder taxRateSeeder) {
+                           TaxRateSeeder taxRateSeeder,
+                           ChartOfAccountService chartOfAccountService,
+                           FiscalCalendarService fiscalCalendarService,
+                           GlConfigService glConfigService) {
         this.props = props;
         this.organisations = organisations;
         this.companies = companies;
@@ -73,6 +83,9 @@ public class BootstrapRunner implements ApplicationRunner {
         this.passwordPolicy = passwordPolicy;
         this.unitSeeder = unitSeeder;
         this.taxRateSeeder = taxRateSeeder;
+        this.chartOfAccountService = chartOfAccountService;
+        this.fiscalCalendarService = fiscalCalendarService;
+        this.glConfigService = glConfigService;
     }
 
     @Override
@@ -101,6 +114,11 @@ public class BootstrapRunner implements ApplicationRunner {
 
         // Seed default VAT rates for the bootstrap company (ADR-0008 D-5b).
         taxRateSeeder.seedDefaults(company.getId());
+
+        // Seed default Chart of Accounts, fiscal year + periods, GL config mappings (ADR-0013 D-15).
+        chartOfAccountService.seedDefaults(company.getId());
+        fiscalCalendarService.seedCurrentYear(company.getId());
+        glConfigService.seedDefaults(company.getId());
 
         Branch branch = new Branch(company, props.branchCode(), props.branchName());
         branch.setTimeZone(props.timeZone());

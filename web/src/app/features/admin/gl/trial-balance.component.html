@@ -1,0 +1,199 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">
+      <i class="bi bi-calculator me-2" aria-hidden="true"></i>Trial Balance
+    </h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      Verify that total debits equal total credits across all accounts.
+    </p>
+  </header>
+
+  @if (!canView()) {
+    <p class="text-muted d-flex align-items-center gap-2 mt-3" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to view the trial balance.
+    </p>
+  } @else {
+
+    <!-- Company selector -->
+    @switch (companyState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-3" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load companies.
+        </p>
+      }
+      @default {
+        <div class="d-flex flex-wrap gap-3 mb-3 align-items-end">
+          @if (companies().length > 1) {
+            <div style="min-width:220px">
+              <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+              <select id="companyPicker" name="companyPicker" class="form-select"
+                      [ngModel]="selectedCompanyId()"
+                      (ngModelChange)="onCompanyChange($event)">
+                @for (c of companies(); track c.uid) {
+                  <option [value]="c.id">{{ c.name }}</option>
+                }
+              </select>
+            </div>
+          }
+
+          <!-- Period filter -->
+          <div style="min-width:220px">
+            <label class="form-label small text-muted mb-1" for="periodPicker">
+              Period <span class="text-muted small">(all periods if blank)</span>
+            </label>
+            @if (periodsState() === 'loading') {
+              <div class="form-control d-flex align-items-center gap-2 text-muted small">
+                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+              </div>
+            } @else {
+              <select id="periodPicker" name="periodPicker" class="form-select"
+                      [ngModel]="selectedPeriodUid()"
+                      (ngModelChange)="onPeriodChange($event)">
+                <option value="">— All periods —</option>
+                @for (p of periods(); track p.uid) {
+                  <option [value]="p.uid">
+                    P{{ p.periodNo }}: {{ p.startDate }} – {{ p.endDate }}
+                    ({{ p.status }})
+                  </option>
+                }
+              </select>
+            }
+          </div>
+
+          <div class="align-self-end">
+            <button type="button" class="btn btn-outline-secondary"
+                    (click)="loadTrialBalance()"
+                    [disabled]="state() === 'loading' || !selectedCompanyId()">
+              @if (state() === 'loading') {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                Loading…
+              } @else {
+                <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>
+                Refresh
+              }
+            </button>
+          </div>
+        </div>
+      }
+    }
+
+    <!-- Trial balance states -->
+    @switch (state()) {
+      @case ('loading') {
+        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Calculating trial balance…
+        </p>
+      }
+      @case ('error') {
+        <p class="state text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load trial balance. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="state text-muted d-flex align-items-center gap-2">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view the trial balance.
+        </p>
+      }
+      @default {
+        @if (tb() === null) {
+          <p class="state text-muted">Select a company to view the trial balance.</p>
+        } @else if (sortedRows().length === 0) {
+          <p class="state text-muted">No account activity to display.</p>
+        } @else {
+
+          <!-- Balanced indicator banner -->
+          @if (isBalanced()) {
+            <div class="alert alert-success d-flex align-items-center gap-2 mb-3" role="status">
+              <i class="bi bi-check-circle-fill fs-5" aria-hidden="true"></i>
+              <strong>Balanced</strong> — total debits equal total credits.
+            </div>
+          } @else {
+            <div class="alert alert-danger d-flex align-items-center gap-2 mb-3" role="alert">
+              <i class="bi bi-exclamation-triangle-fill fs-5" aria-hidden="true"></i>
+              <strong>Out of balance</strong> — the books do not balance. Investigate before closing.
+            </div>
+          }
+
+          <div class="table-responsive">
+            <table class="table table-sm align-middle bg-white tb-grid">
+              <caption class="visually-hidden">Trial balance</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Code</th>
+                  <th scope="col">Account Name</th>
+                  <th scope="col">Type</th>
+                  <th scope="col" class="text-end">Debit</th>
+                  <th scope="col" class="text-end">Credit</th>
+                  <th scope="col" class="text-end">Net</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (type of groupedTypes(); track type) {
+                  <!-- Group header row -->
+                  <tr class="table-light">
+                    <td colspan="6" class="fw-semibold small">
+                      <span class="badge me-2" [class]="typeBadgeClass(type)">{{ type }}</span>
+                    </td>
+                  </tr>
+                  @for (row of rowsForType(type); track row.accountCode) {
+                    <tr>
+                      <td class="font-monospace small fw-semibold ps-4">{{ row.accountCode }}</td>
+                      <td class="small">{{ row.accountName }}</td>
+                      <td></td>
+                      <td class="text-end font-monospace small">
+                        @if (row.totalDebit !== '0.00' && row.totalDebit !== '0') {
+                          {{ row.totalDebit }}
+                        } @else {
+                          <span class="text-muted">—</span>
+                        }
+                      </td>
+                      <td class="text-end font-monospace small">
+                        @if (row.totalCredit !== '0.00' && row.totalCredit !== '0') {
+                          {{ row.totalCredit }}
+                        } @else {
+                          <span class="text-muted">—</span>
+                        }
+                      </td>
+                      <td class="text-end font-monospace small"
+                          [class.text-danger]="row.net.startsWith('-')">
+                        {{ row.net }}
+                      </td>
+                    </tr>
+                  }
+                }
+              </tbody>
+              <!-- Totals footer -->
+              <tfoot class="table-dark fw-semibold">
+                <tr>
+                  <td colspan="3">Totals</td>
+                  <td class="text-end font-monospace">{{ totalDebits() }}</td>
+                  <td class="text-end font-monospace">{{ totalCredits() }}</td>
+                  <td class="text-end">
+                    @if (isBalanced()) {
+                      <span class="text-success">
+                        <i class="bi bi-check-circle-fill me-1" aria-hidden="true"></i>Balanced
+                      </span>
+                    } @else {
+                      <span class="text-warning">
+                        <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>Unbalanced
+                      </span>
+                    }
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        }
+      }
+    }
+  }
+</section>
