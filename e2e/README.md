@@ -17,6 +17,7 @@ tools for: smoke-checking the SPA in a real browser, and exercising the system a
 | `static-proxy-server.js` | Serves the built Angular SPA on a port and proxies `/api/*` to the API. Lets a browser hit one origin (no CORS). | Node (no deps) |
 | `ui-smoke.js` | Playwright: logs in, screenshots every key screen, creates a Route + opens its detail (assignment panels). Reports console errors + API 5xx. Fast sanity that the SPA renders + core flow works. | Node + `playwright-core` |
 | `seed-and-flow.js` | Large-scale: rootadmin bootstraps → creates an operator role + 100 users (branch-assigned, role-granted) → a **non-root operator** bulk-creates 1000 customers / 50 suppliers / 50 products / 20 agents / 10 routes → runs PO→goods-receipt (stock in) and finalised sales (stock out) → **asserts** counts, stock math, invoice-number uniqueness. Records every failure to `issues.json` (never aborts). | Node (no deps) |
+| `qa-ui-drive.js` | **100% typed UI data entry** (no API seeding): logs in, then types ~50 customers / 10 suppliers / 10 products / 5 users / 3 routes / 1 price list into the real forms in a headless browser. Per-record: opens a fresh form, fills, submits, and **waits for the form to close** (the app's success signal) before the next — so it never double-submits or re-creates. Logs issues + screenshots, continues on failure. Counts are env-tunable (`N_CUSTOMERS`, …). | Node + `playwright-core` |
 
 ## Prerequisites
 
@@ -55,6 +56,12 @@ node e2e/static-proxy-server.js web/dist/web/browser 4173
 ```bash
 # UI smoke (browser) — needs the proxy server (step 4) up
 node e2e/ui-smoke.js                 # screenshots → %TEMP%/erp-verify-shots
+
+# 100% typed UI data entry against a live site (e.g. QA). Needs playwright-core on NODE_PATH.
+#   (the scripts in e2e/ have no node_modules of their own — point NODE_PATH at a scratch
+#    dir where you `npm i playwright-core`, e.g. %TEMP%/erp-qa-e2e/node_modules)
+NODE_PATH=%TEMP%/erp-qa-e2e/node_modules WEB_BASE=http://16.170.11.41 ROOT_PASS=... \
+  node e2e/qa-ui-drive.js             # screenshots+json → %TEMP%/erp-qa-shots
 
 # Large-scale seed + flow + assertions (talks to the API directly on 8088)
 node e2e/seed-and-flow.js            # prints a per-severity issue summary; writes issues.json

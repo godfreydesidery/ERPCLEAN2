@@ -11,6 +11,41 @@ Newest first. Severity: BLOCKER > HIGH > MEDIUM > LOW. Status: OPEN / FIXED / WO
 | 3 | LOW | OPEN | API consistency | **DTO company-reference inconsistency.** Parties create DTOs (`CreateCustomerRequest`, `CreateSupplierRequest`, `CreateAgentRequest`) take **`companyId` (Long)**, while newer masters (`products`, `price-lists`, `routes`, `units`) take **`companyUid` (String)**. Wire convention is uid-in-body; parties are un-retrofitted. Confusing for API consumers; worth harmonising to `companyUid`. | Observed building the E2E seeder (had to handle both shapes). Pre-existing (Parties module, ADR-0006). |
 | 4 | LOW | OPEN | Observability | The catch-all `@ExceptionHandler(Exception.class)` in `GlobalExceptionHandler` returns a generic 500 **without logging the exception/stack** (there's a `TODO(logging)`). Any unexpected 500 is invisible in logs — made diagnosing #2 harder. Should log at ERROR with the exception before returning the safe envelope. | `GlobalExceptionHandler` catch-all; noticed during #2 diagnosis. |
 | 5 | INFO | OPEN | Test integrity | Outbox/stock unit tests drive `dispatchOne()` directly (inside a test TX), which **masked #1**. The scheduled `poll()` path was untested until the new regression test. Audit other "drive the internal method directly" tests for the same blind spot (anything relying on an ambient TX the real entrypoint must open). | Root cause analysis of #1. |
+| 6 | HARNESS | **FIXED** | E2E driver (`e2e/qa-ui-drive`) | **Loop re-created records (2× per item).** The customers/suppliers loop navigates to the list ONCE then loops toggle-fill-save without re-navigating; the form state carried over so the create sequence effectively ran ~twice → 100 customer rows for 50 intended names (timestamps 28s apart, non-adjacent codes → NOT a double-submit). **App was correct** (100 unique, contiguous codes CUST-0001..0100). Fix the driver: re-open a fresh form per record / assert the row landed before the next. | QA Playwright run 2026-06-08; createdAt analysis. |
+| 7 | HARNESS | **FIXED** | E2E driver | **Unit create step wrong + unnecessary.** Driver clicked `New Unit of Measure` (actual button is `New Unit`) AND the fresh bootstrap **pre-seeds 17 units** — so unit creation should be skipped entirely. 3 false HIGHs. | qa-drive.js units phase. |
+| 8 | HARNESS | **FIXED** | E2E driver | **User create reported failure but 4/5 persisted.** The user form's submit button doesn't match the generic `button:has-text("Save")` Save locator → 30s timeout, logged HIGH — but qauser1–4 were actually created. Driver needs the user form's real submit selector + verify-by-list instead of button-wait. | qa-drive.js users phase vs API count. |
+
+## Application verdict from the QA UI run (2026-06-08, fresh DB, real typed entry)
+
+**The application behaved correctly for every record the UI actually submitted.** All "failures" in
+the Playwright run were **test-harness defects** (#6–#8 above), not product bugs:
+- Customer codes `CUST-0001..0100`: **100 unique, fully contiguous** — per-company `code_sequence`
+  held under rapid UI creates. Products 20, suppliers 19, routes 5, price-list 1, users 4 persisted.
+- **Zero console errors, zero API 5xx** across the entire browser session.
+- Login, navigation, and every create form that the driver targeted correctly **rendered and saved**.
+
+Net: real browser data entry against the deployed stack is **functionally sound**. The harness needs
+the three fixes above before the next UI run (per-record fresh form + correct unit/user selectors).
+Data left on QA for tester inspection (fresh bootstrap + this run's typed data).
+
+## Corrected UI run (2026-06-08, fresh DB, `e2e/qa-ui-drive.js`) — CLEAN
+
+Harness issues #6–#8 fixed (+ a 4th found & fixed: the route Save is a `type="button"`
+`(click)="create()"`, not a form submit, so Enter doesn't submit it — must click Save). Re-deployed
+QA fresh and re-ran 100% typed UI entry. **Exact counts, no doubling, no app issues:**
+
+| Entity | Intended | Persisted on QA | |
+|---|---|---|---|
+| Customers | 50 | **50** (codes CUST-0001..0050, unique, contiguous) | ✓ |
+| Products | 10 | **10** | ✓ |
+| Suppliers | 10 | **10** | ✓ |
+| Users | 5 | **5** (+rootadmin = 6) | ✓ |
+| Routes | 3 | **3** (ROUTE-0001..0003) | ✓ |
+| Price lists | 1 | **1** | ✓ |
+
+**0 console errors, 0 API 5xx.** The doubling (#6) is gone (per-record fresh-form + wait-for-close),
+units skipped (#7), users create cleanly (#8), routes fixed (click Save). Driver issues #6–#9 are
+now **FIXED in `e2e/qa-ui-drive.js`**. Application verdict stands: real browser data entry is sound.
 
 ## E2E run summary (2026-06-08, throwaway stack, main @ db46205 + fixes)
 
