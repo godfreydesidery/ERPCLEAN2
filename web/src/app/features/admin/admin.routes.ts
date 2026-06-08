@@ -125,6 +125,19 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./products/units-of-measure-list.component').then((m) => m.UnitsOfMeasureListComponent),
   },
+  // ── Routes ───────────────────────────────────────────────────────────────
+  {
+    path: 'routes',
+    canActivate: [requirePermission('ROUTE.VIEW')],
+    loadComponent: () =>
+      import('./routes/route-list.component').then((m) => m.RouteListComponent),
+  },
+  {
+    path: 'routes/uid/:uid',
+    canActivate: [requirePermission('ROUTE.VIEW')],
+    loadComponent: () =>
+      import('./routes/route-detail.component').then((m) => m.RouteDetailComponent),
+  },
   // ── Sales ─────────────────────────────────────────────────────────────────
   {
     path: 'sales-invoices',

@@ -43,12 +43,22 @@ public class IamTestData {
         em.createNativeQuery(
                 "TRUNCATE stock_movements, stock_on_hand RESTART IDENTITY CASCADE")
                 .executeUpdate();
-        // 4c. Clear sales tables (FK children before parents; before products/parties).
+        // 4c. Clear routes junctions BEFORE sales (sales_invoices.route_id FKs routes) and
+        //     BEFORE parties (route_customer/route_agent FK → customers/agents).
+        //     Order: junctions first (FK children of routes), then routes master.
+        em.createNativeQuery(
+                "TRUNCATE route_customer, route_agent, route_branch RESTART IDENTITY CASCADE")
+                .executeUpdate();
+        em.createNativeQuery(
+                "TRUNCATE routes RESTART IDENTITY CASCADE")
+                .executeUpdate();
+        // 4d. Clear sales tables (FK children before parents; before products/parties).
         //     tax_rates after invoices because invoices do NOT FK into tax_rates; payments/lines first.
+        //     sales_invoices.route_id nullable — routes already cleared above so FK is satisfied.
         em.createNativeQuery(
                 "TRUNCATE sales_invoice_payments, sales_invoice_lines, sales_invoices, tax_rates RESTART IDENTITY CASCADE")
                 .executeUpdate();
-        // 4d. Clear products tables (FK children first, then masters, then sequence counter).
+        // 4e. Clear products tables (FK children first, then masters, then sequence counter).
         //     units_of_measure is included here because products.base_unit_id and
         //     product_bulk_packs.unit_id FK into it (UoM cutover V4).
         em.createNativeQuery(

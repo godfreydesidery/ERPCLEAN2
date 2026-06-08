@@ -193,6 +193,22 @@
           </div>
         </div>
 
+        <!-- Route picker (optional) -->
+        <div class="row g-2 mb-2">
+          <div class="col-sm-5">
+            <label class="form-label small text-muted mb-1" for="newRouteUid">Route (optional)</label>
+            <select id="newRouteUid" name="newRouteUid" class="form-select"
+                    [ngModel]="selectedRouteUid()"
+                    (ngModelChange)="selectedRouteUid.set($event)"
+                    [disabled]="saving()">
+              <option value="">— Auto from agent's primary route —</option>
+              @for (r of companyRoutes(); track r.uid) {
+                <option [value]="r.uid">{{ r.code }} — {{ r.name }}</option>
+              }
+            </select>
+          </div>
+        </div>
+
         <!-- Notes -->
         <div class="row g-2 mb-2">
           <div class="col-sm-8">

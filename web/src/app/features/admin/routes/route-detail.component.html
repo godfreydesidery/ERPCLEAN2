@@ -1,0 +1,424 @@
+<div class="container-fluid py-3">
+  <!-- ── Back link ──────────────────────────────────────────────────────── -->
+  <a routerLink="/admin/routes" class="btn btn-link btn-sm ps-0 mb-3">
+    <i class="bi bi-arrow-left" aria-hidden="true"></i> Routes
+  </a>
+
+  <!-- ── Loading / error state for route header ───────────────────────── -->
+  @if (routeState() === 'loading') {
+    <div class="d-flex align-items-center gap-2 text-muted py-4">
+      <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+      <span>Loading route…</span>
+    </div>
+  } @else if (routeState() === 'error') {
+    <div class="alert alert-danger" role="alert">Failed to load route.</div>
+  } @else if (route(); as r) {
+
+    <!-- ── Header ─────────────────────────────────────────────────────── -->
+    <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
+      <h1 class="h4 mb-0">{{ r.code }} — {{ r.name }}</h1>
+      <span class="badge" [class]="statusBadgeClass(r.status)">{{ r.status }}</span>
+    </div>
+    @if (r.locationIdentifier) {
+      <p class="text-muted small mb-3">{{ r.locationIdentifier }}</p>
+    }
+
+    <!-- ── Edit form ──────────────────────────────────────────────────── -->
+    @if (canManage()) {
+      <div class="card mb-4">
+        <div class="card-body">
+          <h2 class="h6 card-title mb-3">Edit Route</h2>
+          @if (saveError()) {
+            <div class="alert alert-danger py-2" role="alert">{{ saveError() }}</div>
+          }
+          <div class="row g-2 align-items-end">
+            <div class="col-sm-5">
+              <label for="edit-route-name" class="form-label form-label-sm">
+                Name <span aria-hidden="true">*</span>
+              </label>
+              <input id="edit-route-name" type="text" class="form-control form-control-sm"
+                     [ngModel]="fName()" (ngModelChange)="fName.set($event)"
+                     maxlength="200" required />
+            </div>
+            <div class="col-sm-4">
+              <label for="edit-route-location" class="form-label form-label-sm">Location Identifier</label>
+              <input id="edit-route-location" type="text" class="form-control form-control-sm"
+                     [ngModel]="fLocationIdentifier()" (ngModelChange)="fLocationIdentifier.set($event)"
+                     maxlength="200" />
+            </div>
+            <div class="col-sm-3">
+              <button class="btn btn-primary btn-sm w-100" type="button"
+                      [disabled]="saving()" (click)="save()">
+                @if (saving()) {
+                  <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                  Saving…
+                } @else {
+                  Save
+                }
+              </button>
+            </div>
+          </div>
+
+          <!-- Archive / Restore -->
+          <div class="mt-3 d-flex gap-2">
+            @if (r.status !== 'ARCHIVED') {
+              <button class="btn btn-outline-danger btn-sm" type="button"
+                      [disabled]="archiving()" (click)="archive()">
+                @if (archiving()) {
+                  <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                }
+                Archive
+              </button>
+            } @else {
+              <button class="btn btn-outline-success btn-sm" type="button"
+                      [disabled]="archiving()" (click)="restore()">
+                @if (archiving()) {
+                  <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                }
+                Restore
+              </button>
+            }
+          </div>
+        </div>
+      </div>
+    }
+
+    <!-- ================================================================= -->
+    <!-- ── Customers panel ──────────────────────────────────────────────── -->
+    <!-- ================================================================= -->
+    <div class="card mb-4">
+      <div class="card-header">
+        <h2 class="h6 mb-0">
+          <i class="bi bi-people-fill me-2" aria-hidden="true"></i>Customers
+        </h2>
+      </div>
+      <div class="card-body">
+
+        <!-- Add-customer form -->
+        @if (canAssign()) {
+          <fieldset class="mb-3">
+            <legend class="form-label form-label-sm">Assign Customer</legend>
+            @if (customerAssignError()) {
+              <div class="alert alert-danger py-2 small" role="alert">{{ customerAssignError() }}</div>
+            }
+            <div class="d-flex gap-2 flex-wrap align-items-start">
+              <div class="position-relative" style="min-width:250px">
+                <label for="customer-search-input" class="visually-hidden">Search customers</label>
+                <input id="customer-search-input" type="search" class="form-control form-control-sm"
+                       placeholder="Search customers…"
+                       [ngModel]="customerSearchQ()"
+                       (ngModelChange)="onCustomerSearchChange($event)" />
+                @if (customerResults().length > 0) {
+                  <ul class="list-group position-absolute w-100 shadow-sm z-3" role="listbox"
+                      aria-label="Customer suggestions">
+                    @for (c of customerResults(); track c.uid) {
+                      <li class="list-group-item list-group-item-action py-1 small"
+                          role="option" style="cursor:pointer"
+                          (click)="selectCustomer(c)"
+                          (keydown.enter)="selectCustomer(c)"
+                          tabindex="0">
+                        {{ c.code }} — {{ c.displayName }}
+                      </li>
+                    }
+                  </ul>
+                }
+              </div>
+              <button class="btn btn-success btn-sm" type="button"
+                      [disabled]="assigningCustomer() || !selectedCustomer()"
+                      (click)="assignCustomer()">
+                @if (assigningCustomer()) {
+                  <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                }
+                Assign
+              </button>
+            </div>
+          </fieldset>
+        }
+
+        <!-- Customers table -->
+        @if (customersState() === 'loading') {
+          <div class="d-flex align-items-center gap-2 text-muted py-2">
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+            <span>Loading…</span>
+          </div>
+        } @else if (customersState() === 'error') {
+          <div class="alert alert-warning py-2 small" role="alert">Failed to load customers.</div>
+        } @else if (!hasCustomers()) {
+          <p class="text-muted small mb-0">No customers assigned.</p>
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+              <caption class="visually-hidden">Assigned customers</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Code</th>
+                  <th scope="col">Name</th>
+                  @if (canAssign()) {
+                    <th scope="col"><span class="visually-hidden">Actions</span></th>
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                @for (rc of customers(); track rc.customerUid) {
+                  <tr>
+                    <td>{{ rc.customerCode }}</td>
+                    <td>{{ rc.customerName }}</td>
+                    @if (canAssign()) {
+                      <td>
+                        <button class="btn btn-outline-danger btn-sm"
+                                type="button"
+                                [disabled]="rowBusyCustomerUid() === rc.customerUid"
+                                (click)="removeCustomer(rc)"
+                                [attr.aria-label]="'Remove ' + rc.customerName">
+                          @if (rowBusyCustomerUid() === rc.customerUid) {
+                            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                          } @else {
+                            <i class="bi bi-trash" aria-hidden="true"></i>
+                          }
+                        </button>
+                      </td>
+                    }
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- ── Agents panel ─────────────────────────────────────────────────── -->
+    <!-- ================================================================= -->
+    <div class="card mb-4">
+      <div class="card-header">
+        <h2 class="h6 mb-0">
+          <i class="bi bi-person-badge me-2" aria-hidden="true"></i>Agents
+          <span class="badge text-bg-secondary ms-2 fw-normal small">EXTERNAL only</span>
+        </h2>
+      </div>
+      <div class="card-body">
+
+        <!-- Add-agent form -->
+        @if (canAssign()) {
+          <fieldset class="mb-3">
+            <legend class="form-label form-label-sm">Assign Agent</legend>
+            @if (agentAssignError()) {
+              <div class="alert alert-danger py-2 small" role="alert">{{ agentAssignError() }}</div>
+            }
+            <div class="d-flex gap-2 flex-wrap align-items-start">
+              <div class="position-relative" style="min-width:250px">
+                <label for="agent-search-input" class="visually-hidden">Search agents (EXTERNAL)</label>
+                <input id="agent-search-input" type="search" class="form-control form-control-sm"
+                       placeholder="Search EXTERNAL agents…"
+                       [ngModel]="agentSearchQ()"
+                       (ngModelChange)="onAgentSearchChange($event)" />
+                @if (agentResults().length > 0) {
+                  <ul class="list-group position-absolute w-100 shadow-sm z-3" role="listbox"
+                      aria-label="Agent suggestions">
+                    @for (a of agentResults(); track a.uid) {
+                      <li class="list-group-item list-group-item-action py-1 small"
+                          role="option" style="cursor:pointer"
+                          (click)="selectAgent(a)"
+                          (keydown.enter)="selectAgent(a)"
+                          tabindex="0">
+                        {{ a.code }} — {{ a.displayName }}
+                      </li>
+                    }
+                  </ul>
+                }
+              </div>
+              <div class="form-check form-check-inline align-self-center mb-0">
+                <input class="form-check-input" type="checkbox" id="agent-is-primary"
+                       [ngModel]="newAgentIsPrimary()"
+                       (ngModelChange)="newAgentIsPrimary.set($event)" />
+                <label class="form-check-label small" for="agent-is-primary">Primary</label>
+              </div>
+              <button class="btn btn-success btn-sm" type="button"
+                      [disabled]="assigningAgent() || !selectedAgent()"
+                      (click)="assignAgent()">
+                @if (assigningAgent()) {
+                  <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                }
+                Assign
+              </button>
+            </div>
+          </fieldset>
+        }
+
+        <!-- Agents table -->
+        @if (agentsState() === 'loading') {
+          <div class="d-flex align-items-center gap-2 text-muted py-2">
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+            <span>Loading…</span>
+          </div>
+        } @else if (agentsState() === 'error') {
+          <div class="alert alert-warning py-2 small" role="alert">Failed to load agents.</div>
+        } @else if (!hasAgents()) {
+          <p class="text-muted small mb-0">No agents assigned.</p>
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+              <caption class="visually-hidden">Assigned agents</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Code</th>
+                  <th scope="col">Name</th>
+                  <th scope="col">Primary</th>
+                  @if (canAssign()) {
+                    <th scope="col"><span class="visually-hidden">Actions</span></th>
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                @for (ra of agents(); track ra.agentUid) {
+                  <tr>
+                    <td>{{ ra.agentCode }}</td>
+                    <td>{{ ra.agentName }}</td>
+                    <td>
+                      @if (ra.isPrimary) {
+                        <span class="badge text-bg-primary">Primary</span>
+                      }
+                    </td>
+                    @if (canAssign()) {
+                      <td>
+                        <button class="btn btn-outline-danger btn-sm"
+                                type="button"
+                                [disabled]="rowBusyAgentUid() === ra.agentUid"
+                                (click)="removeAgent(ra)"
+                                [attr.aria-label]="'Remove agent ' + ra.agentName">
+                          @if (rowBusyAgentUid() === ra.agentUid) {
+                            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                          } @else {
+                            <i class="bi bi-trash" aria-hidden="true"></i>
+                          }
+                        </button>
+                      </td>
+                    }
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- ── Branches panel ───────────────────────────────────────────────── -->
+    <!-- ================================================================= -->
+    <div class="card mb-4">
+      <div class="card-header">
+        <h2 class="h6 mb-0">
+          <i class="bi bi-diagram-3 me-2" aria-hidden="true"></i>Branches
+        </h2>
+      </div>
+      <div class="card-body">
+
+        <!-- Add-branch form -->
+        @if (canAssign()) {
+          <fieldset class="mb-3">
+            <legend class="form-label form-label-sm">Assign Branch</legend>
+            @if (branchAssignError()) {
+              <div class="alert alert-danger py-2 small" role="alert">{{ branchAssignError() }}</div>
+            }
+            <div class="row g-2 align-items-end">
+              <div class="col-sm-5">
+                <label for="branch-company-select" class="form-label form-label-sm">Company</label>
+                @if (companiesState() === 'loading') {
+                  <div class="text-muted small">Loading…</div>
+                } @else {
+                  <select id="branch-company-select" class="form-select form-select-sm"
+                          [ngModel]="selectedCompanyUid()"
+                          (ngModelChange)="onBranchCompanyChange($event)">
+                    <option value="">— Select company —</option>
+                    @for (co of companies(); track co.uid) {
+                      <option [value]="co.uid">{{ co.name }}</option>
+                    }
+                  </select>
+                }
+              </div>
+              <div class="col-sm-4">
+                <label for="branch-select" class="form-label form-label-sm">Branch</label>
+                @if (companyBranchesState() === 'loading') {
+                  <div class="text-muted small">Loading…</div>
+                } @else {
+                  <select id="branch-select" class="form-select form-select-sm"
+                          [disabled]="companyBranches().length === 0"
+                          [ngModel]="selectedBranchUid()"
+                          (ngModelChange)="selectedBranchUid.set($event)">
+                    <option value="">— Select branch —</option>
+                    @for (b of companyBranches(); track b.uid) {
+                      <option [value]="b.uid">{{ b.code }} — {{ b.name }}</option>
+                    }
+                  </select>
+                }
+              </div>
+              <div class="col-sm-3">
+                <button class="btn btn-success btn-sm w-100" type="button"
+                        [disabled]="assigningBranch() || !selectedBranchUid()"
+                        (click)="assignBranch()">
+                  @if (assigningBranch()) {
+                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                  }
+                  Assign
+                </button>
+              </div>
+            </div>
+          </fieldset>
+        }
+
+        <!-- Branches table -->
+        @if (routeBranchesState() === 'loading') {
+          <div class="d-flex align-items-center gap-2 text-muted py-2">
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+            <span>Loading…</span>
+          </div>
+        } @else if (routeBranchesState() === 'error') {
+          <div class="alert alert-warning py-2 small" role="alert">Failed to load branches.</div>
+        } @else if (!hasRouteBranches()) {
+          <p class="text-muted small mb-0">No branches assigned.</p>
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+              <caption class="visually-hidden">Assigned branches</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Code</th>
+                  <th scope="col">Name</th>
+                  @if (canAssign()) {
+                    <th scope="col"><span class="visually-hidden">Actions</span></th>
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                @for (rb of routeBranches(); track rb.branchUid) {
+                  <tr>
+                    <td>{{ rb.branchCode }}</td>
+                    <td>{{ rb.branchName }}</td>
+                    @if (canAssign()) {
+                      <td>
+                        <button class="btn btn-outline-danger btn-sm"
+                                type="button"
+                                [disabled]="rowBusyBranchUid() === rb.branchUid"
+                                (click)="removeBranch(rb)"
+                                [attr.aria-label]="'Remove branch ' + rb.branchName">
+                          @if (rowBusyBranchUid() === rb.branchUid) {
+                            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                          } @else {
+                            <i class="bi bi-trash" aria-hidden="true"></i>
+                          }
+                        </button>
+                      </td>
+                    }
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </div>
+    </div>
+
+  }
+</div>

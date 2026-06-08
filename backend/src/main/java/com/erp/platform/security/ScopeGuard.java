@@ -11,6 +11,7 @@ import com.erp.modules.products.repository.ProductRepository;
 import com.erp.modules.products.repository.UnitOfMeasureRepository;
 import com.erp.modules.purchases.repository.GoodsReceiptRepository;
 import com.erp.modules.purchases.repository.PurchaseOrderRepository;
+import com.erp.modules.routes.repository.RouteRepository;
 import com.erp.modules.sales.repository.SalesInvoiceRepository;
 import com.erp.modules.sales.repository.TaxRateRepository;
 import com.erp.modules.stock.repository.StockMovementRepository;
@@ -54,6 +55,7 @@ public class ScopeGuard {
     private final StockMovementRepository  stockMovements;
     private final PurchaseOrderRepository  purchaseOrders;
     private final GoodsReceiptRepository   goodsReceipts;
+    private final RouteRepository          routes;
     private final AuditService             audit;
 
     public ScopeGuard(CompanyRepository companies,
@@ -71,6 +73,7 @@ public class ScopeGuard {
                       StockMovementRepository stockMovements,
                       PurchaseOrderRepository purchaseOrders,
                       GoodsReceiptRepository goodsReceipts,
+                      RouteRepository routes,
                       AuditService audit) {
         this.companies      = companies;
         this.branches       = branches;
@@ -87,6 +90,7 @@ public class ScopeGuard {
         this.stockMovements = stockMovements;
         this.purchaseOrders = purchaseOrders;
         this.goodsReceipts  = goodsReceipts;
+        this.routes         = routes;
         this.audit          = audit;
     }
 
@@ -116,6 +120,8 @@ public class ScopeGuard {
             // Purchases target types (ADR-0011 D-10)
             case "purchaseorder"  -> purchaseOrders.findCompanyIdByUid(uid);
             case "goodsreceipt"   -> goodsReceipts.findCompanyIdByUid(uid);
+            // Routes target type (ADR-0012 D-9)
+            case "route"          -> routes.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };

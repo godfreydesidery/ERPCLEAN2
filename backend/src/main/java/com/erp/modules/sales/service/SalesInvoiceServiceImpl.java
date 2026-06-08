@@ -3,6 +3,9 @@ package com.erp.modules.sales.service;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.parties.domain.entity.Agent;
 import com.erp.modules.parties.domain.entity.Customer;
+import com.erp.modules.routes.domain.entity.Route;
+import com.erp.modules.routes.repository.RouteRepository;
+import com.erp.modules.routes.service.RouteService;
 import com.erp.modules.parties.repository.AgentRepository;
 import com.erp.modules.parties.repository.CustomerRepository;
 import com.erp.modules.products.domain.entity.Product;
@@ -84,6 +87,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     private final ScopeGuard scopeGuard;
     private final AuditService audit;
     private final OutboxPublisher outbox;
+    private final RouteService routeService;
+    private final RouteRepository routeRepository;
 
     public SalesInvoiceServiceImpl(SalesInvoiceRepository invoices,
                                    SalesInvoiceLineRepository lines,
@@ -100,7 +105,9 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                                    InvoiceTotalsCalculator totalsCalc,
                                    ScopeGuard scopeGuard,
                                    AuditService audit,
-                                   OutboxPublisher outbox) {
+                                   OutboxPublisher outbox,
+                                   RouteService routeService,
+                                   RouteRepository routeRepository) {
         this.invoices = invoices;
         this.lines = lines;
         this.payments = payments;
@@ -117,6 +124,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         this.scopeGuard = scopeGuard;
         this.audit = audit;
         this.outbox = outbox;
+        this.routeService = routeService;
+        this.routeRepository = routeRepository;
     }
 
     // -------------------------------------------------------------------------
@@ -142,9 +151,14 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         // Resolve agent: explicit uid or auto-default to logged-in user's internal agent (FR-SALES-15)
         Long agentId = resolveAgentId(companyId, req.agentUid(), ctx);
 
+        // Resolve route: explicit routeUid takes precedence; else default from agent's primary route
+        // (FR-ROUTE-13, ADR-0012 D-6b). Fail open to null — never blocks a sale (BR-ROUTE-05).
+        Long routeId = resolveRouteId(companyId, agentId, branchId, req.routeUid());
+
         SalesInvoice inv = new SalesInvoice(companyId, branchId,
                 customer.getId(), agentId, req.currency(), actorId());
         inv.setNotes(req.notes());
+        inv.setRouteId(routeId);
 
         SalesInvoice saved = invoices.save(inv);
         audit.record(AuditEvent.of(AuditActions.SALES_INVOICE_CREATE, "sales_invoices",
@@ -726,7 +740,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         inv.setUpdatedBy(actorId());
     }
 
-    /** Build response DTO with enriched customer and agent names. */
+    /** Build response DTO with enriched customer, agent, and route fields. */
     private SalesInvoiceDto toDto(SalesInvoice inv) {
         String customerName = customers.findById(inv.getCustomerId())
                 .map(c -> c.getDisplayName())
@@ -734,7 +748,42 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         String agentName = agents.findById(inv.getAgentId())
                 .map(a -> a.getDisplayName())
                 .orElse(null);
-        return SalesInvoiceDto.from(inv, customerName, agentName);
+        // Route enrichment: nullable — resolve live uid/code/name from the scalar route_id (ADR-0012 D-6d)
+        String routeUid = null;
+        String routeCode = null;
+        String routeName = null;
+        if (inv.getRouteId() != null) {
+            Optional<Route> routeOpt = routeRepository.findById(inv.getRouteId());
+            if (routeOpt.isPresent()) {
+                Route r = routeOpt.get();
+                routeUid  = r.getUid();
+                routeCode = r.getCode();
+                routeName = r.getName();
+            }
+        }
+        return SalesInvoiceDto.from(inv, customerName, agentName, routeUid, routeCode, routeName);
+    }
+
+    /**
+     * Resolve route id for invoice create (ADR-0012 D-6b).
+     * Priority: explicit routeUid in request → default from agent's primary route.
+     * Fails open to null on any error so the sale is never blocked (BR-ROUTE-05).
+     */
+    private Long resolveRouteId(Long companyId, Long agentId, Long branchId, String routeUid) {
+        try {
+            if (routeUid != null && !routeUid.isBlank()) {
+                // Explicit operator selection: resolve scoped to company (same-company guard)
+                return routeRepository.findByCompanyIdAndUid(companyId, routeUid)
+                        .map(Route::getId)
+                        .orElse(null);
+            }
+            // Auto-default from agent's primary route, branch-filtered and ACTIVE (FR-ROUTE-13)
+            return routeService.findPrimaryRouteIdForAgentAtBranch(companyId, agentId, branchId)
+                    .orElse(null);
+        } catch (Exception ex) {
+            // Fail open — invoice creation must never be blocked by route resolution (BR-ROUTE-05)
+            return null;
+        }
     }
 
     private Long actorId() {

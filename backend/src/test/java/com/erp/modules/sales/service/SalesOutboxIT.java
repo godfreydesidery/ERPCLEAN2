@@ -309,6 +309,6 @@ class SalesOutboxIT extends PostgresIntegrationTest {
 
     private CreateSalesInvoiceRequest invoiceRequest() {
         return new CreateSalesInvoiceRequest(
-                companyA.getUid(), customerAUid, agentAUid, "TZS", null);
+                companyA.getUid(), customerAUid, agentAUid, "TZS", null, null);
     }
 }

@@ -263,7 +263,7 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
                 AgentKind.EXTERNAL, null));
 
         SalesInvoiceDto dB = salesInvoiceService.create(new CreateSalesInvoiceRequest(
-                companyB.getUid(), custB.uid(), agB.uid(), "TZS", null));
+                companyB.getUid(), custB.uid(), agB.uid(), "TZS", null, null));
         salesInvoiceService.addLine(dB.uid(), new AddInvoiceLineRequest(
                 prodB.uid(), pcsB.uid(), new BigDecimal("1"), null, null));
         salesInvoiceService.addPayment(dB.uid(), new AddPaymentRequest(
@@ -639,7 +639,7 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
                 rootId, "sales_root", true, companyA.getId(), branchA.getId(), null));
 
         assertThatThrownBy(() -> salesInvoiceService.create(new CreateSalesInvoiceRequest(
-                companyA.getUid(), custB.uid(), agentAUid, "TZS", null)))
+                companyA.getUid(), custB.uid(), agentAUid, "TZS", null, null)))
                 .isInstanceOf(com.erp.platform.common.api.NotFoundException.class);
     }
 
@@ -799,7 +799,7 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
                 null, null, null, null, null, null, null, null, null, null, null, null,
                 AgentKind.EXTERNAL, null));
         salesInvoiceService.create(new CreateSalesInvoiceRequest(
-                companyB.getUid(), custB.uid(), agB.uid(), "TZS", null));
+                companyB.getUid(), custB.uid(), agB.uid(), "TZS", null, null));
 
         // Back to A — list must see only 2 A invoices
         RequestContext.set(new RequestContext.Principal(
@@ -883,7 +883,7 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
 
     private CreateSalesInvoiceRequest invoiceRequest() {
         return new CreateSalesInvoiceRequest(
-                companyA.getUid(), customerAUid, agentAUid, "TZS", null);
+                companyA.getUid(), customerAUid, agentAUid, "TZS", null, null);
     }
 
     /** Add a single unit of productAUid (STANDARD, price 1000 TZS). */

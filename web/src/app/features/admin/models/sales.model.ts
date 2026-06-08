@@ -26,6 +26,10 @@ export interface SalesInvoiceDto {
   customerName: string;
   agentId: string | null;
   agentName: string | null;
+  /** Route defaulted from the agent's primary route; may be null. */
+  routeUid: string | null;
+  routeCode: string | null;
+  routeName: string | null;
   currency: string;
   docDiscountAmount: string | null;
   docDiscountPercent: string | null;
@@ -118,6 +122,8 @@ export interface CreateSalesInvoiceRequest {
   companyUid: string;
   customerUid: string;
   agentUid?: string;
+  /** Optional; if omitted the backend defaults from the agent's primary route. */
+  routeUid?: string;
   currency: string;
   notes?: string;
 }

@@ -7,12 +7,15 @@ import jakarta.validation.constraints.NotBlank;
  * Branch comes from RequestContext — NOT the body (brief §4b).
  * agentUid is optional; when absent the service auto-defaults to the logged-in user's
  * internal agent record (FR-SALES-15).
+ * routeUid is optional; when absent the service auto-defaults from the agent's primary route
+ * (FR-ROUTE-13, ADR-0012 D-6); sending null explicitly clears the default.
  */
 public record CreateSalesInvoiceRequest(
         @NotBlank String companyUid,
         @NotBlank String customerUid,
         String agentUid,
         @NotBlank String currency,
-        String notes
+        String notes,
+        String routeUid
 ) {
 }

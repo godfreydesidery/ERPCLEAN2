@@ -40,5 +40,9 @@ public abstract class PostgresIntegrationTest {
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
         registry.add("spring.flyway.enabled", () -> "true");
+        // Disable the background outbox poller in ITs — tests drive dispatch deterministically via
+        // DomainEventDispatcher.dispatchOne(...); the @Scheduled poller would otherwise race the
+        // test for the same event row (intermittent optimistic-lock failures). ADR-0009 D-4.
+        registry.add("erp.outbox.scheduling-enabled", () -> "false");
     }
 }

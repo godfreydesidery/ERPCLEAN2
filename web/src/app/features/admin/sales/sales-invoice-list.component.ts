@@ -20,6 +20,8 @@ import { OrganisationService } from '../organisation/organisation.service';
 import { CustomerService } from '../parties/customer.service';
 import { AgentService } from '../parties/agent.service';
 import { AgentModel } from '../models/party.model';
+import { RouteDto } from '../routes/models/route.model';
+import { RoutesService } from '../routes/routes.service';
 import { SalesService } from './sales.service';
 
 const DEFAULT_SIZE = 20;
@@ -43,6 +45,7 @@ export class SalesInvoiceListComponent {
   private readonly organisationService = inject(OrganisationService);
   private readonly customerService = inject(CustomerService);
   private readonly agentService = inject(AgentService);
+  private readonly routesService = inject(RoutesService);
   private readonly alerts = inject(AlertService);
   protected readonly session = inject(SessionStore);
 
@@ -77,6 +80,11 @@ export class SalesInvoiceListComponent {
   readonly agentSearchQ = signal('');
   readonly agentResults = signal<AgentModel[]>([]);
   readonly selectedAgent = signal<{ uid: string; label: string } | null>(null);
+
+  // ── Route picker for create form (optional) ────────────────────────────────
+  readonly companyRoutes = signal<RouteDto[]>([]);
+  readonly companyRoutesState = signal<'idle' | 'loading' | 'error'>('idle');
+  readonly selectedRouteUid = signal('');
 
   // ── Search pipeline ────────────────────────────────────────────────────────
   private readonly immediateTrigger$ = new Subject<LoadTrigger>();
@@ -170,6 +178,7 @@ export class SalesInvoiceListComponent {
             if (list.length > 0) {
               this.selectedCompanyId.set(list[0].id);
               this.load(0);
+              this.loadCompanyRoutes(list[0].id);
             }
           },
           error: () => this.companyState.set('error'),
@@ -181,7 +190,21 @@ export class SalesInvoiceListComponent {
 
   onCompanyChange(id: string): void {
     this.selectedCompanyId.set(id);
-    if (id) this.load(0);
+    if (id) {
+      this.load(0);
+      this.loadCompanyRoutes(id);
+    }
+  }
+
+  private loadCompanyRoutes(companyId: string): void {
+    this.companyRoutesState.set('loading');
+    this.routesService.list(companyId, undefined, 0, 200).subscribe({
+      next: ({ rows }) => {
+        this.companyRoutes.set(rows.filter((r) => r.status === 'ACTIVE'));
+        this.companyRoutesState.set('idle');
+      },
+      error: () => this.companyRoutesState.set('error'),
+    });
   }
 
   applySearch(): void {
@@ -266,6 +289,7 @@ export class SalesInvoiceListComponent {
     this.selectedAgent.set(null);
     this.agentSearchQ.set('');
     this.agentResults.set([]);
+    this.selectedRouteUid.set('');
   }
 
   create(): void {
@@ -296,6 +320,7 @@ export class SalesInvoiceListComponent {
       currency,
       notes: this.newNotes().trim() || undefined,
       agentUid: this.selectedAgent()?.uid || undefined,
+      routeUid: this.selectedRouteUid() || undefined,
     };
 
     this.salesService.create(request).subscribe({
