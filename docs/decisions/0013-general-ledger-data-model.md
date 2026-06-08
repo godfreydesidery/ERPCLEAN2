@@ -392,6 +392,8 @@ The trial balance is computed on demand, **not** stored: `SELECT account_id, SUM
 
 ### D-9 — Base-currency-only posting (BR-GL-06) — and the unbuilt `company.base_currency` column
 
+> **OWNER-RESOLVED 2026-06-08:** **V10 adds `companies.base_currency VARCHAR(3) NOT NULL DEFAULT 'TZS'`** (additive ALTER + backfill existing rows to `'TZS'`), closing ADR-0005 D-4's reserved seam. `GLPostingService` asserts every `journal_line.currency` equals `companies.base_currency`. The first-post-sets-the-base fallback below is NOT used.
+
 GL posts in the **company base currency** only (BR-GL-06, ADR-0005 D-4). Every `journal_line.currency` is the base currency; a foreign-currency source is converted at entry (identity in practice — v1 sales document currency = base, sales.md §9). FX revaluation is deferred (§10.5).
 
 **Finding the engineer must act on: `companies` has NO `base_currency` column.** ADR-0005 D-4 *designed* a base-currency config column on `company` but it was **never built** (verified: no `base_currency` in any shipped migration V1–V9; `companies` has `time_zone`, `status`, no currency). Sales/Stock/Purchases have not needed it (each document carries its own `currency`, = base in practice). GL is the **first module that posts a company-level base-currency amount** and must resolve a currency for each line. **Decision — the boring, additive resolution:**
