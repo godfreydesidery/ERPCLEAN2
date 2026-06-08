@@ -51,9 +51,10 @@ class DomainEventDispatcherIT extends PostgresIntegrationTest {
     // Test-only handler constants
     // ---------------------------------------------------------------------------
 
-    static final String PING_EVENT_TYPE    = "TEST.PING";
-    static final String FAILING_EVENT_TYPE = "TEST.FAIL";
-    static final String PING_CONSUMER      = "TEST.PING_HANDLER";
+    static final String PING_EVENT_TYPE      = "TEST.PING";
+    static final String FAILING_EVENT_TYPE   = "TEST.FAIL";
+    static final String MANDATORY_EVENT_TYPE = "TEST.MANDATORY";
+    static final String PING_CONSUMER        = "TEST.PING_HANDLER";
 
     // ---------------------------------------------------------------------------
     // Test-only Spring beans — registered by @Import above
@@ -87,6 +88,30 @@ class DomainEventDispatcherIT extends PostgresIntegrationTest {
         }
     }
 
+    /**
+     * A handler whose {@code handle} requires an AMBIENT transaction (MANDATORY) — exactly like the
+     * real Stock handlers (which delegate to StockPostingService MANDATORY). Used to prove the
+     * scheduled poll() path opens a transaction via the proxy; without that it throws
+     * "No existing transaction found for transaction marked with propagation 'mandatory'".
+     */
+    static class MandatoryHandler implements DomainEventHandler {
+
+        /** static so the test can read it without @Autowiring the @Transactional-proxied bean. */
+        static final AtomicInteger CALL_COUNT = new AtomicInteger(0);
+
+        @Override
+        public String eventType() {
+            return MANDATORY_EVENT_TYPE;
+        }
+
+        @Override
+        @org.springframework.transaction.annotation.Transactional(
+                propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
+        public void handle(DomainEvent event) {
+            CALL_COUNT.incrementAndGet();
+        }
+    }
+
     /** A handler that always throws — used for the retry/cap/FAILED tests. */
     static class FailingHandler implements DomainEventHandler {
 
@@ -116,6 +141,11 @@ class DomainEventDispatcherIT extends PostgresIntegrationTest {
         FailingHandler failingHandler() {
             return new FailingHandler();
         }
+
+        @Bean
+        MandatoryHandler mandatoryHandler() {
+            return new MandatoryHandler();
+        }
     }
 
     // ---------------------------------------------------------------------------
@@ -133,6 +163,8 @@ class DomainEventDispatcherIT extends PostgresIntegrationTest {
     @Autowired private BranchRepository branches;
     @Autowired private PingHandler pingHandler;
     @Autowired private FailingHandler failingHandler;
+    // NOTE: MandatoryHandler is @Transactional → Spring wraps it in a proxy, so we don't @Autowired
+    // the concrete type (use the static counter below + the event status to assert it ran in a TX).
 
     @Value("${erp.outbox.max-attempts:5}")
     private int maxAttempts;
@@ -145,6 +177,7 @@ class DomainEventDispatcherIT extends PostgresIntegrationTest {
         testData.clearAll();
         pingHandler.callCount.set(0);
         failingHandler.callCount.set(0);
+        MandatoryHandler.CALL_COUNT.set(0);
 
         Organisation org = organisations.save(new Organisation("Dispatcher IT Org"));
         Company company  = companies.save(new Company(org, "DIT", "Dispatcher IT Co"));
@@ -182,6 +215,38 @@ class DomainEventDispatcherIT extends PostgresIntegrationTest {
                 .reduce((a, b) -> b)
                 .map(DomainEvent::getId)
                 .orElseThrow();
+    }
+
+    private Long publishMandatory() {
+        txTemplate.execute(s ->
+                outboxPublisher.publish(MANDATORY_EVENT_TYPE, "TEST_AGG", 3L, "agg-uid-mand",
+                        companyId, branchId, "{}"));
+        return domainEventRepository.findAll().stream()
+                .filter(e -> MANDATORY_EVENT_TYPE.equals(e.getEventType()))
+                .reduce((a, b) -> b)
+                .map(DomainEvent::getId)
+                .orElseThrow();
+    }
+
+    // -------------------------------------------------------------------------
+    // Regression: the SCHEDULED poll() path must open a TX (via the proxy) so a
+    // MANDATORY-propagation handler — like the real Stock handlers — actually runs.
+    // Before the self-injection fix, poll()'s this.dispatchOne(...) self-invocation
+    // bypassed the proxy → no TX → "No existing transaction ... propagation 'mandatory'"
+    // → the whole sale→stock / receipt→stock loop silently FAILED at runtime while
+    // every unit test (which called dispatchOne directly) passed.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void poll_dispatchesMandatoryHandler_throughProxyTransaction() {
+        Long eventId = publishMandatory();
+
+        dispatcher.poll(); // the SCHEDULED entry point — must dispatch through the proxy
+
+        assertThat(MandatoryHandler.CALL_COUNT.get()).isEqualTo(1);
+        DomainEvent ev = domainEventRepository.findById(eventId).orElseThrow();
+        assertThat(ev.getStatus()).isEqualTo(DomainEventStatus.DISPATCHED);
+        assertThat(ev.getLastError()).isNull();
     }
 
     // -------------------------------------------------------------------------

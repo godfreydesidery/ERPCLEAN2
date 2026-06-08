@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -47,13 +48,24 @@ public class DomainEventDispatcher {
 
     private final DomainEventRepository repository;
     private final Map<String, List<DomainEventHandler>> handlersByType;
+    /**
+     * Self-reference (via provider to break the construction cycle) so {@link #poll()} invokes
+     * {@link #dispatchOne(Long)} THROUGH the Spring proxy. A plain {@code this.dispatchOne(...)}
+     * self-invocation bypasses the proxy, so its {@code @Transactional(REQUIRES_NEW)} never engages —
+     * which left handlers' {@code MANDATORY} posting service with "no existing transaction" and the
+     * whole sale→stock / receipt→stock loop silently failing at runtime (unit tests masked it by
+     * calling dispatchOne directly on the proxy bean).
+     */
+    private final ObjectProvider<DomainEventDispatcher> self;
 
     @Value("${erp.outbox.max-attempts:5}")
     private int maxAttempts;
 
     DomainEventDispatcher(DomainEventRepository repository,
-                          List<DomainEventHandler> handlers) {
+                          List<DomainEventHandler> handlers,
+                          ObjectProvider<DomainEventDispatcher> self) {
         this.repository      = repository;
+        this.self            = self;
         // Group handlers by their declared event type at construction time (eager — no per-poll map rebuild).
         this.handlersByType  = handlers.stream()
                 .collect(Collectors.groupingBy(DomainEventHandler::eventType));
@@ -62,13 +74,15 @@ public class DomainEventDispatcher {
     /**
      * Poll PENDING events oldest-first and dispatch each in its own per-event transaction.
      * fixedDelayString → delay between the end of one poll and the start of the next (no overlap).
+     * Dispatch goes through the proxy ({@link #self}) so the per-event {@code REQUIRES_NEW} TX opens.
      */
     @Scheduled(fixedDelayString = "${erp.outbox.poll-interval-ms:1000}")
     void poll() {
         List<DomainEvent> batch = repository.findPendingBatch(
                 maxAttempts, PageRequest.of(0, BATCH_SIZE));
+        DomainEventDispatcher proxy = self.getObject();
         for (DomainEvent event : batch) {
-            dispatchOne(event.getId());
+            proxy.dispatchOne(event.getId());
         }
     }
 
