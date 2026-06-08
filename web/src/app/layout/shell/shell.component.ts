@@ -151,6 +151,16 @@ export class ShellComponent {
         { label: 'Goods Receipts', route: '/admin/goods-receipts', icon: 'bi-box-arrow-in-down', available: true, permission: 'PURCHASE.ORDER.VIEW' },
       ],
     },
+    {
+      label: 'Accounting',
+      items: [
+        { label: 'Chart of Accounts', route: '/admin/gl/accounts', icon: 'bi-diagram-3', available: true, permission: 'GL.VIEW' },
+        { label: 'Journal Entries', route: '/admin/gl/journals', icon: 'bi-journal-text', available: true, permission: 'GL.VIEW' },
+        { label: 'Trial Balance', route: '/admin/gl/trial-balance', icon: 'bi-calculator', available: true, permission: 'GL.VIEW' },
+        { label: 'Fiscal Periods', route: '/admin/gl/periods', icon: 'bi-calendar3', available: true, permission: 'GL.VIEW' },
+        { label: 'Posting Accounts', route: '/admin/gl/config', icon: 'bi-gear', available: true, permission: 'GL.MANAGE' },
+      ],
+    },
   ];
 
   /** Nav groups with permission-filtered items. Reactive: recomputes when permissions change. */

@@ -1,0 +1,167 @@
+<section class="admin-page">
+  <!-- Back link -->
+  <div class="mb-3">
+    <a routerLink="/admin/gl/journals" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Journals
+    </a>
+  </div>
+
+  <!-- Loading / error states -->
+  @switch (entryState()) {
+    @case ('loading') {
+      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading journal entry…
+      </p>
+    }
+    @case ('error') {
+      <p class="state text-danger" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load journal entry. Please try again.
+      </p>
+    }
+    @default {
+      @if (entry(); as e) {
+        <!-- Header card -->
+        <div class="card mb-4">
+          <div class="card-body">
+            <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+              <div>
+                <h1 class="h5 mb-1">
+                  <i class="bi bi-journal-text me-2" aria-hidden="true"></i>
+                  Journal Entry — {{ e.batchNumber }}
+                </h1>
+                <p class="text-muted small mb-0">{{ e.description }}</p>
+              </div>
+              <div class="d-flex align-items-center gap-2">
+                <span class="badge" [class]="sourceBadgeClass(e.sourceType)">
+                  {{ e.sourceType }}
+                </span>
+                @if (isBalanced()) {
+                  <span class="badge text-bg-success">
+                    <i class="bi bi-check-circle me-1" aria-hidden="true"></i>Balanced
+                  </span>
+                }
+              </div>
+            </div>
+
+            <dl class="row mt-3 mb-0 small">
+              <dt class="col-sm-2 text-muted">Posting Date</dt>
+              <dd class="col-sm-4">{{ e.postingDate }}</dd>
+              <dt class="col-sm-2 text-muted">Batch Number</dt>
+              <dd class="col-sm-4 font-monospace">{{ e.batchNumber }}</dd>
+
+              @if (e.sourceRef) {
+                <dt class="col-sm-2 text-muted">Source Ref</dt>
+                <dd class="col-sm-4 font-monospace">{{ e.sourceRef }}</dd>
+              }
+              @if (e.reversalOfId) {
+                <dt class="col-sm-2 text-muted">Reversal of</dt>
+                <dd class="col-sm-4 font-monospace text-warning">{{ e.reversalOfId }}</dd>
+              }
+            </dl>
+
+            <!-- Reverse action -->
+            @if (canReverse()) {
+              <div class="mt-3 pt-3 border-top">
+                <button type="button" class="btn btn-outline-warning"
+                        [disabled]="reversing()"
+                        (click)="reverse()"
+                        aria-describedby="reverseHelp">
+                  @if (reversing()) {
+                    <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                    Reversing…
+                  } @else {
+                    <i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i>
+                    Reverse Entry
+                  }
+                </button>
+                <span id="reverseHelp" class="form-text ms-2 small text-muted">
+                  Creates an equal and opposite journal entry.
+                </span>
+                @if (reverseError(); as msg) {
+                  <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+                }
+              </div>
+            }
+
+            @if (e.sourceType === 'SALES' || e.sourceType === 'PURCHASE') {
+              <p class="text-muted small mt-3 mb-0">
+                <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
+                This entry was auto-posted by the system and is read-only.
+              </p>
+            }
+          </div>
+        </div>
+
+        <!-- Lines table -->
+        <h2 class="h6 mb-2">
+          <i class="bi bi-list-ul me-1" aria-hidden="true"></i>
+          Lines ({{ e.lines ? e.lines.length : 0 }})
+        </h2>
+        @if (!e.lines || !e.lines.length) {
+          <p class="text-muted small">No lines on this entry.</p>
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-sm align-middle bg-white grid">
+              <caption class="visually-hidden">Journal entry lines</caption>
+              <thead>
+                <tr>
+                  <th scope="col">#</th>
+                  <th scope="col">Account Code</th>
+                  <th scope="col">Account Name</th>
+                  <th scope="col" class="text-end">Debit</th>
+                  <th scope="col" class="text-end">Credit</th>
+                  <th scope="col">Currency</th>
+                  <th scope="col">Memo</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (line of e.lines; track line.lineNo) {
+                  <tr>
+                    <td class="small text-muted">{{ line.lineNo }}</td>
+                    <td class="font-monospace small fw-semibold">{{ line.accountCode }}</td>
+                    <td class="small">{{ line.accountName }}</td>
+                    <td class="text-end font-monospace small">
+                      @if (parseFloat(line.debitAmount) > 0) {
+                        {{ line.debitAmount }}
+                      } @else {
+                        <span class="text-muted">—</span>
+                      }
+                    </td>
+                    <td class="text-end font-monospace small">
+                      @if (parseFloat(line.creditAmount) > 0) {
+                        {{ line.creditAmount }}
+                      } @else {
+                        <span class="text-muted">—</span>
+                      }
+                    </td>
+                    <td class="small text-muted">{{ line.currency }}</td>
+                    <td class="small text-muted">{{ line.lineMemo ?? '—' }}</td>
+                  </tr>
+                }
+              </tbody>
+              <tfoot class="table-light fw-semibold">
+                <tr>
+                  <td colspan="3" class="text-end small">Totals</td>
+                  <td class="text-end font-monospace small">{{ totalDebits() }}</td>
+                  <td class="text-end font-monospace small">{{ totalCredits() }}</td>
+                  <td colspan="2">
+                    @if (isBalanced()) {
+                      <span class="text-success small">
+                        <i class="bi bi-check-circle-fill me-1" aria-hidden="true"></i>Balanced
+                      </span>
+                    } @else {
+                      <span class="text-danger small">
+                        <i class="bi bi-exclamation-circle-fill me-1" aria-hidden="true"></i>Unbalanced
+                      </span>
+                    }
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        }
+      }
+    }
+  }
+</section>
