@@ -1,0 +1,159 @@
+<div class="container-fluid py-3">
+  <!-- ── Header ─────────────────────────────────────────────────────────── -->
+  <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+    <h1 class="h4 mb-0">Routes</h1>
+    @if (canManage()) {
+      <button class="btn btn-primary btn-sm" type="button" (click)="toggleCreateForm()"
+              [attr.aria-expanded]="showCreateForm()">
+        <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+        @if (showCreateForm()) { Cancel } @else { New Route }
+      </button>
+    }
+  </div>
+
+  <!-- ── Company selector ───────────────────────────────────────────────── -->
+  <div class="mb-3">
+    @if (companyState() === 'loading') {
+      <span class="text-muted small">Loading companies…</span>
+    } @else if (companyState() === 'error') {
+      <span class="text-danger small">Failed to load companies.</span>
+    } @else {
+      <label for="route-company-select" class="form-label visually-hidden">Company</label>
+      <select id="route-company-select" class="form-select form-select-sm w-auto"
+              [ngModel]="selectedCompanyId()"
+              (ngModelChange)="onCompanyChange($event)">
+        @for (co of companies(); track co.id) {
+          <option [value]="co.id">{{ co.name }}</option>
+        }
+      </select>
+    }
+  </div>
+
+  <!-- ── Inline create form ─────────────────────────────────────────────── -->
+  @if (showCreateForm()) {
+    <div class="card mb-3">
+      <div class="card-body">
+        <h2 class="h6 card-title mb-3">New Route</h2>
+        @if (formError()) {
+          <div class="alert alert-danger py-2" role="alert">{{ formError() }}</div>
+        }
+        <div class="row g-2 align-items-end">
+          <div class="col-sm-5">
+            <label for="new-route-name" class="form-label form-label-sm">Name <span aria-hidden="true">*</span></label>
+            <input id="new-route-name" type="text" class="form-control form-control-sm"
+                   [ngModel]="newName()" (ngModelChange)="newName.set($event)"
+                   placeholder="Route name" maxlength="200" required />
+          </div>
+          <div class="col-sm-4">
+            <label for="new-route-location" class="form-label form-label-sm">Location Identifier</label>
+            <input id="new-route-location" type="text" class="form-control form-control-sm"
+                   [ngModel]="newLocationIdentifier()" (ngModelChange)="newLocationIdentifier.set($event)"
+                   placeholder="Optional location" maxlength="200" />
+          </div>
+          <div class="col-sm-3">
+            <button class="btn btn-primary btn-sm w-100" type="button"
+                    [disabled]="saving()" (click)="create()">
+              @if (saving()) {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                Saving…
+              } @else {
+                Save
+              }
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- ── Search bar ──────────────────────────────────────────────────────── -->
+  <div class="d-flex gap-2 mb-3 flex-wrap">
+    <label for="route-search" class="visually-hidden">Search routes</label>
+    <input id="route-search" type="search" class="form-control form-control-sm w-auto"
+           placeholder="Search…"
+           [ngModel]="searchQ()" (ngModelChange)="searchQ.set($event)"
+           (keydown.enter)="applySearch()" />
+    <button class="btn btn-outline-secondary btn-sm" type="button" (click)="applySearch()">
+      <i class="bi bi-search" aria-hidden="true"></i>
+      <span class="visually-hidden">Search</span>
+    </button>
+    @if (searchQ()) {
+      <button class="btn btn-outline-secondary btn-sm" type="button" (click)="clearSearch()">
+        <i class="bi bi-x-lg" aria-hidden="true"></i>
+        <span class="visually-hidden">Clear search</span>
+      </button>
+    }
+  </div>
+
+  <!-- ── States ─────────────────────────────────────────────────────────── -->
+  @if (state() === 'loading') {
+    <div class="d-flex align-items-center gap-2 text-muted py-4">
+      <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+      <span>Loading routes…</span>
+    </div>
+  } @else if (state() === 'forbidden') {
+    <div class="alert alert-warning" role="alert">
+      <i class="bi bi-shield-exclamation me-2" aria-hidden="true"></i>
+      You do not have permission to view routes.
+    </div>
+  } @else if (state() === 'error') {
+    <div class="alert alert-danger" role="alert">
+      Failed to load routes. <button class="btn btn-link btn-sm p-0 ms-1" type="button" (click)="load(currentPage())">Retry</button>
+    </div>
+  } @else if (isEmpty()) {
+    <p class="text-muted py-4">No routes found.</p>
+  } @else {
+    <!-- ── Table ──────────────────────────────────────────────────────────── -->
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle">
+        <caption class="visually-hidden">Routes list</caption>
+        <thead>
+          <tr>
+            <th scope="col">Code</th>
+            <th scope="col">Name</th>
+            <th scope="col">Location</th>
+            <th scope="col">Status</th>
+            <th scope="col"><span class="visually-hidden">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of rows(); track row.uid) {
+            <tr>
+              <td>{{ row.code }}</td>
+              <td>{{ row.name }}</td>
+              <td>{{ row.locationIdentifier ?? '—' }}</td>
+              <td>
+                <span class="badge" [class]="statusBadgeClass(row.status)">{{ row.status }}</span>
+              </td>
+              <td>
+                <a class="btn btn-outline-secondary btn-sm"
+                   [routerLink]="['/admin/routes/uid', row.uid]">
+                  <i class="bi bi-pencil" aria-hidden="true"></i>
+                  <span class="visually-hidden">Edit {{ row.name }}</span>
+                </a>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── Pagination ─────────────────────────────────────────────────────── -->
+    <nav aria-label="Routes pagination">
+      <div class="d-flex align-items-center gap-3">
+        <button class="btn btn-outline-secondary btn-sm" type="button"
+                [disabled]="currentPage() === 0" (click)="prevPage()">
+          <i class="bi bi-chevron-left" aria-hidden="true"></i> Prev
+        </button>
+        <span class="small text-muted">
+          Page {{ currentPage() + 1 }} of {{ meta().totalPages || 1 }}
+          ({{ meta().totalElements }} total)
+        </span>
+        <button class="btn btn-outline-secondary btn-sm" type="button"
+                [disabled]="!meta().hasNext" (click)="nextPage()">
+          Next <i class="bi bi-chevron-right" aria-hidden="true"></i>
+        </button>
+      </div>
+    </nav>
+  }
+</div>
