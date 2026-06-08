@@ -128,6 +128,15 @@ public final class AuditActions {
     public static final String PURCHASE_GR_RECEIVE        = "PURCHASE.GOODS_RECEIPT.RECEIVE";
     public static final String PURCHASE_GR_VOID           = "PURCHASE.GOODS_RECEIPT.VOID";
 
+    // -- GL module (ADR-0013 D-14; target_type = plural table names) ---------
+    public static final String GL_ACCOUNT_CREATE     = "GL.ACCOUNT.CREATE";
+    public static final String GL_ACCOUNT_UPDATE     = "GL.ACCOUNT.UPDATE";
+    public static final String GL_ACCOUNT_DEACTIVATE = "GL.ACCOUNT.DEACTIVATE";
+    public static final String GL_JOURNAL_POST       = "GL.JOURNAL.POST";
+    public static final String GL_PERIOD_OPEN        = "GL.PERIOD.OPEN";
+    public static final String GL_PERIOD_CLOSE       = "GL.PERIOD.CLOSE";
+    public static final String GL_CONFIG_SET         = "GL.CONFIG.SET";
+
     // -- Routes module (ADR-0012 D-12; target_type = plural table names) ----
     public static final String ROUTE_CREATE            = "ROUTE.CREATE";
     public static final String ROUTE_UPDATE            = "ROUTE.UPDATE";

@@ -4,6 +4,7 @@ import com.erp.modules.sales.domain.dto.AddInvoiceLineRequest;
 import com.erp.modules.sales.domain.dto.AddPaymentRequest;
 import com.erp.modules.sales.domain.dto.CreateSalesInvoiceRequest;
 import com.erp.modules.sales.domain.dto.FinaliseInvoiceRequest;
+import com.erp.modules.sales.domain.dto.InvoicePostingTotalsDto;
 import com.erp.modules.sales.domain.dto.OverrideLinePriceRequest;
 import com.erp.modules.sales.domain.dto.SalesInvoiceDto;
 import com.erp.modules.sales.domain.dto.SalesInvoiceLineDto;
@@ -13,6 +14,7 @@ import com.erp.modules.sales.domain.dto.UpdateInvoiceLineRequest;
 import com.erp.modules.sales.domain.dto.UpdateTaxRateRequest;
 import com.erp.modules.sales.domain.dto.VoidInvoiceRequest;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -46,6 +48,13 @@ public interface SalesInvoiceService {
     void removePayment(String invoiceUid, String paymentUid);
 
     List<SalesInvoicePaymentDto> listPayments(String invoiceUid);
+
+    // --- GL posting read (ADR-0013 D-12) ---
+    /**
+     * Returns the monetary totals a GL posting handler needs for a finalised invoice.
+     * Company-scoped so no cross-tenant read is possible. GL imports this DTO, never the entity.
+     */
+    Optional<InvoicePostingTotalsDto> findPostingTotalsByUidAndCompany(String invoiceUid, Long companyId);
 
     // --- Tax rates ---
     TaxRateDto getTaxRateByUid(String uid);

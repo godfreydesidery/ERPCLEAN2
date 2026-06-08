@@ -30,4 +30,10 @@ public interface SalesInvoiceRepository extends JpaRepository<SalesInvoice, Long
      */
     @Query("SELECT i.companyId FROM SalesInvoice i WHERE i.uid = :uid")
     Optional<Long> findCompanyIdByUid(@Param("uid") String uid);
+
+    /**
+     * Company-scoped invoice lookup by uid — used by GL's SalesPostingHandler re-read (ADR-0013 D-12).
+     * Scoped in the query so no cross-tenant read is possible.
+     */
+    Optional<SalesInvoice> findByUidAndCompanyId(String uid, Long companyId);
 }

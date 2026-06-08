@@ -1,5 +1,9 @@
 package com.erp.platform.security;
 
+import com.erp.modules.gl.repository.ChartOfAccountRepository;
+import com.erp.modules.gl.repository.FiscalPeriodRepository;
+import com.erp.modules.gl.repository.GlConfigRepository;
+import com.erp.modules.gl.repository.JournalEntryRepository;
 import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.parties.repository.AgentRepository;
@@ -36,6 +40,7 @@ import org.springframework.stereotype.Component;
  * cross-cutting spine, not a peer module (ArchUnit note in ADR-0002 and ADR-0006 D-10).
  * Sales repositories are added here following the same pattern (ADR-0008 D-10).
  * Purchases repositories added per ADR-0011 D-10 ({@code purchaseorder}/{@code goodsreceipt}).
+ * GL repositories added per ADR-0013 D-10 ({@code account}/{@code fiscalperiod}/{@code journalentry}/{@code glconfig}).
  */
 @Component
 public class ScopeGuard {
@@ -56,6 +61,11 @@ public class ScopeGuard {
     private final PurchaseOrderRepository  purchaseOrders;
     private final GoodsReceiptRepository   goodsReceipts;
     private final RouteRepository          routes;
+    // GL repositories (ADR-0013 D-10)
+    private final ChartOfAccountRepository glAccounts;
+    private final FiscalPeriodRepository   fiscalPeriods;
+    private final JournalEntryRepository   journalEntries;
+    private final GlConfigRepository       glConfigs;
     private final AuditService             audit;
 
     public ScopeGuard(CompanyRepository companies,
@@ -74,6 +84,10 @@ public class ScopeGuard {
                       PurchaseOrderRepository purchaseOrders,
                       GoodsReceiptRepository goodsReceipts,
                       RouteRepository routes,
+                      ChartOfAccountRepository glAccounts,
+                      FiscalPeriodRepository fiscalPeriods,
+                      JournalEntryRepository journalEntries,
+                      GlConfigRepository glConfigs,
                       AuditService audit) {
         this.companies      = companies;
         this.branches       = branches;
@@ -91,6 +105,10 @@ public class ScopeGuard {
         this.purchaseOrders = purchaseOrders;
         this.goodsReceipts  = goodsReceipts;
         this.routes         = routes;
+        this.glAccounts     = glAccounts;
+        this.fiscalPeriods  = fiscalPeriods;
+        this.journalEntries = journalEntries;
+        this.glConfigs      = glConfigs;
         this.audit          = audit;
     }
 
@@ -122,6 +140,11 @@ public class ScopeGuard {
             case "goodsreceipt"   -> goodsReceipts.findCompanyIdByUid(uid);
             // Routes target type (ADR-0012 D-9)
             case "route"          -> routes.findCompanyIdByUid(uid);
+            // GL target types (ADR-0013 D-10)
+            case "account"        -> glAccounts.findCompanyIdByUid(uid);
+            case "fiscalperiod"   -> fiscalPeriods.findCompanyIdByUid(uid);
+            case "journalentry"   -> journalEntries.findCompanyIdByUid(uid);
+            case "glconfig"       -> glConfigs.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };
