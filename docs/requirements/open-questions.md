@@ -247,3 +247,57 @@ Each entry: why it matters · who decides · does it block build.
   only; apportioning freight/duty/insurance ties to the deferred valuation work (stock.md §10).
 - **OQ-PURCH-08** — ✅ **RESOLVED (owner): GOODS-ONLY.** v1 PO/GR are for **goods that move stock**;
   service / expense purchases are deferred to AP/expenses.
+
+## Routes
+
+> **FULLY RATIFIED 2026-06-08.** The owner closed **all eight scoping forks** (route master shape;
+> route↔customer cardinality; route↔agent cardinality + EXTERNAL-only; route↔branch filtering; free-text
+> geography vs geo-hierarchy binding; route captured on the v1 invoice; permission set; numbering).
+> routes.md is **Ratified**. **No ADR-0012-blocking question remains.** solutions-architect may start
+> **ADR-0012** now (routes data model, migration `V9`) + a **small additive Sales-invoice change** (a
+> nullable `route_id` snapshot, mirroring how `products.vat_status` was added for Sales). The remaining
+> OQ-ROUTE items are **non-blocking** detail (recommended defaults stand).
+
+### Resolved (owner, 2026-06-08)
+
+- **ROUTE fork 1 — Route master shape** — ✅ **RESOLVED: per-company master**, code `ROUTE-####` via
+  `code_sequence`, name + free-text location identifier/description, MasterStatus
+  (ACTIVE/INACTIVE/ARCHIVED soft-delete), audit. Mirrors the Customer/Agent/Product master. Reflected in
+  routes.md FR-ROUTE-01/02/03/16, BR-ROUTE-06.
+- **ROUTE fork 2 — Route ↔ Customer cardinality** — ✅ **RESOLVED: MANY-TO-MANY**; a customer may belong
+  to several routes. **All customers routable** (cash/walk-in + credit/account). Reflected in FR-ROUTE-04/05/06.
+- **ROUTE fork 3 — Route ↔ Agent cardinality + agent kind** — ✅ **RESOLVED: MANY-TO-MANY, EXTERNAL agents
+  ONLY** (INTERNAL agents cannot be route-assigned); optional **advisory primary** agent per route.
+  Reflected in FR-ROUTE-07/08/09, BR-ROUTE-02/04.
+- **ROUTE fork 4 — Route ↔ Branch** — ✅ **RESOLVED: company-owned, branch-filtered, can span branches**
+  (mirrors `customer_branch` / `agent_branch`). Reflected in FR-ROUTE-10/11/12, BR-ROUTE-01/03.
+- **ROUTE fork 5 — Geography** — ✅ **RESOLVED: free-text area label / location identifier**, NOT
+  structurally bound to region/district or any geo-hierarchy (a `route_geography` binding is a future
+  additive option). The customer's region/district are **not** the route. Reflected in FR-ROUTE-03/06,
+  BR-ROUTE-08. *(See OQ-ROUTE-03 below — the geo-hierarchy round is deferred, conscious.)*
+- **ROUTE fork 6 — Route on the invoice** — ✅ **RESOLVED: capture it in v1.** The sales invoice gains a
+  **nullable** route, **defaulted from the selling agent's primary route, editable, OPTIONAL** (never
+  blocks a sale; cannot be derived from the customer because route↔customer is N:M). A **small additive
+  cross-module change to Sales** (like `products.vat_status` was), designed in ADR-0012 + a tiny Sales
+  addition. **Captured-not-validated** = accepted risk. Reflected in FR-ROUTE-13/14/15, BR-ROUTE-05/09,
+  routes.md §9/§10.
+- **ROUTE fork 7 — Permissions** — ✅ **RESOLVED: `ROUTE.VIEW` / `ROUTE.MANAGE` / `ROUTE.ASSIGN`**
+  (mirroring `PRODUCT.*` / `PARTY.BRANCH.ASSIGN`); per-company scope; `assertCanActIn` on every read path;
+  audit on every mutation. Reflected in FR-ROUTE-17, NFR-ROUTE-01/03.
+- **ROUTE fork 8 — Numbering** — ✅ **RESOLVED: `ROUTE-####` per company** via the generic `code_sequence`
+  (entity_kind `ROUTE`); no new per-module counter. Reflected in FR-ROUTE-16, BR-ROUTE-06.
+
+### Still open — NON-blocking detail (recommended defaults stand; do NOT block ADR-0012)
+
+- **OQ-ROUTE-01** — **Primary-route default when an external agent is primary on MORE THAN ONE route.**
+  Which route then defaults onto the invoice? *Recommended default:* if exactly one primary route is
+  associated with the active branch, default to it; if zero or several qualify, default to **blank** (the
+  operator selects). *Decider:* owner. *Blocks ADR-0012:* **NO** — blank-on-ambiguity default stands; a
+  one-primary-route-per-agent constraint is an additive option later.
+- **OQ-ROUTE-02** — **Route name uniqueness within a company.** Code is unique per company (BR-ROUTE-06);
+  is the **name** also unique per company? *Recommended default:* name **not** unique (code disambiguates,
+  matching Products/Parties). *Decider:* owner. *Blocks ADR-0012:* **NO** — additive constraint if wanted.
+- **OQ-ROUTE-03** — **Geo-hierarchy / region-district binding (`route_geography`).** Confirmed **deferred**
+  (free-text only in v1, BR-ROUTE-08); recorded so the future structured-geography round is conscious.
+  *Decider:* owner + architect at that round. *Blocks ADR-0012:* **NO** (deferred; not precluded —
+  NFR-ROUTE-04).

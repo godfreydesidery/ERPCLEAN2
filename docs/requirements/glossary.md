@@ -269,3 +269,37 @@ One definition per term, used consistently across the team. Add terms as modules
 - **Void (purchase)** — a permissioned, audited reversal of a received Goods Receipt (and its
   stock-in), or of a PO, mirroring the Sales void. Voiding a Goods Receipt **restores** the received
   quantity to the PO's outstanding. The v1 correction path; full returns-to-supplier are deferred.
+
+## Routes
+
+> Status: **Ratified 2026-06-08** — terms reflect the owner-confirmed v1 in routes.md. A per-company
+> master sibling to Customer/Agent; adds a nullable route to the Sales invoice (ADR-0008 → ADR-0012).
+
+- **Route** — a per-company **master** record naming a **physical sales area / zone** where customers
+  reside and along which **external** sales agents sell. Carries a code (`ROUTE-####`), a name, a
+  free-text location identifier, a MasterStatus, and audit. A **sibling master** to Customer/Agent — it
+  is **not** a party, **not** a branch, and **not** the customer's region/district. Canonical term:
+  *route*.
+- **Location identifier (of a route)** — the route's **free-text** description of the area it covers
+  (e.g. "Kariakoo market block 3–7"). v1 geography is **free-text only** — **not** bound to
+  region/district or to any geo-hierarchy/coordinates (a structured `route_geography` binding is
+  deferred).
+- **Route ↔ Customer membership** — the **many-to-many** assignment of customers to a route (a customer
+  may belong to several routes; a route holds many). **All customers routable** (cash/walk-in +
+  credit/account). An **explicit, curated** grouping — **never** auto-derived from the customer's address.
+- **Route ↔ Agent assignment** — the **many-to-many** assignment of **EXTERNAL** agents to a route (an
+  external agent covers several routes; a route has several). **INTERNAL agents are never
+  route-assigned.** Mirrors the `agent_branch` association pattern.
+- **Primary agent (of a route)** — an **optional, advisory, at-most-one** external agent flagged as a
+  route's main coverer. Used to **default the route onto an invoice** from the selling agent. A hint, not
+  exclusivity — other assigned external agents still cover the route.
+- **Route ↔ Branch association** — the per-company **multi-branch** association making a route
+  visible/usable at given branches (mirrors `customer_branch` / `agent_branch`). A route can **span
+  branches**.
+- **Route on the invoice** — a **nullable** route reference recorded on a sales invoice noting which
+  route the sale came from. **Defaulted from the selling agent's primary route, operator-editable,
+  OPTIONAL** — a blank route never blocks a sale. **Captured, not validated** against the customer or
+  agent in v1 (accepted risk). Cannot be auto-derived from the customer (route↔customer is N:M).
+- **Captured-not-validated (route)** — the v1 stance that the invoice route is **recorded as
+  defaulted/supplied** but **not** checked against the customer's or agent's route memberships. The input
+  to the deferred route-coverage / sales-by-route reporting; never a control on the sale.
