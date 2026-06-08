@@ -584,3 +584,91 @@ that** I cannot purchase across branches or companies by mistake.
   pick-lists update to the new branch without re-login (mirrors US-IAM-003).
 - **AC3** Given any attempt to read or write a PO/GR outside my scope, then it is refused; cross-tenant
   purchase data never appears (NFR-PURCH-01, BR-PURCH-01).
+
+## Routes — sales areas / zones for external field agents
+
+Requirements: [docs/requirements/routes.md](docs/requirements/routes.md). Status: **RATIFIED
+(owner-confirmed 2026-06-08).** v1 = a per-company **Route** master (code `ROUTE-####`, name, free-text
+location, MasterStatus, audit), sibling to Customer/Agent; **route↔customer = many-to-many** (all
+customers routable); **route↔agent = many-to-many, EXTERNAL agents only** (+ optional advisory primary
+agent); **route↔branch** company-owned, branch-filtered, can span branches; **geography = free-text only**
+(not bound to region/district); the **sales invoice gains a nullable route**, **defaulted from the selling
+agent's primary route, editable, optional** (never blocks a sale); permissions `ROUTE.VIEW` /
+`ROUTE.MANAGE` / `ROUTE.ASSIGN`; per-company scope, `assertCanActIn` on every read, audit on every
+mutation. **Captured-not-validated** invoice route is an accepted risk (routes.md §10). Deferred:
+agent-must-match-customer validation, route/sales-by-route reporting, scheduling/visit-days, geo-hierarchy
+(`route_geography`), sequencing, van-stock. Depends on IAM, Parties (EXTERNAL Agent FR-PARTY-13, Customer,
+the `customer_branch`/`agent_branch` pattern), Sales (ADR-0008 — adds the nullable invoice route). Mirrors
+the Products master+junction+RBAC pattern. Next: solutions-architect ADR-0012 (routes data model, `V9`) +
+the small additive Sales invoice route field.
+
+### US-ROUTE-01 — Define a route with a free-text location
+**As a** route administrator / sales manager **I want** to create a named sales area with a description
+**so that** the territories my field agents cover are explicit master data.
+- **AC1** Given I am logged in with `ROUTE.MANAGE` and an active branch, when I create a route with a name
+  and a **free-text location identifier**, then it is saved scoped to my company and numbered
+  **`ROUTE-####`** from the per-company `code_sequence` (FR-ROUTE-01/16, BR-ROUTE-06, NFR-ROUTE-01).
+- **AC2** Given the route is created, then its **geography is the free text only** — it is **not** bound to
+  any customer's region/district nor to a geo-hierarchy (FR-ROUTE-03, BR-ROUTE-08).
+- **AC3** Given I associate the route with one or more **branches of its company**, then it becomes
+  visible/selectable at those branches and may **span branches** (FR-ROUTE-11).
+- **AC4** Given I archive a route, then it is excluded from new assignments and new invoices but stays on
+  historical invoices and is restorable (FR-ROUTE-02, BR-ROUTE-07).
+- **AC5** Given create/edit/archive, then each is written to the audit trail with actor, branch, and
+  timestamp (NFR-ROUTE-03).
+
+### US-ROUTE-02 — Assign customers to a route (many-to-many)
+**As a** route administrator **I want** to group customers into a route **so that** a field agent knows
+which customers fall in their area.
+- **AC1** Given `ROUTE.ASSIGN`, when I add customers to a route, then they become members; a **customer may
+  belong to several routes** and a route holds many customers (FR-ROUTE-04/05).
+- **AC2** Given **all customer sub-kinds are routable**, when I add a **cash/walk-in** or a
+  **credit/account** customer, then both are accepted (FR-ROUTE-04).
+- **AC3** Given a customer of **another company**, when I try to add it, then it is **rejected** — a route's
+  customers must share its company (BR-ROUTE-03).
+- **AC4** Given a customer's region/district is set, then that **does not** assign them to any route, and
+  assigning a route **does not** change their address — membership is a separate explicit assignment
+  (FR-ROUTE-06, BR-ROUTE-08).
+- **AC5** Given each add/remove, then the assignment mutation is audited (NFR-ROUTE-03).
+
+### US-ROUTE-03 — Assign EXTERNAL agents to a route (internal excluded) with an optional primary
+**As a** route administrator **I want** to assign external field agents to a route and optionally mark one
+primary **so that** territory coverage is recorded and sales default to the right route.
+- **AC1** Given `ROUTE.ASSIGN`, when I add an **EXTERNAL** agent to a route, then it is assigned; an
+  external agent may cover **several** routes and a route may have **several** external agents (FR-ROUTE-07/08).
+- **AC2** Given an **INTERNAL** agent, when I try to assign it to a route, then it is **rejected** — only
+  external agents are route-assignable (BR-ROUTE-02).
+- **AC3** Given a route's assigned external agents, when I flag one as **primary**, then it is recorded as
+  the route's **at-most-one advisory primary** — non-exclusive (other assigned agents still cover the
+  route) and used only to default the invoice route (FR-ROUTE-09, BR-ROUTE-04).
+- **AC4** Given I flag an agent **not** assigned to the route as primary, then it is **rejected** — the
+  primary must be one of the route's assigned external agents (BR-ROUTE-04).
+- **AC5** Given an agent of **another company**, when I try to assign it, then it is **rejected**
+  (BR-ROUTE-03).
+
+### US-ROUTE-04 — Route defaults onto a sale from the agent's primary route (optional, editable)
+**As a** sales clerk **I want** the sale's route to default from the selling agent's primary route
+**so that** field sales are attributed to an area without extra keying — but I can change or clear it.
+- **AC1** Given the selling **external** agent has a **primary route** associated with my active branch,
+  when I start a sale, then the invoice **route defaults to that route** (FR-ROUTE-13, FR-ROUTE-12).
+- **AC2** Given the route↔customer link is many-to-many, then the route is **NOT** auto-derived from the
+  customer; it defaults from the **agent's primary route** (FR-ROUTE-14).
+- **AC3** Given the selling agent has **no primary route** (or is internal, or none assigned), then the
+  invoice route defaults to **blank**, which is valid (FR-ROUTE-14, BR-ROUTE-05).
+- **AC4** Given any default, when I **edit or clear** the route, then my choice is kept; the route is
+  **optional** and a **blank route never blocks finalisation** (FR-ROUTE-13, BR-ROUTE-05).
+- **AC5** Given I finalise the sale, then the route is **captured on the invoice but NOT validated** against
+  the customer's or agent's route memberships — captured-not-validated (FR-ROUTE-15, BR-ROUTE-09,
+  routes.md §10 accepted risk).
+- **AC6** Given an **archived** route, then it is not offered as a route on a new sale (BR-ROUTE-07).
+
+### US-ROUTE-05 — Routes are branch-scoped and tenant-isolated end to end
+**As a** branch operator **I want** routes and their pick-lists confined to my active branch and company
+**so that** I cannot see or attribute sales to another branch's or company's routes.
+- **AC1** Given I am active in a branch, when I select a route on a sale, then I see **only routes
+  associated with my active branch** and only my company's routes (FR-ROUTE-12, FR-ROUTE-10).
+- **AC2** Given I switch my active branch via the IAM branch-override header, then my route pick-list
+  updates to the new branch without re-login (mirrors US-IAM-003).
+- **AC3** Given any attempt to read or write a route, assignment, or branch association outside my scope,
+  then it is refused (`assertCanActIn` on every read path); cross-tenant route data never appears
+  (NFR-ROUTE-01, BR-ROUTE-01/03).
