@@ -303,3 +303,79 @@ One definition per term, used consistently across the team. Add terms as modules
 - **Captured-not-validated (route)** — the v1 stance that the invoice route is **recorded as
   defaulted/supplied** but **not** checked against the customer's or agent's route memberships. The input
   to the deferred route-coverage / sales-by-route reporting; never a control on the sale.
+
+## General Ledger (GL) / Financial Accounting
+
+> Status: **Ratified 2026-06-08** — terms reflect the owner-confirmed GL Increment 1 in gl.md. GL = the
+> books; the critical-path gate the rest of the roadmap (AR/AP/Cash/Reporting) posts into / reads from.
+
+- **General Ledger (GL) / the books** — the single, **append-only, double-entry** record of every
+  financial effect, organised by **account**, from which a trial balance / P&L / balance sheet are read.
+  The financial **spine**; per company.
+- **Chart of accounts (CoA)** — a company's complete list of **accounts**, organised by **numeric range**
+  (1000s Assets, 2000s Liabilities, 3000s Equity, 4000s Income, 5000s Expenses). **System-seeded** with a
+  standard Tanzanian small-business set, then **editable** (add/edit/deactivate; **cannot delete an
+  account that has postings**). Per company.
+- **Account (GL account)** — a named bucket in the CoA that financial effects post to (e.g. `1200 Accounts
+  Receivable`, `4100 Sales Revenue`). Carries a **code** (unique per company), a **name**, an **account
+  type**, an active/inactive state, and audit. **Not** a party (customer/supplier) and **not** a cash/bank
+  account (a money location, T1.4) — three distinct things.
+- **Account type** — one of **ASSET · LIABILITY · EQUITY · INCOME · EXPENSE**. Drives **financial-statement
+  placement** (INCOME/EXPENSE → P&L; ASSET/LIABILITY/EQUITY → Balance Sheet) and **normal balance**
+  (ASSET/EXPENSE = debit; LIABILITY/EQUITY/INCOME = credit). The **type**, not the code range alone, is the
+  authority for placement and sign.
+- **Normal balance** — the side (**debit** or **credit**) an account normally carries a positive balance
+  on, set by its account type. Used for statement sign/presentation, **never** to block a posting.
+- **Debit / Credit** — the two sides of double-entry. Every **journal line** is one or the other; every
+  **journal entry**'s debits sum equals its credits sum. Whether a debit increases or decreases an account
+  depends on the account's type.
+- **Journal entry** — one **balanced** financial transaction posted to the books: a date, a description, a
+  source reference, and **≥ 2 journal lines** whose **debits == credits**. The unit of posting; once posted
+  it is **immutable** (corrected only by a reversing entry). **Not** a sales invoice (the invoice is the
+  *source*; the journal entry is what GL posts from it).
+- **Journal line** — one leg of a journal entry: exactly **one account** and a **debit OR a credit amount**
+  (positive; never both, never neither). Base currency in v1.
+- **Journal batch** — the numbered container (`JB-####` from `code_sequence`) a posting run groups its
+  journal entries under. A manual post, a sales auto-post, and a reversal are each one batch.
+- **Posting** — the act of **writing a balanced journal entry to the books**. **Append-only**: a posted
+  entry is never edited or deleted (PROJECT-CONVENTIONS §3.6). Not "saving a draft."
+- **Fiscal period** — one **month** of a company's financial year (12 per year). **OPEN** (postings
+  allowed) or **CLOSED** (postings rejected). The **fiscal-year start month is configurable per company**
+  (e.g. Jan or Jul).
+- **Fiscal year** — the 12-period accounting year of a company, beginning at its configured start month.
+- **Trial balance (TB)** — the read listing every account with its total debits / total credits (or net),
+  as-at a date or over a period. A sound set of books yields **total debits == total credits** (the TB
+  **nets to zero**) — the first proof the books are correct; the source for P&L / balance sheet (Reporting).
+- **Control account** — a GL account whose balance summarises a sub-ledger (e.g. `1200 Accounts Receivable`
+  is the AR sub-ledger's control account). v1 **seeds** the AR/AP control accounts and **posts AR/VAT** from
+  sales; **sub-ledger reconciliation is a later increment** (T1.2/T1.3).
+- **Reversing entry** — a journal entry that **negates** a prior posted entry (debits ↔ credits), used to
+  correct an error or void a posted transaction. The **only** way to undo a posting in an append-only
+  ledger; the original entry **stays** on the books beside the reversal — never deleted.
+- **Opening balance** — an account's starting balance when the books begin (or at a new fiscal year),
+  entered as a **manual journal** that must itself **balance** (assets debit, liabilities/equity credit,
+  the balancing figure to equity / retained earnings).
+- **`gl_configs` (account mapping)** — the per-company config mapping **posting roles** (SALES_REVENUE,
+  VAT_PAYABLE, ACCOUNTS_RECEIVABLE, CASH, …) to **actual CoA accounts**, so the auto-poster never hard-codes
+  account codes. The required sales mappings **must be set before sales auto-posting works**.
+- **Sales auto-posting** — finalising a sale **auto-posts a balanced journal** via the outbox (a
+  `SalesPostingHandler` consuming `SALE.FINALISED`, mirroring `SaleIssueStockHandler`): **DR Accounts
+  Receivable / Cash, CR Sales Revenue, CR VAT Payable**, using `gl_configs`. **Idempotent**; **`SALE.VOIDED`
+  posts the reversing entry**. GL consumes the event as a **DTO only** — it never imports a Sales entity.
+- **Double-entry invariant** — every journal entry has **≥ 2 lines**, **Σ debits == Σ credits**, each line
+  hits **one account** with a **debit OR a credit**, and the entry's date falls in an **OPEN** period;
+  otherwise the entry is **rejected** (balanced-or-rejected).
+- **SYSTEM (auto-poster)** — **not a human** — the outbox consumers (`SalesPostingHandler`,
+  `SaleVoidingHandler`) that post the sales journal / reversal automatically under the **originating event's
+  company/branch context**, with no user permission check (the producing sale was already permissioned).
+
+### GL terminology rulings (pick one, stay consistent)
+- Use **account** for a GL bucket in the chart of accounts; never call a customer/supplier an "account"
+  (they are **parties**) and never call a cash/bank money location a GL "account" without the **cash/bank**
+  qualifier — three distinct things.
+- Use **journal entry** for a balanced posting, **sales invoice** for the source sales document — never
+  blur the source with what GL posts from it.
+- Use **posting** for writing to the books (append-only); a posted entry is **reversed**, never **edited**
+  or **deleted**. Say **reversing entry** for the correction, never "amend the journal."
+- Use **fiscal period** (one month) and **fiscal year** (12 periods) consistently; a period is **OPEN** or
+  **CLOSED**, never "active/inactive" (that is an *account* state).

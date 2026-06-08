@@ -672,3 +672,144 @@ primary **so that** territory coverage is recorded and sales default to the righ
 - **AC3** Given any attempt to read or write a route, assignment, or branch association outside my scope,
   then it is refused (`assertCanActIn` on every read path); cross-tenant route data never appears
   (NFR-ROUTE-01, BR-ROUTE-01/03).
+
+---
+
+## GL — General Ledger / Financial Accounting (the books)
+
+Requirements: [docs/requirements/gl.md](docs/requirements/gl.md). Status: **RATIFIED (owner-confirmed
+2026-06-08).** GL **Increment 1** of the full-ERP roadmap (docs/ROADMAP.md T1.1 / §5) — the critical-path
+gate: nothing reports until the books exist. v1 = a **per-company chart of accounts** (numeric ranges,
+**system-seeded** standard TZ small-business set, **editable**, account **type** drives statement
+placement + normal balance, can't delete a posted-to account); **manual journal entries** (must balance
+Σ debits == Σ credits before posting; incl. **opening balances**); **automatic posting of a sale on
+finalise** (a `SalesPostingHandler` consuming **`SALE.FINALISED`** over the outbox — **DR AR/Cash, CR
+Sales Revenue, CR VAT Payable** via a configurable **`gl_configs`** account map; idempotent) and
+**reversal on void** (**`SALE.VOIDED`**); a **fiscal calendar** (12 monthly periods, **configurable
+fiscal-year start month**, **open/close**, **closed-period posting rejected**); an **append-only
+immutable ledger** (corrections are **reversing entries**, never edit/delete — PROJECT-CONVENTIONS §3.6);
+a **trial balance** read that **nets to zero**; **base-currency-only** posting (FX revaluation deferred).
+Permissions `GL.VIEW` / `GL.MANAGE` (CoA + config) / `GL.POST` (manual journals) / `GL.PERIOD.CLOSE`;
+per-company scope; `assertCanActIn` on every read; audit on every post and close. **Deferred (separate
+later increments):** AR/AP control-account sub-ledger posting & reconciliation (T1.2/T1.3), COGS/inventory
+posting (T2.2), Cash/Bank posting (T1.4), VAT return (T1.5), FX revaluation (X.6), year-end-close
+automation, per-category revenue/VAT mapping, P&L/Balance-Sheet statements (Reporting T2.3). Consumes
+`SALE.FINALISED`/`SALE.VOIDED` from Sales via the outbox (ADR-0009, **DTO-only**); reuses Money (ADR-0005),
+RBAC, audit, `code_sequence` (journal batch). Next: solutions-architect **ADR-0013** (GL data model:
+chart_of_accounts, journal_batches/entries/lines, fiscal_periods, gl_configs; **V10** migration; the
+`SalesPostingHandler` + `SaleVoidingHandler`; `ScopeGuard` "account" case; TZ CoA seed).
+
+### US-GL-01 — Seed and maintain the chart of accounts
+**As a** financial controller **I want** a ready-made chart of accounts I can edit **so that** my books
+start with a standard Tanzanian small-business structure I can tailor without building it from scratch.
+- **AC1** Given a new company, when it is set up, then a **standard TZ small-business chart of accounts is
+  seeded per company** — organised by numeric range (1000s Assets, 2000s Liabilities, 3000s Equity, 4000s
+  Income, 5000s Expenses) and including at minimum Cash, Bank, Accounts Receivable, Inventory, Accounts
+  Payable, VAT Payable, Owner's Equity, Retained Earnings, Sales Revenue, and Cost of Goods Sold
+  (FR-GL-01/02).
+- **AC2** Given `GL.MANAGE`, when I add an account with a **code unique within my company**, a name, and a
+  valid **account type** (ASSET/LIABILITY/EQUITY/INCOME/EXPENSE), then it is saved scoped to my company;
+  a duplicate code is rejected (FR-GL-03, BR-GL-05).
+- **AC3** Given an account's **type**, then it drives **statement placement** (INCOME/EXPENSE → P&L;
+  ASSET/LIABILITY/EQUITY → Balance Sheet) and **normal balance** (ASSET/EXPENSE = debit;
+  LIABILITY/EQUITY/INCOME = credit) — the type, not the range alone, is the authority (FR-GL-05, BR-GL-12).
+- **AC4** Given an account **with postings**, when I try to **delete** it, then it is **refused** — I may
+  only **deactivate** it; a deactivated account is excluded from new postings but stays on historical
+  entries and the trial balance (FR-GL-03/04, BR-GL-04/07).
+- **AC5** Given each add / edit / deactivate, then it is written to the audit trail with actor, company,
+  and timestamp (NFR-GL-06).
+- **AC6** Given any read of the chart of accounts, then I see **only my company's** accounts
+  (`assertCanActIn`); cross-company accounts never appear (NFR-GL-01, BR-GL-05).
+
+### US-GL-02 — Post a manual journal entry (balanced-or-rejected)
+**As an** accountant **I want** to post balanced double-entry journals **so that** I can record accruals,
+adjustments, and reclassifications the automatic postings don't cover.
+- **AC1** Given `GL.POST` and an active company, when I compose a journal with a date, a description, and
+  **two or more lines** — each naming **one active account** with a **debit OR a credit** amount — then I
+  see the running debit/credit totals and whether it balances (FR-GL-06).
+- **AC2** Given the entry **balances** (Σ debits == Σ credits, ≥ 2 lines, date in an **OPEN** period, every
+  account active, every line one-sided), when I post, then it is written to the **append-only books** under
+  a **`JB-####`** batch and the post is audited (FR-GL-06/07, BR-GL-01, NFR-GL-05/06).
+- **AC3** Given the entry **does not balance**, when I post, then it is **rejected** with the
+  debit/credit difference shown and **nothing is written** (FR-GL-07, BR-GL-01).
+- **AC4** Given a line names an **inactive** account, or carries **both** a debit and a credit (or
+  **neither**), when I post, then it is **rejected** (FR-GL-09, BR-GL-04/08).
+- **AC5** Given the entry date falls in a **CLOSED** period, when I post, then it is **rejected** until the
+  period is reopened or the date moved to an open period (FR-GL-08, BR-GL-03).
+
+### US-GL-03 — Finalising a sale auto-posts a balanced journal entry
+**As a** financial controller **I want** every finalised sale to post itself to the books **so that**
+revenue and VAT are recorded without anyone keying a journal.
+- **AC1** Given a sale **finalises** and emits **`SALE.FINALISED`**, when the `SalesPostingHandler`
+  consumes it, then a **balanced** journal entry is posted using the **`gl_configs`** account map:
+  **DR Accounts Receivable / Cash** for the **gross**, **CR Sales Revenue** for the **net**, **CR VAT
+  Payable** for the **VAT** — derived from the invoice's net/VAT/gross totals (FR-GL-10).
+- **AC2** Given the entry is composed, then **net + VAT == gross**, so the entry is **balanced by
+  construction** (Σ debits == Σ credits) and posted under the **originating event's company/branch
+  context** (FR-GL-10, BR-GL-01).
+- **AC3** Given the **same `SALE.FINALISED` is redelivered**, when the handler runs again, then it posts
+  **no second entry** — the books move **once** (idempotency marker, FR-GL-11, BR-GL-09, NFR-GL-03).
+- **AC4** Given the required **`gl_configs` mappings are missing** (SALES_REVENUE / VAT_PAYABLE / AR or
+  CASH), when a `SALE.FINALISED` arrives, then the handler **fails the event** (retry/park per the outbox)
+  rather than posting to a null/wrong account; once finance sets the mapping (`GL.MANAGE`), the replayed
+  event posts the sale (FR-GL-18, BR-GL-10).
+- **AC5** Given the handler consumes the event, then it reads the invoice as a **DTO / event payload** and
+  **imports no Sales entity** (NFR-GL-07).
+- **AC6** Given the post, then it is audited as a **SYSTEM** action (no logged-in user) bounded by the
+  event's company context (NFR-GL-06, FR-GL-19).
+
+### US-GL-04 — Voiding a sale posts the reversing entry
+**As a** financial controller **I want** a voided sale to reverse itself on the books **so that** the
+books never carry a sale that was undone, without anyone deleting a posting.
+- **AC1** Given a sale is **voided** and emits **`SALE.VOIDED`**, when the `SaleVoidingHandler` consumes
+  it, then it posts the **reversing entry** for the original sales journal (the original DR becomes a CR and
+  vice versa) so the net effect on every account is **zero** (FR-GL-12, BR-GL-11).
+- **AC2** Given the reversal posts, then the **original entry is retained** beside it — the void
+  **reverses, never deletes** (append-only, BR-GL-02, NFR-GL-04).
+- **AC3** Given the **same `SALE.VOIDED` is redelivered**, when the handler runs again, then it posts **no
+  second reversal** (idempotency, FR-GL-12, BR-GL-09, NFR-GL-03).
+- **AC4** Given a `SALE.VOIDED` for a sale that was **never posted** (out-of-order), when the handler runs,
+  then it records an **anomaly** for review rather than posting a phantom reversal (FR-GL-12).
+
+### US-GL-05 — Open and close fiscal periods
+**As a** financial controller **I want** to open and close monthly fiscal periods **so that** posting into
+a finalised month is prevented and the year can be closed cleanly.
+- **AC1** Given my company's **fiscal-year start month is configured** (e.g. January or July), then the
+  year has **12 monthly periods** from that start (FR-GL-14).
+- **AC2** Given `GL.PERIOD.CLOSE`, when I **close** an open period, then it is marked CLOSED and the act is
+  audited; subsequent postings dated in it are **rejected** (FR-GL-15, FR-GL-08, BR-GL-03, NFR-GL-06).
+- **AC3** Given a **closed** period, when I **reopen** it (`GL.PERIOD.CLOSE`), then postings dated in it
+  are accepted again, audited (FR-GL-15).
+- **AC4** Given I **close period 12**, then the fiscal year's end state is available to seed the next
+  year's **opening balances** (entered as a manual opening-balance journal — full year-end-close
+  automation is deferred, FR-GL-15, gl.md §10.6).
+- **AC5** Given an **auto-post** (`SALE.FINALISED`) would fall in a **closed** period, then the handler
+  **fails-and-retries** (closed-period rejection applies to automatic posting too) until the period is
+  reopened — no sale posts to a closed period (BR-GL-03, OQ-GL-01).
+
+### US-GL-06 — View the trial balance (the books prove out)
+**As an** accountant / auditor **I want** a trial balance for my company **so that** I can confirm the
+books are balanced and feed the financial statements.
+- **AC1** Given `GL.VIEW`, when I request a trial balance **as-at a date** or **over a period**, then I see
+  every account with its **total debits and total credits** (and net balance), scoped to my company
+  (FR-GL-16/17).
+- **AC2** Given a sound set of books, then the trial balance's **total debits == total credits** (the TB
+  **nets to zero**) — the acceptance proof (FR-GL-16).
+- **AC3** Given a finalised sale has auto-posted, then it appears on the trial balance (AR/Cash debit =
+  Sales Revenue + VAT Payable credit); given that sale is then voided, the reversal nets it back out and
+  the TB still balances (FR-GL-10/12/16 — roadmap Increment 1 acceptance bar).
+- **AC4** Given any trial-balance or journal read, then it returns **only my company's** books
+  (`assertCanActIn`); cross-company figures never appear (NFR-GL-01, BR-GL-05).
+
+### US-GL-07 — Enter opening balances
+**As an** accountant **I want** to enter the books' opening balances **so that** the ledger starts from the
+business's actual position when GL goes live.
+- **AC1** Given `GL.POST`, when I enter opening balances as a **manual journal** (assets debited,
+  liabilities/equity credited, the balancing figure to equity / retained earnings) into the **first open
+  period**, then it posts like any other journal (FR-GL-13, FR-GL-06).
+- **AC2** Given the opening-balance journal **does not balance** (Σ debits ≠ Σ credits), when I post, then
+  it is **rejected** — opening balances obey the same double-entry invariant (BR-GL-01).
+- **AC3** Given opening balances are posted, then the trial balance reflects them and **nets to zero**
+  (FR-GL-16).
+- **AC4** Given a posted opening-balance entry needs correcting, then I correct it with a **reversing
+  entry** then a correct re-post — never by editing the posted entry (BR-GL-02).

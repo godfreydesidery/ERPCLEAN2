@@ -301,3 +301,73 @@ Each entry: why it matters · who decides · does it block build.
   (free-text only in v1, BR-ROUTE-08); recorded so the future structured-geography round is conscious.
   *Decider:* owner + architect at that round. *Blocks ADR-0012:* **NO** (deferred; not precluded —
   NFR-ROUTE-04).
+
+## General Ledger (GL)
+
+> **FULLY RATIFIED 2026-06-08.** GL **Increment 1** of the full-ERP roadmap (docs/ROADMAP.md T1.1 / §5).
+> The owner closed **all six scoping forks** (chart of accounts; sales auto-posting; fiscal calendar;
+> corrections; manual journals; multi-currency). gl.md is **Ratified**. **No ADR-0013-blocking question
+> remains.** solutions-architect may start **ADR-0013** now (GL data model — chart_of_accounts,
+> journal_batches/entries/lines, fiscal_periods, gl_configs; migration **V10**; the `SalesPostingHandler`
+> + `SaleVoidingHandler`; the `ScopeGuard` "account" case; TZ CoA seed). The remaining OQ-GL items are
+> **non-blocking** detail (recommended defaults stand).
+
+### Resolved (owner, 2026-06-08) — the six scoping forks
+
+- **GL fork 1 — Chart of accounts** — ✅ **RESOLVED:** numeric ranges (1000s Assets, 2000s Liabilities,
+  3000s Equity, 4000s Income, 5000s Expenses); **system-seeded** standard **Tanzanian small-business CoA**
+  that is **editable** (add/edit/deactivate; **cannot delete a posted-to account**); each account has an
+  **account TYPE** (ASSET/LIABILITY/EQUITY/INCOME/EXPENSE) driving **statement placement** (P&L vs Balance
+  Sheet) and **normal balance** (debit/credit); **per company**; account **code unique per company**
+  (user/seed-defined codes, uniqueness enforced — `code_sequence` not required for accounts). Reflected in
+  gl.md FR-GL-01..05, BR-GL-04/05/07/12, §3.1.
+- **GL fork 2 — Sales auto-posting** — ✅ **RESOLVED:** finalising a sale **auto-posts a balanced journal**
+  via the outbox (a `SalesPostingHandler` consuming **`SALE.FINALISED`**, mirroring `SaleIssueStockHandler`)
+  using a configurable **account map (`gl_configs`)** — **DR Accounts Receivable** (credit) **or Cash**
+  (cash sale), **CR Sales Revenue**, **CR VAT Payable**; **`SALE.VOIDED` posts the reversing entry**;
+  **fixed mapping in v1** (one revenue account, one VAT-payable account — **NOT** per-product-category, a
+  later option); **idempotent** (`processed_events`). Reflected in FR-GL-10/11/12/18, BR-GL-09/10/11.
+- **GL fork 3 — Fiscal calendar** — ✅ **RESOLVED:** **12 monthly periods**; **fiscal-year start month
+  configurable per company** (e.g. Jan or Jul); periods **OPEN/CLOSED**; **posting into a CLOSED period is
+  rejected**; period-12 close yields the year-end state for opening balances (**full year-end-close
+  automation deferred** — OQ-GL-03). Reflected in FR-GL-08/14/15, BR-GL-03, §3.3.
+- **GL fork 4 — Corrections** — ✅ **RESOLVED: append-only immutable ledger** — posted journal entries are
+  **never edited or deleted**; corrections are **reversing entries** then a correct re-post
+  (PROJECT-CONVENTIONS §3.6); full audit trail. Reflected in FR-GL-12, BR-GL-02/11, NFR-GL-04/06.
+- **GL fork 5 — Manual journals** — ✅ **RESOLVED: INCLUDED in v1** — accountants post manual journals
+  (accruals, adjustments, **opening balances**) with DR/CR lines that **must balance (Σ debits == Σ
+  credits) before posting**. Reflected in FR-GL-06/07/09/13, BR-GL-01/08.
+- **GL fork 6 — Multi-currency** — ✅ **RESOLVED: base-currency-only in v1** — GL posts in the **company
+  base currency** only; foreign-currency transactions **convert at entry**; **FX revaluation / realised
+  gain-loss DEFERRED** (ROADMAP X.6 / ADR-0005 D-8) — an accepted scope boundary. Reflected in BR-GL-06,
+  §10.5, NFR-GL-09.
+
+> **Permissions & double-entry invariant (ratified with the forks):** `GL.VIEW` / `GL.MANAGE` (CoA +
+> config) / `GL.POST` (manual journals) / `GL.PERIOD.CLOSE`; per-company scope; `assertCanActIn` on every
+> read path; audit on every post and close; `ScopeGuard` gains a new **"account"** target type (note for
+> ADR-0013). The **double-entry invariant** (≥ 2 lines, Σ debits == Σ credits, one account + one side per
+> line, date in an OPEN period, balanced-or-rejected) is fixed. Reflected in FR-GL-19, BR-GL-01/08, §4/§5.
+
+### Still open — NON-blocking detail (recommended defaults stand; do NOT block ADR-0013)
+
+- **OQ-GL-01** — **Closed-period policy for an auto-post.** When a `SALE.FINALISED` would post into a
+  **closed** period (a late/replayed event), does the handler **fail-and-retry until reopened** or **post
+  to the next open period**? *Recommended default:* **fail-and-retry** (BR-GL-03 holds for automatic
+  posting too — no sale posts to a closed period); finance reopens / moves the period. *Decider:* owner
+  (finance). *Blocks ADR-0013:* **NO** — default stands; the alternative is an additive configurable policy.
+- **OQ-GL-02** — **Cash-vs-credit signal for AR vs Cash.** v1 sales are paid-at-sale (cash), so the live
+  auto-post is **DR Cash**; the **AR** posting path goes live with credit sales + the AR increment.
+  *Recommended default:* DR Cash for v1; the AR mapping role is seeded from day one so credit-sale AR
+  posting is additive. *Decider:* owner (with the AR increment). *Blocks ADR-0013:* **NO**.
+- **OQ-GL-03** — **Year-end-close automation depth.** v1 = manual opening balances + period-12 close yields
+  the year-end state. *Recommended default:* manual opening-balance journal in v1; automated
+  P&L→retained-earnings closing entry + opening-balance carry-forward is a later slice (gl.md §10.6).
+  *Decider:* owner. *Blocks ADR-0013:* **NO** — deferred, not precluded.
+- **OQ-GL-04** — **Per-category revenue / VAT mapping.** v1 = one Sales Revenue + one VAT Payable account
+  (the ratified fixed mapping). *Recommended default:* fixed single mapping; per-product-category split is
+  an additive `gl_configs` option later (gl.md §10.7). *Decider:* owner. *Blocks ADR-0013:* **NO** —
+  additive.
+- **OQ-CUR-03** — *(carried)* confirm **rounding mode + TZS decimals** before GL computes/balances totals;
+  the balance check (Σ debits == Σ credits) and every posted amount must round identically backend/frontend
+  (NFR-GL-02). *Recommended default:* half-up, TZS = 0 dp. *Decider:* owner (finance input). *Blocks
+  ADR-0013:* **NO** for the model; **confirm before go-live**.
