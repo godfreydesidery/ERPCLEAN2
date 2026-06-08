@@ -191,6 +191,19 @@ class RbacEnforcementHttpIT extends PostgresIntegrationTest {
                 .andExpect(jsonPath("$.data").isArray());
     }
 
+    /**
+     * Missing required query param → 400 (a client error), NOT 500. Before the
+     * GlobalExceptionHandler gained a MissingServletRequestParameterException handler, the absent
+     * {@code organisationUid} fell through to the catch-all and surfaced as a generic 500.
+     */
+    @Test
+    void rootToken_listCompanies_missingOrganisationUid_returns400() throws Exception {
+        mockMvc.perform(get("/api/v1/companies")
+                        .header("Authorization", "Bearer " + rootToken))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors").isArray());
+    }
+
     @Test
     void rootToken_listRoles_returns200() throws Exception {
         mockMvc.perform(get("/api/v1/roles")

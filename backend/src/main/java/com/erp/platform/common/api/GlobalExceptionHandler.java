@@ -3,9 +3,12 @@ package com.erp.platform.common.api;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 /**
  * Translates exceptions into the {@link ApiResponse} error envelope with user-safe messages only
@@ -22,6 +25,28 @@ public class GlobalExceptionHandler {
                 .map(fe -> fe.getField() + ": " + fe.getDefaultMessage())
                 .toList();
         return ResponseEntity.badRequest().body(ApiResponse.error(messages));
+    }
+
+    /**
+     * Malformed request: a missing/un-coercible required query param, a path-var type mismatch, or an
+     * unreadable body. These are client errors → 400, not 500. (Without this they fell through to the
+     * catch-all and surfaced as a generic 500 with no logged stack — e.g. GET /companies with no
+     * {@code organisationUid}.)
+     */
+    @ExceptionHandler({
+            MissingServletRequestParameterException.class,
+            MethodArgumentTypeMismatchException.class,
+            HttpMessageNotReadableException.class
+    })
+    public ResponseEntity<ApiResponse<Void>> handleBadRequest(Exception ex) {
+        String msg = switch (ex) {
+            case MissingServletRequestParameterException e ->
+                    "Missing required request parameter: " + e.getParameterName();
+            case MethodArgumentTypeMismatchException e ->
+                    "Invalid value for parameter: " + e.getName();
+            default -> "Malformed request body.";
+        };
+        return ResponseEntity.badRequest().body(ApiResponse.error(msg));
     }
 
     /** Entity addressed by uid does not exist → 404. */
