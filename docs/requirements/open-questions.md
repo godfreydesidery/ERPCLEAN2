@@ -371,3 +371,141 @@ Each entry: why it matters · who decides · does it block build.
   the balance check (Σ debits == Σ credits) and every posted amount must round identically backend/frontend
   (NFR-GL-02). *Recommended default:* half-up, TZS = 0 dp. *Decider:* owner (finance input). *Blocks
   ADR-0013:* **NO** for the model; **confirm before go-live**.
+
+## Accounts Receivable (AR)
+
+> **FULLY RATIFIED 2026-06-09.** AR is half of **Increment 2** of the full-ERP roadmap (docs/ROADMAP.md
+> T1.2 / §5), built in parallel with AP (T1.3). The owner closed **all five AR scoping forks**
+> (open-item creation; ageing buckets; receipts & allocation; credit limit; v1 feature set).
+> accounts-receivable.md is **Ratified**. **No ADR-0014-blocking question remains.** solutions-architect
+> may start **ADR-0014** now (AR data model — the customer sub-ledger: open items, receipts, allocations,
+> balances/ageing views; migration **V11**; the AR open-item handler consuming `SALE.FINALISED` for credit
+> sales; the receipt → GL cash-leg posting; the **sub-ledger⇄GL-control reconciliation** design; the
+> GL-posting mechanism choice (synchronous `GLPostingService` vs outbox); the **Sales credit-limit additive
+> touch**). The remaining OQ-AR items are **non-blocking** detail (recommended defaults stand).
+
+### Resolved (owner, 2026-06-09) — the five AR scoping forks
+
+- **AR fork 1 — Open-item creation** — ✅ **RESOLVED:** finalising a **CREDIT-account** sale auto-creates
+  an AR **open item** (consumes `SALE.FINALISED` for credit sales); **cash sales create NO AR** (settled at
+  the till). **AR does NOT re-post to GL** — the credit sale's `SalesPostingHandler` already debited the AR
+  control (the no-double-post rule). Reflected in accounts-receivable.md FR-AR-01/02/05, BR-AR-01/02, §3.2.
+- **AR fork 2 — Ageing buckets** — ✅ **RESOLVED:** **Current, 1–30, 31–60, 61–90, 90+** days, by **due
+  date** (due date from customer terms, else net-on-receipt / 0 days — OQ-AR-01). Reflected in FR-AR-03/08,
+  glossary.
+- **AR fork 3 — Receipts / allocation** — ✅ **RESOLVED:** a receipt **auto-allocates oldest-open-first by
+  default**; operator may **manually override** (re-pick invoices); **on-account (unallocated) receipts
+  allowed** (a credit balance applied later); **over-allocation rejected**. A receipt posts **DR Cash/Bank /
+  CR AR control** to GL (re-allocation posts nothing). Reflected in FR-AR-06/07/09/10/11/16, BR-AR-03/04/05/12.
+- **AR fork 4 — Credit limit** — ✅ **RESOLVED: warn + allow with a permission** (`SALES.CREDIT.OVERRIDE`),
+  **audited**, when a credit sale would push (current AR balance + new sale) over the customer's
+  `credit_limit_amount`; the check is an **additive insertion into the Sales finalise path** (like
+  `products.vat_status` was). Reflected in FR-AR-19, BR-AR-10, §3.5.
+- **AR fork 5 — v1 feature set** — ✅ **RESOLVED: IN v1 =** customer **statements** (open items + ageing,
+  view/print), **write-offs** (bad-debt, posts DR bad-debt expense / CR AR control) **+ credit notes**
+  (reduce a receivable), and **opening balances** (pre-existing receivables at go-live). Reflected in
+  FR-AR-12/13/14/15, BR-AR-06/09.
+
+> **Permissions & reconciliation (ratified with the forks):** `AR.VIEW` / `AR.INVOICE.VIEW` /
+> `AR.RECEIPT.RECORD` / `AR.RECEIPT.ALLOCATE` / `AR.WRITEOFF` / `AR.STATEMENT.VIEW` / `AR.OPENING.SET` (+
+> `SALES.CREDIT.OVERRIDE` for the credit-limit override); per-company scope; `assertCanActIn` on every read
+> path; audit on every mutation; `RCT-####` via `code_sequence`; `ScopeGuard` gains new AR target types
+> (note for ADR-0014). The **reconciliation invariant** (AR sub-ledger total == GL `1200 Accounts
+> Receivable` control balance at all times) is fixed and is the chief acceptance bar. Reflected in
+> FR-AR-18/20/21, BR-AR-02/07, NFR-AR-01.
+
+### Still open — NON-blocking detail (recommended defaults stand; do NOT block ADR-0014)
+
+- **OQ-AR-01** — **Customer payment terms / due-date default.** Ageing is by **due date**, from customer
+  terms if defined, **else net-on-receipt (0 days)**. *Recommended default:* a simple per-customer net-days
+  field if present, else 0 days; a rich terms master (net-30, early-payment discounts, instalments) is a
+  later additive slice. *Decider:* owner (finance). *Blocks ADR-0014:* **NO** — the due-date field + the
+  five ageing buckets are fixed.
+- **OQ-AR-02** — **Statement format.** v1 ships **one** statement layout (open items + ageing + recent
+  activity, view/print). *Recommended default:* open-item statement with the five ageing buckets;
+  period-statement / branded / emailed variants are later additive options. *Decider:* owner. *Blocks
+  ADR-0014:* **NO** — presentation detail.
+- **OQ-AR-03** — **Write-off approval.** v1 write-off is a **permissioned, audited single act**
+  (`AR.WRITEOFF`). *Recommended default:* permission + audit, no approval workflow and no doubtful-debt
+  allowance/provision account in v1; both are later additive slices. *Decider:* owner (finance). *Blocks
+  ADR-0014:* **NO** — additive.
+- **OQ-AR-04** — **Credit note: standalone vs ride the void path.** A voided sale rides `SALE.VOIDED` (GL
+  already reverses — AR closes the open item with no second GL post); a non-void correction may be a
+  **standalone AR credit note** (which posts the reduction). *Recommended default:* ride `SALE.VOIDED` for
+  voided sales; allow a standalone AR credit note for non-void corrections; both reconcile (BR-AR-02).
+  *Decider:* owner. *Blocks ADR-0014:* **NO** — both paths reconcile; the standalone path is additive if
+  deferred.
+- **OQ-CUR-03** — *(carried)* confirm **rounding mode + TZS decimals** — allocations and the GL legs must
+  round identically to the AR balance and the control account (NFR-AR-02). *Recommended default:* half-up,
+  TZS = 0 dp. *Decider:* owner (finance input). *Blocks ADR-0014:* **NO** for the model; **confirm before
+  go-live**.
+
+## Accounts Payable (AP)
+
+> **FULLY RATIFIED 2026-06-09.** AP is half of **Increment 2** of the full-ERP roadmap (docs/ROADMAP.md
+> T1.3 / §5), built in parallel with AR (T1.2). The owner closed **all AP scoping forks**
+> (bill-entry-driven AP; 3-way match within tolerance; no GRN accrual; payment runs + single payment; debit
+> notes; opening balances). accounts-payable.md is **Ratified**. **No ADR-0015-blocking question remains.**
+> solutions-architect may start **ADR-0015** now (AP data model — the supplier sub-ledger: supplier bills +
+> lines, the 3-way bill↔PO↔GR match, payables, payments + payment runs, debit notes; migration **V12**; the
+> bill match → GL posting; the **sub-ledger⇄GL-control reconciliation** design; the GL-posting mechanism
+> choice; and the **bill debit account choice** — inventory value vs a purchases / GRNI-clearing account).
+> The remaining OQ-AP items are **non-blocking** detail (recommended defaults stand).
+
+### Resolved (owner, 2026-06-09) — the AP scoping forks
+
+- **AP fork 1 — Bill-entry-driven AP** — ✅ **RESOLVED:** the operator **enters a supplier bill**; it is
+  **3-way matched** against the PO and the Goods Receipt (**quantity AND price**) within a **tolerance**; a
+  matched bill becomes a **payable** that posts to GL. **A goods receipt alone does NOT create a payable**
+  (no GRN accrual in v1). **Accepted consequence:** the liability is **not on the books between receipt and
+  bill entry** (a known bill-driven-AP trade-off — accepted risk). Because the GR posted **Stock only, not
+  GL**, the **AP bill match is the FIRST GL posting for the purchase** (DR Inventory-or-Purchases / CR AP
+  control). Reflected in accounts-payable.md FR-AP-01..06, BR-AP-01/02/03/04, §3.2, §10.1.
+- **AP fork 2 — Tolerance** — ✅ **RESOLVED (concept fixed):** a **tolerance** governs the 3-way match;
+  **over-tolerance bills are held for review** (accept-variance — audited — or reject); nothing posts while
+  held. The exact **value** is OQ-AP-01 (recommended: price within ~2% or a small absolute). Reflected in
+  FR-AP-04/05, BR-AP-04.
+- **AP fork 3 — v1 feature set** — ✅ **RESOLVED: IN v1 =** supplier **payment runs** (batch-select due /
+  matched bills → one payment), **single bill payment**, **debit notes / adjustments** (against open
+  payables), and **opening balances** (pre-existing payables at go-live). Reflected in FR-AP-09/10/11/12/13,
+  BR-AP-05/06/07.
+- **AP fork 4 — COGS / inventory valuation** — ✅ **RESOLVED = DEFERRED (T2.2):** v1 AP books the purchase
+  debit to **inventory-or-expense per `gl_configs` WITHOUT a COGS roll-up** — it creates the liability and a
+  debit, but values no inventory and posts no COGS. Reflected in FR-AP-06, BR-AP-11, §10.3.
+
+> **Permissions & reconciliation (ratified with the forks):** `AP.VIEW` / `AP.BILL.ENTER` / `AP.BILL.MATCH`
+> / `AP.PAYMENT.RUN` / `AP.DEBITNOTE` / `AP.OPENING.SET`; per-company scope; `assertCanActIn` on every read
+> path; audit on every mutation; `BILL-####` / `PAYRUN-####` via `code_sequence`; `ScopeGuard` gains new AP
+> target types (note for ADR-0015). The **reconciliation invariant** (AP sub-ledger total == GL `2100
+> Accounts Payable` control balance at all times) is fixed and is the chief acceptance bar. Reflected in
+> FR-AP-08/14/15, BR-AP-02/08, NFR-AP-01.
+
+### Still open — NON-blocking detail (recommended defaults stand; do NOT block ADR-0015)
+
+- **OQ-AP-01** — **Tolerance value/shape.** The tolerance *concept* is fixed (over-tolerance held); the
+  **value** is open. *Recommended default:* **price within 2% OR a small absolute (whichever is greater),
+  per line**; quantity must match the received qty (no quantity tolerance by default). *Decider:* owner
+  (finance). *Blocks ADR-0015:* **NO** — a configurable setting confirmed before go-live.
+- **OQ-AP-02** — **Bill due date / supplier terms.** *Recommended default:* due date from the bill's stated
+  terms if present, else a per-supplier net-days field, else net-on-receipt (0 days); a rich terms master is
+  a later additive slice. *Decider:* owner. *Blocks ADR-0015:* **NO** — additive.
+- **OQ-AP-03** — **Payment method / bank selection & payment approval.** v1 posts the payment bank leg to a
+  Cash/Bank GL account from `gl_configs` (full Cash&Bank is T1.4). *Recommended default:* one default
+  Cash/Bank GL account per company from `gl_configs`; payment-method (cash / bank transfer / mobile money)
+  selection and a payment-approval workflow are later additive slices (Cash&Bank T1.4 / Approvals X.5).
+  *Decider:* owner. *Blocks ADR-0015:* **NO** — additive.
+- **OQ-AP-04** — **Input VAT on the bill / service (non-goods) bills.** Whether v1 captures input VAT on the
+  bill (for the eventual VAT return, T1.5) and whether a **pure expense / service bill** (no GR to match) is
+  in v1. *Recommended default:* capture the bill total **incl. any stated VAT** for the payable (the VAT
+  *return* is T1.5); v1 focuses on the **goods 3-way match** — a pure expense/service bill posts to an
+  expense account **without** the goods match (a thin additive path) or is deferred, owner's call. *Decider:*
+  owner. *Blocks ADR-0015:* **NO** — the goods 3-way match (the core) is fixed.
+- **OQ-AP-05** — **Partial bill vs partial GR.** How the match handles a bill for some of the received
+  quantity (or a GR not yet fully billed). *Recommended default:* match **per line up to the
+  received-not-yet-billed quantity**; the remainder stays open for a later bill; over-billing the received
+  quantity is **held as a variance** (BR-AP-04). *Decider:* owner. *Blocks ADR-0015:* **NO** — the
+  per-line partial-match default stands.
+- **OQ-CUR-03** — *(carried)* confirm **rounding mode + TZS decimals** — the bill total, the GL legs, and
+  payment allocations must round identically to the AP balance and the control account (NFR-AP-02).
+  *Recommended default:* half-up, TZS = 0 dp. *Decider:* owner (finance input). *Blocks ADR-0015:* **NO**
+  for the model; **confirm before go-live**.

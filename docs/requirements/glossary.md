@@ -379,3 +379,115 @@ One definition per term, used consistently across the team. Add terms as modules
   or **deleted**. Say **reversing entry** for the correction, never "amend the journal."
 - Use **fiscal period** (one month) and **fiscal year** (12 periods) consistently; a period is **OPEN** or
   **CLOSED**, never "active/inactive" (that is an *account* state).
+
+## Accounts Receivable (AR) — the customer sub-ledger
+
+> Status: **Ratified 2026-06-09** — terms reflect the owner-confirmed AR Increment 2 (T1.2) in
+> accounts-receivable.md. AR = who owes us; the **detail behind the GL `1200 Accounts Receivable` control
+> account**.
+
+- **Accounts Receivable (AR)** — money customers owe us for credit sales not yet paid; **the customer
+  sub-ledger** — the per-customer detail behind the GL `1200 Accounts Receivable` control account.
+- **Sub-ledger** — a detailed ledger for one **control account**: AR holds, per customer, the open items +
+  receipts whose **net balance equals** the GL AR control-account balance. The *detail*; the GL control
+  account is the *summary*.
+- **Control account (AR)** — the GL account `1200 Accounts Receivable` whose balance summarises the AR
+  sub-ledger. The sub-ledger must **reconcile** to it at all times.
+- **Open item** — an unpaid (or partly paid) receivable: one credit-sale invoice's outstanding amount in
+  the sub-ledger. Created when a **credit** sale finalises; reduced by receipts / credit notes; closed when
+  settled or written off. **A cash sale creates no open item** (settled at the till).
+- **Receipt (AR)** — money received from a customer against their account (`RCT-####`). **Not** the Sales
+  **receipt** (the till slip on a paid-at-sale invoice). A receipt is **allocated** to open items and posts
+  **DR Cash/Bank / CR AR control** to GL.
+- **Allocation** — applying a receipt (or credit note) to specific open items, reducing each. v1
+  **auto-allocates oldest-open-first** by default; an operator may **manually override**. The amount
+  allocated is **≤ the receipt** (over-allocation rejected); a remainder is **on-account**.
+- **On-account / unapplied (unallocated) receipt** — a receipt (or part of one) **not yet allocated** to an
+  open item: a **credit balance** on the customer's account, applied later. Allowed in v1.
+- **Ageing bucket** — a band of how overdue an open item is, by **due date**: **Current** (not yet due),
+  **1–30**, **31–60**, **61–90**, **90+** days overdue.
+- **Due date** — when an open item falls due, from the **customer's payment terms** applied to the invoice
+  date; if no terms, the v1 default is **net-on-receipt (0 days)** so due date = invoice date.
+- **Statement** — a per-customer document listing the customer's **open items + ageing** (and recent
+  activity), to **view or print**. v1 = read/print only (no emailing / dunning).
+- **Write-off** — removing an uncollectable open item as a **bad debt**: closes the open item and posts
+  **DR bad-debt expense / CR AR control** to GL.
+- **Credit note (AR)** — a document that **reduces a receivable** (return / over-charge correction): reduces
+  the open item and the AR control. Reduces what *a customer owes us* — not the AP **debit note**.
+- **Opening balance (AR)** — a customer's pre-existing receivable at go-live, entered as an opening open
+  item; the sum of opening open items equals the AR control's opening balance.
+- **Credit limit** — the maximum a credit customer may owe (`customers.credit_limit_amount`, Parties V2). v1
+  **warns + allows with `SALES.CREDIT.OVERRIDE`** (audited) when a credit sale would push current AR balance
+  + the new sale over it; the check lives in the **Sales finalise path**.
+- **`SALES.CREDIT.OVERRIDE`** — the IAM permission to finalise a credit sale that exceeds the customer's
+  credit limit (the audited override).
+- **No-double-post (AR)** — the rule that AR **does not post to GL when it creates an open item**, because
+  the credit sale's `SalesPostingHandler` **already** debited the AR control; only the *new* events
+  (receipt, write-off, standalone credit note) post to GL.
+
+### AR terminology rulings (pick one, stay consistent)
+- Use **open item** for an unpaid receivable in the sub-ledger; **receipt** for money received against a
+  customer's account (`RCT-####`) — never call the AR receipt the Sales **receipt** (the till slip).
+- Use **allocation** for applying a receipt to open items; it is **not** a GL **posting** (the cash leg
+  posts once at the receipt; re-allocation posts nothing).
+- Use **on-account / unapplied** for an unallocated receipt credit; never "deposit" (deposits-as-liability
+  are deferred).
+- Use **control account** for the GL `1200` summary, **sub-ledger** for the per-customer detail; the two
+  **reconcile** — never blur them.
+- A **customer** is a **party**; the AR control **account** is a GL bucket — three distinct things (party /
+  GL account / cash-bank account), never interchangeably "account".
+
+## Accounts Payable (AP) — the supplier sub-ledger
+
+> Status: **Ratified 2026-06-09** — terms reflect the owner-confirmed AP Increment 2 (T1.3) in
+> accounts-payable.md. AP = who we owe; the **detail behind the GL `2100 Accounts Payable` control
+> account**. AP is **bill-entry-driven**.
+
+- **Accounts Payable (AP)** — money we owe suppliers for bills not yet paid; **the supplier sub-ledger** —
+  the per-supplier detail behind the GL `2100 Accounts Payable` control account.
+- **Sub-ledger (AP)** — a detailed ledger for the AP control account: holds, per supplier, the open payables
+  whose **net balance equals** the GL AP control-account balance.
+- **Control account (AP)** — the GL account `2100 Accounts Payable` whose balance summarises the AP
+  sub-ledger. The sub-ledger must **reconcile** to it at all times.
+- **Supplier bill / supplier invoice** — the supplier's **demand for payment** (their invoice), the AP
+  document the operator **enters** (`BILL-####`). Distinct from the **PO** (our order) and the **Goods
+  Receipt** (our record of arrival). 3-way matched; a matched bill becomes a **payable**.
+- **Payable** — an entered, matched bill we **owe**: the supplier sub-ledger open item, reduced by payments
+  / debit notes, closed when paid. Created when a bill **matches within tolerance** and posts to GL.
+- **3-way match** — reconciling the **supplier bill** against the **PO** and the **Goods Receipt** —
+  **quantity AND price** — within a **tolerance**, before the bill becomes a payable. (Purchases v1 built the
+  **two-way** PO↔GR match; AP adds the **third leg**, the bill.)
+- **Tolerance** — the allowed price (and/or quantity) variance within which a bill matches automatically; an
+  **over-tolerance** bill is **held for review** (accept-variance or reject). v1 default ≈ price within 2% or
+  a small absolute (OQ-AP-01).
+- **GRNI (Goods Received Not Invoiced)** — the liability for goods received but not yet billed. **v1 has NO
+  GRNI accrual** — the goods receipt posts no liability, so between receipt and bill entry the liability is
+  **not on the books** (the accepted bill-driven-AP gap).
+- **Payment (AP)** — money paid to a supplier against open payables; settling it posts **DR AP control / CR
+  Cash/Bank** to GL. v1 = a **single** bill payment and a **payment run**.
+- **Payment run** — a batch (`PAYRUN-####`) that **selects due / matched bills** and pays them in **one
+  payment**, settling many payables at once.
+- **Debit note (AP)** — a document that **reduces an open payable** (a supplier credit / over-charge /
+  short-delivery correction): reduces the sub-ledger payable and the AP control. Reduces what *we owe a
+  supplier* — not the AR **credit note**.
+- **Opening balance (AP)** — a supplier's pre-existing payable at go-live, entered as an opening payable; the
+  sum of opening payables equals the AP control's opening balance.
+- **First-GL-posting-for-the-purchase (AP)** — the rule that, because the goods receipt posts **Stock only,
+  NOT GL**, the **AP bill match is where the purchase first hits the books** (CR AP control). The mirror of
+  AR's no-double-post rule.
+- **Inventory-or-Purchases (bill debit)** — the GL account the matched bill debits (per `gl_configs`:
+  `INVENTORY` or a purchases / GRNI-clearing / expense account). v1 books it **without a COGS roll-up**
+  (inventory valuation + COGS are T2.2, deferred).
+
+### AP terminology rulings (pick one, stay consistent)
+- Use **supplier bill** for the supplier's invoice we enter; never confuse it with the **PO** (our order) or
+  the **Goods Receipt** (our record of arrival) — the three documents the 3-way match reconciles.
+- Use **payable** for an open matched bill we owe; **payment run** (batch) / **single payment** for settling
+  it; never "invoice payment" loosely.
+- Use **debit note** for reducing what we owe a supplier (AP); use **credit note** for reducing what a
+  customer owes us (AR) — never swap them.
+- Use **control account** for the GL `2100` summary, **sub-ledger** for the per-supplier detail; the two
+  **reconcile** — never blur them.
+- A **supplier** is a **party**; the AP control **account** is a GL bucket — never interchangeably "account".
+- Say **bill-entry-driven** (the operator enters the bill) — a goods receipt does **not** create a payable
+  in v1; never say "the receipt makes us owe."
