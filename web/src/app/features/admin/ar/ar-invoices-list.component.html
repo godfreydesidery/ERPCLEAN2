@@ -1,0 +1,354 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">
+      <i class="bi bi-cash-coin me-2" aria-hidden="true"></i>Receivables — Open Items
+    </h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      AR invoices. Filter by customer or status; write off or credit from each row.
+    </p>
+  </header>
+
+  @if (!canView()) {
+    <p class="text-muted d-flex align-items-center gap-2 mt-3" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to view AR invoices.
+    </p>
+  } @else {
+
+    <!-- Company selector -->
+    @switch (companyState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-3" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load companies.
+        </p>
+      }
+      @default {
+        <div class="d-flex flex-wrap gap-3 mb-3 align-items-end">
+          @if (companies().length > 1) {
+            <div style="min-width:220px">
+              <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+              <select id="companyPicker" name="companyPicker" class="form-select"
+                      [ngModel]="selectedCompanyId()"
+                      (ngModelChange)="onCompanyChange($event)">
+                @for (c of companies(); track c.uid) {
+                  <option [value]="c.id">{{ c.name }}</option>
+                }
+              </select>
+            </div>
+          }
+
+          <!-- Customer filter -->
+          <div style="min-width:260px; position:relative">
+            <label class="form-label small text-muted mb-1" for="customerFilterQ">Customer</label>
+            <div class="input-group input-group-sm">
+              <input id="customerFilterQ" name="customerFilterQ" type="search"
+                     class="form-control" placeholder="Search customer…" autocomplete="off"
+                     [ngModel]="customerFilterQ()"
+                     (ngModelChange)="onCustomerFilterChange($event)" />
+              @if (selectedFilterCustomer()) {
+                <button type="button" class="btn btn-outline-secondary"
+                        (click)="clearCustomerFilter()"
+                        aria-label="Clear customer filter">
+                  <i class="bi bi-x" aria-hidden="true"></i>
+                </button>
+              }
+            </div>
+            @if (customerFilterResults().length > 0) {
+              <ul class="list-group position-absolute w-100 shadow-sm z-3" role="listbox"
+                  aria-label="Customer suggestions" style="top:100%; left:0">
+                @for (c of customerFilterResults(); track c.uid) {
+                  <li class="list-group-item list-group-item-action py-1 small"
+                      role="option" style="cursor:pointer"
+                      (click)="selectFilterCustomer(c)"
+                      (keydown.enter)="selectFilterCustomer(c)"
+                      tabindex="0">
+                    <strong>{{ c.code }}</strong> — {{ c.displayName }}
+                  </li>
+                }
+              </ul>
+            }
+          </div>
+
+          <!-- Status filter -->
+          <div style="min-width:160px">
+            <label class="form-label small text-muted mb-1" for="statusFilter">Status</label>
+            <select id="statusFilter" name="statusFilter" class="form-select form-select-sm"
+                    [ngModel]="statusFilter()"
+                    (ngModelChange)="onStatusChange($event)">
+              <option value="">— All —</option>
+              <option value="OPEN">Open</option>
+              <option value="PARTIAL">Partial</option>
+              <option value="PAID">Paid</option>
+              <option value="WRITTEN_OFF">Written Off</option>
+            </select>
+          </div>
+        </div>
+      }
+    }
+
+    <!-- List states -->
+    @switch (state()) {
+      @case ('loading') {
+        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading invoices…
+        </p>
+      }
+      @case ('error') {
+        <p class="state text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load AR invoices. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="state text-muted d-flex align-items-center gap-2">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view AR invoices.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <p class="state text-muted">No invoices found.</p>
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-hover align-middle bg-white grid">
+              <caption class="visually-hidden">AR invoices</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Document No.</th>
+                  <th scope="col">Customer</th>
+                  <th scope="col">Invoice Date</th>
+                  <th scope="col">Due Date</th>
+                  <th scope="col" class="text-end">Original</th>
+                  <th scope="col" class="text-end">Outstanding</th>
+                  <th scope="col">Currency</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Source</th>
+                  <th scope="col"><span class="visually-hidden">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (inv of rows(); track inv.uid) {
+                  <tr>
+                    <td class="font-monospace small fw-semibold">{{ inv.documentNo }}</td>
+                    <td class="small text-muted font-monospace">{{ inv.customerId }}</td>
+                    <td class="small">{{ inv.invoiceDate }}</td>
+                    <td class="small">{{ inv.dueDate ?? '—' }}</td>
+                    <td class="text-end font-monospace small">{{ fmtMoney(inv.originalAmount) }}</td>
+                    <td class="text-end font-monospace small fw-semibold"
+                        [class.text-danger]="+(inv.outstandingAmount) > 0">
+                      {{ fmtMoney(inv.outstandingAmount) }}
+                    </td>
+                    <td class="small">{{ inv.currency }}</td>
+                    <td>
+                      <span class="badge" [class]="statusBadgeClass(inv.status)">
+                        {{ inv.status }}
+                      </span>
+                    </td>
+                    <td class="small text-muted">{{ inv.source }}</td>
+                    <td class="d-flex gap-1 flex-nowrap">
+                      @if (canWriteOff() && (inv.status === 'OPEN' || inv.status === 'PARTIAL')) {
+                        <button type="button"
+                                class="btn btn-sm btn-outline-warning"
+                                (click)="openWriteOff(inv)"
+                                [attr.aria-label]="'Write off invoice ' + inv.documentNo">
+                          <i class="bi bi-x-circle me-1" aria-hidden="true"></i>Write off
+                        </button>
+                      }
+                      @if (canCreditNote() && (inv.status === 'OPEN' || inv.status === 'PARTIAL')) {
+                        <button type="button"
+                                class="btn btn-sm btn-outline-info"
+                                (click)="openCreditNote(inv)"
+                                [attr.aria-label]="'Raise credit note for ' + inv.documentNo">
+                          <i class="bi bi-file-earmark-minus me-1" aria-hidden="true"></i>Credit note
+                        </button>
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Pagination -->
+          @if (meta().totalPages > 1) {
+            <nav aria-label="AR invoices pagination" class="d-flex align-items-center gap-3 mt-2">
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      [disabled]="currentPage() === 0" (click)="prevPage()">
+                <i class="bi bi-chevron-left" aria-hidden="true"></i>
+                <span class="visually-hidden">Previous page</span>
+              </button>
+              <span class="small text-muted">
+                Page {{ meta().page + 1 }} of {{ meta().totalPages }}
+                ({{ meta().totalElements }} total)
+              </span>
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      [disabled]="!meta().hasNext" (click)="nextPage()">
+                <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                <span class="visually-hidden">Next page</span>
+              </button>
+            </nav>
+          }
+        }
+      }
+    }
+
+    <!-- ── Write-off modal ──────────────────────────────────────────────────── -->
+    @if (writeOffInvoice(); as inv) {
+      <div class="modal d-block" tabindex="-1" role="dialog"
+           aria-modal="true"
+           [attr.aria-labelledby]="'writeOffModalTitle'">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h2 class="modal-title h6" id="writeOffModalTitle">
+                <i class="bi bi-x-circle me-1" aria-hidden="true"></i>
+                Write Off — {{ inv.documentNo }}
+              </h2>
+              <button type="button" class="btn-close" (click)="closeWriteOff()"
+                      aria-label="Close write-off dialog"></button>
+            </div>
+            <div class="modal-body">
+              <p class="text-muted small mb-3">
+                Outstanding: <strong>{{ fmtMoney(inv.outstandingAmount) }} {{ inv.currency }}</strong>
+              </p>
+              <div class="mb-3">
+                <label class="form-label" for="writeOffDate">
+                  Write-off Date <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="writeOffDate" name="writeOffDate" type="date"
+                       class="form-control"
+                       [ngModel]="writeOffDate()"
+                       (ngModelChange)="writeOffDate.set($event)"
+                       [disabled]="writingOff()" required />
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="writeOffReason">
+                  Reason <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <textarea id="writeOffReason" name="writeOffReason"
+                          class="form-control" rows="3"
+                          placeholder="State the reason for write-off…"
+                          [ngModel]="writeOffReason()"
+                          (ngModelChange)="writeOffReason.set($event)"
+                          [disabled]="writingOff()" required></textarea>
+              </div>
+              @if (writeOffError(); as msg) {
+                <p class="text-danger small mb-0" role="alert">
+                  <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ msg }}
+                </p>
+              }
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-outline-secondary"
+                      (click)="closeWriteOff()" [disabled]="writingOff()">Cancel</button>
+              <button type="button" class="btn btn-warning"
+                      (click)="submitWriteOff()" [disabled]="writingOff()">
+                @if (writingOff()) {
+                  <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                  Processing…
+                } @else {
+                  <i class="bi bi-x-circle me-1" aria-hidden="true"></i>Confirm Write-off
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-backdrop show" (click)="closeWriteOff()" aria-hidden="true"></div>
+      </div>
+    }
+
+    <!-- ── Credit note modal ───────────────────────────────────────────────── -->
+    @if (creditNoteInvoice(); as inv) {
+      <div class="modal d-block" tabindex="-1" role="dialog"
+           aria-modal="true"
+           [attr.aria-labelledby]="'creditNoteModalTitle'">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h2 class="modal-title h6" id="creditNoteModalTitle">
+                <i class="bi bi-file-earmark-minus me-1" aria-hidden="true"></i>
+                Raise Credit Note — {{ inv.documentNo }}
+              </h2>
+              <button type="button" class="btn-close" (click)="closeCreditNote()"
+                      aria-label="Close credit note dialog"></button>
+            </div>
+            <div class="modal-body">
+              <div class="row g-3">
+                <div class="col-sm-6">
+                  <label class="form-label" for="cnDate">
+                    Note Date <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <input id="cnDate" name="cnDate" type="date" class="form-control"
+                         [ngModel]="creditNoteDate()"
+                         (ngModelChange)="creditNoteDate.set($event)"
+                         [disabled]="raisingCreditNote()" required />
+                </div>
+                <div class="col-sm-6">
+                  <label class="form-label" for="cnCurrency">Currency</label>
+                  <input id="cnCurrency" name="cnCurrency" type="text" class="form-control"
+                         [ngModel]="creditNoteCurrency()"
+                         (ngModelChange)="creditNoteCurrency.set($event)"
+                         [disabled]="raisingCreditNote()" />
+                </div>
+                <div class="col-sm-6">
+                  <label class="form-label" for="cnNet">
+                    Net Amount <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <input id="cnNet" name="cnNet" type="text" inputmode="decimal"
+                         class="form-control font-monospace" placeholder="0.00"
+                         [ngModel]="creditNoteNet()"
+                         (ngModelChange)="creditNoteNet.set($event)"
+                         [disabled]="raisingCreditNote()" autocomplete="off" required />
+                </div>
+                <div class="col-sm-6">
+                  <label class="form-label" for="cnVat">VAT Amount</label>
+                  <input id="cnVat" name="cnVat" type="text" inputmode="decimal"
+                         class="form-control font-monospace" placeholder="0.00"
+                         [ngModel]="creditNoteVat()"
+                         (ngModelChange)="creditNoteVat.set($event)"
+                         [disabled]="raisingCreditNote()" autocomplete="off" />
+                </div>
+                <div class="col-12">
+                  <label class="form-label" for="cnReason">
+                    Reason <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <textarea id="cnReason" name="cnReason"
+                            class="form-control" rows="3"
+                            placeholder="Reason for credit note…"
+                            [ngModel]="creditNoteReason()"
+                            (ngModelChange)="creditNoteReason.set($event)"
+                            [disabled]="raisingCreditNote()" required></textarea>
+                </div>
+              </div>
+              @if (creditNoteError(); as msg) {
+                <p class="text-danger small mt-2 mb-0" role="alert">
+                  <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ msg }}
+                </p>
+              }
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-outline-secondary"
+                      (click)="closeCreditNote()" [disabled]="raisingCreditNote()">Cancel</button>
+              <button type="button" class="btn btn-info text-white"
+                      (click)="submitCreditNote()" [disabled]="raisingCreditNote()">
+                @if (raisingCreditNote()) {
+                  <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                  Raising…
+                } @else {
+                  <i class="bi bi-file-earmark-minus me-1" aria-hidden="true"></i>Raise Credit Note
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-backdrop show" (click)="closeCreditNote()" aria-hidden="true"></div>
+      </div>
+    }
+  }
+</section>

@@ -1,0 +1,362 @@
+<section class="admin-page">
+  <div class="mb-3">
+    <a routerLink="/admin/ar/invoices" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Receivables
+    </a>
+  </div>
+
+  <header class="page-head">
+    <h1 class="h4 mb-1">
+      <i class="bi bi-receipt me-2" aria-hidden="true"></i>Record Receipt
+    </h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      Select a customer, enter the receipt details, and allocate against open invoices.
+    </p>
+  </header>
+
+  @if (!canRecord()) {
+    <p class="text-muted d-flex align-items-center gap-2 mt-3" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to record receipts.
+    </p>
+  } @else if (savedReceipt(); as receipt) {
+    <!-- ── Success panel ──────────────────────────────────────────────── -->
+    <div class="alert alert-success d-flex flex-column gap-2 mt-3" role="status">
+      <div class="d-flex align-items-center gap-2">
+        <i class="bi bi-check-circle-fill fs-5" aria-hidden="true"></i>
+        <strong>Receipt recorded — {{ receipt.receiptNumber }}</strong>
+      </div>
+      <ul class="mb-0 small">
+        <li>Amount: <span class="font-monospace">{{ fmtMoney(receipt.amount) }} {{ receipt.currency }}</span></li>
+        <li>Unallocated (on-account): <span class="font-monospace">{{ fmtMoney(receipt.unallocatedAmount) }}</span></li>
+        <li>Date: {{ receipt.receiptDate }}</li>
+        <li>Tender: {{ receipt.tenderType }}</li>
+      </ul>
+    </div>
+    <div class="d-flex gap-2 mt-3">
+      <button type="button" class="btn btn-primary" (click)="savedReceipt.set(null)">
+        <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Record Another
+      </button>
+      <a routerLink="/admin/ar/invoices" class="btn btn-outline-secondary">
+        <i class="bi bi-cash-coin me-1" aria-hidden="true"></i>View Open Items
+      </a>
+    </div>
+
+  } @else {
+
+    <!-- Company selector -->
+    @switch (companyState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-3" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load companies.
+        </p>
+      }
+      @default {
+        @if (companies().length > 1) {
+          <div class="mb-3" style="max-width:320px">
+            <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+            <select id="companyPicker" name="companyPicker" class="form-select"
+                    [ngModel]="selectedCompanyId()"
+                    (ngModelChange)="onCompanyChange($event)">
+              @for (c of companies(); track c.uid) {
+                <option [value]="c.id">{{ c.name }}</option>
+              }
+            </select>
+          </div>
+        }
+      }
+    }
+
+    <form (ngSubmit)="submit()" aria-label="Record receipt">
+
+      <!-- ── Header card ──────────────────────────────────────────────────── -->
+      <div class="card mb-3">
+        <div class="card-header small fw-semibold text-muted">Receipt Details</div>
+        <div class="card-body">
+          <div class="row g-3">
+
+            <!-- Customer picker -->
+            <div class="col-md-12">
+              <label class="form-label" for="customerSearch">
+                Customer <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <div style="position:relative">
+                <input id="customerSearch" name="customerSearch" type="search"
+                       class="form-control" placeholder="Type customer name or code…"
+                       autocomplete="off"
+                       [ngModel]="customerSearchQ()"
+                       (ngModelChange)="onCustomerSearchChange($event)"
+                       [disabled]="submitting()" />
+                @if (customerResults().length > 0) {
+                  <ul class="list-group position-absolute w-100 shadow-sm z-3"
+                      role="listbox" aria-label="Customer suggestions"
+                      style="top:100%; left:0; max-height:220px; overflow-y:auto">
+                    @for (c of customerResults(); track c.uid) {
+                      <li class="list-group-item list-group-item-action py-1 small"
+                          role="option" style="cursor:pointer"
+                          (click)="selectCustomer(c)"
+                          (keydown.enter)="selectCustomer(c)"
+                          tabindex="0">
+                        <strong>{{ c.code }}</strong> — {{ c.displayName }}
+                      </li>
+                    }
+                  </ul>
+                }
+              </div>
+              @if (selectedCustomer()) {
+                <div class="form-text text-success">
+                  <i class="bi bi-check-circle me-1" aria-hidden="true"></i>
+                  {{ selectedCustomer()!.label }}
+                </div>
+              }
+            </div>
+
+            <!-- Amount -->
+            <div class="col-sm-4">
+              <label class="form-label" for="receiptAmount">
+                Amount <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="receiptAmount" name="receiptAmount" type="text" inputmode="decimal"
+                     class="form-control font-monospace" placeholder="0.00"
+                     [ngModel]="receiptAmount()"
+                     (ngModelChange)="receiptAmount.set($event)"
+                     [disabled]="submitting()" autocomplete="off" required />
+            </div>
+
+            <!-- Currency -->
+            <div class="col-sm-3">
+              <label class="form-label" for="receiptCurrency">
+                Currency <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="receiptCurrency" name="receiptCurrency" type="text"
+                     class="form-control" placeholder="TZS"
+                     [ngModel]="receiptCurrency()"
+                     (ngModelChange)="receiptCurrency.set($event)"
+                     [disabled]="submitting()" autocomplete="off" required />
+            </div>
+
+            <!-- Date -->
+            <div class="col-sm-5">
+              <label class="form-label" for="receiptDate">
+                Receipt Date <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="receiptDate" name="receiptDate" type="date"
+                     class="form-control"
+                     [ngModel]="receiptDate()"
+                     (ngModelChange)="receiptDate.set($event)"
+                     [disabled]="submitting()" required />
+            </div>
+
+            <!-- Tender type -->
+            <div class="col-sm-4">
+              <label class="form-label" for="tenderType">Tender Type</label>
+              <select id="tenderType" name="tenderType" class="form-select"
+                      [ngModel]="tenderType()"
+                      (ngModelChange)="tenderType.set($event)"
+                      [disabled]="submitting()">
+                <option value="CASH">Cash</option>
+                <option value="CHEQUE">Cheque</option>
+                <option value="BANK_TRANSFER">Bank Transfer</option>
+                <option value="MOBILE_MONEY">Mobile Money</option>
+                <option value="OTHER">Other</option>
+              </select>
+            </div>
+
+            <!-- Bank reference (optional) -->
+            <div class="col-sm-8">
+              <label class="form-label" for="bankRef">
+                Bank Reference <span class="text-muted small">(optional)</span>
+              </label>
+              <input id="bankRef" name="bankRef" type="text"
+                     class="form-control" placeholder="Cheque no., transfer ref…"
+                     [ngModel]="bankReference()"
+                     (ngModelChange)="bankReference.set($event)"
+                     [disabled]="submitting()" autocomplete="off" />
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Allocation editor ────────────────────────────────────────────── -->
+      <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span class="small fw-semibold text-muted">
+            <i class="bi bi-list-check me-1" aria-hidden="true"></i>
+            Allocate Against Open Invoices
+            @if (allocationRows().length > 0) {
+              <span class="badge text-bg-secondary ms-1">{{ allocationRows().length }}</span>
+            }
+          </span>
+          @if (allocationRows().length > 0) {
+            <div class="d-flex gap-2">
+              <button type="button" class="btn btn-sm btn-outline-primary"
+                      (click)="autoAllocateOldestFirst()"
+                      [disabled]="submitting() || receiptAmountNum() <= 0"
+                      title="Fills allocations starting from the oldest invoice">
+                <i class="bi bi-sort-numeric-down me-1" aria-hidden="true"></i>Auto Oldest-first
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      (click)="clearAllocations()" [disabled]="submitting()">
+                <i class="bi bi-eraser me-1" aria-hidden="true"></i>Clear
+              </button>
+            </div>
+          }
+        </div>
+        <div class="card-body p-0">
+
+          @switch (openInvoicesState()) {
+            @case ('loading') {
+              <p class="text-muted small p-3 mb-0 d-flex align-items-center gap-2" aria-live="polite">
+                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                Loading open invoices…
+              </p>
+            }
+            @case ('error') {
+              <p class="text-danger small p-3 mb-0" role="alert">
+                Could not load open invoices.
+              </p>
+            }
+            @default {
+              @if (!selectedCustomer()) {
+                <p class="text-muted small p-3 mb-0">
+                  <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
+                  Select a customer to see their open invoices.
+                </p>
+              } @else if (allocationRows().length === 0) {
+                <p class="text-muted small p-3 mb-0">
+                  No open invoices for this customer. The full receipt will be held on-account.
+                </p>
+              } @else {
+                <div class="table-responsive">
+                  <table class="table table-sm align-middle mb-0" aria-label="Open invoices for allocation">
+                    <thead class="table-light">
+                      <tr>
+                        <th scope="col">Document No.</th>
+                        <th scope="col">Date</th>
+                        <th scope="col">Due</th>
+                        <th scope="col" class="text-end">Original</th>
+                        <th scope="col" class="text-end">Outstanding</th>
+                        <th scope="col">Status</th>
+                        <th scope="col" style="min-width:140px" class="text-end">
+                          Allocate <span class="text-danger" aria-hidden="true">*</span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (row of allocationRows(); track row.invoice.uid; let i = $index) {
+                        <tr [class]="allocationRowClass(row)">
+                          <td class="font-monospace small fw-semibold">{{ row.invoice.documentNo }}</td>
+                          <td class="small">{{ row.invoice.invoiceDate }}</td>
+                          <td class="small">{{ row.invoice.dueDate ?? '—' }}</td>
+                          <td class="text-end font-monospace small">{{ fmtMoney(row.invoice.originalAmount) }}</td>
+                          <td class="text-end font-monospace small fw-semibold">{{ fmtMoney(row.invoice.outstandingAmount) }}</td>
+                          <td>
+                            <span class="badge"
+                                  [class]="row.invoice.status === 'OPEN' ? 'text-bg-warning' : 'text-bg-info'">
+                              {{ row.invoice.status }}
+                            </span>
+                          </td>
+                          <td>
+                            <label [for]="'alloc_' + row.invoice.uid" class="visually-hidden">
+                              Allocation for invoice {{ row.invoice.documentNo }}
+                            </label>
+                            <input [id]="'alloc_' + row.invoice.uid"
+                                   [name]="'alloc_' + row.invoice.uid"
+                                   type="text" inputmode="decimal"
+                                   class="form-control form-control-sm text-end font-monospace"
+                                   placeholder="0.00"
+                                   [ngModel]="row.allocInput"
+                                   (ngModelChange)="updateAllocation(row.invoice.uid, $event)"
+                                   [disabled]="submitting()"
+                                   autocomplete="off" />
+                          </td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+
+                <!-- Running totals bar -->
+                <div class="totals-bar border-top p-3 d-flex flex-wrap gap-4 align-items-center">
+                  <div class="d-flex gap-1 align-items-baseline">
+                    <span class="small text-muted me-1">Receipt Amount:</span>
+                    <span class="fw-semibold font-monospace">{{ fmtMoney(receiptAmountNum()) }}</span>
+                  </div>
+                  <div class="d-flex gap-1 align-items-baseline">
+                    <span class="small text-muted me-1">Allocated:</span>
+                    <span class="fw-semibold font-monospace"
+                          [class.text-danger]="overAllocated()">
+                      {{ fmtMoney(allocatedTotal()) }}
+                    </span>
+                  </div>
+                  <div class="d-flex gap-1 align-items-baseline">
+                    <span class="small text-muted me-1">On-account:</span>
+                    <span class="fw-semibold font-monospace text-info">
+                      {{ fmtMoney(unallocated()) }}
+                    </span>
+                  </div>
+                  @if (overAllocated()) {
+                    <span class="badge text-bg-danger ms-auto" role="alert" aria-live="polite">
+                      <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
+                      Over-allocated — reduce allocations
+                    </span>
+                  } @else if (anyAllocationExceedsOutstanding()) {
+                    <span class="badge text-bg-danger ms-auto" role="alert" aria-live="polite">
+                      <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
+                      An allocation exceeds the invoice outstanding
+                    </span>
+                  } @else if (allocatedTotal() > 0) {
+                    <span class="badge text-bg-success ms-auto">
+                      <i class="bi bi-check-circle me-1" aria-hidden="true"></i>Allocations valid
+                    </span>
+                  }
+                </div>
+              }
+            }
+          }
+        </div>
+      </div>
+
+      <!-- Error + submit -->
+      @if (formError(); as msg) {
+        <p class="text-danger small mb-2" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ msg }}
+        </p>
+      }
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary" [disabled]="submitDisabled()">
+          @if (submitting()) {
+            <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+            Recording…
+          } @else {
+            <i class="bi bi-receipt me-1" aria-hidden="true"></i>
+            Record Receipt
+          }
+        </button>
+        <a routerLink="/admin/ar/invoices" class="btn btn-outline-secondary">Cancel</a>
+      </div>
+
+      @if (overAllocated()) {
+        <p class="text-danger small mt-2" aria-live="polite">
+          <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
+          Total allocations ({{ fmtMoney(allocatedTotal()) }}) exceed the receipt amount ({{ fmtMoney(receiptAmountNum()) }}).
+          Reduce allocations or increase the receipt amount.
+        </p>
+      }
+      @if (anyAllocationExceedsOutstanding() && !overAllocated()) {
+        <p class="text-danger small mt-2" aria-live="polite">
+          <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
+          One or more allocations exceed the invoice's outstanding balance. Check highlighted rows.
+        </p>
+      }
+    </form>
+  }
+</section>

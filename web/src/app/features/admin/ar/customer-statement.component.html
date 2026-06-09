@@ -1,0 +1,287 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">
+      <i class="bi bi-file-earmark-text me-2" aria-hidden="true"></i>Customer Statement
+    </h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      Select a customer to view their outstanding balance, ageing, and transaction history.
+    </p>
+  </header>
+
+  @if (!canView()) {
+    <p class="text-muted d-flex align-items-center gap-2 mt-3" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to view customer statements.
+    </p>
+  } @else {
+
+    <!-- Company + customer selectors -->
+    @switch (companyState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-3" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load companies.
+        </p>
+      }
+      @default {
+        <div class="d-flex flex-wrap gap-3 mb-4 align-items-end">
+          @if (companies().length > 1) {
+            <div style="min-width:220px">
+              <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+              <select id="companyPicker" name="companyPicker" class="form-select"
+                      [ngModel]="selectedCompanyId()"
+                      (ngModelChange)="onCompanyChange($event)">
+                @for (c of companies(); track c.uid) {
+                  <option [value]="c.id">{{ c.name }}</option>
+                }
+              </select>
+            </div>
+          }
+
+          <!-- Customer picker -->
+          <div style="min-width:280px; position:relative">
+            <label class="form-label small text-muted mb-1" for="customerSearch">Customer</label>
+            <input id="customerSearch" name="customerSearch" type="search"
+                   class="form-control" placeholder="Type customer name or code…"
+                   autocomplete="off"
+                   [ngModel]="customerSearchQ()"
+                   (ngModelChange)="onCustomerSearchChange($event)" />
+            @if (customerResults().length > 0) {
+              <ul class="list-group position-absolute w-100 shadow-sm z-3"
+                  role="listbox" aria-label="Customer suggestions"
+                  style="top:100%; left:0; max-height:220px; overflow-y:auto">
+                @for (c of customerResults(); track c.uid) {
+                  <li class="list-group-item list-group-item-action py-1 small"
+                      role="option" style="cursor:pointer"
+                      (click)="selectCustomer(c)"
+                      (keydown.enter)="selectCustomer(c)"
+                      tabindex="0">
+                    <strong>{{ c.code }}</strong> — {{ c.displayName }}
+                  </li>
+                }
+              </ul>
+            }
+          </div>
+
+          @if (selectedCustomer()) {
+            <button type="button" class="btn btn-outline-secondary btn-sm align-self-end"
+                    (click)="refresh()" [disabled]="state() === 'loading'">
+              <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Refresh
+            </button>
+          }
+        </div>
+      }
+    }
+
+    <!-- Statement states -->
+    @switch (state()) {
+      @case ('loading') {
+        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading statement…
+        </p>
+      }
+      @case ('error') {
+        <p class="state text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load customer statement. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="state text-muted d-flex align-items-center gap-2">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view this statement.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <p class="state text-muted">Select a customer above to load their statement.</p>
+        } @else if (statement(); as stmt) {
+
+          <!-- ── Headline ─────────────────────────────────────────────────── -->
+          <div class="d-flex flex-wrap gap-3 mb-4">
+            <div class="card border-0 shadow-sm flex-fill" style="min-width:200px; max-width:280px">
+              <div class="card-body text-center">
+                <div class="small text-muted mb-1">Total Outstanding</div>
+                <div class="h3 font-monospace mb-0"
+                     [class.text-danger]="totalOutstanding() > 0"
+                     [class.text-success]="totalOutstanding() === 0">
+                  {{ fmtMoney(stmt.totalOutstanding) }}
+                </div>
+                <div class="small text-muted">{{ stmt.currency }}</div>
+              </div>
+            </div>
+            <div class="card border-0 shadow-sm flex-fill" style="min-width:180px; max-width:240px">
+              <div class="card-body text-center">
+                <div class="small text-muted mb-1">As At</div>
+                <div class="fw-semibold">{{ stmt.asAt }}</div>
+              </div>
+            </div>
+            <div class="card border-0 shadow-sm flex-fill" style="min-width:180px; max-width:240px">
+              <div class="card-body text-center">
+                <div class="small text-muted mb-1">Open Items</div>
+                <div class="h4 mb-0">{{ openItems().length }}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── Ageing buckets ──────────────────────────────────────────── -->
+          @if (sortedAgeing().length > 0) {
+            <div class="card mb-4">
+              <div class="card-header small fw-semibold text-muted">
+                <i class="bi bi-hourglass-split me-1" aria-hidden="true"></i>Ageing Analysis
+              </div>
+              <div class="card-body p-0">
+                <div class="table-responsive">
+                  <table class="table table-sm align-middle mb-0">
+                    <caption class="visually-hidden">Ageing buckets for this customer</caption>
+                    <thead class="table-light">
+                      <tr>
+                        @for (b of sortedAgeing(); track b.bucket) {
+                          <th scope="col" class="text-end">{{ bucketLabel(b.bucket) }}</th>
+                        }
+                        <th scope="col" class="text-end fw-bold">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        @for (b of sortedAgeing(); track b.bucket) {
+                          <td class="text-end font-monospace"
+                              [class.text-danger]="+(b.amount) > 0 && b.bucket !== 'CURRENT'"
+                              [class.text-muted]="+(b.amount) === 0">
+                            @if (+(b.amount) === 0) {
+                              —
+                            } @else {
+                              {{ fmtMoney(b.amount) }}
+                            }
+                          </td>
+                        }
+                        <td class="text-end font-monospace fw-bold"
+                            [class.text-danger]="totalOutstanding() > 0">
+                          {{ fmtMoney(stmt.totalOutstanding) }}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <!-- Ageing bar visualisation -->
+                @if (totalOutstanding() > 0) {
+                  <div class="ageing-bar d-flex" style="height:8px; overflow:hidden">
+                    @for (b of sortedAgeing(); track b.bucket) {
+                      @let pct = totalOutstanding() > 0 ? (+(b.amount) / totalOutstanding() * 100) : 0;
+                      @if (+(b.amount) > 0) {
+                        <div [class]="'flex-shrink-0 ' + bucketBadgeClass(b.bucket)"
+                             [style.width.%]="pct"
+                             [attr.title]="bucketLabel(b.bucket) + ': ' + fmtMoney(b.amount)"
+                             role="presentation"></div>
+                      }
+                    }
+                  </div>
+                }
+              </div>
+            </div>
+          }
+
+          <!-- ── Open items ──────────────────────────────────────────────── -->
+          @if (openItems().length > 0) {
+            <div class="card mb-4">
+              <div class="card-header small fw-semibold text-muted">
+                <i class="bi bi-cash-coin me-1" aria-hidden="true"></i>
+                Open Items ({{ openItems().length }})
+              </div>
+              <div class="card-body p-0">
+                <div class="table-responsive">
+                  <table class="table table-sm align-middle mb-0">
+                    <caption class="visually-hidden">Open invoice items for this customer</caption>
+                    <thead class="table-light">
+                      <tr>
+                        <th scope="col">Document No.</th>
+                        <th scope="col">Invoice Date</th>
+                        <th scope="col">Due Date</th>
+                        <th scope="col" class="text-end">Original</th>
+                        <th scope="col" class="text-end">Outstanding</th>
+                        <th scope="col">Currency</th>
+                        <th scope="col">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (inv of openItems(); track inv.uid) {
+                        <tr>
+                          <td class="font-monospace small fw-semibold">{{ inv.documentNo }}</td>
+                          <td class="small">{{ inv.invoiceDate }}</td>
+                          <td class="small">{{ inv.dueDate ?? '—' }}</td>
+                          <td class="text-end font-monospace small">{{ fmtMoney(inv.originalAmount) }}</td>
+                          <td class="text-end font-monospace small fw-semibold text-danger">
+                            {{ fmtMoney(inv.outstandingAmount) }}
+                          </td>
+                          <td class="small">{{ inv.currency }}</td>
+                          <td>
+                            <span class="badge" [class]="invoiceStatusBadgeClass(inv.status)">
+                              {{ inv.status }}
+                            </span>
+                          </td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          } @else {
+            <p class="text-muted small mb-4">
+              <i class="bi bi-check-circle-fill text-success me-1" aria-hidden="true"></i>
+              No outstanding open items.
+            </p>
+          }
+
+          <!-- ── Recent receipts ─────────────────────────────────────────── -->
+          @if (recentReceipts().length > 0) {
+            <div class="card mb-4">
+              <div class="card-header small fw-semibold text-muted">
+                <i class="bi bi-receipt me-1" aria-hidden="true"></i>
+                Recent Receipts ({{ recentReceipts().length }})
+              </div>
+              <div class="card-body p-0">
+                <div class="table-responsive">
+                  <table class="table table-sm align-middle mb-0">
+                    <caption class="visually-hidden">Recent receipts for this customer</caption>
+                    <thead class="table-light">
+                      <tr>
+                        <th scope="col">Receipt No.</th>
+                        <th scope="col">Date</th>
+                        <th scope="col" class="text-end">Amount</th>
+                        <th scope="col" class="text-end">Unallocated</th>
+                        <th scope="col">Currency</th>
+                        <th scope="col">Tender</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (r of recentReceipts(); track r.uid) {
+                        <tr>
+                          <td class="font-monospace small fw-semibold">{{ r.receiptNumber }}</td>
+                          <td class="small">{{ r.receiptDate }}</td>
+                          <td class="text-end font-monospace small">{{ fmtMoney(r.amount) }}</td>
+                          <td class="text-end font-monospace small"
+                              [class.text-warning]="+(r.unallocatedAmount) > 0">
+                            {{ fmtMoney(r.unallocatedAmount) }}
+                          </td>
+                          <td class="small">{{ r.currency }}</td>
+                          <td class="small text-muted">{{ r.tenderType }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          }
+        }
+      }
+    }
+  }
+</section>
