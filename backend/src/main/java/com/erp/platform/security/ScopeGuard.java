@@ -192,11 +192,15 @@ public class ScopeGuard {
         }
         // Audit the security-interesting bypass: root acting OUTSIDE its active company (a non-root
         // caller would have been denied here). Root acting within its own company is ordinary and is
-        // already captured by the action's own audit row (ADR-0004 D-9). Called from @Transactional
-        // service methods, so the MANDATORY audit write has a transaction to join.
+        // already captured by the action's own audit row (ADR-0004 D-9).
+        // Use recordIndependent (REQUIRES_NEW): assertCanActIn is also called from
+        // @Transactional(readOnly = true) query paths (AR ageing/statement/balance, GL trial
+        // balance), where a MANDATORY INSERT fails "cannot execute INSERT in a read-only
+        // transaction" — turning a root cross-company report view into a 500 (ISSUES-REGISTER #11).
+        // The bypass audit is an independent security record and commits in its own transaction.
         if (principal != null && principal.root() && companyId != null
                 && !companyId.equals(principal.companyId())) {
-            audit.record(AuditEvent.of(AuditActions.ROOT_BYPASS, "companies", companyId, null)
+            audit.recordIndependent(AuditEvent.of(AuditActions.ROOT_BYPASS, "companies", companyId, null)
                     .detail(Map.of("activeCompanyId", String.valueOf(principal.companyId()),
                             "targetCompanyId", String.valueOf(companyId))));
         }

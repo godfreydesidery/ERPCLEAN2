@@ -33,4 +33,16 @@ public interface AuditService {
      * @param ip          client IP address from the HTTP request
      */
     void record(AuditEvent event, Long actorUserId, String ip);
+
+    /**
+     * Records an audit event in its OWN new transaction ({@code REQUIRES_NEW}), independent of the
+     * caller's transaction. Use for audits that must succeed regardless of the caller's transaction
+     * type — notably security-bypass events raised from {@code @Transactional(readOnly = true)}
+     * query paths, where a {@code MANDATORY} INSERT would fail with "cannot execute INSERT in a
+     * read-only transaction" (ISSUES-REGISTER #11). Actor/company/branch resolve from
+     * {@link com.erp.platform.security.RequestContext}, as with {@link #record(AuditEvent)}.
+     *
+     * @param event the security/business fact to record
+     */
+    void recordIndependent(AuditEvent event);
 }
