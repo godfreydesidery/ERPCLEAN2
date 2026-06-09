@@ -1,0 +1,216 @@
+<section class="container-fluid py-3" aria-label="Bank Reconciliation">
+  <h1 class="h4 mb-3">Bank Reconciliation</h1>
+
+  @if (!canReconcile()) {
+    <div class="alert alert-warning" role="alert">You do not have permission (CASH.RECONCILE).</div>
+  } @else {
+
+    <!-- Company + Account selectors -->
+    <div class="row g-3 mb-3">
+      @if (companies().length > 1) {
+        <div class="col-12 col-md-4">
+          <label class="form-label" for="reconCompany">Company</label>
+          <select id="reconCompany" class="form-select"
+                  [ngModel]="selectedCompanyId()" (ngModelChange)="onCompanyChange($event)">
+            @for (c of companies(); track c.id) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+          </select>
+        </div>
+      }
+
+      <div class="col-12 col-md-5">
+        <label class="form-label" for="reconAccount">Bank Account</label>
+        <select id="reconAccount" class="form-select"
+                [ngModel]="selectedAccountUid()" (ngModelChange)="onAccountChange($event)">
+          <option value="">— select bank account —</option>
+          @for (acc of bankAccounts(); track acc.uid) {
+            <option [value]="acc.uid">{{ acc.code }} — {{ acc.name }}</option>
+          }
+        </select>
+      </div>
+
+      @if (selectedAccountUid() && !reconciliation()) {
+        <div class="col-12 col-md-3 d-flex align-items-end">
+          <button type="button" class="btn btn-primary"
+                  (click)="openNewRecon()" [disabled]="showOpenForm()">
+            <i class="bi bi-folder-plus" aria-hidden="true"></i> Open Reconciliation
+          </button>
+        </div>
+      }
+    </div>
+
+    <!-- Open reconciliation form -->
+    @if (showOpenForm()) {
+      <div class="card mb-3 border-primary" role="form" aria-label="Open bank reconciliation">
+        <div class="card-header fw-semibold">Open Reconciliation</div>
+        <div class="card-body">
+          @if (openError()) {
+            <div class="alert alert-danger py-2" role="alert">{{ openError() }}</div>
+          }
+          <div class="row g-3">
+            <div class="col-12 col-md-4">
+              <label class="form-label" for="reconStmtDate">Statement Date <span aria-hidden="true">*</span></label>
+              <input id="reconStmtDate" type="date" class="form-control"
+                     [ngModel]="statementDate()" (ngModelChange)="statementDate.set($event)" required />
+            </div>
+            <div class="col-12 col-md-4">
+              <label class="form-label" for="reconClosingBal">Statement Closing Balance <span aria-hidden="true">*</span></label>
+              <input id="reconClosingBal" type="number" class="form-control" step="0.01"
+                     [ngModel]="statementClosingBalanceInput()"
+                     (ngModelChange)="statementClosingBalanceInput.set($event)"
+                     placeholder="0.00" required />
+            </div>
+          </div>
+        </div>
+        <div class="card-footer d-flex gap-2">
+          <button type="button" class="btn btn-primary btn-sm"
+                  (click)="submitOpenRecon()" [disabled]="opening()">
+            @if (opening()) {
+              <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+            }
+            Open
+          </button>
+          <button type="button" class="btn btn-outline-secondary btn-sm" (click)="cancelOpenRecon()">Cancel</button>
+        </div>
+      </div>
+    }
+
+    <!-- Active reconciliation header -->
+    @if (reconciliation()) {
+      <div class="card mb-3">
+        <div class="card-body">
+          <div class="row g-2 align-items-center">
+            <div class="col-auto">
+              <strong>{{ reconciliation()!.reconciliationNumber }}</strong>
+            </div>
+            <div class="col-auto">
+              <span class="badge"
+                    [class]="reconciliation()!.status === 'COMPLETED' ? 'text-bg-success' : 'text-bg-warning'">
+                {{ reconciliation()!.status }}
+              </span>
+            </div>
+            <div class="col-auto text-muted small">Statement date: {{ reconciliation()!.statementDate }}</div>
+          </div>
+
+          <!-- Balance summary -->
+          <div class="row g-3 mt-1">
+            <div class="col-auto">
+              <div class="small text-muted">Statement Closing Balance</div>
+              <div class="fs-5 fw-semibold font-monospace">{{ fmtMoney(statementClosingBalance()) }}</div>
+            </div>
+            <div class="col-auto">
+              <div class="small text-muted">Cleared Book Balance</div>
+              <div class="fs-5 fw-semibold font-monospace">{{ fmtMoney(clearedBookBalance()) }}</div>
+            </div>
+            <div class="col-auto">
+              <div class="small text-muted">Difference</div>
+              <div class="fs-5 fw-semibold font-monospace"
+                   [class]="isBalanced() ? 'text-success' : 'text-danger'">
+                {{ fmtMoney(difference()) }}
+              </div>
+            </div>
+            <div class="col-auto d-flex align-items-end">
+              @if (isBalanced()) {
+                <span class="badge text-bg-success fs-6" role="status" aria-label="Reconciliation is balanced">
+                  <i class="bi bi-check-circle-fill me-1" aria-hidden="true"></i> Balanced
+                </span>
+              } @else {
+                <span class="badge text-bg-danger fs-6" role="status" aria-label="Reconciliation is not balanced">
+                  <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i> Out of Balance
+                </span>
+              }
+            </div>
+          </div>
+
+          @if (completeError()) {
+            <div class="alert alert-danger py-2 mt-2" role="alert">{{ completeError() }}</div>
+          }
+
+          @if (reconciliation()!.status !== 'COMPLETED') {
+            <div class="mt-3">
+              <button type="button" class="btn btn-success"
+                      [disabled]="completeDisabled()"
+                      (click)="completeReconciliation()"
+                      [attr.aria-disabled]="completeDisabled()"
+                      aria-describedby="completeHelp">
+                @if (completing()) {
+                  <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                }
+                Complete Reconciliation
+              </button>
+              <div id="completeHelp" class="form-text">
+                @if (!isBalanced()) {
+                  Complete is disabled until the cleared book balance equals the statement closing balance.
+                }
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+    }
+
+    <!-- Transactions table -->
+    @if (selectedAccountUid()) {
+      @if (txnState() === 'loading') {
+        <div class="text-center py-4" aria-busy="true">
+          <span class="spinner-border text-primary" role="status" aria-label="Loading transactions"></span>
+        </div>
+      } @else if (txnState() === 'error') {
+        <div class="alert alert-danger" role="alert">Failed to load transactions.</div>
+      } @else if (transactions().length === 0) {
+        <div class="alert alert-info" role="status">No transactions found for this account.</div>
+      } @else {
+        <div class="table-responsive">
+          <table class="table table-sm align-middle">
+            <caption class="visually-hidden">Account transactions for reconciliation</caption>
+            <thead class="table-light">
+              <tr>
+                <th scope="col">
+                  <span class="visually-hidden">Cleared</span>
+                </th>
+                <th scope="col">Txn No.</th>
+                <th scope="col">Date</th>
+                <th scope="col">Direction</th>
+                <th scope="col">Amount</th>
+                <th scope="col">Type</th>
+                <th scope="col">Memo</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (txn of transactions(); track txn.uid) {
+                <tr [class]="isCleared(txn.uid) ? 'table-success' : ''">
+                  <td>
+                    @if (reconciliation() && reconciliation()!.status !== 'COMPLETED') {
+                      <div class="form-check mb-0">
+                        <input class="form-check-input" type="checkbox"
+                               [id]="'clr-' + txn.uid"
+                               [checked]="isCleared(txn.uid)"
+                               (change)="toggleCleared(txn.uid, $any($event.target).checked)"
+                               [attr.aria-label]="'Mark ' + txn.txnNumber + ' as cleared'" />
+                        <label class="form-check-label visually-hidden" [for]="'clr-' + txn.uid">Cleared</label>
+                      </div>
+                    } @else {
+                      @if (isCleared(txn.uid)) {
+                        <i class="bi bi-check-circle-fill text-success" aria-label="Cleared"></i>
+                      }
+                    }
+                  </td>
+                  <td class="font-monospace small">{{ txn.txnNumber }}</td>
+                  <td class="small">{{ txn.txnDate }}</td>
+                  <td>
+                    <span class="badge" [class]="directionBadgeClass(txn.direction)">{{ txn.direction }}</span>
+                  </td>
+                  <td class="text-end font-monospace">{{ fmtMoney(txn.amount) }}</td>
+                  <td class="small">{{ txn.txnType }}</td>
+                  <td class="small text-muted">{{ txn.memo ?? '—' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    }
+
+  }
+</section>

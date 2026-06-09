@@ -1,0 +1,204 @@
+<section class="container-fluid py-3" aria-label="Cash and Bank Accounts">
+  <div class="d-flex align-items-center mb-3 gap-2 flex-wrap">
+    <h1 class="h4 mb-0 me-auto">Cash &amp; Bank Accounts</h1>
+
+    @if (companyState() === 'loading') {
+      <span class="spinner-border spinner-border-sm text-secondary" aria-label="Loading companies"></span>
+    }
+    @if (companies().length > 1) {
+      <label class="visually-hidden" for="cbAccCompany">Company</label>
+      <select id="cbAccCompany" class="form-select form-select-sm w-auto"
+              [ngModel]="selectedCompanyId()"
+              (ngModelChange)="onCompanyChange($event)">
+        @for (c of companies(); track c.id) {
+          <option [value]="c.id">{{ c.name }}</option>
+        }
+      </select>
+    }
+
+    @if (canManage()) {
+      <button type="button" class="btn btn-primary btn-sm"
+              (click)="openCreateForm()"
+              [disabled]="showCreateForm()">
+        <i class="bi bi-plus-lg" aria-hidden="true"></i> New Account
+      </button>
+    }
+  </div>
+
+  <!-- Create form -->
+  @if (showCreateForm()) {
+    <div class="card mb-3 border-primary" role="form" aria-label="Create cash/bank account">
+      <div class="card-header fw-semibold">New Cash / Bank Account</div>
+      <div class="card-body">
+        @if (createError()) {
+          <div class="alert alert-danger py-2" role="alert">{{ createError() }}</div>
+        }
+        <div class="row g-3">
+          <div class="col-12 col-md-4">
+            <label class="form-label" for="newAccName">Account Name <span aria-hidden="true">*</span></label>
+            <input id="newAccName" type="text" class="form-control form-control-sm"
+                   [ngModel]="newName()" (ngModelChange)="newName.set($event)"
+                   placeholder="e.g. Main Cash Drawer" maxlength="120" required />
+          </div>
+
+          <div class="col-12 col-md-3">
+            <label class="form-label" for="newAccType">Account Type <span aria-hidden="true">*</span></label>
+            <select id="newAccType" class="form-select form-select-sm"
+                    [ngModel]="newType()" (ngModelChange)="newType.set($event)">
+              <option value="CASH">CASH</option>
+              <option value="BANK">BANK</option>
+            </select>
+          </div>
+
+          <div class="col-12 col-md-5">
+            <label class="form-label" for="newAccGl">GL Asset Account <span aria-hidden="true">*</span></label>
+            <select id="newAccGl" class="form-select form-select-sm"
+                    [ngModel]="newGlAccountUid()" (ngModelChange)="newGlAccountUid.set($event)"
+                    required>
+              <option value="">— select GL account —</option>
+              @for (gl of assetAccounts(); track gl.uid) {
+                <option [value]="gl.uid">{{ gl.accountCode }} — {{ gl.name }}</option>
+              }
+            </select>
+            @if (glAccountsState() === 'loading') {
+              <div class="form-text">Loading GL accounts…</div>
+            }
+          </div>
+
+          @if (newType() === 'BANK') {
+            <div class="col-12 col-md-4">
+              <label class="form-label" for="newBankName">Bank Name <span aria-hidden="true">*</span></label>
+              <input id="newBankName" type="text" class="form-control form-control-sm"
+                     [ngModel]="newBankName()" (ngModelChange)="newBankName.set($event)"
+                     placeholder="e.g. CRDB Bank" maxlength="100" />
+            </div>
+            <div class="col-12 col-md-4">
+              <label class="form-label" for="newBankAccNo">Bank Account No.</label>
+              <input id="newBankAccNo" type="text" class="form-control form-control-sm"
+                     [ngModel]="newBankAccountNo()" (ngModelChange)="newBankAccountNo.set($event)"
+                     maxlength="50" />
+            </div>
+            <div class="col-12 col-md-4">
+              <label class="form-label" for="newBankBranch">Bank Branch</label>
+              <input id="newBankBranch" type="text" class="form-control form-control-sm"
+                     [ngModel]="newBankBranch()" (ngModelChange)="newBankBranch.set($event)"
+                     maxlength="80" />
+            </div>
+          }
+
+          <div class="col-12">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="newSetDefault"
+                     [ngModel]="newSetAsDefault()" (ngModelChange)="newSetAsDefault.set($event)" />
+              <label class="form-check-label" for="newSetDefault">Set as default account</label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card-footer d-flex gap-2">
+        <button type="button" class="btn btn-primary btn-sm"
+                (click)="submitCreate()" [disabled]="creating()">
+          @if (creating()) {
+            <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+          }
+          Save Account
+        </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm"
+                (click)="cancelCreate()">Cancel</button>
+      </div>
+    </div>
+  }
+
+  <!-- States -->
+  @if (state() === 'loading') {
+    <div class="text-center py-5" aria-busy="true" aria-label="Loading accounts">
+      <span class="spinner-border text-primary" role="status"></span>
+    </div>
+  } @else if (state() === 'forbidden') {
+    <div class="alert alert-warning" role="alert">You do not have permission to view cash accounts (CASH.VIEW).</div>
+  } @else if (state() === 'error') {
+    <div class="alert alert-danger d-flex align-items-center gap-2" role="alert">
+      <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+      Failed to load accounts.
+      <button type="button" class="btn btn-sm btn-outline-danger ms-auto" (click)="load()">Retry</button>
+    </div>
+  } @else if (isEmpty()) {
+    <div class="alert alert-info" role="status">No cash or bank accounts found. Create one to get started.</div>
+  } @else {
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle">
+        <caption class="visually-hidden">Cash and bank accounts</caption>
+        <thead class="table-light">
+          <tr>
+            <th scope="col">Code</th>
+            <th scope="col">Name</th>
+            <th scope="col">Type</th>
+            <th scope="col">Bank</th>
+            <th scope="col">GL Account</th>
+            <th scope="col">Currency</th>
+            <th scope="col">Default</th>
+            <th scope="col">Active</th>
+            @if (canManage()) {
+              <th scope="col"><span class="visually-hidden">Actions</span></th>
+            }
+          </tr>
+        </thead>
+        <tbody>
+          @for (acc of rows(); track acc.uid) {
+            <tr>
+              <td class="font-monospace">{{ acc.code }}</td>
+              <td>{{ acc.name }}</td>
+              <td>
+                <span class="badge" [class]="typeBadgeClass(acc.accountType)">
+                  {{ acc.accountType }}
+                </span>
+              </td>
+              <td>
+                @if (acc.bankName) {
+                  <span>{{ acc.bankName }}</span>
+                  @if (acc.bankAccountNo) {
+                    <br /><small class="text-muted font-monospace">{{ acc.bankAccountNo }}</small>
+                  }
+                } @else {
+                  <span class="text-muted">—</span>
+                }
+              </td>
+              <td class="font-monospace small">{{ glAccountLabel(acc.glAccountId) }}</td>
+              <td>{{ acc.currency }}</td>
+              <td>
+                @if (acc.isDefault) {
+                  <span class="badge text-bg-success">Default</span>
+                } @else {
+                  <span class="text-muted small">—</span>
+                }
+              </td>
+              <td>
+                @if (acc.active) {
+                  <i class="bi bi-check-circle-fill text-success" aria-label="Active"></i>
+                } @else {
+                  <i class="bi bi-x-circle text-secondary" aria-label="Inactive"></i>
+                }
+              </td>
+              @if (canManage()) {
+                <td>
+                  @if (!acc.isDefault) {
+                    <button type="button" class="btn btn-outline-secondary btn-sm"
+                            [disabled]="settingDefaultUid() === acc.uid"
+                            (click)="setDefault(acc)"
+                            [attr.aria-label]="'Set ' + acc.name + ' as default'">
+                      @if (settingDefaultUid() === acc.uid) {
+                        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                      } @else {
+                        Set default
+                      }
+                    </button>
+                  }
+                </td>
+              }
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</section>

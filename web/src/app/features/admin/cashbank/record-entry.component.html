@@ -1,0 +1,107 @@
+<section class="container-fluid py-3" aria-label="Record Cash or Bank Entry">
+  <h1 class="h4 mb-3">Record Cash / Bank Entry</h1>
+
+  @if (!canRecord()) {
+    <div class="alert alert-warning" role="alert">You do not have permission to record entries (CASH.ENTRY.RECORD).</div>
+  } @else {
+
+    @if (savedEntry()) {
+      <div class="alert alert-success d-flex align-items-center gap-2" role="status">
+        <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
+        Entry <strong>{{ savedEntry()!.txnNumber }}</strong> recorded — direction
+        <span class="badge" [class]="savedEntry()!.direction === 'IN' ? 'text-bg-success' : 'text-bg-danger'">
+          {{ savedEntry()!.direction }}
+        </span>
+        amount <strong>{{ fmtMoney(savedEntry()!.amount) }}</strong>.
+        <button type="button" class="btn btn-sm btn-outline-success ms-auto" (click)="reset()">Record another</button>
+      </div>
+    }
+
+    <div class="card">
+      <div class="card-body">
+        @if (formError()) {
+          <div class="alert alert-danger py-2" role="alert">{{ formError() }}</div>
+        }
+
+        <div class="row g-3">
+          @if (companies().length > 1) {
+            <div class="col-12 col-md-4">
+              <label class="form-label" for="entCompany">Company</label>
+              <select id="entCompany" class="form-select"
+                      [ngModel]="selectedCompanyId()" (ngModelChange)="onCompanyChange($event)">
+                @for (c of companies(); track c.id) {
+                  <option [value]="c.id">{{ c.name }}</option>
+                }
+              </select>
+            </div>
+          }
+
+          <div class="col-12 col-md-5">
+            <label class="form-label" for="entAccount">Cash / Bank Account <span aria-hidden="true">*</span></label>
+            <select id="entAccount" class="form-select"
+                    [ngModel]="selectedAccountUid()" (ngModelChange)="selectedAccountUid.set($event)"
+                    required>
+              <option value="">— select account —</option>
+              @for (acc of cashAccounts(); track acc.uid) {
+                <option [value]="acc.uid">{{ acc.code }} — {{ acc.name }}</option>
+              }
+            </select>
+          </div>
+
+          <div class="col-12 col-md-3">
+            <label class="form-label" for="entDirection">Direction <span aria-hidden="true">*</span></label>
+            <select id="entDirection" class="form-select"
+                    [ngModel]="direction()" (ngModelChange)="direction.set($event)">
+              <option value="IN">IN (Money received)</option>
+              <option value="OUT">OUT (Money paid)</option>
+            </select>
+          </div>
+
+          <div class="col-12 col-md-3">
+            <label class="form-label" for="entAmount">Amount <span aria-hidden="true">*</span></label>
+            <input id="entAmount" type="number" class="form-control" min="0.01" step="0.01"
+                   [ngModel]="amount()" (ngModelChange)="amount.set($event)"
+                   placeholder="0.00" required />
+          </div>
+
+          <div class="col-12 col-md-3">
+            <label class="form-label" for="entDate">Transaction Date <span aria-hidden="true">*</span></label>
+            <input id="entDate" type="date" class="form-control"
+                   [ngModel]="txnDate()" (ngModelChange)="txnDate.set($event)"
+                   required />
+          </div>
+
+          <div class="col-12 col-md-5">
+            <label class="form-label" for="entCounterGl">Counter GL Account <span aria-hidden="true">*</span></label>
+            <select id="entCounterGl" class="form-select"
+                    [ngModel]="counterGlAccountUid()" (ngModelChange)="counterGlAccountUid.set($event)"
+                    required>
+              <option value="">— select counter GL account —</option>
+              @for (gl of counterGlOptions(); track gl.uid) {
+                <option [value]="gl.uid">{{ gl.accountCode }} — {{ gl.name }} ({{ gl.accountType }})</option>
+              }
+            </select>
+          </div>
+
+          <div class="col-12 col-md-8">
+            <label class="form-label" for="entMemo">Memo</label>
+            <input id="entMemo" type="text" class="form-control"
+                   [ngModel]="memo()" (ngModelChange)="memo.set($event)"
+                   placeholder="Optional description" maxlength="200" />
+          </div>
+        </div>
+
+        <div class="mt-3">
+          <button type="button" class="btn btn-primary"
+                  (click)="submit()" [disabled]="submitDisabled()">
+            @if (submitting()) {
+              <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+            }
+            Record Entry
+          </button>
+        </div>
+      </div>
+    </div>
+
+  }
+</section>

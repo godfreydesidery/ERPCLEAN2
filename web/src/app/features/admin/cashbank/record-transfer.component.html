@@ -1,0 +1,117 @@
+<section class="container-fluid py-3" aria-label="Record Cash Transfer">
+  <h1 class="h4 mb-3">Record Cash Transfer</h1>
+
+  @if (!canTransfer()) {
+    <div class="alert alert-warning" role="alert">You do not have permission to record transfers (CASH.TRANSFER).</div>
+  } @else {
+
+    @if (savedTransfer()) {
+      <div class="alert alert-success d-flex align-items-center gap-2" role="status">
+        <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
+        Transfer <strong>{{ savedTransfer()!.transferNumber }}</strong> recorded successfully.
+        <button type="button" class="btn btn-sm btn-outline-success ms-auto" (click)="reset()">Record another</button>
+      </div>
+    }
+
+    <div class="card">
+      <div class="card-body">
+        @if (formError()) {
+          <div class="alert alert-danger py-2" role="alert">{{ formError() }}</div>
+        }
+
+        <div class="row g-3">
+          <!-- Company -->
+          @if (companies().length > 1) {
+            <div class="col-12 col-md-4">
+              <label class="form-label" for="trCompany">Company</label>
+              <select id="trCompany" class="form-select"
+                      [ngModel]="selectedCompanyId()" (ngModelChange)="onCompanyChange($event)">
+                @for (c of companies(); track c.id) {
+                  <option [value]="c.id">{{ c.name }}</option>
+                }
+              </select>
+            </div>
+          }
+
+          <!-- Source Account -->
+          <div class="col-12 col-md-5">
+            <label class="form-label" for="trSource">Source Account <span aria-hidden="true">*</span></label>
+            <select id="trSource" class="form-select"
+                    [ngModel]="sourceAccountUid()"
+                    (ngModelChange)="onSourceChange($event)"
+                    [class.is-invalid]="sameAccountError()"
+                    required>
+              <option value="">— select source —</option>
+              @for (acc of accounts(); track acc.uid) {
+                <option [value]="acc.uid">{{ accountLabel(acc) }}</option>
+              }
+            </select>
+            @if (sourceBalance() !== null) {
+              <div class="form-text">
+                Current balance: <strong>{{ sourceBalanceCurrency() }} {{ fmtMoney(sourceBalance()) }}</strong>
+              </div>
+            }
+          </div>
+
+          <!-- Destination Account -->
+          <div class="col-12 col-md-5">
+            <label class="form-label" for="trDest">Destination Account <span aria-hidden="true">*</span></label>
+            <select id="trDest" class="form-select"
+                    [ngModel]="destinationAccountUid()"
+                    (ngModelChange)="onDestChange($event)"
+                    [class.is-invalid]="sameAccountError()"
+                    required>
+              <option value="">— select destination —</option>
+              @for (acc of accounts(); track acc.uid) {
+                <option [value]="acc.uid">{{ accountLabel(acc) }}</option>
+              }
+            </select>
+            @if (sameAccountError()) {
+              <div class="invalid-feedback" role="alert">Source and destination must differ.</div>
+            }
+            @if (destBalance() !== null) {
+              <div class="form-text">
+                Current balance: <strong>{{ fmtMoney(destBalance()) }}</strong>
+              </div>
+            }
+          </div>
+
+          <!-- Amount -->
+          <div class="col-12 col-md-3">
+            <label class="form-label" for="trAmount">Amount <span aria-hidden="true">*</span></label>
+            <input id="trAmount" type="number" class="form-control" min="0.01" step="0.01"
+                   [ngModel]="amount()" (ngModelChange)="amount.set($event)"
+                   placeholder="0.00" required />
+          </div>
+
+          <!-- Date -->
+          <div class="col-12 col-md-3">
+            <label class="form-label" for="trDate">Transfer Date <span aria-hidden="true">*</span></label>
+            <input id="trDate" type="date" class="form-control"
+                   [ngModel]="transferDate()" (ngModelChange)="transferDate.set($event)"
+                   required />
+          </div>
+
+          <!-- Reference -->
+          <div class="col-12 col-md-4">
+            <label class="form-label" for="trRef">Reference</label>
+            <input id="trRef" type="text" class="form-control"
+                   [ngModel]="reference()" (ngModelChange)="reference.set($event)"
+                   placeholder="Optional reference / memo" maxlength="100" />
+          </div>
+        </div>
+
+        <div class="mt-3">
+          <button type="button" class="btn btn-primary"
+                  (click)="submit()" [disabled]="submitDisabled()">
+            @if (submitting()) {
+              <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+            }
+            Record Transfer
+          </button>
+        </div>
+      </div>
+    </div>
+
+  }
+</section>
