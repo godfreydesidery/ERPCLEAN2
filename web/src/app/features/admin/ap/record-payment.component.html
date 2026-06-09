@@ -1,0 +1,321 @@
+<section class="admin-page">
+  <div class="mb-3">
+    <a routerLink="/admin/ap/supplier-bills" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Payables
+    </a>
+  </div>
+
+  <header class="page-head">
+    <h1 class="h4 mb-1">
+      <i class="bi bi-cash-stack me-2" aria-hidden="true"></i>Record Payment
+    </h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      Select a supplier, choose bills to pay, then submit the payment run.
+    </p>
+  </header>
+
+  @if (!canPay()) {
+    <p class="text-muted d-flex align-items-center gap-2 mt-3" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to record payments.
+    </p>
+  } @else if (savedPayments(); as payments) {
+
+    <!-- ── Success panel ──────────────────────────────────────────────────── -->
+    <div class="alert alert-success mt-3" role="status">
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <i class="bi bi-check-circle-fill fs-5" aria-hidden="true"></i>
+        <strong>Payment run complete — {{ payments.length }} payment(s) recorded</strong>
+      </div>
+      <ul class="mb-0 small">
+        @for (p of payments; track p.uid) {
+          <li>
+            <span class="font-monospace">{{ p.paymentNumber }}</span>
+            — {{ fmtMoney(p.amount) }} {{ p.currency }}
+            ({{ p.tenderType }}
+            @if (p.bankReference) { · {{ p.bankReference }} }
+            )
+          </li>
+        }
+      </ul>
+    </div>
+    <div class="d-flex gap-2 mt-3">
+      <button type="button" class="btn btn-primary" (click)="savedPayments.set(null)">
+        <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Record Another
+      </button>
+      <a routerLink="/admin/ap/supplier-bills" class="btn btn-outline-secondary">
+        <i class="bi bi-receipt-cutoff me-1" aria-hidden="true"></i>View Payables
+      </a>
+    </div>
+
+  } @else {
+
+    <!-- Company selector -->
+    @switch (companyState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-3" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load companies.
+        </p>
+      }
+      @default {
+        @if (companies().length > 1) {
+          <div class="mb-3" style="max-width:320px">
+            <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+            <select id="companyPicker" name="companyPicker" class="form-select"
+                    [ngModel]="selectedCompanyId()"
+                    (ngModelChange)="onCompanyChange($event)">
+              @for (c of companies(); track c.uid) {
+                <option [value]="c.id">{{ c.name }}</option>
+              }
+            </select>
+          </div>
+        }
+      }
+    }
+
+    <form (ngSubmit)="submit()" aria-label="Record payment run">
+
+      <!-- ── Payment header ──────────────────────────────────────────────── -->
+      <div class="card mb-3">
+        <div class="card-header small fw-semibold text-muted">Payment Details</div>
+        <div class="card-body">
+          <div class="row g-3">
+
+            <!-- Supplier picker -->
+            <div class="col-12">
+              <label class="form-label" for="supplierSearch">
+                Supplier <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <div style="position:relative">
+                <input id="supplierSearch" name="supplierSearch" type="search"
+                       class="form-control" placeholder="Type supplier name or code…"
+                       autocomplete="off"
+                       [ngModel]="supplierSearchQ()"
+                       (ngModelChange)="onSupplierSearchChange($event)"
+                       [disabled]="submitting()" />
+                @if (supplierResults().length > 0) {
+                  <ul class="list-group position-absolute w-100 shadow-sm z-3"
+                      role="listbox" aria-label="Supplier suggestions"
+                      style="top:100%; left:0; max-height:220px; overflow-y:auto">
+                    @for (s of supplierResults(); track s.uid) {
+                      <li class="list-group-item list-group-item-action py-1 small"
+                          role="option" style="cursor:pointer"
+                          (click)="selectSupplier(s)"
+                          (keydown.enter)="selectSupplier(s)"
+                          tabindex="0">
+                        <strong>{{ s.code }}</strong> — {{ s.displayName }}
+                      </li>
+                    }
+                  </ul>
+                }
+              </div>
+              @if (selectedSupplier()) {
+                <div class="form-text text-success">
+                  <i class="bi bi-check-circle me-1" aria-hidden="true"></i>
+                  {{ selectedSupplier()!.label }}
+                </div>
+              }
+            </div>
+
+            <!-- Payment Date -->
+            <div class="col-sm-4">
+              <label class="form-label" for="paymentDate">
+                Payment Date <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="paymentDate" name="paymentDate" type="date"
+                     class="form-control"
+                     [ngModel]="paymentDate()"
+                     (ngModelChange)="paymentDate.set($event)"
+                     [disabled]="submitting()" required />
+            </div>
+
+            <!-- Tender type -->
+            <div class="col-sm-4">
+              <label class="form-label" for="tenderType">Tender Type</label>
+              <select id="tenderType" name="tenderType" class="form-select"
+                      [ngModel]="tenderType()"
+                      (ngModelChange)="tenderType.set($event)"
+                      [disabled]="submitting()">
+                <option value="CASH">Cash</option>
+                <option value="CHEQUE">Cheque</option>
+                <option value="BANK_TRANSFER">Bank Transfer</option>
+                <option value="MOBILE_MONEY">Mobile Money</option>
+                <option value="OTHER">Other</option>
+              </select>
+            </div>
+
+            <!-- Bank reference (optional) -->
+            <div class="col-sm-4">
+              <label class="form-label" for="bankRef">
+                Bank Reference <span class="text-muted small">(optional)</span>
+              </label>
+              <input id="bankRef" name="bankRef" type="text"
+                     class="form-control" placeholder="Transfer ref…"
+                     [ngModel]="bankReference()"
+                     (ngModelChange)="bankReference.set($event)"
+                     [disabled]="submitting()" autocomplete="off" />
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Bill selection ──────────────────────────────────────────────── -->
+      <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span class="small fw-semibold text-muted">
+            <i class="bi bi-list-check me-1" aria-hidden="true"></i>
+            Select Bills to Pay
+            @if (bills().length > 0) {
+              <span class="badge text-bg-secondary ms-1">{{ bills().length }} payable</span>
+            }
+          </span>
+          @if (bills().length > 0) {
+            <div class="d-flex gap-2">
+              <button type="button" class="btn btn-sm btn-outline-primary"
+                      (click)="selectAll()" [disabled]="submitting()">
+                <i class="bi bi-check-all me-1" aria-hidden="true"></i>Select All
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      (click)="clearSelection()" [disabled]="submitting()">
+                <i class="bi bi-eraser me-1" aria-hidden="true"></i>Clear
+              </button>
+            </div>
+          }
+        </div>
+        <div class="card-body p-0">
+
+          @switch (billsState()) {
+            @case ('loading') {
+              <p class="text-muted small p-3 mb-0 d-flex align-items-center gap-2" aria-live="polite">
+                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                Loading payable bills…
+              </p>
+            }
+            @case ('error') {
+              <p class="text-danger small p-3 mb-0" role="alert">
+                Could not load bills for this supplier.
+              </p>
+            }
+            @default {
+              @if (!selectedSupplier()) {
+                <p class="text-muted small p-3 mb-0">
+                  <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
+                  Select a supplier to see their payable bills.
+                </p>
+              } @else if (bills().length === 0) {
+                <p class="text-muted small p-3 mb-0">
+                  No payable bills found for this supplier (bills must be MATCHED, APPROVED, or PARTIALLY_PAID).
+                </p>
+              } @else {
+                <div class="table-responsive">
+                  <table class="table table-sm align-middle mb-0" aria-label="Payable bills for selection">
+                    <thead class="table-light">
+                      <tr>
+                        <th scope="col" style="width:36px">
+                          <span class="visually-hidden">Select</span>
+                        </th>
+                        <th scope="col">Bill No.</th>
+                        <th scope="col">Supplier Inv. No.</th>
+                        <th scope="col">Bill Date</th>
+                        <th scope="col">Due Date</th>
+                        <th scope="col" class="text-end">Gross</th>
+                        <th scope="col" class="text-end fw-semibold">Outstanding</th>
+                        <th scope="col">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (bill of bills(); track bill.uid) {
+                        <tr [class]="isBillSelected(bill.uid) ? 'table-primary' : ''">
+                          <td>
+                            <input type="checkbox" class="form-check-input"
+                                   [id]="'bill_' + bill.uid"
+                                   [checked]="isBillSelected(bill.uid)"
+                                   (change)="toggleBill(bill.uid, $any($event.target).checked)"
+                                   [disabled]="submitting()"
+                                   [attr.aria-label]="'Select bill ' + bill.billNumber" />
+                          </td>
+                          <td class="font-monospace small fw-semibold">
+                            <label [for]="'bill_' + bill.uid" class="mb-0" style="cursor:pointer">
+                              {{ bill.billNumber }}
+                            </label>
+                          </td>
+                          <td class="small">{{ bill.supplierInvoiceNo || '—' }}</td>
+                          <td class="small">{{ bill.billDate }}</td>
+                          <td class="small">{{ bill.dueDate ?? '—' }}</td>
+                          <td class="text-end font-monospace small">{{ fmtMoney(bill.grossAmount) }}</td>
+                          <td class="text-end font-monospace small fw-semibold text-danger">
+                            {{ fmtMoney(bill.outstandingAmount) }}
+                          </td>
+                          <td>
+                            <span class="badge" [class]="statusBadgeClass(bill.status)">
+                              {{ bill.status }}
+                            </span>
+                          </td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+
+                <!-- Selection totals bar -->
+                <div class="border-top p-3 d-flex flex-wrap gap-4 align-items-center">
+                  <div class="d-flex gap-1 align-items-baseline">
+                    <span class="small text-muted me-1">Selected Bills:</span>
+                    <span class="fw-semibold">{{ selectedCount() }}</span>
+                  </div>
+                  <div class="d-flex gap-1 align-items-baseline">
+                    <span class="small text-muted me-1">Total Outstanding:</span>
+                    <span class="fw-semibold font-monospace"
+                          [class.text-success]="selectedCount() > 0">
+                      {{ fmtMoney(selectedTotal()) }}
+                    </span>
+                  </div>
+                  @if (selectedCount() === 0) {
+                    <span class="badge text-bg-warning ms-auto" role="alert" aria-live="polite">
+                      <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
+                      Select at least one bill
+                    </span>
+                  } @else {
+                    <span class="badge text-bg-success ms-auto">
+                      <i class="bi bi-check-circle me-1" aria-hidden="true"></i>
+                      {{ selectedCount() }} bill(s) selected
+                    </span>
+                  }
+                </div>
+              }
+            }
+          }
+
+        </div>
+      </div>
+
+      <!-- Error + submit -->
+      @if (formError(); as msg) {
+        <p class="text-danger small mb-2" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ msg }}
+        </p>
+      }
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-success" [disabled]="submitDisabled()">
+          @if (submitting()) {
+            <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+            Recording…
+          } @else {
+            <i class="bi bi-cash-stack me-1" aria-hidden="true"></i>
+            Record Payment ({{ selectedCount() }} bills)
+          }
+        </button>
+        <a routerLink="/admin/ap/supplier-bills" class="btn btn-outline-secondary">Cancel</a>
+      </div>
+
+    </form>
+  }
+</section>

@@ -263,5 +263,42 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./ar/ar-opening-balance.component').then((m) => m.ArOpeningBalanceComponent),
   },
+  // ── Accounts Payable ──────────────────────────────────────────────────────
+  {
+    path: 'ap/supplier-bills',
+    canActivate: [requirePermission('AP.VIEW')],
+    loadComponent: () =>
+      import('./ap/supplier-bills-list.component').then((m) => m.SupplierBillsListComponent),
+  },
+  {
+    path: 'ap/supplier-bills/enter',
+    canActivate: [requirePermission('AP.BILL.ENTER')],
+    loadComponent: () =>
+      import('./ap/enter-bill.component').then((m) => m.EnterBillComponent),
+  },
+  {
+    path: 'ap/supplier-bills/uid/:uid',
+    canActivate: [requirePermission('AP.VIEW')],
+    loadComponent: () =>
+      import('./ap/bill-detail.component').then((m) => m.BillDetailComponent),
+  },
+  {
+    path: 'ap/payments/record',
+    canActivate: [requirePermission('AP.PAYMENT.RUN')],
+    loadComponent: () =>
+      import('./ap/record-payment.component').then((m) => m.RecordPaymentComponent),
+  },
+  {
+    path: 'ap/statement',
+    canActivate: [requirePermission('AP.VIEW')],
+    loadComponent: () =>
+      import('./ap/supplier-statement.component').then((m) => m.SupplierStatementComponent),
+  },
+  {
+    path: 'ap/opening-balance',
+    canActivate: [requirePermission('AP.OPENING.SET')],
+    loadComponent: () =>
+      import('./ap/ap-opening-balance.component').then((m) => m.ApOpeningBalanceComponent),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];
