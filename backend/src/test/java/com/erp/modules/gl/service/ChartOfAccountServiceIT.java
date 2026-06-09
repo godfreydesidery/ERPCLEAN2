@@ -16,6 +16,7 @@ import com.erp.modules.iam.domain.entity.Branch;
 import com.erp.modules.iam.domain.entity.Company;
 import com.erp.modules.iam.domain.entity.Organisation;
 import com.erp.modules.iam.repository.AppUserRepository;
+import com.erp.platform.common.api.ForbiddenException;
 import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.repository.OrganisationRepository;
@@ -266,17 +267,24 @@ class ChartOfAccountServiceIT extends PostgresIntegrationTest {
         AccountDto coA1 = chartOfAccountService.create(new CreateAccountRequest(
                 company.getUid(), "6600", "Company1 Account", AccountType.EXPENSE));
 
-        // Create company 2, switch context to it
+        // Create company 2; switch to a NON-ROOT principal scoped to it. Cross-tenant DENIAL must
+        // be asserted with a non-root user: root legitimately BYPASSES tenant scope (it is not
+        // blocked). A root-based version was a false pass — it only "threw" because the ROOT_BYPASS
+        // audit write failed inside getByUid's read-only TX (ISSUES-REGISTER #11, now fixed), not
+        // because of isolation. Non-root is denied cleanly at ScopeGuard before any audit.
         Organisation org2 = organisations.save(new Organisation("CoA Tenant Org 2"));
         Company company2  = companies.save(new Company(org2, "CATEN2", "CoA Tenant Co 2"));
         Branch  branch2   = branches.save(new Branch(company2, "CAT2B", "CoA Tenant Branch 2"));
+        AppUser nonRoot = users.save(new AppUser(
+                "coa_nonroot", passwordEncoder.encode("Pass1!"), "CoA NonRoot"));
         RequestContext.set(new RequestContext.Principal(
-                rootId, "coa_root", true, company2.getId(), branch2.getId(), null));
+                nonRoot.getId(), "coa_nonroot", false, company2.getId(), branch2.getId(), null));
 
-        // Attempt to read company1's account from company2's context — must be blocked
-        assertThatThrownBy(() -> chartOfAccountService.getByUid(coA1.uid()))
-                .isInstanceOf(RuntimeException.class)
-                .as("assertCanActIn must block cross-tenant CoA read (NFR-GL-01)");
+        // Attempt to read company1's account from a non-root company2 context — must be blocked
+        String coA1Uid = coA1.uid();
+        assertThatThrownBy(() -> chartOfAccountService.getByUid(coA1Uid))
+                .as("assertCanActIn must block cross-tenant CoA read (NFR-GL-01)")
+                .isInstanceOf(ForbiddenException.class);
     }
 
     // =========================================================================

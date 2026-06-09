@@ -63,6 +63,23 @@ class AuditServiceImpl implements AuditService {
         persist(event, actorUserId, null, null, ip);
     }
 
+    /**
+     * Independent (REQUIRES_NEW) record — commits in its own transaction regardless of the caller's.
+     * For security-bypass audits raised from read-only query paths (ISSUES-REGISTER #11): a
+     * MANDATORY INSERT would fail inside a {@code @Transactional(readOnly = true)} caller. Same
+     * RequestContext-sourced actor/company/branch as {@link #record(AuditEvent)}.
+     */
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordIndependent(AuditEvent event) {
+        Principal ctx = RequestContext.get();
+        Long actorUserId = ctx != null ? ctx.userId() : null;
+        Long companyId   = ctx != null ? ctx.companyId() : null;
+        Long branchId    = ctx != null ? ctx.branchId() : null;
+        String ip        = ctx != null ? ctx.ip() : null;
+        persist(event, actorUserId, companyId, branchId, ip);
+    }
+
     // -------------------------------------------------------------------------
     // Internal
     // -------------------------------------------------------------------------

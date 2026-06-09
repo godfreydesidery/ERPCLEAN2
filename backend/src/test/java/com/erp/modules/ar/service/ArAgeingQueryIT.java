@@ -220,6 +220,28 @@ class ArAgeingQueryIT extends PostgresIntegrationTest {
                 .isInstanceOf(ForbiddenException.class);
     }
 
+    @Test
+    void ageing_rootCrossCompany_onReadOnlyPath_succeeds_notReadOnlyTxError() {
+        // ISSUES-REGISTER #11 regression: ROOT acting OUTSIDE its active company triggers a
+        // ROOT_BYPASS audit write inside ageing()'s @Transactional(readOnly=true). Before the fix
+        // that MANDATORY INSERT threw "cannot execute INSERT in a read-only transaction" (a 500 for
+        // root viewing another company's ageing). With recordIndependent (REQUIRES_NEW) it must now
+        // return the data. (Root legitimately bypasses tenant scope — it is NOT denied.)
+        openItem(new BigDecimal("500"), AS_AT); // open item for company A's customer
+
+        Organisation org2 = organisations.save(new Organisation("Root Bypass Org"));
+        Company company2  = companies.save(new Company(org2, "ARRB2", "Root Bypass Co"));
+        Branch branch2    = branches.save(new Branch(company2, "ARRB2B", "Root Bypass Branch"));
+
+        // root scoped to company2, reaching into company A's read-only ageing
+        RequestContext.set(new RequestContext.Principal(
+                rootId, "arag_root", true, company2.getId(), branch2.getId(), null));
+
+        List<ArAgeingRowDto> rows = ageingQuery.ageing(companyId, customerId, AS_AT);
+
+        assertBucket(rows, AgeingBucket.CURRENT, new BigDecimal("500"));
+    }
+
     // =========================================================================
     // Bar 4: Boundary — due == asAt → CURRENT (daysOverdue == 0)
     // =========================================================================
