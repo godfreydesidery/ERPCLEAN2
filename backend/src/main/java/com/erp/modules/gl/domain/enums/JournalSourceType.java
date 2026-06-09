@@ -12,6 +12,10 @@ public enum JournalSourceType {
     SALES_REVERSAL,
     OPENING_BALANCE,
 
+    // --- AR increment (ADR-0014 D-6) — now admitted by the DB CHECK (V11 widens it) ---
+    AR_RECEIPT,
+    AR_WRITEOFF,
+    AR_CREDIT_NOTE,
     // --- RESERVED — NOT yet admitted by the DB CHECK; widen when the increment lands ---
     AR,
     AP,

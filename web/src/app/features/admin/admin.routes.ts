@@ -238,5 +238,30 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./gl/gl-config.component').then((m) => m.GlConfigComponent),
   },
+  // ── Accounts Receivable ───────────────────────────────────────────────────
+  {
+    path: 'ar/invoices',
+    canActivate: [requirePermission('AR.VIEW')],
+    loadComponent: () =>
+      import('./ar/ar-invoices-list.component').then((m) => m.ArInvoicesListComponent),
+  },
+  {
+    path: 'ar/receipts/record',
+    canActivate: [requirePermission('AR.RECEIPT.RECORD')],
+    loadComponent: () =>
+      import('./ar/record-receipt.component').then((m) => m.RecordReceiptComponent),
+  },
+  {
+    path: 'ar/statement',
+    canActivate: [requirePermission('AR.STATEMENT.VIEW')],
+    loadComponent: () =>
+      import('./ar/customer-statement.component').then((m) => m.CustomerStatementComponent),
+  },
+  {
+    path: 'ar/opening-balance',
+    canActivate: [requirePermission('AR.OPENING.SET')],
+    loadComponent: () =>
+      import('./ar/ar-opening-balance.component').then((m) => m.ArOpeningBalanceComponent),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];

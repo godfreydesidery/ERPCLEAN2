@@ -7,6 +7,8 @@ import com.erp.modules.routes.domain.entity.Route;
 import com.erp.modules.routes.repository.RouteRepository;
 import com.erp.modules.routes.service.RouteService;
 import com.erp.modules.parties.repository.AgentRepository;
+import com.erp.modules.ar.domain.dto.ArBalanceDto;
+import com.erp.modules.ar.service.ArBalanceService;
 import com.erp.modules.parties.repository.CustomerRepository;
 import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.domain.entity.ProductBulkPack;
@@ -49,6 +51,7 @@ import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.repository.Lookups;
+import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -90,6 +93,9 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     private final OutboxPublisher outbox;
     private final RouteService routeService;
     private final RouteRepository routeRepository;
+    /** ADR-0014 D-9: credit-limit check at finalise for CREDIT_ACCOUNT customers. */
+    private final ArBalanceService arBalanceService;
+    private final PermissionResolver permissionResolver;
 
     public SalesInvoiceServiceImpl(SalesInvoiceRepository invoices,
                                    SalesInvoiceLineRepository lines,
@@ -108,7 +114,9 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                                    AuditService audit,
                                    OutboxPublisher outbox,
                                    RouteService routeService,
-                                   RouteRepository routeRepository) {
+                                   RouteRepository routeRepository,
+                                   ArBalanceService arBalanceService,
+                                   PermissionResolver permissionResolver) {
         this.invoices = invoices;
         this.lines = lines;
         this.payments = payments;
@@ -127,6 +135,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         this.outbox = outbox;
         this.routeService = routeService;
         this.routeRepository = routeRepository;
+        this.arBalanceService = arBalanceService;
+        this.permissionResolver = permissionResolver;
     }
 
     // -------------------------------------------------------------------------
@@ -204,9 +214,59 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         // Recompute totals one final time and freeze
         totalsCalc.recompute(inv, lineList);
 
-        // Paid-in-full invariant (ADR-0008 D-8)
+        // ADR-0014 D-9/D-10: resolve customer kind to decide cash-vs-credit path.
+        Customer customer = customers.findById(inv.getCustomerId())
+                .orElseThrow(() -> new NotFoundException(
+                        "Customer not found for invoice " + inv.getUid() + " (id=" + inv.getCustomerId() + ")"));
+        boolean isCreditCustomer = customer.getCustomerKind()
+                == com.erp.modules.parties.domain.enums.CustomerKind.CREDIT_ACCOUNT;
+
         List<SalesInvoicePayment> paymentList = payments.findByInvoiceId(inv.getId());
-        assertPaidInFull(inv, paymentList);
+
+        if (isCreditCustomer) {
+            // Credit customers: validate currency only; no paid-in-full requirement (D-10).
+            // Any partial payment is valid; the AR open item carries the residual.
+            // Currency check: mirror BR-CUR-07 (same rule as assertPaidInFull, different path).
+            for (SalesInvoicePayment p : paymentList) {
+                if (!inv.getCurrency().equals(p.getCurrency())) {
+                    throw new IllegalStateException(
+                            "Payment currency " + p.getCurrency()
+                                    + " does not match invoice currency " + inv.getCurrency()
+                                    + " (BR-CUR-07).");
+                }
+            }
+
+            // Credit-limit check (ADR-0014 D-9): existing AR balance + this gross must not exceed limit.
+            com.erp.platform.common.money.Money creditLimit = customer.getCreditLimit();
+            if (creditLimit != null && creditLimit.isPresent()
+                    && creditLimit.getAmount().compareTo(BigDecimal.ZERO) > 0) {
+                ArBalanceDto balance = arBalanceService.currentBalance(
+                        inv.getCompanyId(), inv.getCustomerId());
+                BigDecimal projectedBalance = balance.balance().add(inv.getGrossTotalAmount());
+                if (projectedBalance.compareTo(creditLimit.getAmount()) > 0) {
+                    boolean hasOverride = permissionResolver.hasPermission(
+                            RequestContext.get(), "SALES.CREDIT.OVERRIDE", System.currentTimeMillis());
+                    if (!hasOverride) {
+                        throw new IllegalStateException(
+                                "Credit limit exceeded for customer " + customer.getUid()
+                                        + ". Limit: " + creditLimit.getAmount().toPlainString()
+                                        + " " + creditLimit.getCurrency()
+                                        + ", projected balance: " + projectedBalance.toPlainString()
+                                        + " (ADR-0014 D-9). Requires SALES.CREDIT.OVERRIDE permission.");
+                    }
+                    audit.record(AuditEvent.of(AuditActions.SALES_CREDIT_OVERRIDE, "sales_invoices",
+                                    inv.getId(), inv.getUid())
+                            .detail(Map.of(
+                                    "customerUid", customer.getUid(),
+                                    "creditLimit", creditLimit.getAmount().toPlainString(),
+                                    "creditLimitCurrency", creditLimit.getCurrency(),
+                                    "projectedBalance", projectedBalance.toPlainString())));
+                }
+            }
+        } else {
+            // Cash customer: full paid-in-full invariant applies (ADR-0008 D-8, BR-SALES-07).
+            assertPaidInFull(inv, paymentList);
+        }
 
         // Assign invoice number (ADR-0008 D-7, FR-SALES-23)
         String number = codeGen.next(inv.getCompanyId());
@@ -545,17 +605,44 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     public Optional<InvoicePostingTotalsDto> findPostingTotalsByUidAndCompany(
             String invoiceUid, Long companyId) {
         return invoices.findByUidAndCompanyId(invoiceUid, companyId)
-                .map(inv -> new InvoicePostingTotalsDto(
-                        inv.getUid(),
-                        inv.getStatus().name(),
-                        inv.getCurrency(),
-                        inv.getCustomerId(),
-                        true,  // v1: all sales are paid-in-full (cash), OQ-GL-02
-                        inv.getNetTotalAmount(),
-                        inv.getVatTotalAmount(),
-                        inv.getGrossTotalAmount(),
-                        inv.getFinalisedAt()
-                ));
+                .map(inv -> {
+                    // ADR-0014 D-10: derive isCashSale from customer kind, not hard-coded true.
+                    // CASH_WALK_IN → cash (DR Cash); CREDIT_ACCOUNT → credit (DR AR control).
+                    // Fully-paid credit customers also flag as cash (edge case: no receivable).
+                    Customer cust = customers.findById(inv.getCustomerId()).orElse(null);
+                    boolean isCreditCustomer = cust != null
+                            && cust.getCustomerKind() == com.erp.modules.parties.domain.enums.CustomerKind.CREDIT_ACCOUNT;
+
+                    // Compute outstanding: gross − Σ(payments − change)
+                    List<SalesInvoicePayment> paymentList = payments.findByInvoiceId(inv.getId());
+                    BigDecimal totalTendered = paymentList.stream()
+                            .map(p -> {
+                                BigDecimal net = p.getAmount();
+                                if (p.getChangeAmount() != null) net = net.subtract(p.getChangeAmount());
+                                return net;
+                            })
+                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+                    BigDecimal outstanding = inv.getGrossTotalAmount().subtract(totalTendered)
+                            .max(BigDecimal.ZERO);
+                    boolean fullyPaid = outstanding.compareTo(BigDecimal.ZERO) == 0;
+
+                    // A credit customer with an outstanding balance is a credit sale (DR AR).
+                    // Otherwise (cash customer, or credit customer fully paid) → cash path.
+                    boolean isCashSale = !isCreditCustomer || fullyPaid;
+
+                    return new InvoicePostingTotalsDto(
+                            inv.getUid(),
+                            inv.getStatus().name(),
+                            inv.getCurrency(),
+                            inv.getCustomerId(),
+                            isCashSale,
+                            inv.getNetTotalAmount(),
+                            inv.getVatTotalAmount(),
+                            inv.getGrossTotalAmount(),
+                            inv.getFinalisedAt(),
+                            outstanding  // ADR-0014 D-10: the AR open-item amount
+                    );
+                });
     }
 
     // -------------------------------------------------------------------------

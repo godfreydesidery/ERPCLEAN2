@@ -13,5 +13,8 @@ public enum GlConfigKey {
     // --- RESERVED --- seeded in v1, posted-to when the increment lands ---
     INVENTORY,
     COGS,
-    ACCOUNTS_PAYABLE
+    ACCOUNTS_PAYABLE,
+    // --- AR increment (ADR-0014 D-6/D-13) ---
+    BAD_DEBT_EXPENSE,
+    OPENING_BALANCE_EQUITY
 }

@@ -137,6 +137,15 @@ public final class AuditActions {
     public static final String GL_PERIOD_CLOSE       = "GL.PERIOD.CLOSE";
     public static final String GL_CONFIG_SET         = "GL.CONFIG.SET";
 
+    // -- AR module (ADR-0014 D-13; target_type = plural table names) ---------
+    public static final String AR_OPENITEM_CREATE  = "AR.OPENITEM.CREATE";
+    public static final String AR_RECEIPT_RECORD   = "AR.RECEIPT.RECORD";
+    public static final String AR_RECEIPT_ALLOCATE = "AR.RECEIPT.ALLOCATE";
+    public static final String AR_WRITEOFF         = "AR.WRITEOFF";
+    public static final String AR_CREDITNOTE_RAISE = "AR.CREDITNOTE.RAISE";
+    public static final String AR_OPENING_SET      = "AR.OPENING.SET";
+    public static final String SALES_CREDIT_OVERRIDE = "SALES.CREDIT.OVERRIDE";
+
     // -- Routes module (ADR-0012 D-12; target_type = plural table names) ----
     public static final String ROUTE_CREATE            = "ROUTE.CREATE";
     public static final String ROUTE_UPDATE            = "ROUTE.UPDATE";
