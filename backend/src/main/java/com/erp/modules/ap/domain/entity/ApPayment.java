@@ -60,6 +60,11 @@ public class ApPayment extends UidEntity {
     @Setter
     private String glEntryUid;
 
+    /** FK → cash_bank_accounts(id); nullable for back-compat rows pre-V13 (ADR-0016 D-13). */
+    @Column(name = "cash_bank_account_id")
+    @Setter
+    private Long cashBankAccountId;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

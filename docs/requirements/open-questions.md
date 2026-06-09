@@ -509,3 +509,96 @@ Each entry: why it matters · who decides · does it block build.
   payment allocations must round identically to the AP balance and the control account (NFR-AP-02).
   *Recommended default:* half-up, TZS = 0 dp. *Decider:* owner (finance input). *Blocks ADR-0015:* **NO**
   for the model; **confirm before go-live**.
+
+## Cash & Bank
+
+> **FULLY RATIFIED 2026-06-09.** Cash & Bank is **Increment 3 (T1.4)** of the full-ERP roadmap
+> (docs/ROADMAP.md T1.4 / §5) — the Tier-1 finance finisher. The owner closed **all Cash & Bank scoping
+> forks** (multiple named cash/bank accounts each linked to a GL `1xxx` account, replacing the single
+> `gl_configs` `CASH`; **manual** bank reconciliation with the book==statement completion check, **no
+> statement file import**; the four v1 operations — inter-account transfers, direct cash/bank entries,
+> cheque register, per-account statement & balance — **plus** AR receipts / AP payments routing to a chosen
+> cash/bank account; synchronous GL posting; the scope/permission set). cash-and-bank.md is **Ratified**.
+> **No ADR-0016-blocking question remains.** solutions-architect may start **ADR-0016** now (Cash & Bank
+> data model — cash_bank_accounts, cash_transactions, transfers, bank_reconciliations, the cheque register;
+> migration **V13**; the **additive AR/AP cash-account-selection touch**; the synchronous `GLPostingService`
+> posting; the `ScopeGuard` `cashbankaccount` target type; the **cash-account ⇄ linked-GL-account
+> reconciliation**). The remaining OQ-CASH items are **non-blocking** detail (recommended defaults stand).
+
+### Resolved (owner, 2026-06-09) — the Cash & Bank scoping forks
+
+- **CASH fork 1 — Accounts** — ✅ **RESOLVED:** model **multiple** CASH accounts (petty cash, tills) and
+  BANK accounts (per bank / per branch) per company. Each account: name, type (CASH | BANK), bank details
+  (for BANK), currency (= base v1), a **link to its own GL `1xxx` asset account**, active/status, audit, a
+  `CB-####` code. **Each cash/bank account maps to its own GL account — this replaces the single
+  `gl_configs` `CASH`** with real named accounts. Reflected in cash-and-bank.md FR-CASH-01..04, BR-CASH-01,
+  §3.1.
+- **CASH fork 2 — Bank reconciliation = MANUAL** — ✅ **RESOLVED:** the operator marks ledger transactions
+  **CLEARED** against the bank statement, records a reconciliation (statement date + statement closing
+  balance), and the system checks **book balance == statement/bank balance** — required to **complete** the
+  reconciliation. A **cleared flag is immutable once reconciled**. **NO statement file import** in v1 (CSV /
+  MT940 deferred — OQ-CASH-01). Reflected in FR-CASH-13/14/15, BR-CASH-06/07.
+- **CASH fork 3 — v1 operations** — ✅ **RESOLVED: all four IN v1** — (a) **inter-account transfers** (DR
+  destination GL / CR source GL, same company); (b) **direct cash/bank entries** not tied to AR/AP (post the
+  cash/bank GL account against a chosen counter-account); (c) **cheque management** (a cheque register —
+  number, ISSUED/CLEARED/CANCELLED, post-dated cheques (issue vs value date), and cheque printing — printing
+  **depends on the cross-cutting PDF capability X.1**, flagged); (d) **per-account statement & balance** (a
+  running statement + current balance, a read). **PLUS the always-in core: AR receipts and AP payments route
+  to a chosen cash/bank account** (the additive AR/AP touch; default if unspecified). Reflected in
+  FR-CASH-05..12, BR-CASH-04/05/09/12, §3.2..§3.6.
+- **CASH fork 4 — GL posting** — ✅ **RESOLVED:** every cash/bank movement posts to GL **synchronously** via
+  `GLPostingService.post` (transfers, direct entries, and the cash legs of AR receipts / AP payments) — the
+  established AR/AP precedent (ADR-0014 D-4), not the outbox. Append-only; corrections via reversing entries.
+  The cash/bank account **book balance reconciles to its linked GL account** (the sub-ledger ⇄ control rule).
+  Reflected in FR-CASH-16/17, BR-CASH-02/03/10, NFR-CASH-04.
+
+> **Permissions & reconciliation (ratified with the forks):** `CASH.VIEW` / `CASH.ACCOUNT.MANAGE` /
+> `CASH.TRANSFER` / `CASH.ENTRY.RECORD` / `CASH.RECONCILE` / `CHEQUE.MANAGE`; per-company scope (+ branch
+> where relevant — a till / petty-cash may be branch-scoped, banks company-level); `assertCanActIn` on every
+> read path; audit on every mutation; `CB-####` / `CBT-####` via `code_sequence`; `ScopeGuard` gains a new
+> **`cashbankaccount`** target type (note for ADR-0016). The **two reconciliation invariants** — (1)
+> cash/bank account book balance == its linked GL account balance at all times, and (2) a completed bank
+> reconciliation had book == statement — are fixed and are the chief acceptance bars. Reflected in
+> FR-CASH-17/18/19, BR-CASH-02/06/08, NFR-CASH-01.
+
+### Still open — NON-blocking detail (recommended defaults stand; do NOT block ADR-0016)
+
+- **OQ-CASH-01** — **Bank statement file import format.** v1 reconciliation is **manual**; importing a
+  statement file (CSV / MT940 / BAI2 / OFX) + auto-matching is deferred. *Recommended default:* manual
+  marking + a hand-entered statement closing balance in v1; a **CSV** importer first when prioritised,
+  feeding the same manual-reconciliation model. *Decider:* owner (finance). *Blocks ADR-0016:* **NO** — the
+  manual model is fixed; an importer is additive.
+- **OQ-CASH-02** — **Cheque printing dependency.** The cheque **register** is in v1; **printing** depends on
+  the cross-cutting PDF capability (ROADMAP X.1). *Recommended default:* ship the register in v1; printing
+  lands with / after X.1 (`DocumentService`), reusing the register data. *Decider:* owner + architect (with
+  X.1). *Blocks ADR-0016:* **NO** — the register data is fixed; printing is an additive consumer.
+- **OQ-CASH-03** — **Petty-cash / till branch-scoping default.** A CASH account (till / petty cash) **may**
+  be branch-scoped; a BANK account is company-level. *Recommended default:* a CASH account **may carry a
+  branch** (nullable); a BANK account carries none (company-level); the books stay company-level (gl.md
+  NFR-GL-01). *Decider:* owner. *Blocks ADR-0016:* **NO** — the nullable-branch-on-CASH default stands.
+- **OQ-CASH-04** — **Multi-currency / foreign-currency bank accounts.** v1 is **base currency** (BR-CASH-11);
+  a foreign-currency bank account + FX revaluation are deferred to the FX cross-cutting item (X.6 / gl.md
+  §10.5, ADR-0005 D-8). *Recommended default:* base-currency cash/bank accounts in v1; multi-currency bank
+  accounts land with FX. *Decider:* owner. *Blocks ADR-0016:* **NO** — deferred, not precluded.
+- **OQ-CASH-05** — **Deposit slips / batched lodgements.** Grouping several AR receipts into one bank deposit
+  (a deposit batch clearing as one statement line). *Recommended default:* route each receipt to a chosen
+  account directly in v1; deposit batching is a later additive convenience that reconciles onto the same
+  per-account statement. *Decider:* owner. *Blocks ADR-0016:* **NO** — additive.
+- **OQ-CASH-06** — **Reconciliation reversal / un-reconcile.** Unwinding a **completed** reconciliation to
+  fix a mistake. *Recommended default:* v1 corrects via a reversing entry / a new reconciliation (reconciled
+  cleared flags are immutable — BR-CASH-07); an explicit un-reconcile workflow is a later additive slice.
+  *Decider:* owner. *Blocks ADR-0016:* **NO** — additive.
+- **OQ-CASH-07** — **How the existing `gl_configs` `CASH` maps to the new default cash/bank account.** Cash &
+  Bank replaces the single `CASH` account with named accounts. *Recommended default:* the **company default
+  cash/bank account is the resolution of `CASH`**, so AR/AP callers that do not name an account keep working
+  (the default account's linked GL account becomes the cash leg). *Decider:* architect (ADR-0016, with the
+  AR/AP additive touch). *Blocks ADR-0016:* **NO** — it is exactly the design decision ADR-0016 makes; the
+  requirement fixes the *behaviour* (default if unspecified, BR-CASH-09).
+- **OQ-CASH-08** — **One-to-one cash/bank account ⇄ GL account.** Whether two cash/bank accounts may share a
+  linked GL account. *Recommended default:* **one GL account per cash/bank account** (so each balance
+  reconciles cleanly to a distinct GL account, BR-CASH-02). *Decider:* owner + architect. *Blocks ADR-0016:*
+  **NO** — the one-to-one default stands.
+- **OQ-CUR-03** — *(carried)* confirm **rounding mode + TZS decimals** — transfer legs, direct-entry legs,
+  the AR/AP cash legs, and the reconciliation balance check must round identically to the cash/bank book
+  balance and the linked GL account (NFR-CASH-02). *Recommended default:* half-up, TZS = 0 dp. *Decider:*
+  owner (finance input). *Blocks ADR-0016:* **NO** for the model; **confirm before go-live**.

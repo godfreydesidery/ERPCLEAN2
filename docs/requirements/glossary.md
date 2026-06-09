@@ -491,3 +491,60 @@ One definition per term, used consistently across the team. Add terms as modules
 - A **supplier** is a **party**; the AP control **account** is a GL bucket — never interchangeably "account".
 - Say **bill-entry-driven** (the operator enters the bill) — a goods receipt does **not** create a payable
   in v1; never say "the receipt makes us owe."
+
+## Cash & Bank — the cash book + bank book
+
+> Status: **Ratified 2026-06-09** — terms reflect the owner-confirmed Cash & Bank Increment 3 (T1.4) in
+> cash-and-bank.md. Cash & Bank = where the money actually lives; named money locations each linked to a GL
+> `1xxx` account, reconciled to the bank statement and to GL.
+
+- **Cash/bank account** — a named **money location** the company holds funds in: a **CASH** account (petty
+  cash, a till) or a **BANK** account (an account at a bank, per bank / per branch). Carries a name, a type
+  (CASH | BANK), bank details (bank name, account number, bank branch — for BANK), a currency (= base in v1),
+  a **link to one GL `1xxx` asset account**, an active/status state, audit, and a `CB-####` code. **Not** a
+  GL account (a posting bucket) and **not** a party — a *money location* (party / GL account / cash-bank
+  account are three distinct things).
+- **Cash book** — the set of CASH accounts (petty cash, tills) and their transactions. **Bank book** — the
+  set of BANK accounts and their transactions.
+- **Linked GL account** — the single GL `1xxx` asset account a cash/bank account maps to. Every movement on
+  the account posts to it; the account's book balance equals its balance. **Replaces the single
+  `gl_configs` `CASH` account** with real named accounts.
+- **Book balance** — a cash/bank account's balance **per our records**: the running sum of its (non-void)
+  transactions. Equals its linked GL account's balance (the GL reconciliation rule).
+- **Statement balance / bank balance** — the **bank's** closing balance for an account as at a statement
+  date, taken from the bank statement and entered during reconciliation. The figure the **book balance must
+  agree with** to complete a reconciliation.
+- **Cleared / uncleared** — a transaction is **uncleared** until it is confirmed against the bank statement,
+  then **cleared**. The operator marks transactions cleared during reconciliation; once a transaction is in
+  a **completed** reconciliation its cleared flag is **immutable**.
+- **(Bank) reconciliation** — the **manual** v1 act of agreeing an account's records to the bank statement:
+  mark the cleared transactions, record a statement date + statement closing balance, and confirm **book
+  balance == statement balance** before completing. No statement file import in v1.
+- **Inter-account transfer** — moving money **between two cash/bank accounts of the same company** (bank →
+  petty cash, cash deposit → bank): posts **DR the destination account's GL account / CR the source
+  account's GL account**, balanced. Numbered `CBT-####`. Source ≠ destination.
+- **Direct cash/bank entry** — an ad-hoc receipt or payment **not** tied to AR/AP (bank charges, interest
+  received, owner drawings, sundry cash expense): posts the cash/bank account's GL account against a **chosen
+  GL counter-account** (income / expense / equity). The treasury equivalent of a manual journal that moves a
+  real money location.
+- **Cheque register** — the record of cheques related to bank-account payments: each cheque carries a
+  **cheque number** (unique per bank account), a **status** (ISSUED | CLEARED | CANCELLED), an **issue date**
+  and a **value date**, the bank account it draws on, and the payment it settles.
+- **Post-dated cheque (PDC)** — a cheque whose **value date is later than its issue date** — written now,
+  clears later; tracked as ISSUED until it clears on/after its value date.
+- **Default cash/bank account** — the **one** cash/bank account per company used when an AR receipt / AP
+  payment does **not** name a target account. At most one default per company.
+
+### Cash & Bank terminology rulings (pick one, stay consistent)
+- A **cash/bank account** is a **money location** (this module); a **GL account** is a posting bucket (gl.md);
+  a **party** is a customer/supplier (Parties) — three distinct things, never interchangeably "account". The
+  cash/bank account *links to* exactly one GL account.
+- Use **book balance** for our records and **statement / bank balance** for the bank's — the reconciliation
+  makes them **agree**; never conflate them.
+- A **cleared** transaction (confirmed on the bank statement, later) is **not** a **posted** journal entry
+  (on the books at the moment of the transaction); every transaction posts to GL immediately, clearing is a
+  separate bank-statement confirmation.
+- Use **inter-account transfer** for money between our own accounts; never call it an AR **receipt** (from a
+  customer) or an AP **payment** (to a supplier).
+- A **cheque** is the *instrument* in the register; the **payment** is the financial event it settles —
+  never blur the cheque with the payment's GL posting.

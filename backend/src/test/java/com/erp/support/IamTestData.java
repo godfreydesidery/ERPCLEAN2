@@ -35,6 +35,15 @@ public class IamTestData {
         em.createNativeQuery(
                 "TRUNCATE domain_events, processed_events RESTART IDENTITY CASCADE")
                 .executeUpdate();
+        // 4-CB. Clear Cash & Bank tables BEFORE AR/AP (ar_receipts.cash_bank_account_id and
+        //       ap_payments.cash_bank_account_id FK → cash_bank_accounts; cash_transactions
+        //       FK → bank_reconciliations; cash_transfers FK → cash_transactions).
+        //       FK order: cheques → cash_bank_accounts; bank_reconciliations standalone (FK ← cash_transactions);
+        //       cash_transactions → bank_reconciliations + cash_bank_accounts;
+        //       cash_transfers → cash_transactions + cash_bank_accounts; cash_bank_accounts standalone.
+        em.createNativeQuery(
+                "TRUNCATE cheques, cash_transfers, cash_transactions, bank_reconciliations, cash_bank_accounts RESTART IDENTITY CASCADE")
+                .executeUpdate();
         // 4-AP. Clear AP tables BEFORE GL, suppliers and companies.
         //       FK order: allocations → payments; bill_match → bill_lines → bills; debit_notes standalone.
         em.createNativeQuery(

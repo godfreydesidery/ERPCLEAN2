@@ -13,6 +13,7 @@ import com.erp.modules.ap.domain.enums.SupplierBillStatus;
 import com.erp.modules.ap.repository.SupplierBillRepository;
 import com.erp.modules.gl.repository.JournalEntryRepository;
 import com.erp.modules.gl.repository.JournalLineRepository;
+import com.erp.modules.cashbank.service.CashBankSeeder;
 import com.erp.modules.gl.service.ChartOfAccountService;
 import com.erp.modules.gl.service.FiscalCalendarService;
 import com.erp.modules.gl.service.GlConfigService;
@@ -62,6 +63,7 @@ class ApPaymentServiceIT extends PostgresIntegrationTest {
     @Autowired private ChartOfAccountService   chartOfAccountService;
     @Autowired private FiscalCalendarService   fiscalCalendarService;
     @Autowired private GlConfigService         glConfigService;
+    @Autowired private CashBankSeeder          cashBankSeeder;
     @Autowired private JournalEntryRepository  journalEntryRepo;
     @Autowired private JournalLineRepository   journalLineRepo;
     @Autowired private OrganisationRepository  organisations;
@@ -107,6 +109,7 @@ class ApPaymentServiceIT extends PostgresIntegrationTest {
         fiscalCalendarService.seedCurrentYear(company.getId());
         glConfigService.seedDefaults(company.getId());
         apGlSeeder.seedDefaults(company.getId());
+        cashBankSeeder.seedDefaults(company.getId());
     }
 
     @AfterEach

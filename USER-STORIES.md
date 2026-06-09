@@ -1062,3 +1062,120 @@ entered **so that** nobody expects a payable the moment goods arrive.
   the books at that point — the **first GL posting for the purchase** (FR-AP-06, BR-AP-02).
 - **AC4** Given any AP read or balance, then it returns **only my company's** payables (`assertCanActIn`);
   cross-company figures never appear (FR-AP-14, BR-AP-08, NFR-AP-01).
+
+---
+
+## Cash & Bank — the cash book + bank book
+
+Requirements: [docs/requirements/cash-and-bank.md](docs/requirements/cash-and-bank.md). Status: RATIFIED
+2026-06-09. Increment 3 (T1.4) — named cash/bank accounts each linked to a GL `1xxx` account; transfers;
+direct entries; cheque register; per-account statement & balance; manual bank reconciliation; the additive
+AR/AP cash-account-routing touch. Every cash/bank movement posts to GL synchronously and reconciles to both
+its linked GL account and the bank statement. Next step: solutions-architect ADR-0016 / V13.
+
+### US-CASH-01 — Open a bank account mapped to a GL account
+**As a** treasurer **I want** to create a named cash/bank account linked to a GL account **so that** the
+money in each location is tracked and reconciles to the books — replacing the single hard-wired cash account.
+- **AC1** Given `CASH.ACCOUNT.MANAGE`, when I create a cash/bank account (name, type CASH | BANK, bank
+  details for BANK, currency = base, and a **link to a GL `1xxx` asset account**), then it is saved with a
+  `CB-####` code, set ACTIVE, and the create is audited (FR-CASH-01, NFR-CASH-03).
+- **AC2** Given the account is created, then it **maps to exactly one GL account** (mandatory link), which
+  **replaces the single `gl_configs` `CASH` account** with a real named account (FR-CASH-03, BR-CASH-01).
+- **AC3** Given I create it, when I flag it the **company default**, then at most one default exists per
+  company and AR/AP route to it when no account is named (FR-CASH-04, BR-CASH-09).
+- **AC4** **(Reconciliation bar)** Given a new account, then its **book balance == its linked GL account
+  balance** (both zero at open); they move together on every later transaction (FR-CASH-17, BR-CASH-02).
+- **AC5** Given the account later has transactions, when I try to **delete** it, then it is **refused** — I
+  may only deactivate it (a deactivated account keeps its history, takes no new transactions) (FR-CASH-02,
+  BR-CASH-13).
+
+### US-CASH-02 — An AR receipt lands in a chosen cash/bank account
+**As an** AR cashier **I want** to choose which cash/bank account a customer's receipt lands in **so that**
+the money is recorded in the right location and the right GL account is debited.
+- **AC1** Given I record a customer **receipt** and **choose a cash/bank account**, when it posts, then the
+  GL **debit is the chosen account's linked GL account** and the **credit is `1200 Accounts Receivable`**;
+  the chosen account's **book balance rises** by the receipt amount (FR-CASH-05, §3.2).
+- **AC2** Given I record a receipt and **do not choose** an account, then the **company default cash/bank
+  account** is used (FR-CASH-05, BR-CASH-09).
+- **AC3** Given I name an **inactive** account, or none is named and there is **no company default**, then
+  the receipt **fails with a clear message** rather than posting to a wrong/null account (FR-CASH-07,
+  BR-CASH-09).
+- **AC4** **(Reconciliation bar)** Given the receipt posts, then the chosen account's **book balance == its
+  linked GL account balance** (FR-CASH-17, BR-CASH-02); the cash leg posts **synchronously, in one TX**
+  (NFR-CASH-04, BR-CASH-03).
+- **AC5** Given an AP **payment** chooses a cash/bank account, then symmetrically the GL **credit is the
+  chosen account's linked GL account** (debit `2100`), the account's **book balance falls**, default if
+  unspecified (FR-CASH-06, BR-CASH-09).
+
+### US-CASH-03 — Transfer money between cash/bank accounts
+**As an** accountant **I want** to move money between our own accounts (bank → petty cash, cash deposit →
+bank) **so that** the balances reflect where the money actually is.
+- **AC1** Given `CASH.TRANSFER`, when I record a transfer (`CBT-####`) with a **source** and a
+  **destination** account, an amount, a date, and a reference, then it posts **DR the destination account's
+  GL account / CR the source account's GL account**, balanced (FR-CASH-08, BR-CASH-04).
+- **AC2** Given the transfer posts, then the **source book balance falls** and the **destination book
+  balance rises** by the same amount (FR-CASH-08).
+- **AC3** Given source == destination, or the accounts are in **different companies**, when I submit, then
+  the transfer is **rejected** (BR-CASH-04).
+- **AC4** **(Reconciliation bar)** Given the transfer posts, then **both** accounts' book balances **==**
+  their linked GL account balances; the transfer is **audited** (FR-CASH-17, NFR-CASH-03).
+
+### US-CASH-04 — Record a direct bank-charge entry (not tied to AR/AP)
+**As an** accountant **I want** to record ad-hoc money movements like bank charges and interest **so that**
+sundry receipts/payments hit the right GL account and the cash/bank balance is accurate.
+- **AC1** Given `CASH.ENTRY.RECORD`, when I record a **direct entry** (a cash/bank account, direction, amount,
+  date, reference, and a **GL counter-account**), then it posts the **balanced double-entry** — the cash/bank
+  account's GL account on one side, the counter-account on the other (FR-CASH-09, BR-CASH-05).
+- **AC2** Given a **bank charge**, when it posts, then **DR bank-charges expense / CR the bank account's GL
+  account**; the bank account's **book balance falls** by the charge (§3.4).
+- **AC3** Given a missing/inactive counter-account or linked GL account, then the entry **fails** rather than
+  mis-posting (FR-CASH-16, gl.md BR-GL-10).
+- **AC4** **(Reconciliation bar)** Given the entry posts, then the account's **book balance == its linked GL
+  account balance** (FR-CASH-17, BR-CASH-02); a posted entry is corrected only by a **reversing entry**, never
+  edited (BR-CASH-10).
+
+### US-CASH-05 — Reconcile a bank account to the statement (mark cleared + balance check)
+**As a** treasurer **I want** to mark transactions cleared and confirm our balance matches the bank's **so
+that** I can trust the bank book and catch missing or duplicate transactions.
+- **AC1** Given `CASH.RECONCILE`, when I open a reconciliation, then I enter a **statement date** and a
+  **statement closing balance** and **mark** the account's transactions as **CLEARED** against the statement
+  (FR-CASH-13).
+- **AC2** Given I mark transactions cleared, then the system computes the **book balance of cleared
+  transactions** (FR-CASH-13).
+- **AC3** Given the **book balance == the statement closing balance**, when I complete the reconciliation,
+  then it **completes** and is audited (FR-CASH-14, BR-CASH-06, NFR-CASH-03).
+- **AC4** Given **book ≠ statement**, when I try to complete, then it is **refused** — the reconciliation
+  stays open until I resolve the discrepancy (FR-CASH-14, BR-CASH-06).
+- **AC5** Given a transaction is part of a **completed** reconciliation, when I try to un-clear or edit it,
+  then it is **refused** — the cleared flag is **immutable**; I correct via a reversing entry / a new
+  reconciliation (FR-CASH-15, BR-CASH-07/10).
+- **AC6** Given v1, then reconciliation is **manual** — there is **no statement file import** (OQ-CASH-01).
+
+### US-CASH-06 — Issue and clear a cheque
+**As a** treasurer **I want** a cheque register that tracks issued, cleared, cancelled, and post-dated
+cheques **so that** I know which cheques are outstanding and when they clear.
+- **AC1** Given `CHEQUE.MANAGE`, when I register a cheque against a bank-account payment (cheque number,
+  drawing bank account, the payment it settles, issue date, value date), then it is saved with status
+  **ISSUED** (FR-CASH-10).
+- **AC2** Given the **value date is later than the issue date**, then it is a **post-dated cheque**, tracked
+  as ISSUED until it clears on/after its value date (FR-CASH-10, §3.5).
+- **AC3** Given a cheque number already exists on the **same bank account**, when I register another with
+  that number, then it is **rejected** — cheque number is unique per bank account (FR-CASH-10, BR-CASH-12).
+- **AC4** Given the bank honours the cheque, when I move it **ISSUED → CLEARED**, then the clearing is
+  recorded and audited; a stopped cheque goes **ISSUED → CANCELLED** (FR-CASH-11).
+- **AC5** Given a cancelled cheque whose payment must be undone, then the **payment is reversed via a
+  reversing entry** (append-only) — the register is not edited in place (FR-CASH-11, BR-CASH-10).
+- **AC6** Given cheque **printing**, then it **depends on the cross-cutting PDF capability (X.1)** and is
+  deferred to it; the register data is captured so printing is additive (OQ-CASH-02).
+
+### US-CASH-07 — View a cash/bank account statement & balance
+**As a** cashier or accountant **I want** a running statement and current balance per account **so that** I
+can see every movement and what each location holds.
+- **AC1** Given `CASH.VIEW`, when I open an account's **statement**, then I see every (non-void) transaction
+  (receipts, payments, transfers, direct entries) in date order with a **running balance** (FR-CASH-12).
+- **AC2** Given the statement, then the account's **current balance** is its **book balance** (the running
+  sum of its transactions) (FR-CASH-12, glossary).
+- **AC3** **(Reconciliation bar)** Given any account, then its **current/book balance == its linked GL
+  account balance** (FR-CASH-17, BR-CASH-02).
+- **AC4** Given any read, then it returns **only my company's** cash/bank accounts and transactions
+  (`assertCanActIn`); cross-company figures never appear (FR-CASH-18, BR-CASH-08, NFR-CASH-01).

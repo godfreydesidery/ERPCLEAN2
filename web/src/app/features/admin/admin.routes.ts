@@ -300,5 +300,42 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./ap/ap-opening-balance.component').then((m) => m.ApOpeningBalanceComponent),
   },
+  // ── Cash & Bank ───────────────────────────────────────────────────────────
+  {
+    path: 'cash/accounts',
+    canActivate: [requirePermission('CASH.VIEW')],
+    loadComponent: () =>
+      import('./cashbank/cash-accounts-list.component').then((m) => m.CashAccountsListComponent),
+  },
+  {
+    path: 'cash/transfers/record',
+    canActivate: [requirePermission('CASH.TRANSFER')],
+    loadComponent: () =>
+      import('./cashbank/record-transfer.component').then((m) => m.RecordTransferComponent),
+  },
+  {
+    path: 'cash/entries/record',
+    canActivate: [requirePermission('CASH.ENTRY.RECORD')],
+    loadComponent: () =>
+      import('./cashbank/record-entry.component').then((m) => m.RecordEntryComponent),
+  },
+  {
+    path: 'cash/cheques',
+    canActivate: [requirePermission('CHEQUE.MANAGE')],
+    loadComponent: () =>
+      import('./cashbank/cheque-register.component').then((m) => m.ChequeRegisterComponent),
+  },
+  {
+    path: 'cash/reconciliations',
+    canActivate: [requirePermission('CASH.RECONCILE')],
+    loadComponent: () =>
+      import('./cashbank/bank-reconciliation.component').then((m) => m.BankReconciliationComponent),
+  },
+  {
+    path: 'cash/statement',
+    canActivate: [requirePermission('CASH.VIEW')],
+    loadComponent: () =>
+      import('./cashbank/cash-account-statement.component').then((m) => m.CashAccountStatementComponent),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];

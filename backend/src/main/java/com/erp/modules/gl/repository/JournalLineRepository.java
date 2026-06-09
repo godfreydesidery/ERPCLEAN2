@@ -1,6 +1,7 @@
 package com.erp.modules.gl.repository;
 
 import com.erp.modules.gl.domain.entity.JournalLine;
+import java.math.BigDecimal;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -49,4 +50,17 @@ public interface JournalLineRepository extends JpaRepository<JournalLine, Long> 
             WHERE l.companyId = :companyId
             """)
     Object[] grandTotals(@Param("companyId") Long companyId);
+
+    /**
+     * Net balance of a single GL account: SUM(debit) - SUM(credit).
+     * Returns null when no lines exist — callers treat null as zero.
+     * Used by CashGlReconciliationQuery (ADR-0016 D-9).
+     */
+    @Query("""
+            SELECT SUM(l.debitAmount) - SUM(l.creditAmount)
+            FROM JournalLine l
+            WHERE l.companyId = :companyId
+              AND l.accountId = :accountId
+            """)
+    BigDecimal accountBalance(@Param("companyId") Long companyId, @Param("accountId") Long accountId);
 }

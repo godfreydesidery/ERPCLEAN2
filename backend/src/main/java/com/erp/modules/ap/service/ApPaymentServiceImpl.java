@@ -16,6 +16,11 @@ import com.erp.modules.gl.domain.dto.JournalEntryDraft;
 import com.erp.modules.gl.domain.dto.JournalEntryDraft.LineDraft;
 import com.erp.modules.gl.domain.dto.JournalEntryDto;
 import com.erp.modules.gl.domain.entity.ChartOfAccount;
+import com.erp.modules.cashbank.domain.dto.CashAccountGlResolutionDto;
+import com.erp.modules.cashbank.domain.enums.CashTxnDirection;
+import com.erp.modules.cashbank.domain.enums.CashTxnType;
+import com.erp.modules.cashbank.service.CashBankAccountResolver;
+import com.erp.modules.cashbank.service.CashTransactionRecorder;
 import com.erp.modules.gl.domain.enums.GlConfigKey;
 import com.erp.modules.gl.domain.enums.JournalSourceType;
 import com.erp.modules.gl.service.GLConfigResolver;
@@ -56,6 +61,8 @@ public class ApPaymentServiceImpl implements ApPaymentService {
     private final ApBillNumberGenerator         numbers;
     private final GLPostingService              glPosting;
     private final GLConfigResolver              glConfig;
+    private final CashBankAccountResolver       cashBankAccountResolver;
+    private final CashTransactionRecorder       cashTxnRecorder;
     private final ScopeGuard                    scopeGuard;
     private final AuditService                  audit;
 
@@ -67,18 +74,22 @@ public class ApPaymentServiceImpl implements ApPaymentService {
                                  ApBillNumberGenerator numbers,
                                  GLPostingService glPosting,
                                  GLConfigResolver glConfig,
+                                 CashBankAccountResolver cashBankAccountResolver,
+                                 CashTransactionRecorder cashTxnRecorder,
                                  ScopeGuard scopeGuard,
                                  AuditService audit) {
-        this.bills       = bills;
-        this.payments    = payments;
-        this.allocations = allocations;
-        this.companies   = companies;
-        this.suppliers   = suppliers;
-        this.numbers     = numbers;
-        this.glPosting   = glPosting;
-        this.glConfig    = glConfig;
-        this.scopeGuard  = scopeGuard;
-        this.audit       = audit;
+        this.bills                   = bills;
+        this.payments                = payments;
+        this.allocations             = allocations;
+        this.companies               = companies;
+        this.suppliers               = suppliers;
+        this.numbers                 = numbers;
+        this.glPosting               = glPosting;
+        this.glConfig                = glConfig;
+        this.cashBankAccountResolver = cashBankAccountResolver;
+        this.cashTxnRecorder         = cashTxnRecorder;
+        this.scopeGuard              = scopeGuard;
+        this.audit                   = audit;
     }
 
     // -------------------------------------------------------------------------
@@ -124,8 +135,9 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         bill.setStatus(billStatusAfterPayment(bill.getOutstandingAmount()));
         bills.save(bill);
 
-        // GL: DR AP / CR Cash
-        JournalEntryDto posted = postPaymentToGl(payment, companyId, bill.getBranchId(), currency);
+        // GL: DR AP / CR Cash (ADR-0016: cash leg routed via CashBankAccountResolver)
+        JournalEntryDto posted = postPaymentToGl(payment, companyId, bill.getBranchId(), currency,
+                req.cashBankAccountUid());
         payment.setGlEntryUid(posted.uid());
         payment = payments.save(payment);
 
@@ -197,7 +209,8 @@ public class ApPaymentServiceImpl implements ApPaymentService {
             bills.save(bill);
         }
 
-        JournalEntryDto posted = postPaymentToGl(payment, companyId, branchId(), currency);
+        JournalEntryDto posted = postPaymentToGl(payment, companyId, branchId(), currency,
+                req.cashBankAccountUid());
         payment.setGlEntryUid(posted.uid());
         payment = payments.save(payment);
 
@@ -244,15 +257,18 @@ public class ApPaymentServiceImpl implements ApPaymentService {
     // -------------------------------------------------------------------------
 
     private JournalEntryDto postPaymentToGl(ApPayment payment, Long companyId,
-                                             Long branchId, String currency) {
-        ChartOfAccount apAcct   = glConfig.resolve(companyId, GlConfigKey.ACCOUNTS_PAYABLE);
-        ChartOfAccount cashAcct = glConfig.resolve(companyId, GlConfigKey.CASH);
+                                             Long branchId, String currency,
+                                             String cashBankAccountUid) {
+        ChartOfAccount apAcct = glConfig.resolve(companyId, GlConfigKey.ACCOUNTS_PAYABLE);
+
+        // ADR-0016 D-8: resolve cash/bank account via CashBankAccountResolver (replaces glConfig.CASH)
+        CashAccountGlResolutionDto cashRes = cashBankAccountResolver.resolve(companyId, cashBankAccountUid);
 
         List<LineDraft> glLines = List.of(
                 new LineDraft(apAcct.getId(),
                         payment.getAmount(), BigDecimal.ZERO,
                         currency, "AP payment — " + payment.getPaymentNumber()),
-                new LineDraft(cashAcct.getId(),
+                new LineDraft(cashRes.glAccountId(),
                         BigDecimal.ZERO, payment.getAmount(),
                         currency, "Cash out — " + payment.getPaymentNumber()));
 
@@ -263,7 +279,18 @@ public class ApPaymentServiceImpl implements ApPaymentService {
                 JournalSourceType.AP_PAYMENT,
                 payment.getUid(), null, actorId(), glLines);
 
-        return glPosting.post(draft);
+        JournalEntryDto posted = glPosting.post(draft);
+
+        // Set the cash/bank account FK on the payment row and record the cash transaction
+        payment.setCashBankAccountId(cashRes.cashBankAccountId());
+        cashTxnRecorder.recordSettlement(
+                companyId, branchId, cashRes.cashBankAccountId(),
+                CashTxnType.AP_PAYMENT, CashTxnDirection.OUT,
+                payment.getAmount(), currency,
+                payment.getUid(), posted.uid(),
+                payment.getPaymentDate(), actorId());
+
+        return posted;
     }
 
     // -------------------------------------------------------------------------

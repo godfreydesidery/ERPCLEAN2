@@ -168,6 +168,12 @@ export class ShellComponent {
         { label: 'Record Payment', route: '/admin/ap/payments/record', icon: 'bi-cash-stack', available: true, permission: 'AP.PAYMENT.RUN' },
         { label: 'Supplier Statement', route: '/admin/ap/statement', icon: 'bi-file-earmark-text', available: true, permission: 'AP.VIEW' },
         { label: 'AP Opening Balance', route: '/admin/ap/opening-balance', icon: 'bi-pencil-square', available: true, permission: 'AP.OPENING.SET' },
+        { label: 'Cash & Bank Accounts', route: '/admin/cash/accounts', icon: 'bi-wallet2', available: true, permission: 'CASH.VIEW' },
+        { label: 'Cash Transfer', route: '/admin/cash/transfers/record', icon: 'bi-arrow-left-right', available: true, permission: 'CASH.TRANSFER' },
+        { label: 'Cash / Bank Entry', route: '/admin/cash/entries/record', icon: 'bi-cash', available: true, permission: 'CASH.ENTRY.RECORD' },
+        { label: 'Cheques', route: '/admin/cash/cheques', icon: 'bi-card-checklist', available: true, permission: 'CHEQUE.MANAGE' },
+        { label: 'Bank Reconciliation', route: '/admin/cash/reconciliations', icon: 'bi-bank', available: true, permission: 'CASH.RECONCILE' },
+        { label: 'Cash Statement', route: '/admin/cash/statement', icon: 'bi-file-earmark-bar-graph', available: true, permission: 'CASH.VIEW' },
       ],
     },
   ];
