@@ -1,0 +1,313 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">
+      <i class="bi bi-receipt-cutoff me-2" aria-hidden="true"></i>Payables — Supplier Bills
+    </h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      AP supplier bills. Filter by supplier or status; raise debit notes from each row.
+    </p>
+  </header>
+
+  <div class="mb-3 d-flex gap-2 flex-wrap">
+    @if (canEnterBill()) {
+      <a routerLink="/admin/ap/supplier-bills/enter" class="btn btn-sm btn-primary">
+        <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Enter Bill
+      </a>
+    }
+    @if (canPay()) {
+      <a routerLink="/admin/ap/payments/record" class="btn btn-sm btn-outline-success">
+        <i class="bi bi-cash-stack me-1" aria-hidden="true"></i>Record Payment
+      </a>
+    }
+  </div>
+
+  @if (!canView()) {
+    <p class="text-muted d-flex align-items-center gap-2 mt-3" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to view supplier bills.
+    </p>
+  } @else {
+
+    <!-- Company selector -->
+    @switch (companyState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-3" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load companies.
+        </p>
+      }
+      @default {
+        <div class="d-flex flex-wrap gap-3 mb-3 align-items-end">
+          @if (companies().length > 1) {
+            <div style="min-width:220px">
+              <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+              <select id="companyPicker" name="companyPicker" class="form-select"
+                      [ngModel]="selectedCompanyId()"
+                      (ngModelChange)="onCompanyChange($event)">
+                @for (c of companies(); track c.uid) {
+                  <option [value]="c.id">{{ c.name }}</option>
+                }
+              </select>
+            </div>
+          }
+
+          <!-- Supplier filter -->
+          <div style="min-width:260px; position:relative">
+            <label class="form-label small text-muted mb-1" for="supplierFilterQ">Supplier</label>
+            <div class="input-group input-group-sm">
+              <input id="supplierFilterQ" name="supplierFilterQ" type="search"
+                     class="form-control" placeholder="Search supplier…" autocomplete="off"
+                     [ngModel]="supplierFilterQ()"
+                     (ngModelChange)="onSupplierFilterChange($event)" />
+              @if (selectedFilterSupplier()) {
+                <button type="button" class="btn btn-outline-secondary"
+                        (click)="clearSupplierFilter()"
+                        aria-label="Clear supplier filter">
+                  <i class="bi bi-x" aria-hidden="true"></i>
+                </button>
+              }
+            </div>
+            @if (supplierFilterResults().length > 0) {
+              <ul class="list-group position-absolute w-100 shadow-sm z-3" role="listbox"
+                  aria-label="Supplier suggestions" style="top:100%; left:0">
+                @for (s of supplierFilterResults(); track s.uid) {
+                  <li class="list-group-item list-group-item-action py-1 small"
+                      role="option" style="cursor:pointer"
+                      (click)="selectFilterSupplier(s)"
+                      (keydown.enter)="selectFilterSupplier(s)"
+                      tabindex="0">
+                    <strong>{{ s.code }}</strong> — {{ s.displayName }}
+                  </li>
+                }
+              </ul>
+            }
+          </div>
+
+          <!-- Status filter -->
+          <div style="min-width:160px">
+            <label class="form-label small text-muted mb-1" for="statusFilter">Status</label>
+            <select id="statusFilter" name="statusFilter" class="form-select form-select-sm"
+                    [ngModel]="statusFilter()"
+                    (ngModelChange)="onStatusChange($event)">
+              <option value="">— All —</option>
+              <option value="DRAFT">Draft</option>
+              <option value="MATCHED">Matched</option>
+              <option value="HELD">Held</option>
+              <option value="APPROVED">Approved</option>
+              <option value="PARTIALLY_PAID">Partially Paid</option>
+              <option value="PAID">Paid</option>
+            </select>
+          </div>
+        </div>
+      }
+    }
+
+    <!-- List states -->
+    @switch (state()) {
+      @case ('loading') {
+        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading bills…
+        </p>
+      }
+      @case ('error') {
+        <p class="state text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load supplier bills. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="state text-muted d-flex align-items-center gap-2">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view supplier bills.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <p class="state text-muted">No supplier bills found.</p>
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-hover align-middle bg-white grid">
+              <caption class="visually-hidden">Supplier bills</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Bill No.</th>
+                  <th scope="col">Supplier Inv. No.</th>
+                  <th scope="col">Supplier</th>
+                  <th scope="col">Bill Date</th>
+                  <th scope="col">Due Date</th>
+                  <th scope="col" class="text-end">Gross</th>
+                  <th scope="col" class="text-end">Outstanding</th>
+                  <th scope="col">Currency</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Source</th>
+                  <th scope="col"><span class="visually-hidden">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (bill of rows(); track bill.uid) {
+                  <tr>
+                    <td class="font-monospace small fw-semibold">
+                      <a [routerLink]="['/admin/ap/supplier-bills/uid', bill.uid]"
+                         class="text-decoration-none">
+                        {{ bill.billNumber }}
+                      </a>
+                    </td>
+                    <td class="small text-muted font-monospace">{{ bill.supplierInvoiceNo }}</td>
+                    <td class="small text-muted font-monospace">{{ bill.supplierId }}</td>
+                    <td class="small">{{ bill.billDate }}</td>
+                    <td class="small">{{ bill.dueDate ?? '—' }}</td>
+                    <td class="text-end font-monospace small">{{ fmtMoney(bill.grossAmount) }}</td>
+                    <td class="text-end font-monospace small fw-semibold"
+                        [class.text-danger]="+(bill.outstandingAmount) > 0">
+                      {{ fmtMoney(bill.outstandingAmount) }}
+                    </td>
+                    <td class="small">{{ bill.currency }}</td>
+                    <td>
+                      <span class="badge" [class]="statusBadgeClass(bill.status)">
+                        {{ bill.status }}
+                      </span>
+                    </td>
+                    <td class="small text-muted">{{ bill.source }}</td>
+                    <td class="d-flex gap-1 flex-nowrap">
+                      @if (canMatch() && canMatchBill(bill)) {
+                        <a [routerLink]="['/admin/ap/supplier-bills/uid', bill.uid]"
+                           class="btn btn-sm btn-outline-info"
+                           [attr.aria-label]="'Match bill ' + bill.billNumber">
+                          <i class="bi bi-check2-all me-1" aria-hidden="true"></i>Match
+                        </a>
+                      }
+                      @if (canPay() && canPayBill(bill)) {
+                        <a routerLink="/admin/ap/payments/record"
+                           class="btn btn-sm btn-outline-success"
+                           [attr.aria-label]="'Pay bill ' + bill.billNumber">
+                          <i class="bi bi-cash-stack me-1" aria-hidden="true"></i>Pay
+                        </a>
+                      }
+                      @if (canDebitNote() && (bill.status === 'MATCHED' || bill.status === 'APPROVED' || bill.status === 'PARTIALLY_PAID')) {
+                        <button type="button"
+                                class="btn btn-sm btn-outline-warning"
+                                (click)="openDebitNote(bill)"
+                                [attr.aria-label]="'Raise debit note for bill ' + bill.billNumber">
+                          <i class="bi bi-file-earmark-minus me-1" aria-hidden="true"></i>Debit Note
+                        </button>
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Pagination -->
+          @if (meta().totalPages > 1) {
+            <nav aria-label="Supplier bills pagination" class="d-flex align-items-center gap-3 mt-2">
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      [disabled]="currentPage() === 0" (click)="prevPage()">
+                <i class="bi bi-chevron-left" aria-hidden="true"></i>
+                <span class="visually-hidden">Previous page</span>
+              </button>
+              <span class="small text-muted">
+                Page {{ meta().page + 1 }} of {{ meta().totalPages }}
+                ({{ meta().totalElements }} total)
+              </span>
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      [disabled]="!meta().hasNext" (click)="nextPage()">
+                <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                <span class="visually-hidden">Next page</span>
+              </button>
+            </nav>
+          }
+        }
+      }
+    }
+
+    <!-- ── Debit note modal ────────────────────────────────────────────────── -->
+    @if (debitNoteBill(); as bill) {
+      <div class="modal d-block" tabindex="-1" role="dialog"
+           aria-modal="true"
+           [attr.aria-labelledby]="'debitNoteModalTitle'">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h2 class="modal-title h6" id="debitNoteModalTitle">
+                <i class="bi bi-file-earmark-minus me-1" aria-hidden="true"></i>
+                Raise Debit Note — {{ bill.billNumber }}
+              </h2>
+              <button type="button" class="btn-close" (click)="closeDebitNote()"
+                      aria-label="Close debit note dialog"></button>
+            </div>
+            <div class="modal-body">
+              <p class="text-muted small mb-3">
+                Outstanding: <strong>{{ fmtMoney(bill.outstandingAmount) }} {{ bill.currency }}</strong>
+              </p>
+              <div class="row g-3">
+                <div class="col-sm-6">
+                  <label class="form-label" for="dnDate">
+                    Note Date <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <input id="dnDate" name="dnDate" type="date" class="form-control"
+                         [ngModel]="debitNoteDate()"
+                         (ngModelChange)="debitNoteDate.set($event)"
+                         [disabled]="raisingDebitNote()" required />
+                </div>
+                <div class="col-sm-6">
+                  <label class="form-label" for="dnNet">
+                    Net Amount <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <input id="dnNet" name="dnNet" type="text" inputmode="decimal"
+                         class="form-control font-monospace" placeholder="0.00"
+                         [ngModel]="debitNoteNet()"
+                         (ngModelChange)="debitNoteNet.set($event)"
+                         [disabled]="raisingDebitNote()" autocomplete="off" required />
+                </div>
+                <div class="col-sm-6">
+                  <label class="form-label" for="dnVat">VAT Amount</label>
+                  <input id="dnVat" name="dnVat" type="text" inputmode="decimal"
+                         class="form-control font-monospace" placeholder="0.00"
+                         [ngModel]="debitNoteVat()"
+                         (ngModelChange)="debitNoteVat.set($event)"
+                         [disabled]="raisingDebitNote()" autocomplete="off" />
+                </div>
+                <div class="col-12">
+                  <label class="form-label" for="dnReason">
+                    Reason <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <textarea id="dnReason" name="dnReason"
+                            class="form-control" rows="3"
+                            placeholder="Reason for debit note…"
+                            [ngModel]="debitNoteReason()"
+                            (ngModelChange)="debitNoteReason.set($event)"
+                            [disabled]="raisingDebitNote()" required></textarea>
+                </div>
+              </div>
+              @if (debitNoteError(); as msg) {
+                <p class="text-danger small mt-2 mb-0" role="alert">
+                  <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ msg }}
+                </p>
+              }
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-outline-secondary"
+                      (click)="closeDebitNote()" [disabled]="raisingDebitNote()">Cancel</button>
+              <button type="button" class="btn btn-warning"
+                      (click)="submitDebitNote()" [disabled]="raisingDebitNote()">
+                @if (raisingDebitNote()) {
+                  <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                  Raising…
+                } @else {
+                  <i class="bi bi-file-earmark-minus me-1" aria-hidden="true"></i>Raise Debit Note
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-backdrop show" (click)="closeDebitNote()" aria-hidden="true"></div>
+      </div>
+    }
+  }
+</section>

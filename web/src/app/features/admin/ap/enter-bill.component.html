@@ -1,0 +1,397 @@
+<section class="admin-page">
+  <div class="mb-3">
+    <a routerLink="/admin/ap/supplier-bills" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Payables
+    </a>
+  </div>
+
+  <header class="page-head">
+    <h1 class="h4 mb-1">
+      <i class="bi bi-file-earmark-plus me-2" aria-hidden="true"></i>Enter Supplier Bill
+    </h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      Enter a supplier invoice, run 3-way match, and review line variances.
+    </p>
+  </header>
+
+  @if (!canEnter()) {
+    <p class="text-muted d-flex align-items-center gap-2 mt-3" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to enter bills.
+    </p>
+  } @else {
+
+    <!-- Company selector -->
+    @switch (companyState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-3" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load companies.
+        </p>
+      }
+      @default {
+        @if (companies().length > 1) {
+          <div class="mb-3" style="max-width:320px">
+            <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+            <select id="companyPicker" name="companyPicker" class="form-select"
+                    [ngModel]="selectedCompanyId()"
+                    (ngModelChange)="onCompanyChange($event)">
+              @for (c of companies(); track c.uid) {
+                <option [value]="c.id">{{ c.name }}</option>
+              }
+            </select>
+          </div>
+        }
+      }
+    }
+
+    <!-- ── Match result panel (shown once bill is entered + matched) ──────── -->
+    @if (matchState() === 'running') {
+      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Running 3-way match…
+      </p>
+    }
+
+    @if (matchState() === 'error') {
+      <div class="alert alert-warning d-flex align-items-center gap-2 mb-3" role="alert">
+        <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+        Bill entered but 3-way match failed. You can re-run the match from the bill detail screen.
+      </div>
+    }
+
+    @if (matchState() === 'done' && matchResult(); as result) {
+      <div class="card mb-4 border-0 shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span class="fw-semibold">
+            <i class="bi bi-check2-all me-2" aria-hidden="true"></i>3-Way Match Result
+          </span>
+          <span class="badge"
+                [class]="result.billStatus === 'MATCHED' ? 'text-bg-success' : result.billStatus === 'HELD' ? 'text-bg-danger' : 'text-bg-secondary'">
+            {{ result.billStatus }}
+          </span>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0" aria-label="3-way match line results">
+              <thead class="table-light">
+                <tr>
+                  <th scope="col">Line UID</th>
+                  <th scope="col">Status</th>
+                  <th scope="col" class="text-end">PO Cost</th>
+                  <th scope="col" class="text-end">Price Var.</th>
+                  <th scope="col" class="text-end">Price Var. %</th>
+                  <th scope="col" class="text-end">GR Qty</th>
+                  <th scope="col" class="text-end">Billed Qty</th>
+                  <th scope="col" class="text-end">Qty Var.</th>
+                  <th scope="col"></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (line of result.lineResults; track line.billLineUid) {
+                  <tr [class]="isHeld(line) ? 'table-danger' : line.matchStatus === 'MATCHED' ? 'table-success' : ''">
+                    <td class="font-monospace small">{{ line.billLineUid }}</td>
+                    <td>
+                      <span class="badge" [class]="matchLineBadgeClass(line)">
+                        {{ line.matchStatus }}
+                      </span>
+                    </td>
+                    <td class="text-end font-monospace small">{{ fmtMoney(line.poUnitCostAmount) }}</td>
+                    <td class="text-end font-monospace small"
+                        [class.text-danger]="+(line.priceVarianceAmount) !== 0">
+                      {{ fmtMoney(line.priceVarianceAmount) }}
+                    </td>
+                    <td class="text-end font-monospace small"
+                        [class.text-danger]="+(line.priceVariancePct) !== 0">
+                      {{ fmtPct(line.priceVariancePct) }}
+                    </td>
+                    <td class="text-end font-monospace small">{{ fmtMoney(line.grReceivedQty) }}</td>
+                    <td class="text-end font-monospace small">{{ fmtMoney(line.billedQty) }}</td>
+                    <td class="text-end font-monospace small"
+                        [class.text-warning]="+(line.qtyVariance) !== 0">
+                      {{ fmtMoney(line.qtyVariance) }}
+                    </td>
+                    <td>
+                      @if (isHeld(line)) {
+                        <button type="button" class="btn btn-sm btn-outline-warning"
+                                [disabled]="acceptingLine() === line.billLineUid"
+                                (click)="acceptVariance(line.billLineUid)"
+                                title="Accept this variance and release the line">
+                          @if (acceptingLine() === line.billLineUid) {
+                            <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                          } @else {
+                            <i class="bi bi-check-circle me-1" aria-hidden="true"></i>
+                          }
+                          Accept Variance
+                        </button>
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+        @if (result.billStatus === 'MATCHED') {
+          <div class="card-footer small text-success d-flex align-items-center gap-2">
+            <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
+            All lines matched — bill is ready for payment.
+          </div>
+        } @else {
+          <div class="card-footer small text-danger d-flex align-items-center gap-2">
+            <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+            One or more lines are HELD. Accept variances to release the bill for payment.
+          </div>
+        }
+      </div>
+
+      <div class="d-flex gap-2 mb-4">
+        <button type="button" class="btn btn-outline-primary" (click)="savedBill.set(null); matchResult.set(null); matchState.set('idle')">
+          <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Enter Another Bill
+        </button>
+        @if (savedBill(); as bill) {
+          <a [routerLink]="['/admin/ap/supplier-bills/uid', bill.uid]" class="btn btn-outline-secondary">
+            <i class="bi bi-eye me-1" aria-hidden="true"></i>View Bill Detail
+          </a>
+        }
+      </div>
+    }
+
+    <!-- ── Form (hidden once match result is shown) ────────────────────────── -->
+    @if (matchState() !== 'done') {
+      <form (ngSubmit)="submit()" aria-label="Enter supplier bill">
+
+        <!-- ── Header card ──────────────────────────────────────────────────── -->
+        <div class="card mb-3">
+          <div class="card-header small fw-semibold text-muted">Bill Details</div>
+          <div class="card-body">
+            <div class="row g-3">
+
+              <!-- Supplier picker -->
+              <div class="col-12">
+                <label class="form-label" for="supplierSearch">
+                  Supplier <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <div style="position:relative">
+                  <input id="supplierSearch" name="supplierSearch" type="search"
+                         class="form-control" placeholder="Type supplier name or code…"
+                         autocomplete="off"
+                         [ngModel]="supplierSearchQ()"
+                         (ngModelChange)="onSupplierSearchChange($event)"
+                         [disabled]="submitting()" />
+                  @if (supplierResults().length > 0) {
+                    <ul class="list-group position-absolute w-100 shadow-sm z-3"
+                        role="listbox" aria-label="Supplier suggestions"
+                        style="top:100%; left:0; max-height:220px; overflow-y:auto">
+                      @for (s of supplierResults(); track s.uid) {
+                        <li class="list-group-item list-group-item-action py-1 small"
+                            role="option" style="cursor:pointer"
+                            (click)="selectSupplier(s)"
+                            (keydown.enter)="selectSupplier(s)"
+                            tabindex="0">
+                          <strong>{{ s.code }}</strong> — {{ s.displayName }}
+                        </li>
+                      }
+                    </ul>
+                  }
+                </div>
+                @if (selectedSupplier()) {
+                  <div class="form-text text-success">
+                    <i class="bi bi-check-circle me-1" aria-hidden="true"></i>
+                    {{ selectedSupplier()!.label }}
+                  </div>
+                }
+              </div>
+
+              <!-- Supplier Invoice No. -->
+              <div class="col-md-4">
+                <label class="form-label" for="supplierInvoiceNo">
+                  Supplier Invoice No. <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="supplierInvoiceNo" name="supplierInvoiceNo" type="text"
+                       class="form-control" placeholder="INV-12345"
+                       [ngModel]="supplierInvoiceNo()"
+                       (ngModelChange)="supplierInvoiceNo.set($event)"
+                       [disabled]="submitting()" autocomplete="off" required />
+              </div>
+
+              <!-- Bill Date -->
+              <div class="col-md-4">
+                <label class="form-label" for="billDate">
+                  Bill Date <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="billDate" name="billDate" type="date"
+                       class="form-control"
+                       [ngModel]="billDate()"
+                       (ngModelChange)="billDate.set($event)"
+                       [disabled]="submitting()" required />
+              </div>
+
+              <!-- Due Date -->
+              <div class="col-md-4">
+                <label class="form-label" for="dueDate">
+                  Due Date <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="dueDate" name="dueDate" type="date"
+                       class="form-control"
+                       [ngModel]="dueDate()"
+                       (ngModelChange)="dueDate.set($event)"
+                       [disabled]="submitting()" required />
+              </div>
+
+              <!-- VAT Amount -->
+              <div class="col-md-4">
+                <label class="form-label" for="vatAmount">
+                  VAT Amount <span class="text-muted small">(0 if none)</span>
+                </label>
+                <input id="vatAmount" name="vatAmount" type="text" inputmode="decimal"
+                       class="form-control font-monospace" placeholder="0.00"
+                       [ngModel]="vatAmount()"
+                       (ngModelChange)="vatAmount.set($event)"
+                       [disabled]="submitting()" autocomplete="off" />
+              </div>
+
+              <!-- Currency -->
+              <div class="col-md-3">
+                <label class="form-label" for="currency">
+                  Currency <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="currency" name="currency" type="text"
+                       class="form-control" placeholder="TZS"
+                       [ngModel]="currency()"
+                       (ngModelChange)="currency.set($event)"
+                       [disabled]="submitting()" autocomplete="off" required />
+              </div>
+
+              <!-- Purchase Order UID (optional) -->
+              <div class="col-md-5">
+                <label class="form-label" for="purchaseOrderUid">
+                  Purchase Order UID <span class="text-muted small">(optional — for 3-way match)</span>
+                </label>
+                <input id="purchaseOrderUid" name="purchaseOrderUid" type="text"
+                       class="form-control" placeholder="Leave blank for manual bill"
+                       [ngModel]="purchaseOrderUid()"
+                       (ngModelChange)="purchaseOrderUid.set($event)"
+                       [disabled]="submitting()" autocomplete="off" />
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Line editor ─────────────────────────────────────────────────── -->
+        <div class="card mb-3">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span class="small fw-semibold text-muted">
+              <i class="bi bi-list-ul me-1" aria-hidden="true"></i>
+              Bill Lines
+              <span class="badge text-bg-secondary ms-1">{{ lines().length }}</span>
+            </span>
+            <button type="button" class="btn btn-sm btn-outline-primary"
+                    (click)="addLine()" [disabled]="submitting()">
+              <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add Line
+            </button>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-sm align-middle mb-0" aria-label="Bill lines">
+                <thead class="table-light">
+                  <tr>
+                    <th scope="col" style="min-width:200px">Description <span class="text-danger" aria-hidden="true">*</span></th>
+                    <th scope="col" style="min-width:110px" class="text-end">Billed Qty</th>
+                    <th scope="col" style="min-width:130px" class="text-end">Unit Cost</th>
+                    <th scope="col" style="min-width:130px" class="text-end">Line Net</th>
+                    <th scope="col" style="min-width:160px">PO Line UID <span class="text-muted small">(opt.)</span></th>
+                    <th scope="col"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (line of lines(); track $index; let i = $index) {
+                    <tr>
+                      <td>
+                        <label [for]="'desc_' + i" class="visually-hidden">Description for line {{ i + 1 }}</label>
+                        <input [id]="'desc_' + i" [name]="'desc_' + i" type="text"
+                               class="form-control form-control-sm" placeholder="Item description"
+                               [ngModel]="line.description"
+                               (ngModelChange)="updateLine(i, 'description', $event)"
+                               [disabled]="submitting()" autocomplete="off" />
+                      </td>
+                      <td>
+                        <label [for]="'qty_' + i" class="visually-hidden">Billed qty for line {{ i + 1 }}</label>
+                        <input [id]="'qty_' + i" [name]="'qty_' + i" type="text" inputmode="decimal"
+                               class="form-control form-control-sm text-end font-monospace" placeholder="0"
+                               [ngModel]="line.billedQty"
+                               (ngModelChange)="updateLine(i, 'billedQty', $event)"
+                               [disabled]="submitting()" autocomplete="off" />
+                      </td>
+                      <td>
+                        <label [for]="'cost_' + i" class="visually-hidden">Unit cost for line {{ i + 1 }}</label>
+                        <input [id]="'cost_' + i" [name]="'cost_' + i" type="text" inputmode="decimal"
+                               class="form-control form-control-sm text-end font-monospace" placeholder="0.00"
+                               [ngModel]="line.unitCostAmount"
+                               (ngModelChange)="updateLine(i, 'unitCostAmount', $event)"
+                               [disabled]="submitting()" autocomplete="off" />
+                      </td>
+                      <td class="text-end font-monospace small">
+                        {{ fmtMoney(lineNetAmount(line)) }}
+                      </td>
+                      <td>
+                        <label [for]="'poline_' + i" class="visually-hidden">PO line UID for line {{ i + 1 }}</label>
+                        <input [id]="'poline_' + i" [name]="'poline_' + i" type="text"
+                               class="form-control form-control-sm" placeholder="optional"
+                               [ngModel]="line.poLineUid"
+                               (ngModelChange)="updateLine(i, 'poLineUid', $event)"
+                               [disabled]="submitting()" autocomplete="off" />
+                      </td>
+                      <td>
+                        @if (lines().length > 1) {
+                          <button type="button" class="btn btn-sm btn-outline-danger"
+                                  (click)="removeLine(i)" [disabled]="submitting()"
+                                  [attr.aria-label]="'Remove line ' + (i + 1)">
+                            <i class="bi bi-trash" aria-hidden="true"></i>
+                          </button>
+                        }
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+                <tfoot>
+                  <tr class="table-light">
+                    <td colspan="3" class="text-end small fw-semibold">Total Net:</td>
+                    <td class="text-end font-monospace fw-bold">{{ fmtMoney(totalNet) }}</td>
+                    <td colspan="2"></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Error + submit -->
+        @if (formError(); as msg) {
+          <p class="text-danger small mb-2" role="alert">
+            <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ msg }}
+          </p>
+        }
+
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary" [disabled]="submitDisabled()">
+            @if (submitting()) {
+              <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+              Entering Bill…
+            } @else {
+              <i class="bi bi-file-earmark-check me-1" aria-hidden="true"></i>
+              Enter Bill &amp; Match
+            }
+          </button>
+          <a routerLink="/admin/ap/supplier-bills" class="btn btn-outline-secondary">Cancel</a>
+        </div>
+      </form>
+    }
+
+  }
+</section>

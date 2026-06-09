@@ -159,4 +159,12 @@ public final class AuditActions {
     public static final String ROUTE_AGENT_CLEARPRIMARY = "ROUTE.AGENT.CLEARPRIMARY";
     public static final String ROUTE_BRANCH_ADD        = "ROUTE.BRANCH.ADD";
     public static final String ROUTE_BRANCH_REMOVE     = "ROUTE.BRANCH.REMOVE";
+
+    // ---- AP (ADR-0015 D-13) ----
+    public static final String AP_BILL_ENTER       = "AP.BILL.ENTER";
+    public static final String AP_BILL_MATCH       = "AP.BILL.MATCH";
+    public static final String AP_BILL_POST        = "AP.BILL.POST";
+    public static final String AP_PAYMENT_MAKE     = "AP.PAYMENT.MAKE";
+    public static final String AP_DEBITNOTE_RAISE  = "AP.DEBITNOTE.RAISE";
+    public static final String AP_OPENING_SET      = "AP.OPENING.SET";
 }

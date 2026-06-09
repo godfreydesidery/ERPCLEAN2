@@ -16,5 +16,7 @@ public enum GlConfigKey {
     ACCOUNTS_PAYABLE,
     // --- AR increment (ADR-0014 D-6/D-13) ---
     BAD_DEBT_EXPENSE,
-    OPENING_BALANCE_EQUITY
+    OPENING_BALANCE_EQUITY,
+    // --- AP increment (ADR-0015 D-6/D-13) ---
+    PURCHASES
 }

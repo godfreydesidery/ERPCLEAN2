@@ -1,0 +1,249 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">
+      <i class="bi bi-file-earmark-text me-2" aria-hidden="true"></i>Supplier Statement
+    </h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      Select a supplier to view their outstanding balance, ageing, and open bills.
+    </p>
+  </header>
+
+  @if (!canView()) {
+    <p class="text-muted d-flex align-items-center gap-2 mt-3" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to view supplier statements.
+    </p>
+  } @else {
+
+    <!-- Company + supplier selectors -->
+    @switch (companyState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-3" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load companies.
+        </p>
+      }
+      @default {
+        <div class="d-flex flex-wrap gap-3 mb-4 align-items-end">
+          @if (companies().length > 1) {
+            <div style="min-width:220px">
+              <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+              <select id="companyPicker" name="companyPicker" class="form-select"
+                      [ngModel]="selectedCompanyId()"
+                      (ngModelChange)="onCompanyChange($event)">
+                @for (c of companies(); track c.uid) {
+                  <option [value]="c.id">{{ c.name }}</option>
+                }
+              </select>
+            </div>
+          }
+
+          <!-- Supplier picker -->
+          <div style="min-width:280px; position:relative">
+            <label class="form-label small text-muted mb-1" for="supplierSearch">Supplier</label>
+            <input id="supplierSearch" name="supplierSearch" type="search"
+                   class="form-control" placeholder="Type supplier name or code…"
+                   autocomplete="off"
+                   [ngModel]="supplierSearchQ()"
+                   (ngModelChange)="onSupplierSearchChange($event)" />
+            @if (supplierResults().length > 0) {
+              <ul class="list-group position-absolute w-100 shadow-sm z-3"
+                  role="listbox" aria-label="Supplier suggestions"
+                  style="top:100%; left:0; max-height:220px; overflow-y:auto">
+                @for (s of supplierResults(); track s.uid) {
+                  <li class="list-group-item list-group-item-action py-1 small"
+                      role="option" style="cursor:pointer"
+                      (click)="selectSupplier(s)"
+                      (keydown.enter)="selectSupplier(s)"
+                      tabindex="0">
+                    <strong>{{ s.code }}</strong> — {{ s.displayName }}
+                  </li>
+                }
+              </ul>
+            }
+          </div>
+
+          @if (selectedSupplier()) {
+            <button type="button" class="btn btn-outline-secondary btn-sm align-self-end"
+                    (click)="refresh()" [disabled]="state() === 'loading'">
+              <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Refresh
+            </button>
+          }
+        </div>
+      }
+    }
+
+    <!-- Statement states -->
+    @switch (state()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading statement…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load supplier statement. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="text-muted d-flex align-items-center gap-2">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view this statement.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <p class="text-muted">Select a supplier above to load their statement.</p>
+        } @else if (balance(); as bal) {
+
+          <!-- ── Headline ──────────────────────────────────────────────────── -->
+          <div class="d-flex flex-wrap gap-3 mb-4">
+            <div class="card border-0 shadow-sm flex-fill" style="min-width:200px; max-width:280px">
+              <div class="card-body text-center">
+                <div class="small text-muted mb-1">Outstanding Balance</div>
+                <div class="h3 font-monospace mb-0"
+                     [class.text-danger]="outstandingBalance() > 0"
+                     [class.text-success]="outstandingBalance() === 0">
+                  {{ fmtMoney(bal.outstandingBalance) }}
+                </div>
+                <div class="small text-muted">{{ bal.currency }}</div>
+              </div>
+            </div>
+            <div class="card border-0 shadow-sm flex-fill" style="min-width:180px; max-width:240px">
+              <div class="card-body text-center">
+                <div class="small text-muted mb-1">Open Bills</div>
+                <div class="h4 mb-0">{{ openBills().length }}</div>
+              </div>
+            </div>
+            <div class="card border-0 shadow-sm flex-fill" style="min-width:180px; max-width:240px">
+              <div class="card-body text-center">
+                <div class="small text-muted mb-1">Supplier</div>
+                <div class="small fw-semibold">{{ selectedSupplier()?.label ?? '—' }}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── Ageing buckets ───────────────────────────────────────────── -->
+          @if (sortedAgeing().length > 0) {
+            <div class="card mb-4">
+              <div class="card-header small fw-semibold text-muted">
+                <i class="bi bi-hourglass-split me-1" aria-hidden="true"></i>Ageing Analysis
+              </div>
+              <div class="card-body p-0">
+                <div class="table-responsive">
+                  <table class="table table-sm align-middle mb-0">
+                    <caption class="visually-hidden">Ageing buckets for this supplier</caption>
+                    <thead class="table-light">
+                      <tr>
+                        @for (b of sortedAgeing(); track b.bucket) {
+                          <th scope="col" class="text-end">{{ bucketLabel(b.bucket) }}</th>
+                        }
+                        <th scope="col" class="text-end fw-bold">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        @for (b of sortedAgeing(); track b.bucket) {
+                          <td class="text-end font-monospace"
+                              [class.text-danger]="+(b.amount) > 0 && b.bucket !== 'CURRENT'"
+                              [class.text-muted]="+(b.amount) === 0">
+                            @if (+(b.amount) === 0) {
+                              —
+                            } @else {
+                              {{ fmtMoney(b.amount) }}
+                            }
+                          </td>
+                        }
+                        <td class="text-end font-monospace fw-bold"
+                            [class.text-danger]="outstandingBalance() > 0">
+                          {{ fmtMoney(bal.outstandingBalance) }}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <!-- Ageing bar visualisation -->
+                @if (outstandingBalance() > 0) {
+                  <div class="ageing-bar d-flex" style="height:8px; overflow:hidden">
+                    @for (b of sortedAgeing(); track b.bucket) {
+                      @let pct = outstandingBalance() > 0 ? (+(b.amount) / outstandingBalance() * 100) : 0;
+                      @if (+(b.amount) > 0) {
+                        <div [class]="'flex-shrink-0 ' + bucketBadgeClass(b.bucket)"
+                             [style.width.%]="pct"
+                             [attr.title]="bucketLabel(b.bucket) + ': ' + fmtMoney(b.amount)"
+                             role="presentation"></div>
+                      }
+                    }
+                  </div>
+                }
+              </div>
+            </div>
+          }
+
+          <!-- ── Open bills ───────────────────────────────────────────────── -->
+          @if (openBills().length > 0) {
+            <div class="card mb-4">
+              <div class="card-header small fw-semibold text-muted">
+                <i class="bi bi-receipt-cutoff me-1" aria-hidden="true"></i>
+                Open Bills ({{ openBills().length }})
+              </div>
+              <div class="card-body p-0">
+                <div class="table-responsive">
+                  <table class="table table-sm align-middle mb-0">
+                    <caption class="visually-hidden">Open bills for this supplier</caption>
+                    <thead class="table-light">
+                      <tr>
+                        <th scope="col">Bill No.</th>
+                        <th scope="col">Supplier Inv.</th>
+                        <th scope="col">Bill Date</th>
+                        <th scope="col">Due Date</th>
+                        <th scope="col" class="text-end">Gross</th>
+                        <th scope="col" class="text-end">Outstanding</th>
+                        <th scope="col">Currency</th>
+                        <th scope="col">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (bill of openBills(); track bill.uid) {
+                        <tr>
+                          <td class="font-monospace small fw-semibold">{{ bill.billNumber }}</td>
+                          <td class="small">{{ bill.supplierInvoiceNo || '—' }}</td>
+                          <td class="small">{{ bill.billDate }}</td>
+                          <td class="small">{{ bill.dueDate ?? '—' }}</td>
+                          <td class="text-end font-monospace small">{{ fmtMoney(bill.grossAmount) }}</td>
+                          <td class="text-end font-monospace small fw-semibold text-danger">
+                            {{ fmtMoney(bill.outstandingAmount) }}
+                          </td>
+                          <td class="small">{{ bill.currency }}</td>
+                          <td>
+                            <span class="badge" [class]="billStatusBadgeClass(bill.status)">
+                              {{ bill.status }}
+                            </span>
+                          </td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          } @else {
+            <p class="text-muted small mb-4">
+              <i class="bi bi-check-circle-fill text-success me-1" aria-hidden="true"></i>
+              No outstanding open bills.
+            </p>
+          }
+
+        }
+      }
+    }
+
+  }
+</section>

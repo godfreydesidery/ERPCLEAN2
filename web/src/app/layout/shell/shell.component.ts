@@ -163,6 +163,11 @@ export class ShellComponent {
         { label: 'Record Receipt', route: '/admin/ar/receipts/record', icon: 'bi-receipt', available: true, permission: 'AR.RECEIPT.RECORD' },
         { label: 'Customer Statement', route: '/admin/ar/statement', icon: 'bi-file-earmark-text', available: true, permission: 'AR.STATEMENT.VIEW' },
         { label: 'AR Opening Balance', route: '/admin/ar/opening-balance', icon: 'bi-pencil-square', available: true, permission: 'AR.OPENING.SET' },
+        { label: 'Payables', route: '/admin/ap/supplier-bills', icon: 'bi-receipt-cutoff', available: true, permission: 'AP.VIEW' },
+        { label: 'Enter Bill', route: '/admin/ap/supplier-bills/enter', icon: 'bi-file-earmark-plus', available: true, permission: 'AP.BILL.ENTER' },
+        { label: 'Record Payment', route: '/admin/ap/payments/record', icon: 'bi-cash-stack', available: true, permission: 'AP.PAYMENT.RUN' },
+        { label: 'Supplier Statement', route: '/admin/ap/statement', icon: 'bi-file-earmark-text', available: true, permission: 'AP.VIEW' },
+        { label: 'AP Opening Balance', route: '/admin/ap/opening-balance', icon: 'bi-pencil-square', available: true, permission: 'AP.OPENING.SET' },
       ],
     },
   ];
