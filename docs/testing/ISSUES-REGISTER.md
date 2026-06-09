@@ -96,3 +96,11 @@ only the trial-balance template assumed string. Consider normalising money to a 
 See [`e2e/README.md`](../../e2e/README.md). Scripts: `e2e/seed-and-flow.js`, `e2e/qa-ui-drive.js`
 (typed master-data UI entry), `e2e/gl-ui-drive.js` (GL: post a balanced journal + verify trial
 balance), `e2e/ui-smoke.js` (browser smoke), `e2e/static-proxy-server.js` (SPA+API origin).
+
+## Finding #11 — ROOT_BYPASS audit write fails on read-only query transactions (2026-06-09)
+
+| # | Sev | Status | Area | Issue | Evidence |
+|---|-----|--------|------|-------|----------|
+| 11 | MEDIUM | OPEN | platform / security | `ScopeGuard.assertCanActIn` writes a ROOT_BYPASS audit row when **root acts outside its active company** (ScopeGuard.java:197-201). Its comment assumes the caller is a read-WRITE `@Transactional` method — but read-only query services (`ArAgeingQuery`, GL `TrialBalanceQuery`, AR statement/balance) are `@Transactional(readOnly=true)`. So **a root admin viewing ANOTHER company's read-only financial report (AR ageing/statement/balance, GL trial balance) gets a 500** — `JpaSystemException: cannot execute INSERT in a read-only transaction` — instead of the data. Narrow (root + cross-company + read-only path) but real. Root acting in its OWN company is fine (no bypass audit fires). | Surfaced by `ArAgeingQueryIT.ageing_crossTenant_blocked` while testing isolation. |
+
+**Fix direction (for a focused follow-up, not this branch):** write the ROOT_BYPASS audit in its own `REQUIRES_NEW` transaction (the bypass audit is an independent concern and should commit regardless of the caller's read-only/read-write TX), OR have read-only query services tolerate it. Touches security-platform code used by every `assertCanActIn` caller — deserves its own branch + security review. NOTE: a non-root cross-tenant denial throws `ForbiddenException` BEFORE any audit write (ScopeGuard.java:191), so the tenant-isolation guarantee itself is intact — this is purely the root-bypass-audit-on-read-only-TX path.
