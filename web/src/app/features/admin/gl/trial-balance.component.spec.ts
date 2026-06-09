@@ -127,6 +127,37 @@ describe('TrialBalanceComponent — render', () => {
   });
 });
 
+// ── Regression: money fields arrive as NUMBERS on the wire (BigDecimal → JSON number),
+//    not strings. The template must not assume strings (row.net.startsWith crashed live,
+//    blanking the per-row amounts — see ISSUES-REGISTER). Render the template with numeric
+//    money and assert it renders the rows without throwing.
+describe('TrialBalanceComponent — numeric money (wire reality) renders', () => {
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('renders account rows when net/debit/credit are numbers, not strings', async () => {
+    vi.useFakeTimers();
+    const numericTb = (): any => ({
+      rows: [
+        { accountCode: '1000', accountName: 'Cash', accountType: 'ASSET', totalDebit: 50000, totalCredit: 0, net: 50000 },
+        { accountCode: '4100', accountName: 'Sales Revenue', accountType: 'INCOME', totalDebit: 0, totalCredit: 50000, net: -50000 },
+      ],
+      totalDebits: 50000,
+      totalCredits: 50000,
+    });
+    makeBed({ tbImpl: () => of(numericTb()) });
+
+    const fixture = TestBed.createComponent(TrialBalanceComponent);
+    await vi.runAllTimersAsync();
+    // Would throw "row.net.startsWith is not a function" before the fix.
+    expect(() => fixture.detectChanges()).not.toThrow();
+
+    const text = fixture.nativeElement.textContent ?? '';
+    expect(text).toContain('Cash');
+    expect(text).toContain('Sales Revenue');
+    expect(text).toContain('50000');
+  });
+});
+
 // ── Balanced indicator ─────────────────────────────────────────────────────────
 
 describe('TrialBalanceComponent — balanced indicator', () => {
