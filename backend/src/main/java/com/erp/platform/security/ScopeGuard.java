@@ -5,6 +5,11 @@ import com.erp.modules.ap.repository.ApPaymentRepository;
 import com.erp.modules.ap.repository.SupplierBillRepository;
 import com.erp.modules.ar.repository.ArInvoiceRepository;
 import com.erp.modules.ar.repository.ArReceiptRepository;
+import com.erp.modules.cashbank.repository.BankReconciliationRepository;
+import com.erp.modules.cashbank.repository.CashBankAccountRepository;
+import com.erp.modules.cashbank.repository.CashTransactionRepository;
+import com.erp.modules.cashbank.repository.CashTransferRepository;
+import com.erp.modules.cashbank.repository.ChequeRepository;
 import com.erp.modules.gl.repository.ChartOfAccountRepository;
 import com.erp.modules.gl.repository.FiscalPeriodRepository;
 import com.erp.modules.gl.repository.GlConfigRepository;
@@ -79,6 +84,12 @@ public class ScopeGuard {
     private final SupplierBillRepository   supplierBills;
     private final ApPaymentRepository      apPayments;
     private final ApDebitNoteRepository    apDebitNotes;
+    // Cash & Bank repositories (ADR-0016 D-12)
+    private final CashBankAccountRepository  cashBankAccounts;
+    private final CashTransactionRepository  cashTransactions;
+    private final CashTransferRepository     cashTransfers;
+    private final ChequeRepository           cheques;
+    private final BankReconciliationRepository bankReconciliations;
     private final AuditService             audit;
 
     public ScopeGuard(CompanyRepository companies,
@@ -106,6 +117,11 @@ public class ScopeGuard {
                       SupplierBillRepository supplierBills,
                       ApPaymentRepository apPayments,
                       ApDebitNoteRepository apDebitNotes,
+                      CashBankAccountRepository cashBankAccounts,
+                      CashTransactionRepository cashTransactions,
+                      CashTransferRepository cashTransfers,
+                      ChequeRepository cheques,
+                      BankReconciliationRepository bankReconciliations,
                       AuditService audit) {
         this.companies      = companies;
         this.branches       = branches;
@@ -129,10 +145,15 @@ public class ScopeGuard {
         this.glConfigs      = glConfigs;
         this.arInvoices     = arInvoices;
         this.arReceipts     = arReceipts;
-        this.supplierBills  = supplierBills;
-        this.apPayments     = apPayments;
-        this.apDebitNotes   = apDebitNotes;
-        this.audit          = audit;
+        this.supplierBills       = supplierBills;
+        this.apPayments          = apPayments;
+        this.apDebitNotes        = apDebitNotes;
+        this.cashBankAccounts    = cashBankAccounts;
+        this.cashTransactions    = cashTransactions;
+        this.cashTransfers       = cashTransfers;
+        this.cheques             = cheques;
+        this.bankReconciliations = bankReconciliations;
+        this.audit               = audit;
     }
 
     /**
@@ -173,9 +194,15 @@ public class ScopeGuard {
             case "arinvoice"      -> arInvoices.findCompanyIdByUid(uid);
             case "arreceipt"      -> arReceipts.findCompanyIdByUid(uid);
             // AP target types (ADR-0015 D-12)
-            case "supplierbill"   -> supplierBills.findCompanyIdByUid(uid);
-            case "appayment"      -> apPayments.findCompanyIdByUid(uid);
-            case "apdebitnote"    -> apDebitNotes.findCompanyIdByUid(uid);
+            case "supplierbill"        -> supplierBills.findCompanyIdByUid(uid);
+            case "appayment"           -> apPayments.findCompanyIdByUid(uid);
+            case "apdebitnote"         -> apDebitNotes.findCompanyIdByUid(uid);
+            // Cash & Bank target types (ADR-0016 D-12)
+            case "cashbankaccount"     -> cashBankAccounts.findCompanyIdByUid(uid);
+            case "cashtransaction"     -> cashTransactions.findCompanyIdByUid(uid);
+            case "cashtransfer"        -> cashTransfers.findCompanyIdByUid(uid);
+            case "cheque"              -> cheques.findCompanyIdByUid(uid);
+            case "bankreconciliation"  -> bankReconciliations.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };

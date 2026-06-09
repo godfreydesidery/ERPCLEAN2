@@ -17,6 +17,7 @@ import com.erp.modules.gl.domain.entity.ChartOfAccount;
 import com.erp.modules.gl.repository.ChartOfAccountRepository;
 import com.erp.modules.gl.repository.JournalEntryRepository;
 import com.erp.modules.gl.repository.JournalLineRepository;
+import com.erp.modules.cashbank.service.CashBankSeeder;
 import com.erp.modules.gl.service.ChartOfAccountService;
 import com.erp.modules.gl.service.FiscalCalendarService;
 import com.erp.modules.gl.service.GlConfigService;
@@ -106,6 +107,7 @@ class ArReceiptServiceIT extends PostgresIntegrationTest {
     @Autowired private ChartOfAccountService chartOfAccountService;
     @Autowired private FiscalCalendarService fiscalCalendarService;
     @Autowired private GlConfigService glConfigService;
+    @Autowired private CashBankSeeder cashBankSeeder;
     @Autowired private OrganisationRepository organisations;
     @Autowired private CompanyRepository companies;
     @Autowired private BranchRepository branches;
@@ -173,6 +175,7 @@ class ArReceiptServiceIT extends PostgresIntegrationTest {
         fiscalCalendarService.seedCurrentYear(company.getId());
         glConfigService.seedDefaults(company.getId());
         arGlSeeder.seedDefaults(company.getId());
+        cashBankSeeder.seedDefaults(company.getId());
     }
 
     @AfterEach

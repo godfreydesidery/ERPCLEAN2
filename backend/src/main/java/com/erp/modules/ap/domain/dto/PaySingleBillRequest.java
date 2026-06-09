@@ -14,5 +14,13 @@ public record PaySingleBillRequest(
         @NotNull @Positive BigDecimal amount,
         @NotNull LocalDate paymentDate,
         @NotBlank String tenderType,
-        String bankReference
-) {}
+        String bankReference,
+        /** Optional: uid of the cash/bank account to post to; null = company default (ADR-0016 D-10). */
+        String cashBankAccountUid
+) {
+    /** Back-compat overload: omit cashBankAccountUid → null = company default cash/bank account. */
+    public PaySingleBillRequest(String companyUid, String supplierBillUid, BigDecimal amount,
+                                LocalDate paymentDate, String tenderType, String bankReference) {
+        this(companyUid, supplierBillUid, amount, paymentDate, tenderType, bankReference, null);
+    }
+}

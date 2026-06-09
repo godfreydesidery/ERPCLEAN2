@@ -20,6 +20,9 @@ public enum JournalSourceType {
     AP_BILL,
     AP_PAYMENT,
     AP_DEBIT_NOTE,
+    // --- Cash & Bank increment (ADR-0016 D-7) — now admitted by the DB CHECK (V13 widens it) ---
+    CASH_TRANSFER,
+    CASH_DIRECT,
     // --- RESERVED — NOT yet admitted by the DB CHECK; widen when the increment lands ---
     AR,
     AP,

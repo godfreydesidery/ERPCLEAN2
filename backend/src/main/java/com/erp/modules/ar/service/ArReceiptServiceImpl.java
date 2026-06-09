@@ -16,6 +16,11 @@ import com.erp.modules.gl.domain.dto.JournalEntryDraft;
 import com.erp.modules.gl.domain.dto.JournalEntryDraft.LineDraft;
 import com.erp.modules.gl.domain.dto.JournalEntryDto;
 import com.erp.modules.gl.domain.entity.ChartOfAccount;
+import com.erp.modules.cashbank.domain.dto.CashAccountGlResolutionDto;
+import com.erp.modules.cashbank.domain.enums.CashTxnDirection;
+import com.erp.modules.cashbank.domain.enums.CashTxnType;
+import com.erp.modules.cashbank.service.CashBankAccountResolver;
+import com.erp.modules.cashbank.service.CashTransactionRecorder;
 import com.erp.modules.gl.domain.enums.GlConfigKey;
 import com.erp.modules.gl.domain.enums.JournalSourceType;
 import com.erp.modules.gl.service.GLConfigResolver;
@@ -59,6 +64,8 @@ public class ArReceiptServiceImpl implements ArReceiptService {
     private final ArReceiptNumberGenerator numberGen;
     private final GLPostingService glPosting;
     private final GLConfigResolver glConfig;
+    private final CashBankAccountResolver cashBankAccountResolver;
+    private final CashTransactionRecorder cashTxnRecorder;
     private final ScopeGuard scopeGuard;
     private final AuditService audit;
 
@@ -70,18 +77,22 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                                  ArReceiptNumberGenerator numberGen,
                                  GLPostingService glPosting,
                                  GLConfigResolver glConfig,
+                                 CashBankAccountResolver cashBankAccountResolver,
+                                 CashTransactionRecorder cashTxnRecorder,
                                  ScopeGuard scopeGuard,
                                  AuditService audit) {
-        this.receipts   = receipts;
-        this.invoices   = invoices;
-        this.allocations = allocations;
-        this.customers  = customers;
-        this.companies  = companies;
-        this.numberGen  = numberGen;
-        this.glPosting  = glPosting;
-        this.glConfig   = glConfig;
-        this.scopeGuard = scopeGuard;
-        this.audit      = audit;
+        this.receipts                = receipts;
+        this.invoices                = invoices;
+        this.allocations             = allocations;
+        this.customers               = customers;
+        this.companies               = companies;
+        this.numberGen               = numberGen;
+        this.glPosting               = glPosting;
+        this.glConfig                = glConfig;
+        this.cashBankAccountResolver = cashBankAccountResolver;
+        this.cashTxnRecorder         = cashTxnRecorder;
+        this.scopeGuard              = scopeGuard;
+        this.audit                   = audit;
     }
 
     @Override
@@ -164,8 +175,10 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         receipt.setUpdatedBy(actorId());
 
         // 9. Post cash leg to GL synchronously (D-4). Failure rolls back the whole TX.
-        ChartOfAccount cashAcct = glConfig.resolve(companyId, GlConfigKey.CASH);
-        ChartOfAccount arAcct   = glConfig.resolve(companyId, GlConfigKey.ACCOUNTS_RECEIVABLE);
+        //    ADR-0016: resolve cash/bank account via CashBankAccountResolver (replaces glConfig.CASH).
+        CashAccountGlResolutionDto cashRes = cashBankAccountResolver.resolve(
+                companyId, req.cashBankAccountUid());
+        ChartOfAccount arAcct = glConfig.resolve(companyId, GlConfigKey.ACCOUNTS_RECEIVABLE);
 
         JournalEntryDraft draft = new JournalEntryDraft(
                 companyId,
@@ -177,7 +190,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                 null,
                 actorId(),
                 List.of(
-                        new LineDraft(cashAcct.getId(), receipt.getAmount(), BigDecimal.ZERO, currency,
+                        new LineDraft(cashRes.glAccountId(), receipt.getAmount(), BigDecimal.ZERO, currency,
                                 "Cash received from " + customer.getDisplayName()),
                         new LineDraft(arAcct.getId(), BigDecimal.ZERO, receipt.getAmount(), currency,
                                 "AR control — " + receiptNumber)
@@ -185,7 +198,16 @@ public class ArReceiptServiceImpl implements ArReceiptService {
 
         JournalEntryDto posted = glPosting.post(draft);
         receipt.setGlEntryUid(posted.uid());
+        receipt.setCashBankAccountId(cashRes.cashBankAccountId());
         receipt = receipts.save(receipt);
+
+        // 9b. Append cash_transaction row for this settlement (ADR-0016 D-13).
+        cashTxnRecorder.recordSettlement(
+                companyId, receipt.getBranchId(), cashRes.cashBankAccountId(),
+                CashTxnType.AR_RECEIPT, CashTxnDirection.IN,
+                receipt.getAmount(), currency,
+                receipt.getUid(), posted.uid(),
+                receipt.getReceiptDate(), actorId());
 
         // 10. Audit
         audit.record(AuditEvent.of(AuditActions.AR_RECEIPT_RECORD, "ar_receipts",

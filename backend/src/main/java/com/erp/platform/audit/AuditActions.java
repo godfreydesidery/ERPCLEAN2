@@ -167,4 +167,17 @@ public final class AuditActions {
     public static final String AP_PAYMENT_MAKE     = "AP.PAYMENT.MAKE";
     public static final String AP_DEBITNOTE_RAISE  = "AP.DEBITNOTE.RAISE";
     public static final String AP_OPENING_SET      = "AP.OPENING.SET";
+
+    // ---- Cash & Bank (ADR-0016 D-13) ----
+    public static final String CASH_ACCOUNT_CREATE     = "CASH.ACCOUNT.CREATE";
+    public static final String CASH_ACCOUNT_UPDATE     = "CASH.ACCOUNT.UPDATE";
+    public static final String CASH_TRANSFER_RECORD    = "CASH.TRANSFER.RECORD";
+    public static final String CASH_ENTRY_RECORD       = "CASH.ENTRY.RECORD";
+    public static final String CASH_SETTLEMENT_RECORD  = "CASH.SETTLEMENT.RECORD";
+    public static final String CHEQUE_REGISTER         = "CHEQUE.REGISTER";
+    public static final String CHEQUE_CLEAR            = "CHEQUE.CLEAR";
+    public static final String CHEQUE_CANCEL           = "CHEQUE.CANCEL";
+    public static final String CASH_RECONCILE_OPEN     = "CASH.RECONCILE.OPEN";
+    public static final String CASH_RECONCILE_MARK     = "CASH.RECONCILE.MARK";
+    public static final String CASH_RECONCILE_COMPLETE = "CASH.RECONCILE.COMPLETE";
 }

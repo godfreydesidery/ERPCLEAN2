@@ -22,5 +22,15 @@ public record PaymentRunRequest(
          * Optional explicit bill list. If non-null/non-empty, only these bills are paid
          * (ignoring the date filter). If null/empty, auto-selects by supplier + due date.
          */
-        List<String> billUids
-) {}
+        List<String> billUids,
+        /** Optional: uid of the cash/bank account to post to; null = company default (ADR-0016 D-10). */
+        String cashBankAccountUid
+) {
+    /** Back-compat overload: omit cashBankAccountUid → null = company default cash/bank account. */
+    public PaymentRunRequest(String companyUid, String supplierUid, LocalDate dueOnOrBefore,
+                             LocalDate paymentDate, String tenderType, String bankReference,
+                             List<String> billUids) {
+        this(companyUid, supplierUid, dueOnOrBefore, paymentDate, tenderType, bankReference,
+                billUids, null);
+    }
+}
