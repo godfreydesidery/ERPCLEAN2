@@ -813,3 +813,252 @@ business's actual position when GL goes live.
   (FR-GL-16).
 - **AC4** Given a posted opening-balance entry needs correcting, then I correct it with a **reversing
   entry** then a correct re-post — never by editing the posted entry (BR-GL-02).
+
+---
+
+## AR — Accounts Receivable (the customer sub-ledger)
+
+Requirements: [docs/requirements/accounts-receivable.md](docs/requirements/accounts-receivable.md). Status:
+**RATIFIED (owner-confirmed 2026-06-09).** AR is half of **Increment 2** of the full-ERP roadmap
+(docs/ROADMAP.md T1.2 / §5), built in parallel with [AP](#ap--accounts-payable-the-supplier-sub-ledger). AR
+is the **customer sub-ledger** — the per-customer detail (open items, receipts, allocations, balances,
+ageing) behind the GL **`1200 Accounts Receivable`** control account. v1 = **open items from credit sales**
+(a finalised **credit-account** sale auto-creates an open item via `SALE.FINALISED`; a **cash** sale creates
+none); **receipts + allocation** (**auto oldest-open-first** by default, **manual override**, **on-account /
+unapplied** receipts allowed, over-allocation rejected); **balances + ageing** (Current / 1–30 / 31–60 /
+61–90 / 90+ by due date); **customer statements** (view/print); **write-offs** (bad-debt) and **credit
+notes** (reduce a receivable); **opening balances**; and a **credit-limit check on the Sales finalise path**
+(**warn + allow with `SALES.CREDIT.OVERRIDE`**, audited — an additive Sales touch). **The reconciliation
+rule:** a credit sale's GL entry **already** debited the AR control (Sales' `SalesPostingHandler`) — so AR
+creating the open item **must NOT post to GL again** (no double-post); a **receipt** IS a new event → AR
+records receipt+allocation **and** posts **DR Cash/Bank / CR AR control**. The AR sub-ledger total must
+**reconcile** to the GL AR control account at all times. Permissions `AR.VIEW` / `AR.INVOICE.VIEW` /
+`AR.RECEIPT.RECORD` / `AR.RECEIPT.ALLOCATE` / `AR.WRITEOFF` / `AR.STATEMENT.VIEW` / `AR.OPENING.SET` (+
+`SALES.CREDIT.OVERRIDE`); per-company scope; `assertCanActIn` on every read; audit on every mutation;
+receipts numbered `RCT-####` via `code_sequence`. **Deferred:** Cash & Bank module (T1.4 — v1 posts the
+receipt cash leg directly to a Cash/Bank GL account), payment-terms master, dunning / statement emailing /
+overdue interest, multi-currency AR / FX revaluation, full returns machinery (Sales T2.1). Consumes
+`SALE.FINALISED` / `SALE.VOIDED` (ADR-0009, **DTO-only**); posts to the existing GL (ADR-0013) control
+accounts; reuses Money (ADR-0005), RBAC, audit, `code_sequence`. Next: solutions-architect **ADR-0014** (AR
+data model, **V11**) incl. the sub-ledger⇄GL-control reconciliation design, the GL-posting mechanism choice,
+and the Sales credit-limit additive touch.
+
+### US-AR-01 — A finalised credit sale creates a receivable (system-driven, no GL double-post)
+**As a** credit controller **I want** every credit sale to create its own receivable automatically **so
+that** I always know who owes us, without re-keying the invoice or double-counting it on the books.
+- **AC1** Given a **credit-account** sale finalises and emits **`SALE.FINALISED`**, when the AR open-item
+  handler consumes it, then an **AR open item** is created for the **gross** amount, with an invoice date
+  and a **due date** (from customer terms, else net-on-receipt / 0 days), under the event's company/branch
+  context (FR-AR-01/03).
+- **AC2** Given a **cash / walk-in** sale finalises, when the handler runs, then **no AR open item** is
+  created — a cash sale is settled at the till (FR-AR-02, BR-AR-01).
+- **AC3** Given the open item is created, then **AR posts NOTHING to GL** — the credit sale's
+  `SalesPostingHandler` already debited the **AR control** account; AR records only the sub-ledger detail
+  (FR-AR-05, BR-AR-02 — no double-post).
+- **AC4** Given the **same `SALE.FINALISED` is redelivered**, when the handler runs again, then **no second
+  open item** is created — one open item per invoice (idempotency, FR-AR-04, BR-AR-08, NFR-AR-04).
+- **AC5** Given the handler runs, then it reads the invoice/customer as a **DTO / event payload** and
+  **imports no Sales or Parties entity** (NFR-AR-06); the create is audited as a **SYSTEM** action
+  (NFR-AR-03).
+- **AC6** **(Reconciliation bar)** Given a credit sale has finalised, then the new **AR open item amount
+  equals the AR-control debit** Sales posted (same amount) — the sub-ledger total reconciles to the GL
+  `1200 Accounts Receivable` control balance (FR-AR-18, NFR-AR-01).
+
+### US-AR-02 — Record a receipt and allocate it oldest-open-first (with manual override)
+**As a** cashier / receipts clerk **I want** to record a customer's payment and allocate it to their open
+invoices **so that** their balance and ageing are correct and the cash is on the books.
+- **AC1** Given `AR.RECEIPT.RECORD`, when I record a **receipt** (`RCT-####`) for an amount in the sale
+  currency, then it is allocated **oldest-open-first by default** (pays the oldest-due open items until
+  exhausted) (FR-AR-06/07, BR-AR-03).
+- **AC2** Given `AR.RECEIPT.ALLOCATE`, when I **manually override** the allocation (re-pick which open items
+  the receipt settles), then the receipt is re-applied per my selection; a fully-allocated open item is
+  **closed** (FR-AR-07).
+- **AC3** Given the receipt is recorded, then GL posts **once**: **DR Cash/Bank** (`gl_configs` `CASH`) **/
+  CR the AR control** for the **receipt amount**; the sub-ledger open items drop by the **allocated** amount
+  (FR-AR-06/16, BR-AR-12).
+- **AC4** **(Reconciliation bar)** Given a credit sale (US-AR-01) and then a receipt that settles it, when
+  both have posted, then the **customer's AR balance is reduced correctly** AND the **GL AR control nets
+  correctly** (control debit from the sale − control credit from the receipt = remaining open balance);
+  the sub-ledger total equals the control balance (FR-AR-18, NFR-AR-01).
+- **AC5** Given I try to **over-allocate** (total allocated > receipt amount), when I save, then it is
+  **rejected**; the remainder may stay on-account (FR-AR-10, BR-AR-04).
+- **AC6** Given I **re-allocate** an already-recorded receipt (move its applied amount between open items),
+  then it is a **sub-ledger-only** change and **nothing further posts to GL** (FR-AR-11, BR-AR-12); both the
+  record and the re-allocation are audited (NFR-AR-03).
+
+### US-AR-03 — Take an on-account (unapplied) receipt
+**As a** receipts clerk **I want** to accept money that isn't yet matched to an invoice **so that** a
+customer can pay in advance or over-pay and the credit is held against their account.
+- **AC1** Given `AR.RECEIPT.RECORD`, when I record a receipt with **no allocation** (or allocate less than
+  the receipt), then the unallocated amount stands as an **on-account credit balance** on the customer
+  (FR-AR-09, BR-AR-05).
+- **AC2** Given an on-account credit exists, when a later open item is created or selected, then the credit
+  can be **applied** to it (`AR.RECEIPT.ALLOCATE`), reducing that open item (FR-AR-09).
+- **AC3** Given the receipt was recorded, then GL was posted **DR Cash/Bank / CR AR control** for the full
+  receipt amount once — the on-account portion is a sub-ledger credit, not a separate GL event
+  (FR-AR-16, BR-AR-12).
+
+### US-AR-04 — View and print a customer statement (open items + ageing)
+**As a** credit controller **I want** a customer statement **so that** I can see what a customer owes, how
+overdue, and chase it.
+- **AC1** Given `AR.STATEMENT.VIEW`, when I open a customer's **statement** as at a date, then I see the
+  customer's **open items** and an **ageing** breakdown — **Current / 1–30 / 31–60 / 61–90 / 90+** days by
+  **due date** — plus recent receipts/credit notes (FR-AR-08/12).
+- **AC2** Given the statement, when I print it, then it renders for view/print (no emailing / dunning in
+  v1) (FR-AR-12).
+- **AC3** Given any statement or balance read, then it returns **only my company's** receivables
+  (`assertCanActIn`); cross-company figures never appear (FR-AR-20, BR-AR-07, NFR-AR-01).
+
+### US-AR-05 — Write off a bad debt
+**As a** credit controller **I want** to write off an uncollectable receivable **so that** the books and the
+sub-ledger stop carrying a debt we won't collect.
+- **AC1** Given `AR.WRITEOFF`, when I write off an open item (with a reason), then the open item is
+  **closed** in the sub-ledger and GL posts **DR bad-debt expense** (`gl_configs`) **/ CR the AR control**
+  for the written-off amount (FR-AR-13, BR-AR-06).
+- **AC2** Given the write-off posts, then the customer's balance and the GL AR control drop by the **same
+  amount** (reconciled, FR-AR-18); the write-off is **audited** (NFR-AR-03).
+- **AC3** Given a posted write-off needs correcting, then I correct it with a **reversal / credit
+  adjustment**, never by editing the posted entry (append-only, BR-AR-09).
+
+### US-AR-06 — Enter AR opening balances at go-live
+**As an** accountant **I want** to enter customers' pre-existing receivables **so that** AR starts from the
+business's actual debtor position when it goes live.
+- **AC1** Given `AR.OPENING.SET`, when I enter each customer's pre-existing receivable (amount, invoice
+  date, due date) as an **opening open item**, then it is recorded in the sub-ledger (FR-AR-15).
+- **AC2** Given opening open items are entered, then the **sum equals the AR control account's opening
+  balance** (the GL side is the opening-balance journal, gl.md FR-GL-13) — reconciliation holds from day
+  one (FR-AR-15, BR-AR-02).
+- **AC3** Given an opening open item is wrong, then it is corrected via a **reversal / credit note**, not by
+  editing a posted entry (BR-AR-09).
+
+### US-AR-07 — Credit-limit check on the Sales finalise path (warn + override)
+**As a** sales clerk **I want** to be warned when a credit sale would push a customer over their credit
+limit **so that** we don't over-extend a customer without a manager's say-so.
+- **AC1** Given a **credit** sale is finalised, when the finalise path computes **(current AR balance) +
+  (this sale's gross)** and it **exceeds** the customer's `credit_limit_amount`, then I am **warned**
+  (FR-AR-19, BR-AR-10).
+- **AC2** Given I am warned and I **hold `SALES.CREDIT.OVERRIDE`**, when I confirm, then the sale is
+  **allowed** and the override is **audited** (customer, balance, limit, amount, operator, time)
+  (FR-AR-19, NFR-AR-03).
+- **AC3** Given I am warned and I do **not** hold `SALES.CREDIT.OVERRIDE`, when I try to finalise, then the
+  credit sale is **blocked** until the balance is reduced or the limit raised (FR-AR-19, BR-AR-10).
+- **AC4** Given a **cash** sale, when it is finalised, then the credit-limit check is **not** applied (no
+  receivable arises) (FR-AR-02, FR-AR-19).
+
+---
+
+## AP — Accounts Payable (the supplier sub-ledger)
+
+Requirements: [docs/requirements/accounts-payable.md](docs/requirements/accounts-payable.md). Status:
+**RATIFIED (owner-confirmed 2026-06-09).** AP is half of **Increment 2** of the full-ERP roadmap
+(docs/ROADMAP.md T1.3 / §5), built in parallel with [AR](#ar--accounts-receivable-the-customer-sub-ledger).
+AP is the **supplier sub-ledger** — the per-supplier detail (bills, payables, payments, balances) behind the
+GL **`2100 Accounts Payable`** control account. v1 is **bill-entry-driven**: an operator **enters a supplier
+bill** (`BILL-####`); it is **3-way matched** against the **PO** and the **Goods Receipt** (**quantity AND
+price**) within a **tolerance**; a bill **within tolerance** becomes a **payable** and **posts to GL**; a
+bill **outside tolerance** is **held for review**. **A goods receipt alone does NOT create a payable** (no
+GRN accrual in v1 — accepted risk: the liability is not on the books between receipt and bill entry). v1
+also has **single bill payment + payment runs** (`PAYRUN-####` batch-selects due/matched bills → one
+payment), **debit notes/adjustments** (reduce an open payable), and **opening balances**. **The
+reconciliation rule (mirror of AR):** the goods receipt posted **Stock only, NOT GL** — so the **AP bill
+match is the FIRST GL posting for the purchase** (**DR Inventory-or-Purchases / CR AP control**); a
+**payment** posts **DR AP control / CR Cash/Bank**. The AP sub-ledger total must **reconcile** to the GL AP
+control account at all times. **Inventory valuation + COGS are DEFERRED (T2.2)** — v1 books the bill debit
+to inventory-or-expense per `gl_configs` **without** a COGS roll-up. Permissions `AP.VIEW` / `AP.BILL.ENTER`
+/ `AP.BILL.MATCH` / `AP.PAYMENT.RUN` / `AP.DEBITNOTE` / `AP.OPENING.SET`; per-company scope; `assertCanActIn`
+on every read; audit on every mutation; `BILL-####` / `PAYRUN-####` via `code_sequence`. **Deferred:** GRNI
+accrual, inventory valuation/COGS (T2.2), Cash & Bank module (T1.4 — v1 posts the payment bank leg directly
+to a Cash/Bank GL account), input-VAT recovery + VAT return (T1.5), payment-terms master, payment approval
+workflow, multi-currency AP / FX revaluation. Reads Purchases PO/GRN (ADR-0011, **DTO-only**) for matching;
+posts to the existing GL (ADR-0013) control accounts; reuses Money (ADR-0005), RBAC, audit, `code_sequence`.
+Next: solutions-architect **ADR-0015** (AP data model, **V12**) incl. the sub-ledger⇄GL-control
+reconciliation design, the GL-posting mechanism choice, and the **bill debit account choice** (inventory
+value vs a purchases / GRNI-clearing account).
+
+### US-AP-01 — Enter a supplier bill and 3-way match it (the first GL posting for the purchase)
+**As an** AP clerk **I want** to enter a supplier's bill and match it to our PO and goods receipt **so that**
+we owe only what we actually ordered and received, at the agreed price, and the liability lands on the books.
+- **AC1** Given `AP.BILL.ENTER`, when I enter a supplier bill (`BILL-####`) with lines (product, qty, unit
+  cost), the total, bill/due dates, and the **PO + Goods Receipt(s)** it bills against, then it is recorded
+  for matching (FR-AP-01).
+- **AC2** Given the bill is matched (`AP.BILL.MATCH`), when each line's **quantity** (bill vs received vs
+  ordered) **and price** (bill unit cost vs PO unit cost) agree **within tolerance**, then the bill
+  **matches**, becomes a **payable**, and **posts to GL**: **DR Inventory-or-Purchases (`gl_configs`) [+ DR
+  VAT input if stated] / CR the AP control** for the bill total (FR-AP-03/04/06, BR-AP-03).
+- **AC3** Given a goods receipt had pushed stock in but **did not post to GL**, then this matched bill is
+  the **FIRST GL posting for the purchase** — the liability appears on the books now, not at receipt
+  (FR-AP-06, BR-AP-02).
+- **AC4** Given the bill books a debit, then v1 books it to inventory-or-expense **per `gl_configs` WITHOUT
+  a COGS roll-up** — no cost layer, no COGS (inventory valuation + COGS are T2.2) (BR-AP-11).
+- **AC5** **(Reconciliation bar)** Given a matched bill posts, then the **supplier's AP balance** rises by
+  the bill total AND the **GL AP control** is credited by the same amount; the sub-ledger total equals the
+  GL `2100 Accounts Payable` control balance (FR-AP-08, NFR-AP-01).
+- **AC6** Given matching, then AP reads the **PO / Goods Receipt** as **DTOs** and imports no Purchases
+  entity (NFR-AP-06); the bill entry + match are audited (NFR-AP-03).
+
+### US-AP-02 — A bill over tolerance is held for review
+**As an** AP clerk **I want** a bill whose price or quantity is off to be held **so that** we never silently
+pay a supplier more than we agreed.
+- **AC1** Given a bill whose **price or quantity** is **beyond tolerance** vs the PO/GR, when it is matched,
+  then it is **held for review** and **nothing posts to GL** (FR-AP-04, BR-AP-04).
+- **AC2** Given a held bill and `AP.BILL.MATCH`, when I **accept the variance**, then the bill posts as a
+  payable (US-AP-01 AC2) and the acceptance is **audited** (FR-AP-04, NFR-AP-03).
+- **AC3** Given a held bill, when I **reject** it, then no payable is created and nothing posts to GL
+  (FR-AP-04).
+- **AC4** Given the recommended default tolerance (price within ~2% or a small absolute, quantity = received
+  qty), then it is a **configurable setting** confirmed before go-live; the *held-not-auto-posted* behaviour
+  is fixed regardless of the value (FR-AP-05, OQ-AP-01).
+
+### US-AP-03 — Pay suppliers via a payment run (batch) and as a single payment
+**As a** payments officer **I want** to pay many due bills in one run, or pay a single bill **so that**
+suppliers are settled efficiently and the cash side hits the books.
+- **AC1** Given `AP.PAYMENT.RUN`, when I run a **payment run** (`PAYRUN-####`) that **batch-selects** due /
+  matched bills (by supplier, due date), then they are paid in **one payment** and each payable is settled
+  (FR-AP-10).
+- **AC2** Given the payment, then GL posts **DR the AP control / CR Cash/Bank** (`gl_configs`) for the
+  total, with the per-bill split recorded in the sub-ledger (FR-AP-10, BR-AP-05).
+- **AC3** Given a fully-settled payable, when a later run is built, then it is **excluded** — **no payable is
+  paid twice**; a partly-paid payable shows its **remaining** balance and over-payment is rejected
+  (FR-AP-11, BR-AP-06, NFR-AP-04).
+- **AC4** **(Reconciliation bar)** Given a matched bill (US-AP-01) then its payment, when both have posted,
+  then the **supplier's AP balance** is reduced correctly AND the **GL AP control nets correctly** (control
+  credit from the bill − control debit from the payment = remaining payable); the sub-ledger total equals
+  the control balance (FR-AP-08, NFR-AP-01).
+- **AC5** Given `AP.PAYMENT.RUN`, when I pay a **single** matched/due bill, then that payable is settled and
+  GL posts **DR AP control / CR Cash/Bank** for the paid amount (FR-AP-09); the payment is audited
+  (NFR-AP-03).
+
+### US-AP-04 — Raise a debit note / adjustment against an open payable
+**As an** AP clerk **I want** to reduce what we owe a supplier when they credit us **so that** the payable
+and the books reflect a return or an over-charge correction.
+- **AC1** Given `AP.DEBITNOTE` and an open payable, when I raise a **debit note** (with a reason), then the
+  payable is **reduced** in the sub-ledger and GL posts **DR the AP control / CR
+  Inventory-or-Purchases-or-VAT** for the credited amount (FR-AP-12, BR-AP-07).
+- **AC2** Given the debit note posts, then the supplier's balance and the GL AP control drop by the **same
+  amount** (reconciled, FR-AP-08); the debit note is **audited** (NFR-AP-03).
+- **AC3** Given a posted bill/payment needs correcting, then it is corrected via a **reversal / debit
+  note**, never by editing a posted entry (append-only, BR-AP-09).
+
+### US-AP-05 — Enter AP opening balances at go-live
+**As an** accountant **I want** to enter suppliers' pre-existing payables **so that** AP starts from the
+business's actual creditor position when it goes live.
+- **AC1** Given `AP.OPENING.SET`, when I enter each supplier's pre-existing payable (amount, bill date, due
+  date) as an **opening payable**, then it is recorded in the sub-ledger (FR-AP-13).
+- **AC2** Given opening payables are entered, then the **sum equals the AP control account's opening
+  balance** (the GL side is the opening-balance journal, gl.md FR-GL-13) — reconciliation holds from day
+  one (FR-AP-13, BR-AP-02).
+- **AC3** Given an opening payable is wrong, then it is corrected via a **reversal / debit note**, not by
+  editing a posted entry (BR-AP-09).
+
+### US-AP-06 — The goods receipt does NOT create a payable (the accepted bill-driven gap)
+**As a** financial controller **I want** to understand that the liability appears only when the bill is
+entered **so that** nobody expects a payable the moment goods arrive.
+- **AC1** Given a **Goods Receipt** is finalised (stock pushed in via `STOCK.RECEIVED`), when no bill has
+  been entered, then **no payable** exists and **nothing posts to GL** for the liability (FR-AP-02,
+  BR-AP-01).
+- **AC2** Given goods are received but not yet billed, then the amount owed is **not on the books** — the
+  accepted bill-driven-AP gap (no GRNI accrual in v1) (BR-AP-01, accounts-payable.md §10.1).
+- **AC3** Given the supplier's bill is later entered and matched (US-AP-01), then the liability appears on
+  the books at that point — the **first GL posting for the purchase** (FR-AP-06, BR-AP-02).
+- **AC4** Given any AP read or balance, then it returns **only my company's** payables (`assertCanActIn`);
+  cross-company figures never appear (FR-AP-14, BR-AP-08, NFR-AP-01).
