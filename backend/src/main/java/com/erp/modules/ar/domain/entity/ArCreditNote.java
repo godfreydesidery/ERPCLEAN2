@@ -1,0 +1,103 @@
+package com.erp.modules.ar.domain.entity;
+
+import com.erp.modules.ar.domain.enums.ArCreditNoteOrigin;
+import com.erp.platform.common.domain.UidEntity;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Table;
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDate;
+import lombok.Getter;
+import lombok.Setter;
+
+/**
+ * A credit note that reduces a customer receivable (ADR-0014 D-2d).
+ * STANDALONE posts GL (DR Revenue / DR VAT / CR AR); SALE_VOID rides the void handler.
+ */
+@Getter
+@Entity
+@Table(name = "ar_credit_notes")
+public class ArCreditNote extends UidEntity {
+
+    @Column(name = "company_id", nullable = false, updatable = false)
+    private Long companyId;
+
+    @Column(name = "branch_id")
+    private Long branchId;
+
+    @Column(name = "customer_id", nullable = false, updatable = false)
+    private Long customerId;
+
+    @Column(name = "credit_note_number", nullable = false, length = 30, updatable = false)
+    private String creditNoteNumber;
+
+    @Column(name = "ar_invoice_id")
+    private Long arInvoiceId;
+
+    @Column(name = "note_date", nullable = false, updatable = false)
+    private LocalDate noteDate;
+
+    @Column(name = "amount", nullable = false, precision = 19, scale = 4, updatable = false)
+    private BigDecimal amount;
+
+    @Column(name = "net_amount", nullable = false, precision = 19, scale = 4, updatable = false)
+    private BigDecimal netAmount;
+
+    @Column(name = "vat_amount", nullable = false, precision = 19, scale = 4, updatable = false)
+    private BigDecimal vatAmount;
+
+    @Column(name = "currency", nullable = false, length = 3, updatable = false)
+    private String currency;
+
+    @Column(name = "reason", nullable = false, length = 255)
+    private String reason;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "origin", nullable = false, length = 20, updatable = false)
+    private ArCreditNoteOrigin origin;
+
+    /** Scalar uid of the GL journal entry; null for SALE_VOID (GL already reversed). */
+    @Column(name = "gl_entry_uid", length = 26)
+    @Setter
+    private String glEntryUid;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt = Instant.now();
+
+    @Column(name = "created_by")
+    private Long createdBy;
+
+    @Column(name = "updated_at")
+    @Setter
+    private Instant updatedAt;
+
+    @Column(name = "updated_by")
+    @Setter
+    private Long updatedBy;
+
+    protected ArCreditNote() {
+        // JPA
+    }
+
+    public ArCreditNote(Long companyId, Long branchId, Long customerId,
+                        String creditNoteNumber, Long arInvoiceId, LocalDate noteDate,
+                        BigDecimal amount, BigDecimal netAmount, BigDecimal vatAmount,
+                        String currency, String reason, ArCreditNoteOrigin origin, Long createdBy) {
+        this.companyId        = companyId;
+        this.branchId         = branchId;
+        this.customerId       = customerId;
+        this.creditNoteNumber = creditNoteNumber;
+        this.arInvoiceId      = arInvoiceId;
+        this.noteDate         = noteDate;
+        this.amount           = amount;
+        this.netAmount        = netAmount;
+        this.vatAmount        = vatAmount;
+        this.currency         = currency;
+        this.reason           = reason;
+        this.origin           = origin;
+        this.createdBy        = createdBy;
+    }
+}
