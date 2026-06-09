@@ -74,7 +74,25 @@ now **FIXED in `e2e/qa-ui-drive.js`**. Application verdict stands: real browser 
   and deep-page latency not profiled.
 - **Goods-receipt partial / over-receipt, sale void → stock restore** at scale — single-shot only.
 
+## GL online E2E (2026-06-09, fresh QA deploy of feat/gl-module)
+
+Deployed GL (V10) fresh to QA, then ran the master-data UI E2E (`qa-ui-drive.js` — 0 issues,
+50 customers/10 suppliers/10 products/5 users/3 routes all typed via UI) and a new GL UI E2E
+(`gl-ui-drive.js`). **GL acceptance bar PASSED live:** Chart of Accounts shows the 13 seeded TZ
+accounts; a balanced manual journal (DR 50,000 / CR 50,000) posted through the post-journal editor
+(balance indicator + Post-enable worked); the **trial balance then showed Balanced with the 50,000**.
+
+| # | Sev | Status | Area | Issue | Evidence |
+|---|-----|--------|------|-------|----------|
+| 10 | MEDIUM | **FIXED** | web / GL trial balance | `trial-balance.component.html` assumed money fields are **strings** (`row.net.startsWith('-')`, `row.totalDebit !== '0.00'`), but BigDecimal serializes as a JSON **number** on the wire → `TypeError: net.startsWith is not a function` threw mid-row, **blanking the per-row DEBIT/CREDIT/NET cells** (footer Totals + Balanced banner still rendered, computed separately). The unit spec mocked `net` as a string so it never caught it. | Found by `gl-ui-drive.js` (console error + screenshot showing empty NET column). Fixed: number-safe `+row.net < 0` / `+row.totalDebit !== 0`; added a render-with-numeric-money regression test to trial-balance.component.spec. |
+
+Note (latent, LOW): the GL DTO money fields are typed `string` in the Angular models but arrive as
+numbers — other GL screens coerce with `parseFloat`/`Number.parseFloat(String(..))` so they're safe;
+only the trial-balance template assumed string. Consider normalising money to a single wire type
+(string everywhere, per the Long-as-string convention) — recorded for later, not blocking.
+
 ## How to reproduce
 
-See [`e2e/README.md`](../../e2e/README.md). Scripts: `e2e/seed-and-flow.js` (this run),
-`e2e/ui-smoke.js` (browser smoke), `e2e/static-proxy-server.js` (SPA+API origin).
+See [`e2e/README.md`](../../e2e/README.md). Scripts: `e2e/seed-and-flow.js`, `e2e/qa-ui-drive.js`
+(typed master-data UI entry), `e2e/gl-ui-drive.js` (GL: post a balanced journal + verify trial
+balance), `e2e/ui-smoke.js` (browser smoke), `e2e/static-proxy-server.js` (SPA+API origin).

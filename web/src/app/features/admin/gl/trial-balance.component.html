@@ -150,21 +150,21 @@
                       <td class="small">{{ row.accountName }}</td>
                       <td></td>
                       <td class="text-end font-monospace small">
-                        @if (row.totalDebit !== '0.00' && row.totalDebit !== '0') {
+                        @if (+row.totalDebit !== 0) {
                           {{ row.totalDebit }}
                         } @else {
                           <span class="text-muted">—</span>
                         }
                       </td>
                       <td class="text-end font-monospace small">
-                        @if (row.totalCredit !== '0.00' && row.totalCredit !== '0') {
+                        @if (+row.totalCredit !== 0) {
                           {{ row.totalCredit }}
                         } @else {
                           <span class="text-muted">—</span>
                         }
                       </td>
                       <td class="text-end font-monospace small"
-                          [class.text-danger]="row.net.startsWith('-')">
+                          [class.text-danger]="+row.net < 0">
                         {{ row.net }}
                       </td>
                     </tr>
