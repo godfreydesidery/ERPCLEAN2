@@ -10,6 +10,8 @@ import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.repository.OrganisationRepository;
 import com.erp.modules.iam.repository.UserBranchRepository;
+import com.erp.modules.ap.service.ApGlSeeder;
+import com.erp.modules.ar.service.ArGlSeeder;
 import com.erp.modules.gl.service.ChartOfAccountService;
 import com.erp.modules.gl.service.FiscalCalendarService;
 import com.erp.modules.gl.service.GlConfigService;
@@ -59,6 +61,9 @@ public class BootstrapRunner implements ApplicationRunner {
     private final ChartOfAccountService chartOfAccountService;
     private final FiscalCalendarService fiscalCalendarService;
     private final GlConfigService glConfigService;
+    // AR/AP GL seeders (ADR-0014/0015)
+    private final ArGlSeeder arGlSeeder;
+    private final ApGlSeeder apGlSeeder;
 
     public BootstrapRunner(BootstrapProperties props,
                            OrganisationRepository organisations,
@@ -72,7 +77,9 @@ public class BootstrapRunner implements ApplicationRunner {
                            TaxRateSeeder taxRateSeeder,
                            ChartOfAccountService chartOfAccountService,
                            FiscalCalendarService fiscalCalendarService,
-                           GlConfigService glConfigService) {
+                           GlConfigService glConfigService,
+                           ArGlSeeder arGlSeeder,
+                           ApGlSeeder apGlSeeder) {
         this.props = props;
         this.organisations = organisations;
         this.companies = companies;
@@ -86,6 +93,8 @@ public class BootstrapRunner implements ApplicationRunner {
         this.chartOfAccountService = chartOfAccountService;
         this.fiscalCalendarService = fiscalCalendarService;
         this.glConfigService = glConfigService;
+        this.arGlSeeder = arGlSeeder;
+        this.apGlSeeder = apGlSeeder;
     }
 
     @Override
@@ -119,6 +128,9 @@ public class BootstrapRunner implements ApplicationRunner {
         chartOfAccountService.seedDefaults(company.getId());
         fiscalCalendarService.seedCurrentYear(company.getId());
         glConfigService.seedDefaults(company.getId());
+        // Seed AR/AP GL accounts + gl_configs (ADR-0014/0015 D-13).
+        arGlSeeder.seedDefaults(company.getId());
+        apGlSeeder.seedDefaults(company.getId());
 
         Branch branch = new Branch(company, props.branchCode(), props.branchName());
         branch.setTimeZone(props.timeZone());

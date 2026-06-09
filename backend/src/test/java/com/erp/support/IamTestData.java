@@ -35,6 +35,11 @@ public class IamTestData {
         em.createNativeQuery(
                 "TRUNCATE domain_events, processed_events RESTART IDENTITY CASCADE")
                 .executeUpdate();
+        // 4-AP. Clear AP tables BEFORE GL, suppliers and companies.
+        //       FK order: allocations → payments; bill_match → bill_lines → bills; debit_notes standalone.
+        em.createNativeQuery(
+                "TRUNCATE ap_payment_allocations, ap_debit_notes, ap_payments, bill_match, supplier_bill_lines, supplier_bills RESTART IDENTITY CASCADE")
+                .executeUpdate();
         // 4-AR. Clear AR tables BEFORE GL and companies (FK order: allocations → receipts/invoices;
         //       write_offs / credit_notes → invoices; invoices standalone. All FK → companies/customers/branches).
         em.createNativeQuery(

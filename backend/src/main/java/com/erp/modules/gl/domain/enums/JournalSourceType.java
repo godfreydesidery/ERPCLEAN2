@@ -16,6 +16,10 @@ public enum JournalSourceType {
     AR_RECEIPT,
     AR_WRITEOFF,
     AR_CREDIT_NOTE,
+    // --- AP increment (ADR-0015 D-6) — now admitted by the DB CHECK (V12 widens it) ---
+    AP_BILL,
+    AP_PAYMENT,
+    AP_DEBIT_NOTE,
     // --- RESERVED — NOT yet admitted by the DB CHECK; widen when the increment lands ---
     AR,
     AP,
