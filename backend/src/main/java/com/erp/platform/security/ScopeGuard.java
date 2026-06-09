@@ -1,5 +1,7 @@
 package com.erp.platform.security;
 
+import com.erp.modules.ar.repository.ArInvoiceRepository;
+import com.erp.modules.ar.repository.ArReceiptRepository;
 import com.erp.modules.gl.repository.ChartOfAccountRepository;
 import com.erp.modules.gl.repository.FiscalPeriodRepository;
 import com.erp.modules.gl.repository.GlConfigRepository;
@@ -41,6 +43,7 @@ import org.springframework.stereotype.Component;
  * Sales repositories are added here following the same pattern (ADR-0008 D-10).
  * Purchases repositories added per ADR-0011 D-10 ({@code purchaseorder}/{@code goodsreceipt}).
  * GL repositories added per ADR-0013 D-10 ({@code account}/{@code fiscalperiod}/{@code journalentry}/{@code glconfig}).
+ * AR repositories added per ADR-0014 D-12 ({@code arinvoice}/{@code arreceipt}).
  */
 @Component
 public class ScopeGuard {
@@ -66,6 +69,9 @@ public class ScopeGuard {
     private final FiscalPeriodRepository   fiscalPeriods;
     private final JournalEntryRepository   journalEntries;
     private final GlConfigRepository       glConfigs;
+    // AR repositories (ADR-0014 D-12)
+    private final ArInvoiceRepository      arInvoices;
+    private final ArReceiptRepository      arReceipts;
     private final AuditService             audit;
 
     public ScopeGuard(CompanyRepository companies,
@@ -88,6 +94,8 @@ public class ScopeGuard {
                       FiscalPeriodRepository fiscalPeriods,
                       JournalEntryRepository journalEntries,
                       GlConfigRepository glConfigs,
+                      ArInvoiceRepository arInvoices,
+                      ArReceiptRepository arReceipts,
                       AuditService audit) {
         this.companies      = companies;
         this.branches       = branches;
@@ -109,13 +117,16 @@ public class ScopeGuard {
         this.fiscalPeriods  = fiscalPeriods;
         this.journalEntries = journalEntries;
         this.glConfigs      = glConfigs;
+        this.arInvoices     = arInvoices;
+        this.arReceipts     = arReceipts;
         this.audit          = audit;
     }
 
     /**
      * Resolve a target uid to its owning company id, per target type (ADR-0002 §2, ADR-0006 D-10,
-     * ADR-0008 D-10, ADR-0011 D-10). Extended with purchases target types so that
-     * {@code @perm.scoped(#uid,'purchaseorder','PURCHASE.ORDER.CREATE')} gates work correctly.
+     * ADR-0008 D-10, ADR-0011 D-10, ADR-0014 D-12). Extended with AR target types so that
+     * {@code @perm.scoped(#uid,'arinvoice','AR.INVOICE.VIEW')} and
+     * {@code @perm.scoped(#uid,'arreceipt','AR.VIEW')} gates work correctly.
      */
     public Optional<Long> companyIdOf(String targetType, String uid) {
         if (targetType == null || uid == null) {
@@ -145,6 +156,9 @@ public class ScopeGuard {
             case "fiscalperiod"   -> fiscalPeriods.findCompanyIdByUid(uid);
             case "journalentry"   -> journalEntries.findCompanyIdByUid(uid);
             case "glconfig"       -> glConfigs.findCompanyIdByUid(uid);
+            // AR target types (ADR-0014 D-12)
+            case "arinvoice"      -> arInvoices.findCompanyIdByUid(uid);
+            case "arreceipt"      -> arReceipts.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };
