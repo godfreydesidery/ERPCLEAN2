@@ -687,3 +687,56 @@ One definition per term, used consistently across the team. Add terms as modules
   "closes" — those are GL/VAT verbs. A figure that breaks a bar is **surfaced**, never "fixed" by Reporting.
 - Statement placement is by **`account_type`** (the authority — gl.md BR-GL-12); the **code range** drives
   only the sub-grouping — never place an account by code alone against its type.
+
+## Year-End Close — freeze the year, reset P&L, roll profit into retained earnings
+
+- **Fiscal year close (year-end close)** — the **annual** operation that **freezes** a fiscal year: it
+  auto-closes the year's still-OPEN periods, posts the **closing entry** (P&L → retained earnings), and marks
+  the **fiscal year CLOSED** (`fiscal_years.status = CLOSED`). One end-to-end action, per company per year.
+  After it, all posting into the year is blocked (its periods are CLOSED). **Not** a **period close** (the
+  monthly open/close of one `fiscal_period`, `GL.PERIOD.CLOSE`).
+- **Closing entry (closing journal)** — the **one balanced journal** the close posts, dated at the fiscal
+  year's **`end_date`**: **DEBIT each INCOME account** by its year balance, **CREDIT each EXPENSE account** by
+  its year balance (zeroing every P&L account), with the **net profit/loss to 3900 Retained Earnings** (CR 3900
+  for a profit, DR 3900 for a loss). Σ debits == Σ credits (`GLPostingService` enforces). Source type
+  **YEAR_END_CLOSE**. **No Income Summary intermediate account** — the roll is **direct to 3900**. **Not** an
+  **opening-balance journal** (gl.md FR-GL-13) and **not** the Reporting **current-year-earnings fold** (a
+  read-time presentation derivation, NOT a posted entry — reporting.md BR-REP-05).
+- **Retained earnings roll** — moving the year's **net profit/loss** into **3900 Retained Earnings** as the
+  balancing figure of the closing entry. Sequential year-on-year (the prior year must be closed first); 3900
+  accumulates each closed year's net. Posts to **3900** (EQUITY) — **not** **3100 Opening Balance Equity** and
+  **not** any "Income Summary" account (v1 uses none).
+- **Net profit / loss for the year** — the year's **INCOME − EXPENSE** (the P&L net over the fiscal year). The
+  balancing figure rolled to 3900: a **profit** (INCOME > EXPENSE) **credits** 3900; a **loss** (EXPENSE >
+  INCOME) **debits** 3900.
+- **P&L reset (zeroing)** — the effect of the closing entry on the **INCOME (4xxx) and EXPENSE (5xxx)**
+  accounts: each is brought to a **zero** year-end balance, so the new fiscal year starts the P&L fresh. The
+  account ledger shows the closing line that takes it to zero (drill-down via Reporting).
+- **Reopen (close reversal)** — the operation that **un-freezes** a CLOSED fiscal year for a late adjustment:
+  it posts the **reversal of the closing journal** (restoring the P&L balances + backing out the 3900 roll),
+  flips the **fiscal year and its periods back to OPEN**, and makes the year **re-closeable**. Append-only — a
+  **new reversing entry** (source type **YEAR_END_CLOSE_REVERSAL** or a reversal-of the closing entry),
+  **never** an edit/delete of the closing journal. Permission-gated (sensitive), audited. **Not** a period
+  **reopen** (gl.md FR-GL-15 — re-open one closed *period*, posting nothing).
+- **Closed-period posting gate** — the **existing** GL rule (BR-GL-03): a CLOSED fiscal period rejects all new
+  postings. Year-end close **uses** this gate (after close, the year's periods are CLOSED → posting blocked);
+  the closing / reversing entries are **system-posted** as part of the operation, dated at year-end.
+- **Reverse-then-adjust-then-re-close** — the **late-adjustment flow**: reopen a CLOSED year (reversal posts,
+  P&L restored, year OPEN) → post the adjusting journal(s) → re-close (a fresh closing entry posts the corrected
+  net to 3900). The append-only way to correct a closed year — no closing journal is ever edited.
+
+### Year-End Close terminology rulings (pick one, stay consistent)
+- Use **year close / fiscal year close** (`GL.YEAR.CLOSE`) for the annual freeze + closing entry + retained-
+  earnings roll; **period close** (`GL.PERIOD.CLOSE`) for the monthly open/close of one period — never blur the
+  two (different permissions, different effects: a period close posts **nothing**; a year close posts the
+  **closing entry**).
+- Use **closing entry** (this slice's P&L → 3900 journal) distinct from **opening-balance journal** (gl.md
+  FR-GL-13, a manual capital/equity entry) and from the Reporting **current-year-earnings fold** (a read-time
+  derivation, never posted) — never conflate the posted close with the read-time fold.
+- The roll posts to **3900 Retained Earnings** (EQUITY); never to **3100 Opening Balance Equity** and never via
+  an **Income Summary** account (v1 has none — the roll is **direct to 3900**).
+- A close **freezes** a year; a **reopen** un-freezes it — neither ever **deletes** a posted journal (BR-GL-02);
+  the reopen is a **new reversing entry**, the correction path is **reverse-then-adjust-then-re-close**.
+- After a close, **Reporting needs no change** — the closed year's P&L nets to zero, the rolled net sits in
+  posted 3900, and the inception-to-date equity fold (ADR-0018 D-6) keeps the Balance Sheet balancing with **no
+  double-count**; never say the close "requires a Reporting change."
