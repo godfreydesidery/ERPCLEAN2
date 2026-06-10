@@ -362,5 +362,30 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./tax/wht-register.component').then((m) => m.WhtRegisterComponent),
   },
+  // ── Financial Reporting ───────────────────────────────────────────────────
+  {
+    path: 'reporting/income-statement',
+    canActivate: [requirePermission('REPORT.PL.VIEW')],
+    loadComponent: () =>
+      import('./reporting/income-statement.component').then((m) => m.IncomeStatementComponent),
+  },
+  {
+    path: 'reporting/balance-sheet',
+    canActivate: [requirePermission('REPORT.BS.VIEW')],
+    loadComponent: () =>
+      import('./reporting/balance-sheet.component').then((m) => m.BalanceSheetComponent),
+  },
+  {
+    path: 'reporting/cash-flow',
+    canActivate: [requirePermission('REPORT.CASHFLOW.VIEW')],
+    loadComponent: () =>
+      import('./reporting/cash-flow-statement.component').then((m) => m.CashFlowStatementComponent),
+  },
+  {
+    path: 'reporting/account-ledger',
+    canActivate: [requirePermission('REPORT.LEDGER.VIEW')],
+    loadComponent: () =>
+      import('./reporting/account-ledger.component').then((m) => m.AccountLedgerComponent),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];

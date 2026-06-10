@@ -720,3 +720,90 @@ Each entry: why it matters · who decides · does it block build.
   GL settlement legs, and the WHT legs must round identically (NFR-VAT-02). *Recommended default:* half-up,
   TZS = 0 dp. *Decider:* owner (finance input). *Blocks ADR-0017:* **NO** for the model; **confirm before
   go-live**.
+
+## Financial Reporting
+
+> Status: **RATIFIED 2026-06-10.** The Reporting scoping forks the owner answered are resolved; what remains
+> is non-blocking detail (recommended defaults stand) plus the ADR-0018 design seam (the code-range banding).
+> **No ADR-0018-blocking open question remains.** Requirements: docs/requirements/reporting.md.
+
+### Resolved (owner, 2026-06-10) — the Reporting scoping forks
+
+- **Statement→account mapping** = **AUTO-DERIVE** from `account_type` + account-code ranges; **NO**
+  configurable statement-template table. `account_type` → statement + top section (INCOME/EXPENSE → P&L;
+  ASSET/LIABILITY/EQUITY → Balance Sheet); code range → sub-grouping (current/non-current; cost-of-sales/
+  operating; CF operating/investing/financing). (BR-REP-07.)
+- **Statements in v1** = ALL THREE primary statements + the ledger drill-down: **Income Statement / P&L**
+  (period, INCOME − EXPENSE → gross profit → net profit); **Balance Sheet** (as-at, ASSET = LIABILITY +
+  EQUITY, current vs non-current, current-year net income folded into equity); **Cash-Flow Statement —
+  INDIRECT method** (operating/investing/financing, net change == Cash+Bank movement); **GL account-ledger
+  drill-down** (opening balance + journal lines + running/closing balance). (FR-REP-01..04.)
+- **Comparative columns** = every statement shows the selected period/date AND a prior comparative — standard
+  accounting presentation. (BR-REP-01, FR-REP-06.)
+- **Export** = each statement + the ledger exportable to a **print-faithful PDF** and to **Excel / CSV**.
+  (FR-REP-05, NFR-REP-04.)
+- **Period selection** = arbitrary date range (P&L / CF) or as-at date (BS), with fiscal-period / fiscal-year
+  quick-selects (GL `fiscal_periods` / `FiscalPeriodResolver`); base currency only. (FR-REP-07, BR-REP-09.)
+- **Read-only + correctness bars** = Reporting **POSTS NOTHING** (reads GL); the BS must balance; the
+  cash-flow net == the Cash+Bank GL movement; the P&L net == the period's INCOME − EXPENSE GL movement; every
+  figure drills to journal lines. (BR-REP-02/03/04/05/06/08.)
+- **Permissions** = `REPORT.VIEW` at minimum + the recommended finer split (`REPORT.PL.VIEW` /
+  `REPORT.BS.VIEW` / `REPORT.CASHFLOW.VIEW` / `REPORT.LEDGER.VIEW` / `REPORT.EXPORT`); per-company scope;
+  `assertCanActIn` on every read; seeded via a small **V15 perm-seed migration** + granted to `ORG_ADMIN`.
+  (FR-REP-08, OQ-REP-04.)
+
+### The ADR-0018 design seam (a DECISION the architect makes — does NOT block the requirements)
+
+- **OQ-REP-01** — **The code-range banding boundaries (current/non-current; cost-of-sales/operating; CF
+  section).** The auto-derive principle is fixed (BR-REP-07): `account_type` → statement + top section; code
+  range → sub-grouping. The **exact boundaries** are the ADR's. *Recommended default* (the worked TZ-CoA
+  banding): current assets 1000–1499 / non-current 1500–1999; current liabilities 2000–2499 / non-current
+  2500–2999; cost-of-sales 5100–5199 / operating 5200–5999; CF operating = current operating accounts
+  (AR/AP/Inventory/VAT/WHT), investing = non-current ASSET, financing = EQUITY + non-current LIABILITY; an
+  account outside a named band defaults to the **type's default band** (e.g. ASSET → current). *Decider:*
+  **architect (ADR-0018)**, with finance review. *Blocks ADR-0018:* **NO** — it **is** the banding the ADR
+  fixes; the principle + default stand.
+
+### Still open — NON-blocking detail (recommended defaults stand; do NOT block ADR-0018)
+
+- **OQ-REP-02** — **Cash-flow treatment of the VAT / WHT control accounts.** Where do 1400 VAT Input, 1500
+  WHT Receivable, 2200 VAT Payable, 2300 VAT Due, 2400 WHT Payable sit on the indirect cash-flow statement?
+  *Recommended default:* **working-capital items in the operating section** (the standard treatment); not a
+  separate "tax cash flow" section in v1. *Decider:* owner (finance). *Blocks ADR-0018:* **NO** — the
+  operating-working-capital default stands; the bar (BR-REP-04) holds either way.
+- **OQ-REP-03** — **Comparative default window.** Prior period (same-length preceding range) or prior fiscal
+  year (same period last year)? *Recommended default:* **prior period of the same length** for P&L / Cash-Flow
+  and the **prior year-end (or the period start)** for the Balance Sheet; the reader may **override** to
+  prior-year. *Decider:* owner. *Blocks ADR-0018:* **NO** — the prior-period default stands; prior-year is a
+  selectable override (same comparative machinery).
+- **OQ-REP-04** — **Permission granularity (single `REPORT.VIEW` vs the finer split).** *Recommended default:*
+  seed the **finer split** (`REPORT.VIEW` + `REPORT.PL.VIEW` / `REPORT.BS.VIEW` / `REPORT.CASHFLOW.VIEW` /
+  `REPORT.LEDGER.VIEW` / `REPORT.EXPORT`) so an owner *can* restrict who sees the company P&L vs who may drill
+  a ledger; a simple deployment grants `REPORT.VIEW` to all finance roles. *Decider:* owner. *Blocks
+  ADR-0018:* **NO** — the perm set is seeded in V15; granularity is the owner's policy, the codes are fixed.
+- **OQ-REP-05** — **Export library / generation approach (PDF + Excel/CSV).** *Recommended default:* a
+  server-side **PDF** renderer producing a print-faithful statement (aligning with the cross-cutting
+  Documents/PDF capability X.1 when it lands) + a server-side **Excel/CSV** writer; the exact library is the
+  architect's. *Decider:* **architect (ADR-0018)**. *Blocks ADR-0018:* **NO** — the requirement is a
+  print-faithful PDF + a spreadsheet export; the library is the design decision.
+- **OQ-REP-06** — **Configurable statement templates.** v1 **auto-derives** the mapping. *Recommended
+  default:* auto-derive in v1; a user-configurable statement-template / report-builder is a later additive
+  slice. *Decider:* owner. *Blocks ADR-0018:* **NO** — auto-derive is fixed; templates are additive.
+- **OQ-REP-07** — **Segment / cost-centre / branch / consolidated reporting.** v1 is **company-level**.
+  *Recommended default:* company-level statements in v1; per-cost-centre / per-segment / per-branch lands with
+  the dimension framework (T3.5/T3.6); consolidated multi-company with group reporting (gl.md OQ-CUR-01).
+  *Decider:* owner. *Blocks ADR-0018:* **NO** — deferred, not precluded (NFR-REP-07).
+- **OQ-REP-08** — **Ratio analysis / KPI dashboards / operational analytics.** v1 = the three statements +
+  the ledger. *Recommended default:* statements first; ratios, dashboards, and sales/stock/purchase analytics
+  are the Reporting depth slice (T2.3 depth / Phase D). *Decider:* owner. *Blocks ADR-0018:* **NO** — a later
+  slice.
+- **OQ-REP-09** — **Multi-currency / presentation-currency statements.** v1 is **base currency (TZS)**.
+  *Recommended default:* base-currency statements in v1; foreign / presentation currency translation lands
+  with FX (X.6 / gl.md §10.5). *Decider:* owner. *Blocks ADR-0018:* **NO** — deferred, not precluded.
+- **OQ-REP-10** — **Scheduled / emailed reports.** v1 is **on-demand**. *Recommended default:* on-demand run +
+  view + export in v1; scheduling / emailing lands with Notifications (X.2). *Decider:* owner. *Blocks
+  ADR-0018:* **NO** — additive on the on-demand model.
+- **OQ-CUR-03** — *(carried)* confirm **rounding mode + TZS decimals** — the statement aggregations, the
+  BS-balance check, the P&L-to-ledger reconciliation, and the cash-flow tie-out must round identically to the
+  GL figures they tie to (NFR-REP-06). *Recommended default:* half-up, TZS = 0 dp. *Decider:* owner (finance
+  input). *Blocks ADR-0018:* **NO** for the model; **confirm before go-live**.

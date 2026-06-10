@@ -616,3 +616,74 @@ One definition per term, used consistently across the team. Add terms as modules
 - A **VAT account** is a GL bucket (`2200 VAT Payable`, the new VAT Input/Recoverable) — never call a
   customer/supplier "a VAT account" (they are **parties**), the three-distinct-things rule again
   (party / GL account / cash-bank account).
+
+## Financial Reporting — the three primary statements + the GL account-ledger drill-down
+
+- **Financial statement** — a structured, grouped presentation of the books for a management / external
+  reader, derived **read-only** from GL `journal_lines`. The three primary statements (v1): the **Income
+  Statement / P&L**, the **Balance Sheet**, the **Cash-Flow Statement**. **Not** a trial balance (a flat
+  account list — the TB is the raw input, the statement is the presentation).
+- **Income Statement / Profit & Loss (P&L)** — the statement of **INCOME − EXPENSE over a period** (a date
+  range): revenue, less cost of sales = **gross profit**; less operating expenses = **net profit**. A period
+  (flow) statement. Reads the INCOME (4xxx) and EXPENSE (5xxx) accounts.
+- **Gross profit** — **revenue (INCOME) − cost of sales** (the cost-of-sales expense band, e.g. 5100 COGS +
+  5150 Purchases). The first P&L subtotal.
+- **Operating profit / net profit** — **gross profit − operating expenses** (5200 Rent, 5300 Salaries, 5400
+  Utilities, …). In v1 (no separate finance/tax lines) the bottom line is **net profit**; operating and net
+  profit coincide.
+- **Balance Sheet** — the statement of financial position **as-at a date** (a stock statement): **ASSET =
+  LIABILITY + EQUITY**, grouped **current vs non-current**. Reads ASSET (1xxx) + LIABILITY (2xxx) + EQUITY
+  (3xxx) accounts + the current-year net income folded into equity. **Must balance.**
+- **Current vs non-current** — the Balance-Sheet sub-grouping by realisation horizon: current = realised /
+  settled within ~12 months (cash, AR, inventory, AP, tax payable); non-current = beyond (fixed assets,
+  long-term loans — sparse in v1). Derived from the account-code band.
+- **Retained earnings** — the EQUITY account (3900) carrying accumulated prior-period profit. On the Balance
+  Sheet: **as-at equity = retained earnings + the current-year net income to date**.
+- **Current-year net income** — the P&L **net profit for the current fiscal year up to the as-at date**,
+  **folded into Balance-Sheet equity** so ASSET = LIABILITY + EQUITY holds mid-year. A **presentation
+  derivation** (year-to-date INCOME − EXPENSE), **not** a posted closing entry (v1 has no automated year-end
+  roll-up — gl.md §10.6).
+- **Cash-Flow Statement (indirect method)** — how cash moved over a period, built **indirectly**: net income
+  + non-cash items (depreciation — sparse in v1) ± **working-capital changes** (ΔAR, ΔAP, ΔInventory,
+  ΔVAT/WHT) → **operating**; ± non-current-asset changes → **investing**; ± equity / borrowing changes →
+  **financing**. The **net change in cash == the Cash + Bank GL account movement** between the two dates.
+- **Operating / investing / financing** — the three cash-flow sections. Operating = cash from trading;
+  investing = cash for/from long-term assets (sparse, no Fixed Assets yet); financing = cash from/to owners
+  and lenders (sparse, no Loans yet). Classified from `account_type` + code range.
+- **Working-capital change** — the period **change** (closing − opening) in a current operating account
+  (AR, AP, Inventory, VAT/WHT control accounts), used in the indirect operating section: a rise in AR *uses*
+  cash (subtract); a rise in AP *provides* cash (add).
+- **Comparative period** — the **prior** period / as-at date shown **alongside** the selected one on every
+  statement (this period vs prior period for P&L/CF; this date vs a prior date for BS) — standard accounting
+  presentation. **Not** a budget (a plan — Budgeting, deferred).
+- **Account ledger / drill-down** — for a single GL account over a period: **opening balance**, each
+  **journal line** (posting date, source, reference, debit, credit), the **running balance**, the **closing
+  balance**. The **drill target** from any statement line. The **GL** account ledger — **not** the AR/AP
+  **sub-ledger** (per-party detail).
+- **As-at vs period** — a **Balance Sheet** is **as-at a date** (a point-in-time stock, balances from
+  inception to that date); a **P&L / Cash-Flow** is **over a period** (a flow between two dates).
+- **Auto-derived statement mapping** — the rule that places each account on a statement: **`account_type`**
+  decides the statement + top section (INCOME/EXPENSE → P&L; ASSET/LIABILITY/EQUITY → Balance Sheet — the
+  type is the authority); the **account-code range** decides the sub-grouping (current/non-current;
+  cost-of-sales/operating; CF section). **NO configurable statement-template table** in v1.
+- **Reconciliation / correctness bar** — the exact tie a statement asserts back to GL: the **BS balances**
+  (ASSET == LIABILITY + EQUITY); the **P&L net == the period's INCOME − EXPENSE GL movement**; the
+  **Cash-Flow net change == the Cash + Bank GL account movement**. A broken bar is a defect / data-integrity
+  alarm, surfaced — never silently corrected (Reporting is read-only).
+
+### Reporting terminology rulings (pick one, stay consistent)
+- Use **financial statement** (or P&L / Balance Sheet / Cash-Flow Statement) for the grouped presentation;
+  **trial balance** for the flat account list (gl.md) — the TB is the input, the statement is the output;
+  never call a statement "a trial balance."
+- Use **as-at** for a Balance Sheet (a point in time) and **over a period / for a date range** for a P&L or
+  Cash-Flow (a flow) — never blur the two; a Balance Sheet has no date range, a P&L has no single as-at date.
+- Use **net profit** (the P&L bottom line, a period flow) distinct from **equity** (a Balance-Sheet as-at
+  stock) — but say the net profit **folds into** equity (current-year net income); never equate them.
+- Use **comparative** for the prior-window column (standard presentation); never call it a "budget" (a plan —
+  deferred to Budgeting).
+- A **drill-down** reaches the **account ledger** (GL `journal_lines` for one account); a **sub-ledger** is
+  the AR/AP per-party detail (their modules) — never conflate the GL account ledger with a sub-ledger.
+- Reporting is **read-only**: it **runs / views / exports** a statement; it never "posts", "files", or
+  "closes" — those are GL/VAT verbs. A figure that breaks a bar is **surfaced**, never "fixed" by Reporting.
+- Statement placement is by **`account_type`** (the authority — gl.md BR-GL-12); the **code range** drives
+  only the sub-grouping — never place an account by code alone against its type.

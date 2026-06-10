@@ -1280,3 +1280,125 @@ and see a WHT register **so that** I can remit the withheld tax to TRA and issue
   output−input VAT net (BR-VAT-12).
 - **AC6** Given v1 WHT, then it is **lean** — a configurable rate/type + capture + track + register +
   certificate; the **full WHT-by-type matrix + WHT e-filing** are deferred (OQ-VAT-02, §10.3).
+
+---
+
+## Financial Reporting — the three primary statements + the GL account-ledger drill-down
+
+Requirements: [docs/requirements/reporting.md](docs/requirements/reporting.md). Status: **RATIFIED
+2026-06-10** — the first Reporting slice (T2.3 / Phase A). The moment ERPCLEAN2 is demonstrably an ERP, not
+just balanced books. **Read-only over GL**: turns the balanced ledger into a **Profit & Loss**, a **Balance
+Sheet**, a **Cash-Flow Statement (indirect)**, and the **GL account-ledger drill-down** beneath every line,
+with **comparative** columns and **PDF / Excel-CSV export**. The statement→account mapping is **auto-derived**
+from `account_type` + account-code range (no template table). Reads GL (ADR-0013: `TrialBalanceQuery` /
+`journal_lines` / `chart_of_accounts.account_type` + `normal_balance` / `fiscal_periods`); base currency
+only (ADR-0005). **Posts nothing, owns no new business table** — only a V15 perm-seed for `REPORT.*`. The
+correctness bars are testable: the BS balances; the cash-flow net == the Cash+Bank GL movement; the P&L net
+== the period's INCOME−EXPENSE GL movement; every figure drills to journal lines.
+
+### US-REP-01 — View an Income Statement / P&L with a comparative
+**As an** owner or accountant **I want** a Profit & Loss for a period with a prior-period comparative **so
+that** I can see whether the business made money and how it compares with last period.
+- **AC1** Given `REPORT.VIEW` / `REPORT.PL.VIEW` and an active company, when I run a P&L for a **date range**
+  (or a fiscal-period quick-select), then I see **revenue** less **cost of sales** = **gross profit**, less
+  **operating expenses** = **net profit**, grouped by the auto-derive rule (FR-REP-01, BR-REP-07).
+- **AC2** Given the statement, then it shows a **comparative** prior period alongside the selected period
+  (FR-REP-06, BR-REP-01); the comparative is computed exactly as the primary over the prior window.
+- **AC3** **(Reconciliation bar)** Given the P&L, then its **net profit == the period's INCOME − EXPENSE
+  movement on `journal_lines`** for that range (BR-REP-03); the statement is the ledger, grouped — it cannot
+  show a net the ledger does not carry.
+- **AC4** Given the selected window has **no postings**, then the P&L renders with **zero / empty sections**
+  (a valid empty result), not an error (FR-REP-01).
+- **AC5** Given any read, then it returns **only my company's** figures (`assertCanActIn`); cross-company
+  figures never appear (FR-REP-08, BR-REP-10, NFR-REP-01).
+
+### US-REP-02 — View a Balance Sheet that balances
+**As a** financial controller **I want** a Balance Sheet as-at a date that balances, with a comparative **so
+that** I can trust the financial position and share it externally.
+- **AC1** Given `REPORT.VIEW` / `REPORT.BS.VIEW`, when I run a Balance Sheet **as-at a date**, then I see
+  **assets** (current vs non-current) = **liabilities** (current vs non-current) + **equity**, grouped by the
+  auto-derive rule (FR-REP-02, BR-REP-07).
+- **AC2** Given the equity section, then it includes **retained earnings + the current-year net income to
+  date** folded in (BR-REP-05) — a presentation derivation, not a posted closing entry.
+- **AC3** **(Reconciliation bar)** Given the Balance Sheet, then **ASSET == LIABILITY + EQUITY** for the
+  as-at date (BR-REP-02); it **balances**, because GL is double-entry and the year's net income is folded in.
+- **AC4** Given the statement, then it shows a **comparative** as-at a prior date (FR-REP-06, BR-REP-01).
+- **AC5** Given (in a correct double-entry system this should not happen) the BS does **not** balance, then
+  the imbalance is **surfaced as a data-integrity alarm** for finance to investigate — Reporting is read-only
+  and never silently adjusts a figure (BR-REP-02, BR-REP-08).
+
+### US-REP-03 — View a Cash-Flow Statement that ties to cash
+**As an** accountant **I want** an indirect Cash-Flow Statement whose net change in cash ties to the cash +
+bank movement **so that** I can see where the cash went and trust the bottom line.
+- **AC1** Given `REPORT.VIEW` / `REPORT.CASHFLOW.VIEW`, when I run a Cash-Flow Statement (indirect) for a
+  **date range**, then I see **operating** (net income ± working-capital changes — ΔAR, ΔAP, ΔInventory,
+  ΔVAT/WHT), **investing** (± non-current-asset changes), and **financing** (± equity / borrowing changes),
+  classified by the auto-derive rule (FR-REP-03, BR-REP-07).
+- **AC2** **(Reconciliation bar)** Given the statement, then the **net change in cash == the movement on the
+  Cash + Bank GL accounts (1000 + 1100)** between the two dates (BR-REP-04); the three sections sum to that
+  net change.
+- **AC3** Given v1 has **no Fixed Assets / Loans**, then the **investing / financing sections are sparse**
+  (few or no postings) — this is expected, not a defect, and the **tie-out bar (AC2) holds regardless**
+  (§10.2, BR-REP-04).
+- **AC4** Given the statement, then it shows a **comparative** prior period (FR-REP-06, BR-REP-01).
+- **AC5** Given the net change **does not** tie to the Cash + Bank movement, then it is **surfaced** as a
+  defect for investigation — Reporting never "balances" it by writing (BR-REP-04, BR-REP-08).
+
+### US-REP-04 — Drill from a statement line into the GL account ledger
+**As an** auditor or accountant **I want** to drill from any statement line into the underlying GL account's
+ledger **so that** I can trace every figure down to the journal lines that produced it.
+- **AC1** Given `REPORT.VIEW` / `REPORT.LEDGER.VIEW` and a statement line, when I drill into it, then I see
+  the account's **opening balance**, each **journal line** in the period (posting date, source, reference,
+  debit, credit) in posting-date order, the **running balance**, and the **closing balance** (FR-REP-04).
+- **AC2** **(Trace bar)** Given the account ledger, then the **closing balance == the figure the statement
+  line showed** for that account (BR-REP-06); every statement figure traces to the journal lines.
+- **AC3** Given the ledger, then each line names its **source** (a sales auto-post, an AR receipt, an AP
+  payment, a Cash & Bank transfer, a manual journal, the VAT settlement) and its **reference** (the `JB-####`
+  batch / source document) (FR-REP-04, §3.5).
+- **AC4** Given the ledger is for a GL account, then it is the **GL account ledger** (over `journal_lines`),
+  **not** the AR/AP sub-ledger (per-party detail) (FR-REP-04, glossary).
+- **AC5** Given a very **large** account ledger, then it **paginates / streams** within the performance
+  envelope — it does not time out or load unbounded (NFR-REP-02).
+
+### US-REP-05 — Export a statement to PDF / Excel
+**As an** owner or accountant **I want** to export any statement and the account ledger to PDF and Excel/CSV
+**so that** I can print it, file it, or work with the figures in a spreadsheet.
+- **AC1** Given `REPORT.EXPORT`, when I export a statement (P&L, Balance Sheet, Cash-Flow) or the account
+  ledger to **PDF**, then I get a **print-faithful** rendering — the same figures, the same sections, the
+  comparative column, and a header carrying the **company name + period / as-at date + base currency**
+  (FR-REP-05, NFR-REP-04).
+- **AC2** Given `REPORT.EXPORT`, when I export to **Excel / CSV**, then I get the same figures in a
+  spreadsheet-usable form (rows/columns, the comparative) (FR-REP-05).
+- **AC3** **(Fidelity bar)** Given an export, then it **matches the on-screen statement exactly** (figures,
+  sections, comparative) — a divergence is a defect (NFR-REP-04).
+- **AC4** Given the export library / generation approach, then it is the **architect's ADR call** (OQ-REP-05);
+  the requirement is a print-faithful PDF + a spreadsheet export.
+
+### US-REP-06 — Select the reporting window and comparative
+**As an** accountant **I want** to choose the reporting window and the comparative **so that** I can report
+any period or as-at date and compare against the right prior window.
+- **AC1** Given a P&L / Cash-Flow, when I select the window, then I may choose an **arbitrary date range**;
+  given a Balance Sheet, I select an **as-at date** (FR-REP-07).
+- **AC2** Given the selector, then I have **fiscal-period / fiscal-year quick-selects** (this month, this
+  quarter, this fiscal year, a named period) resolved through GL `fiscal_periods` / `FiscalPeriodResolver`
+  (FR-REP-07, gl.md FR-GL-14).
+- **AC3** Given the **comparative**, then it defaults to the **immediately prior period of the same length**
+  (P&L / Cash-Flow) / the **prior year-end or the period start** (Balance Sheet), and I may **override** it to
+  a chosen prior window — e.g. prior-year same-period (FR-REP-06, OQ-REP-03).
+- **AC4** Given any statement, then all figures are in the **company base currency** (TZS in practice); there
+  is **no FX / presentation-currency** translation in v1 (FR-REP-07, BR-REP-09).
+
+### US-REP-07 — Reporting is read-only and permission-gated
+**As a** business owner **I want** Reporting to read the books without ever writing, and to gate who sees
+which statement **so that** sensitive financial statements are protected and the books are never altered by a
+report.
+- **AC1** Given Reporting, then it **posts nothing, creates no business table, allocates no number** — it
+  reads `journal_lines` / `chart_of_accounts` / `fiscal_periods` only (BR-REP-08, NFR-REP-03).
+- **AC2** Given the permission split, then a user with `REPORT.LEDGER.VIEW` but **not** `REPORT.PL.VIEW` may
+  **drill a ledger** but **not** open the company P&L (FR-REP-08, OQ-REP-04).
+- **AC3** Given a user **without** the relevant `REPORT.*` permission, when they request a statement, then it
+  is **refused** by RBAC (FR-REP-08).
+- **AC4** Given the module ships, then the `REPORT.*` permissions are **seeded via a small V15 migration**
+  (no new business tables) and granted to `ORG_ADMIN` (FR-REP-08; flagged for ADR-0018).
+- **AC5** Given Reporting performs **no mutation**, then there is **no post/close/adjust to audit**; read
+  access to sensitive statements is logged per the platform read-access policy (NFR-REP-05).
