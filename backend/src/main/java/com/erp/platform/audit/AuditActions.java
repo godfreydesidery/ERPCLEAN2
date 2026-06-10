@@ -187,4 +187,7 @@ public final class AuditActions {
     public static final String VAT_ADJUST          = "VAT.ADJUST";
     public static final String WHT_TYPE_MANAGE     = "WHT.TYPE.MANAGE";
     public static final String WHT_CAPTURE         = "WHT.CAPTURE";
+
+    // ---- Reporting module (ADR-0018 D-11) ----
+    public static final String REPORT_EXPORT = "REPORT.EXPORT";
 }
