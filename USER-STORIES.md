@@ -1179,3 +1179,104 @@ can see every movement and what each location holds.
   account balance** (FR-CASH-17, BR-CASH-02).
 - **AC4** Given any read, then it returns **only my company's** cash/bank accounts and transactions
   (`assertCanActIn`); cross-company figures never appear (FR-CASH-18, BR-CASH-08, NFR-CASH-01).
+
+---
+
+## VAT Return / Tax — the monthly VAT obligation (output vs input, filed to TRA)
+
+Requirements: [docs/requirements/vat-return.md](docs/requirements/vat-return.md). Status: **RATIFIED
+2026-06-09** — the last Tier-1 finance piece (T1.5 / Phase A). A **monthly, accrual-basis** VAT return that
+nets **output VAT** (finalised sales) against **input VAT** (supplier bills), takes manual adjustments,
+files **DRAFT → FILED** with a **synchronous GL settlement** + the period lock + a **net-credit
+carry-forward**, plus **withholding-tax (WHT)** capture + a WHT register. Reads Sales output VAT (ADR-0008)
++ AP input VAT (ADR-0015); posts to GL (ADR-0013) on filing (needs a new `VAT_INPUT` account/`gl_configs`
+key — flagged for ADR-0017). TRA EFD/e-filing deferred.
+
+### US-VAT-01 — Prepare a monthly VAT return
+**As an** accountant **I want** to open and compute the VAT return for a calendar month **so that** I can
+see what the company owes TRA (or carries forward) before filing.
+- **AC1** Given `VAT.RETURN.PREPARE` and an active company, when I open the return for a company-month, then
+  a `VATR-####` return is created in status **DRAFT** with a **due date = the 20th of the following month**
+  (FR-VAT-01).
+- **AC2** Given the period, when it computes, then **output VAT** = the sum of `sales_invoices.vat_total_amount`
+  (by tax band, from `tax_summary`) for invoices **FINALISED in the period** (FR-VAT-03, BR-VAT-05), and
+  **input VAT** = the sum of `supplier_bills.vatAmount` for **matched/approved bills DATED in the period**
+  (FR-VAT-04, BR-VAT-04) — **payment-independent** (accrual basis).
+- **AC3** Given a **DRAFT** return, when more invoices finalise / more bills land in the period, then
+  re-computing **refreshes** output and input; recompute does **not** post to GL (FR-VAT-02).
+- **AC4** Given a company-month that already has a return, when I try to open a second, then it is
+  **rejected** — one return per company per month (BR-VAT-01).
+- **AC5** Given any read, then it returns **only my company's** returns (`assertCanActIn`); cross-company
+  figures never appear (FR-VAT-14, BR-VAT-07, NFR-VAT-01).
+
+### US-VAT-02 — Review the output / input breakdown
+**As a** tax officer **I want** to see output VAT by band and input VAT against source **so that** I can
+trust the return before it is filed.
+- **AC1** Given `VAT.VIEW`, when I open a return, then I see **output VAT by band** (STANDARD 18 / ZERO_RATED
+  0 / EXEMPT), **input VAT**, **adjustments**, the **opening credit carried forward**, the **net**, and
+  whether it is **payable** or a **credit** (FR-VAT-13, FR-VAT-06).
+- **AC2** Given a **DRAFT** return, then **only FINALISED** sales contribute output (a DRAFT/voided invoice
+  contributes nothing — BR-VAT-05) and **only matched** bills contribute input (a **held / over-tolerance**
+  bill is excluded until it matches — BR-VAT-04).
+- **AC3** **(Reconciliation bar)** Given the period's output, then it **agrees with the period's `2200 VAT
+  Payable` GL movement** from sales auto-posting (BR-VAT-08).
+- **AC4** Given a FILED return, then I also see its **filing reference** + **filing date** (FR-VAT-13).
+
+### US-VAT-03 — Add a VAT adjustment to a draft return
+**As an** accountant **I want** to add manual adjustment lines to a draft return **so that** bad-debt VAT
+relief, prior-period corrections, and credit/debit-note VAT are reflected in the net.
+- **AC1** Given `VAT.ADJUST` and a **DRAFT** return, when I add an adjustment (a **reason**, an **amount**, a
+  **sign**), then it is recorded, **audited**, and the **net updates** (FR-VAT-05, FR-VAT-06, NFR-VAT-03).
+- **AC2** Given a DRAFT return, when I remove an adjustment, then it is removed and the net recomputes; both
+  add and remove are allowed **only while DRAFT** (BR-VAT-09).
+- **AC3** Given a **FILED** return, when I try to add/remove an adjustment, then it is **refused** — the
+  return is locked; the correction goes to the **next period's adjustment** (BR-VAT-09/10).
+
+### US-VAT-04 — File a VAT return → locks + posts to GL
+**As a** financial controller **I want** to file the return so it is locked and the period's VAT is settled
+on the books **so that** the books reflect what we owe TRA and the period is closed.
+- **AC1** Given `VAT.RETURN.FILE` and a **DRAFT** return, when I file it, then I record a **filing reference**
+  + a **filing date**, the figures **freeze**, and the return moves **DRAFT → FILED** and is **LOCKED**
+  (FR-VAT-08, BR-VAT-02).
+- **AC2** Given filing, then a **synchronous GL settlement journal** posts — **DR `2200 VAT Payable`** (clear
+  output), **CR the `VAT_INPUT` recoverable account** (clear input), book the **net to a VAT-due liability**
+  (net positive) or carry the credit (net negative), **balanced** (FR-VAT-08, BR-VAT-06); the exact accounts
+  are ADR-0017.
+- **AC3** **(Reconciliation bar)** Given a FILED return, then the **filing settlement entry's net == the
+  return's net**, the period's **output == the `2200` movement**, and the **input == the `VAT_INPUT`
+  movement** (BR-VAT-08, NFR-VAT-01); the return and the GL post **commit in one transaction** (NFR-VAT-04).
+- **AC4** Given an already-**FILED** return, when I try to file again or edit it, then it is **rejected** —
+  the VAT period is closed and cannot be filed twice (BR-VAT-11, BR-VAT-02); undoing the GL post is a
+  **reversing entry**, never an edit (BR-VAT-10, gl.md BR-GL-02).
+- **AC5** Given filing would post into a **closed GL period**, or a required `gl_configs` mapping
+  (`VAT_PAYABLE`, the new `VAT_INPUT`, the VAT-due account) is **missing**, then the **file fails** rather
+  than mis-posting; finance fixes it and retries (FR-VAT-09, gl.md OQ-GL-01 / BR-GL-10).
+
+### US-VAT-05 — A net credit carries forward to the next period
+**As an** accountant **I want** a period's net VAT credit to carry forward **so that** it offsets next
+period's liability without a cash-refund claim.
+- **AC1** Given a period nets to a **credit** (input + carried credit + reducing adjustments > output), when
+  it is filed, then the credit is recorded as a **VAT credit**, **not** a cash refund (FR-VAT-07, BR-VAT-03).
+- **AC2** Given the **next** period's return is opened, then the prior period's credit appears as its
+  **opening credit carried forward** and **offsets** that period's net (FR-VAT-06/07, BR-VAT-03).
+- **AC3** Given v1, then a cash **refund claim** to TRA is **not** offered (deferred); the carry-forward is
+  the only v1 path (§10.2).
+
+### US-VAT-06 — Record withholding tax on a payment + the WHT register
+**As a** tax accountant **I want** to capture withholding tax on supplier payments (and customer receipts)
+and see a WHT register **so that** I can remit the withheld tax to TRA and issue/keep certificates.
+- **AC1** Given `WHT.MANAGE` on a supplier **AP payment**, when I apply a **WHT rate/type** (incl.
+  withholding VAT), then the supplier is **paid less** by the withheld amount, the system **books a WHT
+  liability** and **reduces the cash leg** by the withheld amount, and a **WHT certificate** (`WHT-####`) is
+  produced (FR-VAT-10, BR-VAT-12).
+- **AC2** Given a customer **withheld** on an **AR receipt**, when I capture it (`WHT.MANAGE`), then the
+  receipt is **less** than the invoice by the withheld amount, the system **books a WHT receivable/asset**,
+  and the customer's **WHT certificate** is recorded (FR-VAT-11, BR-VAT-12).
+- **AC3** **(Balance bar)** Given a WHT capture, then the **cash reduction == the WHT liability/receivable
+  booked** (the legs net — NFR-VAT-02, BR-VAT-12).
+- **AC4** Given `WHT.VIEW`, when I open the **WHT register** for a period, then I see WHT **withheld** (to
+  remit to TRA) and **received** (a receivable) — the basis for remittance (FR-VAT-12).
+- **AC5** Given the WHT register, then it is a **sibling** to the VAT return and is **NOT** part of the
+  output−input VAT net (BR-VAT-12).
+- **AC6** Given v1 WHT, then it is **lean** — a configurable rate/type + capture + track + register +
+  certificate; the **full WHT-by-type matrix + WHT e-filing** are deferred (OQ-VAT-02, §10.3).

@@ -337,5 +337,30 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./cashbank/cash-account-statement.component').then((m) => m.CashAccountStatementComponent),
   },
+  // ── Tax (VAT Returns + WHT) ───────────────────────────────────────────────
+  {
+    path: 'tax/vat-returns',
+    canActivate: [requirePermission('VAT.VIEW')],
+    loadComponent: () =>
+      import('./tax/vat-returns-list.component').then((m) => m.VatReturnsListComponent),
+  },
+  {
+    path: 'tax/vat-returns/uid/:uid',
+    canActivate: [requirePermission('VAT.VIEW')],
+    loadComponent: () =>
+      import('./tax/vat-return-detail.component').then((m) => m.VatReturnDetailComponent),
+  },
+  {
+    path: 'tax/wht-types',
+    canActivate: [requirePermission('WHT.VIEW')],
+    loadComponent: () =>
+      import('./tax/wht-types-list.component').then((m) => m.WhtTypesListComponent),
+  },
+  {
+    path: 'tax/wht-register',
+    canActivate: [requirePermission('WHT.VIEW')],
+    loadComponent: () =>
+      import('./tax/wht-register.component').then((m) => m.WhtRegisterComponent),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];

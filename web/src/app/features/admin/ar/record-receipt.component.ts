@@ -19,6 +19,8 @@ import {
   TenderType,
 } from './models/ar.model';
 import { ArService } from './ar.service';
+import { WhtTypeDto } from '../tax/models/tax.model';
+import { TaxService } from '../tax/tax.service';
 
 /**
  * A UI-only allocation row — wraps an ArInvoiceDto with the user's input.
@@ -55,6 +57,7 @@ export class RecordReceiptComponent {
   private readonly companyService = inject(CompanyService);
   private readonly organisationService = inject(OrganisationService);
   private readonly customerService = inject(CustomerService);
+  private readonly taxService = inject(TaxService);
   private readonly alerts = inject(AlertService);
   private readonly router = inject(Router);
   protected readonly session = inject(SessionStore);
@@ -79,6 +82,11 @@ export class RecordReceiptComponent {
   // ── Allocation editor ──────────────────────────────────────────────────────
   readonly allocationRows = signal<AllocationRow[]>([]);
   readonly openInvoicesState = signal<'idle' | 'loading' | 'error'>('idle');
+
+  // ── WHT section (optional, WHT_ON_RECEIPT) ────────────────────────────────
+  readonly whtTypes = signal<WhtTypeDto[]>([]);
+  readonly whtTypeUid = signal('');
+  readonly whtAmount = signal('');
 
   // ── Submit state ───────────────────────────────────────────────────────────
   readonly submitting = signal(false);
@@ -175,6 +183,7 @@ export class RecordReceiptComponent {
             this.companyState.set('idle');
             if (list.length > 0) {
               this.selectedCompanyId.set(list[0].id);
+              this.loadWhtTypes(list[0].id);
             }
           },
           error: () => this.companyState.set('error'),
@@ -184,9 +193,17 @@ export class RecordReceiptComponent {
     });
   }
 
+  private loadWhtTypes(companyId: string): void {
+    this.taxService.listWhtTypes(companyId).subscribe({
+      next: (list) => this.whtTypes.set(list.filter((t) => t.active && t.kind === 'WHT_ON_RECEIPT')),
+      error: () => this.whtTypes.set([]),
+    });
+  }
+
   onCompanyChange(id: string): void {
     this.selectedCompanyId.set(id);
     this.resetCustomer();
+    if (id) this.loadWhtTypes(id);
   }
 
   // ── Customer picker ────────────────────────────────────────────────────────
@@ -329,6 +346,14 @@ export class RecordReceiptComponent {
       bankReference: bankRef || undefined,
       allocations,
     };
+
+    // Optional WHT (WHT_ON_RECEIPT)
+    const whtUid = String(this.whtTypeUid() ?? '').trim();
+    const whtAmt = String(this.whtAmount() ?? '').trim();
+    if (whtUid && whtAmt && +whtAmt > 0) {
+      request.whtTypeUid = whtUid;
+      request.whtAmount = whtAmt;
+    }
 
     this.submitting.set(true);
     this.formError.set(null);

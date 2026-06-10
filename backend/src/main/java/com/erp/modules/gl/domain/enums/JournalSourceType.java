@@ -23,6 +23,8 @@ public enum JournalSourceType {
     // --- Cash & Bank increment (ADR-0016 D-7) — now admitted by the DB CHECK (V13 widens it) ---
     CASH_TRANSFER,
     CASH_DIRECT,
+    // --- VAT/Tax increment (ADR-0017 D-13) — now admitted by the DB CHECK (V14 widens it) ---
+    VAT_RETURN,
     // --- RESERVED — NOT yet admitted by the DB CHECK; widen when the increment lands ---
     AR,
     AP,

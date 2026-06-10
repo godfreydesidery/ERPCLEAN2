@@ -35,6 +35,11 @@ public class IamTestData {
         em.createNativeQuery(
                 "TRUNCATE domain_events, processed_events RESTART IDENTITY CASCADE")
                 .executeUpdate();
+        // 4-TAX. Clear VAT / WHT tables BEFORE GL and companies.
+        //        FK order: wht_transactions → wht_types; vat_return_bands/vat_adjustments → vat_returns.
+        em.createNativeQuery(
+                "TRUNCATE wht_transactions, wht_types, vat_adjustments, vat_return_bands, vat_returns RESTART IDENTITY CASCADE")
+                .executeUpdate();
         // 4-CB. Clear Cash & Bank tables BEFORE AR/AP (ar_receipts.cash_bank_account_id and
         //       ap_payments.cash_bank_account_id FK → cash_bank_accounts; cash_transactions
         //       FK → bank_reconciliations; cash_transfers FK → cash_transactions).

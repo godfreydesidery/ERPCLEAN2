@@ -646,6 +646,64 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     }
 
     // -------------------------------------------------------------------------
+    // VAT computation read (ADR-0017 D-6) — additive, no Sales schema change
+    // -------------------------------------------------------------------------
+
+    @Override
+    @Transactional(readOnly = true)
+    public com.erp.modules.sales.domain.dto.VatOutputSummaryDto findVatSummaryForPeriod(
+            Long companyId, java.time.LocalDate start, java.time.LocalDate end) {
+        scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+
+        // Direct JPQL projection — finalised invoices with finalised_at::date in [start, end].
+        // Sum vat_total_amount and parse tax_summary JSONB band breakdown per invoice.
+        // The tax_summary JSONB has the structure: { "STANDARD": {"taxableBase":..., "vatAmount":...}, ... }
+        // We read each invoice's vat_total_amount + tax_summary and aggregate per band in Java.
+        List<SalesInvoice> finalisedInPeriod = invoices.findFinalisedInPeriod(
+                companyId,
+                start.atStartOfDay(java.time.ZoneOffset.UTC).toInstant(),
+                end.plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant());
+
+        java.util.Map<String, BigDecimal> bandTaxableBase = new java.util.LinkedHashMap<>();
+        java.util.Map<String, BigDecimal> bandOutputVat   = new java.util.LinkedHashMap<>();
+        BigDecimal totalOutput = BigDecimal.ZERO;
+
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+
+        for (SalesInvoice inv : finalisedInPeriod) {
+            totalOutput = totalOutput.add(inv.getVatTotalAmount());
+
+            if (inv.getTaxSummary() != null && !inv.getTaxSummary().isBlank()) {
+                try {
+                    com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(inv.getTaxSummary());
+                    root.fields().forEachRemaining(entry -> {
+                        String band = entry.getKey();
+                        com.fasterxml.jackson.databind.JsonNode node = entry.getValue();
+                        BigDecimal base = node.has("taxableBase")
+                                ? new BigDecimal(node.get("taxableBase").asText("0"))
+                                : BigDecimal.ZERO;
+                        BigDecimal vat = node.has("vatAmount")
+                                ? new BigDecimal(node.get("vatAmount").asText("0"))
+                                : BigDecimal.ZERO;
+                        bandTaxableBase.merge(band, base, BigDecimal::add);
+                        bandOutputVat.merge(band, vat, BigDecimal::add);
+                    });
+                } catch (Exception ignored) {
+                    // malformed tax_summary — treat as zero-band, vat_total_amount already counted
+                }
+            }
+        }
+
+        java.util.Map<String, com.erp.modules.sales.domain.dto.VatOutputSummaryDto.BandTotalsDto> byBand
+                = new java.util.LinkedHashMap<>();
+        bandOutputVat.forEach((band, vat) -> byBand.put(band,
+                new com.erp.modules.sales.domain.dto.VatOutputSummaryDto.BandTotalsDto(
+                        bandTaxableBase.getOrDefault(band, BigDecimal.ZERO), vat)));
+
+        return new com.erp.modules.sales.domain.dto.VatOutputSummaryDto(byBand, totalOutput);
+    }
+
+    // -------------------------------------------------------------------------
     // Private helpers
     // -------------------------------------------------------------------------
 

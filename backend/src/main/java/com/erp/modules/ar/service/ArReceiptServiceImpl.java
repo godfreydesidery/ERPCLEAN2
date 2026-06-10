@@ -28,6 +28,8 @@ import com.erp.modules.gl.service.GLPostingService;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.parties.domain.entity.Customer;
 import com.erp.modules.parties.repository.CustomerRepository;
+import com.erp.modules.tax.domain.dto.WhtCaptureResultDto;
+import com.erp.modules.tax.service.WhtCaptureService;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -66,6 +68,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
     private final GLConfigResolver glConfig;
     private final CashBankAccountResolver cashBankAccountResolver;
     private final CashTransactionRecorder cashTxnRecorder;
+    private final WhtCaptureService whtCapture;
     private final ScopeGuard scopeGuard;
     private final AuditService audit;
 
@@ -79,6 +82,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                                  GLConfigResolver glConfig,
                                  CashBankAccountResolver cashBankAccountResolver,
                                  CashTransactionRecorder cashTxnRecorder,
+                                 WhtCaptureService whtCapture,
                                  ScopeGuard scopeGuard,
                                  AuditService audit) {
         this.receipts                = receipts;
@@ -91,6 +95,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         this.glConfig                = glConfig;
         this.cashBankAccountResolver = cashBankAccountResolver;
         this.cashTxnRecorder         = cashTxnRecorder;
+        this.whtCapture              = whtCapture;
         this.scopeGuard              = scopeGuard;
         this.audit                   = audit;
     }
@@ -176,9 +181,43 @@ public class ArReceiptServiceImpl implements ArReceiptService {
 
         // 9. Post cash leg to GL synchronously (D-4). Failure rolls back the whole TX.
         //    ADR-0016: resolve cash/bank account via CashBankAccountResolver (replaces glConfig.CASH).
+        //    ADR-0017 D-9: if WHT present, capture certificate first to get GL account, then reduce
+        //    the cash DR leg by whtAmount and append DR WHT_RECEIVABLE whtAmount.
         CashAccountGlResolutionDto cashRes = cashBankAccountResolver.resolve(
                 companyId, req.cashBankAccountUid());
         ChartOfAccount arAcct = glConfig.resolve(companyId, GlConfigKey.ACCOUNTS_RECEIVABLE);
+
+        boolean hasWht = req.whtTypeUid() != null
+                && req.whtAmount() != null
+                && req.whtAmount().compareTo(BigDecimal.ZERO) > 0;
+
+        // Capture WHT certificate before building the draft so we have glAccountId.
+        WhtCaptureResultDto whtResult = null;
+        if (hasWht) {
+            whtResult = whtCapture.captureOnReceipt(
+                    companyId, receipt.getBranchId(),
+                    req.whtTypeUid(),
+                    customer.getId(), customer.getDisplayName(),
+                    receipt.getUid(),
+                    receipt.getAmount(), req.whtAmount(),
+                    currency, receipt.getReceiptDate(),
+                    null, // journal entry uid linked after post
+                    actorId());
+        }
+
+        List<LineDraft> glLines = new ArrayList<>();
+        // Cash DR = full amount minus any WHT withheld by customer
+        BigDecimal cashDr = hasWht ? receipt.getAmount().subtract(req.whtAmount()) : receipt.getAmount();
+        glLines.add(new LineDraft(cashRes.glAccountId(), cashDr, BigDecimal.ZERO, currency,
+                "Cash received from " + customer.getDisplayName()));
+        // WHT_RECEIVABLE DR leg (the WHT the customer held back on our behalf)
+        if (hasWht) {
+            glLines.add(new LineDraft(whtResult.glAccountId(), req.whtAmount(), BigDecimal.ZERO, currency,
+                    "WHT receivable — " + receiptNumber));
+        }
+        // AR CR = full settled amount (cashDr + whtAmount = receipt.amount — balanced)
+        glLines.add(new LineDraft(arAcct.getId(), BigDecimal.ZERO, receipt.getAmount(), currency,
+                "AR control — " + receiptNumber));
 
         JournalEntryDraft draft = new JournalEntryDraft(
                 companyId,
@@ -189,19 +228,19 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                 receipt.getUid(),
                 null,
                 actorId(),
-                List.of(
-                        new LineDraft(cashRes.glAccountId(), receipt.getAmount(), BigDecimal.ZERO, currency,
-                                "Cash received from " + customer.getDisplayName()),
-                        new LineDraft(arAcct.getId(), BigDecimal.ZERO, receipt.getAmount(), currency,
-                                "AR control — " + receiptNumber)
-                ));
+                glLines);
 
         JournalEntryDto posted = glPosting.post(draft);
         receipt.setGlEntryUid(posted.uid());
         receipt.setCashBankAccountId(cashRes.cashBankAccountId());
         receipt = receipts.save(receipt);
 
-        // 9b. Append cash_transaction row for this settlement (ADR-0016 D-13).
+        // 9b. Link journal entry uid back to WHT transaction (ADR-0017 D-9).
+        if (hasWht && whtResult != null) {
+            whtCapture.linkJournalEntry(whtResult.whtTransactionUid(), posted.uid());
+        }
+
+        // 9c. Append cash_transaction row for this settlement (ADR-0016 D-13).
         cashTxnRecorder.recordSettlement(
                 companyId, receipt.getBranchId(), cashRes.cashBankAccountId(),
                 CashTxnType.AR_RECEIPT, CashTxnDirection.IN,

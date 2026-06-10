@@ -27,6 +27,8 @@ import com.erp.modules.gl.service.GLConfigResolver;
 import com.erp.modules.gl.service.GLPostingService;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.parties.repository.SupplierRepository;
+import com.erp.modules.tax.domain.dto.WhtCaptureResultDto;
+import com.erp.modules.tax.service.WhtCaptureService;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -63,6 +65,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
     private final GLConfigResolver              glConfig;
     private final CashBankAccountResolver       cashBankAccountResolver;
     private final CashTransactionRecorder       cashTxnRecorder;
+    private final WhtCaptureService             whtCapture;
     private final ScopeGuard                    scopeGuard;
     private final AuditService                  audit;
 
@@ -76,6 +79,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
                                  GLConfigResolver glConfig,
                                  CashBankAccountResolver cashBankAccountResolver,
                                  CashTransactionRecorder cashTxnRecorder,
+                                 WhtCaptureService whtCapture,
                                  ScopeGuard scopeGuard,
                                  AuditService audit) {
         this.bills                   = bills;
@@ -88,6 +92,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         this.glConfig                = glConfig;
         this.cashBankAccountResolver = cashBankAccountResolver;
         this.cashTxnRecorder         = cashTxnRecorder;
+        this.whtCapture              = whtCapture;
         this.scopeGuard              = scopeGuard;
         this.audit                   = audit;
     }
@@ -136,8 +141,9 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         bills.save(bill);
 
         // GL: DR AP / CR Cash (ADR-0016: cash leg routed via CashBankAccountResolver)
+        // ADR-0017 D-9: when WHT present, CR WHT_PAYABLE instead of full cash CR.
         JournalEntryDto posted = postPaymentToGl(payment, companyId, bill.getBranchId(), currency,
-                req.cashBankAccountUid());
+                req.cashBankAccountUid(), bill.getSupplierId(), req.whtTypeUid(), req.whtAmount());
         payment.setGlEntryUid(posted.uid());
         payment = payments.save(payment);
 
@@ -209,8 +215,10 @@ public class ApPaymentServiceImpl implements ApPaymentService {
             bills.save(bill);
         }
 
+        // For a payment run the WHT applies to the batch total; supplier id from first bill if batch.
+        Long runSupplierId = openBills.isEmpty() ? null : openBills.get(0).getSupplierId();
         JournalEntryDto posted = postPaymentToGl(payment, companyId, branchId(), currency,
-                req.cashBankAccountUid());
+                req.cashBankAccountUid(), runSupplierId, req.whtTypeUid(), req.whtAmount());
         payment.setGlEntryUid(posted.uid());
         payment = payments.save(payment);
 
@@ -258,19 +266,48 @@ public class ApPaymentServiceImpl implements ApPaymentService {
 
     private JournalEntryDto postPaymentToGl(ApPayment payment, Long companyId,
                                              Long branchId, String currency,
-                                             String cashBankAccountUid) {
+                                             String cashBankAccountUid,
+                                             Long supplierId,
+                                             String whtTypeUid, BigDecimal whtAmount) {
         ChartOfAccount apAcct = glConfig.resolve(companyId, GlConfigKey.ACCOUNTS_PAYABLE);
 
         // ADR-0016 D-8: resolve cash/bank account via CashBankAccountResolver (replaces glConfig.CASH)
         CashAccountGlResolutionDto cashRes = cashBankAccountResolver.resolve(companyId, cashBankAccountUid);
 
-        List<LineDraft> glLines = List.of(
-                new LineDraft(apAcct.getId(),
-                        payment.getAmount(), BigDecimal.ZERO,
-                        currency, "AP payment — " + payment.getPaymentNumber()),
-                new LineDraft(cashRes.glAccountId(),
-                        BigDecimal.ZERO, payment.getAmount(),
-                        currency, "Cash out — " + payment.getPaymentNumber()));
+        boolean hasWht = whtTypeUid != null
+                && whtAmount != null
+                && whtAmount.compareTo(BigDecimal.ZERO) > 0;
+
+        // Capture WHT certificate before building the GL draft (ADR-0017 D-9).
+        WhtCaptureResultDto whtResult = null;
+        if (hasWht) {
+            whtResult = whtCapture.captureOnPayment(
+                    companyId, branchId,
+                    whtTypeUid,
+                    supplierId, "Supplier",   // party name resolved from supplier if needed
+                    payment.getUid(),
+                    payment.getAmount(), whtAmount,
+                    currency, payment.getPaymentDate(),
+                    null,   // journal entry uid linked after post
+                    actorId());
+        }
+
+        // DR AP = gross payment amount (bills settled at gross — balanced with cash + WHT legs)
+        // CR Cash = gross minus WHT; CR WHT_PAYABLE = WHT (ADR-0017 D-9)
+        BigDecimal cashCr = hasWht ? payment.getAmount().subtract(whtAmount) : payment.getAmount();
+
+        List<LineDraft> glLines = new ArrayList<>();
+        glLines.add(new LineDraft(apAcct.getId(),
+                payment.getAmount(), BigDecimal.ZERO,
+                currency, "AP payment — " + payment.getPaymentNumber()));
+        glLines.add(new LineDraft(cashRes.glAccountId(),
+                BigDecimal.ZERO, cashCr,
+                currency, "Cash out — " + payment.getPaymentNumber()));
+        if (hasWht) {
+            glLines.add(new LineDraft(whtResult.glAccountId(),
+                    BigDecimal.ZERO, whtAmount,
+                    currency, "WHT payable — " + payment.getPaymentNumber()));
+        }
 
         JournalEntryDraft draft = new JournalEntryDraft(
                 companyId, branchId,
@@ -280,6 +317,11 @@ public class ApPaymentServiceImpl implements ApPaymentService {
                 payment.getUid(), null, actorId(), glLines);
 
         JournalEntryDto posted = glPosting.post(draft);
+
+        // Back-link journal entry uid to WHT transaction (ADR-0017 D-9).
+        if (hasWht && whtResult != null) {
+            whtCapture.linkJournalEntry(whtResult.whtTransactionUid(), posted.uid());
+        }
 
         // Set the cash/bank account FK on the payment row and record the cash transaction
         payment.setCashBankAccountId(cashRes.cashBankAccountId());

@@ -166,6 +166,42 @@
         </div>
       </div>
 
+      <!-- ── Withholding Tax (optional, WHT_ON_PAYMENT) ───────────────────── -->
+      @if (whtTypes().length > 0) {
+        <div class="card mb-3">
+          <div class="card-header small fw-semibold text-muted">
+            <i class="bi bi-percent me-1" aria-hidden="true"></i>Withholding Tax
+            <span class="badge text-bg-secondary ms-1">Optional</span>
+          </div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-sm-6">
+                <label class="form-label" for="whtType">WHT Type (we withhold from supplier)</label>
+                <select id="whtType" name="whtType" class="form-select form-select-sm"
+                        [ngModel]="whtTypeUid()"
+                        (ngModelChange)="whtTypeUid.set($event)"
+                        [disabled]="submitting()">
+                  <option value="">— None —</option>
+                  @for (t of whtTypes(); track t.uid) {
+                    <option [value]="t.uid">{{ t.code }} — {{ t.name }} ({{ fmtMoney(t.ratePct) }}%)</option>
+                  }
+                </select>
+              </div>
+              @if (whtTypeUid()) {
+                <div class="col-sm-4">
+                  <label class="form-label" for="whtAmount">WHT Amount withheld</label>
+                  <input id="whtAmount" name="whtAmount" type="text" inputmode="decimal"
+                         class="form-control form-control-sm font-monospace" placeholder="0.00"
+                         [ngModel]="whtAmount()"
+                         (ngModelChange)="whtAmount.set($event)"
+                         [disabled]="submitting()" autocomplete="off" />
+                </div>
+              }
+            </div>
+          </div>
+        </div>
+      }
+
       <!-- ── Bill selection ──────────────────────────────────────────────── -->
       <div class="card mb-3">
         <div class="card-header d-flex justify-content-between align-items-center">

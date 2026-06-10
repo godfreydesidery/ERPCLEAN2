@@ -12,7 +12,9 @@ import com.erp.modules.sales.domain.dto.SalesInvoicePaymentDto;
 import com.erp.modules.sales.domain.dto.TaxRateDto;
 import com.erp.modules.sales.domain.dto.UpdateInvoiceLineRequest;
 import com.erp.modules.sales.domain.dto.UpdateTaxRateRequest;
+import com.erp.modules.sales.domain.dto.VatOutputSummaryDto;
 import com.erp.modules.sales.domain.dto.VoidInvoiceRequest;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -55,6 +57,14 @@ public interface SalesInvoiceService {
      * Company-scoped so no cross-tenant read is possible. GL imports this DTO, never the entity.
      */
     Optional<InvoicePostingTotalsDto> findPostingTotalsByUidAndCompany(String invoiceUid, Long companyId);
+
+    // --- VAT computation read (ADR-0017 D-6) ---
+    /**
+     * Sums output VAT from FINALISED invoices whose finalised_at date falls in [start, end],
+     * grouped by tax band. Used by the tax module's VatReturnComputationReader; company-scoped.
+     * Tax module imports this DTO, never a Sales entity (NFR-VAT-06 / D-10).
+     */
+    VatOutputSummaryDto findVatSummaryForPeriod(Long companyId, LocalDate start, LocalDate end);
 
     // --- Tax rates ---
     TaxRateDto getTaxRateByUid(String uid);

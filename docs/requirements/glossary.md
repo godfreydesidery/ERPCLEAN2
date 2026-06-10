@@ -548,3 +548,71 @@ One definition per term, used consistently across the team. Add terms as modules
   customer) or an AP **payment** (to a supplier).
 - A **cheque** is the *instrument* in the register; the **payment** is the financial event it settles —
   never blur the cheque with the payment's GL posting.
+
+## VAT Return / Tax — the monthly VAT obligation
+
+> Status: **Ratified 2026-06-09** — terms reflect the owner-confirmed VAT Return / Tax module (T1.5 /
+> Phase A) in vat-return.md. The last Tier-1 finance piece; a monthly, accrual-basis return that nets output
+> (Sales) against input (AP), files to a locked GL settlement, carries a net credit forward, and tracks
+> withholding tax.
+
+- **VAT (Value Added Tax)** — the Tanzanian consumption tax (standard rate **18%**), administered by
+  **TRA**, charged on taxable sales (**output**) and incurred on taxable purchases (**input**). A
+  VAT-registered company collects output VAT for TRA, recovers input VAT against it, and remits the **net**
+  monthly.
+- **Output VAT** — the VAT the company **charges customers** — the sum of `sales_invoices.vat_total_amount`
+  (by band, from `tax_summary`) for invoices **FINALISED in the period**. Already credited to GL **`2200 VAT
+  Payable`** by the sales auto-poster. A liability to TRA.
+- **Input VAT** — the VAT the company **was charged by suppliers** — the sum of `supplier_bills.vatAmount`
+  for **matched/approved bills DATED in the period**. **Recoverable** against output. Needs a **VAT Input /
+  Recoverable** account that does not exist yet (the ADR-0017 seam, OQ-VAT-01).
+- **Net VAT** — **output VAT − input VAT + adjustments + opening credit carried forward**, for the period.
+  **Net positive** = **VAT payable** to TRA; **net negative** = a **VAT credit**.
+- **VAT payable (to TRA)** — a **net positive** return: what the company owes TRA for the period, due the
+  **20th of the next month**.
+- **VAT credit** — a **net negative** return (input > output): a credit balance. In v1 it **carries
+  forward** (not a cash refund) — never call a carried credit a "refund."
+- **Return period** — one **calendar month** of VAT, **per company**, on an **invoice/accrual basis**;
+  exactly one per company per month; **due the 20th of the following month**.
+- **Accrual basis (invoice basis)** — VAT recognised when the invoice/bill is **dated**, **not** when money
+  moves: output on **finalise**, input on **bill date**. (Cash-basis is deferred.)
+- **Filing reference** — the **operator-entered** TRA acknowledgement/submission reference recorded when a
+  return is **FILED** (there is **no** TRA e-filing in v1). Not the internal `VATR-####` document number.
+- **Credit carry-forward** — a net credit becoming the **opening credit on the next period's return**,
+  offsetting its net. The v1 treatment of a net credit (no cash refund).
+- **VAT adjustment** — a **manual line** on a **DRAFT** return (a **reason + amount + sign**) that **affects
+  the net** — bad-debt VAT relief, prior-period corrections, credit/debit-note VAT. Audited; DRAFT-only.
+- **Withholding tax (WHT)** — tax the **payer** withholds from a payment and remits to TRA **on behalf of**
+  the payee (e.g. the TZ **2% withholding**). When **we pay a supplier** we may withhold (pay less, owe TRA
+  a **WHT liability**); when a **customer pays us** they may withhold (we receive less, hold a **WHT
+  receivable/asset**). Reduces the cash paid/received; **separate** from the VAT output−input net.
+- **Withholding VAT (WHT-VAT)** — a WHT regime where VAT is withheld at payment; modelled as a WHT **type/
+  rate** on the same capture-and-track machinery, not a separate engine.
+- **WHT certificate** — the document evidencing tax withheld (issued to the supplier when we withhold,
+  received from the customer when they withhold); the supporting record for the WHT register / remittance.
+- **WHT register / return** — the period's list of WHT **withheld** (a liability to remit) and **received**
+  (a receivable) — the basis for **remitting** withheld tax to TRA. A **sibling** to the VAT return,
+  **distinct** from it.
+- **VAT Input / Recoverable account** — the GL `1xxx` account ADR-0017 **adds** (with a `gl_configs`
+  **`VAT_INPUT`** key) to carry recoverable input VAT — it does **not** exist today (ADR-0013 D-13 has
+  `VAT_PAYABLE` only). The filing seam (OQ-VAT-01).
+- **VAT settlement entry** — the **synchronous GL journal** posted **on filing**: DR `2200 VAT Payable`
+  (clear output), CR the `VAT_INPUT` account (clear input), book the **net** to a VAT-due liability (or
+  carry a credit). Balanced; the books' record that the period was filed.
+
+### VAT terminology rulings (pick one, stay consistent)
+- Use **output VAT** for what we charge customers and **input VAT** for what suppliers charge us; the return
+  **nets** them — never blur the two sides.
+- Use **net VAT** for output − input + adjustments; say **VAT payable** only when the net is **positive** and
+  **VAT credit** when **negative** — a net credit **carries forward**, it is **not** a "refund" in v1.
+- Use **VAT return** for the periodic output−input obligation and **WHT return / register** for the separate
+  withholding remittance — two distinct statutory filings; never fold WHT into the VAT net.
+- Use **withholding** for tax the payer holds back **for** the payee; it reduces the **cash paid/received**,
+  **not** the bill's VAT — never call a withheld amount "VAT."
+- A return is **FILED** (locked, period closed), **never** "edited" — correct a filed period via the **next
+  period's adjustment** (append-only), and undo a GL post via a **reversing entry**, never an edit.
+- Use **filing reference** for TRA's acknowledgement and **`VATR-####`** for our internal return number —
+  never conflate them; there is **no** TRA e-filing in v1.
+- A **VAT account** is a GL bucket (`2200 VAT Payable`, the new VAT Input/Recoverable) — never call a
+  customer/supplier "a VAT account" (they are **parties**), the three-distinct-things rule again
+  (party / GL account / cash-bank account).

@@ -19,6 +19,8 @@ import {
   TenderType,
 } from './models/ap.model';
 import { ApService } from './ap.service';
+import { WhtTypeDto } from '../tax/models/tax.model';
+import { TaxService } from '../tax/tax.service';
 
 /**
  * Record Payment screen — AP.PAYMENT.RUN.
@@ -43,6 +45,7 @@ export class RecordPaymentComponent {
   private readonly companyService = inject(CompanyService);
   private readonly organisationService = inject(OrganisationService);
   private readonly supplierService = inject(SupplierService);
+  private readonly taxService = inject(TaxService);
   private readonly alerts = inject(AlertService);
   protected readonly session = inject(SessionStore);
 
@@ -66,6 +69,11 @@ export class RecordPaymentComponent {
   readonly paymentDate = signal('');
   readonly tenderType = signal<TenderType>('BANK_TRANSFER');
   readonly bankReference = signal('');
+
+  // ── WHT section (optional, WHT_ON_PAYMENT) ────────────────────────────────
+  readonly whtTypes = signal<WhtTypeDto[]>([]);
+  readonly whtTypeUid = signal('');
+  readonly whtAmount = signal('');
 
   // ── Submit state ───────────────────────────────────────────────────────────
   readonly submitting = signal(false);
@@ -130,7 +138,10 @@ export class RecordPaymentComponent {
           next: (list) => {
             this.companies.set(list);
             this.companyState.set('idle');
-            if (list.length > 0) this.selectedCompanyId.set(list[0].id);
+            if (list.length > 0) {
+              this.selectedCompanyId.set(list[0].id);
+              this.loadWhtTypes(list[0].id);
+            }
           },
           error: () => this.companyState.set('error'),
         });
@@ -139,9 +150,17 @@ export class RecordPaymentComponent {
     });
   }
 
+  private loadWhtTypes(companyId: string): void {
+    this.taxService.listWhtTypes(companyId).subscribe({
+      next: (list) => this.whtTypes.set(list.filter((t) => t.active && t.kind === 'WHT_ON_PAYMENT')),
+      error: () => this.whtTypes.set([]),
+    });
+  }
+
   onCompanyChange(id: string): void {
     this.selectedCompanyId.set(id);
     this.resetSupplier();
+    if (id) this.loadWhtTypes(id);
   }
 
   // ── Supplier picker ────────────────────────────────────────────────────────
@@ -244,6 +263,14 @@ export class RecordPaymentComponent {
       bankReference: bankRef || null,
       billUids: [...this.selectedBillUids()],
     };
+
+    // Optional WHT (WHT_ON_PAYMENT)
+    const whtUid = String(this.whtTypeUid() ?? '').trim();
+    const whtAmt = String(this.whtAmount() ?? '').trim();
+    if (whtUid && whtAmt && +whtAmt > 0) {
+      request.whtTypeUid = whtUid;
+      request.whtAmount = whtAmt;
+    }
 
     this.submitting.set(true);
     this.formError.set(null);

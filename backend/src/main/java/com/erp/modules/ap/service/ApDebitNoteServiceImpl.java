@@ -173,9 +173,10 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
                 BigDecimal.ZERO, note.getNetAmount(),
                 currency, "Debit note net — " + note.getDebitNoteNumber()));
 
-        // CR VAT_PAYABLE (VAT portion, if any)
+        // CR VAT_INPUT (VAT portion, if any) — contra to the original input-VAT DR posted on bill-match
+        // (ADR-0017 D-7: input VAT lives in VAT_INPUT, not VAT_PAYABLE).
         if (note.getVatAmount().compareTo(BigDecimal.ZERO) > 0) {
-            ChartOfAccount vatAcct = glConfig.resolve(companyId, GlConfigKey.VAT_PAYABLE);
+            ChartOfAccount vatAcct = glConfig.resolve(companyId, GlConfigKey.VAT_INPUT);
             glLines.add(new LineDraft(vatAcct.getId(),
                     BigDecimal.ZERO, note.getVatAmount(),
                     currency, "Debit note VAT — " + note.getDebitNoteNumber()));

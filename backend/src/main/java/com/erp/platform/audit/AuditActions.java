@@ -180,4 +180,11 @@ public final class AuditActions {
     public static final String CASH_RECONCILE_OPEN     = "CASH.RECONCILE.OPEN";
     public static final String CASH_RECONCILE_MARK     = "CASH.RECONCILE.MARK";
     public static final String CASH_RECONCILE_COMPLETE = "CASH.RECONCILE.COMPLETE";
+
+    // ---- VAT / Tax module (ADR-0017 D-13) ----
+    public static final String VAT_RETURN_PREPARE  = "VAT.RETURN.PREPARE";
+    public static final String VAT_RETURN_FILE     = "VAT.RETURN.FILE";
+    public static final String VAT_ADJUST          = "VAT.ADJUST";
+    public static final String WHT_TYPE_MANAGE     = "WHT.TYPE.MANAGE";
+    public static final String WHT_CAPTURE         = "WHT.CAPTURE";
 }

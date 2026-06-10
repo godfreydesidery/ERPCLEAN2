@@ -31,14 +31,19 @@ public class GlConfigServiceImpl implements GlConfigService {
     private static final Logger log = LoggerFactory.getLogger(GlConfigServiceImpl.class);
 
     /** Keys seeded by default (ROADMAP T1.1, ADR-0013 D-15). */
-    private static final Map<GlConfigKey, String> DEFAULT_MAPPINGS = Map.of(
-            GlConfigKey.SALES_REVENUE,       "4100",
-            GlConfigKey.VAT_PAYABLE,         "2200",
-            GlConfigKey.ACCOUNTS_RECEIVABLE, "1200",
-            GlConfigKey.CASH,                "1000",
-            GlConfigKey.INVENTORY,           "1300",
-            GlConfigKey.COGS,                "5100",
-            GlConfigKey.ACCOUNTS_PAYABLE,    "2100"
+    private static final Map<GlConfigKey, String> DEFAULT_MAPPINGS = Map.ofEntries(
+            Map.entry(GlConfigKey.SALES_REVENUE,       "4100"),
+            Map.entry(GlConfigKey.VAT_PAYABLE,         "2200"),
+            Map.entry(GlConfigKey.ACCOUNTS_RECEIVABLE, "1200"),
+            Map.entry(GlConfigKey.CASH,                "1000"),
+            Map.entry(GlConfigKey.INVENTORY,           "1300"),
+            Map.entry(GlConfigKey.COGS,                "5100"),
+            Map.entry(GlConfigKey.ACCOUNTS_PAYABLE,    "2100"),
+            // VAT/Tax increment (ADR-0017 D-5)
+            Map.entry(GlConfigKey.VAT_INPUT,           "1400"),
+            Map.entry(GlConfigKey.VAT_DUE,             "2300"),
+            Map.entry(GlConfigKey.WHT_PAYABLE,         "2400"),
+            Map.entry(GlConfigKey.WHT_RECEIVABLE,      "1500")
     );
 
     private final GlConfigRepository configs;

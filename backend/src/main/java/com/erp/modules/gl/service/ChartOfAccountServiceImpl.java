@@ -40,19 +40,23 @@ public class ChartOfAccountServiceImpl implements ChartOfAccountService {
 
     /** Standard TZ CoA seed: (code, name, type). */
     private static final List<Object[]> DEFAULT_ACCOUNTS = List.of(
-            new Object[]{"1000", "Cash",                      AccountType.ASSET},
-            new Object[]{"1100", "Bank",                      AccountType.ASSET},
-            new Object[]{"1200", "Accounts Receivable",       AccountType.ASSET},
-            new Object[]{"1300", "Inventory",                 AccountType.ASSET},
-            new Object[]{"2100", "Accounts Payable",          AccountType.LIABILITY},
-            new Object[]{"2200", "VAT Payable",               AccountType.LIABILITY},
-            new Object[]{"3000", "Owner's Equity / Capital",  AccountType.EQUITY},
-            new Object[]{"3900", "Retained Earnings",         AccountType.EQUITY},
-            new Object[]{"4100", "Sales Revenue",             AccountType.INCOME},
-            new Object[]{"5100", "Cost of Goods Sold",        AccountType.EXPENSE},
-            new Object[]{"5200", "Rent Expense",              AccountType.EXPENSE},
-            new Object[]{"5300", "Salaries & Wages",          AccountType.EXPENSE},
-            new Object[]{"5400", "Utilities",                 AccountType.EXPENSE}
+            new Object[]{"1000", "Cash",                        AccountType.ASSET},
+            new Object[]{"1100", "Bank",                        AccountType.ASSET},
+            new Object[]{"1200", "Accounts Receivable",         AccountType.ASSET},
+            new Object[]{"1300", "Inventory",                   AccountType.ASSET},
+            new Object[]{"1400", "VAT Input (Recoverable)",     AccountType.ASSET},
+            new Object[]{"1500", "WHT Receivable",              AccountType.ASSET},
+            new Object[]{"2100", "Accounts Payable",            AccountType.LIABILITY},
+            new Object[]{"2200", "VAT Payable",                 AccountType.LIABILITY},
+            new Object[]{"2300", "VAT Due (Payable to TRA)",    AccountType.LIABILITY},
+            new Object[]{"2400", "WHT Payable (to TRA)",        AccountType.LIABILITY},
+            new Object[]{"3000", "Owner's Equity / Capital",    AccountType.EQUITY},
+            new Object[]{"3900", "Retained Earnings",           AccountType.EQUITY},
+            new Object[]{"4100", "Sales Revenue",               AccountType.INCOME},
+            new Object[]{"5100", "Cost of Goods Sold",          AccountType.EXPENSE},
+            new Object[]{"5200", "Rent Expense",                AccountType.EXPENSE},
+            new Object[]{"5300", "Salaries & Wages",            AccountType.EXPENSE},
+            new Object[]{"5400", "Utilities",                   AccountType.EXPENSE}
     );
 
     public ChartOfAccountServiceImpl(ChartOfAccountRepository accounts,

@@ -1,0 +1,133 @@
+<section class="container-fluid py-3" aria-label="VAT Returns">
+  <div class="d-flex align-items-center mb-3 gap-2 flex-wrap">
+    <h1 class="h4 mb-0 me-auto">VAT Returns</h1>
+
+    @if (companyState() === 'loading') {
+      <span class="spinner-border spinner-border-sm text-secondary" aria-label="Loading companies"></span>
+    }
+    @if (companies().length > 1) {
+      <label class="visually-hidden" for="vatListCompany">Company</label>
+      <select id="vatListCompany" class="form-select form-select-sm w-auto"
+              [ngModel]="selectedCompanyId()"
+              (ngModelChange)="onCompanyChange($event)">
+        @for (c of companies(); track c.id) {
+          <option [value]="c.id">{{ c.name }}</option>
+        }
+      </select>
+    }
+
+    @if (canPrepare()) {
+      <button type="button" class="btn btn-primary btn-sm"
+              (click)="openNewForm()"
+              [disabled]="showNewForm()">
+        <i class="bi bi-plus-lg" aria-hidden="true"></i> New VAT Return
+      </button>
+    }
+  </div>
+
+  <!-- New return form -->
+  @if (showNewForm()) {
+    <div class="card mb-3 border-primary" role="form" aria-label="Open new VAT return">
+      <div class="card-header fw-semibold">New VAT Return — Select Period</div>
+      <div class="card-body">
+        @if (createError()) {
+          <div class="alert alert-danger py-2" role="alert">{{ createError() }}</div>
+        }
+        <div class="row g-3">
+          <div class="col-12 col-md-3">
+            <label class="form-label" for="newVatYear">Year <span aria-hidden="true">*</span></label>
+            <input id="newVatYear" type="number" class="form-control form-control-sm"
+                   [ngModel]="newYear()" (ngModelChange)="newYear.set(+$event)"
+                   min="2000" max="2100" required />
+          </div>
+          <div class="col-12 col-md-4">
+            <label class="form-label" for="newVatMonth">Month <span aria-hidden="true">*</span></label>
+            <select id="newVatMonth" class="form-select form-select-sm"
+                    [ngModel]="newMonth()" (ngModelChange)="newMonth.set(+$event)">
+              @for (m of months; track m.value) {
+                <option [value]="m.value">{{ m.label }}</option>
+              }
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="card-footer d-flex gap-2">
+        <button type="button" class="btn btn-primary btn-sm"
+                (click)="submitNew()" [disabled]="creating()">
+          @if (creating()) {
+            <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+          }
+          Open Return
+        </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm"
+                (click)="cancelNew()">Cancel</button>
+      </div>
+    </div>
+  }
+
+  <!-- States -->
+  @if (state() === 'loading') {
+    <div class="text-center py-5" aria-busy="true" aria-label="Loading VAT returns">
+      <span class="spinner-border text-primary" role="status"></span>
+    </div>
+  } @else if (state() === 'forbidden') {
+    <div class="alert alert-warning" role="alert">You do not have permission to view VAT returns (VAT.VIEW).</div>
+  } @else if (state() === 'error') {
+    <div class="alert alert-danger d-flex align-items-center gap-2" role="alert">
+      <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+      Failed to load VAT returns.
+      <button type="button" class="btn btn-sm btn-outline-danger ms-auto" (click)="load()">Retry</button>
+    </div>
+  } @else if (isEmpty()) {
+    <div class="alert alert-info" role="status">No VAT returns found. Use "New VAT Return" to open the first return.</div>
+  } @else {
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle">
+        <caption class="visually-hidden">VAT returns list</caption>
+        <thead class="table-light">
+          <tr>
+            <th scope="col">Return No.</th>
+            <th scope="col">Period</th>
+            <th scope="col">Due Date</th>
+            <th scope="col">Status</th>
+            <th scope="col" class="text-end">Output VAT</th>
+            <th scope="col" class="text-end">Input VAT</th>
+            <th scope="col" class="text-end">Net VAT</th>
+            <th scope="col">Result</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (ret of rows(); track ret.uid) {
+            <tr class="cursor-pointer" (click)="openDetail(ret)" role="button"
+                [attr.aria-label]="'Open return ' + ret.returnNumber" style="cursor:pointer">
+              <td class="font-monospace fw-semibold">{{ ret.returnNumber }}</td>
+              <td>{{ periodLabel(ret) }}</td>
+              <td>{{ ret.dueDate }}</td>
+              <td>
+                <span class="badge" [class]="statusBadgeClass(ret.status)">
+                  {{ ret.status }}
+                </span>
+              </td>
+              <td class="text-end font-monospace">{{ fmtMoney(ret.outputVat) }}</td>
+              <td class="text-end font-monospace">{{ fmtMoney(ret.inputVat) }}</td>
+              <td class="text-end font-monospace"
+                  [class.text-danger]="+(ret.netVat) > 0"
+                  [class.text-success]="+(ret.netVat) < 0">
+                {{ fmtMoney(ret.netVat) }}
+              </td>
+              <td>
+                @if (+(ret.netVat) > 0) {
+                  <span class="text-danger small">Payable</span>
+                } @else if (+(ret.netVat) < 0) {
+                  <span class="text-success small">Credit c/f</span>
+                } @else {
+                  <span class="text-muted small">Nil</span>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</section>
