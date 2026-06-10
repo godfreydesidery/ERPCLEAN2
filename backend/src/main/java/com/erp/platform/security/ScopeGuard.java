@@ -10,6 +10,10 @@ import com.erp.modules.cashbank.repository.CashBankAccountRepository;
 import com.erp.modules.cashbank.repository.CashTransactionRepository;
 import com.erp.modules.cashbank.repository.CashTransferRepository;
 import com.erp.modules.cashbank.repository.ChequeRepository;
+import com.erp.modules.tax.repository.VatAdjustmentRepository;
+import com.erp.modules.tax.repository.VatReturnRepository;
+import com.erp.modules.tax.repository.WhtTransactionRepository;
+import com.erp.modules.tax.repository.WhtTypeRepository;
 import com.erp.modules.gl.repository.ChartOfAccountRepository;
 import com.erp.modules.gl.repository.FiscalPeriodRepository;
 import com.erp.modules.gl.repository.GlConfigRepository;
@@ -90,6 +94,11 @@ public class ScopeGuard {
     private final CashTransferRepository     cashTransfers;
     private final ChequeRepository           cheques;
     private final BankReconciliationRepository bankReconciliations;
+    // VAT / WHT repositories (ADR-0017 D-11)
+    private final VatReturnRepository        vatReturns;
+    private final VatAdjustmentRepository    vatAdjustments;
+    private final WhtTypeRepository          whtTypes;
+    private final WhtTransactionRepository   whtTransactions;
     private final AuditService             audit;
 
     public ScopeGuard(CompanyRepository companies,
@@ -122,6 +131,10 @@ public class ScopeGuard {
                       CashTransferRepository cashTransfers,
                       ChequeRepository cheques,
                       BankReconciliationRepository bankReconciliations,
+                      VatReturnRepository vatReturns,
+                      VatAdjustmentRepository vatAdjustments,
+                      WhtTypeRepository whtTypes,
+                      WhtTransactionRepository whtTransactions,
                       AuditService audit) {
         this.companies      = companies;
         this.branches       = branches;
@@ -153,6 +166,10 @@ public class ScopeGuard {
         this.cashTransfers       = cashTransfers;
         this.cheques             = cheques;
         this.bankReconciliations = bankReconciliations;
+        this.vatReturns          = vatReturns;
+        this.vatAdjustments      = vatAdjustments;
+        this.whtTypes            = whtTypes;
+        this.whtTransactions     = whtTransactions;
         this.audit               = audit;
     }
 
@@ -203,6 +220,11 @@ public class ScopeGuard {
             case "cashtransfer"        -> cashTransfers.findCompanyIdByUid(uid);
             case "cheque"              -> cheques.findCompanyIdByUid(uid);
             case "bankreconciliation"  -> bankReconciliations.findCompanyIdByUid(uid);
+            // VAT / WHT target types (ADR-0017 D-11)
+            case "vatreturn"           -> vatReturns.findCompanyIdByUid(uid);
+            case "vatadjustment"       -> vatAdjustments.findCompanyIdByUid(uid);
+            case "whttype"             -> whtTypes.findCompanyIdByUid(uid);
+            case "whttransaction"      -> whtTransactions.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };

@@ -1,6 +1,8 @@
 package com.erp.modules.sales.repository;
 
 import com.erp.modules.sales.domain.entity.SalesInvoice;
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -36,4 +38,19 @@ public interface SalesInvoiceRepository extends JpaRepository<SalesInvoice, Long
      * Scoped in the query so no cross-tenant read is possible.
      */
     Optional<SalesInvoice> findByUidAndCompanyId(String uid, Long companyId);
+
+    /**
+     * FINALISED invoices whose finalised_at falls in [periodStart, periodEnd) —
+     * used by VatReturnComputationReader (ADR-0017 D-6). Company-scoped.
+     */
+    @Query("""
+            SELECT i FROM SalesInvoice i
+            WHERE i.companyId = :companyId
+              AND i.status = 'FINALISED'
+              AND i.finalisedAt >= :periodStart
+              AND i.finalisedAt < :periodEnd
+            """)
+    List<SalesInvoice> findFinalisedInPeriod(@Param("companyId") Long companyId,
+                                             @Param("periodStart") Instant periodStart,
+                                             @Param("periodEnd") Instant periodEnd);
 }

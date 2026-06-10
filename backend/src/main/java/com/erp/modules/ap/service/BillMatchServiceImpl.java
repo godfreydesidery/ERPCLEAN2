@@ -271,9 +271,10 @@ public class BillMatchServiceImpl implements BillMatchService {
                 bill.getNetAmount(), BigDecimal.ZERO,
                 bill.getCurrency(), "Purchases — " + bill.getSupplierInvoiceNo()));
 
-        // Input VAT (OQ-AP-04): if bill states VAT, debit to VAT_PAYABLE (nets output vs input)
+        // Input VAT (ADR-0017 D-7): if bill states VAT, debit to VAT_INPUT (recoverable input VAT)
+        // Previously posted to VAT_PAYABLE; corrected to VAT_INPUT per ADR-0017 D-7.
         if (bill.getVatAmount().compareTo(BigDecimal.ZERO) > 0) {
-            ChartOfAccount vatAcct = glConfig.resolve(bill.getCompanyId(), GlConfigKey.VAT_PAYABLE);
+            ChartOfAccount vatAcct = glConfig.resolve(bill.getCompanyId(), GlConfigKey.VAT_INPUT);
             glLines.add(new LineDraft(vatAcct.getId(),
                     bill.getVatAmount(), BigDecimal.ZERO,
                     bill.getCurrency(), "Input VAT — " + bill.getSupplierInvoiceNo()));

@@ -18,5 +18,10 @@ public enum GlConfigKey {
     BAD_DEBT_EXPENSE,
     OPENING_BALANCE_EQUITY,
     // --- AP increment (ADR-0015 D-6/D-13) ---
-    PURCHASES
+    PURCHASES,
+    // --- VAT/Tax increment (ADR-0017 D-5) ---
+    VAT_INPUT,
+    VAT_DUE,
+    WHT_PAYABLE,
+    WHT_RECEIVABLE
 }

@@ -83,12 +83,24 @@ class MigrationKeepDataIT extends PostgresIntegrationTest {
                 assertThat(n).as("gl_configs seeded for the pre-existing company").isGreaterThan(0);
                 assertThat(maxLen).as("every gl_config uid fits VARCHAR(26)").isLessThanOrEqualTo(26);
             }
-            // Sanity: long config keys are present (the ones that overflowed pre-fix).
+            // Sanity: long config keys are present (the ones that overflowed pre-fix), incl. the
+            // V14 VAT/WHT keys whose seed-uid uses the same #12-safe md5 pattern.
             try (ResultSet rs = s.executeQuery(
                     "SELECT count(*) AS n FROM gl_configs WHERE config_key IN "
-                    + "('ACCOUNTS_RECEIVABLE','OPENING_BALANCE_EQUITY','BAD_DEBT_EXPENSE')")) {
+                    + "('ACCOUNTS_RECEIVABLE','OPENING_BALANCE_EQUITY','BAD_DEBT_EXPENSE',"
+                    + "'VAT_INPUT','VAT_DUE','WHT_PAYABLE','WHT_RECEIVABLE')")) {
                 rs.next();
-                assertThat(rs.getInt("n")).as("long-named config keys seeded").isGreaterThan(0);
+                assertThat(rs.getInt("n")).as("long-named config keys seeded (incl. V14 VAT/WHT)")
+                        .isGreaterThanOrEqualTo(7);
+            }
+            // V14 CoA accounts (1400/1500/2300/2400) seeded for the pre-existing company, uid <=26.
+            try (ResultSet rs = s.executeQuery(
+                    "SELECT count(*) AS n, coalesce(max(length(uid)),0) AS maxlen "
+                    + "FROM chart_of_accounts WHERE account_code IN ('1400','1500','2300','2400')")) {
+                rs.next();
+                assertThat(rs.getInt("n")).as("V14 CoA accounts seeded for the pre-existing company")
+                        .isEqualTo(4);
+                assertThat(rs.getInt("maxlen")).as("every CoA uid fits VARCHAR(26)").isLessThanOrEqualTo(26);
             }
         } finally {
             try (Connection c = DriverManager.getConnection(url, user, pass); Statement s = c.createStatement()) {

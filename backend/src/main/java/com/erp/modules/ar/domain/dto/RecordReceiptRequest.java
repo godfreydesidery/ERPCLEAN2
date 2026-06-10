@@ -9,6 +9,8 @@ import java.util.List;
  * allocations is optional — if empty the receipt is fully on-account (BR-AR-05).
  * cashBankAccountUid is optional — null resolves to the company default cash/bank account
  * (ADR-0016 D-10).
+ * whtTypeUid + whtAmount are optional WHT fields (ADR-0017 D-9): when present the WHT leg is
+ * captured and the cash DR is reduced by whtAmount.
  */
 public record RecordReceiptRequest(
         String companyUid,
@@ -21,14 +23,27 @@ public record RecordReceiptRequest(
         /** Manual override allocations (oldest-first used when this is empty). */
         List<AllocationLineRequest> allocations,
         /** Optional: uid of the cash/bank account to post to; null = company default (ADR-0016 D-10). */
-        String cashBankAccountUid
+        String cashBankAccountUid,
+        /** Optional: uid of the WhtType to use for WHT_ON_RECEIPT capture (ADR-0017 D-9). */
+        String whtTypeUid,
+        /** Optional: WHT amount withheld by the customer (ADR-0017 D-9). */
+        BigDecimal whtAmount
 ) {
-    /** Back-compat overload: omit cashBankAccountUid → null = company default cash/bank account. */
+    /** Back-compat overload: omit cashBankAccountUid → null; no WHT. */
     public RecordReceiptRequest(String companyUid, String customerUid, BigDecimal amount,
                                 String currency, LocalDate receiptDate, String tenderType,
                                 String bankReference, List<AllocationLineRequest> allocations) {
         this(companyUid, customerUid, amount, currency, receiptDate, tenderType, bankReference,
-                allocations, null);
+                allocations, null, null, null);
+    }
+
+    /** Back-compat overload: include cashBankAccountUid but no WHT. */
+    public RecordReceiptRequest(String companyUid, String customerUid, BigDecimal amount,
+                                String currency, LocalDate receiptDate, String tenderType,
+                                String bankReference, List<AllocationLineRequest> allocations,
+                                String cashBankAccountUid) {
+        this(companyUid, customerUid, amount, currency, receiptDate, tenderType, bankReference,
+                allocations, cashBankAccountUid, null, null);
     }
 
     /** One allocation line in the create request. */
