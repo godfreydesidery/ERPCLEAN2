@@ -377,6 +377,32 @@ class YearEndCloseServiceIT extends PostgresIntegrationTest {
     }
 
     // =========================================================================
+    // Bar 6 — close still zeroes a P&L account that was DEACTIVATED with a live balance
+    //         (adversarial-review #14: BR-GL-07 permits deactivating an account that has
+    //          postings, so YEAR_END_CLOSE must still be able to clear it — BR-GL-04 exception)
+    // =========================================================================
+
+    @Test
+    void closeFiscalYear_zeroesInactivePlAccount_afterDeactivation() {
+        // FY2026 P&L activity: CR 4100 Sales 1000, DR 5200 Expense 300 → net profit 700
+        post2026(cashAccountId, salesAccountId, new BigDecimal("1000"));
+        post2026(expenseAccountId, cashAccountId, new BigDecimal("300"));
+
+        // Deactivate Sales (4100) while it still carries a live -1000 net-debit balance (allowed by BR-GL-07).
+        chartOfAccountService.deactivate(requireAccount("4100").getUid());
+        assertThat(requireAccount("4100").isActive()).as("4100 is now inactive").isFalse();
+
+        // Pre-fix this threw BR-GL-04 ("inactive; cannot post to it") and the whole close failed.
+        FiscalYearDto fy2026 = fiscalCalendarService.listFiscalYears(company.getId()).get(0);
+        FiscalYearDto closed = yearEndCloseService.closeFiscalYear(fy2026.uid());
+
+        assertThat(closed.status()).isEqualTo(PeriodStatus.CLOSED);
+        assertThat(netBalance(salesAccountId)).as("inactive Sales account is still zeroed by the close")
+                .isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(netBalance(expenseAccountId)).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    // =========================================================================
     // Private helpers
     // =========================================================================
 
