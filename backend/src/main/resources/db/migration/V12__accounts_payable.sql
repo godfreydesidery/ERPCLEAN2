@@ -350,7 +350,8 @@ ALTER TABLE gl_configs
 -- Seed PURCHASES → 5150 per company (and OPENING_BALANCE_EQUITY → 3100 if not done by V11).
 INSERT INTO gl_configs (uid, company_id, config_key, account_id, version, created_at)
 SELECT
-    'APCD' || lpad(coa.company_id::text, 8, '0') || m.config_key AS uid,
+    -- <=26-char uid (ISSUES-REGISTER #12): bound the seed uid via md5(key), as V10/V11.
+    'APC' || lpad(coa.company_id::text, 6, '0') || substr(md5(m.config_key), 1, 12) AS uid,
     coa.company_id,
     m.config_key,
     coa.id,
