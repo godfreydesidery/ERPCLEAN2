@@ -144,3 +144,40 @@ Found by a multi-agent adversarial review of the Year-End Close increment (3 dim
 **FIXED** (branch `feat/year-end-close`): the reviewer's first-cut fix (skip inactive P&L accounts in the close query) was **rejected as accounting-wrong** — it would strand a real balance on the P&L and miscompute the retained-earnings roll. Correct fix: **`YEAR_END_CLOSE` is the one `JournalSourceType` permitted to post to an INACTIVE account** (it must be able to *clear* a deactivated account that still holds a balance — consistent with BR-GL-07). `GLPostingServiceImpl.validateLine` gained an `allowInactiveAccount` flag set only when `draft.sourceType() == YEAR_END_CLOSE` (the closing journal + its reopen reversal); **BR-GL-04 stays enforced for every other source type**. Regression: `YearEndCloseServiceIT.closeFiscalYear_zeroesInactivePlAccount_afterDeactivation` (deactivate a P&L account with a live balance → close still succeeds + zeroes it). Full suite green.
 
 **Refuted (correctly — no defect):** break-even closing entry omits the 3900 line (spec D-4 permits it; the P&L zeroing lines balance among themselves); the `draftLines>=2` guard at break-even (handled per spec); mid-year-opened zero-movement account skipped (correct — balance-driven, OQ-CLOSE-05).
+
+---
+
+## QA e2e — clean main deploy (2026-06-10)
+
+Comprehensive API e2e against live QA (`http://16.170.11.41/api/v1`), main branch, V1–V16 stack
+(GL, AR, AP, Cash&Bank, VAT+WHT, Financial Reporting, Year-End Close). Script: `C:/Users/Godfrey/AppData/Local/Temp/erp-full-e2e.js`.
+Run 3 times with progressive script fixes to eliminate harness artifacts; all non-bug flags were
+confirmed script errors (wrong enum value, missing required field, dirty-DB idempotency). One genuine
+app bug survived all fixes.
+
+| # | Sev | Status | Area | Issue | Evidence |
+|---|-----|--------|------|-------|----------|
+| 15 | HIGH | OPEN | ap / BillMatchServiceImpl | `BillMatchServiceImpl.runMatch` transitions the bill from DRAFT → MATCHED and calls `bills.save(bill)` without assigning a `bill_number` first. The DB CHECK constraint `chk_supplier_bill_number_when_posted` (`status <> 'DRAFT' AND bill_number IS NOT NULL`) fires → `ConstraintViolationException` → generic 500 ("An unexpected error occurred."). `ApBillNumberGenerator` is injected into `ApDebitNoteServiceImpl`, `ApPaymentServiceImpl`, and `ApOpeningBalanceServiceImpl` but is **absent from `BillMatchServiceImpl`**. Every direct-bill (no-PO) match call is broken. | Reproduced 3× on QA (bills `01KTRXAWRVYJZXH3J7G5SAWDBB`, `01KTRXTVTKV9MHCHHXF9J2DBAX`, and a third debug bill) with a freshly-created INDIVIDUAL supplier + no-PO bill. All periods OPEN, all GL configs present, base currency TZS — the GL post path is fine; the constraint fires on `bills.save` when status becomes MATCHED. Stack swallowed by the `GlobalExceptionHandler` catch-all (Issue #4). Fix: inject `ApBillNumberGenerator` into `BillMatchServiceImpl`; call `bill.setBillNumber(numbers.next(bill.getCompanyId()))` before `bill.setStatus(MATCHED)` in `postMatchedBillToGl` (and in `acceptVariance` when all lines resolve). Add regression `BillMatchServiceImplTest#runMatch_directBill_assignsBillNumber` asserting `result.billNumber() != null` and `status == MATCHED`. |
+
+**E2e-script artifacts (not bugs — app correctly rejected or dirty-DB state):**
+- `CreateSupplierRequest` field gaps: initial script used `partyType: 'ORGANISATION'` (not in `PartyType` enum — valid: `INDIVIDUAL`/`BUSINESS`) and missing `supplierKind`; then `partyType: 'BUSINESS'` without `tin` (BR-PARTY-04 correctly requires TIN for BUSINESS). Fix: use `INDIVIDUAL`. App correctly returned 400.
+- Cash 2nd bank account 409: GL account 1100 already linked from a prior run (`E2E Bank` account from `erp-acct-loop.js`). App correctly enforced uniqueness. Script fixed to look up existing account by `glAccountId`.
+- VAT return 409: period 2026-06 already has a FILED return from the first run. BR-VAT-01 correctly rejects duplicates. Script fixed to look up existing return and exercise lock-check only.
+- Price list absent on fresh DB: bootstrap does not seed a price list (by design — business data). Script fixed to create one before pricing the product.
+
+**Flows that passed cleanly (no genuine app issues):**
+
+| Flow | Result |
+|------|--------|
+| 1. Baseline — login, org/company/branch/unit resolution, trial balance | PASS |
+| 2. Master data — customer, agent, supplier, product, price-list price | PASS (after script fix) |
+| 3. Cash & Bank — default account, 2nd bank account, direct entry IN, transfer, GL reconciliation (book==GL both accounts) | PASS |
+| 4. AR — credit invoice, line add, finalize, outbox wait, AR open item exists, receipt | PASS |
+| 5. AP list endpoints (GET supplier-bills, GET payments) | PASS |
+| 5. AP bill enter + match → | **FINDING #15 (500)** |
+| 6. VAT return open/recompute/file, lock enforced (re-file → 409), WHT register 200 | PASS |
+| 6. Trial balance balanced throughout all flows | PASS |
+| 7. Income statement (reconciliation.ties=true), balance sheet (ASSETS==LIAB+EQUITY), cash flow (ties=true), account ledger, CSV export (200, text/csv, non-empty) | PASS |
+| 8. Year-end close (→ CLOSED), balance sheet post-close still ties, reopen (→ OPEN, QA left clean) | PASS |
+
+**Verdict: HAS-FINDINGS — 1 HIGH (BLOCKER-adjacent: all AP bill match/post calls fail with 500). All other V1–V16 flows PASS.**
