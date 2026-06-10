@@ -64,7 +64,7 @@ For each item: **scope** · **integration point** · **reuse** · **depends-on**
 - *Depends-on:* GL (T1.1), AR (T1.2), AP (T1.3).
 - *Effort:* **L** · *Ships-as:* **ADR-0016 / V13** (cash_bank_accounts, cash_transactions, bank_reconciliations).
 
-**T1.5 Tax / VAT return** — periodic output-vs-input VAT computation and filing record.
+**T1.5 Tax / VAT return** — ✅ **DONE** (ADR-0017 / V14, `com.erp.modules.tax`). Monthly accrual-basis output−input VAT return, DRAFT→FILED with a synchronous GL settlement (DR `VAT_PAYABLE` / CR new `VAT_INPUT` / ±`VAT_DUE`) + credit carry-forward; input VAT split to `VAT_INPUT` at AP bill-match. **Withholding tax** included (register + certificates + AR/AP payment legs). 525 backend tests, 6 web screens. TRA EFD/VFD deferred.
 - *Integration point:* `TaxReturnService.compute` aggregates finalised `sales_invoices` (output VAT, from `tax_summary` per band) + received `goods_receipt_lines` (input VAT) over a period window. Reuses the `tax_rates` master (per-company, vat_status-keyed) and the `InvoiceTotalsCalculator` tax-exclusive algorithm (ADR-0008 D-4). Note: **input VAT needs AP/purchase-VAT input** — today GR lines have cost but no VAT columns (V8:50-85), so this is realistic only after AP (T1.3) or a purchase-VAT slice.
 - *Reuse:* `tax_rates`; Money; `code_sequence` (TAXRET-####); outbox (`TAXRETURN.GENERATED`); audit; RBAC (`TAX.RETURN.VIEW`, `TAX.RETURN.SUBMIT`).
 - *Depends-on:* Sales (shipped), AP/purchase-VAT (T1.3), GL optional. TRA EFD/VFD fiscalisation stays deferred (OQ-SALES-03).
