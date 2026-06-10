@@ -1,0 +1,254 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">
+      <i class="bi bi-cash-stack me-2" aria-hidden="true"></i>Cash-Flow Statement
+      <span class="badge text-bg-secondary fs-6 fw-normal ms-2">Indirect method</span>
+    </h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      Operating, investing, and financing cash flows — net change tied to Cash + Bank GL movement.
+    </p>
+  </header>
+
+  @if (!canView()) {
+    <p class="text-muted d-flex align-items-center gap-2 mt-3" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to view the Cash-Flow Statement.
+    </p>
+  } @else {
+
+    @switch (companyState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-3" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load companies.
+        </p>
+      }
+      @default {
+        <div class="card mb-3">
+          <div class="card-body">
+            <div class="row g-3 align-items-end">
+
+              @if (companies().length > 1) {
+                <div class="col-sm-6 col-lg-3">
+                  <label class="form-label" for="cf-company">Company</label>
+                  <select id="cf-company" name="cf-company" class="form-select"
+                          [ngModel]="selectedCompanyId()"
+                          (ngModelChange)="onCompanyChange($event)">
+                    @for (c of companies(); track c.uid) {
+                      <option [value]="c.id">{{ c.name }}</option>
+                    }
+                  </select>
+                </div>
+              }
+
+              <div class="col-sm-6 col-lg-2">
+                <label class="form-label" for="cf-from">Period from</label>
+                <input id="cf-from" name="cf-from" type="date" class="form-control"
+                       [ngModel]="fromDate()" (ngModelChange)="fromDate.set($event)" />
+              </div>
+              <div class="col-sm-6 col-lg-2">
+                <label class="form-label" for="cf-to">Period to</label>
+                <input id="cf-to" name="cf-to" type="date" class="form-control"
+                       [ngModel]="toDate()" (ngModelChange)="toDate.set($event)" />
+              </div>
+              <div class="col-sm-6 col-lg-2">
+                <label class="form-label" for="cf-cmpfrom">
+                  Comparative from <span class="text-muted small">(optional)</span>
+                </label>
+                <input id="cf-cmpfrom" name="cf-cmpfrom" type="date" class="form-control"
+                       [ngModel]="cmpFrom()" (ngModelChange)="cmpFrom.set($event)" />
+              </div>
+              <div class="col-sm-6 col-lg-2">
+                <label class="form-label" for="cf-cmpto">
+                  Comparative to <span class="text-muted small">(optional)</span>
+                </label>
+                <input id="cf-cmpto" name="cf-cmpto" type="date" class="form-control"
+                       [ngModel]="cmpTo()" (ngModelChange)="cmpTo.set($event)" />
+              </div>
+
+              <div class="col-auto">
+                <button type="button" class="btn btn-primary"
+                        (click)="run()"
+                        [disabled]="state() === 'loading' || !selectedCompanyId()">
+                  @if (state() === 'loading') {
+                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Running…
+                  } @else {
+                    <i class="bi bi-play-fill me-1" aria-hidden="true"></i>Run
+                  }
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      }
+    }
+
+    @switch (state()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Building Cash-Flow Statement…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load the Cash-Flow Statement. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="text-muted d-flex align-items-center gap-2">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view this statement.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <p class="text-muted">Select a company and period, then click Run.</p>
+        }
+
+        @if (statement(); as s) {
+
+          <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+            <div>
+              <div class="fw-semibold">{{ s.header.companyName }}</div>
+              <div class="text-muted small">{{ s.header.periodLabel }}</div>
+              <div class="text-muted small">Currency: {{ s.header.currency }}</div>
+            </div>
+            @if (canExport()) {
+              <div class="d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('PDF')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>PDF
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('XLSX')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Excel
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('CSV')" [disabled]="exporting()">
+                  <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>CSV
+                </button>
+              </div>
+            }
+          </div>
+
+          <!-- Cash tie-out indicator -->
+          @if (s.reconciliation.ties) {
+            <div class="alert alert-success d-flex align-items-center gap-2 mb-3" role="status">
+              <i class="bi bi-check-circle-fill fs-5" aria-hidden="true"></i>
+              <strong>Cash tie-out: Reconciled</strong> — net change in cash equals the Cash + Bank GL movement.
+            </div>
+          } @else {
+            <div class="alert alert-danger d-flex align-items-center gap-2 mb-3" role="alert">
+              <i class="bi bi-exclamation-triangle-fill fs-5" aria-hidden="true"></i>
+              <strong>Data integrity alarm — cash tie-out fails.</strong>
+              Net change in cash ({{ fmtMoney(s.reconciliation.computed.current) }})
+              does not equal Cash + Bank movement ({{ fmtMoney(s.reconciliation.expected.current) }}).
+              Difference: {{ fmtMoney(s.reconciliation.difference.current) }}.
+            </div>
+          }
+
+          <div class="table-responsive">
+            <table class="table table-sm align-middle bg-white stmt-grid">
+              <caption class="visually-hidden">Cash-Flow Statement</caption>
+              <thead>
+                <tr>
+                  <th scope="col" class="col-code">Code</th>
+                  <th scope="col">Account / Item</th>
+                  <th scope="col" class="text-end">{{ s.header.periodLabel }}</th>
+                  <th scope="col" class="text-end text-muted">{{ s.header.comparativeLabel }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Opening cash position -->
+                <tr class="table-light">
+                  <td colspan="4" class="fw-semibold small text-uppercase text-muted">Opening Cash Position</td>
+                </tr>
+                <tr>
+                  <td></td>
+                  <td class="small">Opening cash &amp; bank balance</td>
+                  <td class="text-end font-monospace small">{{ fmtMoney(s.openingCash.current) }}</td>
+                  <td class="text-end font-monospace small text-muted">{{ fmtMoney(s.openingCash.comparative) }}</td>
+                </tr>
+
+                @for (section of s.sections; track section.sectionKey) {
+                  <tr class="table-light">
+                    <td colspan="4" class="fw-semibold small text-uppercase text-muted">
+                      {{ section.title }}
+                    </td>
+                  </tr>
+                  @for (line of section.lines; track (line.accountCode ?? line.accountName)) {
+                    <tr>
+                      <td class="font-monospace small ps-4">{{ line.accountCode ?? '' }}</td>
+                      <td class="small">
+                        @if (line.accountUid) {
+                          <a [routerLink]="['/admin/reporting/account-ledger']"
+                             [queryParams]="{ accountUid: line.accountUid, fromDate: fromDate(), toDate: toDate(), companyId: selectedCompanyId() }"
+                             class="text-decoration-none">
+                            {{ line.accountName }}
+                          </a>
+                        } @else {
+                          {{ line.accountName }}
+                        }
+                      </td>
+                      <td class="text-end font-monospace small"
+                          [class.text-muted]="+(line.amounts.current ?? 0) === 0">
+                        @if (+(line.amounts.current ?? 0) !== 0) {
+                          {{ fmtMoney(line.amounts.current) }}
+                        } @else {
+                          —
+                        }
+                      </td>
+                      <td class="text-end font-monospace small text-muted">
+                        @if (+(line.amounts.comparative ?? 0) !== 0) {
+                          {{ fmtMoney(line.amounts.comparative) }}
+                        } @else {
+                          —
+                        }
+                      </td>
+                    </tr>
+                  }
+                  <tr class="fw-semibold border-top">
+                    <td colspan="2" class="ps-4 small">Net cash from {{ section.title }}</td>
+                    <td class="text-end font-monospace small"
+                        [class.text-danger]="+(section.subtotal.current ?? 0) < 0">
+                      {{ fmtMoney(section.subtotal.current) }}
+                    </td>
+                    <td class="text-end font-monospace small text-muted"
+                        [class.text-danger]="+(section.subtotal.comparative ?? 0) < 0">
+                      {{ fmtMoney(section.subtotal.comparative) }}
+                    </td>
+                  </tr>
+                }
+
+              </tbody>
+              <tfoot>
+                <tr class="table-secondary fw-semibold">
+                  <td colspan="2">Net Change in Cash</td>
+                  <td class="text-end font-monospace"
+                      [class.text-danger]="+(s.netChangeInCash.current ?? 0) < 0">
+                    {{ fmtMoney(s.netChangeInCash.current) }}
+                  </td>
+                  <td class="text-end font-monospace text-muted"
+                      [class.text-danger]="+(s.netChangeInCash.comparative ?? 0) < 0">
+                    {{ fmtMoney(s.netChangeInCash.comparative) }}
+                  </td>
+                </tr>
+                <tr class="table-dark fw-bold">
+                  <td colspan="2">Closing Cash &amp; Bank Balance</td>
+                  <td class="text-end font-monospace">{{ fmtMoney(s.closingCash.current) }}</td>
+                  <td class="text-end font-monospace text-muted">{{ fmtMoney(s.closingCash.comparative) }}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+        }
+      }
+    }
+  }
+</section>

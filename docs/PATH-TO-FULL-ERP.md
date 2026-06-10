@@ -439,7 +439,7 @@ These are the chokepoints — build them in this order or the things downstream 
 Ordered phases (not calendar dates). Relative size noted per phase. Cross-cutting enablers are interleaved where a phase first needs them. Phase labels extend ROADMAP's tier language.
 
 ### Phase A — Finish the finance tier  *(relative size: M–L)*
-**Adds:** Cash & Bank (ADR-0016 / V13); VAT return (ADR-0017 / V14); Reporting module skeleton + **P&L + Balance Sheet** + GL account ledger drill-down (T2.3 first slice); year-end close automation + closed-period policy (GL depth).
+**Adds:** Cash & Bank (ADR-0016 / V13) ✅; VAT return + WHT (ADR-0017 / V14) ✅; **Reporting (ADR-0018 / V15) ✅ — P&L + Balance Sheet + Cash-Flow (indirect) + GL account-ledger drill-down, all comparative, with PDF/Excel/CSV export** (T2.3 first slice); year-end close automation + closed-period policy (GL depth) — **remaining**.
 **You can now:** see real cash position and reconcile banks; settle AR/AP with a posted cash leg; file a periodic VAT return; **produce a P&L and a balance sheet** for a period; close a fiscal year and carry balances forward. *This is the moment ERPCLEAN2 is demonstrably an ERP, not just balanced books.*
 
 ### Phase B — Operational depth + cash-flow completion  *(relative size: L–XL)*
