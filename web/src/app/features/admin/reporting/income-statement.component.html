@@ -1,0 +1,243 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">
+      <i class="bi bi-bar-chart-line me-2" aria-hidden="true"></i>Income Statement / P&amp;L
+    </h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      Revenue, gross profit, and net profit for a selected period — with a comparative.
+    </p>
+  </header>
+
+  @if (!canView()) {
+    <p class="text-muted d-flex align-items-center gap-2 mt-3" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to view the Income Statement.
+    </p>
+  } @else {
+
+    <!-- Company selector + period form -->
+    @switch (companyState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-3" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load companies.
+        </p>
+      }
+      @default {
+        <div class="card mb-3">
+          <div class="card-body">
+            <div class="row g-3 align-items-end">
+
+              @if (companies().length > 1) {
+                <div class="col-sm-6 col-lg-3">
+                  <label class="form-label" for="is-company">Company</label>
+                  <select id="is-company" name="is-company" class="form-select"
+                          [ngModel]="selectedCompanyId()"
+                          (ngModelChange)="onCompanyChange($event)">
+                    @for (c of companies(); track c.uid) {
+                      <option [value]="c.id">{{ c.name }}</option>
+                    }
+                  </select>
+                </div>
+              }
+
+              <div class="col-sm-6 col-lg-2">
+                <label class="form-label" for="is-from">Period from</label>
+                <input id="is-from" name="is-from" type="date" class="form-control"
+                       [ngModel]="fromDate()" (ngModelChange)="fromDate.set($event)" />
+              </div>
+              <div class="col-sm-6 col-lg-2">
+                <label class="form-label" for="is-to">Period to</label>
+                <input id="is-to" name="is-to" type="date" class="form-control"
+                       [ngModel]="toDate()" (ngModelChange)="toDate.set($event)" />
+              </div>
+              <div class="col-sm-6 col-lg-2">
+                <label class="form-label" for="is-cmpfrom">
+                  Comparative from <span class="text-muted small">(optional)</span>
+                </label>
+                <input id="is-cmpfrom" name="is-cmpfrom" type="date" class="form-control"
+                       [ngModel]="cmpFrom()" (ngModelChange)="cmpFrom.set($event)" />
+              </div>
+              <div class="col-sm-6 col-lg-2">
+                <label class="form-label" for="is-cmpto">
+                  Comparative to <span class="text-muted small">(optional)</span>
+                </label>
+                <input id="is-cmpto" name="is-cmpto" type="date" class="form-control"
+                       [ngModel]="cmpTo()" (ngModelChange)="cmpTo.set($event)" />
+              </div>
+
+              <div class="col-auto">
+                <button type="button" class="btn btn-primary"
+                        (click)="run()"
+                        [disabled]="state() === 'loading' || !selectedCompanyId()">
+                  @if (state() === 'loading') {
+                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Running…
+                  } @else {
+                    <i class="bi bi-play-fill me-1" aria-hidden="true"></i>Run
+                  }
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      }
+    }
+
+    <!-- Statement states -->
+    @switch (state()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Building Income Statement…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load the Income Statement. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="text-muted d-flex align-items-center gap-2">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view this statement.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <p class="text-muted">Select a company and period, then click Run.</p>
+        }
+
+        @if (statement(); as s) {
+
+          <!-- Header + export toolbar -->
+          <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+            <div>
+              <div class="fw-semibold">{{ s.header.companyName }}</div>
+              <div class="text-muted small">{{ s.header.periodLabel }}</div>
+              <div class="text-muted small">Currency: {{ s.header.currency }}</div>
+            </div>
+            @if (canExport()) {
+              <div class="d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('PDF')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>PDF
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('XLSX')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Excel
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('CSV')" [disabled]="exporting()">
+                  <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>CSV
+                </button>
+              </div>
+            }
+          </div>
+
+          <!-- Reconciliation bar -->
+          @if (s.reconciliation.ties) {
+            <div class="alert alert-success d-flex align-items-center gap-2 mb-3" role="status">
+              <i class="bi bi-check-circle-fill fs-5" aria-hidden="true"></i>
+              <strong>Reconciled</strong> — net profit equals the period INCOME − EXPENSE GL movement.
+            </div>
+          } @else {
+            <div class="alert alert-danger d-flex align-items-center gap-2 mb-3" role="alert">
+              <i class="bi bi-exclamation-triangle-fill fs-5" aria-hidden="true"></i>
+              <strong>Data integrity alarm</strong> — {{ s.reconciliation.label }}
+              (difference: {{ fmtMoney(s.reconciliation.difference.current) }}).
+              Investigate the books.
+            </div>
+          }
+
+          <!-- Statement table -->
+          <div class="table-responsive">
+            <table class="table table-sm align-middle bg-white stmt-grid">
+              <caption class="visually-hidden">Income Statement</caption>
+              <thead>
+                <tr>
+                  <th scope="col" class="col-code">Code</th>
+                  <th scope="col">Account</th>
+                  <th scope="col" class="text-end">{{ s.header.periodLabel }}</th>
+                  <th scope="col" class="text-end text-muted">{{ s.header.comparativeLabel }}</th>
+                </tr>
+              </thead>
+              <tbody>
+
+                @for (section of s.sections; track section.sectionKey) {
+                  <!-- Section header -->
+                  <tr class="table-light">
+                    <td colspan="4" class="fw-semibold small text-uppercase text-muted">
+                      {{ section.title }}
+                    </td>
+                  </tr>
+                  @for (line of section.lines; track (line.accountCode ?? line.accountName)) {
+                    <tr>
+                      <td class="font-monospace small ps-4">{{ line.accountCode ?? '' }}</td>
+                      <td class="small">
+                        @if (line.accountUid) {
+                          <a [routerLink]="['/admin/reporting/account-ledger']"
+                             [queryParams]="{ accountUid: line.accountUid, fromDate: fromDate(), toDate: toDate(), companyId: selectedCompanyId() }"
+                             class="text-decoration-none">
+                            {{ line.accountName }}
+                          </a>
+                        } @else {
+                          {{ line.accountName }}
+                        }
+                      </td>
+                      <td class="text-end font-monospace small">
+                        @if (+(line.amounts.current ?? 0) !== 0) {
+                          {{ fmtMoney(line.amounts.current) }}
+                        } @else {
+                          <span class="text-muted">—</span>
+                        }
+                      </td>
+                      <td class="text-end font-monospace small text-muted">
+                        @if (+(line.amounts.comparative ?? 0) !== 0) {
+                          {{ fmtMoney(line.amounts.comparative) }}
+                        } @else {
+                          <span class="text-muted">—</span>
+                        }
+                      </td>
+                    </tr>
+                  }
+                  <!-- Section subtotal -->
+                  <tr class="fw-semibold border-top">
+                    <td colspan="2" class="ps-4 small">{{ section.title }} total</td>
+                    <td class="text-end font-monospace small">{{ fmtMoney(section.subtotal.current) }}</td>
+                    <td class="text-end font-monospace small text-muted">{{ fmtMoney(section.subtotal.comparative) }}</td>
+                  </tr>
+                }
+
+              </tbody>
+              <tfoot>
+                <!-- Gross profit -->
+                <tr class="table-secondary fw-semibold">
+                  <td colspan="2">Gross Profit</td>
+                  <td class="text-end font-monospace">{{ fmtMoney(s.grossProfit.current) }}</td>
+                  <td class="text-end font-monospace text-muted">{{ fmtMoney(s.grossProfit.comparative) }}</td>
+                </tr>
+                <!-- Net profit -->
+                <tr class="table-dark fw-bold">
+                  <td colspan="2">Net Profit</td>
+                  <td class="text-end font-monospace"
+                      [class.text-danger]="+(s.netProfit.current ?? 0) < 0">
+                    {{ fmtMoney(s.netProfit.current) }}
+                  </td>
+                  <td class="text-end font-monospace text-muted"
+                      [class.text-danger]="+(s.netProfit.comparative ?? 0) < 0">
+                    {{ fmtMoney(s.netProfit.comparative) }}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+        }
+      }
+    }
+  }
+</section>

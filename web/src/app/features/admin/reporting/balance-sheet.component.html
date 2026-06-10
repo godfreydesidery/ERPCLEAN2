@@ -1,0 +1,235 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">
+      <i class="bi bi-building-check me-2" aria-hidden="true"></i>Balance Sheet
+    </h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      Assets = Liabilities + Equity as at a date — with a comparative.
+    </p>
+  </header>
+
+  @if (!canView()) {
+    <p class="text-muted d-flex align-items-center gap-2 mt-3" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to view the Balance Sheet.
+    </p>
+  } @else {
+
+    <!-- Company selector + period form -->
+    @switch (companyState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-3" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load companies.
+        </p>
+      }
+      @default {
+        <div class="card mb-3">
+          <div class="card-body">
+            <div class="row g-3 align-items-end">
+
+              @if (companies().length > 1) {
+                <div class="col-sm-6 col-lg-3">
+                  <label class="form-label" for="bs-company">Company</label>
+                  <select id="bs-company" name="bs-company" class="form-select"
+                          [ngModel]="selectedCompanyId()"
+                          (ngModelChange)="onCompanyChange($event)">
+                    @for (c of companies(); track c.uid) {
+                      <option [value]="c.id">{{ c.name }}</option>
+                    }
+                  </select>
+                </div>
+              }
+
+              <div class="col-sm-6 col-lg-2">
+                <label class="form-label" for="bs-asat">As at date</label>
+                <input id="bs-asat" name="bs-asat" type="date" class="form-control"
+                       [ngModel]="asAtDate()" (ngModelChange)="asAtDate.set($event)" />
+              </div>
+              <div class="col-sm-6 col-lg-2">
+                <label class="form-label" for="bs-cmp">
+                  Comparative as at <span class="text-muted small">(optional)</span>
+                </label>
+                <input id="bs-cmp" name="bs-cmp" type="date" class="form-control"
+                       [ngModel]="compareAsAt()" (ngModelChange)="compareAsAt.set($event)" />
+              </div>
+
+              <div class="col-auto">
+                <button type="button" class="btn btn-primary"
+                        (click)="run()"
+                        [disabled]="state() === 'loading' || !selectedCompanyId()">
+                  @if (state() === 'loading') {
+                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Running…
+                  } @else {
+                    <i class="bi bi-play-fill me-1" aria-hidden="true"></i>Run
+                  }
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      }
+    }
+
+    <!-- Statement states -->
+    @switch (state()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Building Balance Sheet…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load the Balance Sheet. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="text-muted d-flex align-items-center gap-2">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view this statement.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <p class="text-muted">Select a company and date, then click Run.</p>
+        }
+
+        @if (statement(); as s) {
+
+          <!-- Header + export toolbar -->
+          <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+            <div>
+              <div class="fw-semibold">{{ s.header.companyName }}</div>
+              <div class="text-muted small">{{ s.header.periodLabel }}</div>
+              <div class="text-muted small">Currency: {{ s.header.currency }}</div>
+            </div>
+            @if (canExport()) {
+              <div class="d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('PDF')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>PDF
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('XLSX')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Excel
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('CSV')" [disabled]="exporting()">
+                  <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>CSV
+                </button>
+              </div>
+            }
+          </div>
+
+          <!-- Balance indicator -->
+          @if (s.reconciliation.ties) {
+            <div class="alert alert-success d-flex align-items-center gap-2 mb-3" role="status">
+              <i class="bi bi-check-circle-fill fs-5" aria-hidden="true"></i>
+              <strong>Balanced</strong> — Assets = Liabilities + Equity.
+            </div>
+          } @else {
+            <div class="alert alert-danger d-flex align-items-center gap-2 mb-3" role="alert">
+              <i class="bi bi-exclamation-triangle-fill fs-5" aria-hidden="true"></i>
+              <strong>Data integrity alarm — Balance Sheet does not balance.</strong>
+              Difference: {{ fmtMoney(s.reconciliation.difference.current) }}.
+              Investigate the books and equity-fold computation.
+            </div>
+          }
+
+          <!-- Statement table -->
+          <div class="table-responsive">
+            <table class="table table-sm align-middle bg-white stmt-grid">
+              <caption class="visually-hidden">Balance Sheet</caption>
+              <thead>
+                <tr>
+                  <th scope="col" class="col-code">Code</th>
+                  <th scope="col">Account</th>
+                  <th scope="col" class="text-end">{{ s.header.periodLabel }}</th>
+                  <th scope="col" class="text-end text-muted">{{ s.header.comparativeLabel }}</th>
+                </tr>
+              </thead>
+              <tbody>
+
+                @for (section of s.sections; track section.sectionKey) {
+                  <tr class="table-light">
+                    <td colspan="4" class="fw-semibold small text-uppercase text-muted">
+                      {{ section.title }}
+                    </td>
+                  </tr>
+                  @for (line of section.lines; track (line.accountCode ?? line.accountName)) {
+                    <tr>
+                      <td class="font-monospace small ps-4">{{ line.accountCode ?? '' }}</td>
+                      <td class="small">
+                        @if (line.accountUid) {
+                          <a [routerLink]="['/admin/reporting/account-ledger']"
+                             [queryParams]="{ accountUid: line.accountUid, fromDate: '1900-01-01', toDate: asAtDate(), companyId: selectedCompanyId() }"
+                             class="text-decoration-none">
+                            {{ line.accountName }}
+                          </a>
+                        } @else {
+                          <em class="text-muted">{{ line.accountName }}</em>
+                        }
+                      </td>
+                      <td class="text-end font-monospace small">
+                        @if (+(line.amounts.current ?? 0) !== 0) {
+                          {{ fmtMoney(line.amounts.current) }}
+                        } @else {
+                          <span class="text-muted">—</span>
+                        }
+                      </td>
+                      <td class="text-end font-monospace small text-muted">
+                        @if (+(line.amounts.comparative ?? 0) !== 0) {
+                          {{ fmtMoney(line.amounts.comparative) }}
+                        } @else {
+                          <span class="text-muted">—</span>
+                        }
+                      </td>
+                    </tr>
+                  }
+                  <tr class="fw-semibold border-top">
+                    <td colspan="2" class="ps-4 small">{{ section.title }} total</td>
+                    <td class="text-end font-monospace small">{{ fmtMoney(section.subtotal.current) }}</td>
+                    <td class="text-end font-monospace small text-muted">{{ fmtMoney(section.subtotal.comparative) }}</td>
+                  </tr>
+                }
+
+              </tbody>
+              <tfoot>
+                <tr class="table-secondary fw-semibold">
+                  <td colspan="2">Total Assets</td>
+                  <td class="text-end font-monospace">{{ fmtMoney(s.totalAssets.current) }}</td>
+                  <td class="text-end font-monospace text-muted">{{ fmtMoney(s.totalAssets.comparative) }}</td>
+                </tr>
+                <tr class="fw-semibold">
+                  <td colspan="2">Total Liabilities</td>
+                  <td class="text-end font-monospace">{{ fmtMoney(s.totalLiabilities.current) }}</td>
+                  <td class="text-end font-monospace text-muted">{{ fmtMoney(s.totalLiabilities.comparative) }}</td>
+                </tr>
+                <tr class="fw-semibold">
+                  <td colspan="2">Total Equity</td>
+                  <td class="text-end font-monospace">{{ fmtMoney(s.totalEquity.current) }}</td>
+                  <td class="text-end font-monospace text-muted">{{ fmtMoney(s.totalEquity.comparative) }}</td>
+                </tr>
+                <tr class="table-dark fw-bold">
+                  <td colspan="2">Total Liabilities + Equity</td>
+                  <td class="text-end font-monospace">
+                    {{ fmtMoney(+(s.totalLiabilities.current ?? 0) + +(s.totalEquity.current ?? 0)) }}
+                  </td>
+                  <td class="text-end font-monospace text-muted">
+                    {{ fmtMoney(+(s.totalLiabilities.comparative ?? 0) + +(s.totalEquity.comparative ?? 0)) }}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+        }
+      }
+    }
+  }
+</section>

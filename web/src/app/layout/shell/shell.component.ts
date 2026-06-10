@@ -177,6 +177,10 @@ export class ShellComponent {
         { label: 'VAT Returns', route: '/admin/tax/vat-returns', icon: 'bi-file-earmark-ruled', available: true, permission: 'VAT.VIEW' },
         { label: 'WHT Types', route: '/admin/tax/wht-types', icon: 'bi-percent', available: true, permission: 'WHT.VIEW' },
         { label: 'WHT Register', route: '/admin/tax/wht-register', icon: 'bi-table', available: true, permission: 'WHT.VIEW' },
+        { label: 'Income Statement', route: '/admin/reporting/income-statement', icon: 'bi-bar-chart-line', available: true, permission: 'REPORT.PL.VIEW' },
+        { label: 'Balance Sheet', route: '/admin/reporting/balance-sheet', icon: 'bi-building-check', available: true, permission: 'REPORT.BS.VIEW' },
+        { label: 'Cash-Flow Statement', route: '/admin/reporting/cash-flow', icon: 'bi-cash-stack', available: true, permission: 'REPORT.CASHFLOW.VIEW' },
+        { label: 'Account Ledger', route: '/admin/reporting/account-ledger', icon: 'bi-journal-text', available: true, permission: 'REPORT.LEDGER.VIEW' },
       ],
     },
   ];

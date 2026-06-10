@@ -25,6 +25,9 @@ public enum JournalSourceType {
     CASH_DIRECT,
     // --- VAT/Tax increment (ADR-0017 D-13) — now admitted by the DB CHECK (V14 widens it) ---
     VAT_RETURN,
+    // --- Year-End Close increment (ADR-0019 D-10) — admitted by the DB CHECK (V16 widens it) ---
+    // The reversal reuses YEAR_END_CLOSE with reversalOfId set — no separate token (D-10 decided).
+    YEAR_END_CLOSE,
     // --- RESERVED — NOT yet admitted by the DB CHECK; widen when the increment lands ---
     AR,
     AP,

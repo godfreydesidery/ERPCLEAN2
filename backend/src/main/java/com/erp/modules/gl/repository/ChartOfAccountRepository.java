@@ -1,6 +1,9 @@
 package com.erp.modules.gl.repository;
 
 import com.erp.modules.gl.domain.entity.ChartOfAccount;
+import com.erp.modules.gl.domain.enums.AccountType;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -29,4 +32,13 @@ public interface ChartOfAccountRepository extends JpaRepository<ChartOfAccount, 
 
     /** Lookup by company + account_code — used by seeders resolving account_id by code. */
     Optional<ChartOfAccount> findByCompanyIdAndAccountCode(Long companyId, String accountCode);
+
+    /**
+     * All INCOME and EXPENSE accounts for a company — used by YearEndCloseServiceImpl to select
+     * which accounts to zero in the closing entry (ADR-0019 D-3, classify by account_type not code).
+     */
+    @Query("SELECT a FROM ChartOfAccount a WHERE a.companyId = :companyId AND a.accountType IN :types")
+    List<ChartOfAccount> findByCompanyIdAndAccountTypeIn(
+            @Param("companyId") Long companyId,
+            @Param("types") Collection<AccountType> types);
 }

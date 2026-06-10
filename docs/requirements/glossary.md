@@ -616,3 +616,127 @@ One definition per term, used consistently across the team. Add terms as modules
 - A **VAT account** is a GL bucket (`2200 VAT Payable`, the new VAT Input/Recoverable) — never call a
   customer/supplier "a VAT account" (they are **parties**), the three-distinct-things rule again
   (party / GL account / cash-bank account).
+
+## Financial Reporting — the three primary statements + the GL account-ledger drill-down
+
+- **Financial statement** — a structured, grouped presentation of the books for a management / external
+  reader, derived **read-only** from GL `journal_lines`. The three primary statements (v1): the **Income
+  Statement / P&L**, the **Balance Sheet**, the **Cash-Flow Statement**. **Not** a trial balance (a flat
+  account list — the TB is the raw input, the statement is the presentation).
+- **Income Statement / Profit & Loss (P&L)** — the statement of **INCOME − EXPENSE over a period** (a date
+  range): revenue, less cost of sales = **gross profit**; less operating expenses = **net profit**. A period
+  (flow) statement. Reads the INCOME (4xxx) and EXPENSE (5xxx) accounts.
+- **Gross profit** — **revenue (INCOME) − cost of sales** (the cost-of-sales expense band, e.g. 5100 COGS +
+  5150 Purchases). The first P&L subtotal.
+- **Operating profit / net profit** — **gross profit − operating expenses** (5200 Rent, 5300 Salaries, 5400
+  Utilities, …). In v1 (no separate finance/tax lines) the bottom line is **net profit**; operating and net
+  profit coincide.
+- **Balance Sheet** — the statement of financial position **as-at a date** (a stock statement): **ASSET =
+  LIABILITY + EQUITY**, grouped **current vs non-current**. Reads ASSET (1xxx) + LIABILITY (2xxx) + EQUITY
+  (3xxx) accounts + the current-year net income folded into equity. **Must balance.**
+- **Current vs non-current** — the Balance-Sheet sub-grouping by realisation horizon: current = realised /
+  settled within ~12 months (cash, AR, inventory, AP, tax payable); non-current = beyond (fixed assets,
+  long-term loans — sparse in v1). Derived from the account-code band.
+- **Retained earnings** — the EQUITY account (3900) carrying accumulated prior-period profit. On the Balance
+  Sheet: **as-at equity = retained earnings + the current-year net income to date**.
+- **Current-year net income** — the P&L **net profit for the current fiscal year up to the as-at date**,
+  **folded into Balance-Sheet equity** so ASSET = LIABILITY + EQUITY holds mid-year. A **presentation
+  derivation** (year-to-date INCOME − EXPENSE), **not** a posted closing entry (v1 has no automated year-end
+  roll-up — gl.md §10.6).
+- **Cash-Flow Statement (indirect method)** — how cash moved over a period, built **indirectly**: net income
+  + non-cash items (depreciation — sparse in v1) ± **working-capital changes** (ΔAR, ΔAP, ΔInventory,
+  ΔVAT/WHT) → **operating**; ± non-current-asset changes → **investing**; ± equity / borrowing changes →
+  **financing**. The **net change in cash == the Cash + Bank GL account movement** between the two dates.
+- **Operating / investing / financing** — the three cash-flow sections. Operating = cash from trading;
+  investing = cash for/from long-term assets (sparse, no Fixed Assets yet); financing = cash from/to owners
+  and lenders (sparse, no Loans yet). Classified from `account_type` + code range.
+- **Working-capital change** — the period **change** (closing − opening) in a current operating account
+  (AR, AP, Inventory, VAT/WHT control accounts), used in the indirect operating section: a rise in AR *uses*
+  cash (subtract); a rise in AP *provides* cash (add).
+- **Comparative period** — the **prior** period / as-at date shown **alongside** the selected one on every
+  statement (this period vs prior period for P&L/CF; this date vs a prior date for BS) — standard accounting
+  presentation. **Not** a budget (a plan — Budgeting, deferred).
+- **Account ledger / drill-down** — for a single GL account over a period: **opening balance**, each
+  **journal line** (posting date, source, reference, debit, credit), the **running balance**, the **closing
+  balance**. The **drill target** from any statement line. The **GL** account ledger — **not** the AR/AP
+  **sub-ledger** (per-party detail).
+- **As-at vs period** — a **Balance Sheet** is **as-at a date** (a point-in-time stock, balances from
+  inception to that date); a **P&L / Cash-Flow** is **over a period** (a flow between two dates).
+- **Auto-derived statement mapping** — the rule that places each account on a statement: **`account_type`**
+  decides the statement + top section (INCOME/EXPENSE → P&L; ASSET/LIABILITY/EQUITY → Balance Sheet — the
+  type is the authority); the **account-code range** decides the sub-grouping (current/non-current;
+  cost-of-sales/operating; CF section). **NO configurable statement-template table** in v1.
+- **Reconciliation / correctness bar** — the exact tie a statement asserts back to GL: the **BS balances**
+  (ASSET == LIABILITY + EQUITY); the **P&L net == the period's INCOME − EXPENSE GL movement**; the
+  **Cash-Flow net change == the Cash + Bank GL account movement**. A broken bar is a defect / data-integrity
+  alarm, surfaced — never silently corrected (Reporting is read-only).
+
+### Reporting terminology rulings (pick one, stay consistent)
+- Use **financial statement** (or P&L / Balance Sheet / Cash-Flow Statement) for the grouped presentation;
+  **trial balance** for the flat account list (gl.md) — the TB is the input, the statement is the output;
+  never call a statement "a trial balance."
+- Use **as-at** for a Balance Sheet (a point in time) and **over a period / for a date range** for a P&L or
+  Cash-Flow (a flow) — never blur the two; a Balance Sheet has no date range, a P&L has no single as-at date.
+- Use **net profit** (the P&L bottom line, a period flow) distinct from **equity** (a Balance-Sheet as-at
+  stock) — but say the net profit **folds into** equity (current-year net income); never equate them.
+- Use **comparative** for the prior-window column (standard presentation); never call it a "budget" (a plan —
+  deferred to Budgeting).
+- A **drill-down** reaches the **account ledger** (GL `journal_lines` for one account); a **sub-ledger** is
+  the AR/AP per-party detail (their modules) — never conflate the GL account ledger with a sub-ledger.
+- Reporting is **read-only**: it **runs / views / exports** a statement; it never "posts", "files", or
+  "closes" — those are GL/VAT verbs. A figure that breaks a bar is **surfaced**, never "fixed" by Reporting.
+- Statement placement is by **`account_type`** (the authority — gl.md BR-GL-12); the **code range** drives
+  only the sub-grouping — never place an account by code alone against its type.
+
+## Year-End Close — freeze the year, reset P&L, roll profit into retained earnings
+
+- **Fiscal year close (year-end close)** — the **annual** operation that **freezes** a fiscal year: it
+  auto-closes the year's still-OPEN periods, posts the **closing entry** (P&L → retained earnings), and marks
+  the **fiscal year CLOSED** (`fiscal_years.status = CLOSED`). One end-to-end action, per company per year.
+  After it, all posting into the year is blocked (its periods are CLOSED). **Not** a **period close** (the
+  monthly open/close of one `fiscal_period`, `GL.PERIOD.CLOSE`).
+- **Closing entry (closing journal)** — the **one balanced journal** the close posts, dated at the fiscal
+  year's **`end_date`**: **DEBIT each INCOME account** by its year balance, **CREDIT each EXPENSE account** by
+  its year balance (zeroing every P&L account), with the **net profit/loss to 3900 Retained Earnings** (CR 3900
+  for a profit, DR 3900 for a loss). Σ debits == Σ credits (`GLPostingService` enforces). Source type
+  **YEAR_END_CLOSE**. **No Income Summary intermediate account** — the roll is **direct to 3900**. **Not** an
+  **opening-balance journal** (gl.md FR-GL-13) and **not** the Reporting **current-year-earnings fold** (a
+  read-time presentation derivation, NOT a posted entry — reporting.md BR-REP-05).
+- **Retained earnings roll** — moving the year's **net profit/loss** into **3900 Retained Earnings** as the
+  balancing figure of the closing entry. Sequential year-on-year (the prior year must be closed first); 3900
+  accumulates each closed year's net. Posts to **3900** (EQUITY) — **not** **3100 Opening Balance Equity** and
+  **not** any "Income Summary" account (v1 uses none).
+- **Net profit / loss for the year** — the year's **INCOME − EXPENSE** (the P&L net over the fiscal year). The
+  balancing figure rolled to 3900: a **profit** (INCOME > EXPENSE) **credits** 3900; a **loss** (EXPENSE >
+  INCOME) **debits** 3900.
+- **P&L reset (zeroing)** — the effect of the closing entry on the **INCOME (4xxx) and EXPENSE (5xxx)**
+  accounts: each is brought to a **zero** year-end balance, so the new fiscal year starts the P&L fresh. The
+  account ledger shows the closing line that takes it to zero (drill-down via Reporting).
+- **Reopen (close reversal)** — the operation that **un-freezes** a CLOSED fiscal year for a late adjustment:
+  it posts the **reversal of the closing journal** (restoring the P&L balances + backing out the 3900 roll),
+  flips the **fiscal year and its periods back to OPEN**, and makes the year **re-closeable**. Append-only — a
+  **new reversing entry** (source type **YEAR_END_CLOSE_REVERSAL** or a reversal-of the closing entry),
+  **never** an edit/delete of the closing journal. Permission-gated (sensitive), audited. **Not** a period
+  **reopen** (gl.md FR-GL-15 — re-open one closed *period*, posting nothing).
+- **Closed-period posting gate** — the **existing** GL rule (BR-GL-03): a CLOSED fiscal period rejects all new
+  postings. Year-end close **uses** this gate (after close, the year's periods are CLOSED → posting blocked);
+  the closing / reversing entries are **system-posted** as part of the operation, dated at year-end.
+- **Reverse-then-adjust-then-re-close** — the **late-adjustment flow**: reopen a CLOSED year (reversal posts,
+  P&L restored, year OPEN) → post the adjusting journal(s) → re-close (a fresh closing entry posts the corrected
+  net to 3900). The append-only way to correct a closed year — no closing journal is ever edited.
+
+### Year-End Close terminology rulings (pick one, stay consistent)
+- Use **year close / fiscal year close** (`GL.YEAR.CLOSE`) for the annual freeze + closing entry + retained-
+  earnings roll; **period close** (`GL.PERIOD.CLOSE`) for the monthly open/close of one period — never blur the
+  two (different permissions, different effects: a period close posts **nothing**; a year close posts the
+  **closing entry**).
+- Use **closing entry** (this slice's P&L → 3900 journal) distinct from **opening-balance journal** (gl.md
+  FR-GL-13, a manual capital/equity entry) and from the Reporting **current-year-earnings fold** (a read-time
+  derivation, never posted) — never conflate the posted close with the read-time fold.
+- The roll posts to **3900 Retained Earnings** (EQUITY); never to **3100 Opening Balance Equity** and never via
+  an **Income Summary** account (v1 has none — the roll is **direct to 3900**).
+- A close **freezes** a year; a **reopen** un-freezes it — neither ever **deletes** a posted journal (BR-GL-02);
+  the reopen is a **new reversing entry**, the correction path is **reverse-then-adjust-then-re-close**.
+- After a close, **Reporting needs no change** — the closed year's P&L nets to zero, the rolled net sits in
+  posted 3900, and the inception-to-date equity fold (ADR-0018 D-6) keeps the Balance Sheet balancing with **no
+  double-count**; never say the close "requires a Reporting change."

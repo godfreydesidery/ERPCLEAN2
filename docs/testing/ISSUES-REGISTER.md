@@ -115,3 +115,32 @@ balance), `e2e/ui-smoke.js` (browser smoke), `e2e/static-proxy-server.js` (SPA+A
 
 **Impact (original):** any **keep-data** deploy onto a DB that already has ≥1 company breaks (can't upgrade an existing/production database). Clean deploys are fine, which is why QA was recovered with a fresh deploy.
 **Fix direction (needs care — V10–V13 are merged/shipped):** the seed-uid generation must stay ≤26 chars, e.g. `'ARC' \|\| lpad(company_id::text,6,'0') \|\| substr(md5(config_key),1,12)` (21 chars, deterministic, unique per company+key). Because the only persistent DB (QA) has NOT successfully applied V11+ (it failed) and CI DBs are ephemeral, editing the V11–V13 seed lines in place is the justified pragmatic fix (no persistent successful checksum to break) — OR a forward-only repair migration. **MUST add a regression test that runs the migrations against a DB seeded with a company** (the gap that hid this) — e.g. an IT that inserts a company before Flyway runs, or asserts seed-uid length ≤26. Also covers V10's latent same-pattern overflow (ACCOUNTS_RECEIVABLE/PAYABLE keys).
+
+## Finding #13 — Reporting (ADR-0018) adversarial review batch (2026-06-10)
+
+Found by a multi-agent adversarial review of the Financial Reporting increment (5 dimensions → verify each finding: 11 confirmed / 10 refuted). All three actionable defects were invisible to the happy-path ITs because they are *presentation/edge* bugs, not *total* bugs — the balance + tie-out + P&L self-checks operate on totals, which still held.
+
+| # | Sev | Status | Area | Issue | Evidence |
+|---|-----|--------|------|-------|----------|
+| 13a | HIGH | **FIXED** | reporting / StatementClassifier | Account **1500 (WHT Receivable)** fell in the non-current asset band (1500–1999) → presented as NON_CURRENT_ASSETS on the Balance Sheet and INVESTING on the Cash-Flow, but per ADR-0018 D-4/D-7 the VAT/WHT control accounts (1400/1500) are short-term working capital → CURRENT_ASSETS / OPERATING. Totals still balanced (so ITs passed); only the *section* was wrong. | Adversarial review (3 independent reviewers). |
+| 13b | HIGH | **FIXED** | reporting / CsvStatementRenderer | **CSV formula injection** — `escape()` did not neutralise cells starting with `= + - @` (user-controlled account/company names → formula executes when the CSV is opened in Excel). Also a pre-existing **double-escape** of row labels. | Adversarial review (export dimension). |
+| 13c | BLOCKER | **FIXED** | reporting / ReportingController | `accountLedgerExport` passed `Integer.MAX_VALUE` as the page size → an unbounded query materialising a multi-year ledger (potentially millions of lines) into memory → OOM (NFR-REP-02). | Adversarial review (export dimension); self-introduced in the export endpoint. |
+
+**FIXED** (branch `feat/reporting-module`): (13a) non-current asset band shifted to **1600**–1999 in `StatementClassifier` (both `classifyAsset` + `classifyForCashFlow`), so 1400/1500 present as current/operating consistently across both statements; regression `StatementClassifierTest`. (13b) `escape()` now formula-guards text cells (prefix `'` for leading `= + - @`/TAB/CR) while leaving numeric amounts un-mangled (negatives keep their `-`); double-escape removed; regression `CsvStatementRendererTest`. (13c) export capped at `LEDGER_EXPORT_MAX_ROWS = 10_000`. Full suite **551 green**.
+
+**Deferred (LOW — speculative DB-corruption hardening, not current defects; the GL write path enforces these invariants):**
+- P&L self-check doesn't detect entries posted to the *wrong account type* (e.g. crediting 3100 instead of 4100) — would need an EQUITY/ASSET/LIABILITY-movement-in-P&L-period alarm. Manifests only on a mis-posting/corruption.
+- `IncomeStatementBuilder.presentedAmount` trusts `ChartOfAccount.normalBalance` without re-asserting the type↔normal-balance invariant (enforced at write by `ChartOfAccountService`). Manifests only on DB corruption.
+*(Recorded for a future hardening pass; both require data already violating a GL write-path invariant to bite.)*
+
+## Finding #14 — Year-End Close (ADR-0019) adversarial review batch (2026-06-10)
+
+Found by a multi-agent adversarial review of the Year-End Close increment (3 dimensions → verify each: 1 confirmed / 3 refuted). The 3 refuted were break-even / mid-year-opened-account false alarms the verifiers correctly dismissed against the spec — the closing-entry math is sound.
+
+| # | Sev | Status | Area | Issue | Evidence |
+|---|-----|--------|------|-------|----------|
+| 14 | HIGH | **FIXED** | gl / YearEndClose × GLPostingService | A P&L account **deactivated while it still carries a current-year balance** (which BR-GL-07 explicitly permits — "deactivate instead of delete") makes the year-end closing journal try to post a zeroing line to an inactive account → `GLPostingService` rejects it (BR-GL-04 "inactive; cannot post to it") → the **entire year-close fails and rolls back**, leaving the year unclosable. Reachable via `ChartOfAccountService.deactivate`. | Adversarial review (reopen-guards dimension). |
+
+**FIXED** (branch `feat/year-end-close`): the reviewer's first-cut fix (skip inactive P&L accounts in the close query) was **rejected as accounting-wrong** — it would strand a real balance on the P&L and miscompute the retained-earnings roll. Correct fix: **`YEAR_END_CLOSE` is the one `JournalSourceType` permitted to post to an INACTIVE account** (it must be able to *clear* a deactivated account that still holds a balance — consistent with BR-GL-07). `GLPostingServiceImpl.validateLine` gained an `allowInactiveAccount` flag set only when `draft.sourceType() == YEAR_END_CLOSE` (the closing journal + its reopen reversal); **BR-GL-04 stays enforced for every other source type**. Regression: `YearEndCloseServiceIT.closeFiscalYear_zeroesInactivePlAccount_afterDeactivation` (deactivate a P&L account with a live balance → close still succeeds + zeroes it). Full suite green.
+
+**Refuted (correctly — no defect):** break-even closing entry omits the 3900 line (spec D-4 permits it; the P&L zeroing lines balance among themselves); the `draftLines>=2` guard at break-even (handled per spec); mid-year-opened zero-movement account skipped (correct — balance-driven, OQ-CLOSE-05).

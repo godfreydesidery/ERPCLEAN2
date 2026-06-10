@@ -38,6 +38,11 @@ public class ApiResponseAdvice implements ResponseBodyAdvice<Object> {
         if (body instanceof String) {
             return body;
         }
+        // Binary/file downloads (e.g. report exports → PDF/XLSX/CSV bytes, ADR-0018 D-9) must NOT be
+        // JSON-wrapped — they carry their own Content-Type/Content-Disposition. Pass through untouched.
+        if (body instanceof byte[] || body instanceof org.springframework.core.io.Resource) {
+            return body;
+        }
         return ApiResponse.ok(body);
     }
 }

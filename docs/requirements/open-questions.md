@@ -359,10 +359,13 @@ Each entry: why it matters · who decides · does it block build.
   auto-post is **DR Cash**; the **AR** posting path goes live with credit sales + the AR increment.
   *Recommended default:* DR Cash for v1; the AR mapping role is seeded from day one so credit-sale AR
   posting is additive. *Decider:* owner (with the AR increment). *Blocks ADR-0013:* **NO**.
-- **OQ-GL-03** — **Year-end-close automation depth.** v1 = manual opening balances + period-12 close yields
-  the year-end state. *Recommended default:* manual opening-balance journal in v1; automated
-  P&L→retained-earnings closing entry + opening-balance carry-forward is a later slice (gl.md §10.6).
-  *Decider:* owner. *Blocks ADR-0013:* **NO** — deferred, not precluded.
+- **OQ-GL-03** — **Year-end-close automation depth.** ✅ **RESOLVED 2026-06-10 — specified as the Year-End
+  Close slice** (see the *Year-End Close* section below; docs/requirements/year-end-close.md, ADR-0019 next):
+  an automated **P&L → 3900 Retained Earnings** closing entry (direct, no Income Summary) on year-close, with
+  auto-close of the year's periods, an auto-reversing **reopen**, the sequencing guards, a distinct
+  `GL.YEAR.CLOSE` permission, and the close↔reporting consistency (no Reporting change). Did **not** block
+  ADR-0013 (deferred at the time); now its own slice. *(Automatic posted opening-balance carry-forward is
+  deferred — the continuous ledger makes it unnecessary in v1, year-end-close.md §10.2.)*
 - **OQ-GL-04** — **Per-category revenue / VAT mapping.** v1 = one Sales Revenue + one VAT Payable account
   (the ratified fixed mapping). *Recommended default:* fixed single mapping; per-product-category split is
   an additive `gl_configs` option later (gl.md §10.7). *Decider:* owner. *Blocks ADR-0013:* **NO** —
@@ -720,3 +723,161 @@ Each entry: why it matters · who decides · does it block build.
   GL settlement legs, and the WHT legs must round identically (NFR-VAT-02). *Recommended default:* half-up,
   TZS = 0 dp. *Decider:* owner (finance input). *Blocks ADR-0017:* **NO** for the model; **confirm before
   go-live**.
+
+## Financial Reporting
+
+> Status: **RATIFIED 2026-06-10.** The Reporting scoping forks the owner answered are resolved; what remains
+> is non-blocking detail (recommended defaults stand) plus the ADR-0018 design seam (the code-range banding).
+> **No ADR-0018-blocking open question remains.** Requirements: docs/requirements/reporting.md.
+
+### Resolved (owner, 2026-06-10) — the Reporting scoping forks
+
+- **Statement→account mapping** = **AUTO-DERIVE** from `account_type` + account-code ranges; **NO**
+  configurable statement-template table. `account_type` → statement + top section (INCOME/EXPENSE → P&L;
+  ASSET/LIABILITY/EQUITY → Balance Sheet); code range → sub-grouping (current/non-current; cost-of-sales/
+  operating; CF operating/investing/financing). (BR-REP-07.)
+- **Statements in v1** = ALL THREE primary statements + the ledger drill-down: **Income Statement / P&L**
+  (period, INCOME − EXPENSE → gross profit → net profit); **Balance Sheet** (as-at, ASSET = LIABILITY +
+  EQUITY, current vs non-current, current-year net income folded into equity); **Cash-Flow Statement —
+  INDIRECT method** (operating/investing/financing, net change == Cash+Bank movement); **GL account-ledger
+  drill-down** (opening balance + journal lines + running/closing balance). (FR-REP-01..04.)
+- **Comparative columns** = every statement shows the selected period/date AND a prior comparative — standard
+  accounting presentation. (BR-REP-01, FR-REP-06.)
+- **Export** = each statement + the ledger exportable to a **print-faithful PDF** and to **Excel / CSV**.
+  (FR-REP-05, NFR-REP-04.)
+- **Period selection** = arbitrary date range (P&L / CF) or as-at date (BS), with fiscal-period / fiscal-year
+  quick-selects (GL `fiscal_periods` / `FiscalPeriodResolver`); base currency only. (FR-REP-07, BR-REP-09.)
+- **Read-only + correctness bars** = Reporting **POSTS NOTHING** (reads GL); the BS must balance; the
+  cash-flow net == the Cash+Bank GL movement; the P&L net == the period's INCOME − EXPENSE GL movement; every
+  figure drills to journal lines. (BR-REP-02/03/04/05/06/08.)
+- **Permissions** = `REPORT.VIEW` at minimum + the recommended finer split (`REPORT.PL.VIEW` /
+  `REPORT.BS.VIEW` / `REPORT.CASHFLOW.VIEW` / `REPORT.LEDGER.VIEW` / `REPORT.EXPORT`); per-company scope;
+  `assertCanActIn` on every read; seeded via a small **V15 perm-seed migration** + granted to `ORG_ADMIN`.
+  (FR-REP-08, OQ-REP-04.)
+
+### The ADR-0018 design seam (a DECISION the architect makes — does NOT block the requirements)
+
+- **OQ-REP-01** — **The code-range banding boundaries (current/non-current; cost-of-sales/operating; CF
+  section).** The auto-derive principle is fixed (BR-REP-07): `account_type` → statement + top section; code
+  range → sub-grouping. The **exact boundaries** are the ADR's. *Recommended default* (the worked TZ-CoA
+  banding): current assets 1000–1499 / non-current 1500–1999; current liabilities 2000–2499 / non-current
+  2500–2999; cost-of-sales 5100–5199 / operating 5200–5999; CF operating = current operating accounts
+  (AR/AP/Inventory/VAT/WHT), investing = non-current ASSET, financing = EQUITY + non-current LIABILITY; an
+  account outside a named band defaults to the **type's default band** (e.g. ASSET → current). *Decider:*
+  **architect (ADR-0018)**, with finance review. *Blocks ADR-0018:* **NO** — it **is** the banding the ADR
+  fixes; the principle + default stand.
+
+### Still open — NON-blocking detail (recommended defaults stand; do NOT block ADR-0018)
+
+- **OQ-REP-02** — **Cash-flow treatment of the VAT / WHT control accounts.** Where do 1400 VAT Input, 1500
+  WHT Receivable, 2200 VAT Payable, 2300 VAT Due, 2400 WHT Payable sit on the indirect cash-flow statement?
+  *Recommended default:* **working-capital items in the operating section** (the standard treatment); not a
+  separate "tax cash flow" section in v1. *Decider:* owner (finance). *Blocks ADR-0018:* **NO** — the
+  operating-working-capital default stands; the bar (BR-REP-04) holds either way.
+- **OQ-REP-03** — **Comparative default window.** Prior period (same-length preceding range) or prior fiscal
+  year (same period last year)? *Recommended default:* **prior period of the same length** for P&L / Cash-Flow
+  and the **prior year-end (or the period start)** for the Balance Sheet; the reader may **override** to
+  prior-year. *Decider:* owner. *Blocks ADR-0018:* **NO** — the prior-period default stands; prior-year is a
+  selectable override (same comparative machinery).
+- **OQ-REP-04** — **Permission granularity (single `REPORT.VIEW` vs the finer split).** *Recommended default:*
+  seed the **finer split** (`REPORT.VIEW` + `REPORT.PL.VIEW` / `REPORT.BS.VIEW` / `REPORT.CASHFLOW.VIEW` /
+  `REPORT.LEDGER.VIEW` / `REPORT.EXPORT`) so an owner *can* restrict who sees the company P&L vs who may drill
+  a ledger; a simple deployment grants `REPORT.VIEW` to all finance roles. *Decider:* owner. *Blocks
+  ADR-0018:* **NO** — the perm set is seeded in V15; granularity is the owner's policy, the codes are fixed.
+- **OQ-REP-05** — **Export library / generation approach (PDF + Excel/CSV).** *Recommended default:* a
+  server-side **PDF** renderer producing a print-faithful statement (aligning with the cross-cutting
+  Documents/PDF capability X.1 when it lands) + a server-side **Excel/CSV** writer; the exact library is the
+  architect's. *Decider:* **architect (ADR-0018)**. *Blocks ADR-0018:* **NO** — the requirement is a
+  print-faithful PDF + a spreadsheet export; the library is the design decision.
+- **OQ-REP-06** — **Configurable statement templates.** v1 **auto-derives** the mapping. *Recommended
+  default:* auto-derive in v1; a user-configurable statement-template / report-builder is a later additive
+  slice. *Decider:* owner. *Blocks ADR-0018:* **NO** — auto-derive is fixed; templates are additive.
+- **OQ-REP-07** — **Segment / cost-centre / branch / consolidated reporting.** v1 is **company-level**.
+  *Recommended default:* company-level statements in v1; per-cost-centre / per-segment / per-branch lands with
+  the dimension framework (T3.5/T3.6); consolidated multi-company with group reporting (gl.md OQ-CUR-01).
+  *Decider:* owner. *Blocks ADR-0018:* **NO** — deferred, not precluded (NFR-REP-07).
+- **OQ-REP-08** — **Ratio analysis / KPI dashboards / operational analytics.** v1 = the three statements +
+  the ledger. *Recommended default:* statements first; ratios, dashboards, and sales/stock/purchase analytics
+  are the Reporting depth slice (T2.3 depth / Phase D). *Decider:* owner. *Blocks ADR-0018:* **NO** — a later
+  slice.
+- **OQ-REP-09** — **Multi-currency / presentation-currency statements.** v1 is **base currency (TZS)**.
+  *Recommended default:* base-currency statements in v1; foreign / presentation currency translation lands
+  with FX (X.6 / gl.md §10.5). *Decider:* owner. *Blocks ADR-0018:* **NO** — deferred, not precluded.
+- **OQ-REP-10** — **Scheduled / emailed reports.** v1 is **on-demand**. *Recommended default:* on-demand run +
+  view + export in v1; scheduling / emailing lands with Notifications (X.2). *Decider:* owner. *Blocks
+  ADR-0018:* **NO** — additive on the on-demand model.
+- **OQ-CUR-03** — *(carried)* confirm **rounding mode + TZS decimals** — the statement aggregations, the
+  BS-balance check, the P&L-to-ledger reconciliation, and the cash-flow tie-out must round identically to the
+  GL figures they tie to (NFR-REP-06). *Recommended default:* half-up, TZS = 0 dp. *Decider:* owner (finance
+  input). *Blocks ADR-0018:* **NO** for the model; **confirm before go-live**.
+
+## Year-End Close
+
+> Status: **RATIFIED 2026-06-10.** The six Year-End Close forks the owner ratified are resolved; this also
+> **closes gl.md OQ-GL-03** (year-end-close automation depth — the deferred slice is now specified). What
+> remains is non-blocking detail / an ADR design decision (recommended defaults stand). **No ADR-0019-blocking
+> open question remains.** Requirements: docs/requirements/year-end-close.md.
+
+### Resolved (owner, 2026-06-10) — the Year-End Close forks
+
+- **Closing entry** = **zero each P&L account direct to Retained Earnings.** On year-end close, post **one**
+  balanced closing journal dated at the fiscal year's `end_date`: DEBIT each INCOME account by its year
+  balance, CREDIT each EXPENSE account by its year balance (every P&L account → zero), with the **net
+  profit/loss to 3900 Retained Earnings** (CR 3900 for a net profit, DR 3900 for a net loss). **NO Income
+  Summary intermediate account.** Adds a **RETAINED_EARNINGS** `gl_config` key → 3900. (FR-CLOSE-02,
+  BR-CLOSE-01/02/03.)
+- **Reopen** = **allowed, auto-reversing.** Reopening a CLOSED fiscal year posts a **reversal of the closing
+  journal** (restoring the P&L balances + backing out the retained-earnings roll), flips the year (and its
+  periods) back to OPEN, and the year becomes re-closeable. Append-only — a NEW reversing entry (source type
+  **YEAR_END_CLOSE_REVERSAL** or a reversal-of the closing entry), never an edit/delete of the closing journal
+  (BR-GL-02). The **reverse-then-adjust-then-re-close** flow. (FR-CLOSE-05/06, BR-CLOSE-07/08/10.)
+- **Auto-close remaining periods at year-close** = closing the fiscal year first CLOSES any still-OPEN periods
+  within it, then posts the closing entry, then marks the year CLOSED — **one** end-to-end action; reopen flips
+  the periods back to OPEN. (FR-CLOSE-01, BR-CLOSE-06.)
+- **Ordering / sequencing guards** = a year can be closed only if the immediately prior fiscal year is already
+  CLOSED (sequential roll; prior figures frozen); cannot close an already-CLOSED year; cannot close a year with
+  no periods; reopen only the **most-recently-closed** year. After close, all posting into the year is blocked
+  (the existing period gate). (FR-CLOSE-03, BR-CLOSE-04/05/09/10.)
+- **Permissions** = a distinct **`GL.YEAR.CLOSE`** permission covering **both** close and reopen (sensitive —
+  separate from `GL.PERIOD.CLOSE`); `GL.VIEW` reads close status + the closing journal; per-company scope;
+  `assertCanActIn` on every read; audit on close + reopen (with the posted journal uid). Seeded via the small
+  **V16** migration (RETAINED_EARNINGS seed → 3900 + GL.YEAR.CLOSE perm + the YEAR_END_CLOSE source-type CHECK
+  widen). (FR-CLOSE-08/09, BR-CLOSE-11.)
+- **Base currency, append-only, double-entry** = the closing/reversing journals are in the company base
+  currency, balanced (Σ debits == Σ credits), and immutable once posted (corrected only by the reopen reversal)
+  — all GL invariants hold. The **close↔reporting consistency** is automatic: the closed year's P&L nets to
+  zero, the rolled net sits in posted 3900, the inception-to-date equity fold covers only the open year → the
+  Balance Sheet keeps balancing with no double-count and **Reporting needs no change** (ADR-0018 D-6).
+  (BR-CLOSE-12/14.)
+
+### Still open — NON-blocking detail (recommended defaults stand; do NOT block ADR-0019)
+
+- **OQ-CLOSE-01** — **Require the immediately prior fiscal year CLOSED before closing this one?**
+  *Recommended default:* **YES** — sequential roll; the prior year's figures frozen first (BR-CLOSE-04). No
+  prior year → satisfied vacuously. *Decider:* owner (finance). *Blocks ADR-0019:* **NO** — the prior-year
+  guard is the default; relaxing it (out-of-sequence close) is an additive, not-recommended policy.
+- **OQ-CLOSE-02** — **Reopen only the most-recently-closed year?** *Recommended default:* **YES** — only the
+  latest CLOSED year may be reopened (BR-CLOSE-10), keeping the roll chain sound; to correct an older year,
+  reopen the later year(s) first in reverse-chronological order. *Decider:* owner (finance). *Blocks ADR-0019:*
+  **NO** — latest-only is the default; reopening an arbitrary older year is deferred (and discouraged).
+- **OQ-CLOSE-03** — **Closing-entry posting vs the period-gate ordering.** The closing entry is dated at the
+  year's `end_date` (within the year being closed) while the same operation CLOSES the year's periods. Post the
+  closing entry **before** flipping the periods CLOSED, or on a **system path that bypasses** the just-closed
+  gate? *Recommended default:* **post the closing entry first, then flip the periods CLOSED** (the boring
+  order-of-operations answer). *Decider:* **architect (ADR-0019)** — an operation-ordering design detail.
+  *Blocks ADR-0019:* **NO** — it **is** the ADR decision; either ordering yields the same end state.
+- **OQ-CLOSE-04** — **How a P&L run *for the closed year* reads after the close.** The closing entry is dated
+  at `end_date`, so a P&L for the closed year's window includes the trading lines **and** the zeroing close.
+  *Recommended default:* a P&L over the fiscal year's date range reads the year's INCOME − EXPENSE **movement**
+  (trading lines); the net reported **equals the net rolled to 3900** (the reconciliation tie). Reporting reads
+  movement, not closing-adjusted balances, so the closed-year P&L still reports its result. *Decider:*
+  **architect (ADR-0019)** confirms whether a "trading P&L" view excludes the YEAR_END_CLOSE source-type lines
+  (either is consistent). *Blocks ADR-0019:* **NO** — Reporting is unchanged; a presentation confirmation.
+- **OQ-CLOSE-05** — **Handling accounts opened mid-year.** A P&L account created partway through the year
+  carries only its post-creation movement. *Recommended default:* the close zeroes **every** P&L account with a
+  **non-zero year balance** — the balance, not the open date, drives the closing line; no special-casing.
+  *Decider:* owner (finance) / architect. *Blocks ADR-0019:* **NO** — the balance-driven rule handles it.
+- **OQ-CUR-03** — *(carried)* confirm **rounding mode + TZS decimals** — the closing-entry amounts, the balance
+  check, and the net rolled to 3900 must round identically to the GL figures they zero (NFR-CLOSE-02).
+  *Recommended default:* half-up, TZS = 0 dp. *Decider:* owner (finance input). *Blocks ADR-0019:* **NO** for
+  the model; **confirm before go-live**.

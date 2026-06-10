@@ -187,4 +187,11 @@ public final class AuditActions {
     public static final String VAT_ADJUST          = "VAT.ADJUST";
     public static final String WHT_TYPE_MANAGE     = "WHT.TYPE.MANAGE";
     public static final String WHT_CAPTURE         = "WHT.CAPTURE";
+
+    // ---- Reporting module (ADR-0018 D-11) ----
+    public static final String REPORT_EXPORT = "REPORT.EXPORT";
+
+    // ---- Year-End Close (ADR-0019 D-12) ----
+    // Both close and reopen emit this action; reopen distinguishes via detail("action","reopen").
+    public static final String GL_YEAR_CLOSE = "GL.YEAR.CLOSE";
 }

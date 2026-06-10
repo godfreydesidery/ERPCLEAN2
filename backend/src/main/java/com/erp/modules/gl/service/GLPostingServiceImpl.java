@@ -78,10 +78,16 @@ public class GLPostingServiceImpl implements GLPostingService {
                             + (draftLines == null ? 0 : draftLines.size()));
         }
 
-        // 2. Validate each line: one-sided, positive amount, active account, same company, base currency
+        // 2. Validate each line: one-sided, positive amount, active account, same company, base currency.
+        //    YEAR_END_CLOSE (the closing journal + its reopen reversal) is the ONE source allowed to
+        //    post to an INACTIVE account — it must be able to ZERO a P&L account that was deactivated
+        //    while still carrying a year balance (BR-GL-07 permits deactivating an account that has
+        //    postings, so the close must still be able to clear it). BR-GL-04 stays enforced for every
+        //    other source type. (Year-End Close adversarial review, ISSUES-REGISTER #14.)
         String baseCurrency = resolveBaseCurrency(draft.companyId());
+        boolean allowInactive = draft.sourceType() == JournalSourceType.YEAR_END_CLOSE;
         for (JournalEntryDraft.LineDraft ld : draftLines) {
-            validateLine(ld, draft.companyId(), baseCurrency);
+            validateLine(ld, draft.companyId(), baseCurrency, allowInactive);
         }
 
         // 3. Σ debit == Σ credit (BR-GL-01, NFR-GL-02 — BigDecimal exact comparison)
@@ -196,7 +202,8 @@ public class GLPostingServiceImpl implements GLPostingService {
         return company.getBaseCurrency();
     }
 
-    private void validateLine(JournalEntryDraft.LineDraft ld, Long companyId, String baseCurrency) {
+    private void validateLine(JournalEntryDraft.LineDraft ld, Long companyId, String baseCurrency,
+                              boolean allowInactiveAccount) {
         BigDecimal debit  = ld.debitAmount()  != null ? ld.debitAmount()  : BigDecimal.ZERO;
         BigDecimal credit = ld.creditAmount() != null ? ld.creditAmount() : BigDecimal.ZERO;
 
@@ -223,7 +230,7 @@ public class GLPostingServiceImpl implements GLPostingService {
                     "Account " + account.getUid() + " belongs to company " + account.getCompanyId()
                             + " but the entry is for company " + companyId + " (BR-GL-05).");
         }
-        if (!account.isActive()) {
+        if (!account.isActive() && !allowInactiveAccount) {
             throw new IllegalArgumentException(
                     "Account " + account.getAccountCode() + " is inactive; cannot post to it (BR-GL-04).");
         }
