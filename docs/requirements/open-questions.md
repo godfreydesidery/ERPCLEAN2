@@ -602,3 +602,121 @@ Each entry: why it matters · who decides · does it block build.
   the AR/AP cash legs, and the reconciliation balance check must round identically to the cash/bank book
   balance and the linked GL account (NFR-CASH-02). *Recommended default:* half-up, TZS = 0 dp. *Decider:*
   owner (finance input). *Blocks ADR-0016:* **NO** for the model; **confirm before go-live**.
+
+## VAT Return / Tax
+
+> **FULLY RATIFIED 2026-06-09.** The VAT Return / Tax module is the **last Tier-1 finance piece**
+> (docs/ROADMAP.md T1.5 / docs/PATH-TO-FULL-ERP.md Phase A). The owner closed **all VAT scoping forks**
+> (MONTHLY accrual-basis returns due the 20th; net = output − input + adjustments, net positive payable /
+> net negative carries forward; DRAFT → FILE that **locks** the return + posts a **synchronous GL
+> settlement**; manual DRAFT adjustments; **WHT IN v1** — capture + track + register + certificate on AP
+> payments / AR receipts; **TRA EFD/VFD / e-filing DEFERRED**; the permission set). vat-return.md is
+> **Ratified**. **No ADR-0017-blocking question remains.** solutions-architect may start **ADR-0017** now
+> (VAT-return data model — `vat_returns` + lines/adjustments, the WHT register; migration **V14**; the new
+> **VAT Input/Recoverable** CoA account + `gl_configs` **`VAT_INPUT`** key + a VAT-due account/key; the
+> **filing GL settlement posting** + the **credit carry-forward**; the **WHT touch** on the AP-payment /
+> AR-receipt cash legs; the `ScopeGuard` **`vatreturn`** target type). The one meaty item — the
+> `VAT_INPUT`-account / AP-input-VAT-booking seam (OQ-VAT-01) — **is the decision ADR-0017 makes**, not a
+> requirements blocker (the *behaviour* is fixed). The remaining OQ-VAT items are **non-blocking** detail
+> (recommended defaults stand).
+
+### Resolved (owner, 2026-06-09) — the VAT scoping forks
+
+- **VAT fork 1 — Period & basis** — ✅ **RESOLVED: MONTHLY returns** (one per company per calendar month,
+  **due the 20th of the next month**) on an **invoice/accrual basis** — output VAT from sales **FINALISED**
+  in the month, input VAT from supplier bills **DATED** in the month, **payment-independent**. Reflected in
+  vat-return.md FR-VAT-01/03/04, BR-VAT-01/04/05.
+- **VAT fork 2 — Computation** — ✅ **RESOLVED: net VAT = output VAT (sales) − input VAT (purchases) +
+  adjustments + opening credit carried forward.** Output = Σ `sales_invoices.vat_total_amount` (by band,
+  from `tax_summary`) for finalised invoices in the period; input = Σ `supplier_bills.vatAmount` for
+  matched/approved bills dated in the period. **Net positive = VAT PAYABLE; net negative = CREDIT.**
+  Reflected in FR-VAT-03/04/06, BR-VAT-03.
+- **VAT fork 3 — Filing posts to GL** — ✅ **RESOLVED:** DRAFT → **FILE** posts a **synchronous GL journal**
+  that settles the period's VAT control accounts — **DR `2200 VAT Payable`** (clear output), **CR the new
+  `VAT_INPUT` recoverable account** (clear input), book the **net to a VAT-due / -payable-to-TRA liability**
+  (net positive) or carry a **credit** (net negative), balanced. A **net credit carries forward** (not a
+  cash refund in v1). Reflected in FR-VAT-07/08, BR-VAT-03/06.
+- **VAT fork 4 — Return lifecycle** — ✅ **RESOLVED:** **DRAFT** (computed, recomputable as more
+  invoices/bills land) → **FILED** (records a filing reference + filing date; **LOCKS** the return — figures
+  frozen, immutable, VAT period closed). Append-only — a filed return is corrected via the **next period's
+  adjustments**, not edited. Reflected in FR-VAT-02/08/09, BR-VAT-02/10/11.
+- **VAT fork 5 — Credit carry-forward** — ✅ **RESOLVED:** when input VAT > output VAT (net credit), the
+  credit carries forward as the **opening credit on the next period's return**. Reflected in FR-VAT-07,
+  BR-VAT-03.
+- **VAT fork 6 — VAT adjustments** — ✅ **RESOLVED:** **manual adjustment lines on a DRAFT** return before
+  filing (bad-debt VAT relief, prior-period corrections, credit/debit-note VAT) — each a **reason + amount +
+  sign**, **audited**, affecting the net. Reflected in FR-VAT-05, BR-VAT-09.
+- **VAT fork 7 — Withholding tax (WHT)** — ✅ **RESOLVED = IN v1 (lean but real).** Track WHT (the TZ 2%
+  withholding; withholding VAT) captured at an **AP payment** (we withhold — pay the supplier less, book a
+  **WHT liability**) and/or an **AR receipt** (a customer withholds — we receive less, book a **WHT
+  receivable/asset**), with a **WHT rate/type**, the withheld amount, a **WHT certificate**, and a **WHT
+  register/return** for remittance — WHT **reduces the cash paid/received** and is **separate** from the VAT
+  net. **Minimal v1 = capture + track + register/certificate; the full WHT-by-type matrix + e-filing are
+  deferred** (OQ-VAT-02). The biggest scope item; the additive AP/AR cash-leg touch is flagged for ADR-0017.
+  Reflected in FR-VAT-10/11/12, BR-VAT-12, §3.7.
+- **VAT fork 8 — TRA/EFD/VFD fiscalisation** — ✅ **RESOLVED = DEFERRED (accepted boundary):** the return is
+  **computed + a filing record kept** (an operator-entered filing reference + date); **no** direct TRA
+  e-filing / EFD/VFD integration in v1 (the same separable integration Sales deferred — OQ-SALES-03).
+  Reflected in §10.1, NFR-VAT-08.
+- **VAT fork 9 — Permissions** — ✅ **RESOLVED:** `VAT.VIEW` / `VAT.RETURN.PREPARE` / `VAT.RETURN.FILE` /
+  `VAT.ADJUST` / `WHT.VIEW` / `WHT.MANAGE`; per-company scope; `assertCanActIn` on every read path; audit on
+  prepare/file/adjust/WHT capture; `ScopeGuard` gains a new **`vatreturn`** target type; numbering
+  `VATR-####` / `WHT-####` via `code_sequence`. Reflected in FR-VAT-14/15, NFR-VAT-01/03/05.
+
+> **Reconciliation bar (ratified with the forks):** a **filed** return reconciles to the books — the
+> period's **output VAT == the `2200 VAT Payable` movement**, the **input VAT == the `VAT_INPUT` movement**,
+> and the **filing settlement entry's net == the return's net** (BR-VAT-08, NFR-VAT-01) — the chief
+> acceptance bar. A return **cannot be filed twice** (BR-VAT-11); a WHT capture's **cash reduction == its
+> liability/receivable** (BR-VAT-12).
+
+### The ADR-0017 design seam (a DECISION the architect makes — does NOT block the requirements)
+
+- **OQ-VAT-01** — **The `VAT_INPUT` account + how AP's input VAT relates to it.** There is **no** VAT
+  input/recoverable account / `gl_configs` key yet (ADR-0013 D-13 has `VAT_PAYABLE` only). ADR-0017 must add
+  a CoA **"VAT Input / Recoverable"** account + a `gl_configs` **`VAT_INPUT`** key (and a **VAT-due**
+  liability account/key for the net), and decide **how the AP bill's input VAT reaches it** — **either** AP
+  books the bill's stated VAT to `VAT_INPUT` at bill-match (accounts-payable.md FR-AP-06's "[+ DR VAT input
+  if captured]" goes live), **or** the return reads `supplier_bills.vatAmount` and the **filing journal** is
+  where input VAT is first separated onto the books (both reconcile — BR-VAT-08). *Recommended default:*
+  **book the bill's input VAT to `VAT_INPUT` at AP bill-match** (so the books carry input VAT continuously,
+  mirroring how output VAT already sits on `2200`, and the return reconciles to the period movement); the
+  filing journal then clears `2200` + `VAT_INPUT` to the VAT-due liability. *Decider:* **architect
+  (ADR-0017).** *Blocks ADR-0017:* **NO** — it **is** the decision ADR-0017 makes; the requirement fixes the
+  behaviour.
+
+### Still open — NON-blocking detail (recommended defaults stand; do NOT block ADR-0017)
+
+- **OQ-VAT-02** — **WHT scope depth.** v1 WHT is **lean** (a configurable rate/type incl. withholding VAT +
+  capture + track + register + certificate, on AP payments / AR receipts). *Recommended default:* a small
+  set of owner-configurable WHT rates/types booking a single WHT liability + a single WHT receivable
+  account; the **full WHT-by-type matrix** (payment type × residency × treaty) and **WHT e-filing** are
+  deferred. *Decider:* owner (finance / tax). *Blocks ADR-0017:* **NO** — the lean capture model is fixed.
+- **OQ-VAT-03** — **Adjustment sources (bad-debt VAT relief, prior-period).** v1 adjustments are **manual**.
+  *Recommended default:* manual lines in v1; **auto-deriving bad-debt VAT relief from AR write-offs** and
+  prior-period wizards are later additive conveniences. *Decider:* owner (finance). *Blocks ADR-0017:*
+  **NO** — manual is fixed; auto is additive.
+- **OQ-VAT-04** — **Cash-basis vs accrual-basis VAT.** v1 is **accrual/invoice basis** (output on finalise,
+  input on bill date). *Recommended default:* accrual in v1; a cash-basis scheme (recognise on payment) is a
+  later additive option. *Decider:* owner. *Blocks ADR-0017:* **NO** — accrual is fixed.
+- **OQ-VAT-05** — **Multi-rate / historical VAT-rate changes.** v1 reads STANDARD 18 / ZERO_RATED 0 / EXEMPT
+  from `tax_rates`. *Recommended default:* the three current bands in v1; rate-effective-dating / extra
+  schedules ride a richer tax-code scheme later (sales.md OQ-PROD-05 note). *Decider:* owner. *Blocks
+  ADR-0017:* **NO** — additive.
+- **OQ-VAT-06** — **Partial-exemption / input-VAT apportionment.** v1 recovers input VAT **in full** from
+  matched bills. *Recommended default:* full recovery in v1; partial-exemption apportionment (recover only
+  the taxable-supply proportion for a mixed business) is deferred. *Decider:* owner (finance). *Blocks
+  ADR-0017:* **NO** — additive.
+- **OQ-VAT-07** — **Multi-currency VAT.** v1 is **base currency (TZS)** (BR-VAT-13). *Recommended default:*
+  base-currency VAT in v1; foreign-currency VAT treatment lands with FX (X.6 / gl.md §10.5). *Decider:*
+  owner. *Blocks ADR-0017:* **NO** — deferred, not precluded.
+- **OQ-VAT-08** — **Partial-period bills + VAT rounding per band.** (a) A bill **dated in the period but
+  matched later** — which period does it count in? *Recommended default:* the period of its **bill date**
+  (accrual basis, BR-VAT-04); a bill matched after that period's return is **filed** is corrected via the
+  **next period's adjustment** (BR-VAT-10). (b) **VAT rounding per band.** *Recommended default:* sum the
+  already-rounded per-invoice band amounts (no re-rounding of an already-computed line VAT), half-up,
+  TZS = 0 dp. *Decider:* owner (finance). *Blocks ADR-0017:* **NO** — defaults stand; confirm before
+  go-live.
+- **OQ-CUR-03** — *(carried)* confirm **rounding mode + TZS decimals** — the output/input sums, the net, the
+  GL settlement legs, and the WHT legs must round identically (NFR-VAT-02). *Recommended default:* half-up,
+  TZS = 0 dp. *Decider:* owner (finance input). *Blocks ADR-0017:* **NO** for the model; **confirm before
+  go-live**.
