@@ -1,0 +1,204 @@
+<section class="container-fluid py-3" aria-label="WHT Types">
+  <div class="d-flex align-items-center mb-3 gap-2 flex-wrap">
+    <h1 class="h4 mb-0 me-auto">Withholding Tax Types</h1>
+
+    @if (companyState() === 'loading') {
+      <span class="spinner-border spinner-border-sm text-secondary" aria-label="Loading companies"></span>
+    }
+    @if (companies().length > 1) {
+      <label class="visually-hidden" for="whtTypesCompany">Company</label>
+      <select id="whtTypesCompany" class="form-select form-select-sm w-auto"
+              [ngModel]="selectedCompanyId()"
+              (ngModelChange)="onCompanyChange($event)">
+        @for (c of companies(); track c.id) {
+          <option [value]="c.id">{{ c.name }}</option>
+        }
+      </select>
+    }
+
+    @if (canManage()) {
+      <button type="button" class="btn btn-primary btn-sm"
+              (click)="openCreate()"
+              [disabled]="showCreateForm()">
+        <i class="bi bi-plus-lg" aria-hidden="true"></i> New WHT Type
+      </button>
+    }
+  </div>
+
+  <!-- Create form -->
+  @if (showCreateForm()) {
+    <div class="card mb-3 border-primary" role="form" aria-label="Create WHT type">
+      <div class="card-header fw-semibold">New Withholding Tax Type</div>
+      <div class="card-body">
+        @if (createError()) {
+          <div class="alert alert-danger py-2" role="alert">{{ createError() }}</div>
+        }
+        <div class="row g-3">
+          <div class="col-12 col-md-2">
+            <label class="form-label" for="whtNewCode">Code <span aria-hidden="true">*</span></label>
+            <input id="whtNewCode" type="text" class="form-control form-control-sm"
+                   [ngModel]="newCode()" (ngModelChange)="newCode.set($event)"
+                   placeholder="e.g. WHT-5" maxlength="20" required />
+          </div>
+          <div class="col-12 col-md-4">
+            <label class="form-label" for="whtNewName">Name <span aria-hidden="true">*</span></label>
+            <input id="whtNewName" type="text" class="form-control form-control-sm"
+                   [ngModel]="newName()" (ngModelChange)="newName.set($event)"
+                   placeholder="e.g. WHT on Professional Fees" maxlength="100" required />
+          </div>
+          <div class="col-12 col-md-3">
+            <label class="form-label" for="whtNewKind">Kind <span aria-hidden="true">*</span></label>
+            <select id="whtNewKind" class="form-select form-select-sm"
+                    [ngModel]="newKind()" (ngModelChange)="newKind.set($event)">
+              <option value="WHT_ON_PAYMENT">On Payment (we withhold from supplier)</option>
+              <option value="WHT_ON_RECEIPT">On Receipt (customer withholds from us)</option>
+            </select>
+          </div>
+          <div class="col-12 col-md-2">
+            <label class="form-label" for="whtNewRate">Rate % <span aria-hidden="true">*</span></label>
+            <input id="whtNewRate" type="number" class="form-control form-control-sm"
+                   [ngModel]="newRate()" (ngModelChange)="newRate.set($event)"
+                   min="0" max="100" step="0.01" placeholder="5.00" required />
+          </div>
+        </div>
+      </div>
+      <div class="card-footer d-flex gap-2">
+        <button type="button" class="btn btn-primary btn-sm"
+                (click)="submitCreate()" [disabled]="creating()">
+          @if (creating()) {
+            <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+          }
+          Save
+        </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm"
+                (click)="cancelCreate()">Cancel</button>
+      </div>
+    </div>
+  }
+
+  <!-- States -->
+  @if (state() === 'loading') {
+    <div class="text-center py-5" aria-busy="true" aria-label="Loading WHT types">
+      <span class="spinner-border text-primary" role="status"></span>
+    </div>
+  } @else if (state() === 'forbidden') {
+    <div class="alert alert-warning" role="alert">You do not have permission to view WHT types (WHT.VIEW).</div>
+  } @else if (state() === 'error') {
+    <div class="alert alert-danger d-flex align-items-center gap-2" role="alert">
+      <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+      Failed to load WHT types.
+      <button type="button" class="btn btn-sm btn-outline-danger ms-auto" (click)="load()">Retry</button>
+    </div>
+  } @else if (isEmpty()) {
+    <div class="alert alert-info" role="status">No WHT types found. Create one to get started.</div>
+  } @else {
+
+    @if (editError()) {
+      <div class="alert alert-danger py-2 mb-3" role="alert">{{ editError() }}</div>
+    }
+
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle">
+        <caption class="visually-hidden">Withholding tax types</caption>
+        <thead class="table-light">
+          <tr>
+            <th scope="col">Code</th>
+            <th scope="col">Name</th>
+            <th scope="col">Kind</th>
+            <th scope="col" class="text-end">Rate %</th>
+            <th scope="col">Active</th>
+            @if (canManage()) {
+              <th scope="col"><span class="visually-hidden">Actions</span></th>
+            }
+          </tr>
+        </thead>
+        <tbody>
+          @for (wht of rows(); track wht.uid) {
+            <tr>
+              <td class="font-monospace">{{ wht.code }}</td>
+
+              @if (editingUid() === wht.uid) {
+                <!-- Edit mode -->
+                <td>
+                  <label [for]="'editName-' + wht.uid" class="visually-hidden">Name</label>
+                  <input [id]="'editName-' + wht.uid" type="text" class="form-control form-control-sm"
+                         [ngModel]="editName()" (ngModelChange)="editName.set($event)"
+                         maxlength="100" required />
+                </td>
+                <td>
+                  <span class="badge" [class]="kindBadgeClass(wht.kind)">{{ kindLabel(wht.kind) }}</span>
+                </td>
+                <td class="text-end">
+                  <label [for]="'editRate-' + wht.uid" class="visually-hidden">Rate %</label>
+                  <input [id]="'editRate-' + wht.uid" type="number" class="form-control form-control-sm text-end"
+                         [ngModel]="editRate()" (ngModelChange)="editRate.set($event)"
+                         min="0" max="100" step="0.01" style="width:6rem" />
+                </td>
+                <td>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox"
+                           [id]="'editActive-' + wht.uid"
+                           [ngModel]="editActive()" (ngModelChange)="editActive.set($event)" />
+                    <label class="form-check-label" [for]="'editActive-' + wht.uid">Active</label>
+                  </div>
+                </td>
+                <td class="d-flex gap-1">
+                  <button type="button" class="btn btn-primary btn-sm"
+                          [disabled]="saving()"
+                          (click)="saveEdit(wht)"
+                          aria-label="Save changes">
+                    @if (saving()) {
+                      <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                    } @else {
+                      <i class="bi bi-check-lg" aria-hidden="true"></i>
+                    }
+                  </button>
+                  <button type="button" class="btn btn-outline-secondary btn-sm"
+                          (click)="cancelEdit()"
+                          aria-label="Cancel edit">
+                    <i class="bi bi-x-lg" aria-hidden="true"></i>
+                  </button>
+                </td>
+              } @else {
+                <!-- View mode -->
+                <td>{{ wht.name }}</td>
+                <td>
+                  <span class="badge" [class]="kindBadgeClass(wht.kind)">{{ kindLabel(wht.kind) }}</span>
+                </td>
+                <td class="text-end font-monospace">{{ fmtRate(wht.ratePct) }}%</td>
+                <td>
+                  @if (wht.active) {
+                    <i class="bi bi-check-circle-fill text-success" aria-label="Active"></i>
+                  } @else {
+                    <span class="badge text-bg-secondary">Inactive</span>
+                  }
+                </td>
+                @if (canManage()) {
+                  <td class="d-flex gap-1">
+                    <button type="button" class="btn btn-outline-secondary btn-sm"
+                            (click)="startEdit(wht)"
+                            [attr.aria-label]="'Edit ' + wht.name">
+                      <i class="bi bi-pencil" aria-hidden="true"></i>
+                    </button>
+                    @if (wht.active) {
+                      <button type="button" class="btn btn-outline-danger btn-sm"
+                              [disabled]="deactivatingUid() === wht.uid"
+                              (click)="deactivate(wht)"
+                              [attr.aria-label]="'Deactivate ' + wht.name">
+                        @if (deactivatingUid() === wht.uid) {
+                          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                        } @else {
+                          <i class="bi bi-slash-circle" aria-hidden="true"></i>
+                        }
+                      </button>
+                    }
+                  </td>
+                }
+              }
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</section>

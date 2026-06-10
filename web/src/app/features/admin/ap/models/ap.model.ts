@@ -196,6 +196,13 @@ export interface PaymentRunRequest {
   tenderType: string;
   bankReference?: string | null;
   billUids?: string[];
+  /**
+   * Optional WHT_ON_PAYMENT capture (ADR-0017 D-9).
+   * When set, the cash CR is reduced by whtAmount and a WHT payable leg is posted.
+   */
+  whtTypeUid?: string | null;
+  /** Send as string. */
+  whtAmount?: string | null;
 }
 
 // ── Debit note ────────────────────────────────────────────────────────────────
