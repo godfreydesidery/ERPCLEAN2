@@ -43,7 +43,9 @@ public class GlConfigServiceImpl implements GlConfigService {
             Map.entry(GlConfigKey.VAT_INPUT,           "1400"),
             Map.entry(GlConfigKey.VAT_DUE,             "2300"),
             Map.entry(GlConfigKey.WHT_PAYABLE,         "2400"),
-            Map.entry(GlConfigKey.WHT_RECEIVABLE,      "1500")
+            Map.entry(GlConfigKey.WHT_RECEIVABLE,      "1500"),
+            // Year-End Close increment (ADR-0019 D-9) — 3900 is in the V10 CoA default seed
+            Map.entry(GlConfigKey.RETAINED_EARNINGS,   "3900")
     );
 
     private final GlConfigRepository configs;

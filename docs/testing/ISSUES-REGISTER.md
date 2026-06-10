@@ -132,3 +132,15 @@ Found by a multi-agent adversarial review of the Financial Reporting increment (
 - P&L self-check doesn't detect entries posted to the *wrong account type* (e.g. crediting 3100 instead of 4100) — would need an EQUITY/ASSET/LIABILITY-movement-in-P&L-period alarm. Manifests only on a mis-posting/corruption.
 - `IncomeStatementBuilder.presentedAmount` trusts `ChartOfAccount.normalBalance` without re-asserting the type↔normal-balance invariant (enforced at write by `ChartOfAccountService`). Manifests only on DB corruption.
 *(Recorded for a future hardening pass; both require data already violating a GL write-path invariant to bite.)*
+
+## Finding #14 — Year-End Close (ADR-0019) adversarial review batch (2026-06-10)
+
+Found by a multi-agent adversarial review of the Year-End Close increment (3 dimensions → verify each: 1 confirmed / 3 refuted). The 3 refuted were break-even / mid-year-opened-account false alarms the verifiers correctly dismissed against the spec — the closing-entry math is sound.
+
+| # | Sev | Status | Area | Issue | Evidence |
+|---|-----|--------|------|-------|----------|
+| 14 | HIGH | **FIXED** | gl / YearEndClose × GLPostingService | A P&L account **deactivated while it still carries a current-year balance** (which BR-GL-07 explicitly permits — "deactivate instead of delete") makes the year-end closing journal try to post a zeroing line to an inactive account → `GLPostingService` rejects it (BR-GL-04 "inactive; cannot post to it") → the **entire year-close fails and rolls back**, leaving the year unclosable. Reachable via `ChartOfAccountService.deactivate`. | Adversarial review (reopen-guards dimension). |
+
+**FIXED** (branch `feat/year-end-close`): the reviewer's first-cut fix (skip inactive P&L accounts in the close query) was **rejected as accounting-wrong** — it would strand a real balance on the P&L and miscompute the retained-earnings roll. Correct fix: **`YEAR_END_CLOSE` is the one `JournalSourceType` permitted to post to an INACTIVE account** (it must be able to *clear* a deactivated account that still holds a balance — consistent with BR-GL-07). `GLPostingServiceImpl.validateLine` gained an `allowInactiveAccount` flag set only when `draft.sourceType() == YEAR_END_CLOSE` (the closing journal + its reopen reversal); **BR-GL-04 stays enforced for every other source type**. Regression: `YearEndCloseServiceIT.closeFiscalYear_zeroesInactivePlAccount_afterDeactivation` (deactivate a P&L account with a live balance → close still succeeds + zeroes it). Full suite green.
+
+**Refuted (correctly — no defect):** break-even closing entry omits the 3900 line (spec D-4 permits it; the P&L zeroing lines balance among themselves); the `draftLines>=2` guard at break-even (handled per spec); mid-year-opened zero-movement account skipped (correct — balance-driven, OQ-CLOSE-05).

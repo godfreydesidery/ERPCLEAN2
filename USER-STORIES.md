@@ -1402,3 +1402,101 @@ report.
   (no new business tables) and granted to `ORG_ADMIN` (FR-REP-08; flagged for ADR-0018).
 - **AC5** Given Reporting performs **no mutation**, then there is **no post/close/adjust to audit**; read
   access to sensitive statements is logged per the platform read-access policy (NFR-REP-05).
+
+## Year-End Close — freeze the year, reset P&L, roll profit into retained earnings
+
+Requirements: [docs/requirements/year-end-close.md](docs/requirements/year-end-close.md). Status: **RATIFIED
+2026-06-10** — the **LAST Tier-1 finance piece** (PATH-TO-FULL-ERP Phase A "year-end close automation +
+closed-period policy"; ROADMAP GL depth; closes gl.md OQ-GL-03). A **GL-depth operation** (inside
+`com.erp.modules.gl`, **no new module**): close a fiscal year (auto-close its periods + post one balanced
+**closing entry** dated at the year's `end_date` — DR each INCOME account / CR each EXPENSE account, **net
+profit/loss direct to 3900 Retained Earnings**, **no Income Summary** — + mark the year **CLOSED**), and
+**reopen** a closed year (post the **reversal** of the closing journal, flip the year + periods back to OPEN,
+re-closeable — append-only, never an edit/delete). Drives the shipped `GLPostingService` (synchronous,
+balanced) + `FiscalCalendarService` (period close/reopen) + the period-status posting gate. Adds a
+**RETAINED_EARNINGS** `gl_config` key → 3900 + a **YEAR_END_CLOSE** source type (the small **V16** migration).
+Gated by a distinct **`GL.YEAR.CLOSE`** permission (close + reopen, sensitive — separate from
+`GL.PERIOD.CLOSE`); per-company; audited. The close↔reporting consistency is **automatic** — the closed year's
+P&L nets to zero, the rolled earnings sit in posted 3900, the inception-to-date equity fold covers only the
+open year → the Balance Sheet keeps balancing with **no double-count** and **Reporting needs no change**
+(ADR-0018 D-6). Base currency, double-entry, append-only — all GL invariants hold.
+
+### US-CLOSE-01 — Close a fiscal year and see the P&L reset + retained earnings rise
+**As a** financial controller **I want** to close a fiscal year in one action — auto-closing its periods,
+posting the closing entry, and freezing the year **so that** the year's profit rolls into retained earnings,
+the P&L starts the new year at zero, and the closed year's figures are locked.
+- **AC1** Given `GL.YEAR.CLOSE`, an active company, an **OPEN** fiscal year **with periods**, and the
+  **immediately prior year CLOSED**, when I close the year, then the system **(a)** auto-CLOSES any still-OPEN
+  periods within it, **(b)** posts **one balanced closing journal** dated at the year's `end_date` (source
+  YEAR_END_CLOSE), and **(c)** marks the **fiscal year CLOSED** — one end-to-end, atomic operation
+  (FR-CLOSE-01, BR-CLOSE-06).
+- **AC2** Given the closing journal, then it **DEBITS each INCOME account** by its year balance and **CREDITS
+  each EXPENSE account** by its year balance, with the **net profit/loss to 3900 Retained Earnings** (CR 3900
+  for a net profit, DR 3900 for a net loss) — **no Income Summary** account (FR-CLOSE-02, BR-CLOSE-01/02).
+- **AC3** **(Reconciliation bar — P&L reset)** Given the close, then **every INCOME and EXPENSE account's
+  year-end balance == 0** afterward (the P&L reset for the new year) (BR-CLOSE-01).
+- **AC4** **(Reconciliation bar — the roll)** Given the close, then the **Σ rolled to 3900 == the year's net
+  profit/loss** (Σ INCOME − Σ EXPENSE), and the closing journal is **balanced** (Σ debits == Σ credits)
+  (BR-CLOSE-02/03, BR-GL-01).
+- **AC5** **(Reconciliation bar — the Balance Sheet still balances)** Given the year is closed, then the
+  Reporting **Balance Sheet still balances** (ASSET == LIABILITY + EQUITY) with **no double-count** — the closed
+  year's P&L nets to zero, the rolled net sits in posted 3900, the inception-to-date equity fold covers only the
+  still-open year — and **Reporting needs no change** (BR-CLOSE-12, reporting.md BR-REP-02/05).
+- **AC6** Given the year is closed, then **all** posting into it is **blocked** (its periods are CLOSED — the
+  existing gate); the close is **audited** with the closing-journal uid + the net rolled (BR-CLOSE-09,
+  NFR-CLOSE-03).
+
+### US-CLOSE-02 — Reopen a closed year for a late adjustment and re-close
+**As a** financial controller **I want** to reopen a closed fiscal year, post a late adjustment, and re-close
+it **so that** I can correct the year without ever editing a posted closing journal.
+- **AC1** Given `GL.YEAR.CLOSE` and a **CLOSED** fiscal year that is the **most-recently-closed**, when I reopen
+  it, then the system posts the **reversal of the closing journal** (a NEW reversing entry — restoring every P&L
+  account's balance + backing out the 3900 roll) and flips the **year and its periods back to OPEN**
+  (FR-CLOSE-04, BR-CLOSE-06/07).
+- **AC2** **(Append-only)** Given the reopen, then the original closing journal is **never edited or deleted** —
+  the reopen is a new reversing entry; the closing entry and its reversal both stand on the books
+  (BR-CLOSE-08, BR-GL-02).
+- **AC3** **(Reconciliation bar — restore)** Given the reopen, then **every P&L account's balance is restored to
+  exactly its pre-close value** and 3900's roll is **backed out** (the reversal swaps the closing entry's debits
+  and credits) (BR-CLOSE-07, BR-GL-11).
+- **AC4** Given the year is OPEN again, when I post the **adjusting journal(s)** (the normal `GL.POST` path) and
+  then **re-close** the year, then a **fresh** closing entry posts the **corrected** net to 3900; the original
+  closing entry, its reversal, the adjustment, and the re-close all stand on the books (FR-CLOSE-05,
+  BR-CLOSE-08).
+- **AC5** Given I attempt to reopen a year that is **not the most-recently-closed**, then it is **rejected**
+  ("only the most-recently-closed year may be reopened") — I reopen the later year(s) first (BR-CLOSE-10).
+- **AC6** Given the reopen, then it is **audited** with the reversal-journal uid (NFR-CLOSE-03).
+
+### US-CLOSE-03 — View a year's close status and the closing journal
+**As an** owner or accountant **I want** to see whether a year is closed, the net rolled to retained earnings,
+and the closing journal **so that** I can confirm the close and trace it to the postings.
+- **AC1** Given `GL.VIEW` and a fiscal year, when I view its close status, then I see whether it is **OPEN /
+  CLOSED**, who closed it and when (`closed_at` / `closed_by`), and the **net profit/loss rolled** to 3900
+  (FR-CLOSE-06).
+- **AC2** Given a CLOSED year, then I can view the **closing journal** (its `JB-####` batch + lines — DR INCOME
+  / CR EXPENSE / the 3900 roll) (FR-CLOSE-06).
+- **AC3** **(Trace bar)** Given a P&L account, when I drill into its **account ledger** (Reporting's drill-down),
+  then I see the **closing line** that brought its year balance to **zero** — every closing figure traces to the
+  posting (BR-CLOSE-13, reporting.md BR-REP-06).
+- **AC4** Given any read, then it returns **only my company's** close status / journal (`assertCanActIn`);
+  cross-company never appears (BR-CLOSE-14, NFR-CLOSE-01).
+
+### US-CLOSE-04 — Close blocked when the prior year is still open (the sequencing guards)
+**As a** financial controller **I want** the close to refuse out-of-sequence or invalid closes **so that** the
+retained-earnings roll stays sequential and the prior year's figures are frozen first.
+- **AC1** Given the **immediately prior** fiscal year is **still OPEN**, when I try to close this year, then it
+  is **rejected** ("prior fiscal year must be closed first"); nothing is posted or changed (FR-CLOSE-03,
+  BR-CLOSE-04).
+- **AC2** Given the year is **already CLOSED**, when I try to close it again, then it is **rejected** ("fiscal
+  year already closed") — the correction path is **reopen then re-close** (BR-CLOSE-05, US-CLOSE-02).
+- **AC3** Given the year has **no periods**, when I try to close it, then it is **rejected** ("fiscal year has
+  no periods") — the calendar must be seeded first (BR-CLOSE-05).
+- **AC4** Given the `RETAINED_EARNINGS` `gl_config` is **unmapped** or maps to an **inactive** account, when I
+  close, then the close **fails** rather than mis-posting; finance sets the mapping (`GL.MANAGE`) and retries
+  (BR-GL-10, BR-CLOSE-11).
+- **AC5** Given a user **without** `GL.YEAR.CLOSE`, when they attempt a close or a reopen, then it is **refused**
+  by RBAC — `GL.YEAR.CLOSE` is a **distinct, sensitive** permission, separate from `GL.PERIOD.CLOSE`
+  (FR-CLOSE-08).
+- **AC6** Given the slice ships, then `GL.YEAR.CLOSE` + the `RETAINED_EARNINGS` config + the YEAR_END_CLOSE
+  source type are seeded via the small **V16** migration (additive — V1–V15 frozen) (FR-CLOSE-07/08,
+  BR-CLOSE-11).
