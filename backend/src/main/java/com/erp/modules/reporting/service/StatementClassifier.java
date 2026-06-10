@@ -10,10 +10,10 @@ import org.springframework.stereotype.Component;
  *
  * <p>Exact bands (OQ-REP-01 default, finance-reviewable — code change, no migration):
  * <pre>
- * ASSET    1000–1499  → CURRENT_ASSETS
- * ASSET    1500–1999  → NON_CURRENT_ASSETS
+ * ASSET    1000–1599  → CURRENT_ASSETS      (incl. VAT/WHT control 1400/1500 — working capital, D-7)
+ * ASSET    1600–1999  → NON_CURRENT_ASSETS  (true fixed/long-term assets; none seeded yet)
  * ASSET    other      → CURRENT_ASSETS (type default)
- * LIABILITY 2000–2499 → CURRENT_LIABILITIES
+ * LIABILITY 2000–2499 → CURRENT_LIABILITIES (incl. VAT/WHT control 2200/2300/2400)
  * LIABILITY 2500–2999 → NON_CURRENT_LIABILITIES
  * LIABILITY other     → CURRENT_LIABILITIES (type default)
  * EQUITY   any 3xxx   → EQUITY
@@ -21,6 +21,11 @@ import org.springframework.stereotype.Component;
  * EXPENSE  5100–5199  → COST_OF_SALES  (5100 COGS + 5150 Purchases)
  * EXPENSE  other      → OPERATING_EXPENSES
  * </pre>
+ *
+ * <p>The non-current asset band starts at 1600 (not 1500) so the VAT/WHT control accounts
+ * (1400 VAT Input, 1500 WHT Receivable) — short-term working-capital items recovered within the
+ * cycle, per ADR-0018 D-7 / OQ-REP-02 — present as CURRENT_ASSETS on the Balance Sheet and OPERATING
+ * on the Cash-Flow, consistent across both statements.
  */
 @Component
 public class StatementClassifier {
@@ -41,8 +46,8 @@ public class StatementClassifier {
         int code = parseLeadingCode(accountCode);
         return switch (type) {
             case ASSET -> {
-                if (code >= 1000 && code <= 1499) yield StatementSection.OPERATING; // current operating assets
-                if (code >= 1500 && code <= 1999) yield StatementSection.INVESTING;
+                if (code >= 1000 && code <= 1599) yield StatementSection.OPERATING; // current working-capital assets (incl. 1400/1500)
+                if (code >= 1600 && code <= 1999) yield StatementSection.INVESTING;  // non-current/fixed assets
                 yield StatementSection.OPERATING; // default
             }
             case LIABILITY -> {
@@ -58,8 +63,8 @@ public class StatementClassifier {
     // -------------------------------------------------------------------------
 
     private StatementSection classifyAsset(int code) {
-        if (code >= 1000 && code <= 1499) return StatementSection.CURRENT_ASSETS;
-        if (code >= 1500 && code <= 1999) return StatementSection.NON_CURRENT_ASSETS;
+        if (code >= 1000 && code <= 1599) return StatementSection.CURRENT_ASSETS;   // incl. VAT/WHT control 1400/1500
+        if (code >= 1600 && code <= 1999) return StatementSection.NON_CURRENT_ASSETS;
         return StatementSection.CURRENT_ASSETS; // out-of-band default (BR-REP-07)
     }
 

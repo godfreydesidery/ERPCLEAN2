@@ -17,29 +17,52 @@ public class CsvStatementRenderer {
     public byte[] render(StatementRenderModel model) {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         try (PrintWriter w = new PrintWriter(new OutputStreamWriter(baos, StandardCharsets.UTF_8))) {
-            w.println(csvRow(model.title(), "", ""));
-            w.println(csvRow(model.companyName(), "", ""));
-            w.println(csvRow(model.periodLabel(), model.comparativeLabel() != null ? model.comparativeLabel() : "", ""));
-            w.println(csvRow("Generated", model.generatedAt(), ""));
+            w.println(line(text(model.title())));
+            w.println(line(text(model.companyName())));
+            w.println(line(text(model.periodLabel()),
+                            text(model.comparativeLabel() != null ? model.comparativeLabel() : "")));
+            w.println(line(text("Generated"), text(model.generatedAt())));
             w.println();
-            w.println(csvRow("Description", "Current", "Comparative"));
+            w.println(line(text("Description"), text("Current"), text("Comparative")));
             for (Row row : model.rows()) {
-                w.println(csvRow(
-                        escape(row.label()),
-                        fmtAmount(row.current()),
-                        fmtAmount(row.comparative())));
+                // Labels may be user-controlled (account/company names) → formula-guarded text;
+                // amounts are BigDecimal numerics → plain CSV-escape only (don't mangle negatives).
+                w.println(line(text(row.label()),
+                               escape(fmtAmount(row.current())),
+                               escape(fmtAmount(row.comparative()))));
             }
         }
         return baos.toByteArray();
     }
 
-    private String csvRow(String a, String b, String c) {
-        return escape(a) + "," + escape(b) + "," + escape(c);
+    /** Join already-escaped cells into one CSV record. */
+    private String line(String... cells) {
+        return String.join(",", cells);
+    }
+
+    /** A user/text cell: neutralise CSV formula injection, then CSV-escape. */
+    private String text(String val) {
+        return escape(formulaGuard(val));
+    }
+
+    /**
+     * Neutralise CSV/Excel formula injection: a cell starting with = + - @ (or TAB/CR) is treated as
+     * a formula by spreadsheet apps. Prefix a single quote so it is rendered as literal text. Applied
+     * to text cells only (labels/headers, which may carry user-controlled account/company names);
+     * numeric amounts are not guarded so negative values keep their leading '-'.
+     */
+    private String formulaGuard(String val) {
+        if (val == null || val.isEmpty()) return val;
+        char c0 = val.charAt(0);
+        if (c0 == '=' || c0 == '+' || c0 == '-' || c0 == '@' || c0 == '\t' || c0 == '\r') {
+            return "'" + val;
+        }
+        return val;
     }
 
     private String escape(String val) {
         if (val == null) return "";
-        if (val.contains(",") || val.contains("\"") || val.contains("\n")) {
+        if (val.contains(",") || val.contains("\"") || val.contains("\n") || val.contains("\r")) {
             return "\"" + val.replace("\"", "\"\"") + "\"";
         }
         return val;

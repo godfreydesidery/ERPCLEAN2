@@ -149,10 +149,15 @@ public class ReportingController {
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate fromDate,
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate toDate,
             @RequestParam(defaultValue = "PDF") ExportFormat format) {
-        // Export the full ledger (large page) rather than a screen page.
-        AccountLedgerDto dto = reporting.accountLedger(companyId, accountUid, fromDate, toDate, 0, Integer.MAX_VALUE);
+        // Export a bounded ledger page — NOT Integer.MAX_VALUE, which would materialise a multi-year
+        // ledger (potentially millions of lines) into memory and OOM the app (NFR-REP-02). A single
+        // export is capped at LEDGER_EXPORT_MAX_ROWS; narrow the date range for very long ledgers.
+        AccountLedgerDto dto = reporting.accountLedger(companyId, accountUid, fromDate, toDate, 0, LEDGER_EXPORT_MAX_ROWS);
         return download(exporter.export(flattener.flatten(dto), format));
     }
+
+    /** Bound on a single ledger export to keep memory/response size sane (NFR-REP-02). */
+    private static final int LEDGER_EXPORT_MAX_ROWS = 10_000;
 
     // -------------------------------------------------------------------------
 
