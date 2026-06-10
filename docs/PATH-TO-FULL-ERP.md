@@ -18,26 +18,38 @@ ERPCLEAN2 today is a **working, double-entry accounting system on top of a compl
 
 ## 2. Status snapshot
 
-| # | ERP area | Overall status | Area effort | Note |
-|---|----------|----------------|-------------|------|
-| 1 | **IAM / platform foundation** (org, RBAC, audit, outbox, Money, numbering) | **DONE** | — | Shipped V1/V6; the spine everything reuses |
-| 2 | **Parties** (customers/suppliers/agents/other) | **DONE** | — | Shipped V2; segmentation/contracts are depth items under other areas |
-| 3 | **Products / catalogue** (products, UoM, price lists, barcodes, single-level recipes) | **PARTIAL** | M | Core done; multi-level BOM/versions feed Manufacturing |
-| 4 | **Tier-1 Accounting** (GL / AR / AP / Cash&Bank / VAT / FX / year-end) | **PARTIAL** | XXL | GL/AR/AP/Cash&Bank/**VAT+WHT DONE**; year-end, FX **remaining** |
-| 5 | **Reporting, Financial Statements & BI** | **PARTIAL** | L | TB + AR/AP ageing done; P&L, BS, cash-flow, analytics, export, dashboards remaining |
-| 6 | **Sales / Order-to-Cash depth** | **PARTIAL** | XL | Invoice channel + credit sales done; SO, POS, returns, delivery, pricing depth remaining |
-| 7 | **Procurement / Purchase-to-Pay depth** | **PARTIAL** | XL | PO→GR→bill→3-way-match→pay done; requisitions, RFQ, approvals, landed cost, returns remaining |
-| 8 | **Inventory / Warehouse depth** | **PARTIAL** | L | Qty-only single-location done; **valuation/COGS**, multi-location, counts, batch/serial remaining |
-| 9 | **Manufacturing / Production** | **NOT_STARTED** | XL | Greenfield; gated on multi-level BOM + valuation/COGS |
-| 10 | **HR & Payroll (Tanzania)** | **NOT_STARTED** | XL | Greenfield; posts to GL, cash via Cash&Bank; TZ statutory detail |
-| 11 | **Fixed Assets** | **NOT_STARTED** | L | Greenfield; depreciation runs post to GL; fiscal-period gated |
-| 12 | **CRM** | **NOT_STARTED** | L | Greenfield; reads Parties, feeds Sales Orders |
-| 13 | **Projects / Job Costing** | **NOT_STARTED** | L | Greenfield; project-tags costs/revenue across GL/AR/AP/stock |
-| 14 | **Budgeting & Management Accounting** | **NOT_STARTED** | XL | Greenfield; needs cost-centre dimension framework on GL |
-| 15 | **Cross-cutting platform capabilities** | **PARTIAL** | XL | Outbox/audit/Money done; documents, notifications, import/export, approvals, FX, search remaining |
-| 16 | **Non-functional / production-hardening** | **PARTIAL** | XXL | Audit/RBAC/pagination/migrations solid; logging, secrets, CI/CD, K8s, OpenAPI, a11y, backup remaining |
+**Overall completion ≈ 37%** (effort-weighted) as of 2026-06-10. See the roll-up below the table.
+
+| # | ERP area | Status | Effort·wt | % done | Note |
+|---|----------|--------|-----------|--------|------|
+| 1 | **IAM / platform foundation** (org, RBAC, audit, outbox, Money, numbering) | **DONE** | —·10 | **100%** | Shipped V1/V6; the spine everything reuses |
+| 2 | **Parties** (customers/suppliers/agents/other) | **DONE** | —·3 | **100%** | Shipped V2; segmentation/contracts are depth items under other areas |
+| 3 | **Products / catalogue** (products, UoM, price lists, barcodes, single-level recipes) | **PARTIAL** | M·3 | **75%** | Core done; multi-level BOM/versions feed Manufacturing |
+| 4 | **Tier-1 Accounting** (GL / AR / AP / Cash&Bank / VAT / FX / year-end) | **PARTIAL** | XXL·12 | **90%** | GL/AR/AP/Cash&Bank/**VAT+WHT/Reporting-statements/Year-End DONE**; only **FX remaining** |
+| 5 | **Reporting, Financial Statements & BI** | **PARTIAL** | L·5 | **45%** | TB + AR/AP ageing + **P&L/BS/Cash-Flow/ledger/export DONE**; analytics, dashboards, custom report builder remaining |
+| 6 | **Sales / Order-to-Cash depth** | **PARTIAL** | XL·8 | **30%** | Invoice channel + credit sales done; SO, POS, returns, delivery, pricing depth remaining |
+| 7 | **Procurement / Purchase-to-Pay depth** | **PARTIAL** | XL·8 | **45%** | PO→GR→bill→3-way-match→pay done; requisitions, RFQ, approvals, landed cost, returns remaining |
+| 8 | **Inventory / Warehouse depth** | **PARTIAL** | L·5 | **30%** | Qty-only single-location done; **valuation/COGS** (next, decided), multi-location, counts, batch/serial remaining |
+| 9 | **Manufacturing / Production** | **NOT_STARTED** | XL·8 | **0%** | Greenfield; gated on multi-level BOM + valuation/COGS |
+| 10 | **HR & Payroll (Tanzania)** | **NOT_STARTED** | XL·8 | **0%** | Greenfield; posts to GL, cash via Cash&Bank; TZ statutory detail |
+| 11 | **Fixed Assets** | **NOT_STARTED** | L·5 | **0%** | Greenfield; depreciation runs post to GL; fiscal-period gated |
+| 12 | **CRM** | **NOT_STARTED** | L·5 | **0%** | Greenfield; reads Parties, feeds Sales Orders |
+| 13 | **Projects / Job Costing** | **NOT_STARTED** | L·5 | **0%** | Greenfield; project-tags costs/revenue across GL/AR/AP/stock |
+| 14 | **Budgeting & Management Accounting** | **NOT_STARTED** | XL·8 | **0%** | Greenfield; needs cost-centre dimension framework on GL |
+| 15 | **Cross-cutting platform capabilities** | **PARTIAL** | XL·8 | **35%** | Outbox/audit/Money done; documents/PDF, notifications, import/export, approvals, FX, search remaining |
+| 16 | **Non-functional / production-hardening** | **PARTIAL** | XXL·12 | **30%** | Audit/RBAC/pagination/migrations solid; logging, secrets, CI/CD, K8s, OpenAPI, a11y, backup/DR remaining |
 
 *(Areas 1–2 fold into "shipped core"; the backlog below details areas 3–16.)*
+
+### Completion roll-up (recompute when an area's % changes)
+
+**Method:** effort-weight per area (`M·3 · L·5 · XL·8 · XXL·12`; IAM foundation ·10), then `Σ(weight × %) ÷ Σweight`. Total weight = **113**; weighted-done ≈ **42** → **≈ 37% complete** (effort-weighted).
+
+**Two lenses:**
+- **By raw remaining effort: ≈37%** — the long tail is large (six greenfield modules at 0% + a full production-hardening pass).
+- **By value / risk-retired: ≈50%** — the hardest, highest-risk spine (the double-entry **financial core** GL/AR/AP/Cash/VAT/statements/year-end + the **trading core** sales/purchases/stock) is **done**; what remains is mostly *additive modules on a proven platform*, not foundational risk.
+
+**How to keep this honest:** when an increment lands, bump that area's **% done** in the table and re-run the method above (it's just a weighted average — no tooling needed). E.g. when Inventory valuation/COGS ships, area 8 goes 30% → ~70% (+~2 points overall ≈ 39%).
 
 ---
 
