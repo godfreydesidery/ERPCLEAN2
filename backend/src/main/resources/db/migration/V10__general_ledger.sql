@@ -392,7 +392,10 @@ ON CONFLICT (fiscal_year_id, period_no) DO NOTHING;
 -- ============================================================================
 INSERT INTO gl_configs (uid, company_id, config_key, account_id, version, created_at)
 SELECT
-    'GCSD' || lpad(coa.company_id::text, 8, '0') || m.config_key AS uid,
+    -- <=26-char uid: prefix + 6-digit company + 12-hex md5(key). Concatenating the raw
+    -- config_key overflowed uid VARCHAR(26) for long keys (e.g. ACCOUNTS_RECEIVABLE) when this
+    -- seed runs on a DB that already has companies (keep-data upgrade) -- ISSUES-REGISTER #12.
+    'GC' || lpad(coa.company_id::text, 6, '0') || substr(md5(m.config_key), 1, 12) AS uid,
     coa.company_id,
     m.config_key,
     coa.id,

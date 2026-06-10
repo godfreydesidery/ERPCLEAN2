@@ -268,7 +268,9 @@ ALTER TABLE gl_configs
 -- Seed BAD_DEBT_EXPENSE → 5500 and OPENING_BALANCE_EQUITY → 3100 per company.
 INSERT INTO gl_configs (uid, company_id, config_key, account_id, version, created_at)
 SELECT
-    'ARCD' || lpad(coa.company_id::text, 8, '0') || m.config_key AS uid,
+    -- <=26-char uid (ISSUES-REGISTER #12): raw config_key (e.g. OPENING_BALANCE_EQUITY) overflowed
+    -- uid VARCHAR(26) when seeding a DB that already has companies. md5(key) keeps it bounded.
+    'ARC' || lpad(coa.company_id::text, 6, '0') || substr(md5(m.config_key), 1, 12) AS uid,
     coa.company_id,
     m.config_key,
     coa.id,
