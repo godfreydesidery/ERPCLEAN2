@@ -23,5 +23,7 @@ public enum GlConfigKey {
     VAT_INPUT,
     VAT_DUE,
     WHT_PAYABLE,
-    WHT_RECEIVABLE
+    WHT_RECEIVABLE,
+    // --- Year-End Close increment (ADR-0019 D-9) ---
+    RETAINED_EARNINGS
 }

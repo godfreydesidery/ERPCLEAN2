@@ -45,6 +45,19 @@ public class FiscalYear extends UidEntity {
     @Setter
     private PeriodStatus status = PeriodStatus.OPEN;
 
+    // Year-end close fields (ADR-0019 D-7, V16 additive columns)
+    @Column(name = "closed_at")
+    @Setter
+    private Instant closedAt;
+
+    @Column(name = "closed_by")
+    @Setter
+    private Long closedBy;
+
+    @Column(name = "closing_journal_uid", length = 26)
+    @Setter
+    private String closingJournalUid;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

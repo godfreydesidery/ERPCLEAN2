@@ -16,6 +16,7 @@ import com.erp.modules.tax.repository.WhtTransactionRepository;
 import com.erp.modules.tax.repository.WhtTypeRepository;
 import com.erp.modules.gl.repository.ChartOfAccountRepository;
 import com.erp.modules.gl.repository.FiscalPeriodRepository;
+import com.erp.modules.gl.repository.FiscalYearRepository;
 import com.erp.modules.gl.repository.GlConfigRepository;
 import com.erp.modules.gl.repository.JournalEntryRepository;
 import com.erp.modules.iam.repository.BranchRepository;
@@ -79,6 +80,7 @@ public class ScopeGuard {
     // GL repositories (ADR-0013 D-10)
     private final ChartOfAccountRepository glAccounts;
     private final FiscalPeriodRepository   fiscalPeriods;
+    private final FiscalYearRepository     fiscalYears;
     private final JournalEntryRepository   journalEntries;
     private final GlConfigRepository       glConfigs;
     // AR repositories (ADR-0014 D-12)
@@ -119,6 +121,7 @@ public class ScopeGuard {
                       RouteRepository routes,
                       ChartOfAccountRepository glAccounts,
                       FiscalPeriodRepository fiscalPeriods,
+                      FiscalYearRepository fiscalYears,
                       JournalEntryRepository journalEntries,
                       GlConfigRepository glConfigs,
                       ArInvoiceRepository arInvoices,
@@ -154,6 +157,7 @@ public class ScopeGuard {
         this.routes         = routes;
         this.glAccounts     = glAccounts;
         this.fiscalPeriods  = fiscalPeriods;
+        this.fiscalYears    = fiscalYears;
         this.journalEntries = journalEntries;
         this.glConfigs      = glConfigs;
         this.arInvoices     = arInvoices;
@@ -202,9 +206,10 @@ public class ScopeGuard {
             case "goodsreceipt"   -> goodsReceipts.findCompanyIdByUid(uid);
             // Routes target type (ADR-0012 D-9)
             case "route"          -> routes.findCompanyIdByUid(uid);
-            // GL target types (ADR-0013 D-10)
+            // GL target types (ADR-0013 D-10 + ADR-0019 D-1)
             case "account"        -> glAccounts.findCompanyIdByUid(uid);
             case "fiscalperiod"   -> fiscalPeriods.findCompanyIdByUid(uid);
+            case "fiscalyear"     -> fiscalYears.findCompanyIdByUid(uid);
             case "journalentry"   -> journalEntries.findCompanyIdByUid(uid);
             case "glconfig"       -> glConfigs.findCompanyIdByUid(uid);
             // AR target types (ADR-0014 D-12)

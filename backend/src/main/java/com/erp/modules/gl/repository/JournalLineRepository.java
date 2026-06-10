@@ -2,6 +2,7 @@ package com.erp.modules.gl.repository;
 
 import com.erp.modules.gl.domain.entity.JournalLine;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -63,4 +64,25 @@ public interface JournalLineRepository extends JpaRepository<JournalLine, Long> 
               AND l.accountId = :accountId
             """)
     BigDecimal accountBalance(@Param("companyId") Long companyId, @Param("accountId") Long accountId);
+
+    /**
+     * Period-windowed aggregate for Year-End Close (ADR-0019 D-3):
+     * returns [accountId, sumDebit, sumCredit] for every account that has movement in
+     * [fromDate, toDate] for the given company.  Used by YearEndCloseServiceImpl to compute
+     * each P&L account's year balance without depending on the reporting module.
+     * Hits ix_journal_entries_company_date (date window) + ix_journal_lines_company_account (group).
+     */
+    @Query("""
+            SELECT l.accountId,
+                   SUM(l.debitAmount)  AS sumDebit,
+                   SUM(l.creditAmount) AS sumCredit
+            FROM   JournalLine l
+            JOIN   JournalEntry e ON e.id = l.entryId
+            WHERE  l.companyId  = :companyId
+              AND  e.postingDate BETWEEN :fromDate AND :toDate
+            GROUP  BY l.accountId
+            """)
+    List<Object[]> periodMovementByAccount(@Param("companyId") Long companyId,
+                                            @Param("fromDate")  LocalDate fromDate,
+                                            @Param("toDate")    LocalDate toDate);
 }
