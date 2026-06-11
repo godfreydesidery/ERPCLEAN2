@@ -1,12 +1,14 @@
-# 0024 — Notifications data model: a cross-cutting `com.erp.modules.notifications` module — in-app + email alerts driven by the transactional outbox (a new `NotificationDispatcher` consumer) plus a `@Scheduled` scanner for time-based triggers (invoice-overdue / low-stock), a seeded notification-type catalogue with permission-based audience rules, per-user preferences (mute / per-channel), and an append-only delivery log; additive as `V25__notifications.sql` + `V26__notification_triggers.sql` (V1–V19 frozen), a new `NotificationDispatcher implements DomainEventHandler`, two new `PAYMENT.RECEIVED` / `APPROVAL.PENDING` trigger event types, and a one-line `outbox.publish` touch-point in AR receipt recording
+# 0024 — Notifications data model: a cross-cutting `com.erp.modules.notifications` module — in-app + email alerts driven by the transactional outbox (a new `NotificationDispatcher` consumer) plus a `@Scheduled` scanner for time-based triggers (invoice-overdue / low-stock), a seeded notification-type catalogue with permission-based audience rules, per-user preferences (mute / per-channel), and an append-only delivery log; additive as `V25__notifications.sql` + `V26__notification_triggers.sql` (V1–V19 frozen), a new `NotificationDispatcher implements DomainEventHandler`, one new `PAYMENT.RECEIVED` trigger event type (+ consumption of the existing `APPROVAL.SUBMITTED` emitted by approvals/ADR-0022), and a one-line `outbox.publish` touch-point in AR receipt recording
+
+> **Amended 2026-06-11 (Wave-2 collision resolution):** the original title declared **two** new trigger event types `PAYMENT.RECEIVED` + `APPROVAL.PENDING`. Per the Wave-2 coordination plan (`wave2-build-coordination.md` collision #2), `APPROVAL.PENDING` was a name collision — the approvals engine (ADR-0022 D-10) emits **`APPROVAL.SUBMITTED`** (at submit, explicitly "for Notifications later") and `APPROVAL.RESOLVED`; it never emits `APPROVAL.PENDING`. Notifications now **consumes the existing `APPROVAL.SUBMITTED`** (no producer change). So this increment adds exactly **one** new `DomainEventType` constant (`PAYMENT.RECEIVED`, from AR). See the amendment notes in D-4 / D-8 / D-14.
 
 - **Status:** Accepted
 - **Date:** 2026-06-11
 - **Deciders:** solutions-architect (architect-authored requirements 2026-06-11 — notifications.md FR-NOTIF-01..14, BR-NOTIF-01..14, NFR-NOTIF-01..09, §3 behaviour, §7 flows, §11 OQ log; the recommended defaults are adopted, the eight OQs are this ADR's decisions / owner-confirmable seed data, none blocks the build).
 - **Context source:** [docs/requirements/notifications.md](../requirements/notifications.md) (the business spec — the ground truth for every rule below). [docs/PATH-TO-FULL-ERP.md](../PATH-TO-FULL-ERP.md) §3.12 (area 15 cross-cutting — "Email / SMS notifications" + "In-app notifications / user alerts", the X.2 enabler) + §4.6 (notifications as a cross-cutting enabler many modules want). Verified against the **shipped** code:
-  - **Transactional outbox** ([ADR-0009](0009-transactional-outbox.md) / V6): `OutboxPublisher.publish(eventType, aggregateType, aggregateId, aggregateUid, companyId, branchId, payload)` (in the caller's TX, serialises payload → JSONB); `DomainEventHandler` (`String eventType()` + `void handle(DomainEvent)`, auto-discovered, invoked per matching event in the dispatcher's per-event TX); `DomainEvent` (carries `uid`, `eventType`, `aggregateType`, `aggregateId`, `aggregateUid`, `companyId`, `branchId`, `payload` JSONB — **the consumer establishes context from `companyId`/`branchId` on the event alone, no JWT**); `IdempotencyGuard.alreadyProcessed(consumer, eventUid)` / `markProcessed(consumer, eventUid)` + `processed_events(consumer, event_uid)`; `DomainEventType` constants (today: `SALE.FINALISED`, `SALE.VOIDED`, `STOCK.RECEIVED`, `STOCK.RECEIPT.VOIDED`, `DELIVERY.CONFIRMED`, `DELIVERY.RETURNED` — **this ADR adds `PAYMENT.RECEIVED` + `APPROVAL.PENDING`** and the `AGG_AR_RECEIPT` / `AGG_APPROVAL` aggregate constants); `DomainEventDispatcher` is `@Scheduled` (the polling pattern the notification **scanner** mirrors).
+  - **Transactional outbox** ([ADR-0009](0009-transactional-outbox.md) / V6): `OutboxPublisher.publish(eventType, aggregateType, aggregateId, aggregateUid, companyId, branchId, payload)` (in the caller's TX, serialises payload → JSONB); `DomainEventHandler` (`String eventType()` + `void handle(DomainEvent)`, auto-discovered, invoked per matching event in the dispatcher's per-event TX); `DomainEvent` (carries `uid`, `eventType`, `aggregateType`, `aggregateId`, `aggregateUid`, `companyId`, `branchId`, `payload` JSONB — **the consumer establishes context from `companyId`/`branchId` on the event alone, no JWT**); `IdempotencyGuard.alreadyProcessed(consumer, eventUid)` / `markProcessed(consumer, eventUid)` + `processed_events(consumer, event_uid)`; `DomainEventType` constants (today: `SALE.FINALISED`, `SALE.VOIDED`, `STOCK.RECEIVED`, `STOCK.RECEIPT.VOIDED`, `DELIVERY.CONFIRMED`, `DELIVERY.RETURNED` — **this ADR adds `PAYMENT.RECEIVED`** [Amended 2026-06-11 — was `PAYMENT.RECEIVED` + `APPROVAL.PENDING`; `APPROVAL.PENDING` removed, notifications consumes the **existing** `APPROVAL.SUBMITTED` (ADR-0022)] and the `AGG_AR_RECEIPT` aggregate constant; the approvals aggregate `AGG_APPROVAL` is **already declared by ADR-0022** — notifications does not re-declare it); `DomainEventDispatcher` is `@Scheduled` (the polling pattern the notification **scanner** mirrors).
   - **IAM** ([ADR-0001](0001-iam-architecture.md)/[0002](0002-rbac-enforcement.md) / V1): `app_users` (`id`, `uid` VARCHAR(26), `username`, `display_name`, **`email` VARCHAR(160) NULLABLE**, `phone`, `is_root`, `status`; **no `company_id` — users are global, scoped via `user_branch`**); `user_branch` (`user_id`, `branch_id`, `is_default`; a user is in many branches across companies); `roles` + `role_permission` + `permissions(code, module, description)`; `PermissionResolver.resolve(userId, companyId, branchId, now)` + the underlying `UserRoleRepository.resolvePermissionCodes(userId, companyId, branchId)` (**the recipient-by-permission mechanism — but request-bound today via `PermissionResolver`; the dispatcher needs the repository query directly, D-9**); `ScopeGuard.assertCanActIn(principal, companyId)` (the read-path guard) + `companyIdOf(targetType, uid)` switch (**this ADR adds `notification` / `notificationtype` / `notificationpref`**); `@perm.has(code)` / `@perm.scoped(uid, targetType, code)` gating via `PermissionChecks` (NEVER `hasAuthority`).
-  - **AR** ([ADR-0014](0014-accounts-receivable-data-model.md) / V11): `ar_invoices` (open items with `due_date`, `balance`, `status` — the **invoice-overdue scanner read**), the AR ageing query, and the **AR receipt recording service** (where the one-line `PAYMENT.RECEIVED` publish lands — D-8). AR is the producer of the `payment-received` trigger.
+  - **AR** ([ADR-0014](0014-accounts-receivable-data-model.md) / V11): `ar_invoices` (open items with `due_date`, `balance`, `status` — the **invoice-overdue scanner read**), the AR ageing query, and the **AR receipt recording service** (`ArReceiptService`, where the one-line `PAYMENT.RECEIVED` publish lands — D-8). AR is the producer of the `payment-received` trigger. **[Amended 2026-06-11: shipped AR does NOT emit `PAYMENT.RECEIVED` today — adding the `OutboxPublisher.publish` is an explicit producer-side implementation task on a shipped module, D-8/D-14.]**
   - **Stock** ([ADR-0010](0010-stock-data-model.md) / V7): `stock_on_hand` (`quantity`, optional **`reorder_level`** + a low flag — the **low-stock scanner read**, per (company, branch, product)). Stock exposes the on-hand read; the scanner queries it.
   - **Money** ([ADR-0005](0005-money-and-currency.md)): NOT used by notifications (BR-NOTIF-13 — a monetary figure in a body is a formatted display string at fire time, no `Money`, no journal FK).
   - **Audit** ([ADR-0004](0004-iam-audit-trail.md)): the append-only audit trail; admin actions (type enable/disable) audit via `AuditService` (NFR-NOTIF-03).
@@ -86,8 +88,9 @@ com.erp.modules.notifications
 │                   NotificationTypeDto, NotificationPreferenceDto / SetPreferenceRequest,
 │                   NotificationDeliveryDto,
 │                   SetCompanyTypeStateRequest (admin per-company type toggle),
-│                   PaymentReceivedPayload   (the AR trigger payload shape — lives in ar.domain.dto, D-8),
-│                   ApprovalPendingPayload   (the approvals trigger payload — designed-to-contract, D-8)
+│                   PaymentReceivedPayload   (the AR trigger payload shape — lives in ar.domain.dto, D-8)
+│                   // Amended 2026-06-11: ApprovalPendingPayload removed — the approvals trigger consumes the
+│                   // EXISTING APPROVAL.SUBMITTED + approvals.domain.dto.ApprovalSubmittedPayload (ADR-0022), D-8
 ├── domain.enums    NotificationChannel (IN_APP|EMAIL; reserved SMS|PUSH|WEBHOOK),
 │                   NotificationSeverity (INFO|WARNING|CRITICAL),
 │                   DeliveryOutcome (PENDING|SENT|FAILED|SUPPRESSED),
@@ -287,7 +290,9 @@ v1 consumed set:
 | `STOCK.RECEIVED` (existing) | Stock (A) | `GOODS_RECEIVED` | `STOCK.VIEW` |
 | `DELIVERY.CONFIRMED` (existing) | Sales (A) | `DELIVERY_CONFIRMED` | `SALES.DELIVERY.VIEW` |
 | `PAYMENT.RECEIVED` (**NEW**, D-8) | AR (B) | `PAYMENT_RECEIVED` | `AR.VIEW` |
-| `APPROVAL.PENDING` (**NEW**, designed-to-contract, D-8) | Approvals (B) | `APPROVAL_PENDING` | the approver perm (from the payload) |
+| `APPROVAL.SUBMITTED` (**existing**, ADR-0022 D-10) | Approvals (A) | `APPROVAL_PENDING` | the approver perm (from the payload) |
+
+> **Amended 2026-06-11 (Wave-2 collision resolution):** the approvals row originally consumed a **new** `APPROVAL.PENDING` event (source kind (B), "designed-to-contract"). Per coordination collision #2, approvals (ADR-0022 D-10) already emits **`APPROVAL.SUBMITTED`** at submit — explicitly intended for Notifications. So the approvals trigger is now a **source-kind (A)** subscription to the **existing** `APPROVAL.SUBMITTED` (zero producer change; approvals does not add `APPROVAL.PENDING`). The notification *type key* stays `APPROVAL_PENDING` (the user-facing "you have an approval pending" message); only the *consumed outbox event* changes from the (never-built) `APPROVAL.PENDING` to the shipped `APPROVAL.SUBMITTED`. The dynamic-audience-from-payload behaviour (D-8) is unchanged — `ApprovalSubmittedPayload` (ADR-0022) carries the approver routing.
 
 Each handler:
 1. `IdempotencyGuard.alreadyProcessed("NOTIFICATIONS.<TYPE>", event.uid())` → if processed, no-op (BR-NOTIF-07).
@@ -377,12 +382,15 @@ coordination rides the platform's outbox-scaling work (deferred, NFR-NOTIF-05).
 
 ### D-8 — The new trigger events + the AR producer touch-point (the (B) source)
 
-**Two new `DomainEventType` constants:**
+**One new `DomainEventType` constant** (declared under ADR-0024's `DomainEventType` block, the shared-file append protocol §1):
 ```
-DomainEventType.PAYMENT_RECEIVED  = "PAYMENT.RECEIVED"    (NEW; AR emits)
-DomainEventType.APPROVAL_PENDING  = "APPROVAL.PENDING"    (NEW; the approvals engine will emit — designed-to-contract)
+DomainEventType.PAYMENT_RECEIVED  = "PAYMENT.RECEIVED"    (NEW; AR emits — the producer-side change is an implementation task, see below + D-14)
 ```
-plus aggregate constants `AGG_AR_RECEIPT = "AR_RECEIPT"` and `AGG_APPROVAL = "APPROVAL"`.
+plus the aggregate constant `AGG_AR_RECEIPT = "AR_RECEIPT"`.
+
+> **Amended 2026-06-11 (Wave-2 collision resolution).** Two changes here:
+> 1. **`APPROVAL.PENDING` removed (collision #2).** The original declared a second new constant `APPROVAL_PENDING = "APPROVAL.PENDING"`. The approvals engine (ADR-0022 D-10) emits **`APPROVAL.SUBMITTED`** + `APPROVAL.RESOLVED` — **never** `APPROVAL.PENDING`. Notifications **consumes the existing `APPROVAL.SUBMITTED`** (which already carries `ApprovalSubmittedPayload`, ADR-0022) and raises the `APPROVAL_PENDING` *notification type*. **No new approval event constant is declared by ADR-0024**, and `AGG_APPROVAL` is **already owned by ADR-0022** (not re-declared here).
+> 2. **`PAYMENT.RECEIVED` is a producer-side implementation task (collision #3).** Shipped AR (ADR-0014) does **NOT** emit `PAYMENT.RECEIVED` today. The notifications increment must therefore **add a one-line `OutboxPublisher.publish(PAYMENT.RECEIVED, …)` to `ArReceiptService`** (the receipt-record method) — a **cross-branch touch on a shipped module**. This is the explicit producer-side change below; until it lands, the `PAYMENT_RECEIVED` subscription is dormant (no event fires) and nothing breaks.
 
 **`PaymentReceivedPayload`** (lives in `ar.domain.dto` — the producer owns the payload, the
 `SaleFinalisedPayload` precedent; the notifications dispatcher imports it, the GL-imports-sales-dto direction):
@@ -403,16 +411,23 @@ This is **additive** (a new event row in AR's TX; AR's behaviour is unchanged) a
 notifications' — notifications consumes it (NFR-NOTIF-09). If OQ-NOTIF-01 chooses the thin first cut, this
 line is the fast-follow; the dispatcher subscription is ready either way.
 
-**`ApprovalPendingPayload`** (designed-to-contract; lives in the approvals module when it ships):
+**`ApprovalSubmittedPayload`** (**owned by approvals — ADR-0022 D-1/D-10**; the notifications dispatcher imports it from `approvals.domain.dto`, the consumer-reads-producer-payload direction):
 ```
-record ApprovalPendingPayload(
-    String documentUid, String documentType, Long companyId, Long branchId,
-    String approverPermission, String summary, Instant pendingSince)
+// shape per ADR-0022 (ApprovalSubmittedPayload). The dispatcher reads the approver-routing
+// permission + the document summary from this payload; the exact field names follow ADR-0022's record.
 ```
-The dispatcher consumes `APPROVAL.PENDING`, reads `approverPermission` **from the payload** (the audience for
-this type is dynamic — the approver perm of the pending step, not a fixed `notification_types.audience_permission`),
-and raises `APPROVAL_PENDING`. **Until the approvals engine exists, no such event is published and the type
-lies dormant** (BR-NOTIF-14) — zero coupling, zero blocker.
+The dispatcher consumes the **existing** `APPROVAL.SUBMITTED` (ADR-0022 D-10 — emitted in the approvals
+engine's submit TX), reads the approver routing/permission **from the payload** (the audience for this type is
+dynamic — the approver perm of the pending step, not a fixed `notification_types.audience_permission`), and
+raises the `APPROVAL_PENDING` notification type. **Until the approvals engine ships, no `APPROVAL.SUBMITTED`
+event is published and the type lies dormant** (BR-NOTIF-14) — zero coupling, zero blocker. Notifications does
+**not** define the approval payload; it consumes ADR-0022's.
+
+> **Amended 2026-06-11 (Wave-2 collision resolution):** the original designed a notifications-defined
+> `ApprovalPendingPayload` consumed off a new `APPROVAL.PENDING` event. Per collision #2, neither exists — the
+> approvals engine (ADR-0022) already emits `APPROVAL.SUBMITTED` with its own `ApprovalSubmittedPayload`.
+> Notifications consumes that existing event + payload. The notifications `domain.dto` no longer declares an
+> `ApprovalPendingPayload`; the dispatcher imports `approvals.domain.dto.ApprovalSubmittedPayload`.
 
 ### D-9 — Audience resolution outside a request: a new IAM repository read (OQ-NOTIF-04)
 
@@ -491,9 +506,10 @@ case "notificationpref"  -> notificationPreferences.findCompanyIdByUid(uid);
 
 - **`notifications.events` → `platform.events`** (`DomainEventHandler`, `IdempotencyGuard`, `OutboxPublisher`)
   — the outbox-consumer coupling, the Stock/GL precedent. **Allowed.**
-- **`notifications.events` → `ar.domain.dto`** (`PaymentReceivedPayload`) and (when it ships)
-  `approvals.domain.dto` (`ApprovalPendingPayload`) — the consumer reads the producer's **payload DTO**, the
-  exact direction `stock.events` imports `sales.domain.dto.SaleFinalisedPayload`. **Allowed.**
+- **`notifications.events` → `ar.domain.dto`** (`PaymentReceivedPayload`) and **`approvals.domain.dto`**
+  (`ApprovalSubmittedPayload`, ADR-0022 — the **existing** approvals payload) — the consumer reads the
+  producer's **payload DTO**, the exact direction `stock.events` imports `sales.domain.dto.SaleFinalisedPayload`.
+  **Allowed.** [Amended 2026-06-11 — was the never-built `ApprovalPendingPayload`; now ADR-0022's shipped `ApprovalSubmittedPayload`.]
 - **`notifications.service` → `ar` read model + `stock` read model** (DTO/projection reads for the scanner +
   template re-reads) and **→ `iam.repository`** (the audience query, D-9) — DTO/read-only, no entity import,
   no write into a source table. **Allowed** (the GL-re-reads-sales + ScopeGuard-reads-IAM precedents).
@@ -530,9 +546,16 @@ case "notificationpref"  -> notificationPreferences.findCompanyIdByUid(uid);
    pattern). Permissions have no `uid` — #12 N/A for the perm rows.
 
 **`V26__notification_triggers.sql`** (the cross-module trigger scaffolding — additive, may be empty schema):
-- The two new `DomainEventType` constants (`PAYMENT.RECEIVED`, `APPROVAL.PENDING`) are **code, not schema**
-  (the `domain_events.event_type` column is a free VARCHAR(60); no CHECK to widen — verified). So V26 carries
-  **no schema for the events themselves**. V26 exists to (a) hold any additive index the scanner needs on the
+- The one new `DomainEventType` constant (`PAYMENT.RECEIVED`) is **code, not schema** (the
+  `domain_events.event_type` column is a free VARCHAR(60); no CHECK to widen — verified). So V26 carries **no
+  schema for the event itself**. [Amended 2026-06-11 — was "two new constants … `PAYMENT.RECEIVED`, `APPROVAL.PENDING`"; `APPROVAL.PENDING` removed (notifications consumes the existing `APPROVAL.SUBMITTED`), so only `PAYMENT.RECEIVED` is new.]
+- **Producer-side implementation task (NOT a migration — code, lands in this increment):** shipped AR
+  (ADR-0014) does **not** emit `PAYMENT.RECEIVED`. Add a **one-line
+  `OutboxPublisher.publish(DomainEventType.PAYMENT_RECEIVED, …)` to `ArReceiptService`** (the receipt-record
+  method, in AR's existing TX) — a **cross-branch touch on a shipped module**. This is additive and
+  behaviour-neutral for AR (a new outbox row in AR's TX; AR's posting/behaviour is unchanged) and is the
+  explicit producer-side change the coordinator must sequence (D-8). It may land in a tiny AR patch or in the
+  notifications branch's AR touch; either way it is a *code* change, not schema. V26 exists to (a) hold any additive index the scanner needs on the
   source read models *if* a missing index is found (e.g. an `ar_invoices (company_id, due_date)` partial index
   for the overdue scan, or a `stock_on_hand (company_id) WHERE quantity <= reorder_level` partial index for
   low-stock — **additive, on frozen tables, index-only, allowed**), and (b) keep the trigger/producer
@@ -603,7 +626,8 @@ navigation / a light interval — NFR-NOTIF-05, no WebSocket in v1) linking to `
 - SMS/push/webhook (channel enum reserved), document attachments (column reserved), subscriber lists, custom
   types/template editing, digests/throttle/quiet-hours, read receipts/escalation, manual resend, i18n
   templates, WebSocket in-app push — all deferred, none precluded (NFR-NOTIF-07). The `APPROVAL_PENDING` type
-  is seeded and dormant until the approvals engine emits its trigger (BR-NOTIF-14).
+  is seeded and dormant until the approvals engine emits `APPROVAL.SUBMITTED` (BR-NOTIF-14) [Amended
+  2026-06-11 — consumes the existing ADR-0022 `APPROVAL.SUBMITTED`, not a new `APPROVAL.PENDING`].
 
 ## Alternatives considered
 
@@ -669,9 +693,11 @@ ADR-0024 designs the **Notifications** cross-cutting module `com.erp.modules.not
 (`notification_types` catalogue, `notifications`, `notification_preferences`, `notification_deliveries`,
 `notification_scan_markers`), four enums (`NotificationChannel` IN_APP/EMAIL + reserved SMS/PUSH/WEBHOOK,
 `NotificationSeverity`, `DeliveryOutcome`, `SuppressionReason`), and the fan-out spine. **Triggers come from
-three sources** (D-4/D-7/D-8): existing outbox events (subscribe, zero producer change), two **new trigger
-events** (`PAYMENT.RECEIVED` from AR via a one-line additive publish; `APPROVAL.PENDING` designed-to-contract,
-dormant until the approvals engine ships), and a `@Scheduled NotificationScanner` for the inherently
+three sources** (D-4/D-7/D-8): existing outbox events (subscribe, zero producer change — including the
+**existing `APPROVAL.SUBMITTED`** from approvals/ADR-0022, dormant until the approvals engine ships), **one new
+trigger event** (`PAYMENT.RECEIVED` from AR via a one-line additive `OutboxPublisher.publish` in
+`ArReceiptService` — a producer-side implementation task on shipped AR), and a `@Scheduled
+NotificationScanner` for the inherently [Amended 2026-06-11 (Wave-2 collisions #2/#3): was "two new trigger events `PAYMENT.RECEIVED`/`APPROVAL.PENDING`"; `APPROVAL.PENDING` removed — notifications consumes the existing `APPROVAL.SUBMITTED`.]
 time-based conditions (invoice-overdue, low-stock) deduped via `notification_scan_markers` (fire-once-per-
 crossing, low-stock re-arms on recovery). The `NotificationDispatcher` is an outbox `DomainEventHandler`
 (at-least-once, idempotent via `IdempotencyGuard`, crash-safe — the in-memory bus is forbidden). Audience =
@@ -681,10 +707,12 @@ override the type defaults; suppression is **recorded** (never silent). Email is
 (`@Async` + delivery row + bounded retry; `spring-boot-starter-mail` added) and **never blocks** the in-app
 channel or the business TX. **No GL, no `Money`, no `gl_config` key, no CoA account** (BR-NOTIF-13) — a pure
 sink. **Additive on frozen V1–V19** as `V25__notifications.sql` (tables + #12-safe per-company type seed +
-perms) + `V26__notification_triggers.sql` (additive scanner indexes / a no-op placeholder; the two event
-constants are code, not schema). **Leaf consumer, no cycle** (D-13). **Cross-module touch list:** (1)
-**AR → outbox** — the one-line `PAYMENT.RECEIVED` publish in AR's receipt-record service (+ `PaymentReceived
-Payload` in `ar.domain.dto`); (2) **IAM** — the additive `findUserIdsWithPermission` repository read; (3)
+perms) + `V26__notification_triggers.sql` (additive scanner indexes / a no-op placeholder; the one new event
+constant `PAYMENT.RECEIVED` is code, not schema). **Leaf consumer, no cycle** (D-13). **Cross-module touch
+list:** (1) **AR → outbox (producer-side implementation task)** — add the one-line `OutboxPublisher.publish(
+PAYMENT.RECEIVED, …)` to `ArReceiptService` (shipped AR does NOT emit it today; cross-branch touch) +
+`PaymentReceivedPayload` in `ar.domain.dto`; the approvals trigger needs **no producer change** — notifications
+consumes the **existing `APPROVAL.SUBMITTED`** (ADR-0022); (2) **IAM** — the additive `findUserIdsWithPermission` repository read; (3)
 **notifications → ar/stock read models** — the scanner queries + template re-reads (DTO/read-only); (4) the
 **shell** — a bell + unread badge polling `unread-count`. **Readiness:** every table, column, constraint name,
 enum, trigger source, dispatcher mapping, scanner dedup rule, audience query, preference precedence, API
