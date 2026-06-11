@@ -25,6 +25,7 @@ import com.erp.modules.parties.repository.AgentRepository;
 import com.erp.modules.parties.repository.CustomerRepository;
 import com.erp.modules.parties.repository.OtherPartyRepository;
 import com.erp.modules.parties.repository.SupplierRepository;
+import com.erp.modules.products.repository.BomRepository;
 import com.erp.modules.products.repository.PriceListRepository;
 import com.erp.modules.products.repository.ProductRepository;
 import com.erp.modules.products.repository.UnitOfMeasureRepository;
@@ -111,6 +112,8 @@ public class ScopeGuard {
     private final DeliveryRepository         deliveryRepo;
     // Sales Returns repositories (ADR-0021 D-11, Stage 2)
     private final SalesReturnRepository      salesReturns;
+    // products-bom (ADR-0026 D-11)
+    private final BomRepository              bomsRepo;
     private final AuditService             audit;
 
     public ScopeGuard(CompanyRepository companies,
@@ -152,6 +155,7 @@ public class ScopeGuard {
                       SalesOrderRepository salesOrders,
                       DeliveryRepository deliveryRepo,
                       SalesReturnRepository salesReturns,
+                      BomRepository bomsRepo,
                       AuditService audit) {
         this.companies      = companies;
         this.branches       = branches;
@@ -192,6 +196,8 @@ public class ScopeGuard {
         this.salesOrders         = salesOrders;
         this.deliveryRepo        = deliveryRepo;
         this.salesReturns        = salesReturns;
+        // products-bom (ADR-0026 D-11)
+        this.bomsRepo            = bomsRepo;
         this.audit               = audit;
     }
 
@@ -254,6 +260,8 @@ public class ScopeGuard {
             case "delivery"            -> deliveryRepo.findCompanyIdByUid(uid);
             // Sales Returns target types (ADR-0021 D-11, Stage 2)
             case "salesreturn"         -> salesReturns.findCompanyIdByUid(uid);
+            // products-bom (ADR-0026 D-11)
+            case "bom"                 -> bomsRepo.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };

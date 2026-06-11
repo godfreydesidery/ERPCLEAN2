@@ -3,6 +3,7 @@ package com.erp.api;
 import com.erp.modules.products.domain.dto.AddBarcodeRequest;
 import com.erp.modules.products.domain.dto.AddComponentRequest;
 import com.erp.modules.products.domain.dto.AssignProductBranchRequest;
+import com.erp.modules.products.domain.dto.BomDto;
 import com.erp.modules.products.domain.dto.CreateBulkPackRequest;
 import com.erp.modules.products.domain.dto.CreateProductRequest;
 import com.erp.modules.products.domain.dto.ProductBarcodeDto;
@@ -13,6 +14,7 @@ import com.erp.modules.products.domain.dto.ProductDto;
 import com.erp.modules.products.domain.dto.ProductPriceDto;
 import com.erp.modules.products.domain.dto.SetProductPriceRequest;
 import com.erp.modules.products.domain.dto.UpdateProductRequest;
+import com.erp.modules.products.service.BomService;
 import com.erp.modules.products.service.ProductService;
 import com.erp.platform.common.api.ApiResponse;
 import com.erp.platform.common.api.PageMeta;
@@ -43,9 +45,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProductController {
 
     private final ProductService productService;
+    private final BomService bomService;
 
-    public ProductController(ProductService productService) {
+    public ProductController(ProductService productService, BomService bomService) {
         this.productService = productService;
+        this.bomService = bomService;
     }
 
     // -------------------------------------------------------------------------
@@ -229,5 +233,17 @@ public class ProductController {
     @PreAuthorize("@perm.scoped(#uid,'product','PRODUCT.MANAGE')")
     public void removeComponent(@PathVariable String uid, @PathVariable String componentUid) {
         productService.removeComponent(uid, componentUid);
+    }
+
+    // -------------------------------------------------------------------------
+    // BOM convenience — promote legacy recipe to a multi-level BOM draft (ADR-0026 D-5/OQ-BOM-01)
+    // -------------------------------------------------------------------------
+
+    @PostMapping("/uid/{uid}/promote-recipe-to-bom")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("@perm.scoped(#uid,'product','BOM.MANAGE')")
+    public BomDto promoteRecipeToBom(@PathVariable String uid,
+                                     @RequestParam Long companyId) {
+        return bomService.promoteRecipeToDraftBom(uid, companyId);
     }
 }

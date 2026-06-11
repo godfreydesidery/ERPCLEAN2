@@ -94,7 +94,11 @@ public class IamTestData {
         em.createNativeQuery(
                 "TRUNCATE sales_invoice_payments, sales_invoice_lines, sales_invoices, tax_rates RESTART IDENTITY CASCADE")
                 .executeUpdate();
-        // 4e. Clear products tables (FK children first, then masters, then sequence counter).
+        // 4e. Clear BOM tables BEFORE products (bom_components FK → products; boms FK → products).
+        em.createNativeQuery(
+                "TRUNCATE bom_components, boms RESTART IDENTITY CASCADE")
+                .executeUpdate();
+        // 4f. Clear products tables (FK children first, then masters, then sequence counter).
         //     units_of_measure is included here because products.base_unit_id and
         //     product_bulk_packs.unit_id FK into it (UoM cutover V4).
         em.createNativeQuery(

@@ -208,4 +208,15 @@ public final class AuditActions {
     public static final String DELIVERY_CREATE    = "SALES.DELIVERY.CREATE";
     public static final String DELIVERY_INVOICE   = "SALES.DELIVERY.INVOICE";
     public static final String RETURN_CREATE      = "SALES.RETURN.CREATE";
+
+    // ---- Multi-level BOM (ADR-0026) ----
+    public static final String BOM_CREATE          = "BOM.CREATE";
+    public static final String BOM_UPDATE          = "BOM.UPDATE";
+    public static final String BOM_ACTIVATE        = "BOM.ACTIVATE";
+    public static final String BOM_SUPERSEDE       = "BOM.SUPERSEDE";
+    public static final String BOM_ARCHIVE         = "BOM.ARCHIVE";
+    public static final String BOM_COMPONENT_ADD   = "BOM.COMPONENT.ADD";
+    public static final String BOM_COMPONENT_UPDATE = "BOM.COMPONENT.UPDATE";
+    public static final String BOM_COMPONENT_REMOVE = "BOM.COMPONENT.REMOVE";
+    public static final String BOM_PROMOTE_RECIPE  = "BOM.PROMOTE_RECIPE";
 }
