@@ -202,3 +202,20 @@ Multi-agent adversarial review of the Inventory Valuation + COGS increment (5 di
 - The SALE_ISSUE unit-cost re-derivation (value/qty vs stored avg) — rounding-equivalent at 4dp; LOW.
 
 **Refuted (11 — correctly, no defect):** the migration #12-safe seed-uids, the journal source-type CHECK completeness, the perms seed+grant, the report/opening/adjustment per-company scope (assertCanActIn on every path), the gl_config JOIN mapping, and the zero-cost-receipt recon (the weighted-avg preserves Σqty×avg == GL 1300) were all verified safe.
+
+## Finding #17 — Sales Orders / Order-to-Cash (ADR-0021) adversarial review batch (2026-06-11)
+
+Multi-agent adversarial review of the full O2C increment (Stage 1+2: quote/SO/reservation/delivery/COGS-seam/partial-invoicing/discounts/returns) — 6 dimensions, 52 agents, **46 findings → 28 confirmed / 18 refuted**. After dedup/triage, 4 distinct fixes applied (commit 4a41945); full suite **602 green**.
+
+| # | Sev | Status | Issue |
+|---|-----|--------|-------|
+| 17a | HIGH | **FIXED** | **The big one (≈6 findings collapsed here):** composed/recipe products never persisted `delivery_line.issue_value_amount` — `DeliveryIssueStockHandler.processSimpleLine` wrote it but the `processComponent` (BOM) loop did not. So `SalesReturnServiceImpl.proRateIssueValue` returned null → a return of a KIT product restored qty but **skipped the COGS reversal** (inventory overstated, phantom P&L gain). Fix: `processComponent` returns its issued value, `processLine` accumulates + writes the total back (mirrors simple lines). IT added: deliver a kit → return → asserts COGS reversed at original cost. |
+| 17b | MEDIUM | **FIXED** | No discount validation — negative and >100% discounts accepted (line + order). New `DiscountValidator` rejects them at quotation/SO/invoice create+addLine+updateLine. |
+| 17c | HIGH | **FIXED** | `createInvoiceFromDelivery` copied the FULL order-level `docDiscountAmount` onto a PARTIAL invoice (subset of lines) → wrong net/VAT. Fix: pro-rate `docDiscountAmount` by `invoicedRawNet / soTotalRawNet`. (VAT-on-discounted-net was already correct — `InvoiceTotalsCalculator` applies VAT on discounted nets.) |
+| 17d | MEDIUM | **FIXED** | Concurrency (ADR-0021 D-5 posture = `@Version` + ONE retry, NOT pessimistic locks): `confirm`/`cancel`/`delivery.create` mutate SalesOrderLine + stock reserved_qty without the retry wrapper `StockReservationService` has → double-reserve / over-fulfill / qty_reserved corruption under concurrent ops. Added one-retry-on-`ObjectOptimisticLockingFailureException` wrappers (confirm keeps `assertDraft`, so a sequential re-confirm is rejected). |
+
+**Verified already-correct (no change):** `DeliveryReturnedPayload.ReturnLineItem.productUid` (set to the numeric product id, used directly — field name misleading but value correct); the VAT-on-discounted-net path.
+
+**Deliberately NOT changed (accepted; would over-engineer or are within tolerance):** the `StockReservationService` negative-reserved silent CLAMP (defensible safety net + DB CHECK backstop), the order-discount apportionment double-rounding edge (MEDIUM), the line-level cancellation-after-partial-delivery guard (LOW), integer/scale truncation (LOW), and the "async write-back race" (the delivery is confirmed + the event dispatched before any return can reference it; 17a closes the null path). No pessimistic DB locks added (single-instance posture).
+
+**Refuted (18 — correctly, no defect):** the seam double-count (a sale traverses exactly one issue path — delivery for SO via `issuesStock=false`, finalise for DIRECT — proven by the seam IT), the V18/V19 #12-safe seeds + the `chk_ar_credit_note_origin` additive widen, the perms seed+grant, per-company scope (assertCanActIn on every read path), and most of the over-stated multi-instance concurrency scenarios beyond the bounded retry above.
