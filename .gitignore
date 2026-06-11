@@ -38,3 +38,6 @@ Thumbs.db
 
 # SPA bundle injected at Docker build time — never commit
 backend/src/main/resources/static/
+
+# Agent worktrees (local scratch — never commit)
+.claude/worktrees/
