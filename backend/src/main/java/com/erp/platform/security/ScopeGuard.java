@@ -42,6 +42,10 @@ import com.erp.modules.stock.repository.StockOnHandRepository;
 // approvals (ADR-0022)
 import com.erp.modules.approvals.repository.ApprovalPolicyRepository;
 import com.erp.modules.approvals.repository.ApprovalRequestRepository;
+// documents (ADR-0023)
+import com.erp.modules.documents.repository.DocumentBrandingRepository;
+import com.erp.modules.documents.repository.DocumentTemplateRepository;
+import com.erp.modules.documents.repository.GeneratedDocumentRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -117,6 +121,10 @@ public class ScopeGuard {
     // Approvals repositories (ADR-0022 D-11)
     private final ApprovalPolicyRepository   approvalPolicies;
     private final ApprovalRequestRepository  approvalRequests;
+    // documents (ADR-0023)
+    private final GeneratedDocumentRepository generatedDocuments;
+    private final DocumentTemplateRepository  documentTemplates;
+    private final DocumentBrandingRepository  documentBrandings;
     private final AuditService             audit;
 
     public ScopeGuard(CompanyRepository companies,
@@ -161,6 +169,10 @@ public class ScopeGuard {
                       // approvals (ADR-0022)
                       ApprovalPolicyRepository approvalPolicies,
                       ApprovalRequestRepository approvalRequests,
+                      // documents (ADR-0023)
+                      GeneratedDocumentRepository generatedDocuments,
+                      DocumentTemplateRepository documentTemplates,
+                      DocumentBrandingRepository documentBrandings,
                       AuditService audit) {
         this.companies      = companies;
         this.branches       = branches;
@@ -203,6 +215,10 @@ public class ScopeGuard {
         this.salesReturns        = salesReturns;
         this.approvalPolicies    = approvalPolicies;
         this.approvalRequests    = approvalRequests;
+        // documents (ADR-0023)
+        this.generatedDocuments  = generatedDocuments;
+        this.documentTemplates   = documentTemplates;
+        this.documentBrandings   = documentBrandings;
         this.audit               = audit;
     }
 
@@ -268,6 +284,10 @@ public class ScopeGuard {
             // approvals (ADR-0022)
             case "approvalpolicy"      -> approvalPolicies.findCompanyIdByUid(uid);
             case "approvalrequest"     -> approvalRequests.findCompanyIdByUid(uid);
+            // documents (ADR-0023)
+            case "generateddocument"   -> generatedDocuments.findCompanyIdByUid(uid);
+            case "documenttemplate"    -> documentTemplates.findCompanyIdByUid(uid);
+            case "documentbranding"    -> documentBrandings.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };

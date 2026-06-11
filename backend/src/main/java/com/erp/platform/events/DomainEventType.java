@@ -52,6 +52,11 @@ public final class DomainEventType {
     // --- approvals (ADR-0022) ---
     public static final String AGG_APPROVAL_REQUEST = "APPROVAL_REQUEST";
 
+    // --- documents (ADR-0023) ---
+    /** A document PDF was rendered and the record committed (ADR-0023 D-7). */
+    public static final String DOCUMENT_GENERATED     = "DOCUMENT.GENERATED";
+    public static final String AGG_GENERATED_DOCUMENT = "GENERATED_DOCUMENT";
+
     private DomainEventType() {
     }
 }
