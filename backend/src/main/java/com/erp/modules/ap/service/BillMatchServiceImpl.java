@@ -64,6 +64,7 @@ public class BillMatchServiceImpl implements BillMatchService {
     private final PurchaseMatchReader        purchaseReader;
     private final GLPostingService           glPosting;
     private final GLConfigResolver           glConfig;
+    private final ApBillNumberGenerator      numbers;
     private final ScopeGuard                 scopeGuard;
     private final AuditService               audit;
     private final JdbcTemplate               jdbc;
@@ -74,6 +75,7 @@ public class BillMatchServiceImpl implements BillMatchService {
                                  PurchaseMatchReader purchaseReader,
                                  GLPostingService glPosting,
                                  GLConfigResolver glConfig,
+                                 ApBillNumberGenerator numbers,
                                  ScopeGuard scopeGuard,
                                  AuditService audit,
                                  JdbcTemplate jdbc) {
@@ -83,6 +85,7 @@ public class BillMatchServiceImpl implements BillMatchService {
         this.purchaseReader = purchaseReader;
         this.glPosting      = glPosting;
         this.glConfig       = glConfig;
+        this.numbers        = numbers;
         this.scopeGuard     = scopeGuard;
         this.audit          = audit;
         this.jdbc           = jdbc;
@@ -194,6 +197,13 @@ public class BillMatchServiceImpl implements BillMatchService {
                 : SupplierBillStatus.MATCHED;
         bill.setStatus(newBillStatus);
 
+        // Assign bill_number before MATCHED transition (finding #15):
+        // DB CHECK chk_supplier_bill_number_when_posted requires non-DRAFT bills to have a number.
+        // Guard is idempotent — re-matching or re-posting a bill that already has a number is a no-op.
+        if (!anyHeld && bill.getBillNumber() == null) {
+            bill.setBillNumber(numbers.nextBill(bill.getCompanyId()));
+        }
+
         if (!anyHeld) {
             postMatchedBillToGl(bill);
         }
@@ -237,6 +247,11 @@ public class BillMatchServiceImpl implements BillMatchService {
                             || m.getMatchStatus() == BillMatchStatus.VARIANCE_ACCEPTED);
 
         if (allResolved) {
+            // Assign bill_number before MATCHED transition (finding #15):
+            // idempotent — acceptVariance may be called multiple times (once per held line).
+            if (bill.getBillNumber() == null) {
+                bill.setBillNumber(numbers.nextBill(bill.getCompanyId()));
+            }
             bill.setStatus(SupplierBillStatus.MATCHED);
             postMatchedBillToGl(bill);
             bills.save(bill);
