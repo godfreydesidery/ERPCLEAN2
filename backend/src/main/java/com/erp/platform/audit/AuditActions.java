@@ -208,4 +208,13 @@ public final class AuditActions {
     public static final String DELIVERY_CREATE    = "SALES.DELIVERY.CREATE";
     public static final String DELIVERY_INVOICE   = "SALES.DELIVERY.INVOICE";
     public static final String RETURN_CREATE      = "SALES.RETURN.CREATE";
+
+    // ---- Approvals engine (ADR-0022) ----
+    public static final String APPROVAL_POLICY_CREATE     = "APPROVAL.POLICY.CREATE";
+    public static final String APPROVAL_POLICY_UPDATE     = "APPROVAL.POLICY.UPDATE";
+    public static final String APPROVAL_POLICY_DEACTIVATE = "APPROVAL.POLICY.DEACTIVATE";
+    public static final String APPROVAL_REQUEST_SUBMIT    = "APPROVAL.REQUEST.SUBMIT";
+    public static final String APPROVAL_STEP_DECIDE       = "APPROVAL.STEP.DECIDE";
+    public static final String APPROVAL_REQUEST_RECALL    = "APPROVAL.REQUEST.RECALL";
+    public static final String APPROVAL_REQUEST_CANCEL    = "APPROVAL.REQUEST.CANCEL";
 }

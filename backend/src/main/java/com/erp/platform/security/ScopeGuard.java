@@ -39,6 +39,9 @@ import com.erp.modules.sales.repository.SalesReturnRepository;
 import com.erp.modules.sales.repository.TaxRateRepository;
 import com.erp.modules.stock.repository.StockMovementRepository;
 import com.erp.modules.stock.repository.StockOnHandRepository;
+// approvals (ADR-0022)
+import com.erp.modules.approvals.repository.ApprovalPolicyRepository;
+import com.erp.modules.approvals.repository.ApprovalRequestRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -111,6 +114,9 @@ public class ScopeGuard {
     private final DeliveryRepository         deliveryRepo;
     // Sales Returns repositories (ADR-0021 D-11, Stage 2)
     private final SalesReturnRepository      salesReturns;
+    // Approvals repositories (ADR-0022 D-11)
+    private final ApprovalPolicyRepository   approvalPolicies;
+    private final ApprovalRequestRepository  approvalRequests;
     private final AuditService             audit;
 
     public ScopeGuard(CompanyRepository companies,
@@ -152,6 +158,9 @@ public class ScopeGuard {
                       SalesOrderRepository salesOrders,
                       DeliveryRepository deliveryRepo,
                       SalesReturnRepository salesReturns,
+                      // approvals (ADR-0022)
+                      ApprovalPolicyRepository approvalPolicies,
+                      ApprovalRequestRepository approvalRequests,
                       AuditService audit) {
         this.companies      = companies;
         this.branches       = branches;
@@ -192,6 +201,8 @@ public class ScopeGuard {
         this.salesOrders         = salesOrders;
         this.deliveryRepo        = deliveryRepo;
         this.salesReturns        = salesReturns;
+        this.approvalPolicies    = approvalPolicies;
+        this.approvalRequests    = approvalRequests;
         this.audit               = audit;
     }
 
@@ -254,6 +265,9 @@ public class ScopeGuard {
             case "delivery"            -> deliveryRepo.findCompanyIdByUid(uid);
             // Sales Returns target types (ADR-0021 D-11, Stage 2)
             case "salesreturn"         -> salesReturns.findCompanyIdByUid(uid);
+            // approvals (ADR-0022)
+            case "approvalpolicy"      -> approvalPolicies.findCompanyIdByUid(uid);
+            case "approvalrequest"     -> approvalRequests.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };

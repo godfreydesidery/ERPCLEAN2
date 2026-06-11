@@ -81,6 +81,12 @@ public class IamTestData {
         em.createNativeQuery(
                 "TRUNCATE routes RESTART IDENTITY CASCADE")
                 .executeUpdate();
+        // 4-APR. Clear approvals tables BEFORE companies/branches (FK children of companies+branches).
+        //        FK order: decisions → request_steps → requests → policies.
+        em.createNativeQuery(
+                "TRUNCATE approval_decisions, approval_request_steps, approval_requests, " +
+                "approval_policy_steps, approval_policies RESTART IDENTITY CASCADE")
+                .executeUpdate();
         // 4d-O2C. Clear ADR-0021 O2C tables BEFORE sales_invoices (delivery_lines FK → sales_order_lines;
         //         sales_order_lines FK → sales_orders; delivery_lines.delivery_id FK → deliveries).
         //         Order: leaf children first, then headers.
