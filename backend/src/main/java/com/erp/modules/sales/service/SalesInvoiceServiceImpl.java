@@ -647,7 +647,9 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                             inv.getVatTotalAmount(),
                             inv.getGrossTotalAmount(),
                             inv.getFinalisedAt(),
-                            outstanding  // ADR-0014 D-10: the AR open-item amount
+                            outstanding,              // ADR-0014 D-10: the AR open-item amount
+                            inv.getCostCentreValueId(), // ADR-0025 D-6: dimension defaults
+                            inv.getDepartmentValueId()
                     );
                 });
     }

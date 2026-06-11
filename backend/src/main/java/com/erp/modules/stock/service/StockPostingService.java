@@ -44,4 +44,15 @@ public interface StockPostingService {
                 String sourceEventUid, String sourceDocumentType, String sourceDocumentUid,
                 String reasonCode, String note, Instant occurredAt, Long actorId,
                 BigDecimal unitCostAmount, BigDecimal valueAmount);
+
+    /**
+     * Extended overload with dimension default ids (ADR-0025 D-6, V28).
+     * Both dimension ids are nullable — untagged when null (NFR-CC-01 zero-regression guarantee).
+     */
+    String post(Long companyId, Long branchId, Long productId,
+                BigDecimal quantity, MovementType movementType,
+                String sourceEventUid, String sourceDocumentType, String sourceDocumentUid,
+                String reasonCode, String note, Instant occurredAt, Long actorId,
+                BigDecimal unitCostAmount, BigDecimal valueAmount,
+                Long costCentreValueId, Long departmentValueId);
 }

@@ -1,5 +1,7 @@
 package com.erp.platform.security;
 
+import com.erp.modules.costing.repository.DimensionRepository;
+import com.erp.modules.costing.repository.DimensionValueRepository;
 import com.erp.modules.ap.repository.ApDebitNoteRepository;
 import com.erp.modules.ap.repository.ApPaymentRepository;
 import com.erp.modules.ap.repository.SupplierBillRepository;
@@ -107,10 +109,14 @@ public class ScopeGuard {
     private final WhtTransactionRepository   whtTransactions;
     // Sales Orders repositories (ADR-0021 D-10)
     private final QuotationRepository        quotations;
+    // Note: cost-centre repos added below under "cost-centre" comment (ADR-0025 D-5)
     private final SalesOrderRepository       salesOrders;
     private final DeliveryRepository         deliveryRepo;
     // Sales Returns repositories (ADR-0021 D-11, Stage 2)
     private final SalesReturnRepository      salesReturns;
+    // cost-centre (ADR-0025 D-5)
+    private final DimensionRepository        dimensions;
+    private final DimensionValueRepository   dimensionValues;
     private final AuditService             audit;
 
     public ScopeGuard(CompanyRepository companies,
@@ -152,6 +158,9 @@ public class ScopeGuard {
                       SalesOrderRepository salesOrders,
                       DeliveryRepository deliveryRepo,
                       SalesReturnRepository salesReturns,
+                      // cost-centre (ADR-0025 D-5)
+                      DimensionRepository dimensions,
+                      DimensionValueRepository dimensionValues,
                       AuditService audit) {
         this.companies      = companies;
         this.branches       = branches;
@@ -192,6 +201,9 @@ public class ScopeGuard {
         this.salesOrders         = salesOrders;
         this.deliveryRepo        = deliveryRepo;
         this.salesReturns        = salesReturns;
+        // cost-centre (ADR-0025 D-5)
+        this.dimensions          = dimensions;
+        this.dimensionValues     = dimensionValues;
         this.audit               = audit;
     }
 
@@ -254,6 +266,9 @@ public class ScopeGuard {
             case "delivery"            -> deliveryRepo.findCompanyIdByUid(uid);
             // Sales Returns target types (ADR-0021 D-11, Stage 2)
             case "salesreturn"         -> salesReturns.findCompanyIdByUid(uid);
+            // cost-centre target types (ADR-0025 D-5)
+            case "dimension"           -> dimensions.findCompanyIdByUid(uid);
+            case "dimensionvalue"      -> dimensionValues.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };

@@ -208,4 +208,10 @@ public final class AuditActions {
     public static final String DELIVERY_CREATE    = "SALES.DELIVERY.CREATE";
     public static final String DELIVERY_INVOICE   = "SALES.DELIVERY.INVOICE";
     public static final String RETURN_CREATE      = "SALES.RETURN.CREATE";
+
+    // ---- Cost-centre / Accounting-dimension framework (ADR-0025) ----
+    public static final String COSTING_VALUE_CREATE              = "COSTING.VALUE.CREATE";
+    public static final String COSTING_VALUE_UPDATE              = "COSTING.VALUE.UPDATE";
+    public static final String COSTING_VALUE_DEACTIVATE          = "COSTING.VALUE.DEACTIVATE";
+    public static final String COSTING_DIMENSION_MANDATORY_SET   = "COSTING.DIMENSION.MANDATORY.SET";
 }

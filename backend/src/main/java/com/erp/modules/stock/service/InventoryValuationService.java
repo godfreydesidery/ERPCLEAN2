@@ -90,14 +90,26 @@ public interface InventoryValuationService {
      * Revalue a stock adjustment: post DR STOCK_ADJUSTMENT / CR INVENTORY (decrease) or reverse
      * (increase) at the current avg_cost (ADR-0020 D-7, FR-INV-08).
      * Synchronous in the operator's TX — missing gl_config fails the command (BR-INV-12).
-     * Returns the movement's on-hand row for audit detail, or null if avg_cost not established
-     * (COGS-skip edge — quantity still moved).
      *
-     * @param movementUid  the uid of the ADJUSTMENT movement just posted by StockServiceImpl
-     * @param soh          the on-hand row (already loaded by StockServiceImpl)
-     * @param adjustQty    the signed adjustment quantity
-     * @param postingDate  the posting date for the GL entry
+     * <p>ADR-0025 D-6: {@code costCentreValueId} and {@code departmentValueId} are optional
+     * dimension ids for the P&L expense leg; null = untagged (NFR-CC-01).
+     *
+     * @param movementUid        the uid of the ADJUSTMENT movement just posted by StockServiceImpl
+     * @param soh                the on-hand row (already loaded by StockServiceImpl)
+     * @param adjustQty          the signed adjustment quantity
+     * @param postingDate        the posting date for the GL entry
+     * @param costCentreValueId  nullable dimension id for cost-centre tagging
+     * @param departmentValueId  nullable dimension id for department tagging
      */
     void revalueAdjustment(String movementUid, StockOnHand soh, BigDecimal adjustQty,
-                            LocalDate postingDate);
+                            LocalDate postingDate,
+                            Long costCentreValueId, Long departmentValueId);
+
+    /**
+     * Backward-compatible overload — calls the full form with null dimension ids (NFR-CC-01).
+     */
+    default void revalueAdjustment(String movementUid, StockOnHand soh, BigDecimal adjustQty,
+                                   LocalDate postingDate) {
+        revalueAdjustment(movementUid, soh, adjustQty, postingDate, null, null);
+    }
 }

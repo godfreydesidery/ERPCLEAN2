@@ -67,6 +67,33 @@ public class StockPostingServiceImpl implements StockPostingService {
         return movement.getUid();
     }
 
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public String post(Long companyId, Long branchId, Long productId,
+                       BigDecimal quantity, MovementType movementType,
+                       String sourceEventUid, String sourceDocumentType, String sourceDocumentUid,
+                       String reasonCode, String note, Instant occurredAt, Long actorId,
+                       BigDecimal unitCostAmount, BigDecimal valueAmount,
+                       Long costCentreValueId, Long departmentValueId) {
+
+        StockMovement movement = new StockMovement(
+                companyId, branchId, productId,
+                movementType, quantity,
+                sourceEventUid, sourceDocumentType, sourceDocumentUid,
+                reasonCode, note, occurredAt, actorId,
+                unitCostAmount, valueAmount,
+                costCentreValueId, departmentValueId);
+        movements.save(movement);
+
+        try {
+            applyOnHandDelta(companyId, branchId, productId, quantity, actorId);
+        } catch (ObjectOptimisticLockingFailureException ex) {
+            applyOnHandDelta(companyId, branchId, productId, quantity, actorId);
+        }
+
+        return movement.getUid();
+    }
+
     private void applyOnHandDelta(Long companyId, Long branchId, Long productId,
                                    BigDecimal delta, Long actorId) {
         StockOnHand soh = onHands
