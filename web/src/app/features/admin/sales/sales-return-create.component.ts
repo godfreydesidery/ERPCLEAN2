@@ -125,7 +125,9 @@ export class SalesReturnCreateComponent implements OnInit {
 
   /** Returns an error string if the qty input for this entry is invalid, else null. */
   lineQtyError(entry: ReturnLineEntry): string | null {
-    const raw = entry.qtyInput.trim();
+    // ngModel on <input type="number"> coerces the bound value to a JS number at runtime, so
+    // qtyInput may be a number despite the string type — coerce before string ops (QA e2e finding).
+    const raw = String(entry.qtyInput ?? '').trim();
     if (raw === '' || raw === '0') return null; // blank / zero = skip this line
     const n = +raw;
     if (Number.isNaN(n) || n < 0) return 'Must be a positive number.';
@@ -154,12 +156,12 @@ export class SalesReturnCreateComponent implements OnInit {
     // Collect lines with a non-zero qty
     const returnLines = entries
       .filter((e) => {
-        const n = +(e.qtyInput.trim() || '0');
+        const n = +(String(e.qtyInput ?? '').trim() || '0');
         return n > 0;
       })
       .map((e) => ({
         deliveryLineUid: e.line.uid,
-        qtyReturned: String(+(e.qtyInput.trim())),
+        qtyReturned: String(+(String(e.qtyInput ?? '').trim())),
       }));
 
     if (returnLines.length === 0) {
