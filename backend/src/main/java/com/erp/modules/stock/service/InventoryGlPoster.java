@@ -292,26 +292,30 @@ public class InventoryGlPoster {
         ChartOfAccount inventoryAcct   = configResolver.resolve(companyId, GlConfigKey.INVENTORY);
         ChartOfAccount adjustmentAcct  = configResolver.resolve(companyId, GlConfigKey.STOCK_ADJUSTMENT);
 
+        // ADR-0025 D-6: only the P&L-relevant leg (STOCK_ADJUSTMENT expense) carries the
+        // dimension tag; the balance-sheet INVENTORY control leg posts untagged (D-6 decision).
         List<LineDraft> lines;
         if (cmd.decrease()) {
-            // DR STOCK_ADJUSTMENT / CR INVENTORY
+            // DR STOCK_ADJUSTMENT (expense — tagged) / CR INVENTORY (BS — untagged)
             lines = List.of(
                     new LineDraft(adjustmentAcct.getId(),
                             cmd.value(), BigDecimal.ZERO,
-                            cmd.currency(), "Stock adjustment — " + cmd.movementUid()),
+                            cmd.currency(), "Stock adjustment — " + cmd.movementUid(),
+                            cmd.costCentreValueId(), cmd.departmentValueId(), null, null),
                     new LineDraft(inventoryAcct.getId(),
                             BigDecimal.ZERO, cmd.value(),
                             cmd.currency(), "Inventory adjustment — " + cmd.movementUid())
             );
         } else {
-            // DR INVENTORY / CR STOCK_ADJUSTMENT
+            // DR INVENTORY (BS — untagged) / CR STOCK_ADJUSTMENT (expense — tagged)
             lines = List.of(
                     new LineDraft(inventoryAcct.getId(),
                             cmd.value(), BigDecimal.ZERO,
                             cmd.currency(), "Inventory adjustment — " + cmd.movementUid()),
                     new LineDraft(adjustmentAcct.getId(),
                             BigDecimal.ZERO, cmd.value(),
-                            cmd.currency(), "Stock adjustment — " + cmd.movementUid())
+                            cmd.currency(), "Stock adjustment — " + cmd.movementUid(),
+                            cmd.costCentreValueId(), cmd.departmentValueId(), null, null)
             );
         }
 
@@ -335,9 +339,21 @@ public class InventoryGlPoster {
     public record CogsLeg(Long productId, String productCode, BigDecimal value) {}
 
     /**
-     * Parameters for {@link #postAdjustmentDirect} — bundles the 5 adjustment-specific
+     * Parameters for {@link #postAdjustmentDirect} — bundles the adjustment-specific
      * fields so the method stays under the 7-parameter Sonar limit (java:S107).
+     *
+     * <p>ADR-0025 D-6: {@code costCentreValueId} and {@code departmentValueId} are optional
+     * dimension tag ids for the expense leg (already resolved by the caller via
+     * {@code DimensionResolver}). Null = untagged (NFR-CC-01).
+     * The 5-arg constructor defaults them to null for backward compatibility.
      */
     public record AdjustmentPostCmd(String movementUid, String currency,
-                                    BigDecimal value, boolean decrease, Long postedBy) {}
+                                    BigDecimal value, boolean decrease, Long postedBy,
+                                    Long costCentreValueId, Long departmentValueId) {
+        /** Convenience 5-arg constructor — existing callers unchanged (NFR-CC-01). */
+        public AdjustmentPostCmd(String movementUid, String currency,
+                                 BigDecimal value, boolean decrease, Long postedBy) {
+            this(movementUid, currency, value, decrease, postedBy, null, null);
+        }
+    }
 }

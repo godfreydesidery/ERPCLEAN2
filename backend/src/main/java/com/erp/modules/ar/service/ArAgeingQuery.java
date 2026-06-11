@@ -10,6 +10,8 @@ import com.erp.modules.ar.repository.ArInvoiceRepository;
 import com.erp.modules.ar.repository.ArReceiptAllocationRepository;
 import com.erp.modules.ar.repository.ArReceiptRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.modules.parties.repository.CustomerRepository;
+import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -35,17 +37,20 @@ public class ArAgeingQuery {
     private final ArReceiptRepository receipts;
     private final ArReceiptAllocationRepository allocations;
     private final CompanyRepository companies;
+    private final CustomerRepository customers;
     private final ScopeGuard scopeGuard;
 
     public ArAgeingQuery(ArInvoiceRepository invoices,
                           ArReceiptRepository receipts,
                           ArReceiptAllocationRepository allocations,
                           CompanyRepository companies,
+                          CustomerRepository customers,
                           ScopeGuard scopeGuard) {
         this.invoices    = invoices;
         this.receipts    = receipts;
         this.allocations = allocations;
         this.companies   = companies;
+        this.customers   = customers;
         this.scopeGuard  = scopeGuard;
     }
 
@@ -97,6 +102,18 @@ public class ArAgeingQuery {
 
         return new ArStatementDto(companyId, customerId, asAt, total, currency,
                 ageingRows, openDtos, receiptDtos);
+    }
+
+    /**
+     * uid-based overload for the documents module (ADR-0023 D-5 / AR_STATEMENT render).
+     * Resolves customerUid → internal id, then delegates to statement(companyId, customerId, asAt).
+     * Additive — no interface change needed.
+     */
+    public ArStatementDto statementByCustomerUid(Long companyId, String customerUid, LocalDate asAt) {
+        Long customerId = customers.findByUid(customerUid)
+                .map(c -> c.getId())
+                .orElseThrow(() -> new NotFoundException("Customer not found: " + customerUid));
+        return statement(companyId, customerId, asAt);
     }
 
     // -------------------------------------------------------------------------

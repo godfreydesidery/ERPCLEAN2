@@ -1,5 +1,8 @@
 package com.erp.modules.stock.service;
 
+import com.erp.modules.costing.domain.dto.DimensionTagDto;
+import com.erp.modules.costing.domain.dto.ResolvedDimensionTagDto;
+import com.erp.modules.costing.service.DimensionResolver;
 import com.erp.modules.products.domain.dto.ProductDto;
 import com.erp.modules.products.service.ProductService;
 import com.erp.modules.stock.domain.dto.AdjustStockRequest;
@@ -51,6 +54,7 @@ public class StockServiceImpl implements StockService {
     private final StockPostingService       posting;
     private final ProductService            productService;
     private final InventoryValuationService valuation;
+    private final DimensionResolver         dimensionResolver;
     private final ScopeGuard               scopeGuard;
     private final AuditService             audit;
 
@@ -59,15 +63,17 @@ public class StockServiceImpl implements StockService {
                             StockPostingService posting,
                             ProductService productService,
                             InventoryValuationService valuation,
+                            DimensionResolver dimensionResolver,
                             ScopeGuard scopeGuard,
                             AuditService audit) {
-        this.onHands        = onHands;
-        this.movements      = movements;
-        this.posting        = posting;
-        this.productService = productService;
-        this.valuation      = valuation;
-        this.scopeGuard     = scopeGuard;
-        this.audit          = audit;
+        this.onHands           = onHands;
+        this.movements         = movements;
+        this.posting           = posting;
+        this.productService    = productService;
+        this.valuation         = valuation;
+        this.dimensionResolver = dimensionResolver;
+        this.scopeGuard        = scopeGuard;
+        this.audit             = audit;
     }
 
     // -------------------------------------------------------------------------
@@ -101,6 +107,15 @@ public class StockServiceImpl implements StockService {
             }
         }
 
+        // ADR-0025 D-6: resolve optional dimension tag before posting.
+        // AdjustStockRequest carries nullable *ValueUid fields — unresolved when null.
+        ResolvedDimensionTagDto dimTag = dimensionResolver.resolveTag(
+                product.companyId(),
+                new DimensionTagDto(
+                        request.costCentreValueUid(),
+                        request.departmentValueUid(),
+                        null, null));
+
         String movementUid = posting.post(
                 product.companyId(),
                 principal.branchId(),
@@ -112,7 +127,8 @@ public class StockServiceImpl implements StockService {
                 request.note(),
                 Instant.now(),
                 principal.userId(),
-                avgCostNow, movementValue);  // FIX C: carry cost on the movement row
+                avgCostNow, movementValue,   // FIX C: carry cost on the movement row
+                dimTag.costCentreValueId(), dimTag.departmentValueId());
 
         // Audit the manual op (D-12).
         StockMovement movement = movements.findByUid(movementUid).orElseThrow();
@@ -130,7 +146,8 @@ public class StockServiceImpl implements StockService {
         StockOnHand soh = onHands.findByCompanyIdAndBranchIdAndProductId(
                 product.companyId(), principal.branchId(), product.id()).orElse(null);
         if (soh != null) {
-            valuation.revalueAdjustment(movementUid, soh, request.quantity(), LocalDate.now());
+            valuation.revalueAdjustment(movementUid, soh, request.quantity(), LocalDate.now(),
+                    dimTag.costCentreValueId(), dimTag.departmentValueId());
         }
 
         return StockMovementDto.from(movement);

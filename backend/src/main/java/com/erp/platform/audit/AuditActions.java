@@ -208,4 +208,28 @@ public final class AuditActions {
     public static final String DELIVERY_CREATE    = "SALES.DELIVERY.CREATE";
     public static final String DELIVERY_INVOICE   = "SALES.DELIVERY.INVOICE";
     public static final String RETURN_CREATE      = "SALES.RETURN.CREATE";
+
+    // ---- Approvals engine (ADR-0022) ----
+    public static final String APPROVAL_POLICY_CREATE     = "APPROVAL.POLICY.CREATE";
+    public static final String APPROVAL_POLICY_UPDATE     = "APPROVAL.POLICY.UPDATE";
+    public static final String APPROVAL_POLICY_DEACTIVATE = "APPROVAL.POLICY.DEACTIVATE";
+    public static final String APPROVAL_REQUEST_SUBMIT    = "APPROVAL.REQUEST.SUBMIT";
+    public static final String APPROVAL_STEP_DECIDE       = "APPROVAL.STEP.DECIDE";
+    public static final String APPROVAL_REQUEST_RECALL    = "APPROVAL.REQUEST.RECALL";
+    public static final String APPROVAL_REQUEST_CANCEL    = "APPROVAL.REQUEST.CANCEL";
+    // ---- Multi-level BOM (ADR-0026) ----
+    public static final String BOM_CREATE          = "BOM.CREATE";
+    public static final String BOM_UPDATE          = "BOM.UPDATE";
+    public static final String BOM_ACTIVATE        = "BOM.ACTIVATE";
+    public static final String BOM_SUPERSEDE       = "BOM.SUPERSEDE";
+    public static final String BOM_ARCHIVE         = "BOM.ARCHIVE";
+    public static final String BOM_COMPONENT_ADD   = "BOM.COMPONENT.ADD";
+    public static final String BOM_COMPONENT_UPDATE = "BOM.COMPONENT.UPDATE";
+    public static final String BOM_COMPONENT_REMOVE = "BOM.COMPONENT.REMOVE";
+    public static final String BOM_PROMOTE_RECIPE  = "BOM.PROMOTE_RECIPE";
+    // ---- Cost-centre / Accounting-dimension framework (ADR-0025) ----
+    public static final String COSTING_VALUE_CREATE              = "COSTING.VALUE.CREATE";
+    public static final String COSTING_VALUE_UPDATE              = "COSTING.VALUE.UPDATE";
+    public static final String COSTING_VALUE_DEACTIVATE          = "COSTING.VALUE.DEACTIVATE";
+    public static final String COSTING_DIMENSION_MANDATORY_SET   = "COSTING.DIMENSION.MANDATORY.SET";
 }

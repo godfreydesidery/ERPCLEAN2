@@ -57,11 +57,15 @@ public class GLPostingSafeInvoker {
      *
      * <p>Entry shape (ADR-0013): DR Cash/AR (gross) · CR Sales Revenue (net) · CR VAT Payable (vat,
      * omitted when zero per {@code chk_journal_line_one_side}).
+     *
+     * <p>ADR-0025 D-6: only the P&L-relevant revenue leg carries the dimension tag (the cash/AR
+     * debit leg posts untagged — D-6 sub-decision). Both ids nullable (untagged when null).
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public JournalEntryDto postSaleInNewTx(Long companyId, Long branchId, String invoiceUid,
                                            String currency, BigDecimal gross, BigDecimal net,
-                                           BigDecimal vat, boolean cashSale, LocalDate postingDate) {
+                                           BigDecimal vat, boolean cashSale, LocalDate postingDate,
+                                           Long costCentreValueId, Long departmentValueId) {
         try {
             ChartOfAccount debitAcct = cashSale
                     ? configResolver.resolve(companyId, GlConfigKey.CASH)
@@ -70,9 +74,13 @@ public class GLPostingSafeInvoker {
             ChartOfAccount vatPayableAcct = configResolver.resolve(companyId, GlConfigKey.VAT_PAYABLE);
 
             List<LineDraft> lines = new ArrayList<>();
+            // DR Cash/AR — balance-sheet control leg, untagged (ADR-0025 D-6)
             lines.add(new LineDraft(debitAcct.getId(), gross, BigDecimal.ZERO, currency, "Gross sale"));
-            lines.add(new LineDraft(revenueAcct.getId(), BigDecimal.ZERO, net, currency, "Sales revenue"));
+            // CR Sales Revenue — P&L revenue leg, carry dimension tag (ADR-0025 D-6)
+            lines.add(new LineDraft(revenueAcct.getId(), BigDecimal.ZERO, net, currency,
+                    "Sales revenue", costCentreValueId, departmentValueId, null, null));
             if (vat != null && vat.compareTo(BigDecimal.ZERO) > 0) {
+                // CR VAT Payable — balance-sheet control leg, untagged
                 lines.add(new LineDraft(vatPayableAcct.getId(), BigDecimal.ZERO, vat, currency, "VAT payable"));
             }
             JournalEntryDraft draft = new JournalEntryDraft(
@@ -85,6 +93,18 @@ public class GLPostingSafeInvoker {
                     companyId, invoiceUid, ex.getMessage());
             return null;
         }
+    }
+
+    /**
+     * Backward-compatible overload for callers that do not supply dimension ids.
+     * Delegates to the full form with null dimension ids (NFR-CC-01).
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public JournalEntryDto postSaleInNewTx(Long companyId, Long branchId, String invoiceUid,
+                                           String currency, BigDecimal gross, BigDecimal net,
+                                           BigDecimal vat, boolean cashSale, LocalDate postingDate) {
+        return postSaleInNewTx(companyId, branchId, invoiceUid, currency, gross, net, vat,
+                               cashSale, postingDate, null, null);
     }
 
     /**

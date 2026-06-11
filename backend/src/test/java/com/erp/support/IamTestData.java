@@ -81,6 +81,12 @@ public class IamTestData {
         em.createNativeQuery(
                 "TRUNCATE routes RESTART IDENTITY CASCADE")
                 .executeUpdate();
+        // 4-APR. Clear approvals tables BEFORE companies/branches (FK children of companies+branches).
+        //        FK order: decisions → request_steps → requests → policies.
+        em.createNativeQuery(
+                "TRUNCATE approval_decisions, approval_request_steps, approval_requests, " +
+                "approval_policy_steps, approval_policies RESTART IDENTITY CASCADE")
+                .executeUpdate();
         // 4d-O2C. Clear ADR-0021 O2C tables BEFORE sales_invoices (delivery_lines FK → sales_order_lines;
         //         sales_order_lines FK → sales_orders; delivery_lines.delivery_id FK → deliveries).
         //         Order: leaf children first, then headers.
@@ -94,7 +100,11 @@ public class IamTestData {
         em.createNativeQuery(
                 "TRUNCATE sales_invoice_payments, sales_invoice_lines, sales_invoices, tax_rates RESTART IDENTITY CASCADE")
                 .executeUpdate();
-        // 4e. Clear products tables (FK children first, then masters, then sequence counter).
+        // 4e. Clear BOM tables BEFORE products (bom_components FK → products; boms FK → products).
+        em.createNativeQuery(
+                "TRUNCATE bom_components, boms RESTART IDENTITY CASCADE")
+                .executeUpdate();
+        // 4f. Clear products tables (FK children first, then masters, then sequence counter).
         //     units_of_measure is included here because products.base_unit_id and
         //     product_bulk_packs.unit_id FK into it (UoM cutover V4).
         em.createNativeQuery(

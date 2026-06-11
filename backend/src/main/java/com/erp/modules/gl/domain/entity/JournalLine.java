@@ -46,6 +46,24 @@ public class JournalLine extends UidEntity {
     @Column(name = "line_memo", length = 255)
     private String lineMemo;
 
+    // --- cost-centre (ADR-0025 D-3) — nullable dimension slot tags ---
+    // Scalar Long ids, no cross-module @ManyToOne (D-7). FK to dimension_values(id) in DB.
+    /** Cost Centre slot tag (nullable — untagged when null). */
+    @Column(name = "cost_centre_value_id")
+    private Long costCentreValueId;
+
+    /** Department slot tag (nullable). */
+    @Column(name = "department_value_id")
+    private Long departmentValueId;
+
+    /** Reserved for Projects module (ADR-0033 / slot 3 — no v1 poster writes this). */
+    @Column(name = "dimension3_value_id")
+    private Long dimension3ValueId;
+
+    /** Reserved for a future dimension (slot 4 — no v1 poster writes this). */
+    @Column(name = "dimension4_value_id")
+    private Long dimension4ValueId;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
@@ -60,17 +78,34 @@ public class JournalLine extends UidEntity {
     public static JournalLine debit(Long companyId, Long branchId, Long entryId, int lineNo,
                                     Long accountId, BigDecimal amount, String currency,
                                     String lineMemo, Long createdBy) {
+        return debit(companyId, branchId, entryId, lineNo, accountId, amount, currency,
+                     lineMemo, createdBy, null, null, null, null);
+    }
+
+    /**
+     * Debit line with dimension tags (ADR-0025 D-3/D-4).
+     * All four dimension ids are nullable — null = untagged for that slot.
+     */
+    public static JournalLine debit(Long companyId, Long branchId, Long entryId, int lineNo,
+                                    Long accountId, BigDecimal amount, String currency,
+                                    String lineMemo, Long createdBy,
+                                    Long costCentreValueId, Long departmentValueId,
+                                    Long dimension3ValueId, Long dimension4ValueId) {
         JournalLine l = new JournalLine();
-        l.companyId = companyId;
-        l.branchId = branchId;
-        l.entryId = entryId;
-        l.lineNo = lineNo;
-        l.accountId = accountId;
-        l.debitAmount = amount;
-        l.creditAmount = BigDecimal.ZERO;
-        l.currency = currency;
-        l.lineMemo = lineMemo;
-        l.createdBy = createdBy;
+        l.companyId          = companyId;
+        l.branchId           = branchId;
+        l.entryId            = entryId;
+        l.lineNo             = lineNo;
+        l.accountId          = accountId;
+        l.debitAmount        = amount;
+        l.creditAmount       = BigDecimal.ZERO;
+        l.currency           = currency;
+        l.lineMemo           = lineMemo;
+        l.createdBy          = createdBy;
+        l.costCentreValueId  = costCentreValueId;
+        l.departmentValueId  = departmentValueId;
+        l.dimension3ValueId  = dimension3ValueId;
+        l.dimension4ValueId  = dimension4ValueId;
         return l;
     }
 
@@ -78,17 +113,34 @@ public class JournalLine extends UidEntity {
     public static JournalLine credit(Long companyId, Long branchId, Long entryId, int lineNo,
                                      Long accountId, BigDecimal amount, String currency,
                                      String lineMemo, Long createdBy) {
+        return credit(companyId, branchId, entryId, lineNo, accountId, amount, currency,
+                      lineMemo, createdBy, null, null, null, null);
+    }
+
+    /**
+     * Credit line with dimension tags (ADR-0025 D-3/D-4).
+     * All four dimension ids are nullable — null = untagged for that slot.
+     */
+    public static JournalLine credit(Long companyId, Long branchId, Long entryId, int lineNo,
+                                     Long accountId, BigDecimal amount, String currency,
+                                     String lineMemo, Long createdBy,
+                                     Long costCentreValueId, Long departmentValueId,
+                                     Long dimension3ValueId, Long dimension4ValueId) {
         JournalLine l = new JournalLine();
-        l.companyId = companyId;
-        l.branchId = branchId;
-        l.entryId = entryId;
-        l.lineNo = lineNo;
-        l.accountId = accountId;
-        l.debitAmount = BigDecimal.ZERO;
-        l.creditAmount = amount;
-        l.currency = currency;
-        l.lineMemo = lineMemo;
-        l.createdBy = createdBy;
+        l.companyId          = companyId;
+        l.branchId           = branchId;
+        l.entryId            = entryId;
+        l.lineNo             = lineNo;
+        l.accountId          = accountId;
+        l.debitAmount        = BigDecimal.ZERO;
+        l.creditAmount       = amount;
+        l.currency           = currency;
+        l.lineMemo           = lineMemo;
+        l.createdBy          = createdBy;
+        l.costCentreValueId  = costCentreValueId;
+        l.departmentValueId  = departmentValueId;
+        l.dimension3ValueId  = dimension3ValueId;
+        l.dimension4ValueId  = dimension4ValueId;
         return l;
     }
 }

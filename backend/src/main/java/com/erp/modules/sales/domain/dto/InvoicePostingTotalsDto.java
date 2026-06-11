@@ -13,6 +13,10 @@ import java.time.Instant;
  *
  * <p>outstandingAmount: the unpaid residual (gross − Σ payments). For a fully-unpaid credit sale
  * this equals grossTotalAmount. AR uses this as the open item amount (D-10).
+ *
+ * <p>ADR-0025 D-6: {@code costCentreValueId} and {@code departmentValueId} are the invoice's
+ * header-level dimension defaults (scalar ids, nullable — null = untagged). SalesPostingHandler
+ * stamps the revenue LineDrafts with these ids.
  */
 public record InvoicePostingTotalsDto(
         String invoiceUid,
@@ -25,5 +29,10 @@ public record InvoicePostingTotalsDto(
         BigDecimal grossTotalAmount,
         Instant finalisedAt,
         /** Unpaid residual at finalise — the AR open-item amount (ADR-0014 D-10). */
-        BigDecimal outstandingAmount
+        BigDecimal outstandingAmount,
+        // --- cost-centre (ADR-0025 D-6) ---
+        /** Cost Centre dimension default id (nullable — untagged when null). */
+        Long costCentreValueId,
+        /** Department dimension default id (nullable — untagged when null). */
+        Long departmentValueId
 ) {}

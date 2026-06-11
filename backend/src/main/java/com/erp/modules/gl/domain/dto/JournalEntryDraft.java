@@ -20,12 +20,35 @@ public record JournalEntryDraft(
         Long postedBy,   // NULL for SYSTEM auto-poster
         List<LineDraft> lines
 ) {
-    /** One draft line — account resolved to id before being passed to the engine. */
+    /**
+     * One draft line — account resolved to id before being passed to the engine.
+     *
+     * <p>ADR-0025 D-4: the four {@code *ValueId} fields are optional dimension tags
+     * (already resolved by the poster via {@code costing.DimensionResolver} before building the
+     * draft). null = untagged for that slot. Existing callers use the 5-arg convenience
+     * constructor which defaults all four to null — so no existing poster's call site changes
+     * (NFR-CC-01, the zero-regression guarantee).
+     */
     public record LineDraft(
             Long accountId,
             BigDecimal debitAmount,
             BigDecimal creditAmount,
             String currency,
-            String lineMemo
-    ) {}
+            String lineMemo,
+            // --- cost-centre (ADR-0025 D-4) — optional; null = untagged ---
+            Long costCentreValueId,
+            Long departmentValueId,
+            Long dimension3ValueId,
+            Long dimension4ValueId
+    ) {
+        /**
+         * 5-arg convenience constructor — keeps every existing poster's call site unchanged
+         * (NFR-CC-01). Defaults all four dimension ids to null (untagged).
+         */
+        public LineDraft(Long accountId, BigDecimal debitAmount, BigDecimal creditAmount,
+                         String currency, String lineMemo) {
+            this(accountId, debitAmount, creditAmount, currency, lineMemo,
+                 null, null, null, null);
+        }
+    }
 }

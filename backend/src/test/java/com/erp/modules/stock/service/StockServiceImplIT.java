@@ -416,9 +416,11 @@ class StockServiceImplIT extends PostgresIntegrationTest {
         stockService.openingBalance(new OpeningBalanceRequest(product.uid(), new BigDecimal("50"), null));
 
         stockService.adjust(new AdjustStockRequest(
-                product.uid(), new BigDecimal("10"), AdjustmentReason.COUNT_CORRECTION, null));
+                product.uid(), new BigDecimal("10"), AdjustmentReason.COUNT_CORRECTION, null,
+                null, null));
         stockService.adjust(new AdjustStockRequest(
-                product.uid(), new BigDecimal("-5"), AdjustmentReason.DAMAGE, "broken"));
+                product.uid(), new BigDecimal("-5"), AdjustmentReason.DAMAGE, "broken",
+                null, null));
 
         assertThat(onHand(product.id()).quantity()).isEqualByComparingTo(new BigDecimal("55")); // 50+10−5
         assertLedgerMatchesOnHand(product.id());
@@ -430,7 +432,7 @@ class StockServiceImplIT extends PostgresIntegrationTest {
 
         assertThatThrownBy(() -> stockService.adjust(
                 new AdjustStockRequest(product.uid(), BigDecimal.ZERO,
-                        AdjustmentReason.COUNT_CORRECTION, null)))
+                        AdjustmentReason.COUNT_CORRECTION, null, null, null)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("non-zero");
     }
@@ -476,7 +478,8 @@ class StockServiceImplIT extends PostgresIntegrationTest {
         long auditBefore = auditRepository.count();
 
         stockService.adjust(new AdjustStockRequest(
-                product.uid(), new BigDecimal("7"), AdjustmentReason.COUNT_CORRECTION, null));
+                product.uid(), new BigDecimal("7"), AdjustmentReason.COUNT_CORRECTION, null,
+                null, null));
 
         List<AuditLog> logs = auditRepository.findAll();
         assertThat(logs.size()).isGreaterThan((int) auditBefore);

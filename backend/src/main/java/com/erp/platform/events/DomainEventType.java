@@ -32,6 +32,14 @@ public final class DomainEventType {
     /** Delivery returned — COGS reversal + stock-in trigger for returns (ADR-0021 D-11, Stage 2). */
     public static final String DELIVERY_RETURNED      = "DELIVERY.RETURNED";
 
+    // --- approvals (ADR-0022) ---
+
+    /** Approval request submitted — policy matched, PENDING chain created (ADR-0022 D-10). */
+    public static final String APPROVAL_SUBMITTED     = "APPROVAL.SUBMITTED";
+
+    /** Approval request reached a terminal state (APPROVED/REJECTED/RECALLED/CANCELLED) (ADR-0022 D-10). */
+    public static final String APPROVAL_RESOLVED      = "APPROVAL.RESOLVED";
+
     // ---------------------------------------------------------------------------
     // Aggregate types (the producing aggregate kind — used for diagnostics/replay)
     // ---------------------------------------------------------------------------
@@ -40,6 +48,14 @@ public final class DomainEventType {
     public static final String AGG_GOODS_RECEIPT  = "GOODS_RECEIPT";
     public static final String AGG_DELIVERY       = "DELIVERY";
     public static final String AGG_SALES_RETURN   = "SALES_RETURN";
+
+    // --- approvals (ADR-0022) ---
+    public static final String AGG_APPROVAL_REQUEST = "APPROVAL_REQUEST";
+
+    // --- documents (ADR-0023) ---
+    /** A document PDF was rendered and the record committed (ADR-0023 D-7). */
+    public static final String DOCUMENT_GENERATED     = "DOCUMENT.GENERATED";
+    public static final String AGG_GENERATED_DOCUMENT = "GENERATED_DOCUMENT";
 
     private DomainEventType() {
     }

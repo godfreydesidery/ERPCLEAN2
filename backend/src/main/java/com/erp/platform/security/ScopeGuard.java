@@ -1,5 +1,7 @@
 package com.erp.platform.security;
 
+import com.erp.modules.costing.repository.DimensionRepository;
+import com.erp.modules.costing.repository.DimensionValueRepository;
 import com.erp.modules.ap.repository.ApDebitNoteRepository;
 import com.erp.modules.ap.repository.ApPaymentRepository;
 import com.erp.modules.ap.repository.SupplierBillRepository;
@@ -25,6 +27,7 @@ import com.erp.modules.parties.repository.AgentRepository;
 import com.erp.modules.parties.repository.CustomerRepository;
 import com.erp.modules.parties.repository.OtherPartyRepository;
 import com.erp.modules.parties.repository.SupplierRepository;
+import com.erp.modules.products.repository.BomRepository;
 import com.erp.modules.products.repository.PriceListRepository;
 import com.erp.modules.products.repository.ProductRepository;
 import com.erp.modules.products.repository.UnitOfMeasureRepository;
@@ -39,6 +42,13 @@ import com.erp.modules.sales.repository.SalesReturnRepository;
 import com.erp.modules.sales.repository.TaxRateRepository;
 import com.erp.modules.stock.repository.StockMovementRepository;
 import com.erp.modules.stock.repository.StockOnHandRepository;
+// approvals (ADR-0022)
+import com.erp.modules.approvals.repository.ApprovalPolicyRepository;
+import com.erp.modules.approvals.repository.ApprovalRequestRepository;
+// documents (ADR-0023)
+import com.erp.modules.documents.repository.DocumentBrandingRepository;
+import com.erp.modules.documents.repository.DocumentTemplateRepository;
+import com.erp.modules.documents.repository.GeneratedDocumentRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -107,10 +117,23 @@ public class ScopeGuard {
     private final WhtTransactionRepository   whtTransactions;
     // Sales Orders repositories (ADR-0021 D-10)
     private final QuotationRepository        quotations;
+    // Note: cost-centre repos added below under "cost-centre" comment (ADR-0025 D-5)
     private final SalesOrderRepository       salesOrders;
     private final DeliveryRepository         deliveryRepo;
     // Sales Returns repositories (ADR-0021 D-11, Stage 2)
     private final SalesReturnRepository      salesReturns;
+    // Approvals repositories (ADR-0022 D-11)
+    private final ApprovalPolicyRepository   approvalPolicies;
+    private final ApprovalRequestRepository  approvalRequests;
+    // documents (ADR-0023)
+    private final GeneratedDocumentRepository generatedDocuments;
+    private final DocumentTemplateRepository  documentTemplates;
+    private final DocumentBrandingRepository  documentBrandings;
+    // products-bom (ADR-0026 D-11)
+    private final BomRepository              bomsRepo;
+    // cost-centre (ADR-0025 D-5)
+    private final DimensionRepository        dimensions;
+    private final DimensionValueRepository   dimensionValues;
     private final AuditService             audit;
 
     public ScopeGuard(CompanyRepository companies,
@@ -152,6 +175,17 @@ public class ScopeGuard {
                       SalesOrderRepository salesOrders,
                       DeliveryRepository deliveryRepo,
                       SalesReturnRepository salesReturns,
+                      // approvals (ADR-0022)
+                      ApprovalPolicyRepository approvalPolicies,
+                      ApprovalRequestRepository approvalRequests,
+                      // documents (ADR-0023)
+                      GeneratedDocumentRepository generatedDocuments,
+                      DocumentTemplateRepository documentTemplates,
+                      DocumentBrandingRepository documentBrandings,
+                      BomRepository bomsRepo,
+                      // cost-centre (ADR-0025 D-5)
+                      DimensionRepository dimensions,
+                      DimensionValueRepository dimensionValues,
                       AuditService audit) {
         this.companies      = companies;
         this.branches       = branches;
@@ -192,6 +226,17 @@ public class ScopeGuard {
         this.salesOrders         = salesOrders;
         this.deliveryRepo        = deliveryRepo;
         this.salesReturns        = salesReturns;
+        this.approvalPolicies    = approvalPolicies;
+        this.approvalRequests    = approvalRequests;
+        // documents (ADR-0023)
+        this.generatedDocuments  = generatedDocuments;
+        this.documentTemplates   = documentTemplates;
+        this.documentBrandings   = documentBrandings;
+        // products-bom (ADR-0026 D-11)
+        this.bomsRepo            = bomsRepo;
+        // cost-centre (ADR-0025 D-5)
+        this.dimensions          = dimensions;
+        this.dimensionValues     = dimensionValues;
         this.audit               = audit;
     }
 
@@ -254,6 +299,18 @@ public class ScopeGuard {
             case "delivery"            -> deliveryRepo.findCompanyIdByUid(uid);
             // Sales Returns target types (ADR-0021 D-11, Stage 2)
             case "salesreturn"         -> salesReturns.findCompanyIdByUid(uid);
+            // approvals (ADR-0022)
+            case "approvalpolicy"      -> approvalPolicies.findCompanyIdByUid(uid);
+            case "approvalrequest"     -> approvalRequests.findCompanyIdByUid(uid);
+            // documents (ADR-0023)
+            case "generateddocument"   -> generatedDocuments.findCompanyIdByUid(uid);
+            case "documenttemplate"    -> documentTemplates.findCompanyIdByUid(uid);
+            case "documentbranding"    -> documentBrandings.findCompanyIdByUid(uid);
+            // products-bom (ADR-0026 D-11)
+            case "bom"                 -> bomsRepo.findCompanyIdByUid(uid);
+            // cost-centre target types (ADR-0025 D-5)
+            case "dimension"           -> dimensions.findCompanyIdByUid(uid);
+            case "dimensionvalue"      -> dimensionValues.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };
