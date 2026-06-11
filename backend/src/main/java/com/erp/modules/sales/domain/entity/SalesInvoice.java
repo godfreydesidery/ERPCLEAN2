@@ -1,5 +1,6 @@
 package com.erp.modules.sales.domain.entity;
 
+import com.erp.modules.sales.domain.enums.DocumentOrigin;
 import com.erp.modules.sales.domain.enums.DocumentType;
 import com.erp.modules.sales.domain.enums.InvoiceStatus;
 import com.erp.platform.common.domain.UidEntity;
@@ -123,6 +124,29 @@ public class SalesInvoice extends UidEntity {
     @Column(name = "notes", length = 500)
     @Setter
     private String notes;
+
+    // -------------------------------------------------------------------------
+    // ADR-0021 D-8 — invoice origin seam fields (additive, V18)
+    // -------------------------------------------------------------------------
+
+    /**
+     * DIRECT = walk-in invoice (issues stock on finalise).
+     * SALES_ORDER = invoice raised from a delivery (revenue-only — delivery already issued).
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "origin", nullable = false, length = 20)
+    @Setter
+    private DocumentOrigin origin = DocumentOrigin.DIRECT;
+
+    /** The SO this invoice bills (when origin = SALES_ORDER). */
+    @Column(name = "source_order_uid", length = 26)
+    @Setter
+    private String sourceOrderUid;
+
+    /** The delivery this invoice bills (partial-invoicing trace, D-10). */
+    @Column(name = "source_delivery_uid", length = 26)
+    @Setter
+    private String sourceDeliveryUid;
 
     /**
      * FK → routes.id; nullable (BR-ROUTE-05 — a sale is never blocked when the route is blank).

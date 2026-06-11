@@ -96,6 +96,16 @@ public class SaleIssueStockHandler implements DomainEventHandler {
 
         SaleFinalisedPayload payload = deserialise(event.getPayload());
 
+        // ADR-0021 D-6 (belt-and-braces seam guard): SO-sourced invoices carry issuesStock=false
+        // because the delivery already issued stock via DELIVERY.CONFIRMED → DeliveryIssueStockHandler.
+        // Dedup-mark and return immediately — no stock work for revenue-only invoices.
+        if (!payload.issuesStock()) {
+            log.info("SaleIssueStockHandler: skipping stock issue for SO-sourced invoice uid={} " +
+                             "(issuesStock=false, ADR-0021 D-6)", payload.invoiceUid());
+            guard.markProcessed(CONSUMER, event.getUid());
+            return;
+        }
+
         RequestContext.Principal previous = RequestContext.get();
         RequestContext.set(new RequestContext.Principal(
                 null, "SYSTEM", false, event.getCompanyId(), event.getBranchId(), null));

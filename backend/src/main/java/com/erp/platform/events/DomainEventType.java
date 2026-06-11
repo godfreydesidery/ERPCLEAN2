@@ -26,12 +26,19 @@ public final class DomainEventType {
     /** Goods receipt voided — compensating receipt reversal (ADR-0009 D-3; built by ADR-0011). */
     public static final String STOCK_RECEIPT_VOIDED   = "STOCK.RECEIPT.VOIDED";
 
+    /** Delivery confirmed — stock-issue + COGS trigger for SO-sourced sales (ADR-0021 D-6). */
+    public static final String DELIVERY_CONFIRMED     = "DELIVERY.CONFIRMED";
+
+    /** Delivery returned — COGS reversal + stock-in trigger for returns (ADR-0021 D-11, Stage 2). */
+    public static final String DELIVERY_RETURNED      = "DELIVERY.RETURNED";
+
     // ---------------------------------------------------------------------------
     // Aggregate types (the producing aggregate kind — used for diagnostics/replay)
     // ---------------------------------------------------------------------------
 
     public static final String AGG_SALES_INVOICE = "SALES_INVOICE";
     public static final String AGG_GOODS_RECEIPT = "GOODS_RECEIPT";
+    public static final String AGG_DELIVERY      = "DELIVERY";
 
     private DomainEventType() {
     }

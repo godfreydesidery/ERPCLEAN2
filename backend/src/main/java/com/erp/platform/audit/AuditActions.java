@@ -194,4 +194,17 @@ public final class AuditActions {
     // ---- Year-End Close (ADR-0019 D-12) ----
     // Both close and reopen emit this action; reopen distinguishes via detail("action","reopen").
     public static final String GL_YEAR_CLOSE = "GL.YEAR.CLOSE";
+
+    // ---- Sales Orders / Order-to-Cash (ADR-0021) ----
+    public static final String QUOTATION_CREATE   = "SALES.QUOTE.CREATE";
+    public static final String QUOTATION_SEND     = "SALES.QUOTE.SEND";
+    public static final String QUOTATION_ACCEPT   = "SALES.QUOTE.ACCEPT";
+    public static final String QUOTATION_REJECT   = "SALES.QUOTE.REJECT";
+    public static final String SO_CREATE          = "SALES.ORDER.CREATE";
+    public static final String SO_LINE_ADD        = "SALES.ORDER.LINE.ADD";
+    public static final String SO_LINE_REMOVE     = "SALES.ORDER.LINE.REMOVE";
+    public static final String SO_CONFIRM         = "SALES.ORDER.CONFIRM";
+    public static final String SO_CANCEL          = "SALES.ORDER.CANCEL";
+    public static final String DELIVERY_CREATE    = "SALES.DELIVERY.CREATE";
+    public static final String DELIVERY_INVOICE   = "SALES.DELIVERY.INVOICE";
 }
