@@ -14,8 +14,13 @@ import java.util.List;
  * so the two records produce the same wire shape and Stock's handler deserialises either.
  * This avoids a cross-module compile dependency from Purchases → Stock (ADR-0011 D-1 boundary).
  *
- * <p>Shape (fixed by ADR-0010 D-5 / ADR-0011 D-8):
- * {@code { receiptUid, companyId, branchId, receivedAt, lines:[{ productId, productUid, unitId, qtyInBase }] }}
+ * <p>Shape (fixed by ADR-0010 D-5 / ADR-0011 D-8 / ADR-0020 D-3):
+ * {@code { receiptUid, companyId, branchId, receivedAt, lines:[{ productId, productUid, unitId,
+ * qtyInBase, unitCostAmount }] }}
+ *
+ * <p>ADR-0020 D-3: {@code unitCostAmount} added — populated from
+ * {@code goods_receipt_lines.unit_cost_amount} so the stock handler can recompute the moving average
+ * and post the GRNI GL leg without a cross-module read.
  */
 public record StockReceivedPayload(
         String  receiptUid,
@@ -28,6 +33,7 @@ public record StockReceivedPayload(
             Long       productId,
             String     productUid,
             Long       unitId,
-            BigDecimal qtyInBase
+            BigDecimal qtyInBase,
+            BigDecimal unitCostAmount   // NEW (ADR-0020 D-3) — goods_receipt_lines.unit_cost_amount
     ) {}
 }

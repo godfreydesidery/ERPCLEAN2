@@ -276,20 +276,55 @@ public class BillMatchServiceImpl implements BillMatchService {
     }
 
     // -------------------------------------------------------------------------
-    // GL posting (D-4/D-6): DR Purchases [+ DR VAT] / CR Accounts Payable
+    // GL posting (D-4/D-6/ADR-0020 D-9): DR GRNI (goods) + DR Purchases (service) [+ DR VAT] / CR AP
     // -------------------------------------------------------------------------
 
+    /**
+     * Post the matched bill to GL.
+     *
+     * <p>ADR-0020 D-9 GRNI swap: bill lines linked to a GR line ({@code gr_line_uid IS NOT NULL})
+     * are goods lines — their net amount clears the GRNI liability accrued at goods receipt
+     * (DR GRNI / CR AP). Lines with no GR link are service lines (DR PURCHASES / CR AP).
+     * A bill can mix both types; the two buckets accumulate separately.
+     *
+     * <p>Finding #15 (bill_number) coexists independently — already handled in {@link #runMatch}.
+     */
     private void postMatchedBillToGl(SupplierBill bill) {
-        ChartOfAccount purchasesAcct = glConfig.resolve(bill.getCompanyId(), GlConfigKey.PURCHASES);
-        ChartOfAccount apAcct        = glConfig.resolve(bill.getCompanyId(), GlConfigKey.ACCOUNTS_PAYABLE);
+        List<SupplierBillLine> billLines =
+                lines.findBySupplierBillIdOrderByLineNo(bill.getId());
 
+        // Partition net amount: goods (grLineUid != null) vs service.
+        BigDecimal goodsNet   = BigDecimal.ZERO;
+        BigDecimal serviceNet = BigDecimal.ZERO;
+        for (SupplierBillLine l : billLines) {
+            BigDecimal lineNet = l.getLineNetAmount() != null ? l.getLineNetAmount() : BigDecimal.ZERO;
+            if (l.getGrLineUid() != null) {
+                goodsNet = goodsNet.add(lineNet);
+            } else {
+                serviceNet = serviceNet.add(lineNet);
+            }
+        }
+
+        ChartOfAccount apAcct = glConfig.resolve(bill.getCompanyId(), GlConfigKey.ACCOUNTS_PAYABLE);
         List<LineDraft> glLines = new ArrayList<>();
-        glLines.add(new LineDraft(purchasesAcct.getId(),
-                bill.getNetAmount(), BigDecimal.ZERO,
-                bill.getCurrency(), "Purchases — " + bill.getSupplierInvoiceNo()));
 
-        // Input VAT (ADR-0017 D-7): if bill states VAT, debit to VAT_INPUT (recoverable input VAT)
-        // Previously posted to VAT_PAYABLE; corrected to VAT_INPUT per ADR-0017 D-7.
+        // Goods lines: DR GRNI (clears the GRNI accrual from goods receipt) / later CR AP
+        if (goodsNet.compareTo(BigDecimal.ZERO) > 0) {
+            ChartOfAccount grniAcct = glConfig.resolve(bill.getCompanyId(), GlConfigKey.GRNI);
+            glLines.add(new LineDraft(grniAcct.getId(),
+                    goodsNet, BigDecimal.ZERO,
+                    bill.getCurrency(), "GRNI clear — " + bill.getSupplierInvoiceNo()));
+        }
+
+        // Service lines: DR Purchases (periodic expense recognition)
+        if (serviceNet.compareTo(BigDecimal.ZERO) > 0) {
+            ChartOfAccount purchasesAcct = glConfig.resolve(bill.getCompanyId(), GlConfigKey.PURCHASES);
+            glLines.add(new LineDraft(purchasesAcct.getId(),
+                    serviceNet, BigDecimal.ZERO,
+                    bill.getCurrency(), "Purchases — " + bill.getSupplierInvoiceNo()));
+        }
+
+        // Input VAT (ADR-0017 D-7): debit VAT_INPUT for recoverable input VAT.
         if (bill.getVatAmount().compareTo(BigDecimal.ZERO) > 0) {
             ChartOfAccount vatAcct = glConfig.resolve(bill.getCompanyId(), GlConfigKey.VAT_INPUT);
             glLines.add(new LineDraft(vatAcct.getId(),
@@ -297,6 +332,7 @@ public class BillMatchServiceImpl implements BillMatchService {
                     bill.getCurrency(), "Input VAT — " + bill.getSupplierInvoiceNo()));
         }
 
+        // CR Accounts Payable — full gross amount
         glLines.add(new LineDraft(apAcct.getId(),
                 BigDecimal.ZERO, bill.getGrossAmount(),
                 bill.getCurrency(), "AP control — " + bill.getSupplierInvoiceNo()));
@@ -322,7 +358,9 @@ public class BillMatchServiceImpl implements BillMatchService {
         audit.record(AuditEvent.of(AuditActions.AP_BILL_POST, "supplier_bills",
                         bill.getId(), bill.getUid())
                 .detail(Map.of("glEntryUid", posted.uid(),
-                        "grossAmount", bill.getGrossAmount().toPlainString())));
+                        "grossAmount", bill.getGrossAmount().toPlainString(),
+                        "goodsNet",    goodsNet.toPlainString(),
+                        "serviceNet",  serviceNet.toPlainString())));
     }
 
     // -------------------------------------------------------------------------

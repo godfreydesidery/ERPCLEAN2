@@ -87,6 +87,24 @@ public class StockMovement {
     @Column(name = "note", length = 500, updatable = false)
     private String note;
 
+    /**
+     * Unit cost applied to this movement (ADR-0020 D-2): the receipt cost (GOODS_RECEIPT), the
+     * current avg at issue (SALE_ISSUE / ADJUSTMENT-out), or the opening cost (OPENING_BALANCE).
+     * NULL for movements that post no cost.  Immutable (append-only ledger).
+     * CHECK (unit_cost_amount IS NULL AND value_amount IS NULL) OR unit_cost_amount >= 0.
+     */
+    @Column(name = "unit_cost_amount", precision = 19, scale = 4, updatable = false)
+    private BigDecimal unitCostAmount;
+
+    /**
+     * Signed value of this movement = qty × unit_cost_amount, HALF_UP 4 dp (ADR-0020 D-2).
+     * + for receipt / increase; − for issue / decrease.
+     * This is what a reversal reverses at (D-5 exact-original-cost reversal).
+     * Immutable (append-only ledger).
+     */
+    @Column(name = "value_amount", precision = 19, scale = 4, updatable = false)
+    private BigDecimal valueAmount;
+
     /** When the movement occurred (business time, not DB insert time). */
     @Column(name = "occurred_at", nullable = false, updatable = false)
     private Instant occurredAt;
@@ -104,6 +122,7 @@ public class StockMovement {
 
     /**
      * Full constructor used by {@link com.erp.modules.stock.service.StockPostingService}.
+     * The two trailing cost params are nullable — existing paths that post no cost pass null.
      *
      * @param companyId          tenant scope
      * @param branchId           tenant branch scope
@@ -117,12 +136,15 @@ public class StockMovement {
      * @param note               optional free-text
      * @param occurredAt         business time of the movement
      * @param createdBy          operator id for manual movements; null for system
+     * @param unitCostAmount     unit cost at this movement (ADR-0020 D-2); null = no cost
+     * @param valueAmount        signed value = qty × unit_cost, HALF_UP 4dp; null = no cost
      */
     public StockMovement(Long companyId, Long branchId, Long productId,
                          MovementType movementType, BigDecimal quantity,
                          String sourceEventUid, String sourceDocumentType, String sourceDocumentUid,
                          String reasonCode, String note,
-                         Instant occurredAt, Long createdBy) {
+                         Instant occurredAt, Long createdBy,
+                         BigDecimal unitCostAmount, BigDecimal valueAmount) {
         this.companyId          = companyId;
         this.branchId           = branchId;
         this.productId          = productId;
@@ -135,6 +157,8 @@ public class StockMovement {
         this.note               = note;
         this.occurredAt         = occurredAt != null ? occurredAt : Instant.now();
         this.createdBy          = createdBy;
+        this.unitCostAmount     = unitCostAmount;
+        this.valueAmount        = valueAmount;
     }
 
     @PrePersist
@@ -163,4 +187,6 @@ public class StockMovement {
     public Instant      getOccurredAt()          { return occurredAt; }
     public Instant      getCreatedAt()           { return createdAt; }
     public Long         getCreatedBy()           { return createdBy; }
+    public BigDecimal   getUnitCostAmount()      { return unitCostAmount; }
+    public BigDecimal   getValueAmount()         { return valueAmount; }
 }

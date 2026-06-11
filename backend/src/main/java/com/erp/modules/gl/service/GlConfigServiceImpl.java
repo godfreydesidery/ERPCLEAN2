@@ -45,7 +45,10 @@ public class GlConfigServiceImpl implements GlConfigService {
             Map.entry(GlConfigKey.WHT_PAYABLE,         "2400"),
             Map.entry(GlConfigKey.WHT_RECEIVABLE,      "1500"),
             // Year-End Close increment (ADR-0019 D-9) — 3900 is in the V10 CoA default seed
-            Map.entry(GlConfigKey.RETAINED_EARNINGS,   "3900")
+            Map.entry(GlConfigKey.RETAINED_EARNINGS,   "3900"),
+            // Inventory Valuation & COGS increment (ADR-0020 D-8)
+            Map.entry(GlConfigKey.GRNI,                "2150"),
+            Map.entry(GlConfigKey.STOCK_ADJUSTMENT,    "5160")
     );
 
     private final GlConfigRepository configs;

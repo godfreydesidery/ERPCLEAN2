@@ -13,6 +13,7 @@ import com.erp.modules.iam.repository.UserBranchRepository;
 import com.erp.modules.ap.service.ApGlSeeder;
 import com.erp.modules.ar.service.ArGlSeeder;
 import com.erp.modules.cashbank.service.CashBankSeeder;
+import com.erp.modules.stock.service.InventoryGlSeeder;
 import com.erp.modules.gl.service.ChartOfAccountService;
 import com.erp.modules.gl.service.FiscalCalendarService;
 import com.erp.modules.gl.service.GlConfigService;
@@ -67,6 +68,8 @@ public class BootstrapRunner implements ApplicationRunner {
     private final ApGlSeeder apGlSeeder;
     // Cash & Bank seeder (ADR-0016 D-10)
     private final CashBankSeeder cashBankSeeder;
+    // Inventory Valuation & COGS seeder (ADR-0020 D-8)
+    private final InventoryGlSeeder inventoryGlSeeder;
 
     public BootstrapRunner(BootstrapProperties props,
                            OrganisationRepository organisations,
@@ -83,7 +86,8 @@ public class BootstrapRunner implements ApplicationRunner {
                            GlConfigService glConfigService,
                            ArGlSeeder arGlSeeder,
                            ApGlSeeder apGlSeeder,
-                           CashBankSeeder cashBankSeeder) {
+                           CashBankSeeder cashBankSeeder,
+                           InventoryGlSeeder inventoryGlSeeder) {
         this.props = props;
         this.organisations = organisations;
         this.companies = companies;
@@ -97,9 +101,10 @@ public class BootstrapRunner implements ApplicationRunner {
         this.chartOfAccountService = chartOfAccountService;
         this.fiscalCalendarService = fiscalCalendarService;
         this.glConfigService = glConfigService;
-        this.arGlSeeder      = arGlSeeder;
-        this.apGlSeeder      = apGlSeeder;
-        this.cashBankSeeder  = cashBankSeeder;
+        this.arGlSeeder        = arGlSeeder;
+        this.apGlSeeder        = apGlSeeder;
+        this.cashBankSeeder    = cashBankSeeder;
+        this.inventoryGlSeeder = inventoryGlSeeder;
     }
 
     @Override
@@ -138,6 +143,8 @@ public class BootstrapRunner implements ApplicationRunner {
         apGlSeeder.seedDefaults(company.getId());
         // Seed default Cash & Bank account (ADR-0016 D-10).
         cashBankSeeder.seedDefaults(company.getId());
+        // Seed GRNI + Stock Adjustment GL accounts + gl_configs (ADR-0020 D-8).
+        inventoryGlSeeder.seedDefaults(company.getId());
 
         Branch branch = new Branch(company, props.branchCode(), props.branchName());
         branch.setTimeZone(props.timeZone());
