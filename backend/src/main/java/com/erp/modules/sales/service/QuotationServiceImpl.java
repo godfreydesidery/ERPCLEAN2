@@ -105,6 +105,8 @@ public class QuotationServiceImpl implements QuotationService {
         Customer customer = resolveCustomer(companyId, req.customerUid());
         Long agentId = resolveAgentId(companyId, req.agentUid(), ctx);
 
+        DiscountValidator.validateDocDiscount(req.docDiscountAmount(), req.docDiscountPercent());
+
         Quotation q = new Quotation(companyId, branchId, customer.getId(), agentId,
                 req.currency(), req.quoteDate(), req.validUntil(), actorId());
         q.setDocDiscountAmount(req.docDiscountAmount());
@@ -148,6 +150,8 @@ public class QuotationServiceImpl implements QuotationService {
         BigDecimal vatRate = resolveVatRate(q.getCompanyId(), product);
         BigDecimal qtyInBase = computeQtyInBase(product, unit, req.quantity());
         short lineNo = (short) (quotationLines.findMaxLineNo(q.getId()) + 1);
+
+        DiscountValidator.validateLineDiscount(req.lineDiscountAmount(), req.lineDiscountPercent());
 
         QuotationLine line = new QuotationLine(q.getId(), q.getCompanyId(), q.getBranchId(), lineNo,
                 product.getId(), product.getCode(), product.getName(),
