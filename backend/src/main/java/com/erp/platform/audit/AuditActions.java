@@ -232,4 +232,24 @@ public final class AuditActions {
     public static final String COSTING_VALUE_UPDATE              = "COSTING.VALUE.UPDATE";
     public static final String COSTING_VALUE_DEACTIVATE          = "COSTING.VALUE.DEACTIVATE";
     public static final String COSTING_DIMENSION_MANDATORY_SET   = "COSTING.DIMENSION.MANDATORY.SET";
+
+    // --- inventory-depth (ADR-0028) ---
+    public static final String STOCK_LOCATION_CREATE      = "STOCK.LOCATION.CREATE";
+    public static final String STOCK_LOCATION_UPDATE      = "STOCK.LOCATION.UPDATE";
+    public static final String STOCK_LOCATION_DEACTIVATE  = "STOCK.LOCATION.DEACTIVATE";
+    public static final String STOCK_LOCATION_SET_DEFAULT = "STOCK.LOCATION.SET_DEFAULT";
+    public static final String STOCK_TRANSFER_CREATE      = "STOCK.TRANSFER.CREATE";
+    public static final String STOCK_TRANSFER_DISPATCH    = "STOCK.TRANSFER.DISPATCH";
+    public static final String STOCK_TRANSFER_RECEIVE     = "STOCK.TRANSFER.RECEIVE";
+    public static final String STOCK_TRANSFER_COMPLETE    = "STOCK.TRANSFER.COMPLETE";
+    public static final String STOCK_TRANSFER_CANCEL      = "STOCK.TRANSFER.CANCEL";
+    public static final String STOCK_COUNT_CREATE         = "STOCK.COUNT.CREATE";
+    public static final String STOCK_COUNT_FREEZE         = "STOCK.COUNT.FREEZE";
+    public static final String STOCK_COUNT_ENTER          = "STOCK.COUNT.ENTER";
+    public static final String STOCK_COUNT_POST           = "STOCK.COUNT.POST";
+    public static final String STOCK_COUNT_CANCEL         = "STOCK.COUNT.CANCEL";
+    public static final String STOCK_BATCH_RECEIVE        = "STOCK.BATCH.RECEIVE";
+    public static final String STOCK_SERIAL_RECEIVE       = "STOCK.SERIAL.RECEIVE";
+    public static final String STOCK_SERIAL_ISSUE         = "STOCK.SERIAL.ISSUE";
+    public static final String STOCK_SERIAL_RETURN        = "STOCK.SERIAL.RETURN";
 }

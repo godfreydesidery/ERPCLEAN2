@@ -57,6 +57,20 @@ public final class DomainEventType {
     public static final String DOCUMENT_GENERATED     = "DOCUMENT.GENERATED";
     public static final String AGG_GENERATED_DOCUMENT = "GENERATED_DOCUMENT";
 
+    // --- inventory-depth (ADR-0028) ---
+
+    /** Stock transfer dispatched — TRANSFER_OUT at source + in-transit holding (ADR-0028 D-12). */
+    public static final String STOCK_TRANSFER_DISPATCHED = "STOCK.TRANSFER.DISPATCHED";
+
+    /** Stock transfer received — TRANSFER_IN from in-transit to dest (ADR-0028 D-12). */
+    public static final String STOCK_TRANSFER_RECEIVED   = "STOCK.TRANSFER.RECEIVED";
+
+    /** Stock count posted — informational (GL posts synchronously, not via this event) (ADR-0028 D-12). */
+    public static final String STOCK_COUNT_POSTED        = "STOCK.COUNT.POSTED";
+
+    public static final String AGG_STOCK_TRANSFER        = "STOCK_TRANSFER";
+    public static final String AGG_STOCK_COUNT           = "STOCK_COUNT";
+
     private DomainEventType() {
     }
 }

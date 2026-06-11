@@ -41,6 +41,13 @@ public class StockOnHand {
     @Column(name = "branch_id", nullable = false, updatable = false)
     private Long branchId;
 
+    /**
+     * Scalar FK to stock_locations.id — the physical location within the branch.
+     * Added by ADR-0028 V38 re-grain; backfilled to the branch default location for existing rows.
+     */
+    @Column(name = "location_id", nullable = false, updatable = false)
+    private Long locationId;
+
     /** Scalar FK to products.id — no cross-module @ManyToOne (D-1 boundary rule). */
     @Column(name = "product_id", nullable = false, updatable = false)
     private Long productId;
@@ -99,12 +106,20 @@ public class StockOnHand {
         // JPA
     }
 
-    public StockOnHand(Long companyId, Long branchId, Long productId) {
+    public StockOnHand(Long companyId, Long branchId, Long locationId, Long productId) {
         this.companyId   = companyId;
         this.branchId    = branchId;
+        this.locationId  = locationId;
         this.productId   = productId;
         this.quantity    = BigDecimal.ZERO;
         this.reservedQty = BigDecimal.ZERO;
+    }
+
+    /** Legacy 3-arg constructor retained for backward compatibility; locationId defaults to null.
+     *  @deprecated use the 4-arg constructor; callers must supply a locationId (ADR-0028 D-3). */
+    @Deprecated
+    public StockOnHand(Long companyId, Long branchId, Long productId) {
+        this(companyId, branchId, null, productId);
     }
 
     @PrePersist
@@ -172,6 +187,7 @@ public class StockOnHand {
     public String     getUid()           { return uid; }
     public Long       getCompanyId()     { return companyId; }
     public Long       getBranchId()      { return branchId; }
+    public Long       getLocationId()    { return locationId; }
     public Long       getProductId()     { return productId; }
     public BigDecimal getQuantity()      { return quantity; }
     public BigDecimal getReorderLevel()  { return reorderLevel; }

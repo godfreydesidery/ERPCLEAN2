@@ -20,9 +20,18 @@ public interface StockOnHandRepository extends JpaRepository<StockOnHand, Long> 
     /**
      * The upsert-probe for the posting primitive (D-4): returns the existing on-hand row for
      * the (company, branch, product) triple, or empty if first-touch.
+     * @deprecated Use the location-aware overload (ADR-0028 D-3).
      */
+    @Deprecated
     Optional<StockOnHand> findByCompanyIdAndBranchIdAndProductId(
             Long companyId, Long branchId, Long productId);
+
+    /**
+     * Location-aware upsert-probe (ADR-0028 D-3): returns the existing on-hand row for
+     * (company, branch, location, product), or empty if first-touch.
+     */
+    Optional<StockOnHand> findByCompanyIdAndBranchIdAndLocationIdAndProductId(
+            Long companyId, Long branchId, Long locationId, Long productId);
 
     /** uid-lookup for the reorder-level edit endpoint (D-11). */
     Optional<StockOnHand> findByUid(String uid);
