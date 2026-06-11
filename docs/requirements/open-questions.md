@@ -881,3 +881,63 @@ Each entry: why it matters · who decides · does it block build.
   check, and the net rolled to 3900 must round identically to the GL figures they zero (NFR-CLOSE-02).
   *Recommended default:* half-up, TZS = 0 dp. *Decider:* owner (finance input). *Blocks ADR-0019:* **NO** for
   the model; **confirm before go-live**.
+
+## Inventory Valuation & COGS
+
+> The **Inventory-Valuation / COGS scoping forks** the owner answered — **moving weighted average** costing;
+> **perpetual** inventory via a **GRNI** clearing account; **opening inventory valuation** IN; a **stock
+> valuation report** with the **Σ == `1300 Inventory` GL balance** recon bar IN; **stock-adjustment
+> revaluation** IN; the **deferred** list (multi-location, FIFO/standard cost, landed cost, counts,
+> batch/serial, negative-stock-policy depth, inter-branch-transfer valuation, manufacturing WIP); and the two
+> new permissions (`INVENTORY.VALUATION.VIEW`, `INVENTORY.OPENING.SET`) — are **RESOLVED 2026-06-10** (see
+> inventory-valuation.md §2/§5/§6/§7). **No ADR-0020-blocking open question remains.** What stays open is
+> detail with a recommended default; the architecturally meaty items are **decisions ADR-0020 makes**, not
+> requirements blockers (the *behaviour* is fixed).
+
+### The ADR-0020 design seams (DECISIONS the architect makes — do NOT block the requirements)
+
+- **OQ-INV-02** — **Reversal cost: original issue/receipt cost vs the now-current average?** A sale void
+  reverses COGS — at the **original** cost the sale issued at, or the **now-current** average? *Recommended
+  default:* the **original issue/receipt cost** (symmetric reversal; no phantom gain/loss from average drift;
+  record the cost on the original movement to reverse it). *Decider:* architect / owner (finance). *Blocks
+  ADR-0020:* **NO** — original-cost is the default; current-average is discouraged.
+- **OQ-INV-03** — **GRNI granularity: per goods-receipt line vs per receipt?** GRNI is credited at receipt,
+  debited at bill-match. Accrue/clear **per GR line** (a partial bill clears the matched portion) or **per
+  receipt**? *Recommended default:* **per GR line** (aligns with the 3-way match's line granularity). *Decider:*
+  architect (ADR-0020). *Blocks ADR-0020:* **NO** — it **is** the decision; both reconcile to BR-INV-08.
+- **OQ-INV-04** — **Fate of `5150 Purchases`: the GOODS-vs-SERVICE bill branch.** A stock/goods bill **clears
+  GRNI**; a service / non-stock bill has no GRNI. Does the service bill **retain** `DR 5150 Purchases / CR AP`,
+  and how is GOODS vs SERVICE decided? *Recommended default:* a bill **with a linked goods receipt** clears
+  GRNI; a bill **without** retains `5150 Purchases` (the dedicated service-purchasing split is a separate
+  Procurement item — PATH-TO-FULL-ERP §3.4). *Decider:* architect (ADR-0020) confirms the predicate. *Blocks
+  ADR-0020:* **NO** — `5150` is retained for service; the predicate is the design detail.
+- **OQ-INV-05** — **The cost-into-event seam.** `StockReceivedPayload.LineItem` carries no unit cost; the cost
+  is on `goods_receipt_lines.unit_cost_amount` (V8). Carry it by **extending the STOCK.RECEIVED payload** (a
+  per-line `unitCost` — recommended, leanest additive shape) **or** have the handler **read the GR line cost by
+  uid** as a DTO? *Recommended default:* **extend the payload**. *Decider:* architect (ADR-0020). *Blocks
+  ADR-0020:* **NO** — it **is** the seam decision; both deliver the cost.
+- **OQ-INV-06** — **Average-cost precision & storage.** To how many decimals is the running average held, and
+  where do the average + on-hand value live? *Recommended default:* hold the average at a **higher internal
+  scale** (4–6 dp) to avoid cumulative drift, **rounded HALF_UP to base-currency dp on posting**; store as
+  **additive columns on `stock_on_hand`** (NFR-STOCK-06). *Decider:* architect (ADR-0020) + owner (finance) on
+  the display dp. *Blocks ADR-0020:* **NO** — confirm dp before go-live.
+
+### Still open — NON-blocking detail (recommended defaults stand; do NOT block ADR-0020)
+
+- **OQ-INV-01** — **Issue cost at zero / negative on-hand (the negative-stock cost rule).** The quantity model
+  allows negative on-hand (ADR-0010 BR-STOCK-03); at **what cost** is an issue valued with no established
+  average? *Recommended default:* **block the costed issue** until a receipt establishes a cost — or, the
+  flagged alternative, value at the **last-known average**. The deferred-cost-on-negative + true-up policy is
+  out of scope. *Decider:* owner (finance). *Blocks ADR-0020:* **NO** — a single rule (recommended block)
+  stands; the alternative is a one-line config.
+- **OQ-INV-07** — **Multi-location valuation.** v1 is single location (one average per company-product).
+  *Recommended default:* single-location v1; per-location cost + inter-location transfer valuation land with
+  Stock multi-location (PATH-TO-FULL-ERP §3.5). *Decider:* owner. *Blocks ADR-0020:* **NO** — deferred, not
+  precluded.
+- **OQ-INV-08** — **Multi-currency inventory valuation.** v1 is base currency (TZS) (BR-INV-11). *Recommended
+  default:* base-currency cost in v1; foreign-currency cost / FX on the unit cost lands with FX
+  (multicurrency.md). *Decider:* owner. *Blocks ADR-0020:* **NO** — deferred, not precluded.
+- **OQ-CUR-03** — *(carried)* confirm **rounding mode + TZS decimals** — the average-cost rounding, the
+  inventory / COGS / GRNI / adjustment legs, and the valuation-report sum must round identically (NFR-INV-02).
+  *Recommended default:* HALF_UP, TZS = 0 dp display, a higher internal scale on the average (OQ-INV-06).
+  *Decider:* owner (finance input). *Blocks ADR-0020:* **NO** for the model; **confirm before go-live**.
