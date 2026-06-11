@@ -25,5 +25,8 @@ public enum GlConfigKey {
     WHT_PAYABLE,
     WHT_RECEIVABLE,
     // --- Year-End Close increment (ADR-0019 D-9) ---
-    RETAINED_EARNINGS
+    RETAINED_EARNINGS,
+    // --- Inventory Valuation & COGS increment (ADR-0020 D-8) ---
+    GRNI,
+    STOCK_ADJUSTMENT
 }

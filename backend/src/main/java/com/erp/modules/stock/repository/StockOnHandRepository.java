@@ -49,4 +49,10 @@ public interface StockOnHandRepository extends JpaRepository<StockOnHand, Long> 
 
     /** All on-hand rows for a product across all branches of a company (cross-branch overview). */
     List<StockOnHand> findByCompanyIdAndProductId(Long companyId, Long productId);
+
+    /**
+     * All on-hand rows for a company across all branches — used by the valuation report
+     * to aggregate value per product (ADR-0020 D-6).
+     */
+    List<StockOnHand> findByCompanyId(Long companyId);
 }

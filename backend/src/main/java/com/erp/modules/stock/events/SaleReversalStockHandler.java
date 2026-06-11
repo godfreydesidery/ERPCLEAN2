@@ -4,6 +4,8 @@ import com.erp.modules.sales.domain.dto.SaleVoidedPayload;
 import com.erp.modules.stock.domain.entity.StockMovement;
 import com.erp.modules.stock.domain.enums.MovementType;
 import com.erp.modules.stock.repository.StockMovementRepository;
+import com.erp.modules.stock.service.InventoryGlPoster;
+import com.erp.modules.stock.service.InventoryValuationService;
 import com.erp.modules.stock.service.StockPostingService;
 import com.erp.platform.events.DomainEvent;
 import com.erp.platform.events.DomainEventHandler;
@@ -11,6 +13,8 @@ import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.IdempotencyGuard;
 import com.erp.platform.security.RequestContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,14 +26,12 @@ import org.springframework.transaction.annotation.Transactional;
  * Consumes {@code SALE.VOIDED} — reverses SALE_ISSUE movements by reading Stock's own ledger
  * (ADR-0010 D-5, OQ-STOCK-10).
  *
- * <p>The reversal source is {@code stock_movements} filtered by
- * {@code source_document_uid = invoiceUid AND movement_type = SALE_ISSUE} — not the void payload's
- * lines. This is robust to recipe explosion (the ledger contains component-level rows, not composed
- * product rows) and to non-stockable skips (lines that were never issued have nothing to reverse).
- *
- * <p>Out-of-order anomaly (OQ-STOCK-10): if no SALE_ISSUE rows exist for the invoice, a log/metric
- * is recorded; no phantom movement is posted (zero-effect movements are forbidden by the DB CHECK).
- * The {@code processed_events} marker is still written so the void is not re-attempted.
+ * <p>ADR-0020: for each original SALE_ISSUE movement, reads the stored {@code value_amount}
+ * (cost at time of issue) and calls {@link InventoryValuationService#reverseIssue} to restore
+ * {@code on_hand_value}. Posts DR INVENTORY (1300) / CR COGS (5100) via
+ * {@link InventoryGlPoster#postSaleReversalInNewTx} (REQUIRES_NEW — GL anomaly never poisons
+ * the dispatch TX). If the original movement had no cost (null value_amount), the GL leg is
+ * skipped with a WARN; quantity reversal still proceeds.
  */
 @Component
 public class SaleReversalStockHandler implements DomainEventHandler {
@@ -39,18 +41,24 @@ public class SaleReversalStockHandler implements DomainEventHandler {
     static final String CONSUMER = "STOCK.SALE_REVERSAL";
     private static final String DOC_TYPE = "SALES_INVOICE";
 
-    private final IdempotencyGuard guard;
-    private final StockPostingService posting;
-    private final StockMovementRepository movementRepository;
-    private final ObjectMapper objectMapper;
+    private final IdempotencyGuard           guard;
+    private final StockPostingService        posting;
+    private final StockMovementRepository    movementRepository;
+    private final InventoryValuationService  valuation;
+    private final InventoryGlPoster          glPoster;
+    private final ObjectMapper               objectMapper;
 
     public SaleReversalStockHandler(IdempotencyGuard guard,
                                      StockPostingService posting,
                                      StockMovementRepository movementRepository,
+                                     InventoryValuationService valuation,
+                                     InventoryGlPoster glPoster,
                                      ObjectMapper objectMapper) {
         this.guard              = guard;
         this.posting            = posting;
         this.movementRepository = movementRepository;
+        this.valuation          = valuation;
+        this.glPoster           = glPoster;
         this.objectMapper       = objectMapper;
     }
 
@@ -69,17 +77,13 @@ public class SaleReversalStockHandler implements DomainEventHandler {
 
         SaleVoidedPayload payload = deserialise(event.getPayload());
 
-        // Look up what was actually issued for this invoice (reverse-from-ledger, OQ-STOCK-10).
         List<StockMovement> issued = movementRepository
                 .findBySourceDocumentUidAndMovementType(payload.invoiceUid(), MovementType.SALE_ISSUE);
 
         if (issued.isEmpty()) {
-            // Out-of-order or entirely non-stockable invoice — record anomaly, no phantom movement.
             log.warn("SaleReversalStockHandler: SALE.VOIDED for invoice uid={} but no SALE_ISSUE " +
-                            "movements found in ledger — anomaly recorded (OQ-STOCK-10). " +
-                            "void event uid={}",
+                            "movements found in ledger — anomaly recorded (OQ-STOCK-10). void event uid={}",
                     payload.invoiceUid(), event.getUid());
-            // Still mark processed so this void is not re-attempted.
             guard.markProcessed(CONSUMER, event.getUid());
             return;
         }
@@ -88,18 +92,56 @@ public class SaleReversalStockHandler implements DomainEventHandler {
         RequestContext.set(new RequestContext.Principal(
                 null, "SYSTEM", false, event.getCompanyId(), event.getBranchId(), null));
         try {
+            BigDecimal totalOriginalValue = BigDecimal.ZERO;
+            boolean anyCostNull = false;
+
             for (StockMovement original : issued) {
-                // Post opposite-sign SALE_REVERSAL — same product, same magnitude, sign flipped.
+                BigDecimal originalValue = original.getValueAmount();
+
+                if (originalValue == null) {
+                    log.warn("SaleReversalStockHandler: original SALE_ISSUE movement uid={} has no " +
+                                     "value_amount — valuation restore skipped for this row (D-2 edge)",
+                            original.getUid());
+                    anyCostNull = true;
+                } else {
+                    // Restore on_hand_value at original cost (ADR-0020 D-5).
+                    // value_amount on a SALE_ISSUE is stored as a positive absolute value.
+                    valuation.reverseIssue(
+                            original.getCompanyId(), original.getBranchId(), original.getProductId(),
+                            originalValue);
+                    totalOriginalValue = totalOriginalValue.add(originalValue);
+                }
+
+                // Post opposite-sign SALE_REVERSAL quantity movement.
                 posting.post(
                         original.getCompanyId(), original.getBranchId(), original.getProductId(),
-                        original.getQuantity().negate(),  // negate: SALE_ISSUE was negative → reversal is positive
+                        original.getQuantity().negate(),  // SALE_ISSUE was negative → reversal is positive
                         MovementType.SALE_REVERSAL,
-                        event.getUid(),                   // source_event_uid = the VOID event's uid
+                        event.getUid(),
                         DOC_TYPE, payload.invoiceUid(),
                         null, null,
-                        null,                             // occurredAt → now() (StockMovement default)
-                        null);
+                        null,
+                        null,
+                        original.getUnitCostAmount(),
+                        originalValue);
             }
+
+            // Post one GL journal DR INVENTORY / CR COGS for the entire void (D-5).
+            if (totalOriginalValue.compareTo(BigDecimal.ZERO) > 0) {
+                String glEntryUid = glPoster.postSaleReversalInNewTx(
+                        event.getCompanyId(), event.getBranchId(), LocalDate.now(),
+                        payload.invoiceUid(), "TZS", totalOriginalValue);
+                if (glEntryUid == null) {
+                    log.warn("SaleReversalStockHandler: sale reversal GL post returned null " +
+                                     "for invoice uid={} — GL not configured (qty still reversed)",
+                            payload.invoiceUid());
+                }
+            } else if (anyCostNull) {
+                log.warn("SaleReversalStockHandler: all original SALE_ISSUE movements for invoice uid={} " +
+                                 "lacked value_amount — no COGS reversal GL posted",
+                        payload.invoiceUid());
+            }
+
         } finally {
             if (previous == null) {
                 RequestContext.clear();

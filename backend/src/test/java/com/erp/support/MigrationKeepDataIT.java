@@ -84,14 +84,15 @@ class MigrationKeepDataIT extends PostgresIntegrationTest {
                 assertThat(maxLen).as("every gl_config uid fits VARCHAR(26)").isLessThanOrEqualTo(26);
             }
             // Sanity: long config keys are present (the ones that overflowed pre-fix), incl. the
-            // V14 VAT/WHT keys and the V16 RETAINED_EARNINGS key — all use the #12-safe md5 pattern.
+            // V14 VAT/WHT, V16 RETAINED_EARNINGS, and V17 GRNI/STOCK_ADJUSTMENT keys — all #12-safe md5.
             try (ResultSet rs = s.executeQuery(
                     "SELECT count(*) AS n FROM gl_configs WHERE config_key IN "
                     + "('ACCOUNTS_RECEIVABLE','OPENING_BALANCE_EQUITY','BAD_DEBT_EXPENSE',"
-                    + "'VAT_INPUT','VAT_DUE','WHT_PAYABLE','WHT_RECEIVABLE','RETAINED_EARNINGS')")) {
+                    + "'VAT_INPUT','VAT_DUE','WHT_PAYABLE','WHT_RECEIVABLE','RETAINED_EARNINGS',"
+                    + "'GRNI','STOCK_ADJUSTMENT')")) {
                 rs.next();
-                assertThat(rs.getInt("n")).as("long-named config keys seeded (incl. V14 VAT/WHT + V16 RETAINED_EARNINGS)")
-                        .isGreaterThanOrEqualTo(8);
+                assertThat(rs.getInt("n")).as("long-named config keys seeded (V14 VAT/WHT + V16 RE + V17 GRNI/STOCK_ADJ)")
+                        .isGreaterThanOrEqualTo(10);
             }
             // V14 CoA accounts (1400/1500/2300/2400) seeded for the pre-existing company, uid <=26.
             try (ResultSet rs = s.executeQuery(

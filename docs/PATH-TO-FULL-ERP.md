@@ -18,7 +18,7 @@ ERPCLEAN2 today is a **working, double-entry accounting system on top of a compl
 
 ## 2. Status snapshot
 
-**Overall completion ≈ 37%** (effort-weighted) as of 2026-06-10. See the roll-up below the table.
+**Overall completion ≈ 39%** (effort-weighted) as of 2026-06-10 (Inventory valuation/COGS shipped — area 8 30%→70%). See the roll-up below the table.
 
 | # | ERP area | Status | Effort·wt | % done | Note |
 |---|----------|--------|-----------|--------|------|
@@ -29,7 +29,7 @@ ERPCLEAN2 today is a **working, double-entry accounting system on top of a compl
 | 5 | **Reporting, Financial Statements & BI** | **PARTIAL** | L·5 | **45%** | TB + AR/AP ageing + **P&L/BS/Cash-Flow/ledger/export DONE**; analytics, dashboards, custom report builder remaining |
 | 6 | **Sales / Order-to-Cash depth** | **PARTIAL** | XL·8 | **30%** | Invoice channel + credit sales done; SO, POS, returns, delivery, pricing depth remaining |
 | 7 | **Procurement / Purchase-to-Pay depth** | **PARTIAL** | XL·8 | **45%** | PO→GR→bill→3-way-match→pay done; requisitions, RFQ, approvals, landed cost, returns remaining |
-| 8 | **Inventory / Warehouse depth** | **PARTIAL** | L·5 | **30%** | Qty-only single-location done; **valuation/COGS** (next, decided), multi-location, counts, batch/serial remaining |
+| 8 | **Inventory / Warehouse depth** | **PARTIAL** | L·5 | **70%** | Qty-only + **moving-avg valuation/COGS, perpetual via GRNI (ADR-0020/V17) DONE**; multi-location, counts, batch/serial remaining |
 | 9 | **Manufacturing / Production** | **NOT_STARTED** | XL·8 | **0%** | Greenfield; gated on multi-level BOM + valuation/COGS |
 | 10 | **HR & Payroll (Tanzania)** | **NOT_STARTED** | XL·8 | **0%** | Greenfield; posts to GL, cash via Cash&Bank; TZ statutory detail |
 | 11 | **Fixed Assets** | **NOT_STARTED** | L·5 | **0%** | Greenfield; depreciation runs post to GL; fiscal-period gated |
@@ -43,7 +43,7 @@ ERPCLEAN2 today is a **working, double-entry accounting system on top of a compl
 
 ### Completion roll-up (recompute when an area's % changes)
 
-**Method:** effort-weight per area (`M·3 · L·5 · XL·8 · XXL·12`; IAM foundation ·10), then `Σ(weight × %) ÷ Σweight`. Total weight = **113**; weighted-done ≈ **42** → **≈ 37% complete** (effort-weighted).
+**Method:** effort-weight per area (`M·3 · L·5 · XL·8 · XXL·12`; IAM foundation ·10), then `Σ(weight × %) ÷ Σweight`. Total weight = **113**; weighted-done ≈ **44** → **≈ 39% complete** (effort-weighted). (Inventory area 8 30%→70% = +2.0 points since the last bump.)
 
 **Two lenses:**
 - **By raw remaining effort: ≈37%** — the long tail is large (six greenfield modules at 0% + a full production-hardening pass).

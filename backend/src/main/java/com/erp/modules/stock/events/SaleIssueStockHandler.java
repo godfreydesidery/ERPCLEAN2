@@ -4,6 +4,9 @@ import com.erp.modules.products.domain.dto.ProductDto;
 import com.erp.modules.products.service.ProductService;
 import com.erp.modules.sales.domain.dto.SaleFinalisedPayload;
 import com.erp.modules.stock.domain.enums.MovementType;
+import com.erp.modules.stock.service.InventoryGlPoster;
+import com.erp.modules.stock.service.InventoryGlPoster.CogsLeg;
+import com.erp.modules.stock.service.InventoryValuationService;
 import com.erp.modules.stock.service.RecipeExplosionResolver;
 import com.erp.modules.stock.service.StockPostingService;
 import com.erp.platform.events.DomainEvent;
@@ -13,6 +16,9 @@ import com.erp.platform.events.IdempotencyGuard;
 import com.erp.platform.security.RequestContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,12 +37,14 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>Non-stockable, non-composed → skip and record (INFO log; no movement row).</li>
  * </ul>
  *
+ * <p>ADR-0020: after each qty movement, calls {@link InventoryValuationService#costIssue} to
+ * debit {@code on_hand_value} at current avg; posts DR COGS (5100) / CR INVENTORY (1300) via
+ * {@link InventoryGlPoster#postCogsInNewTx} (REQUIRES_NEW — a GL anomaly never poisons the
+ * dispatch TX). If avg_cost is NULL for a product (no prior receipt), COGS leg is skipped with
+ * a WARN log; quantity still moves (D-2 edge note).
+ *
  * <p>Idempotency: checked via {@link IdempotencyGuard} (primary, ADR-0009 D-6a) + DB backstop
  * {@code uq_stock_movement_source_event (source_event_uid, product_id)} (secondary, D-6b).
- *
- * <p>Runs as the system under the event's company/branch scope (D-5): no JWT, no request principal.
- * A system {@link RequestContext.Principal} is set for the duration of the handle call so that
- * tenant-scoped repository methods resolve correctly. It is cleared after, in a finally block.
  */
 @Component
 public class SaleIssueStockHandler implements DomainEventHandler {
@@ -49,21 +57,27 @@ public class SaleIssueStockHandler implements DomainEventHandler {
     /** Source document type written on each movement (D-5). */
     private static final String DOC_TYPE = "SALES_INVOICE";
 
-    private final IdempotencyGuard guard;
-    private final StockPostingService posting;
-    private final ProductService productService;
-    private final RecipeExplosionResolver explosion;
-    private final ObjectMapper objectMapper;
+    private final IdempotencyGuard           guard;
+    private final StockPostingService        posting;
+    private final ProductService             productService;
+    private final RecipeExplosionResolver    explosion;
+    private final InventoryValuationService  valuation;
+    private final InventoryGlPoster          glPoster;
+    private final ObjectMapper               objectMapper;
 
     public SaleIssueStockHandler(IdempotencyGuard guard,
                                   StockPostingService posting,
                                   ProductService productService,
                                   RecipeExplosionResolver explosion,
+                                  InventoryValuationService valuation,
+                                  InventoryGlPoster glPoster,
                                   ObjectMapper objectMapper) {
         this.guard          = guard;
         this.posting        = posting;
         this.productService = productService;
         this.explosion      = explosion;
+        this.valuation      = valuation;
+        this.glPoster       = glPoster;
         this.objectMapper   = objectMapper;
     }
 
@@ -75,26 +89,36 @@ public class SaleIssueStockHandler implements DomainEventHandler {
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void handle(DomainEvent event) {
-        // 1. Primary dedup check (ADR-0009 D-6a).
         if (guard.alreadyProcessed(CONSUMER, event.getUid())) {
             log.debug("SaleIssueStockHandler: event uid={} already processed — skipping", event.getUid());
             return;
         }
 
-        // 2. Deserialise payload.
         SaleFinalisedPayload payload = deserialise(event.getPayload());
 
-        // 3. Establish system-scoped RequestContext from event tenant scope (D-5).
-        //    Save and restore the previous principal so that callers in the same thread
-        //    (e.g. integration tests that set a test principal before calling the dispatcher)
-        //    are not left with a cleared context after the handler returns.
         RequestContext.Principal previous = RequestContext.get();
         RequestContext.set(new RequestContext.Principal(
                 null, "SYSTEM", false, event.getCompanyId(), event.getBranchId(), null));
         try {
-            // 4. Process each line.
+            List<CogsLeg> cogsLegs = new ArrayList<>();
+
             for (SaleFinalisedPayload.LineItem line : payload.lines()) {
-                processLine(event, payload, line);
+                processLine(event, payload, line, cogsLegs);
+            }
+
+            // One COGS journal per SALE.FINALISED event (one per invoice), all components combined.
+            if (!cogsLegs.isEmpty()) {
+                LocalDate postingDate = payload.finalisedAt() != null
+                        ? payload.finalisedAt().atZone(ZoneOffset.UTC).toLocalDate()
+                        : LocalDate.now();
+                String glEntryUid = glPoster.postCogsInNewTx(
+                        event.getCompanyId(), event.getBranchId(), postingDate,
+                        payload.invoiceUid(), "TZS", cogsLegs);
+                if (glEntryUid == null) {
+                    log.warn("SaleIssueStockHandler: COGS GL post returned null for invoice uid={} " +
+                                     "— GL not configured or period closed (qty still moved)",
+                            payload.invoiceUid());
+                }
             }
         } finally {
             if (previous == null) {
@@ -104,16 +128,14 @@ public class SaleIssueStockHandler implements DomainEventHandler {
             }
         }
 
-        // 5. Mark processed (in same TX as movements — atomicity guarantee, ADR-0009 D-6a).
         guard.markProcessed(CONSUMER, event.getUid());
     }
 
     private void processLine(DomainEvent event, SaleFinalisedPayload payload,
-                              SaleFinalisedPayload.LineItem line) {
+                              SaleFinalisedPayload.LineItem line, List<CogsLeg> cogsLegs) {
         ProductDto product = productService.getByUid(line.productUid());
 
         if (explosion.isComposed(line.productUid())) {
-            // Composed product — explode to stockable components (D-8).
             List<RecipeExplosionResolver.ExplosionLine> components =
                     explosion.explode(line.productUid(), line.qtyInBase());
             if (components.isEmpty()) {
@@ -122,32 +144,97 @@ public class SaleIssueStockHandler implements DomainEventHandler {
                         line.productUid(), payload.invoiceUid());
             }
             for (RecipeExplosionResolver.ExplosionLine comp : components) {
-                posting.post(
-                        event.getCompanyId(), event.getBranchId(), comp.productId(),
-                        comp.quantity(),                  // already negated by the resolver
-                        MovementType.SALE_ISSUE,
-                        event.getUid(),                   // source_event_uid = this event's uid
-                        DOC_TYPE, payload.invoiceUid(),
-                        null, null,
-                        payload.finalisedAt(),
-                        null);                            // system: no actor
+                processComponent(event, payload, comp, cogsLegs);
             }
         } else if (!product.stockable()) {
-            // Non-stockable, non-composed — skip and record.
             log.info("SaleIssueStockHandler: skipping non-stockable product uid={} name='{}' " +
                             "on invoice uid={} (BR-STOCK-02, D-3)",
                     line.productUid(), product.name(), payload.invoiceUid());
         } else {
-            // Simple stockable product — post one SALE_ISSUE.
-            posting.post(
-                    event.getCompanyId(), event.getBranchId(), line.productId(),
-                    line.qtyInBase().negate(),            // signed delta: out = negative
-                    MovementType.SALE_ISSUE,
-                    event.getUid(),
-                    DOC_TYPE, payload.invoiceUid(),
-                    null, null,
-                    payload.finalisedAt(),
-                    null);
+            processSimpleLine(event, payload, line, product, cogsLegs);
+        }
+    }
+
+    /**
+     * Issues one exploded BOM component and accumulates a COGS leg.
+     * FIX G: skips if issuedMagnitude is zero (guards the unit-cost divide).
+     */
+    private void processComponent(DomainEvent event, SaleFinalisedPayload payload,
+                                   RecipeExplosionResolver.ExplosionLine comp,
+                                   List<CogsLeg> cogsLegs) {
+        // quantity() is already negated by the resolver (component going out)
+        BigDecimal issuedMagnitude = comp.quantity().abs();
+        // FIX G: guard zero magnitude — unit-cost re-derivation divides by issuedMagnitude
+        if (issuedMagnitude.compareTo(BigDecimal.ZERO) == 0) {
+            log.warn("SaleIssueStockHandler: zero issuedMagnitude for component " +
+                             "productId={} on invoice uid={} — COGS leg skipped (FIX G)",
+                    comp.productId(), payload.invoiceUid());
+            return;
+        }
+
+        BigDecimal issuedValue = valuation.costIssue(
+                event.getCompanyId(), event.getBranchId(), comp.productId(), issuedMagnitude);
+
+        posting.post(
+                event.getCompanyId(), event.getBranchId(), comp.productId(),
+                comp.quantity(),
+                MovementType.SALE_ISSUE,
+                event.getUid(),
+                DOC_TYPE, payload.invoiceUid(),
+                null, null,
+                payload.finalisedAt(),
+                null,
+                issuedValue != null ? issuedValue.divide(issuedMagnitude,
+                        4, java.math.RoundingMode.HALF_UP) : null,
+                issuedValue);
+
+        if (issuedValue == null) {
+            log.warn("SaleIssueStockHandler: avg_cost not established for component " +
+                             "productId={} on invoice uid={} — COGS leg skipped (D-2 edge)",
+                    comp.productId(), payload.invoiceUid());
+        } else {
+            // comp.productUid() not available from ExplosionLine; use productId as fallback code.
+            cogsLegs.add(new CogsLeg(comp.productId(), comp.productId().toString(), issuedValue));
+        }
+    }
+
+    /**
+     * Issues one simple stockable line and accumulates a COGS leg.
+     * FIX G: zero-qty guard delegated to {@link InventoryValuationService#costIssue}.
+     */
+    private void processSimpleLine(DomainEvent event, SaleFinalisedPayload payload,
+                                    SaleFinalisedPayload.LineItem line, ProductDto product,
+                                    List<CogsLeg> cogsLegs) {
+        BigDecimal issuedQty = line.qtyInBase();
+        BigDecimal issuedValue = valuation.costIssue(
+                event.getCompanyId(), event.getBranchId(), line.productId(), issuedQty);
+
+        // Unit-cost re-derivation: guard zero qty to avoid ArithmeticException (FIX G).
+        BigDecimal unitCost = null;
+        if (issuedValue != null && issuedQty.compareTo(BigDecimal.ZERO) != 0) {
+            unitCost = issuedValue.divide(issuedQty, 4, java.math.RoundingMode.HALF_UP);
+        }
+
+        posting.post(
+                event.getCompanyId(), event.getBranchId(), line.productId(),
+                issuedQty.negate(),
+                MovementType.SALE_ISSUE,
+                event.getUid(),
+                DOC_TYPE, payload.invoiceUid(),
+                null, null,
+                payload.finalisedAt(),
+                null,
+                unitCost,
+                issuedValue);
+
+        if (issuedValue == null) {
+            log.warn("SaleIssueStockHandler: avg_cost not established for product uid={} " +
+                             "on invoice uid={} — COGS leg skipped (D-2 edge)",
+                    line.productUid(), payload.invoiceUid());
+        } else {
+            cogsLegs.add(new CogsLeg(line.productId(),
+                    product.code() != null ? product.code() : line.productUid(),
+                    issuedValue));
         }
     }
 

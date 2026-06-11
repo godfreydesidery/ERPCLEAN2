@@ -44,14 +44,16 @@ public class StockPostingServiceImpl implements StockPostingService {
     public String post(Long companyId, Long branchId, Long productId,
                        BigDecimal quantity, MovementType movementType,
                        String sourceEventUid, String sourceDocumentType, String sourceDocumentUid,
-                       String reasonCode, String note, Instant occurredAt, Long actorId) {
+                       String reasonCode, String note, Instant occurredAt, Long actorId,
+                       BigDecimal unitCostAmount, BigDecimal valueAmount) {
 
         // (1) Append the movement row — the immutable ledger entry.
         StockMovement movement = new StockMovement(
                 companyId, branchId, productId,
                 movementType, quantity,
                 sourceEventUid, sourceDocumentType, sourceDocumentUid,
-                reasonCode, note, occurredAt, actorId);
+                reasonCode, note, occurredAt, actorId,
+                unitCostAmount, valueAmount);
         movements.save(movement);
 
         // (2) Upsert the on-hand row — first touch creates it at qty 0, then delta is applied.

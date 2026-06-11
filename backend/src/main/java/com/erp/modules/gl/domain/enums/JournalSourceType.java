@@ -28,10 +28,14 @@ public enum JournalSourceType {
     // --- Year-End Close increment (ADR-0019 D-10) — admitted by the DB CHECK (V16 widens it) ---
     // The reversal reuses YEAR_END_CLOSE with reversalOfId set — no separate token (D-10 decided).
     YEAR_END_CLOSE,
+    // --- Inventory Valuation & COGS increment (ADR-0020 D-10) — admitted by the DB CHECK (V17 widens it) ---
+    STOCK_RECEIPT,
+    COGS,
+    STOCK_ADJUSTMENT,
+    OPENING_INVENTORY,
     // --- RESERVED — NOT yet admitted by the DB CHECK; widen when the increment lands ---
     AR,
     AP,
-    COGS,
     CASH,
     PAYROLL,
     DEPRECIATION
