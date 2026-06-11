@@ -13,6 +13,9 @@ import java.time.Instant;
  *
  * <p>On-hand may go negative (no block — BR-STOCK-03). The optimistic {@code version} on
  * {@link com.erp.modules.stock.domain.entity.StockOnHand} guards concurrent updates (NFR-STOCK-04).
+ *
+ * <p>ADR-0020 D-2: two trailing nullable cost params added. Existing callers that post no cost
+ * pass {@code null, null}. The cost is stored immutably on the movement row for exact reversal.
  */
 public interface StockPostingService {
 
@@ -32,10 +35,13 @@ public interface StockPostingService {
      * @param note               optional free-text
      * @param occurredAt         business time (event time for event-driven; now() for manual)
      * @param actorId            operator user id for manual movements; null for system/event-driven
+     * @param unitCostAmount     unit cost for this movement (ADR-0020 D-2); null = no cost recorded
+     * @param valueAmount        signed value = qty × unit_cost, HALF_UP 4dp; null = no cost recorded
      * @return the uid of the newly created StockMovement row
      */
     String post(Long companyId, Long branchId, Long productId,
                 BigDecimal quantity, MovementType movementType,
                 String sourceEventUid, String sourceDocumentType, String sourceDocumentUid,
-                String reasonCode, String note, Instant occurredAt, Long actorId);
+                String reasonCode, String note, Instant occurredAt, Long actorId,
+                BigDecimal unitCostAmount, BigDecimal valueAmount);
 }

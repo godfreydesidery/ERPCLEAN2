@@ -740,3 +740,66 @@ One definition per term, used consistently across the team. Add terms as modules
 - After a close, **Reporting needs no change** — the closed year's P&L nets to zero, the rolled net sits in
   posted 3900, and the inception-to-date equity fold (ADR-0018 D-6) keeps the Balance Sheet balancing with **no
   double-count**; never say the close "requires a Reporting change."
+
+## Inventory Valuation & COGS terms
+
+> Source: [docs/requirements/inventory-valuation.md](inventory-valuation.md) (RATIFIED 2026-06-10). The
+> valuation-depth slice on the existing stock module — moving weighted-average cost, perpetual books via GRNI,
+> COGS on sale, opening valuation, the valuation report reconciled to GL, and adjustment revaluation.
+
+- **Moving weighted average (moving average cost)** — the v1 costing method: **one running average unit cost
+  per product** (per company; single location), recomputed **at each receipt** as `new_avg = (on_hand_value +
+  receipt_qty × receipt_unit_cost) / (on_hand_qty + receipt_qty)`. Issues are valued at the **current**
+  average and **do not** change it; the **first** receipt sets the average to the receipt unit cost. **Not**
+  FIFO (cost layers) and **not** standard cost (a planned cost + variances) — both deferred.
+- **Inventory value** — per product **on-hand quantity × moving-average cost**, summed = the inventory asset.
+  Sits on GL **`1300 Inventory`** in the perpetual model. The **valuation report** computes it and **must tie**
+  to the `1300` GL balance (the recon bar, BR-INV-06). **Not** COGS.
+- **Cost of goods sold (COGS)** — the **cost** of inventory issued on a sale: **issued qty × the current
+  moving-average cost**, posted **DR `5100 COGS` / CR `1300 Inventory`** on SALE.FINALISED (incl. recipe
+  explosion, each component at its own average). The P&L expense matched to revenue that makes **gross margin**
+  (revenue − COGS) visible. **Not** the periodic `5150 Purchases` expense.
+- **GRNI (Goods-Received-Not-Invoiced)** — a **NEW clearing liability** (`2xxx`) bridging **receiving goods**
+  (DR Inventory / CR GRNI at receipt) and **being billed** (DR GRNI / CR AP at bill-match). After both, GRNI
+  **nets to zero** for the receipt; a standing GRNI balance is **goods received not yet invoiced** (a real
+  accrual), not a leak. **Not** Accounts Payable (the billed payable) and **not** `5150 Purchases`.
+- **Perpetual inventory** — inventory tracked **continuously** as an asset that rises on receipt and falls on
+  issue (the v1 model). **Not** **periodic inventory** — the shipped treatment (goods → `5150 Purchases`
+  expense at bill-match, value known only by a count) that v1 **replaces for stock bills** (service bills keep
+  `5150`).
+- **Opening (inventory) valuation** — the **one-time** seed of cost/value onto existing quantity-only on-hand
+  at go-live: per product, set the average and post **DR `1300 Inventory` / CR `3100 Opening-Balance-Equity`**
+  at qty × cost, **once per product**. **Not** a goods receipt (DR Inventory / CR GRNI) and **not** the
+  stock-module quantity opening balance.
+- **Revaluation** — a **value** change with no sale. In v1 it is the **stock-adjustment revaluation** — a
+  manual adjustment posts **DR Stock-Adjustment/Shrinkage / CR Inventory** (decrease) or the reverse (increase)
+  at the current average; the average is **unchanged**. General mark-to-market / standard-cost revaluation is
+  deferred.
+- **Shrinkage** — inventory **lost** (theft / spillage / damage / expiry), recorded as a stock adjustment
+  **out**; its value (qty × avg) is expensed to the **Stock-Adjustment / Shrinkage** account (a NEW `5xxx`).
+  The `AdjustmentReason` enum already carries SHRINKAGE / DAMAGE / EXPIRY / COUNT_CORRECTION.
+- **Average-cost recompute** — the recalculation of a product's moving average **on a receipt** — the **only**
+  event that changes the average in v1. Issues consume at the current average; opening valuation seeds it; an
+  adjustment out consumes at it (without changing it).
+- **Cost-into-event seam** — the gap this slice closes: the receipt unit cost lives on
+  `goods_receipt_lines.unit_cost_amount` (V8) but the **STOCK.RECEIVED payload carries no unit cost** today; it
+  must reach the stock receipt handler to recompute the average and post to GL (OQ-INV-05, an ADR-0020 seam).
+- **Reconciliation bar (inventory)** — the rule that the valuation report's **Σ (qty × avg) == the `1300
+  Inventory` GL balance** (BR-INV-06); a disagreement is a **finance-grade defect** — the same discipline as
+  the VAT return's BR-VAT-08 and Reporting's recon ties.
+
+### Inventory-valuation terminology rulings (pick one, stay consistent)
+- Use **moving weighted average** (or **moving average cost**) for the v1 method — never "weighted average"
+  bare (which a reader may take as a periodic-end average) and never "average cost" loosely; the average
+  **recomputes at receipt** and **issues consume at it**.
+- Use **inventory value** for the asset (qty × avg, on `1300`) and **COGS** for the issued cost (on `5100`) —
+  never blur them; a receipt grows inventory value, a sale moves it into COGS.
+- Use **GRNI** for the goods-received-not-invoiced clearing liability — never "purchases accrual" loosely and
+  never conflate it with **AP** (the billed payable) or **`5150 Purchases`** (the periodic expense v1 retires
+  for stock bills); GRNI **nets to zero** once a receipt is billed.
+- Use **perpetual** vs **periodic** precisely — v1 makes the books **perpetual** for stock bills; **periodic**
+  (`5150 Purchases`) is retained only for non-stock / service bills.
+- Use **opening valuation** for the one-time cost seed (DR Inventory / CR 3100) — never "opening balance" bare
+  (that is the stock-module **quantity** seed) and never "goods receipt" (DR Inventory / CR GRNI).
+- A **revaluation** changes value with no sale (the adjustment path); a **sale** reduces both quantity and
+  value (to COGS) — never call a sale a revaluation.

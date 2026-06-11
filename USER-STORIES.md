@@ -1500,3 +1500,134 @@ retained-earnings roll stays sequential and the prior year's figures are frozen 
 - **AC6** Given the slice ships, then `GL.YEAR.CLOSE` + the `RETAINED_EARNINGS` config + the YEAR_END_CLOSE
   source type are seeded via the small **V16** migration (additive — V1–V15 frozen) (FR-CLOSE-07/08,
   BR-CLOSE-11).
+
+---
+
+## Inventory Valuation & COGS
+
+Requirements: [docs/requirements/inventory-valuation.md](docs/requirements/inventory-valuation.md). Status:
+**RATIFIED (owner-confirmed 2026-06-10).** Phase B's highest-leverage piece — gives quantity-only stock a
+**moving weighted-average** cost, makes the books **perpetual** via a **GRNI** bridge, posts **COGS** on every
+sale, values the opening stock, and reports inventory value **reconciled to the `1300 Inventory` GL balance**.
+ADR-0020 next (no schema/columns here). Stories are the test/build contract.
+
+### US-INV-01 — Receive goods → inventory is valued (average recompute + DR Inventory / CR GRNI)
+**As a** stock controller **I want** receiving goods to set the product's cost and capitalise the goods on the
+books **so that** inventory carries a real value and the cost is ready for the next sale.
+- **AC1** Given a stockable product with on-hand qty `Q0` at average `A0` (on-hand value `V0 = Q0 × A0`), when
+  a goods receipt for `Qr` at unit cost `Cr` is processed (STOCK.RECEIVED), then the **moving-average recomputes**
+  to `(V0 + Qr × Cr) / (Q0 + Qr)`, HALF_UP base currency (FR-INV-01, BR-INV-01).
+- **AC2** Given the **first ever** receipt of a product (on-hand zero, no average), when it is processed, then
+  the **average becomes the receipt unit cost** `Cr` (BR-INV-01).
+- **AC3** Given the receipt, then a **balanced** GL entry posts **DR `1300 Inventory` / CR GRNI** at `Qr × Cr`,
+  in the **same transaction** as the +quantity movement (FR-INV-02, BR-INV-02); the receipt path posted no GL
+  before.
+- **AC4** Given the STOCK.RECEIVED event is **re-delivered**, then the average is **not** re-recomputed and the
+  GL entry is **not** double-posted (idempotent — NFR-INV-04).
+- **AC5** Given two **racing receipts** of the same product, then both average recomputes are applied (neither
+  lost) — the `stock_on_hand` optimistic `@Version` guard serialises them (NFR-INV-05).
+- **AC6** Given the receipt, then the posting is **audited** with actor SYSTEM (the event handler) and company
+  context (NFR-INV-03).
+
+### US-INV-02 — Sell → COGS posts at the current average and gross margin is visible
+**As an** owner / accountant **I want** every sale to post its cost of goods sold at the product's average cost
+**so that** the P&L shows true gross margin and inventory falls by the cost issued.
+- **AC1** Given a stockable product at current average `A`, when a sale of `Qs` finalises (SALE.FINALISED), then
+  a **balanced** GL entry posts **DR `5100 COGS` / CR `1300 Inventory`** at `Qs × A`, in the **same transaction**
+  as the −quantity deduction (FR-INV-04, BR-INV-04); the sale path posted no COGS before.
+- **AC2 (the inventory↓ / COGS↑ tie)** Given the sale, then **`1300 Inventory` decreases by `Qs × A`** and
+  **`5100 COGS` increases by the same `Qs × A`** — equal and opposite (BR-INV-04).
+- **AC3** Given the sale, then the **average is unchanged** (an issue consumes at the current average, it does
+  not recompute it — BR-INV-01).
+- **AC4 (recipe explosion)** Given a **composed** product sold, when it finalises, then COGS posts for **each
+  stockable component at its own** current average; a non-stockable / non-composed line posts **no COGS**
+  (FR-INV-04, ADR-0010 D-8).
+- **AC5 (margin visible)** Given the sale's revenue posted by the sales auto-poster and the COGS posted here,
+  then **gross margin = revenue − COGS** is derivable on the P&L (the Phase B unlock).
+- **AC6** Given the SALE.FINALISED event is re-delivered, then COGS is **not** double-posted (idempotent —
+  NFR-INV-04).
+
+### US-INV-03 — Bill the receipt → GRNI clears and nets to zero
+**As an** AP / matching officer **I want** matching the supplier bill to clear the goods-received accrual
+**so that** the goods sit on inventory at cost, the payable is recognised, and GRNI nets to zero.
+- **AC1** Given a **stock/goods** bill for a received line, when the bill **matches** (AP 3-way match), then the
+  posting is **DR GRNI / CR `2100 AP`** (the VAT_INPUT leg unchanged) — **not** the shipped DR `5150 Purchases`
+  (FR-INV-03, BR-INV-03).
+- **AC2 (the GRNI-nets-to-zero tie)** Given a receipt accrued **CR GRNI** at receipt and the bill posted **DR
+  GRNI** at match, when the receipt is fully billed, then **GRNI nets to zero** for that receipt (BR-INV-08).
+- **AC3** Given a **service / non-stock** bill (no linked goods receipt), when it matches, then it **retains**
+  `DR 5150 Purchases / CR 2100 AP` — the GOODS-vs-SERVICE branch (FR-INV-03, OQ-INV-04).
+- **AC4** Given the goods are received but **not yet billed**, then the **GRNI carries the accrual** (goods
+  received not invoiced) — a real, explainable balance, not a leak (BR-INV-08).
+
+### US-INV-04 — Stock valuation report ties to the Inventory GL balance
+**As an** accountant **I want** a stock valuation report whose total equals the Inventory GL balance **so that**
+I can trust the inventory asset and reconcile the perpetual books.
+- **AC1** Given `INVENTORY.VALUATION.VIEW`, when I open the report, then I see per product **on-hand qty ×
+  moving-average cost = value**, totalled across products (FR-INV-07).
+- **AC2 (the recon bar)** Given the report, then **Σ value == the `1300 Inventory` GL balance** for my company;
+  a disagreement is flagged as a **finance-grade defect** (BR-INV-06, NFR-INV-01 — the BR-VAT-08 precedent).
+- **AC3** Given a sale just posted COGS of `Qs × A`, when I re-run the report, then the total has **fallen by
+  `Qs × A`** and **still equals** the (now lower) `1300 Inventory` balance (BR-INV-06).
+- **AC4** Given the report, then it is **on-screen + exportable**, and returns **only my company's** figures
+  (`assertCanActIn`); cross-company never appears (FR-INV-07, BR-INV-10).
+
+### US-INV-05 — Set the opening inventory valuation (once per product)
+**As an** accountant **I want** to value the existing quantity-only on-hand at go-live **so that** inventory
+starts on the books at a real cost.
+- **AC1** Given `INVENTORY.OPENING.SET` and a product with on-hand qty `Q0` and no cost, when I set an opening
+  unit cost `C0`, then the product's **average is seeded** to `C0` and a **balanced** GL entry posts **DR `1300
+  Inventory` / CR `3100 Opening-Balance-Equity`** at `Q0 × C0` (FR-INV-06, BR-INV-07).
+- **AC2** Given a product **already opening-valued**, when I attempt a second opening valuation, then it is
+  **rejected** ("opening valuation already set") — a later correction is an adjustment or a reversing entry, not
+  a re-open (BR-INV-07).
+- **AC3** Given the opening valuation, then the valuation report's total **equals** the seeded `1300 Inventory`
+  balance (BR-INV-06), and the act is **audited** (NFR-INV-03).
+- **AC4** Given a user **without** `INVENTORY.OPENING.SET`, when they attempt it, then it is **refused** by RBAC
+  (FR-INV-10).
+
+### US-INV-06 — Adjust stock → the revaluation posts (shrinkage / write-off to its account)
+**As a** stock controller **I want** a stock adjustment to revalue inventory and book the loss/gain **so that**
+shrinkage and write-offs hit the books and inventory value stays correct.
+- **AC1** Given a product at current average `A`, when I record an **adjustment out** of `Qa` (`STOCK.ADJUST`, a
+  mandatory `AdjustmentReason` e.g. SHRINKAGE), then a **balanced** GL entry posts **DR Stock-Adjustment /
+  Shrinkage (NEW) / CR `1300 Inventory`** at `Qa × A` (FR-INV-08, BR-INV-09); the ADJUSTMENT path posted no GL
+  before.
+- **AC2** Given an **adjustment in** of `Qa`, when I record it, then the entry posts the **reverse** (DR `1300
+  Inventory` / CR Stock-Adjustment) at `Qa × A` (FR-INV-08).
+- **AC3** Given either adjustment, then the **moving average is unchanged** (an adjustment does not recompute the
+  average — BR-INV-09).
+- **AC4** Given the adjustment, then the inventory-value change equals the GL Inventory movement, so the
+  valuation report still **ties to GL** (BR-INV-06); the act is **audited** (NFR-INV-03).
+
+### US-INV-07 — Reversals restore the cost (sale void / goods-receipt reversal)
+**As an** accountant **I want** voiding a sale or reversing a receipt to back out its cost posting **so that**
+the books stay correct and append-only with no phantom gain/loss.
+- **AC1** Given a sale that posted COGS of `Qs × A`, when the sale is **voided** (SALE.VOIDED), then a **new
+  reversing entry** posts **DR `1300 Inventory` / CR `5100 COGS`** at the **original issue cost** `Qs × A`
+  (recommended — OQ-INV-02), restoring the inventory value (FR-INV-05, BR-INV-05).
+- **AC2** Given a goods receipt that posted **DR Inventory / CR GRNI** at `Qr × Cr`, when it is **reversed**,
+  then a **new reversing entry** posts **DR GRNI / CR `1300 Inventory`** at the original `Qr × Cr` (FR-INV-05).
+- **AC3** Given any reversal, then the original posting is **never edited or deleted** — only a reversing entry
+  is added (BR-INV-05, gl.md BR-GL-02).
+- **AC4** Given the reversal, then the valuation report still **ties to the `1300 Inventory` GL balance**
+  (BR-INV-06), and the reversal is **audited** (NFR-INV-03).
+
+### US-INV-08 — Costed postings obey the GL invariants (the unhappy paths)
+**As an** accountant **I want** a costed posting to fail safely rather than mis-post **so that** the perpetual
+books never go wrong silently.
+- **AC1** Given an issue (sale / adjustment-out) at **zero or negative on-hand** with no established cost, when
+  it is processed, then the **costed issue is blocked** (recommended) or valued at the **last-known average**
+  (the flagged alternative) — the quantity rule is unchanged, the cost rule is OQ-INV-01 (BR-INV-01).
+- **AC2** Given a **zero-cost** goods receipt, when it is processed, then the average is dragged toward zero but
+  the receipt is **accepted and surfaced for review** (not silently rejected) (BR-INV-01).
+- **AC3** Given a required `gl_config` mapping (`INVENTORY` / `COGS` / `GRNI` / `STOCK_ADJUSTMENT` /
+  `OPENING_BALANCE_EQUITY`) is **unmapped** or maps to an **inactive** account, when a costed posting runs, then
+  it **fails rather than mis-posts**; finance sets the mapping (`GL.MANAGE`) and retries (BR-INV-12, gl.md
+  BR-GL-10).
+- **AC4** Given a costed posting would land in a **CLOSED** fiscal period, then it is handled per the GL
+  closed-period policy (gl.md OQ-GL-01) (BR-INV-12).
+- **AC5** Given a computation would yield a **negative average**, then it is treated as a **defect** — the
+  average must never go negative (NFR-INV-02).
+- **AC6** Given any read or figure, then it returns **only the acting company's** data (`assertCanActIn`);
+  cross-company valuation never appears (BR-INV-10, NFR-INV-01).

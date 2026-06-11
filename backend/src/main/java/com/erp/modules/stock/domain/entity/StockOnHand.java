@@ -53,6 +53,22 @@ public class StockOnHand {
     @Column(name = "reorder_level", precision = 19, scale = 6)
     private BigDecimal reorderLevel;
 
+    /**
+     * Running moving-average unit cost in base currency (ADR-0020 D-2).
+     * NULL = no cost established yet (never received, never opened).
+     * CHECK avg_cost IS NULL OR avg_cost >= 0 enforced by DB (chk_stock_on_hand_avg_nonneg).
+     */
+    @Column(name = "avg_cost", precision = 19, scale = 4)
+    private BigDecimal avgCost;
+
+    /**
+     * Current on-hand inventory value = maintained running Σ of costed deltas (ADR-0020 D-2).
+     * Authoritative: issues credit this exactly; the report sums it; avoids re-rounding loss.
+     * NOT NULL DEFAULT 0.
+     */
+    @Column(name = "on_hand_value", nullable = false, precision = 19, scale = 4)
+    private BigDecimal onHandValue = BigDecimal.ZERO;
+
     /** Optimistic lock — guards concurrent movement updates (NFR-STOCK-04). */
     @Version
     @Column(name = "version", nullable = false)
@@ -108,20 +124,37 @@ public class StockOnHand {
         this.updatedBy    = actorId;
     }
 
+    /**
+     * Apply a cost recompute result (ADR-0020 D-2): update the running average and on-hand value.
+     * Called by InventoryValuationServiceImpl under the @Version optimistic lock.
+     *
+     * @param newAvgCost    new moving-average unit cost (4 dp HALF_UP); may be null only if first state
+     * @param newOnHandValue new authoritative on-hand value (4 dp HALF_UP)
+     * @param actorId       null for system-event-driven paths
+     */
+    public void applyCostRecompute(BigDecimal newAvgCost, BigDecimal newOnHandValue, Long actorId) {
+        this.avgCost      = newAvgCost;
+        this.onHandValue  = newOnHandValue != null ? newOnHandValue : BigDecimal.ZERO;
+        this.updatedAt    = Instant.now();
+        this.updatedBy    = actorId;
+    }
+
     // -------------------------------------------------------------------------
     // Accessors
     // -------------------------------------------------------------------------
 
-    public Long       getId()           { return id; }
-    public String     getUid()          { return uid; }
-    public Long       getCompanyId()    { return companyId; }
-    public Long       getBranchId()     { return branchId; }
-    public Long       getProductId()    { return productId; }
-    public BigDecimal getQuantity()     { return quantity; }
-    public BigDecimal getReorderLevel() { return reorderLevel; }
-    public Long       getVersion()      { return version; }
-    public Instant    getCreatedAt()    { return createdAt; }
-    public Long       getCreatedBy()    { return createdBy; }
-    public Instant    getUpdatedAt()    { return updatedAt; }
-    public Long       getUpdatedBy()    { return updatedBy; }
+    public Long       getId()            { return id; }
+    public String     getUid()           { return uid; }
+    public Long       getCompanyId()     { return companyId; }
+    public Long       getBranchId()      { return branchId; }
+    public Long       getProductId()     { return productId; }
+    public BigDecimal getQuantity()      { return quantity; }
+    public BigDecimal getReorderLevel()  { return reorderLevel; }
+    public BigDecimal getAvgCost()       { return avgCost; }
+    public BigDecimal getOnHandValue()   { return onHandValue; }
+    public Long       getVersion()       { return version; }
+    public Instant    getCreatedAt()     { return createdAt; }
+    public Long       getCreatedBy()     { return createdBy; }
+    public Instant    getUpdatedAt()     { return updatedAt; }
+    public Long       getUpdatedBy()     { return updatedBy; }
 }

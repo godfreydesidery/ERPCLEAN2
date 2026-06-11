@@ -311,7 +311,8 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
                         l.getProductId(),
                         resolveProductUid(l.getProductId()),
                         l.getUnitId(),
-                        l.getQtyInBase()))
+                        l.getQtyInBase(),
+                        l.getUnitCostAmount()))  // ADR-0020 D-3: carry cost into the stock event
                 .toList();
     }
 

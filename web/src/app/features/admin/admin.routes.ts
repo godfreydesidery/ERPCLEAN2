@@ -164,6 +164,23 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./stock/stock-list.component').then((m) => m.StockListComponent),
   },
+  // ── Inventory Valuation ───────────────────────────────────────────────────
+  {
+    path: 'stock/valuation',
+    canActivate: [requirePermission('INVENTORY.VALUATION.VIEW')],
+    loadComponent: () =>
+      import('./inventory-valuation/stock-valuation-report.component').then(
+        (m) => m.StockValuationReportComponent,
+      ),
+  },
+  {
+    path: 'stock/valuation/opening',
+    canActivate: [requirePermission('INVENTORY.OPENING.SET')],
+    loadComponent: () =>
+      import('./inventory-valuation/opening-valuation.component').then(
+        (m) => m.OpeningValuationComponent,
+      ),
+  },
   // ── Purchases ─────────────────────────────────────────────────────────────
   {
     path: 'purchase-orders',

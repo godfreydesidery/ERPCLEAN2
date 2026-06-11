@@ -181,3 +181,24 @@ app bug survived all fixes.
 | 8. Year-end close (→ CLOSED), balance sheet post-close still ties, reopen (→ OPEN, QA left clean) | PASS |
 
 **Verdict: HAS-FINDINGS — 1 HIGH (BLOCKER-adjacent: all AP bill match/post calls fail with 500). All other V1–V16 flows PASS.**
+
+## Finding #16 — Inventory Valuation (ADR-0020) adversarial review batch (2026-06-10)
+
+Multi-agent adversarial review of the Inventory Valuation + COGS increment (5 dimensions → verify each: 18 confirmed / 11 refuted; several "confirmed" overlapped or over-stated the impact — see triage). 7 distinct genuine issues FIXED (commit 2c851fb); 3 deliberately NOT changed (rationale below); full suite 584 green.
+
+| # | Sev | Status | Area | Issue |
+|---|-----|--------|------|-------|
+| 16a | HIGH | **FIXED** | stock / InventoryValuationServiceImpl.reverseReceipt | New avg computed with the PRE-reversal qty (`soh.getQuantity()`) — reverseReceipt runs before the qty delta posts → reversing a receipt that empties on-hand set avg=0 instead of keeping last-known. Fix: `qty.subtract(originalQty.abs())`. |
+| 16b | HIGH | **FIXED** | stock / InventoryGlPoster | GL `configResolver.resolve` ran in the OUTER (handler MANDATORY) TX → a missing/inactive account marked the dispatch TX rollback-only, undoing the physical stock movement (defeating the null-on-anomaly isolation). Fix: each event post method is now `@Transactional(REQUIRES_NEW)` doing resolve+build+post+catch→null inside the boundary (dropped GLPostingSafeInvoker for these). |
+| 16c | MEDIUM | **FIXED** | stock / StockServiceImpl.adjust | ADJUSTMENT movement recorded null unit_cost/value (movement cols are updatable=false; revalueAdjustment ran after). Fix: compute avg×|qty| BEFORE posting.post so the movement carries the cost (exact-reversal + ledger completeness). |
+| 16d | MEDIUM | **FIXED** | stock / InventoryValuationServiceImpl | costIssue/reverseIssue/reverseReceipt/revalueAdjustment lacked the one-retry-on-ObjectOptimisticLockingFailureException wrapper that recomputeOnReceipt has (ADR-0020 D-2 / NFR-INV-05). Added (resilience; single-instance QA never raced, but multi-instance needs it). |
+| 16e | MEDIUM | **FIXED** | stock / StockValuationQuery | Per-row report avgCost = `MAX(avg_cost)` across branches → use implied `Σon_hand_value / Σqty` (matters once multi-location lands; recon total unaffected). |
+| 16f | MEDIUM | **FIXED** | stock / SaleIssueStockHandler + costIssue | Division-by-zero guard on a zero-qty issued component (recipe explosion edge). |
+| 16g | MEDIUM | **FIXED** | ap / BillMatchServiceImpl | postMatchedBillToGl had no idempotency guard → a re-run match double-posts the GL. Fix: short-circuit if a journal entry already exists for (companyId, AP_BILL, bill.uid). |
+
+**Deliberately NOT changed (intentional; would destabilise working code or are non-defects):**
+- SALE_ISSUE `value_amount` stored as a positive magnitude (spec D-2 says signed) — GL postings, reversals, and the recon bar ALL tie today; reversal logic reads it as a magnitude. Changing the sign risks the working reversal flow for a purely-cosmetic data-model-contract gain. Documented convention; no behavioural change. (OQ — revisit if a signed-ledger audit report is ever added.)
+- The zero-cost / null-cost-receipt CHECK constraint — zero-cost receipts are intentionally allowed (ADR-0020 D-2 edge).
+- The SALE_ISSUE unit-cost re-derivation (value/qty vs stored avg) — rounding-equivalent at 4dp; LOW.
+
+**Refuted (11 — correctly, no defect):** the migration #12-safe seed-uids, the journal source-type CHECK completeness, the perms seed+grant, the report/opening/adjustment per-company scope (assertCanActIn on every path), the gl_config JOIN mapping, and the zero-cost-receipt recon (the weighted-avg preserves Σqty×avg == GL 1300) were all verified safe.

@@ -1,0 +1,103 @@
+package com.erp.modules.stock.service;
+
+import com.erp.modules.stock.domain.dto.OpeningValuationResultDto;
+import com.erp.modules.stock.domain.dto.SetOpeningValuationRequest;
+import com.erp.modules.stock.domain.entity.StockOnHand;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+
+/**
+ * Moving-average cost authority for the stock module (ADR-0020 D-2/D-5/D-5b/D-7).
+ *
+ * <p>Every path that changes the inventory value calls into this service:
+ * <ul>
+ *   <li>{@link #recomputeOnReceipt} — called by the goods-receipt handler after qty delta.</li>
+ *   <li>{@link #costIssue} — called by sale-issue and adjustment-out handlers to debit inventory
+ *       at the current avg; updates {@code on_hand_value} in place.</li>
+ *   <li>{@link #reverseIssue} — called by sale-reversal handler to restore value at original cost.</li>
+ *   <li>{@link #reverseReceipt} — called by receipt-reversal handler to back out value at original cost.</li>
+ *   <li>{@link #setOpeningValue} — operator once-per-product opening valuation.</li>
+ *   <li>{@link #revalueAdjustment} — called by {@code StockServiceImpl.adjust} for the GL leg.</li>
+ * </ul>
+ */
+public interface InventoryValuationService {
+
+    /**
+     * Recompute the moving-average cost on a goods receipt (BR-INV-01, ADR-0020 D-2).
+     *
+     * <p>Runs inside the receipt handler's MANDATORY TX, under the {@code @Version} optimistic lock
+     * on the on-hand row, with one retry on {@code ObjectOptimisticLockingFailureException}.
+     *
+     * <p>Returns the receipt value (qty × receipt cost, HALF_UP 4 dp) used for the GL leg.
+     *
+     * @param companyId       tenant
+     * @param branchId        branch (cost is per company-product; branch scopes the on-hand row)
+     * @param productId       the product
+     * @param receiptQty      positive receipt quantity in base units
+     * @param receiptCost     unit cost from the payload (goods_receipt_lines.unit_cost_amount)
+     * @return receipt value amount for the GL leg (Σ qty × cost for the receipt line)
+     */
+    BigDecimal recomputeOnReceipt(Long companyId, Long branchId, Long productId,
+                                   BigDecimal receiptQty, BigDecimal receiptCost);
+
+    /**
+     * Apply a cost-issue delta: debit on_hand_value by qty × current avg_cost (ADR-0020 D-4b).
+     * Returns the issued value amount (positive absolute value) or {@code null} when avg_cost is
+     * NULL (COGS leg skipped per D-2 edge — caller logs WARN + anomaly).
+     *
+     * @param companyId  tenant
+     * @param branchId   branch
+     * @param productId  product
+     * @param issuedQty  positive magnitude of the issued quantity (caller negates for the movement)
+     * @return issued value (&gt;=0) or null when avg_cost is not established
+     */
+    BigDecimal costIssue(Long companyId, Long branchId, Long productId, BigDecimal issuedQty);
+
+    /**
+     * Reverse a prior issue: restore on_hand_value by the original value amount (ADR-0020 D-5).
+     * avg_cost is left unchanged (an issue never moved it).
+     *
+     * @param companyId       tenant
+     * @param branchId        branch
+     * @param productId       product
+     * @param originalValue   absolute value of the original SALE_ISSUE movement's value_amount
+     *                        (positive — the restore amount)
+     */
+    void reverseIssue(Long companyId, Long branchId, Long productId, BigDecimal originalValue);
+
+    /**
+     * Reverse a prior receipt: back out on_hand_value and recompute avg_cost (ADR-0020 D-5).
+     * Symmetric inverse of recomputeOnReceipt.
+     *
+     * @param companyId      tenant
+     * @param branchId       branch
+     * @param productId      product
+     * @param originalQty    positive magnitude of the original GOODS_RECEIPT quantity
+     * @param originalValue  positive value of the original GOODS_RECEIPT movement's value_amount
+     */
+    void reverseReceipt(Long companyId, Long branchId, Long productId,
+                         BigDecimal originalQty, BigDecimal originalValue);
+
+    /**
+     * One-time opening valuation (ADR-0020 D-5b, FR-INV-06): set avg_cost + on_hand_value for
+     * an existing quantity-only on-hand row, post DR INVENTORY / CR OPENING_BALANCE_EQUITY.
+     * Gated {@code INVENTORY.OPENING.SET}; idempotency guard = avg_cost IS NOT NULL or value != 0.
+     */
+    OpeningValuationResultDto setOpeningValue(SetOpeningValuationRequest request,
+                                               LocalDate postingDate);
+
+    /**
+     * Revalue a stock adjustment: post DR STOCK_ADJUSTMENT / CR INVENTORY (decrease) or reverse
+     * (increase) at the current avg_cost (ADR-0020 D-7, FR-INV-08).
+     * Synchronous in the operator's TX — missing gl_config fails the command (BR-INV-12).
+     * Returns the movement's on-hand row for audit detail, or null if avg_cost not established
+     * (COGS-skip edge — quantity still moved).
+     *
+     * @param movementUid  the uid of the ADJUSTMENT movement just posted by StockServiceImpl
+     * @param soh          the on-hand row (already loaded by StockServiceImpl)
+     * @param adjustQty    the signed adjustment quantity
+     * @param postingDate  the posting date for the GL entry
+     */
+    void revalueAdjustment(String movementUid, StockOnHand soh, BigDecimal adjustQty,
+                            LocalDate postingDate);
+}

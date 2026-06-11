@@ -39,6 +39,9 @@ import com.erp.modules.purchases.repository.GoodsReceiptLineRepository;
 import com.erp.modules.purchases.repository.GoodsReceiptRepository;
 import com.erp.modules.purchases.repository.PurchaseOrderLineRepository;
 import com.erp.modules.purchases.repository.PurchaseOrderRepository;
+import com.erp.modules.gl.service.ChartOfAccountService;
+import com.erp.modules.gl.service.FiscalCalendarService;
+import com.erp.modules.gl.service.GlConfigService;
 import com.erp.modules.stock.domain.dto.StockOnHandDto;
 import com.erp.modules.stock.domain.enums.MovementType;
 import com.erp.modules.stock.repository.StockMovementRepository;
@@ -90,6 +93,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
  */
 class PurchasesServiceImplIT extends PostgresIntegrationTest {
 
+    @Autowired private ChartOfAccountService   chartOfAccountService;
+    @Autowired private FiscalCalendarService   fiscalCalendarService;
+    @Autowired private GlConfigService         glConfigService;
+
     @Autowired private PurchaseOrderService    poService;
     @Autowired private GoodsReceiptService     grService;
     @Autowired private SupplierService         supplierService;
@@ -132,6 +139,13 @@ class PurchasesServiceImplIT extends PostgresIntegrationTest {
         rootId = root.getId();
 
         setContext(companyA, branchA);
+
+        // GL foundations required by GoodsReceiptStockHandler (ADR-0020):
+        // handler posts DR Inventory/CR GRNI on every receipt event; without these
+        // the dispatch TX is marked rollback-only and all dispatcher tests error.
+        chartOfAccountService.seedDefaults(companyA.getId());
+        fiscalCalendarService.seedCurrentYear(companyA.getId());
+        glConfigService.seedDefaults(companyA.getId());
 
         UnitOfMeasureDto pcs = unitService.create(
                 new CreateUnitOfMeasureRequest(companyA.getUid(), "PCS", "Pieces"));
