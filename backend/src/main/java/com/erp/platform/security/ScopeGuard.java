@@ -25,6 +25,7 @@ import com.erp.modules.parties.repository.AgentRepository;
 import com.erp.modules.parties.repository.CustomerRepository;
 import com.erp.modules.parties.repository.OtherPartyRepository;
 import com.erp.modules.parties.repository.SupplierRepository;
+import com.erp.modules.products.repository.BomRepository;
 import com.erp.modules.products.repository.PriceListRepository;
 import com.erp.modules.products.repository.ProductRepository;
 import com.erp.modules.products.repository.UnitOfMeasureRepository;
@@ -125,6 +126,8 @@ public class ScopeGuard {
     private final GeneratedDocumentRepository generatedDocuments;
     private final DocumentTemplateRepository  documentTemplates;
     private final DocumentBrandingRepository  documentBrandings;
+    // products-bom (ADR-0026 D-11)
+    private final BomRepository              bomsRepo;
     private final AuditService             audit;
 
     public ScopeGuard(CompanyRepository companies,
@@ -173,6 +176,7 @@ public class ScopeGuard {
                       GeneratedDocumentRepository generatedDocuments,
                       DocumentTemplateRepository documentTemplates,
                       DocumentBrandingRepository documentBrandings,
+                      BomRepository bomsRepo,
                       AuditService audit) {
         this.companies      = companies;
         this.branches       = branches;
@@ -219,6 +223,8 @@ public class ScopeGuard {
         this.generatedDocuments  = generatedDocuments;
         this.documentTemplates   = documentTemplates;
         this.documentBrandings   = documentBrandings;
+        // products-bom (ADR-0026 D-11)
+        this.bomsRepo            = bomsRepo;
         this.audit               = audit;
     }
 
@@ -288,6 +294,8 @@ public class ScopeGuard {
             case "generateddocument"   -> generatedDocuments.findCompanyIdByUid(uid);
             case "documenttemplate"    -> documentTemplates.findCompanyIdByUid(uid);
             case "documentbranding"    -> documentBrandings.findCompanyIdByUid(uid);
+            // products-bom (ADR-0026 D-11)
+            case "bom"                 -> bomsRepo.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };

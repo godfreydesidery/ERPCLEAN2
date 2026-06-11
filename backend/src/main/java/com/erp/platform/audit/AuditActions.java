@@ -217,4 +217,14 @@ public final class AuditActions {
     public static final String APPROVAL_STEP_DECIDE       = "APPROVAL.STEP.DECIDE";
     public static final String APPROVAL_REQUEST_RECALL    = "APPROVAL.REQUEST.RECALL";
     public static final String APPROVAL_REQUEST_CANCEL    = "APPROVAL.REQUEST.CANCEL";
+    // ---- Multi-level BOM (ADR-0026) ----
+    public static final String BOM_CREATE          = "BOM.CREATE";
+    public static final String BOM_UPDATE          = "BOM.UPDATE";
+    public static final String BOM_ACTIVATE        = "BOM.ACTIVATE";
+    public static final String BOM_SUPERSEDE       = "BOM.SUPERSEDE";
+    public static final String BOM_ARCHIVE         = "BOM.ARCHIVE";
+    public static final String BOM_COMPONENT_ADD   = "BOM.COMPONENT.ADD";
+    public static final String BOM_COMPONENT_UPDATE = "BOM.COMPONENT.UPDATE";
+    public static final String BOM_COMPONENT_REMOVE = "BOM.COMPONENT.REMOVE";
+    public static final String BOM_PROMOTE_RECIPE  = "BOM.PROMOTE_RECIPE";
 }
