@@ -662,7 +662,8 @@ class InventoryValuationServiceIT extends PostgresIntegrationTest {
         // Adjustment on p2
         setCtx();
         stockService.adjust(new AdjustStockRequest(
-                p2.uid(), new BigDecimal("-2"), AdjustmentReason.DAMAGE, "test"));
+                p2.uid(), new BigDecimal("-2"), AdjustmentReason.DAMAGE, "test",
+                null, null));
 
         // Re-read the report
         setCtx();
@@ -691,7 +692,8 @@ class InventoryValuationServiceIT extends PostgresIntegrationTest {
         // Adjust −5 (damage)
         setCtx();
         stockService.adjust(new AdjustStockRequest(
-                product.uid(), new BigDecimal("-5"), AdjustmentReason.DAMAGE, "breakage"));
+                product.uid(), new BigDecimal("-5"), AdjustmentReason.DAMAGE, "breakage",
+                null, null));
 
         // on_hand_value: 6000 − 5×300 = 4500
         assertThat(requireSoh(product.id()).getOnHandValue())
@@ -768,7 +770,7 @@ class InventoryValuationServiceIT extends PostgresIntegrationTest {
         setCtx();
         com.erp.modules.stock.domain.dto.StockMovementDto movDto = stockService.adjust(
                 new AdjustStockRequest(product.uid(), new BigDecimal("-3"),
-                        AdjustmentReason.SHRINKAGE, "test-fixc"));
+                        AdjustmentReason.SHRINKAGE, "test-fixc", null, null));
 
         // The ADJUSTMENT movement must carry unit_cost = 250 and value = −750
         com.erp.modules.stock.domain.entity.StockMovement adjMov =

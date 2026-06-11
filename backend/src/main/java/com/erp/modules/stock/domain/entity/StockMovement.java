@@ -105,6 +105,16 @@ public class StockMovement {
     @Column(name = "value_amount", precision = 19, scale = 4, updatable = false)
     private BigDecimal valueAmount;
 
+    // --- cost-centre (ADR-0025 D-6, V28) — dimension default carrier for ADJUSTMENT rows ---
+    // Nullable. InventoryGlPoster.postAdjustmentDirect uses these to stamp the expense LineDraft.
+    /** FK → dimension_values(id); Cost Centre dimension default for this adjustment (nullable). */
+    @Column(name = "cost_centre_value_id", updatable = false)
+    private Long costCentreValueId;
+
+    /** FK → dimension_values(id); Department dimension default for this adjustment (nullable). */
+    @Column(name = "department_value_id", updatable = false)
+    private Long departmentValueId;
+
     /** When the movement occurred (business time, not DB insert time). */
     @Column(name = "occurred_at", nullable = false, updatable = false)
     private Instant occurredAt;
@@ -145,20 +155,40 @@ public class StockMovement {
                          String reasonCode, String note,
                          Instant occurredAt, Long createdBy,
                          BigDecimal unitCostAmount, BigDecimal valueAmount) {
-        this.companyId          = companyId;
-        this.branchId           = branchId;
-        this.productId          = productId;
-        this.movementType       = movementType;
-        this.quantity           = quantity;
-        this.sourceEventUid     = sourceEventUid;
-        this.sourceDocumentType = sourceDocumentType;
-        this.sourceDocumentUid  = sourceDocumentUid;
-        this.reasonCode         = reasonCode;
-        this.note               = note;
-        this.occurredAt         = occurredAt != null ? occurredAt : Instant.now();
-        this.createdBy          = createdBy;
-        this.unitCostAmount     = unitCostAmount;
-        this.valueAmount        = valueAmount;
+        this(companyId, branchId, productId, movementType, quantity,
+             sourceEventUid, sourceDocumentType, sourceDocumentUid,
+             reasonCode, note, occurredAt, createdBy, unitCostAmount, valueAmount,
+             null, null);
+    }
+
+    /**
+     * Extended constructor with dimension default ids (ADR-0025 D-6, V28).
+     * The two trailing dimension ids are nullable — existing callers use the above constructor
+     * which defaults them to null (NFR-CC-01 zero-regression guarantee).
+     */
+    public StockMovement(Long companyId, Long branchId, Long productId,
+                         MovementType movementType, BigDecimal quantity,
+                         String sourceEventUid, String sourceDocumentType, String sourceDocumentUid,
+                         String reasonCode, String note,
+                         Instant occurredAt, Long createdBy,
+                         BigDecimal unitCostAmount, BigDecimal valueAmount,
+                         Long costCentreValueId, Long departmentValueId) {
+        this.companyId           = companyId;
+        this.branchId            = branchId;
+        this.productId           = productId;
+        this.movementType        = movementType;
+        this.quantity            = quantity;
+        this.sourceEventUid      = sourceEventUid;
+        this.sourceDocumentType  = sourceDocumentType;
+        this.sourceDocumentUid   = sourceDocumentUid;
+        this.reasonCode          = reasonCode;
+        this.note                = note;
+        this.occurredAt          = occurredAt != null ? occurredAt : Instant.now();
+        this.createdBy           = createdBy;
+        this.unitCostAmount      = unitCostAmount;
+        this.valueAmount         = valueAmount;
+        this.costCentreValueId   = costCentreValueId;
+        this.departmentValueId   = departmentValueId;
     }
 
     @PrePersist
@@ -189,4 +219,7 @@ public class StockMovement {
     public Long         getCreatedBy()           { return createdBy; }
     public BigDecimal   getUnitCostAmount()      { return unitCostAmount; }
     public BigDecimal   getValueAmount()         { return valueAmount; }
+    // cost-centre (ADR-0025 D-6)
+    public Long         getCostCentreValueId()   { return costCentreValueId; }
+    public Long         getDepartmentValueId()   { return departmentValueId; }
 }

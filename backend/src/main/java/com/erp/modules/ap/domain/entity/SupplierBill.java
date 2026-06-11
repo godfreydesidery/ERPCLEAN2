@@ -90,6 +90,18 @@ public class SupplierBill extends UidEntity {
     @Setter
     private Long matchedBy;
 
+    // --- cost-centre (ADR-0025 D-6, V28) — header-level dimension default ---
+    // Nullable. When set, BillMatchServiceImpl.postMatchedBillToGl stamps LineDrafts.
+    /** FK → dimension_values(id); Cost Centre dimension default (nullable). */
+    @Column(name = "cost_centre_value_id")
+    @Setter
+    private Long costCentreValueId;
+
+    /** FK → dimension_values(id); Department dimension default (nullable). */
+    @Column(name = "department_value_id")
+    @Setter
+    private Long departmentValueId;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

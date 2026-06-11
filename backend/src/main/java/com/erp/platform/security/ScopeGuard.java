@@ -1,5 +1,7 @@
 package com.erp.platform.security;
 
+import com.erp.modules.costing.repository.DimensionRepository;
+import com.erp.modules.costing.repository.DimensionValueRepository;
 import com.erp.modules.ap.repository.ApDebitNoteRepository;
 import com.erp.modules.ap.repository.ApPaymentRepository;
 import com.erp.modules.ap.repository.SupplierBillRepository;
@@ -115,6 +117,7 @@ public class ScopeGuard {
     private final WhtTransactionRepository   whtTransactions;
     // Sales Orders repositories (ADR-0021 D-10)
     private final QuotationRepository        quotations;
+    // Note: cost-centre repos added below under "cost-centre" comment (ADR-0025 D-5)
     private final SalesOrderRepository       salesOrders;
     private final DeliveryRepository         deliveryRepo;
     // Sales Returns repositories (ADR-0021 D-11, Stage 2)
@@ -128,6 +131,9 @@ public class ScopeGuard {
     private final DocumentBrandingRepository  documentBrandings;
     // products-bom (ADR-0026 D-11)
     private final BomRepository              bomsRepo;
+    // cost-centre (ADR-0025 D-5)
+    private final DimensionRepository        dimensions;
+    private final DimensionValueRepository   dimensionValues;
     private final AuditService             audit;
 
     public ScopeGuard(CompanyRepository companies,
@@ -177,6 +183,9 @@ public class ScopeGuard {
                       DocumentTemplateRepository documentTemplates,
                       DocumentBrandingRepository documentBrandings,
                       BomRepository bomsRepo,
+                      // cost-centre (ADR-0025 D-5)
+                      DimensionRepository dimensions,
+                      DimensionValueRepository dimensionValues,
                       AuditService audit) {
         this.companies      = companies;
         this.branches       = branches;
@@ -225,6 +234,9 @@ public class ScopeGuard {
         this.documentBrandings   = documentBrandings;
         // products-bom (ADR-0026 D-11)
         this.bomsRepo            = bomsRepo;
+        // cost-centre (ADR-0025 D-5)
+        this.dimensions          = dimensions;
+        this.dimensionValues     = dimensionValues;
         this.audit               = audit;
     }
 
@@ -296,6 +308,9 @@ public class ScopeGuard {
             case "documentbranding"    -> documentBrandings.findCompanyIdByUid(uid);
             // products-bom (ADR-0026 D-11)
             case "bom"                 -> bomsRepo.findCompanyIdByUid(uid);
+            // cost-centre target types (ADR-0025 D-5)
+            case "dimension"           -> dimensions.findCompanyIdByUid(uid);
+            case "dimensionvalue"      -> dimensionValues.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };

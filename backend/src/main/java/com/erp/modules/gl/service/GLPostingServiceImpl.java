@@ -127,7 +127,8 @@ public class GLPostingServiceImpl implements GLPostingService {
         }
         entry = entries.save(entry);
 
-        // 8. Persist lines
+        // 8. Persist lines — pass through dimension value ids from the draft (ADR-0025 D-4).
+        //    All four ids are nullable: when null the line is untagged, identical to pre-V27 (NFR-CC-01).
         List<JournalLine> savedLines = new ArrayList<>();
         int lineNo = 1;
         for (JournalEntryDraft.LineDraft ld : draftLines) {
@@ -136,10 +137,16 @@ public class GLPostingServiceImpl implements GLPostingService {
             JournalLine line;
             if (debit.compareTo(BigDecimal.ZERO) > 0) {
                 line = JournalLine.debit(draft.companyId(), draft.branchId(), entry.getId(),
-                        lineNo, ld.accountId(), debit, ld.currency(), ld.lineMemo(), draft.postedBy());
+                        lineNo, ld.accountId(), debit, ld.currency(), ld.lineMemo(),
+                        draft.postedBy(),
+                        ld.costCentreValueId(), ld.departmentValueId(),
+                        ld.dimension3ValueId(), ld.dimension4ValueId());
             } else {
                 line = JournalLine.credit(draft.companyId(), draft.branchId(), entry.getId(),
-                        lineNo, ld.accountId(), credit, ld.currency(), ld.lineMemo(), draft.postedBy());
+                        lineNo, ld.accountId(), credit, ld.currency(), ld.lineMemo(),
+                        draft.postedBy(),
+                        ld.costCentreValueId(), ld.departmentValueId(),
+                        ld.dimension3ValueId(), ld.dimension4ValueId());
             }
             savedLines.add(lines.save(line));
             lineNo++;
@@ -166,14 +173,20 @@ public class GLPostingServiceImpl implements GLPostingService {
 
         List<JournalLine> originalLines = lines.findByEntryIdOrderByLineNo(original.getId());
 
-        // Build reversed draft: swap debit/credit on every line (BR-GL-11)
+        // Build reversed draft: swap debit/credit on every line (BR-GL-11).
+        // Carry the dimension tags from the original line (the reversal tags the same
+        // cost centres/departments as the entry being reversed — ADR-0025 D-4).
         List<JournalEntryDraft.LineDraft> reversedLines = originalLines.stream()
                 .map(l -> new JournalEntryDraft.LineDraft(
                         l.getAccountId(),
                         l.getCreditAmount(),   // original credit becomes debit
                         l.getDebitAmount(),    // original debit becomes credit
                         l.getCurrency(),
-                        l.getLineMemo()
+                        l.getLineMemo(),
+                        l.getCostCentreValueId(),
+                        l.getDepartmentValueId(),
+                        l.getDimension3ValueId(),
+                        l.getDimension4ValueId()
                 ))
                 .toList();
 

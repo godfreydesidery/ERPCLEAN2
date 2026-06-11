@@ -329,7 +329,12 @@ public class BillMatchServiceImpl implements BillMatchService {
         ChartOfAccount apAcct = glConfig.resolve(bill.getCompanyId(), GlConfigKey.ACCOUNTS_PAYABLE);
         List<LineDraft> glLines = new ArrayList<>();
 
-        // Goods lines: DR GRNI (clears the GRNI accrual from goods receipt) / later CR AP
+        // ADR-0025 D-6: only P&L-relevant legs carry the dimension tag. AP control leg untagged.
+        Long ccId   = bill.getCostCentreValueId();
+        Long deptId = bill.getDepartmentValueId();
+
+        // Goods lines: DR GRNI (clears the GRNI accrual from goods receipt)
+        // GRNI is balance-sheet; per D-6 sub-decision it posts untagged in v1.
         if (goodsNet.compareTo(BigDecimal.ZERO) > 0) {
             ChartOfAccount grniAcct = glConfig.resolve(bill.getCompanyId(), GlConfigKey.GRNI);
             glLines.add(new LineDraft(grniAcct.getId(),
@@ -337,15 +342,16 @@ public class BillMatchServiceImpl implements BillMatchService {
                     bill.getCurrency(), "GRNI clear — " + bill.getSupplierInvoiceNo()));
         }
 
-        // Service lines: DR Purchases (periodic expense recognition)
+        // Service lines: DR Purchases (periodic expense recognition) — P&L leg, carry tag
         if (serviceNet.compareTo(BigDecimal.ZERO) > 0) {
             ChartOfAccount purchasesAcct = glConfig.resolve(bill.getCompanyId(), GlConfigKey.PURCHASES);
             glLines.add(new LineDraft(purchasesAcct.getId(),
                     serviceNet, BigDecimal.ZERO,
-                    bill.getCurrency(), "Purchases — " + bill.getSupplierInvoiceNo()));
+                    bill.getCurrency(), "Purchases — " + bill.getSupplierInvoiceNo(),
+                    ccId, deptId, null, null));
         }
 
-        // Input VAT (ADR-0017 D-7): debit VAT_INPUT for recoverable input VAT.
+        // Input VAT (ADR-0017 D-7): debit VAT_INPUT — balance-sheet, untagged in v1
         if (bill.getVatAmount().compareTo(BigDecimal.ZERO) > 0) {
             ChartOfAccount vatAcct = glConfig.resolve(bill.getCompanyId(), GlConfigKey.VAT_INPUT);
             glLines.add(new LineDraft(vatAcct.getId(),
@@ -353,7 +359,7 @@ public class BillMatchServiceImpl implements BillMatchService {
                     bill.getCurrency(), "Input VAT — " + bill.getSupplierInvoiceNo()));
         }
 
-        // CR Accounts Payable — full gross amount
+        // CR Accounts Payable — full gross amount; balance-sheet control leg, untagged
         glLines.add(new LineDraft(apAcct.getId(),
                 BigDecimal.ZERO, bill.getGrossAmount(),
                 bill.getCurrency(), "AP control — " + bill.getSupplierInvoiceNo()));
