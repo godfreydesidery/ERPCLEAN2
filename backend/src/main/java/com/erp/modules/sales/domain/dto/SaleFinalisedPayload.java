@@ -7,21 +7,30 @@ import java.util.List;
 /**
  * Typed payload record for the {@code SALE.FINALISED} outbox event (ADR-0008 D-9, ADR-0009 D-3).
  *
- * <p>Shape is EXACTLY as specified in ADR-0008 D-9:
- * {@code { invoiceUid, companyId, branchId, finalisedAt, lines:[{ productId, productUid, unitId, qtyInBase }] }}.
+ * <p>Shape: {@code { invoiceUid, companyId, branchId, finalisedAt, lines:[...], issuesStock }}.
  * The record is serialised to JSONB by {@link com.erp.platform.events.OutboxPublisher#publish} via Jackson.
  *
- * <p>This is a Sales-module-owned DTO; it lives in {@code sales.domain.dto} — the payload data is
- * plain scalars and uids (no cross-module entity import), consistent with the uid-in-payload
- * discipline (ADR-0009 D-3).
+ * <p>{@code issuesStock} (ADR-0021 D-6): {@code true} for DIRECT walk-in invoices (the existing
+ * behaviour — stock is issued on finalise). {@code false} for SO-sourced invoices (delivery already
+ * issued stock; the invoice posts revenue only). Default {@code true} for backward-safety so
+ * any pre-V18 serialised events continue to issue stock as expected.
  */
 public record SaleFinalisedPayload(
         String invoiceUid,
         Long companyId,
         Long branchId,
         Instant finalisedAt,
-        List<LineItem> lines
+        List<LineItem> lines,
+        boolean issuesStock
 ) {
+    /**
+     * Backward-compatible factory for code that does not supply {@code issuesStock}.
+     * Preserves the pre-V18 contract: issuesStock defaults to {@code true}.
+     */
+    public SaleFinalisedPayload(String invoiceUid, Long companyId, Long branchId,
+                                Instant finalisedAt, List<LineItem> lines) {
+        this(invoiceUid, companyId, branchId, finalisedAt, lines, true);
+    }
 
     /**
      * Per-line item — what the stock consumer needs for deduction and recipe explosion.

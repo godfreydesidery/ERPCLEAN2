@@ -152,6 +152,9 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
             invoices.save(targetInvoice);
         }
 
+        // Use the origin from the request; defaults to STANDALONE for existing callers (ADR-0021 D-11).
+        ArCreditNoteOrigin origin = req.origin() != null ? req.origin() : ArCreditNoteOrigin.STANDALONE;
+
         ArCreditNote note = new ArCreditNote(
                 companyId,
                 RequestContext.get() != null ? RequestContext.get().branchId() : null,
@@ -162,7 +165,7 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
                 totalAmount, netAmount, vatAmount,
                 currency,
                 req.reason(),
-                ArCreditNoteOrigin.STANDALONE,
+                origin,
                 actorId());
         note.setGlEntryUid(posted.uid());
         note = creditNotes.save(note);

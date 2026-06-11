@@ -69,6 +69,15 @@ public class StockOnHand {
     @Column(name = "on_hand_value", nullable = false, precision = 19, scale = 4)
     private BigDecimal onHandValue = BigDecimal.ZERO;
 
+    /**
+     * Aggregate soft-reserved quantity in base units across all confirmed SO lines for this
+     * (company, branch, product). Available-to-promise = quantity − reserved_qty (ADR-0021 D-5).
+     * NOT NULL DEFAULT 0. May not go below 0 (DB CHECK chk_stock_on_hand_reserved_nonneg).
+     * Over-reservation: quantity − reserved_qty < 0 = negative available → backorder allowed.
+     */
+    @Column(name = "reserved_qty", nullable = false, precision = 19, scale = 6)
+    private BigDecimal reservedQty = BigDecimal.ZERO;
+
     /** Optimistic lock — guards concurrent movement updates (NFR-STOCK-04). */
     @Version
     @Column(name = "version", nullable = false)
@@ -91,10 +100,11 @@ public class StockOnHand {
     }
 
     public StockOnHand(Long companyId, Long branchId, Long productId) {
-        this.companyId = companyId;
-        this.branchId  = branchId;
-        this.productId = productId;
-        this.quantity  = BigDecimal.ZERO;
+        this.companyId   = companyId;
+        this.branchId    = branchId;
+        this.productId   = productId;
+        this.quantity    = BigDecimal.ZERO;
+        this.reservedQty = BigDecimal.ZERO;
     }
 
     @PrePersist
@@ -143,6 +153,21 @@ public class StockOnHand {
     // Accessors
     // -------------------------------------------------------------------------
 
+    /**
+     * Apply a signed reservation delta (positive = reserve, negative = release).
+     * Caller must ensure the result stays >= 0 (service enforces; DB CHECK backstop).
+     */
+    public void applyReservationDelta(BigDecimal delta, Long actorId) {
+        this.reservedQty = this.reservedQty.add(delta);
+        this.updatedAt   = Instant.now();
+        this.updatedBy   = actorId;
+    }
+
+    /** Available-to-promise: signed, may be negative when over-reserved (backorder). */
+    public BigDecimal availableQty() {
+        return quantity.subtract(reservedQty);
+    }
+
     public Long       getId()            { return id; }
     public String     getUid()           { return uid; }
     public Long       getCompanyId()     { return companyId; }
@@ -152,6 +177,7 @@ public class StockOnHand {
     public BigDecimal getReorderLevel()  { return reorderLevel; }
     public BigDecimal getAvgCost()       { return avgCost; }
     public BigDecimal getOnHandValue()   { return onHandValue; }
+    public BigDecimal getReservedQty()   { return reservedQty; }
     public Long       getVersion()       { return version; }
     public Instant    getCreatedAt()     { return createdAt; }
     public Long       getCreatedBy()     { return createdBy; }

@@ -294,6 +294,10 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                         l.getQtyInBase()))
                 .toList();
 
+        // ADR-0021 D-6: DIRECT invoices issue stock on finalise (issuesStock=true);
+        // SO-sourced invoices post revenue only — delivery already issued stock (issuesStock=false).
+        boolean issuesStock = (inv.getOrigin() == com.erp.modules.sales.domain.enums.DocumentOrigin.DIRECT);
+
         outbox.publish(
                 DomainEventType.SALE_FINALISED,
                 DomainEventType.AGG_SALES_INVOICE,
@@ -306,7 +310,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                         inv.getCompanyId(),
                         inv.getBranchId(),
                         inv.getFinalisedAt(),
-                        payloadLines));
+                        payloadLines,
+                        issuesStock));
 
         audit.record(AuditEvent.of(AuditActions.SALES_INVOICE_FINALISE, "sales_invoices",
                         inv.getId(), inv.getUid())
@@ -387,6 +392,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                 listPrice, listPrice,   // applied = list initially
                 product.getVatStatus(), vatRate,
                 actorId());
+        DiscountValidator.validateLineDiscount(req.lineDiscountAmount(), req.lineDiscountPercent());
         line.setLineDiscountAmount(req.lineDiscountAmount());
         line.setLineDiscountPercent(req.lineDiscountPercent());
 
@@ -426,6 +432,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                         .orElseThrow(() -> new NotFoundException("Product not found: " + line.getProductId())));
         BigDecimal qtyInBase = computeQtyInBase(product, unit, req.quantity());
 
+        DiscountValidator.validateLineDiscount(req.lineDiscountAmount(), req.lineDiscountPercent());
         line.setQuantity(req.quantity());
         line.setQtyInBase(qtyInBase);
         line.setLineDiscountAmount(req.lineDiscountAmount());

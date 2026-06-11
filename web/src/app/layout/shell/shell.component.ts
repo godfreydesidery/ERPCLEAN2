@@ -134,7 +134,11 @@ export class ShellComponent {
     {
       label: 'Sales',
       items: [
+        { label: 'Quotations', route: '/admin/quotations', icon: 'bi-file-earmark-text', available: true, permission: 'SALES.QUOTE.VIEW' },
+        { label: 'Sales Orders', route: '/admin/sales-orders', icon: 'bi-bag-check', available: true, permission: 'SALES.ORDER.VIEW' },
+        { label: 'Deliveries', route: '/admin/deliveries', icon: 'bi-truck', available: true, permission: 'SALES.DELIVERY.VIEW' },
         { label: 'Invoices', route: '/admin/sales-invoices', icon: 'bi-receipt', available: true, permission: 'SALES.INVOICE.VIEW' },
+        { label: 'Sales Returns', route: '/admin/sales-returns', icon: 'bi-arrow-return-left', available: true, permission: 'SALES.RETURN.VIEW' },
         { label: 'Tax Rates', route: '/admin/tax-rates', icon: 'bi-percent', available: true, permission: 'TAXRATE.VIEW' },
       ],
     },

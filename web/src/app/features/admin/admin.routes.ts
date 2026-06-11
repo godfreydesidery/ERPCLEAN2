@@ -138,7 +138,69 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./routes/route-detail.component').then((m) => m.RouteDetailComponent),
   },
-  // ── Sales ─────────────────────────────────────────────────────────────────
+  // ── Sales Orders (O2C) ────────────────────────────────────────────────────
+  {
+    path: 'quotations',
+    canActivate: [requirePermission('SALES.QUOTE.VIEW')],
+    loadComponent: () =>
+      import('./sales/quotation-list.component').then((m) => m.QuotationListComponent),
+  },
+  {
+    path: 'quotations/uid/:uid',
+    canActivate: [requirePermission('SALES.QUOTE.VIEW')],
+    loadComponent: () =>
+      import('./sales/quotation-detail.component').then((m) => m.QuotationDetailComponent),
+  },
+  {
+    path: 'sales-orders',
+    canActivate: [requirePermission('SALES.ORDER.VIEW')],
+    loadComponent: () =>
+      import('./sales/sales-order-list.component').then((m) => m.SalesOrderListComponent),
+  },
+  {
+    path: 'sales-orders/uid/:uid',
+    canActivate: [requirePermission('SALES.ORDER.VIEW')],
+    loadComponent: () =>
+      import('./sales/sales-order-detail.component').then((m) => m.SalesOrderDetailComponent),
+  },
+  {
+    path: 'deliveries',
+    canActivate: [requirePermission('SALES.DELIVERY.VIEW')],
+    loadComponent: () =>
+      import('./sales/delivery-list.component').then((m) => m.DeliveryListComponent),
+  },
+  {
+    path: 'deliveries/create',
+    canActivate: [requirePermission('SALES.DELIVERY.CREATE')],
+    loadComponent: () =>
+      import('./sales/delivery-create.component').then((m) => m.DeliveryCreateComponent),
+  },
+  {
+    path: 'deliveries/uid/:uid',
+    canActivate: [requirePermission('SALES.DELIVERY.VIEW')],
+    loadComponent: () =>
+      import('./sales/delivery-detail.component').then((m) => m.DeliveryDetailComponent),
+  },
+  // ── Sales Returns (RMA) ───────────────────────────────────────────────────
+  {
+    path: 'sales-returns',
+    canActivate: [requirePermission('SALES.RETURN.VIEW')],
+    loadComponent: () =>
+      import('./sales/sales-return-list.component').then((m) => m.SalesReturnListComponent),
+  },
+  {
+    path: 'sales-returns/create',
+    canActivate: [requirePermission('SALES.RETURN.CREATE')],
+    loadComponent: () =>
+      import('./sales/sales-return-create.component').then((m) => m.SalesReturnCreateComponent),
+  },
+  {
+    path: 'sales-returns/uid/:uid',
+    canActivate: [requirePermission('SALES.RETURN.VIEW')],
+    loadComponent: () =>
+      import('./sales/sales-return-detail.component').then((m) => m.SalesReturnDetailComponent),
+  },
+  // ── Sales Invoices ─────────────────────────────────────────────────────────
   {
     path: 'sales-invoices',
     canActivate: [requirePermission('SALES.INVOICE.VIEW')],
