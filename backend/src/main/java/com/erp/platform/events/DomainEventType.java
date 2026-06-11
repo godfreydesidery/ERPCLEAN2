@@ -57,6 +57,11 @@ public final class DomainEventType {
     public static final String DOCUMENT_GENERATED     = "DOCUMENT.GENERATED";
     public static final String AGG_GENERATED_DOCUMENT = "GENERATED_DOCUMENT";
 
+    // --- fixed-assets (ADR-0030) ---
+    /** A depreciation run completed and the GL journal was posted (ADR-0030 D-8). */
+    public static final String DEPRECIATION_RUN_EXECUTED = "DEPRECIATION.RUN.EXECUTED";
+    public static final String AGG_DEPRECIATION_RUN      = "DEPRECIATION_RUN";
+
     private DomainEventType() {
     }
 }

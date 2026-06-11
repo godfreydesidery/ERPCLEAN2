@@ -64,6 +64,13 @@ public class IamTestData {
         em.createNativeQuery(
                 "TRUNCATE journal_lines, journal_entries, journal_batches, gl_configs, fiscal_periods, fiscal_years, chart_of_accounts RESTART IDENTITY CASCADE")
                 .executeUpdate();
+        // 4-FA. Clear Fixed Assets tables BEFORE GL, categories, companies (FK order: run lines → runs →
+        //       schedule lines → assets; disposals/revaluations → assets; assets → categories).
+        em.createNativeQuery(
+                "TRUNCATE asset_revaluations, asset_disposals, " +
+                "depreciation_run_lines, depreciation_runs, " +
+                "depreciation_schedule_lines, fixed_assets, asset_categories RESTART IDENTITY CASCADE")
+                .executeUpdate();
         // 4a. Clear purchases tables BEFORE products/parties (GR/PO lines FK → products/suppliers/units).
         em.createNativeQuery(
                 "TRUNCATE goods_receipt_lines, goods_receipts, purchase_order_lines, purchase_orders RESTART IDENTITY CASCADE")

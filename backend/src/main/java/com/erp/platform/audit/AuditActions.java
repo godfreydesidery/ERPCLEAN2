@@ -232,4 +232,17 @@ public final class AuditActions {
     public static final String COSTING_VALUE_UPDATE              = "COSTING.VALUE.UPDATE";
     public static final String COSTING_VALUE_DEACTIVATE          = "COSTING.VALUE.DEACTIVATE";
     public static final String COSTING_DIMENSION_MANDATORY_SET   = "COSTING.DIMENSION.MANDATORY.SET";
+
+    // ---- Fixed Assets (ADR-0030) ----
+    public static final String FA_CATEGORY_CREATE    = "FA.CATEGORY.CREATE";
+    public static final String FA_CATEGORY_UPDATE    = "FA.CATEGORY.UPDATE";
+    public static final String FA_CATEGORY_ARCHIVE   = "FA.CATEGORY.ARCHIVE";
+    public static final String FA_ASSET_REGISTER     = "FA.ASSET.REGISTER";
+    public static final String FA_ASSET_UPDATE       = "FA.ASSET.UPDATE";
+    public static final String FA_ASSET_IN_SERVICE   = "FA.ASSET.IN_SERVICE";
+    public static final String FA_ASSET_TRANSFER     = "FA.ASSET.TRANSFER";
+    public static final String FA_ASSET_DISPOSE      = "FA.ASSET.DISPOSE";
+    public static final String FA_ASSET_WRITE_OFF    = "FA.ASSET.WRITE_OFF";
+    public static final String FA_ASSET_REVALUE      = "FA.ASSET.REVALUE";
+    public static final String FA_DEPRECIATION_RUN   = "FA.DEPRECIATION.RUN";
 }

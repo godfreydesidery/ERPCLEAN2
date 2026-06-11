@@ -49,6 +49,10 @@ import com.erp.modules.approvals.repository.ApprovalRequestRepository;
 import com.erp.modules.documents.repository.DocumentBrandingRepository;
 import com.erp.modules.documents.repository.DocumentTemplateRepository;
 import com.erp.modules.documents.repository.GeneratedDocumentRepository;
+// fixed-assets (ADR-0030 D-14)
+import com.erp.modules.fixedassets.repository.AssetCategoryRepository;
+import com.erp.modules.fixedassets.repository.DepreciationRunRepository;
+import com.erp.modules.fixedassets.repository.FixedAssetRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -134,6 +138,10 @@ public class ScopeGuard {
     // cost-centre (ADR-0025 D-5)
     private final DimensionRepository        dimensions;
     private final DimensionValueRepository   dimensionValues;
+    // fixed-assets (ADR-0030 D-14)
+    private final AssetCategoryRepository    assetCategories;
+    private final FixedAssetRepository       fixedAssets;
+    private final DepreciationRunRepository  depreciationRuns;
     private final AuditService             audit;
 
     public ScopeGuard(CompanyRepository companies,
@@ -186,6 +194,10 @@ public class ScopeGuard {
                       // cost-centre (ADR-0025 D-5)
                       DimensionRepository dimensions,
                       DimensionValueRepository dimensionValues,
+                      // fixed-assets (ADR-0030 D-14)
+                      AssetCategoryRepository assetCategories,
+                      FixedAssetRepository fixedAssets,
+                      DepreciationRunRepository depreciationRuns,
                       AuditService audit) {
         this.companies      = companies;
         this.branches       = branches;
@@ -237,6 +249,10 @@ public class ScopeGuard {
         // cost-centre (ADR-0025 D-5)
         this.dimensions          = dimensions;
         this.dimensionValues     = dimensionValues;
+        // fixed-assets (ADR-0030 D-14)
+        this.assetCategories     = assetCategories;
+        this.fixedAssets         = fixedAssets;
+        this.depreciationRuns    = depreciationRuns;
         this.audit               = audit;
     }
 
@@ -311,6 +327,10 @@ public class ScopeGuard {
             // cost-centre target types (ADR-0025 D-5)
             case "dimension"           -> dimensions.findCompanyIdByUid(uid);
             case "dimensionvalue"      -> dimensionValues.findCompanyIdByUid(uid);
+            // fixed-assets (ADR-0030 D-14)
+            case "assetcategory"       -> assetCategories.findCompanyIdByUid(uid);
+            case "fixedasset"          -> fixedAssets.findCompanyIdByUid(uid);
+            case "depreciationrun"     -> depreciationRuns.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };

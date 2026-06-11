@@ -15,6 +15,7 @@ import com.erp.modules.documents.service.DocumentBrandingSeeder;
 import com.erp.modules.ar.service.ArGlSeeder;
 import com.erp.modules.cashbank.service.CashBankSeeder;
 import com.erp.modules.stock.service.InventoryGlSeeder;
+import com.erp.modules.fixedassets.service.FixedAssetGlSeeder;
 import com.erp.modules.gl.service.ChartOfAccountService;
 import com.erp.modules.gl.service.FiscalCalendarService;
 import com.erp.modules.gl.service.GlConfigService;
@@ -73,6 +74,8 @@ public class BootstrapRunner implements ApplicationRunner {
     private final InventoryGlSeeder inventoryGlSeeder;
     // Document branding + template registry seeder (ADR-0023 D-10)
     private final DocumentBrandingSeeder documentBrandingSeeder;
+    // Fixed Assets GL seeder (ADR-0030 D-7)
+    private final FixedAssetGlSeeder fixedAssetGlSeeder;
 
     public BootstrapRunner(BootstrapProperties props,
                            OrganisationRepository organisations,
@@ -91,7 +94,8 @@ public class BootstrapRunner implements ApplicationRunner {
                            ApGlSeeder apGlSeeder,
                            CashBankSeeder cashBankSeeder,
                            InventoryGlSeeder inventoryGlSeeder,
-                           DocumentBrandingSeeder documentBrandingSeeder) {
+                           DocumentBrandingSeeder documentBrandingSeeder,
+                           FixedAssetGlSeeder fixedAssetGlSeeder) {
         this.props = props;
         this.organisations = organisations;
         this.companies = companies;
@@ -110,6 +114,7 @@ public class BootstrapRunner implements ApplicationRunner {
         this.cashBankSeeder    = cashBankSeeder;
         this.inventoryGlSeeder      = inventoryGlSeeder;
         this.documentBrandingSeeder = documentBrandingSeeder;
+        this.fixedAssetGlSeeder     = fixedAssetGlSeeder;
     }
 
     @Override
@@ -152,6 +157,8 @@ public class BootstrapRunner implements ApplicationRunner {
         inventoryGlSeeder.seedDefaults(company.getId());
         // Seed document branding profile + template registry (ADR-0023 D-10).
         documentBrandingSeeder.seedDefaults(company.getId());
+        // Seed Fixed Assets GL accounts + gl_configs (ADR-0030 D-7).
+        fixedAssetGlSeeder.seedDefaults(company.getId());
 
         Branch branch = new Branch(company, props.branchCode(), props.branchName());
         branch.setTimeZone(props.timeZone());
