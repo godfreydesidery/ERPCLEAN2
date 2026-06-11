@@ -1,0 +1,134 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Deliveries</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-truck me-1" aria-hidden="true"></i>
+      View all deliveries. Create deliveries from the Sales Order detail screen.
+    </p>
+  </header>
+
+  <!-- Company selector -->
+  @switch (companyState()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mb-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load companies.
+      </p>
+    }
+    @default {
+      @if (companies().length > 1) {
+        <div class="mb-3" style="max-width:320px">
+          <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+          <select id="companyPicker" name="companyPicker" class="form-select"
+                  [ngModel]="selectedCompanyId()"
+                  (ngModelChange)="onCompanyChange($event)">
+            @for (c of companies(); track c.uid) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+          </select>
+        </div>
+      }
+    }
+  }
+
+  @if (selectedCompanyId()) {
+    <!-- List states -->
+    @switch (state()) {
+      @case ('loading') {
+        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading deliveries…
+        </p>
+      }
+      @case ('error') {
+        <p class="state text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load deliveries. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="state text-muted d-flex align-items-center gap-2">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view deliveries.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <p class="state text-muted">No deliveries yet. Create them from the Sales Order detail screen.</p>
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-hover align-middle bg-white grid">
+              <caption class="visually-hidden">Deliveries</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Delivery #</th>
+                  <th scope="col">Sales Order</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Delivery Date</th>
+                  <th scope="col">Confirmed At</th>
+                  <th scope="col"><span class="visually-hidden">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (d of rows(); track d.uid) {
+                  <tr>
+                    <td class="font-monospace">{{ d.deliveryNumber ?? 'DRAFT' }}</td>
+                    <td>
+                      <a [routerLink]="['/admin/sales-orders/uid', d.salesOrderUid]"
+                         class="small">
+                        View SO
+                      </a>
+                    </td>
+                    <td>
+                      <span class="badge" [class]="statusBadgeClass(d.status)">{{ d.status }}</span>
+                    </td>
+                    <td class="small text-muted">{{ d.deliveryDate }}</td>
+                    <td class="small text-muted">
+                      @if (d.confirmedAt) {
+                        {{ d.confirmedAt | date:'dd/MM/yyyy HH:mm' }}
+                      } @else {
+                        —
+                      }
+                    </td>
+                    <td>
+                      <a class="btn btn-sm btn-outline-primary"
+                         [routerLink]="['/admin/deliveries/uid', d.uid]"
+                         [attr.aria-label]="'Open delivery ' + (d.deliveryNumber ?? 'DRAFT')">
+                        <i class="bi bi-eye me-1" aria-hidden="true"></i>Open
+                      </a>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          @if (meta().totalPages > 1) {
+            <nav aria-label="Delivery list pagination" class="d-flex align-items-center gap-3 mt-2">
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      [disabled]="currentPage() === 0"
+                      (click)="prevPage()">
+                <i class="bi bi-chevron-left" aria-hidden="true"></i>
+                <span class="visually-hidden">Previous page</span>
+              </button>
+              <span class="small text-muted">
+                Page {{ meta().page + 1 }} of {{ meta().totalPages }}
+                ({{ meta().totalElements }} total)
+              </span>
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      [disabled]="!meta().hasNext"
+                      (click)="nextPage()">
+                <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                <span class="visually-hidden">Next page</span>
+              </button>
+            </nav>
+          }
+        }
+      }
+    }
+  }
+</section>
