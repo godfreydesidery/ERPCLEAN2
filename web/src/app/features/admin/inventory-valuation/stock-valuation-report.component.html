@@ -1,0 +1,176 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">
+      <i class="bi bi-clipboard-data me-2" aria-hidden="true"></i>Stock Valuation Report
+    </h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      Per-product on-hand quantity, average cost and inventory value — reconciled to the GL Inventory account (1300).
+    </p>
+  </header>
+
+  @if (!canView()) {
+    <p class="text-muted d-flex align-items-center gap-2 mt-3" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to view the Stock Valuation Report.
+    </p>
+  } @else {
+
+    <!-- Toolbar -->
+    <div class="d-flex gap-2 align-items-center mb-3 mt-3">
+      <button type="button" class="btn btn-primary btn-sm"
+              (click)="load()"
+              [disabled]="state() === 'loading'"
+              aria-label="Refresh stock valuation report">
+        @if (state() === 'loading') {
+          <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Loading…
+        } @else {
+          <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Refresh
+        }
+      </button>
+
+      @if (canSetOpening()) {
+        <a routerLink="/admin/stock/valuation/opening"
+           class="btn btn-outline-secondary btn-sm">
+          <i class="bi bi-pencil-square me-1" aria-hidden="true"></i>Set Opening Valuation
+        </a>
+      }
+    </div>
+
+    <!-- Load states -->
+    @switch (state()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Building valuation report…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load the Stock Valuation Report. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="text-muted d-flex align-items-center gap-2">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view this report.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <p class="text-muted">Click Refresh to load the current valuation.</p>
+        }
+
+        @if (report(); as r) {
+
+          <!-- Currency context -->
+          <p class="small text-muted mb-2">
+            Currency: <strong>{{ r.currency }}</strong>
+          </p>
+
+          <!-- Reconciliation bar -->
+          @if (r.recon.ties) {
+            <div class="alert alert-success d-flex align-items-center gap-2 mb-3" role="status">
+              <i class="bi bi-check-circle-fill fs-5" aria-hidden="true"></i>
+              <div>
+                <strong>Reconciled to GL</strong> — Σ Inventory value equals the GL Inventory (1300) account balance.
+                <span class="ms-2 font-monospace">{{ fmtMoney(r.recon.computed) }} {{ r.currency }}</span>
+              </div>
+            </div>
+          } @else {
+            <div class="alert alert-danger d-flex align-items-center gap-2 mb-3" role="alert">
+              <i class="bi bi-exclamation-triangle-fill fs-5" aria-hidden="true"></i>
+              <div>
+                <strong>Finance-grade alarm — Stock ledger and GL are out of sync.</strong>
+                <br />
+                Stock Σ: <span class="font-monospace">{{ fmtMoney(r.recon.computed) }}</span> |
+                GL 1300: <span class="font-monospace">{{ fmtMoney(r.recon.expected) }}</span> |
+                Difference: <span class="font-monospace text-danger">{{ fmtMoney(r.recon.difference) }}</span>
+                <br />
+                <span class="small">Investigate posting gaps (unposted GRNs, manual adjustments, opening valuation gaps).</span>
+              </div>
+            </div>
+          }
+
+          <!-- Valuation table -->
+          <div class="table-responsive">
+            <table class="table table-sm align-middle bg-white">
+              <caption class="visually-hidden">Stock Valuation Report — per-product on-hand value</caption>
+              <thead class="table-light">
+                <tr>
+                  <th scope="col">Code</th>
+                  <th scope="col">Product</th>
+                  <th scope="col" class="text-end">On-Hand Qty</th>
+                  <th scope="col" class="text-end">Avg Cost</th>
+                  <th scope="col" class="text-end">Inventory Value</th>
+                  <th scope="col">Currency</th>
+                </tr>
+              </thead>
+              <tbody>
+                @if (r.rows.length === 0) {
+                  <tr>
+                    <td colspan="6" class="text-center text-muted py-4">
+                      No stock on hand for this company.
+                    </td>
+                  </tr>
+                }
+                @for (row of r.rows; track row.productUid) {
+                  <tr [class.table-warning]="isUnvalued(row.avgCost)">
+                    <td class="font-monospace small">{{ row.productCode }}</td>
+                    <td class="small">{{ row.productName }}</td>
+                    <td class="text-end font-monospace small">{{ fmtQty(row.quantity) }}</td>
+                    <td class="text-end font-monospace small">
+                      @if (isUnvalued(row.avgCost)) {
+                        <span class="badge text-bg-warning" title="No opening cost set — set via Opening Valuation">
+                          Not valued
+                        </span>
+                      } @else {
+                        {{ fmtMoney(row.avgCost) }}
+                      }
+                    </td>
+                    <td class="text-end font-monospace small">
+                      @if (isUnvalued(row.value)) {
+                        <span class="text-muted">—</span>
+                      } @else {
+                        {{ fmtMoney(row.value) }}
+                      }
+                    </td>
+                    <td class="small text-muted">{{ row.currency }}</td>
+                  </tr>
+                }
+              </tbody>
+              <tfoot>
+                <tr class="table-secondary fw-semibold">
+                  <td colspan="4" class="text-end">Total Inventory Value</td>
+                  <td class="text-end font-monospace">{{ fmtMoney(r.totalValue) }}</td>
+                  <td class="small text-muted">{{ r.currency }}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <!-- Recon summary card -->
+          <div class="card mt-3" style="max-width:480px">
+            <div class="card-header small fw-semibold text-muted">
+              <i class="bi bi-bank me-1" aria-hidden="true"></i>GL Reconciliation
+            </div>
+            <div class="card-body p-3">
+              <dl class="row mb-0 small">
+                <dt class="col-sm-6">Σ Inventory (stock ledger)</dt>
+                <dd class="col-sm-6 text-end font-monospace mb-1">{{ fmtMoney(r.recon.computed) }}</dd>
+                <dt class="col-sm-6">GL 1300 Inventory balance</dt>
+                <dd class="col-sm-6 text-end font-monospace mb-1">{{ fmtMoney(r.recon.expected) }}</dd>
+                <dt class="col-sm-6">Difference</dt>
+                <dd class="col-sm-6 text-end font-monospace mb-0"
+                    [class.text-success]="r.recon.ties"
+                    [class.text-danger]="!r.recon.ties">
+                  {{ fmtMoney(r.recon.difference) }}
+                </dd>
+              </dl>
+            </div>
+          </div>
+
+        }
+      }
+    }
+  }
+</section>

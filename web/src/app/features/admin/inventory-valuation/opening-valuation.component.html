@@ -1,0 +1,175 @@
+<section class="admin-page">
+  <div class="mb-3">
+    <a routerLink="/admin/stock/valuation" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Stock Valuation Report
+    </a>
+  </div>
+
+  <header class="page-head">
+    <h1 class="h4 mb-1">
+      <i class="bi bi-pencil-square me-2" aria-hidden="true"></i>Set Opening Inventory Valuation
+    </h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      Set the one-time opening unit cost for a product that has on-hand quantity but no cost yet.
+      Posts <strong>DR Inventory (1300) / CR Opening Balance Equity (3100)</strong>.
+      This operation can only be performed once per on-hand row.
+    </p>
+  </header>
+
+  @if (!canSet()) {
+    <p class="text-muted d-flex align-items-center gap-2 mt-3" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to set opening inventory valuations.
+    </p>
+  } @else {
+
+    <!-- Company selector -->
+    @switch (companyState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-3" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load companies.
+        </p>
+      }
+      @default {
+        @if (companies().length > 1) {
+          <div class="mb-3" style="max-width:320px">
+            <label class="form-label small text-muted mb-1" for="ovCompanyPicker">Company</label>
+            <select id="ovCompanyPicker" name="ovCompanyPicker" class="form-select"
+                    [ngModel]="selectedCompanyId()"
+                    (ngModelChange)="onCompanyChange($event)">
+              @for (c of companies(); track c.uid) {
+                <option [value]="c.id">{{ c.name }}</option>
+              }
+            </select>
+          </div>
+        }
+      }
+    }
+
+    <!-- Unvalued rows load state -->
+    @switch (loadState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading unvalued products…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-3" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load unvalued products. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-3">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view the stock valuation report.
+        </p>
+      }
+      @default {
+
+        @if (!hasUnvalued()) {
+          <div class="alert alert-success d-flex align-items-center gap-2 mb-3" role="status">
+            <i class="bi bi-check-circle-fill fs-5" aria-hidden="true"></i>
+            All products with on-hand stock have been valued. No opening valuations are pending.
+          </div>
+        } @else {
+
+          <!-- Info notice -->
+          <div class="alert alert-info d-flex align-items-center gap-2 mb-3" role="note">
+            <i class="bi bi-info-circle-fill fs-5" aria-hidden="true"></i>
+            <div class="small">
+              <strong>{{ unvaluedRows().length }} product(s) need an opening cost.</strong>
+              Select a product and enter its unit cost at migration date.
+              This action is <strong>one-time per product</strong> — you cannot change it once posted.
+            </div>
+          </div>
+
+          <!-- Success result banner -->
+          @if (lastResult(); as r) {
+            <div class="alert alert-success d-flex align-items-center gap-2 mb-3" role="status">
+              <i class="bi bi-check-circle-fill fs-5" aria-hidden="true"></i>
+              Opening valuation posted — GL entry <strong>{{ r.glEntryUid }}</strong>.
+              Value: <span class="font-monospace">{{ fmtMoney(r.openingValue) }} {{ r.currency }}</span>
+              (cost <span class="font-monospace">{{ fmtMoney(r.openingCost) }}</span>
+              × qty <span class="font-monospace">{{ fmtMoney(r.quantity) }}</span>).
+            </div>
+          }
+
+          <!-- Opening valuation form -->
+          <form (ngSubmit)="submit()" aria-label="Set opening inventory valuation" class="card" style="max-width:560px">
+            <div class="card-header small fw-semibold text-muted">Opening Valuation Details</div>
+            <div class="card-body">
+
+              <!-- Product picker -->
+              <div class="mb-3">
+                <label class="form-label" for="ovProduct">
+                  Product (unvalued on-hand rows)
+                  <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <select id="ovProduct" name="ovProduct" class="form-select"
+                        [ngModel]="selectedStockOnHandUid()"
+                        (ngModelChange)="selectedStockOnHandUid.set($event)"
+                        [disabled]="saving()"
+                        required>
+                  <option value="" disabled>— Select a product —</option>
+                  @for (row of unvaluedRows(); track row.stockOnHandUid) {
+                    <option [value]="row.stockOnHandUid">{{ row.label }}</option>
+                  }
+                </select>
+                <div class="form-text">
+                  Only products with on-hand quantity but no cost appear here.
+                </div>
+              </div>
+
+              <!-- Opening unit cost -->
+              <div class="mb-3">
+                <label class="form-label" for="ovCost">
+                  Opening Unit Cost
+                  <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="ovCost" name="ovCost"
+                       type="text" inputmode="decimal"
+                       class="form-control font-monospace"
+                       placeholder="0.0000"
+                       autocomplete="off"
+                       [ngModel]="openingCostStr()"
+                       (ngModelChange)="openingCostStr.set($event)"
+                       [disabled]="saving()"
+                       required />
+                <div class="form-text">
+                  Unit cost in base currency at the migration / valuation date.
+                  Inventory value = on-hand quantity × this cost.
+                </div>
+              </div>
+
+              @if (formError(); as msg) {
+                <p class="text-danger small mt-2 mb-0" role="alert">
+                  <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ msg }}
+                </p>
+              }
+            </div>
+
+            <div class="card-footer d-flex gap-2">
+              <button type="submit" class="btn btn-primary" [disabled]="submitDisabled()">
+                @if (saving()) {
+                  <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                  Posting…
+                } @else {
+                  <i class="bi bi-check-lg me-1" aria-hidden="true"></i>Set Opening Valuation
+                }
+              </button>
+              <a routerLink="/admin/stock/valuation" class="btn btn-outline-secondary">Cancel</a>
+            </div>
+          </form>
+
+        }
+      }
+    }
+  }
+</section>
