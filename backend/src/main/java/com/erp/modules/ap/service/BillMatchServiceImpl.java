@@ -64,6 +64,7 @@ public class BillMatchServiceImpl implements BillMatchService {
     private final PurchaseMatchReader        purchaseReader;
     private final GLPostingService           glPosting;
     private final GLConfigResolver           glConfig;
+    private final ApBillNumberGenerator      numbers;
     private final ScopeGuard                 scopeGuard;
     private final AuditService               audit;
     private final JdbcTemplate               jdbc;
@@ -74,6 +75,7 @@ public class BillMatchServiceImpl implements BillMatchService {
                                  PurchaseMatchReader purchaseReader,
                                  GLPostingService glPosting,
                                  GLConfigResolver glConfig,
+                                 ApBillNumberGenerator numbers,
                                  ScopeGuard scopeGuard,
                                  AuditService audit,
                                  JdbcTemplate jdbc) {
@@ -83,6 +85,7 @@ public class BillMatchServiceImpl implements BillMatchService {
         this.purchaseReader = purchaseReader;
         this.glPosting      = glPosting;
         this.glConfig       = glConfig;
+        this.numbers        = numbers;
         this.scopeGuard     = scopeGuard;
         this.audit          = audit;
         this.jdbc           = jdbc;
@@ -192,6 +195,15 @@ public class BillMatchServiceImpl implements BillMatchService {
         SupplierBillStatus newBillStatus = anyHeld
                 ? SupplierBillStatus.HELD
                 : SupplierBillStatus.MATCHED;
+        // Assign bill_number BEFORE the status transition (finding #15). Order matters: setStatus
+        // dirties the bill as non-DRAFT, and numbers.nextBill(...) runs a code_sequence query that
+        // triggers a Hibernate autoflush — flushing a MATCHED-but-unnumbered row violates
+        // chk_supplier_bill_number_when_posted. Numbering while the bill is still DRAFT keeps that
+        // autoflush legal. Guard is idempotent (no-op if already numbered). HELD bills stay unnumbered.
+        if (!anyHeld && bill.getBillNumber() == null) {
+            bill.setBillNumber(numbers.nextBill(bill.getCompanyId()));
+        }
+
         bill.setStatus(newBillStatus);
 
         if (!anyHeld) {
@@ -237,6 +249,11 @@ public class BillMatchServiceImpl implements BillMatchService {
                             || m.getMatchStatus() == BillMatchStatus.VARIANCE_ACCEPTED);
 
         if (allResolved) {
+            // Assign bill_number before MATCHED transition (finding #15):
+            // idempotent — acceptVariance may be called multiple times (once per held line).
+            if (bill.getBillNumber() == null) {
+                bill.setBillNumber(numbers.nextBill(bill.getCompanyId()));
+            }
             bill.setStatus(SupplierBillStatus.MATCHED);
             postMatchedBillToGl(bill);
             bills.save(bill);
