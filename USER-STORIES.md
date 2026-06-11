@@ -1631,3 +1631,155 @@ books never go wrong silently.
   average must never go negative (NFR-INV-02).
 - **AC6** Given any read or figure, then it returns **only the acting company's** data (`assertCanActIn`);
   cross-company valuation never appears (BR-INV-10, NFR-INV-01).
+
+---
+
+## Sales Orders / Order-to-Cash
+
+Requirements: [docs/requirements/sales-orders.md](docs/requirements/sales-orders.md). Status: **RATIFIED
+(owner-confirmed 2026-06-10).** The Order-to-Cash depth increment — the **quote → order → reserve → deliver →
+invoice → [return]** spine on the shipped invoice channel. **THE KEY SEAM:** stock issue + COGS **move from
+invoice-finalise to delivery-time**, so an **SO-sourced invoice posts revenue only** (never re-issues stock)
+while a **direct walk-in invoice keeps issuing stock + COGS on finalise**. Reuses the ADR-0020 valuation/COGS
++ reversal engine (the delivery drives it, the return reverses it) and `ArCreditNoteService` (ADR-0014, for
+returns). ADR-0021 next (no schema/columns here). **The build is staged: core O2C spine first (quote → SO →
+reserve → deliver → invoice), returns second.** Stories are the test/build contract.
+
+### US-SO-01 — Quote → accept → sales order (a priced offer becomes a committed order)
+**As a** sales officer **I want** to quote a customer and turn an accepted quote into an order **so that** the
+customer's commitment is captured without committing stock or the books prematurely.
+- **AC1** Given `SALES.QUOTE.CREATE`, when I create a quotation with lines (product, qty, price-list unit
+  price, optional line discount) and a **validity date**, then it is **DRAFT** and **reserves no stock and
+  posts no GL** (FR-SO-01, BR-SO-01).
+- **AC2** Given a draft quote, when I **send** it (`SALES.QUOTE.SEND`), then `QUOTE-####` is allocated and the
+  status is **SENT**; the act is **audited** (FR-SO-02, NFR-SO-04).
+- **AC3** Given a SENT quote within its validity, when I **accept** it (`SALES.QUOTE.ACCEPT`), then it
+  **converts to a sales order** with its **lines and pricing copied** (the SO opens DRAFT — OQ-SO-07)
+  (FR-SO-03, BR-SO-01).
+- **AC4 (expiry guard)** Given a quote **past its validity date**, when I attempt to accept it, then it is
+  **EXPIRED** and acceptance is **rejected** (BR-SO-01).
+- **AC5** Given any quote stage, then **no `stock_movements` row and no journal entry** exist for the quote —
+  it commits nothing (BR-SO-01).
+
+### US-SO-02 — Confirm a sales order → stock is reserved (available = on_hand − reserved)
+**As a** sales officer **I want** confirming an order to reserve its stock **so that** the goods are held for
+the customer and the available-to-promise reflects the commitment.
+- **AC1** Given a DRAFT SO, when I **confirm** it (`SALES.ORDER.CONFIRM`), then each line's ordered qty is
+  **reserved**: `reserved` rises and **available = on_hand − reserved** falls; the SO is **CONFIRMED**
+  (FR-SO-05, FR-SO-07, BR-SO-02).
+- **AC2 (soft allocation — no stock move, no GL)** Given the confirmation, then **no `stock_movements` row and
+  no journal entry** are written — on-hand and the books are **unchanged** (BR-SO-03).
+- **AC3 (the ATP tie)** Given on-hand `H` and reservations totalling `R`, then **available-to-promise = H − R**;
+  a new order sees the **reduced** available (BR-SO-05).
+- **AC4 (over-reservation allowed, flagged)** Given an ordered qty **exceeding** available on-hand, when I
+  confirm, then the reservation is **allowed** (→ **negative available**, **flagged**) because backorders are
+  supported (BR-SO-05, OQ-SO-02).
+- **AC5** Given a DRAFT SO (not yet confirmed), then it **reserves nothing and posts nothing** (BR-SO-02).
+- **AC6** Given the confirmation, then the state transition is **audited** with actor + company context
+  (NFR-SO-04).
+
+### US-SO-03 — Partial delivery → COGS posts and a backorder remains (the engine driver)
+**As a** stock controller **I want** delivering part of an order to issue the stock, post its cost, and leave
+the rest on backorder **so that** the books carry COGS when goods physically leave and the unshipped balance
+stays open.
+- **AC1** Given a CONFIRMED SO line of qty `10` at current average `A`, when I create a **delivery**
+  (`SALES.DELIVERY.CREATE`) for `6`, then the system **issues 6** (a real `stock_movements` deduction) and
+  posts a **balanced** GL entry **DR `5100 COGS` / CR `1300 Inventory`** at `6 × A` (reusing ADR-0020)
+  (FR-SO-09, BR-SO-04).
+- **AC2 (COGS-at-delivery, not at invoice)** Given the delivery, then **COGS posts now** (at delivery), **not**
+  when the invoice is later raised (THE KEY SEAM — BR-SO-04/09).
+- **AC3 (reservation → issue)** Given the delivery of `6`, then the reservation **falls by 6** (the delivered
+  portion converts reservation → issue) (BR-SO-06).
+- **AC4 (backorder)** Given the partial delivery, then the **unshipped `4` stays open** on the SO as a
+  **backorder** and the SO is **PARTIALLY_FULFILLED**; it may be delivered later (BR-SO-07, BR-SO-12).
+- **AC5 (recipe explosion)** Given a **composed** product delivered, then COGS posts for **each stockable
+  component at its own** current average; a non-stockable / non-composed line posts **no COGS** (FR-SO-09,
+  ADR-0010 D-8).
+- **AC6 (over-deliver guard)** Given a delivery for **more** than the line's open qty, then it is **rejected**
+  (BR-SO-11).
+- **AC7 (idempotent)** Given the delivery's stock/COGS event is **re-delivered**, then stock moves and COGS
+  posts **once** (NFR-SO-02, BR-SO-17).
+
+### US-SO-04 — Invoice a delivery → revenue posts ONLY (no stock re-issue) — the seam reconciliation
+**As an** accountant **I want** invoicing a delivered order to post revenue without moving stock again **so
+that** revenue is billed once and COGS is never double-counted.
+- **AC1** Given a delivery of `6` (which already issued stock + posted COGS), when I **invoice** it
+  (`SALES.INVOICE.CREATE`, referencing the delivery / SO), then the invoice finalises with `INV-####` and posts
+  **REVENUE ONLY** — **DR AR/Cash, CR Sales Revenue, CR VAT** (FR-SO-11, FR-SO-12).
+- **AC2 (the no-re-issue tie — the seam)** Given the SO-sourced invoice finalises, then **no `stock_movements`
+  row is written and no COGS re-posts** — on-hand is **unchanged by the invoice** (the delivery already moved
+  it) (BR-SO-09). Re-issuing would double-count COGS — a release blocker.
+- **AC3 (direct invoice unchanged)** Given a **direct** walk-in invoice (no SO/delivery), when it finalises,
+  then it **still issues stock + posts COGS** on finalise exactly as today (BR-SO-09).
+- **AC4 (partial invoicing)** Given one SO with two deliveries, when each is invoiced, then the SO yields
+  **two invoices**, each billing its delivered qty (BR-SO-08).
+- **AC5 (status rollup)** Given all delivered qty is invoiced, then the SO is **INVOICED**; given it is also
+  fully delivered, then the SO is **CLOSED** (BR-SO-12).
+- **AC6 (over-invoice guard)** Given an invoice for **more** than the delivered (not-yet-invoiced) qty, then it
+  is **rejected** (BR-SO-11).
+
+### US-SO-05 — Order-level + line discounts flow to the invoice (VAT on the discounted net)
+**As a** sales officer **I want** line and order discounts to flow through to the invoice with VAT on the
+discounted net **so that** the customer is billed and taxed correctly.
+- **AC1** Given an order line with a **line discount** (% or amount), when invoiced, then the line's **net** is
+  the price-list price × qty **less the line discount**, and **VAT is computed on that discounted net**
+  (FR-SO-13, BR-SO-10).
+- **AC2 (order-level discount apportioned)** Given an **order-level discount**, when invoiced, then it is
+  **apportioned across lines pro-rata to each line's net** before VAT, so the per-band VAT summary stays
+  correct (FR-SO-13, BR-SO-10).
+- **AC3 (algorithm reuse / backend == frontend)** Given the invoice totals, then they are computed by the
+  **shipped `InvoiceTotalsCalculator`** (round per line, apportion the discount pro-rata, VAT on discounted
+  net, HALF_UP at each boundary) and are **identical backend and frontend** (NFR-SO-03, sales.md D-4).
+- **AC4** Given the discounted totals, then the SO totals and the resulting invoice totals **agree to the
+  cent** (OQ-SO-06).
+
+### US-SO-06 — Return / RMA → stock back in + a credit note (staged second)
+**As a** stock controller / accountant **I want** returning delivered goods to restock them and credit the
+customer **so that** inventory and the customer's balance are both corrected.
+- **AC1** Given a delivery of `6` at original issued cost `A`, when I create a **return** (`SALES.RETURN.
+  CREATE`) **against that delivery** for `2`, then `2` come **back into stock** (a real `stock_movements`
+  **IN**) and a **balanced** reversing entry posts **DR `1300 Inventory` / CR `5100 COGS`** at `2 × A` (the
+  **original issued cost** — reusing the ADR-0020 reversal) (FR-SO-14, BR-SO-13, OQ-SO-05).
+- **AC2 (credit note)** Given the return, then a **credit note** is raised (reusing `ArCreditNoteService`,
+  ADR-0014) reversing the **revenue / AR / VAT** for the returned value (DR Sales Revenue, DR VAT, CR AR/Cash);
+  the customer's open balance **falls** (BR-SO-13).
+- **AC3 (the cost-basis tie)** Given the return reverses COGS at the **original issued cost** `A` (not the
+  now-current average), then there is **no phantom gain/loss** from average drift and the books are symmetric
+  (BR-SO-13, OQ-SO-05).
+- **AC4 (partial + over-return guard)** Given a **partial** return, then it is allowed; given a return for
+  **more** than the delivered (less already-returned) qty, then it is **rejected** (BR-SO-11).
+- **AC5 (recipe explosion)** Given a **composed** product returned, then COGS reverses for **each stockable
+  component at its original issued cost** (FR-SO-14).
+- **AC6 (append-only + audited)** Given the return, then the original postings are **never edited** — only
+  reversing entries are added — and the return + its postings are **audited** (BR-SO-16, NFR-SO-04).
+
+### US-SO-07 — Cancel an order → the reservation is released
+**As a** sales manager **I want** cancelling an order to free its reserved stock **so that** the goods become
+available to promise to other customers.
+- **AC1** Given a CONFIRMED SO with reservations, when I **cancel** it (`SALES.ORDER.CANCEL`), then the
+  **remaining (undelivered) reservation is released** — `reserved` falls, **available rises** — and the SO is
+  **CANCELLED** (FR-SO-06, BR-SO-06).
+- **AC2 (no stock move on cancel)** Given the cancel, then **no `stock_movements` row and no journal entry** are
+  written — releasing a soft reservation moves no stock (BR-SO-03/06).
+- **AC3 (cancel mid-fulfilment)** Given an SO with deliveries already made, when I cancel it, then only the
+  **undelivered** balance is cancelled; the **delivered portion stands** and is invoiced / returnable normally
+  (OQ-SO-04).
+- **AC4** Given the cancel, then the state transition is **audited** (NFR-SO-04).
+
+### US-SO-08 — Order-to-Cash is scoped, permissioned, and isolated (the cross-cutting guards)
+**As an** owner **I want** every O2C document scoped to its company and gated by permission **so that** data
+never leaks across companies and only authorised users act.
+- **AC1** Given any quote / order / delivery / return read, then it returns **only the acting company's** data
+  (`assertCanActIn`); cross-company never appears (FR-SO-16, BR-SO-14, NFR-SO-01).
+- **AC2** Given a user **without** the relevant `SALES.QUOTE.* / SALES.ORDER.* / SALES.DELIVERY.CREATE /
+  SALES.RETURN.CREATE` permission, when they attempt the act, then it is **refused** by RBAC (FR-SO-17).
+- **AC3 (numbering concurrency)** Given two concurrent creations for the same company, then they get **distinct**
+  `QUOTE-#### / SO-#### / DEL-#### / RET-####` numbers (the `code_sequence` row-lock) (NFR-SO-07).
+- **AC4 (reservation concurrency)** Given two confirmations racing on the same product's on-hand, then **both
+  reservations are applied** (neither lost) — the `stock_on_hand` optimistic `@Version` serialises them
+  (NFR-SO-05).
+- **AC5 (every transition audited)** Given any state transition (quote sent/accepted; SO confirmed/cancelled;
+  delivery created; invoice raised; return created), then it is **audited** with actor, action, target, and
+  company context (NFR-SO-04).
+- **AC6 (base currency)** Given any O2C amount, then it is in the company **base currency** (TZS in practice);
+  foreign-currency orders are deferred (BR-SO-15).

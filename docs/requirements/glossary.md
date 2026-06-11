@@ -801,5 +801,70 @@ One definition per term, used consistently across the team. Add terms as modules
   (`5150 Purchases`) is retained only for non-stock / service bills.
 - Use **opening valuation** for the one-time cost seed (DR Inventory / CR 3100) — never "opening balance" bare
   (that is the stock-module **quantity** seed) and never "goods receipt" (DR Inventory / CR GRNI).
+
+## Sales Orders / Order-to-Cash terms
+
+> Source: [docs/requirements/sales-orders.md](sales-orders.md) (RATIFIED 2026-06-10). The Order-to-Cash depth
+> increment — quote → order → reserve → deliver → invoice → [return] on the shipped invoice channel. THE KEY
+> SEAM: stock issue + COGS move from invoice-finalise to delivery-time; SO-sourced invoices post revenue only.
+
+- **Quotation (quote)** — a **non-binding priced offer** (`QUOTE-####`) with draft pricing + a **validity
+  date**; lifecycle DRAFT → SENT → ACCEPTED → EXPIRED / REJECTED. It **reserves no stock and posts no GL**; on
+  **acceptance** it **converts to a sales order** (lines + pricing copied). **Not** a sales order and **not** an
+  invoice.
+- **Sales order (SO)** — a customer's **committed order** (`SO-####`) with order lines (product, qty ordered,
+  unit price, discount); lifecycle DRAFT → CONFIRMED → (PARTIALLY_)FULFILLED → (PARTIALLY_)INVOICED → CLOSED,
+  plus CANCELLED. **Confirming reserves** stock. The SO posts **nothing** on its own — the delivery and the
+  invoice do. **Not** a quotation (which commits nothing) and **not** an invoice (the bill).
+- **Order line** — one product on a sales order: product, **qty ordered**, unit price (price-list default,
+  overridable), optional line discount; tracks its own **fulfilled** (delivered) and **invoiced** quantities,
+  from which the SO status rollup derives.
+- **Reservation (soft allocation)** — confirming an SO **reserves** the ordered qty: a soft hold that records
+  the quantity is **spoken for** but **moves no stock (no `stock_movements` row) and posts no GL**. Released by
+  delivery (converted to issue) or cancel. **Not** a stock issue and **not** a journal entry.
+- **Available-to-promise (ATP) / available** — **available = on_hand − reserved**: the quantity the business
+  can still commit to a *new* order. **Not** on-hand (the physical quantity). v1's ATP is the simple
+  on_hand − reserved; forward-looking ATP / MRP is deferred.
+- **Fulfilment / delivery** — the act of **shipping** an SO's goods, recorded as a **delivery** (`DEL-####`).
+  Delivering **issues the stock** (a real deduction) **and posts DR COGS / CR Inventory at the moving average**
+  (reusing ADR-0020 — the delivery now **drives** the engine) **and releases** the matching reservation. The
+  moment **goods physically leave and the cost is incurred**. **Not** the invoice (the bill) and **not** the
+  reservation (the soft hold).
+- **Partial delivery** — a delivery that ships **less than** an SO line's open qty; the shipped portion issues
+  + COGS, the unshipped balance becomes a **backorder**. One line may be delivered over several deliveries.
+- **Backorder** — the **unshipped open balance** of an SO line (ordered − fulfilled); it **stays open** on the
+  SO (still reserved, awaiting stock/delivery) until delivered or the SO is cancelled. A quantity state, not a
+  document.
+- **COGS-at-delivery** — THE KEY SEAM: for an SO-sourced sale, the **delivery** (not the invoice) is the
+  trigger that **issues stock and posts COGS** at the moving average. (A **direct** walk-in invoice still issues
+  + COGS at finalise — there is no delivery in front of it.)
+- **Partial invoicing** — invoicing the **delivered** qty of an SO — possibly **several invoices** across
+  several deliveries against one order; each invoice **references the delivery / SO** and posts **revenue only**
+  (no stock re-issue). The SO is **INVOICED** when all delivered qty is invoiced.
+- **Order-level discount / line discount** — a discount on top of the price-list price: **per-line** (% or
+  amount) and **order-level** (% or amount, apportioned across lines pro-rata to net). Both flow to the invoice
+  totals; **VAT is computed on the discounted net** (reusing the `InvoiceTotalsCalculator` algorithm).
+- **Sales return / RMA** — a **return** (`RET-####`) of delivered goods **against a delivery**: the returned
+  qty comes **back into stock** (reversing COGS/inventory at the **original issued cost** — reusing the ADR-0020
+  reversal) **and** raises a **credit note** (reusing `ArCreditNoteService` to reverse revenue / AR / VAT).
+  Partial returns allowed; capped at the delivered qty. **Against a delivery**, not a free-standing negative
+  invoice; **not** a void (a full reversal of a finalised invoice).
+- **Credit note** — the AR document that **reduces** what a customer owes (reverses revenue / AR / VAT), raised
+  by a sales return. **Reused from AR** (ADR-0014); O2C **raises** one, it does not own the posting. **Not** an
+  invoice and **not** a cash refund (the refund tender is a deferred Cash & Bank act).
+
+### Order-to-Cash terminology rulings (pick one, stay consistent)
+- Use **quotation** (a non-binding offer), **sales order** (a committed order), **delivery** (goods leave, COGS
+  posts), and **invoice** (the customer is billed, revenue posts) precisely — never blur them; each is a
+  distinct document with a distinct effect.
+- Use **reservation** for the soft allocation and **issue** for the real stock deduction — confirming
+  **reserves**, delivering **issues**; never call a reservation a stock movement.
+- Use **available-to-promise** (or **available**) = **on_hand − reserved** — never "available" loosely as a
+  synonym for on-hand.
+- Use **backorder** for the open unshipped balance on the order — never treat it as a separate document.
+- Use **COGS-at-delivery** for the seam — for an SO-sourced sale COGS posts **at delivery**, for a direct sale
+  **at finalise**; never both, and an **SO-sourced invoice never re-issues stock**.
+- Use **return / RMA** (against a delivery, partial-capable, stock-in + credit-note) vs **void** (full reversal
+  of a finalised invoice) precisely — they are different acts.
 - A **revaluation** changes value with no sale (the adjustment path); a **sale** reduces both quantity and
   value (to COGS) — never call a sale a revaluation.

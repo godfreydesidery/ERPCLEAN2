@@ -941,3 +941,86 @@ Each entry: why it matters · who decides · does it block build.
   inventory / COGS / GRNI / adjustment legs, and the valuation-report sum must round identically (NFR-INV-02).
   *Recommended default:* HALF_UP, TZS = 0 dp display, a higher internal scale on the average (OQ-INV-06).
   *Decider:* owner (finance input). *Blocks ADR-0020:* **NO** for the model; **confirm before go-live**.
+
+## Sales Orders / Order-to-Cash
+
+> The **full Order-to-Cash scope** the owner ratified — the **quotation** stage (QUOTE-####, validity,
+> DRAFT→SENT→ACCEPTED→EXPIRED/REJECTED, accept→convert to SO, reserves/posts nothing); the **sales order**
+> lifecycle (SO-####, DRAFT→CONFIRMED→(PARTIALLY_)FULFILLED→(PARTIALLY_)INVOICED→CLOSED + CANCELLED); **soft
+> reservation on confirm** (available = on_hand − reserved); **delivery** (DEL-####, partial + backorder) →
+> issues stock + COGS at the moving average (reusing ADR-0020 — the delivery drives it); **THE KEY SEAM** —
+> stock issue + COGS move to delivery-time, so SO-sourced invoices post **revenue only** (never re-issue
+> stock) and direct walk-in invoices **keep** issuing stock + COGS on finalise; **partial invoicing** per
+> delivery; **order-level + line discounts** (VAT on the discounted net); **returns / RMA** (RET-####, against
+> a delivery — stock in + COGS reversal at the original issued cost + a credit note reusing `ArCreditNote
+> Service`); and the permissions / numbering / scope — are **RESOLVED 2026-06-10** (see sales-orders.md
+> §2/§5/§6/§7). **No ADR-0021-blocking open question remains.** What stays open is detail with a recommended
+> default; the architecturally meaty items are **decisions ADR-0021 makes**, not requirements blockers (the
+> *behaviour* is fixed). **The increment is large — the build is STAGED: core O2C spine first, returns
+> second.**
+
+### The ADR-0021 design seams (DECISIONS the architect makes — do NOT block the requirements)
+
+- **OQ-SO-01** — **The reservation model.** `stock_on_hand` has **no reserved / available column today** (V7:
+  `quantity` + `reorder_level`; V17 added `avg_cost` + `on_hand_value`). How is a soft reservation tracked — an
+  **additive `reserved` quantity on `stock_on_hand`** (with **available = on_hand − reserved** derived), a
+  **per-SO-line reservation ledger**, or both? *Recommended default:* additive `reserved` on `stock_on_hand`
+  for the fast ATP read **plus** a per-SO-line reservation record for traceability + release. *Decider:*
+  architect (ADR-0021). *Blocks ADR-0021:* **NO** — it **is** the model decision.
+- **OQ-SO-02** — **Over-reservation / backorder policy.** May confirming an SO reserve **beyond** on-hand (→
+  negative available)? *Recommended default:* **allow** (negative available, **flagged**), because backorders
+  are supported (BR-SO-05). *Decider:* owner (sales policy). *Blocks ADR-0021:* **NO** — allow-and-flag is the
+  default; a block-on-over-reserve is a one-line policy alternative.
+- **OQ-SO-03** — **The invoice-origin mechanism for the stock-issue seam (the load-bearing one).** How does
+  invoice-finalise know **not** to issue stock for an **SO-sourced** invoice while a **direct** invoice still
+  does? **(a)** an **invoice origin/flag** (DIRECT vs SO/DELIVERY) read by the issue path (e.g. a
+  `SALE.FINALISED` payload flag `issuesStock=false` or a distinct revenue-only event), **or (b)** the
+  **delivery owns the stock event** (a new `DELIVERY.SHIPPED` drives issue + COGS; SO-sourced invoice-finalise
+  emits a revenue-only posting, never a stock event). *Recommended default:* **(b) the delivery owns the stock
+  event** — it leaves the direct-invoice path **completely untouched** and the SO-sourced invoice simply never
+  emits a stock event. *Decider:* architect (ADR-0021). *Blocks ADR-0021:* **NO** — it **is** the seam
+  decision; both reconcile to BR-SO-09. (Getting it wrong double-counts COGS — the slice's top risk.)
+- **OQ-SO-04** — **Reservation-release timing + invoicing/cancel granularity.** (a) A delivery releases the
+  **delivered** portion's reservation (reservation → issue); a cancel releases the **remaining** reservation —
+  confirm the exact release points. (b) Invoice **per delivery** vs **aggregate** several deliveries into one
+  invoice. (c) Cancelling an SO with deliveries made cancels only the **undelivered** balance. *Recommended
+  defaults:* release the delivered portion at delivery + the remaining at cancel; **invoice per delivery** (the
+  clean delivery↔invoice trace); cancel only the undelivered balance. *Decider:* architect / owner. *Blocks
+  ADR-0021:* **NO** — defaults stand; alternatives are additive.
+- **OQ-SO-05** — **Return cost basis + the credit-note origin.** A return reverses COGS at the **original
+  issued cost** of the delivery (recommended — symmetric, no phantom gain/loss, mirrors OQ-INV-02) vs the
+  **now-current** average; and the credit-note **origin** is a **new `RETURN`** value alongside the shipped
+  STANDALONE / SALE_VOID (`ArCreditNoteOrigin`). *Recommended default:* original issued cost; a `RETURN`
+  credit-note origin. *Decider:* architect (ADR-0021) + owner (finance). *Blocks ADR-0021:* **NO** —
+  original-cost is the default; current-average is discouraged.
+- **OQ-SO-06** — **Discount rounding / apportionment.** The order-level discount apportioned across lines
+  pro-rata to net, before VAT, HALF_UP — confirm this **reuses the shipped `InvoiceTotalsCalculator` algorithm
+  unchanged** (sales.md D-4) so the SO totals and the invoice totals agree to the cent. *Recommended default:*
+  reuse `InvoiceTotalsCalculator` unchanged. *Decider:* architect (ADR-0021) + owner (finance) on display dp.
+  *Blocks ADR-0021:* **NO** — confirm before go-live.
+- **OQ-SO-07** — **Quote→order + confirm edit semantics + numbering timing.** (a) On quote acceptance,
+  **re-price to current list or keep the quoted price**, and does the SO open **DRAFT or CONFIRMED**? (b) What
+  may be **edited** on a CONFIRMED SO (a reserved line) — a re-confirm that re-reserves, or cancel-and-re-raise?
+  (c) When is each number allocated (`QUOTE-####` at send? `SO-####` at create? `DEL-####` / `RET-####` at
+  create?). *Recommended defaults:* keep the quoted pricing, SO opens **DRAFT**; a confirmed line is adjusted by
+  an explicit re-confirm (re-reserve) or cancel-and-re-raise (no silent edit); allocate `QUOTE-####` at send,
+  `SO-####` at create, `DEL-####` / `RET-####` at create. *Decider:* architect / owner. *Blocks ADR-0021:*
+  **NO** — defaults stand; alternatives are additive.
+
+### Still open — NON-blocking detail (recommended defaults stand; do NOT block ADR-0021)
+
+- **OQ-SO-08** — **POS as a further channel.** Deferred (sales-orders.md §2). *Recommended default:* the
+  walk-in invoice is the over-the-counter channel in v1; POS (sessions / float / X-Z / offline) is a later
+  channel on the same spine. *Decider:* owner. *Blocks ADR-0021:* **NO** — deferred, not precluded (NFR-SO-08).
+- **OQ-SO-09** — **Multi-warehouse / location-aware reservation + allocation.** Deferred (§2). *Recommended
+  default:* single-location reserve/issue against the SO's company-branch on-hand; per-location allocation +
+  inter-location transfer-to-fulfil land with Stock multi-location (PATH-TO-FULL-ERP §3.5; ties to OQ-INV-07).
+  *Decider:* owner. *Blocks ADR-0021:* **NO** — deferred, not precluded.
+- **OQ-SO-10** — **Refund tender on a return.** Deferred (§2). *Recommended default:* a return raises a
+  **credit note** (reduces the customer's balance); a cash / mobile-money **refund** is a Cash & Bank act
+  against the credit note, in a later slice. *Decider:* owner. *Blocks ADR-0021:* **NO** — deferred.
+- **OQ-CUR-03** — *(carried)* confirm **rounding mode + TZS decimals** — the discount apportionment, the
+  VAT-on-discounted-net, the COGS-at-delivery, and the return reversal must round identically backend/frontend
+  (NFR-SO-03). *Recommended default:* HALF_UP, TZS = 0 dp display, reuse `InvoiceTotalsCalculator` + the
+  ADR-0020 average precision. *Decider:* owner (finance input). *Blocks ADR-0021:* **NO** for the model;
+  **confirm before go-live**.
