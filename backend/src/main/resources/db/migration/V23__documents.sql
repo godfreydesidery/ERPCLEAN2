@@ -85,6 +85,7 @@ CREATE INDEX ix_document_templates_company ON document_templates (company_id);
 CREATE TABLE generated_documents (
     id               BIGSERIAL PRIMARY KEY,
     uid              VARCHAR(26)      NOT NULL,
+    version          BIGINT       NOT NULL DEFAULT 0,
     company_id       BIGINT           NOT NULL,
     branch_id        BIGINT,
     document_number  VARCHAR(30)      NOT NULL,

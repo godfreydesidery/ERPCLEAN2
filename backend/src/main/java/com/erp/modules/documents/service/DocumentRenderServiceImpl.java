@@ -39,10 +39,12 @@ import com.erp.platform.security.ScopeGuard;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.persistence.criteria.Predicate;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -50,6 +52,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -236,7 +239,18 @@ public class DocumentRenderServiceImpl implements DocumentRenderService {
                                            Instant from, Instant to, Pageable pageable) {
         RequestContext.Principal principal = RequestContext.get();
         scopeGuard.assertCanActIn(principal, companyId);
-        return generatedDocs.listFiltered(companyId, type, sourceUid, from, to, pageable)
+        // Build predicate in code to avoid SQLState 42P18: PostgreSQL cannot infer the column type
+        // of a null bind value in (:p IS NULL OR col = :p) — same pattern as AuditReadService.
+        Specification<GeneratedDocument> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(cb.equal(root.get("companyId"), companyId));
+            if (type      != null) predicates.add(cb.equal(root.get("documentType"), type));
+            if (sourceUid != null) predicates.add(cb.equal(root.get("sourceUid"), sourceUid));
+            if (from      != null) predicates.add(cb.greaterThanOrEqualTo(root.get("generatedAt"), from));
+            if (to        != null) predicates.add(cb.lessThanOrEqualTo(root.get("generatedAt"), to));
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+        return generatedDocs.findAll(spec, pageable)
                 .map(GeneratedDocumentDto::from);
     }
 

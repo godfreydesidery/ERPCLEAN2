@@ -61,7 +61,7 @@ public class BomCycleGuard {
     public void assertNoCycle(Long parentProductId, Long candidateChildProductId) {
         if (parentProductId.equals(candidateChildProductId)) {
             throw new IllegalArgumentException(
-                    "Cannot add a product as a component of itself (BR-BOM-01 self-reference).");
+                    "Cannot add a product as a component of itself — self-reference cycle (BR-BOM-01).");
         }
         Set<Long> visited = new HashSet<>();
         visited.add(parentProductId); // the product we are checking against

@@ -4,8 +4,10 @@ import com.erp.modules.documents.domain.dto.GeneratedDocumentDto;
 import com.erp.modules.documents.domain.dto.RenderDocumentRequest;
 import com.erp.modules.documents.domain.enums.DocumentType;
 import com.erp.modules.documents.service.DocumentRenderService;
-import com.erp.platform.security.RequestContext;
+import com.erp.platform.common.api.ApiResponse;
+import com.erp.platform.common.api.PageMeta;
 import java.time.Instant;
+import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -89,14 +91,15 @@ public class DocumentController {
      */
     @GetMapping
     @PreAuthorize("@perm.has('DOCUMENT.VIEW')")
-    public Page<GeneratedDocumentDto> list(
+    public ApiResponse<List<GeneratedDocumentDto>> list(
             @RequestParam Long companyId,
             @RequestParam(required = false) DocumentType type,
             @RequestParam(required = false) String sourceUid,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
             Pageable pageable) {
-        return renderService.list(companyId, type, sourceUid, from, to, pageable);
+        Page<GeneratedDocumentDto> page = renderService.list(companyId, type, sourceUid, from, to, pageable);
+        return ApiResponse.ok(page.getContent(), PageMeta.from(page));
     }
 
     /**

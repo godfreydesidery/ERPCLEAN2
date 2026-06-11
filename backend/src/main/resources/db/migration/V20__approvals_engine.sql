@@ -46,6 +46,7 @@ CREATE INDEX ix_approval_policies_company ON approval_policies (company_id);
 CREATE TABLE approval_policy_steps (
     id                 BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     uid                VARCHAR(26)  NOT NULL,
+    version          BIGINT       NOT NULL DEFAULT 0,
     approval_policy_id BIGINT       NOT NULL,
     company_id         BIGINT       NOT NULL,
     sequence           SMALLINT     NOT NULL,
@@ -111,6 +112,7 @@ CREATE INDEX ix_approval_requests_submitter ON approval_requests (company_id, su
 CREATE TABLE approval_request_steps (
     id                    BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     uid                   VARCHAR(26)  NOT NULL,
+    version          BIGINT       NOT NULL DEFAULT 0,
     approval_request_id   BIGINT       NOT NULL,
     company_id            BIGINT       NOT NULL,
     branch_id             BIGINT,
@@ -142,6 +144,7 @@ CREATE INDEX ix_approval_request_steps_open
 CREATE TABLE approval_decisions (
     id                       BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     uid                      VARCHAR(26)  NOT NULL,
+    version          BIGINT       NOT NULL DEFAULT 0,
     approval_request_id      BIGINT       NOT NULL,
     approval_request_step_id BIGINT       NOT NULL,
     company_id               BIGINT       NOT NULL,

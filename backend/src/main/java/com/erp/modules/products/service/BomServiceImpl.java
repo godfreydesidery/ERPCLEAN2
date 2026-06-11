@@ -187,7 +187,12 @@ public class BomServiceImpl implements BomService {
             cycleGuard.assertNoCycle(bom.getParentProductId(), line.getComponentProductId());
         });
 
-        // Supersede prior ACTIVE version (atomic, in same TX — BR-BOM-04/05)
+        // Supersede prior ACTIVE version (atomic, in same TX — BR-BOM-04/05).
+        // saveAndFlush the ARCHIVED state BEFORE setting the new BOM ACTIVE — this is the
+        // Hibernate autoflush-ordering trap: without an explicit flush here, both dirty rows
+        // (prior→ARCHIVED, new→ACTIVE) may be written in registration order and the partial-unique
+        // index uq_bom_one_active fires because the new ACTIVE row lands before the old one is
+        // de-activated at the DB level.
         Optional<Bom> priorActive = boms.findByParentProductIdAndStatus(
                 bom.getParentProductId(), BomStatus.ACTIVE);
         priorActive.ifPresent(prior -> {
@@ -196,6 +201,7 @@ public class BomServiceImpl implements BomService {
             prior.setArchivedAt(Instant.now());
             prior.setUpdatedAt(Instant.now());
             prior.setUpdatedBy(actorId());
+            boms.saveAndFlush(prior); // flush ARCHIVED to DB before new ACTIVE is written
             audit.record(AuditEvent.of(AuditActions.BOM_SUPERSEDE, "boms",
                             prior.getId(), prior.getUid())
                     .detail(Map.of("supersededBy", uid,
