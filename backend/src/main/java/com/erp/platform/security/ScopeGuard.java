@@ -39,6 +39,10 @@ import com.erp.modules.sales.repository.SalesReturnRepository;
 import com.erp.modules.sales.repository.TaxRateRepository;
 import com.erp.modules.stock.repository.StockMovementRepository;
 import com.erp.modules.stock.repository.StockOnHandRepository;
+// documents (ADR-0023)
+import com.erp.modules.documents.repository.DocumentBrandingRepository;
+import com.erp.modules.documents.repository.DocumentTemplateRepository;
+import com.erp.modules.documents.repository.GeneratedDocumentRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -111,6 +115,10 @@ public class ScopeGuard {
     private final DeliveryRepository         deliveryRepo;
     // Sales Returns repositories (ADR-0021 D-11, Stage 2)
     private final SalesReturnRepository      salesReturns;
+    // documents (ADR-0023)
+    private final GeneratedDocumentRepository generatedDocuments;
+    private final DocumentTemplateRepository  documentTemplates;
+    private final DocumentBrandingRepository  documentBrandings;
     private final AuditService             audit;
 
     public ScopeGuard(CompanyRepository companies,
@@ -152,6 +160,10 @@ public class ScopeGuard {
                       SalesOrderRepository salesOrders,
                       DeliveryRepository deliveryRepo,
                       SalesReturnRepository salesReturns,
+                      // documents (ADR-0023)
+                      GeneratedDocumentRepository generatedDocuments,
+                      DocumentTemplateRepository documentTemplates,
+                      DocumentBrandingRepository documentBrandings,
                       AuditService audit) {
         this.companies      = companies;
         this.branches       = branches;
@@ -192,6 +204,10 @@ public class ScopeGuard {
         this.salesOrders         = salesOrders;
         this.deliveryRepo        = deliveryRepo;
         this.salesReturns        = salesReturns;
+        // documents (ADR-0023)
+        this.generatedDocuments  = generatedDocuments;
+        this.documentTemplates   = documentTemplates;
+        this.documentBrandings   = documentBrandings;
         this.audit               = audit;
     }
 
@@ -254,6 +270,10 @@ public class ScopeGuard {
             case "delivery"            -> deliveryRepo.findCompanyIdByUid(uid);
             // Sales Returns target types (ADR-0021 D-11, Stage 2)
             case "salesreturn"         -> salesReturns.findCompanyIdByUid(uid);
+            // documents (ADR-0023)
+            case "generateddocument"   -> generatedDocuments.findCompanyIdByUid(uid);
+            case "documenttemplate"    -> documentTemplates.findCompanyIdByUid(uid);
+            case "documentbranding"    -> documentBrandings.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };

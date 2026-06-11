@@ -11,6 +11,7 @@ import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.repository.OrganisationRepository;
 import com.erp.modules.iam.repository.UserBranchRepository;
 import com.erp.modules.ap.service.ApGlSeeder;
+import com.erp.modules.documents.service.DocumentBrandingSeeder;
 import com.erp.modules.ar.service.ArGlSeeder;
 import com.erp.modules.cashbank.service.CashBankSeeder;
 import com.erp.modules.stock.service.InventoryGlSeeder;
@@ -70,6 +71,8 @@ public class BootstrapRunner implements ApplicationRunner {
     private final CashBankSeeder cashBankSeeder;
     // Inventory Valuation & COGS seeder (ADR-0020 D-8)
     private final InventoryGlSeeder inventoryGlSeeder;
+    // Document branding + template registry seeder (ADR-0023 D-10)
+    private final DocumentBrandingSeeder documentBrandingSeeder;
 
     public BootstrapRunner(BootstrapProperties props,
                            OrganisationRepository organisations,
@@ -87,7 +90,8 @@ public class BootstrapRunner implements ApplicationRunner {
                            ArGlSeeder arGlSeeder,
                            ApGlSeeder apGlSeeder,
                            CashBankSeeder cashBankSeeder,
-                           InventoryGlSeeder inventoryGlSeeder) {
+                           InventoryGlSeeder inventoryGlSeeder,
+                           DocumentBrandingSeeder documentBrandingSeeder) {
         this.props = props;
         this.organisations = organisations;
         this.companies = companies;
@@ -104,7 +108,8 @@ public class BootstrapRunner implements ApplicationRunner {
         this.arGlSeeder        = arGlSeeder;
         this.apGlSeeder        = apGlSeeder;
         this.cashBankSeeder    = cashBankSeeder;
-        this.inventoryGlSeeder = inventoryGlSeeder;
+        this.inventoryGlSeeder      = inventoryGlSeeder;
+        this.documentBrandingSeeder = documentBrandingSeeder;
     }
 
     @Override
@@ -145,6 +150,8 @@ public class BootstrapRunner implements ApplicationRunner {
         cashBankSeeder.seedDefaults(company.getId());
         // Seed GRNI + Stock Adjustment GL accounts + gl_configs (ADR-0020 D-8).
         inventoryGlSeeder.seedDefaults(company.getId());
+        // Seed document branding profile + template registry (ADR-0023 D-10).
+        documentBrandingSeeder.seedDefaults(company.getId());
 
         Branch branch = new Branch(company, props.branchCode(), props.branchName());
         branch.setTimeZone(props.timeZone());

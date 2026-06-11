@@ -41,6 +41,13 @@ public final class DomainEventType {
     public static final String AGG_DELIVERY       = "DELIVERY";
     public static final String AGG_SALES_RETURN   = "SALES_RETURN";
 
+    // --- documents (ADR-0023) ---
+
+    /** A document PDF was rendered and the record committed (ADR-0023 D-7). */
+    public static final String DOCUMENT_GENERATED     = "DOCUMENT.GENERATED";
+
+    public static final String AGG_GENERATED_DOCUMENT = "GENERATED_DOCUMENT";
+
     private DomainEventType() {
     }
 }
