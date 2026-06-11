@@ -219,3 +219,19 @@ Multi-agent adversarial review of the full O2C increment (Stage 1+2: quote/SO/re
 **Deliberately NOT changed (accepted; would over-engineer or are within tolerance):** the `StockReservationService` negative-reserved silent CLAMP (defensible safety net + DB CHECK backstop), the order-discount apportionment double-rounding edge (MEDIUM), the line-level cancellation-after-partial-delivery guard (LOW), integer/scale truncation (LOW), and the "async write-back race" (the delivery is confirmed + the event dispatched before any return can reference it; 17a closes the null path). No pessimistic DB locks added (single-instance posture).
 
 **Refuted (18 — correctly, no defect):** the seam double-count (a sale traverses exactly one issue path — delivery for SO via `issuesStock=false`, finalise for DIRECT — proven by the seam IT), the V18/V19 #12-safe seeds + the `chk_ar_credit_note_origin` additive widen, the perms seed+grant, per-company scope (assertCanActIn on every read path), and most of the over-stated multi-instance concurrency scenarios beyond the bounded retry above.
+
+## Finding #18 — QA browser-e2e session on the clean `develop` deploy (2026-06-11)
+
+QA box `16.170.11.41` **redeployed from `develop` @ 843f407 with CLEAN DATA** (volume wiped → fresh env-bootstrap; 19 migrations V1–V19 validated; login + health UP). Ran the `e2e/` Playwright drivers against the live site (operator tools, not CI). Result: **the core + all shipped modules render and work; the O2C browser flow surfaced one real frontend bug, now fixed + re-verified green.**
+
+| Driver | Result |
+|---|--------|
+| `ui-smoke.js` | 7/7 PASS (login + stock/PO/goods-receipts/routes render; Route create+detail), 0 console errors, 0 API 5xx |
+| `qa-ui-drive.js` (typed CRUD) | 0 issues — 8 products / 15 customers / 6 suppliers / 3 users / 2 routes / 1 price-list typed through the real forms |
+| `sales-o2c-ui-drive.js` (NEW — full Order-to-Cash, API stock-in prereq + browser flow) | After the fix below: **12/12 steps PASS** — quote→send→accept→SO→confirm/reserve→partial delivery (COGS posted)→invoice-from-delivery→return (RET CONFIRMED)→credit note raised. 0 BLOCKER/HIGH, 0 console errors, 0 5xx. |
+
+| # | Sev | Status | Issue |
+|---|-----|--------|-------|
+| 18a | HIGH | **FIXED + re-verified** | **Sales Return create screen crashed** — `TypeError: qtyInput.trim is not a function`. `<input type="number">` + `[(ngModel)]` coerces the bound value to a JS *number* at runtime, but `sales-return-create.component.ts` called `.trim()` on it (`lineQtyError` + `submit` × 3 sites) → the form threw before submitting, so the **entire Sales Return / credit-note / COGS-reversal leg was unusable from the UI**. Unit/IT tests missed it (the backend return flow is correct — only the web form crashed); the **browser e2e caught it**. Fix (develop `78c59be`): `String(x ?? '').trim()` at the 3 sites. Re-deployed + re-ran → return leg green (RET-0001 CONFIRMED + credit note raised). |
+
+**The `e2e/sales-o2c-ui-drive.js` driver** (API-seeds a stocked product, then drives quote→SO→deliver→invoice→return in a real browser) is a reusable O2C regression check — kept in `e2e/` (uncommitted operator tool, per the harness convention).
