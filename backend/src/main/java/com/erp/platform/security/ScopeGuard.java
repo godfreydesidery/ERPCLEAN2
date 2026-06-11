@@ -31,7 +31,11 @@ import com.erp.modules.products.repository.UnitOfMeasureRepository;
 import com.erp.modules.purchases.repository.GoodsReceiptRepository;
 import com.erp.modules.purchases.repository.PurchaseOrderRepository;
 import com.erp.modules.routes.repository.RouteRepository;
+import com.erp.modules.sales.repository.DeliveryRepository;
+import com.erp.modules.sales.repository.QuotationRepository;
 import com.erp.modules.sales.repository.SalesInvoiceRepository;
+import com.erp.modules.sales.repository.SalesOrderRepository;
+import com.erp.modules.sales.repository.SalesReturnRepository;
 import com.erp.modules.sales.repository.TaxRateRepository;
 import com.erp.modules.stock.repository.StockMovementRepository;
 import com.erp.modules.stock.repository.StockOnHandRepository;
@@ -101,6 +105,12 @@ public class ScopeGuard {
     private final VatAdjustmentRepository    vatAdjustments;
     private final WhtTypeRepository          whtTypes;
     private final WhtTransactionRepository   whtTransactions;
+    // Sales Orders repositories (ADR-0021 D-10)
+    private final QuotationRepository        quotations;
+    private final SalesOrderRepository       salesOrders;
+    private final DeliveryRepository         deliveryRepo;
+    // Sales Returns repositories (ADR-0021 D-11, Stage 2)
+    private final SalesReturnRepository      salesReturns;
     private final AuditService             audit;
 
     public ScopeGuard(CompanyRepository companies,
@@ -138,6 +148,10 @@ public class ScopeGuard {
                       VatAdjustmentRepository vatAdjustments,
                       WhtTypeRepository whtTypes,
                       WhtTransactionRepository whtTransactions,
+                      QuotationRepository quotations,
+                      SalesOrderRepository salesOrders,
+                      DeliveryRepository deliveryRepo,
+                      SalesReturnRepository salesReturns,
                       AuditService audit) {
         this.companies      = companies;
         this.branches       = branches;
@@ -174,6 +188,10 @@ public class ScopeGuard {
         this.vatAdjustments      = vatAdjustments;
         this.whtTypes            = whtTypes;
         this.whtTransactions     = whtTransactions;
+        this.quotations          = quotations;
+        this.salesOrders         = salesOrders;
+        this.deliveryRepo        = deliveryRepo;
+        this.salesReturns        = salesReturns;
         this.audit               = audit;
     }
 
@@ -230,6 +248,12 @@ public class ScopeGuard {
             case "vatadjustment"       -> vatAdjustments.findCompanyIdByUid(uid);
             case "whttype"             -> whtTypes.findCompanyIdByUid(uid);
             case "whttransaction"      -> whtTransactions.findCompanyIdByUid(uid);
+            // Sales Orders target types (ADR-0021 D-10)
+            case "quotation"           -> quotations.findCompanyIdByUid(uid);
+            case "salesorder"          -> salesOrders.findCompanyIdByUid(uid);
+            case "delivery"            -> deliveryRepo.findCompanyIdByUid(uid);
+            // Sales Returns target types (ADR-0021 D-11, Stage 2)
+            case "salesreturn"         -> salesReturns.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };

@@ -1,0 +1,360 @@
+package com.erp.modules.sales.service;
+
+import com.erp.modules.sales.domain.dto.CreateDeliveryRequest;
+import com.erp.modules.sales.domain.dto.DeliveryConfirmedPayload;
+import com.erp.modules.sales.domain.dto.DeliveryDto;
+import com.erp.modules.sales.domain.dto.DeliveryLineDto;
+import com.erp.modules.sales.domain.dto.SalesInvoiceDto;
+import com.erp.modules.sales.domain.entity.Delivery;
+import com.erp.modules.sales.domain.entity.DeliveryLine;
+import com.erp.modules.sales.domain.entity.SalesInvoice;
+import com.erp.modules.sales.domain.entity.SalesInvoiceLine;
+import com.erp.modules.sales.domain.entity.SalesOrder;
+import com.erp.modules.sales.domain.entity.SalesOrderLine;
+import com.erp.modules.sales.domain.enums.DocumentOrigin;
+import com.erp.modules.sales.domain.enums.SalesOrderStatus;
+import com.erp.modules.sales.repository.DeliveryLineRepository;
+import com.erp.modules.sales.repository.DeliveryRepository;
+import com.erp.modules.sales.repository.SalesInvoiceLineRepository;
+import com.erp.modules.sales.repository.SalesInvoiceRepository;
+import com.erp.modules.sales.repository.SalesOrderLineRepository;
+import com.erp.modules.sales.repository.SalesOrderRepository;
+import com.erp.modules.products.repository.ProductRepository;
+import com.erp.modules.stock.service.StockReservationService;
+import com.erp.platform.audit.AuditActions;
+import com.erp.platform.audit.AuditEvent;
+import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.repository.Lookups;
+import com.erp.platform.events.DomainEventType;
+import com.erp.platform.events.OutboxPublisher;
+import com.erp.platform.security.RequestContext;
+import com.erp.platform.security.ScopeGuard;
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * Delivery lifecycle service (ADR-0021 D-7/D-10).
+ *
+ * <p>Deliveries are created directly in CONFIRMED status (picking/packing deferred).
+ * On create: releases the per-line reservation, increments SO fulfilled qty, publishes
+ * DELIVERY.CONFIRMED in the same TX, then calls salesOrderService.recomputeStatus.
+ *
+ * <p>D-10 seam: createInvoiceFromDelivery copies delivery lines onto a DRAFT SalesInvoice
+ * with origin=SALES_ORDER so that SaleIssueStockHandler will skip it at finalise — the
+ * delivery has already issued the stock.
+ */
+@Service
+@Transactional
+public class DeliveryServiceImpl implements DeliveryService {
+
+    private final DeliveryRepository         deliveries;
+    private final DeliveryLineRepository     deliveryLines;
+    private final SalesOrderRepository       salesOrders;
+    private final SalesOrderLineRepository   salesOrderLines;
+    private final SalesInvoiceRepository     invoices;
+    private final SalesInvoiceLineRepository invoiceLines;
+    private final StockReservationService    reservationService;
+    private final OrderToCashNumberGenerator numberGen;
+    private final SalesOrderService          salesOrderService;
+    private final InvoiceTotalsCalculator    totalsCalc;
+    private final ScopeGuard                 scopeGuard;
+    private final AuditService               audit;
+    private final OutboxPublisher            outbox;
+    /**
+     * Used to resolve product uid for the DELIVERY.CONFIRMED payload (ADR-0021 D-6 fix).
+     * SalesOrderLine stores only productId; the handler needs productUid for recipe explosion.
+     */
+    private final ProductRepository          productRepository;
+
+    public DeliveryServiceImpl(DeliveryRepository deliveries,
+                               DeliveryLineRepository deliveryLines,
+                               SalesOrderRepository salesOrders,
+                               SalesOrderLineRepository salesOrderLines,
+                               SalesInvoiceRepository invoices,
+                               SalesInvoiceLineRepository invoiceLines,
+                               StockReservationService reservationService,
+                               OrderToCashNumberGenerator numberGen,
+                               SalesOrderService salesOrderService,
+                               InvoiceTotalsCalculator totalsCalc,
+                               ScopeGuard scopeGuard,
+                               AuditService audit,
+                               OutboxPublisher outbox,
+                               ProductRepository productRepository) {
+        this.deliveries        = deliveries;
+        this.deliveryLines     = deliveryLines;
+        this.salesOrders       = salesOrders;
+        this.salesOrderLines   = salesOrderLines;
+        this.invoices          = invoices;
+        this.invoiceLines      = invoiceLines;
+        this.reservationService = reservationService;
+        this.numberGen         = numberGen;
+        this.salesOrderService = salesOrderService;
+        this.totalsCalc        = totalsCalc;
+        this.scopeGuard        = scopeGuard;
+        this.audit             = audit;
+        this.outbox            = outbox;
+        this.productRepository = productRepository;
+    }
+
+    // -------------------------------------------------------------------------
+    // create — the central O2C step
+    // -------------------------------------------------------------------------
+
+    @Override
+    public DeliveryDto create(CreateDeliveryRequest req) {
+        SalesOrder order = requireOrder(req.salesOrderUid());
+        RequestContext.Principal ctx = RequestContext.get();
+        scopeGuard.assertCanActIn(ctx, order.getCompanyId());
+
+        if (order.getStatus() != SalesOrderStatus.CONFIRMED
+                && order.getStatus() != SalesOrderStatus.PARTIALLY_FULFILLED) {
+            throw new IllegalStateException(
+                    "Can only deliver against a CONFIRMED or PARTIALLY_FULFILLED order; current: "
+                            + order.getStatus());
+        }
+
+        Delivery delivery = new Delivery(
+                order.getCompanyId(), order.getBranchId(),
+                order.getId(), order.getUid(),
+                order.getCustomerId(), req.deliveryDate(), actorId());
+        delivery.setDeliveryNumber(numberGen.nextDelivery(order.getCompanyId()));
+        delivery.setNotes(req.notes());
+        Delivery saved = deliveries.save(delivery);
+
+        List<DeliveryLine> savedLines = new ArrayList<>();
+        List<DeliveryConfirmedPayload.LineItem> payloadLines = new ArrayList<>();
+        short lineNo = 1;
+
+        for (CreateDeliveryRequest.DeliveryLineRequest lineReq : req.lines()) {
+            SalesOrderLine sol = salesOrderLines.findByUid(lineReq.salesOrderLineUid())
+                    .orElseThrow(() -> new NotFoundException(
+                            "SalesOrderLine not found: " + lineReq.salesOrderLineUid()));
+
+            if (!sol.getSalesOrderId().equals(order.getId())) {
+                throw new IllegalArgumentException(
+                        "SalesOrderLine " + lineReq.salesOrderLineUid() + " does not belong to order "
+                                + req.salesOrderUid());
+            }
+
+            BigDecimal qtyDeliveredBase = lineReq.qtyDelivered();  // UI sends base qty; unit=base in v1
+            if (qtyDeliveredBase.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new IllegalArgumentException(
+                        "Delivery qty must be > 0 for line " + sol.getUid());
+            }
+
+            // BR-SO-11: cannot deliver more than the open (unfulfilled) qty on the SO line
+            BigDecimal openQty = sol.getQtyOrderedBase().subtract(sol.getQtyFulfilledBase());
+            if (qtyDeliveredBase.compareTo(openQty) > 0) {
+                throw new IllegalStateException(
+                        "Delivery qty " + qtyDeliveredBase + " exceeds open qty " + openQty
+                                + " on SO line " + sol.getUid() + " (BR-SO-11).");
+            }
+
+            DeliveryLine dl = new DeliveryLine(
+                    saved.getId(), sol.getId(), sol.getUid(),
+                    saved.getCompanyId(), saved.getBranchId(), lineNo++,
+                    sol.getProductId(), sol.getProductCode(), sol.getProductName(),
+                    sol.getUnitId(), sol.getUnitName(),
+                    qtyDeliveredBase, qtyDeliveredBase,   // qty + qty_base (same in v1)
+                    sol.getCurrency(), actorId());
+            savedLines.add(deliveryLines.save(dl));
+
+            // Release the corresponding reservation (delta = negative)
+            BigDecimal releaseAmt = qtyDeliveredBase.min(sol.getQtyReservedBase());
+            if (releaseAmt.compareTo(BigDecimal.ZERO) > 0) {
+                reservationService.applyReservationDelta(
+                        order.getCompanyId(), order.getBranchId(),
+                        sol.getProductId(), releaseAmt.negate(), actorId());
+                sol.setQtyReservedBase(sol.getQtyReservedBase().subtract(releaseAmt));
+            }
+
+            // Update fulfilled qty on SO line
+            sol.setQtyFulfilledBase(sol.getQtyFulfilledBase().add(qtyDeliveredBase));
+            sol.setUpdatedAt(Instant.now());
+            sol.setUpdatedBy(actorId());
+
+            // Resolve product uid — SalesOrderLine stores only productId; the DELIVERY.CONFIRMED
+            // handler needs the uid for productService.getByUid() / recipe explosion (ADR-0021 D-6).
+            String productUid = productRepository.findById(sol.getProductId())
+                    .map(p -> p.getUid())
+                    .orElseThrow(() -> new NotFoundException("Product not found id=" + sol.getProductId()));
+            payloadLines.add(new DeliveryConfirmedPayload.LineItem(
+                    sol.getProductId(), productUid,
+                    sol.getUnitId(), qtyDeliveredBase,
+                    dl.getId()));
+        }
+
+        // Publish DELIVERY.CONFIRMED in the SAME transaction (ADR-0021 D-6)
+        outbox.publish(
+                DomainEventType.DELIVERY_CONFIRMED,
+                DomainEventType.AGG_DELIVERY,
+                saved.getId(), saved.getUid(),
+                saved.getCompanyId(), saved.getBranchId(),
+                new DeliveryConfirmedPayload(
+                        saved.getUid(), order.getUid(),
+                        saved.getCompanyId(), saved.getBranchId(),
+                        saved.getConfirmedAt(), payloadLines));
+
+        // Recompute SO status (may transition to PARTIALLY_FULFILLED or FULFILLED)
+        salesOrderService.recomputeStatus(order.getId());
+
+        audit.record(AuditEvent.of(AuditActions.DELIVERY_CREATE, "deliveries",
+                saved.getId(), saved.getUid())
+                .detail(Map.of("deliveryNumber", saved.getDeliveryNumber(),
+                        "salesOrderUid", order.getUid())));
+
+        return toDto(saved, savedLines);
+    }
+
+    // -------------------------------------------------------------------------
+    // read paths
+    // -------------------------------------------------------------------------
+
+    @Override
+    @Transactional(readOnly = true)
+    public DeliveryDto getByUid(String uid) {
+        Delivery d = requireDelivery(uid);
+        scopeGuard.assertCanActIn(RequestContext.get(), d.getCompanyId());
+        return toDto(d, deliveryLines.findByDeliveryIdOrderByLineNo(d.getId()));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<DeliveryDto> list(Long companyId, Pageable pageable) {
+        scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        return deliveries.findByCompanyId(companyId, pageable).map(d ->
+                toDto(d, deliveryLines.findByDeliveryIdOrderByLineNo(d.getId())));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<DeliveryDto> listForOrder(String salesOrderUid) {
+        SalesOrder order = requireOrder(salesOrderUid);
+        scopeGuard.assertCanActIn(RequestContext.get(), order.getCompanyId());
+        return deliveries.findBySalesOrderId(order.getId()).stream().map(d ->
+                toDto(d, deliveryLines.findByDeliveryIdOrderByLineNo(d.getId()))).toList();
+    }
+
+    // -------------------------------------------------------------------------
+    // D-10 seam: createInvoiceFromDelivery
+    // -------------------------------------------------------------------------
+
+    /**
+     * Creates a DRAFT SalesInvoice from the uninvoiced lines on this delivery (ADR-0021 D-10).
+     *
+     * <p>The invoice has origin=SALES_ORDER so that when the caller finalises it,
+     * SaleIssueStockHandler will skip stock issue (delivery already issued the stock).
+     * qty_invoiced_base is updated on delivery lines and SO lines in this TX.
+     */
+    @Override
+    public SalesInvoiceDto createInvoiceFromDelivery(String deliveryUid) {
+        Delivery delivery = requireDelivery(deliveryUid);
+        RequestContext.Principal ctx = RequestContext.get();
+        scopeGuard.assertCanActIn(ctx, delivery.getCompanyId());
+
+        SalesOrder order = salesOrders.findById(delivery.getSalesOrderId())
+                .orElseThrow(() -> new NotFoundException(
+                        "SalesOrder not found id=" + delivery.getSalesOrderId()));
+
+        List<DeliveryLine> dLines = deliveryLines.findByDeliveryIdOrderByLineNo(delivery.getId());
+        List<DeliveryLine> billable = dLines.stream()
+                .filter(l -> l.openInvoiceQtyBase().compareTo(BigDecimal.ZERO) > 0)
+                .toList();
+
+        if (billable.isEmpty()) {
+            throw new IllegalStateException(
+                    "Delivery " + deliveryUid + " has no uninvoiced lines.");
+        }
+
+        // Resolve the agent from the SO (the SO carries agentId from order creation)
+        Long agentId = order.getAgentId();
+        if (agentId == null) {
+            throw new IllegalStateException("SalesOrder " + order.getUid() + " has no agent.");
+        }
+
+        SalesInvoice invoice = new SalesInvoice(
+                delivery.getCompanyId(), delivery.getBranchId(),
+                delivery.getCustomerId(), agentId,
+                order.getCurrency(), actorId());
+        invoice.setOrigin(DocumentOrigin.SALES_ORDER);
+        invoice.setSourceOrderUid(order.getUid());
+        invoice.setSourceDeliveryUid(delivery.getUid());
+        invoice.setDocDiscountAmount(order.getDocDiscountAmount());
+        invoice.setDocDiscountPercent(order.getDocDiscountPercent());
+
+        SalesInvoice savedInv = invoices.save(invoice);
+        List<SalesInvoiceLine> createdLines = new ArrayList<>();
+        short lineNo = 1;
+
+        for (DeliveryLine dl : billable) {
+            SalesOrderLine sol = salesOrderLines.findById(dl.getSalesOrderLineId())
+                    .orElseThrow(() -> new NotFoundException(
+                            "SalesOrderLine not found id=" + dl.getSalesOrderLineId()));
+
+            BigDecimal qtyToInvoice = dl.openInvoiceQtyBase();
+
+            SalesInvoiceLine invLine = new SalesInvoiceLine(
+                    savedInv, lineNo++,
+                    sol.getProductId(), sol.getProductCode(), sol.getProductName(),
+                    sol.getUnitId(), sol.getUnitName(),
+                    qtyToInvoice, qtyToInvoice,       // quantity + qty_in_base
+                    sol.getListPriceAmount(), sol.getUnitPriceAmount(),
+                    sol.getVatStatus(), sol.getVatRate(),
+                    actorId());
+            invLine.setLineDiscountAmount(sol.getLineDiscountAmount());
+            invLine.setLineDiscountPercent(sol.getLineDiscountPercent());
+            createdLines.add(invoiceLines.save(invLine));
+
+            // Update running counters on delivery line and SO line
+            dl.setQtyInvoicedBase(dl.getQtyInvoicedBase().add(qtyToInvoice));
+            dl.setUpdatedAt(Instant.now());
+            dl.setUpdatedBy(actorId());
+
+            sol.setQtyInvoicedBase(sol.getQtyInvoicedBase().add(qtyToInvoice));
+            sol.setUpdatedAt(Instant.now());
+            sol.setUpdatedBy(actorId());
+        }
+
+        // Compute totals on the new invoice
+        totalsCalc.recompute(savedInv, createdLines);
+
+        // Recompute SO status (may move to PARTIALLY_INVOICED / CLOSED)
+        salesOrderService.recomputeStatus(order.getId());
+
+        audit.record(AuditEvent.of(AuditActions.DELIVERY_INVOICE, "deliveries",
+                delivery.getId(), delivery.getUid())
+                .detail(Map.of("invoiceUid", savedInv.getUid(),
+                        "deliveryUid", deliveryUid)));
+
+        return SalesInvoiceDto.from(savedInv, null, null, null, null, null);
+    }
+
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+
+    private Delivery requireDelivery(String uid) {
+        return Lookups.orNotFound(deliveries.findByUid(uid), "Delivery", uid);
+    }
+
+    private SalesOrder requireOrder(String uid) {
+        return Lookups.orNotFound(salesOrders.findByUid(uid), "SalesOrder", uid);
+    }
+
+    private DeliveryDto toDto(Delivery d, List<DeliveryLine> lines) {
+        return DeliveryDto.from(d, lines.stream().map(DeliveryLineDto::from).toList());
+    }
+
+    private Long actorId() {
+        RequestContext.Principal p = RequestContext.get();
+        return p != null ? p.userId() : null;
+    }
+}
