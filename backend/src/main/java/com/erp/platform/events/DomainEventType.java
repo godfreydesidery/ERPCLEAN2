@@ -36,9 +36,10 @@ public final class DomainEventType {
     // Aggregate types (the producing aggregate kind — used for diagnostics/replay)
     // ---------------------------------------------------------------------------
 
-    public static final String AGG_SALES_INVOICE = "SALES_INVOICE";
-    public static final String AGG_GOODS_RECEIPT = "GOODS_RECEIPT";
-    public static final String AGG_DELIVERY      = "DELIVERY";
+    public static final String AGG_SALES_INVOICE  = "SALES_INVOICE";
+    public static final String AGG_GOODS_RECEIPT  = "GOODS_RECEIPT";
+    public static final String AGG_DELIVERY       = "DELIVERY";
+    public static final String AGG_SALES_RETURN   = "SALES_RETURN";
 
     private DomainEventType() {
     }

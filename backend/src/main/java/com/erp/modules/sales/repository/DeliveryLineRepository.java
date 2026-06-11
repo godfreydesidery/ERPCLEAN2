@@ -19,4 +19,7 @@ public interface DeliveryLineRepository extends JpaRepository<DeliveryLine, Long
     Optional<DeliveryLine> findByUidAndDeliveryId(String uid, Long deliveryId);
 
     List<DeliveryLine> findBySalesOrderLineId(Long salesOrderLineId);
+
+    /** Used by DeliveryIssueStockHandler to write back issue_value_amount after COGS issued. */
+    List<DeliveryLine> findByDeliveryIdAndProductId(Long deliveryId, Long productId);
 }

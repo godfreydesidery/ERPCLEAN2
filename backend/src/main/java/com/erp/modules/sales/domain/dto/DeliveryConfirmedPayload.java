@@ -25,15 +25,18 @@ public record DeliveryConfirmedPayload(
     /**
      * Per-line item — what the stock consumer needs for stock deduction and recipe explosion.
      *
-     * @param productId   internal product id (for stock ledger FK)
-     * @param productUid  stable product uid (for cross-system references)
-     * @param unitId      unit of measure id
-     * @param qtyInBase   quantity in the product's base unit
+     * @param productId      internal product id (for stock ledger FK)
+     * @param productUid     stable product uid (for cross-system references)
+     * @param unitId         unit of measure id
+     * @param qtyInBase      quantity in the product's base unit
+     * @param deliveryLineId delivery_line PK — used by the handler to write back
+     *                       issue_value_amount once avg_cost is resolved (OQ-SO-05).
      */
     public record LineItem(
             Long productId,
             String productUid,
             Long unitId,
-            BigDecimal qtyInBase
+            BigDecimal qtyInBase,
+            Long deliveryLineId
     ) {}
 }

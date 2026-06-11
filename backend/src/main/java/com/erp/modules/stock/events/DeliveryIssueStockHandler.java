@@ -3,6 +3,7 @@ package com.erp.modules.stock.events;
 import com.erp.modules.products.domain.dto.ProductDto;
 import com.erp.modules.products.service.ProductService;
 import com.erp.modules.sales.domain.dto.DeliveryConfirmedPayload;
+import com.erp.modules.sales.repository.DeliveryLineRepository;
 import com.erp.modules.stock.domain.enums.MovementType;
 import com.erp.modules.stock.service.InventoryGlPoster;
 import com.erp.modules.stock.service.InventoryGlPoster.CogsLeg;
@@ -17,6 +18,7 @@ import com.erp.platform.security.RequestContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -39,6 +41,10 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>sourceRef for the COGS journal = deliveryUid</li>
  * </ul>
  *
+ * <p>After issuing each simple line the handler writes {@code issue_value_amount} back to
+ * the {@code delivery_line} row (OQ-SO-05) so that {@code SalesReturnServiceImpl} can
+ * pro-rate the original issued cost when a return is created (ADR-0021 D-11, Stage 2).
+ *
  * <p>Idempotency: checked via {@link IdempotencyGuard} (consumer "STOCK.DELIVERY_ISSUE") +
  * DB backstop {@code uq_stock_movement_source_event (source_event_uid, product_id)}.
  */
@@ -56,6 +62,7 @@ public class DeliveryIssueStockHandler implements DomainEventHandler {
     private final RecipeExplosionResolver   explosion;
     private final InventoryValuationService valuation;
     private final InventoryGlPoster         glPoster;
+    private final DeliveryLineRepository    deliveryLineRepo;
     private final ObjectMapper              objectMapper;
 
     public DeliveryIssueStockHandler(IdempotencyGuard guard,
@@ -64,14 +71,16 @@ public class DeliveryIssueStockHandler implements DomainEventHandler {
                                      RecipeExplosionResolver explosion,
                                      InventoryValuationService valuation,
                                      InventoryGlPoster glPoster,
+                                     DeliveryLineRepository deliveryLineRepo,
                                      ObjectMapper objectMapper) {
-        this.guard         = guard;
-        this.posting       = posting;
-        this.productService = productService;
-        this.explosion     = explosion;
-        this.valuation     = valuation;
-        this.glPoster      = glPoster;
-        this.objectMapper  = objectMapper;
+        this.guard            = guard;
+        this.posting          = posting;
+        this.productService   = productService;
+        this.explosion        = explosion;
+        this.valuation        = valuation;
+        this.glPoster         = glPoster;
+        this.deliveryLineRepo = deliveryLineRepo;
+        this.objectMapper     = objectMapper;
     }
 
     @Override
@@ -212,6 +221,15 @@ public class DeliveryIssueStockHandler implements DomainEventHandler {
             cogsLegs.add(new CogsLeg(line.productId(),
                     product.code() != null ? product.code() : line.productUid(),
                     issuedValue));
+        }
+
+        // OQ-SO-05: write the issued cost back to delivery_line so that SalesReturnServiceImpl
+        // can pro-rate the original cost for partial returns (ADR-0021 D-11, Stage 2).
+        if (issuedValue != null && line.deliveryLineId() != null) {
+            deliveryLineRepo.findById(line.deliveryLineId()).ifPresent(dl -> {
+                dl.setIssueValueAmount(issuedValue);
+                dl.setUpdatedAt(Instant.now());
+            });
         }
     }
 

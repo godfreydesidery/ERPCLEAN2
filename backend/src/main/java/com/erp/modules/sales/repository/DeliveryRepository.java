@@ -16,6 +16,9 @@ public interface DeliveryRepository extends JpaRepository<Delivery, Long> {
     @Query("SELECT d.companyId FROM Delivery d WHERE d.uid = :uid")
     Optional<Long> findCompanyIdByUid(@Param("uid") String uid);
 
+    @Query("SELECT d.id FROM Delivery d WHERE d.uid = :uid")
+    Optional<Long> findIdByUid(@Param("uid") String uid);
+
     List<Delivery> findBySalesOrderId(Long salesOrderId);
 
     Page<Delivery> findByCompanyId(Long companyId, Pageable pageable);

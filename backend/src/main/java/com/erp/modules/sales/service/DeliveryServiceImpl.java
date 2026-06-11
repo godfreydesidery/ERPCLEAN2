@@ -188,7 +188,8 @@ public class DeliveryServiceImpl implements DeliveryService {
                     .orElseThrow(() -> new NotFoundException("Product not found id=" + sol.getProductId()));
             payloadLines.add(new DeliveryConfirmedPayload.LineItem(
                     sol.getProductId(), productUid,
-                    sol.getUnitId(), qtyDeliveredBase));
+                    sol.getUnitId(), qtyDeliveredBase,
+                    dl.getId()));
         }
 
         // Publish DELIVERY.CONFIRMED in the SAME transaction (ADR-0021 D-6)
