@@ -1,10 +1,10 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, computed, inject, input, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
-import { DeliveryDto, DeliveryStatus } from '../models/sales-orders.model';
+import { DeliveryDto, DeliveryStatus, SalesReturnDto } from '../models/sales-orders.model';
 import { SalesInvoiceDto } from '../models/sales.model';
 import { SalesOrdersService } from './sales-orders.service';
 
@@ -15,6 +15,7 @@ type LoadState = 'loading' | 'idle' | 'error';
  * Actions:
  *   DRAFT → Confirm (issues stock)
  *   CONFIRMED → Invoice this delivery (creates draft invoice, navigates to it)
+ *   CONFIRMED → Create Return (navigates to return-create pre-filled with this delivery uid)
  */
 @Component({
   selector: 'app-delivery-detail',
@@ -25,6 +26,7 @@ type LoadState = 'loading' | 'idle' | 'error';
 export class DeliveryDetailComponent {
   private readonly soService = inject(SalesOrdersService);
   private readonly alerts = inject(AlertService);
+  private readonly router = inject(Router);
   protected readonly session = inject(SessionStore);
 
   readonly uid = input.required<string>();
@@ -42,8 +44,12 @@ export class DeliveryDetailComponent {
   readonly invoiceError = signal<string | null>(null);
   readonly createdInvoice = signal<SalesInvoiceDto | null>(null);
 
+  // ── Returns for this delivery ────────────────────────────────────────────────
+  readonly existingReturns = signal<SalesReturnDto[]>([]);
+
   // ── Permissions ──────────────────────────────────────────────────────────────
   readonly canCreate = computed(() => this.session.hasPermission('SALES.DELIVERY.CREATE'));
+  readonly canCreateReturn = computed(() => this.session.hasPermission('SALES.RETURN.CREATE'));
 
   // ── Derived ──────────────────────────────────────────────────────────────────
   readonly isDraft = computed(() => this.delivery()?.status === 'DRAFT');
@@ -58,8 +64,19 @@ export class DeliveryDetailComponent {
   private loadDelivery(): void {
     this.deliveryState.set('loading');
     this.soService.getDeliveryByUid(this.uid()).subscribe({
-      next: (d) => { this.delivery.set(d); this.deliveryState.set('idle'); },
+      next: (d) => {
+        this.delivery.set(d);
+        this.deliveryState.set('idle');
+        this.loadReturns();
+      },
       error: () => this.deliveryState.set('error'),
+    });
+  }
+
+  private loadReturns(): void {
+    this.soService.listReturnsForDelivery(this.uid()).subscribe({
+      next: ({ rows }) => this.existingReturns.set(rows),
+      error: () => undefined, // non-fatal — returns panel simply stays empty
     });
   }
 
@@ -89,6 +106,14 @@ export class DeliveryDetailComponent {
     this.confirming.set(false);
     this.showConfirmDialog.set(false);
     this.alerts.success('Delivery is already confirmed on creation (Stage-1 behaviour).');
+  }
+
+  // ── Create Return ──────────────────────────────────────────────────────────────
+
+  createReturn(): void {
+    void this.router.navigate(['/admin/sales-returns/create'], {
+      queryParams: { deliveryUid: this.uid() },
+    });
   }
 
   // ── Invoice ────────────────────────────────────────────────────────────────────

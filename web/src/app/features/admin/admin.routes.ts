@@ -181,6 +181,25 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./sales/delivery-detail.component').then((m) => m.DeliveryDetailComponent),
   },
+  // ── Sales Returns (RMA) ───────────────────────────────────────────────────
+  {
+    path: 'sales-returns',
+    canActivate: [requirePermission('SALES.RETURN.VIEW')],
+    loadComponent: () =>
+      import('./sales/sales-return-list.component').then((m) => m.SalesReturnListComponent),
+  },
+  {
+    path: 'sales-returns/create',
+    canActivate: [requirePermission('SALES.RETURN.CREATE')],
+    loadComponent: () =>
+      import('./sales/sales-return-create.component').then((m) => m.SalesReturnCreateComponent),
+  },
+  {
+    path: 'sales-returns/uid/:uid',
+    canActivate: [requirePermission('SALES.RETURN.VIEW')],
+    loadComponent: () =>
+      import('./sales/sales-return-detail.component').then((m) => m.SalesReturnDetailComponent),
+  },
   // ── Sales Invoices ─────────────────────────────────────────────────────────
   {
     path: 'sales-invoices',

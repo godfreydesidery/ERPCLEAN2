@@ -1,0 +1,152 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Sales Returns</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-arrow-return-left me-1" aria-hidden="true"></i>
+      Manage sales returns and RMAs. Create a return from the Delivery detail screen.
+    </p>
+  </header>
+
+  <!-- Company selector -->
+  @switch (companyState()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mb-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load companies.
+      </p>
+    }
+    @default {
+      @if (companies().length > 1) {
+        <div class="mb-3" style="max-width:320px">
+          <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+          <select id="companyPicker" name="companyPicker" class="form-select"
+                  [ngModel]="selectedCompanyId()"
+                  (ngModelChange)="onCompanyChange($event)">
+            @for (c of companies(); track c.uid) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+          </select>
+        </div>
+      }
+    }
+  }
+
+  @if (selectedCompanyId()) {
+    <!-- Status filter -->
+    <div class="d-flex flex-wrap gap-2 mb-3 align-items-end">
+      <div>
+        <label class="form-label small text-muted mb-1" for="statusFilter">Status</label>
+        <select id="statusFilter" name="statusFilter" class="form-select"
+                style="min-width:160px"
+                [ngModel]="statusFilter()"
+                (ngModelChange)="onStatusChange($event)">
+          @for (s of statusOptions; track s.value) {
+            <option [value]="s.value">{{ s.label }}</option>
+          }
+        </select>
+      </div>
+    </div>
+
+    <!-- List states -->
+    @switch (state()) {
+      @case ('loading') {
+        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading returns…
+        </p>
+      }
+      @case ('error') {
+        <p class="state text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load sales returns. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="state text-muted d-flex align-items-center gap-2">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view sales returns.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <p class="state text-muted">No sales returns yet. Create one from the Delivery detail screen.</p>
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-hover align-middle bg-white grid">
+              <caption class="visually-hidden">Sales returns</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Return #</th>
+                  <th scope="col">Delivery</th>
+                  <th scope="col">Sales Order</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Return Date</th>
+                  <th scope="col" class="text-end">Total (gross)</th>
+                  <th scope="col"><span class="visually-hidden">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (r of rows(); track r.uid) {
+                  <tr>
+                    <td class="font-monospace">{{ returnLabel(r) }}</td>
+                    <td>
+                      <a class="small"
+                         [routerLink]="['/admin/deliveries/uid', r.deliveryUid]"
+                         [attr.aria-label]="'Open delivery for return ' + returnLabel(r)">
+                        {{ r.deliveryUid | slice:0:8 }}…
+                      </a>
+                    </td>
+                    <td>
+                      <a class="small"
+                         [routerLink]="['/admin/sales-orders/uid', r.salesOrderUid]"
+                         [attr.aria-label]="'Open sales order for return ' + returnLabel(r)">
+                        View SO
+                      </a>
+                    </td>
+                    <td>
+                      <span class="badge" [class]="statusBadgeClass(r.status)">{{ r.status }}</span>
+                    </td>
+                    <td class="small text-muted">{{ r.returnDate }}</td>
+                    <td class="text-end font-monospace">{{ r.currency }} {{ fmtMoney(r.grossAmount) }}</td>
+                    <td>
+                      <a class="btn btn-sm btn-outline-primary"
+                         [routerLink]="['/admin/sales-returns/uid', r.uid]"
+                         [attr.aria-label]="'Open return ' + returnLabel(r)">
+                        <i class="bi bi-eye me-1" aria-hidden="true"></i>Open
+                      </a>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          @if (meta().totalPages > 1) {
+            <nav aria-label="Sales return list pagination" class="d-flex align-items-center gap-3 mt-2">
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      [disabled]="currentPage() === 0"
+                      (click)="prevPage()">
+                <i class="bi bi-chevron-left" aria-hidden="true"></i>
+                <span class="visually-hidden">Previous page</span>
+              </button>
+              <span class="small text-muted">
+                Page {{ meta().page + 1 }} of {{ meta().totalPages }}
+                ({{ meta().totalElements }} total)
+              </span>
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      [disabled]="!meta().hasNext"
+                      (click)="nextPage()">
+                <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                <span class="visually-hidden">Next page</span>
+              </button>
+            </nav>
+          }
+        }
+      }
+    }
+  }
+</section>

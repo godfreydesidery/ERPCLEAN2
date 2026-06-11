@@ -233,3 +233,76 @@ export interface CreateDeliveryRequest {
     qtyDelivered: string;
   }>;
 }
+
+// ── Sales Returns (RMA) ────────────────────────────────────────────────────────
+
+export type SalesReturnStatus = 'DRAFT' | 'CONFIRMED';
+
+export interface SalesReturnLineDto {
+  id: string;
+  uid: string;
+  salesReturnId: string;
+  deliveryLineId: string;
+  deliveryLineUid: string;
+  lineNo: number;
+  productId: string;
+  productCode: string;
+  productName: string;
+  unitId: string;
+  unitName: string;
+  /** Wire: number | string — coerce with +v */
+  qtyReturned: number | string;
+  /** Wire: number | string — coerce with +v */
+  qtyReturnedBase: number | string;
+  /** Wire: number | string — coerce with +v */
+  unitPriceAmount: number | string | null;
+  /** Wire: number | string — coerce with +v */
+  lineDiscountAmount: number | string | null;
+  /** Wire: number | string — coerce with +v */
+  lineDiscountPercent: number | string | null;
+  vatStatus: string | null;
+  /** Wire: number | string — coerce with +v */
+  vatRate: number | string | null;
+  /** Wire: number | string — coerce with +v */
+  netAmount: number | string;
+  /** Wire: number | string — coerce with +v */
+  vatAmount: number | string;
+  /** Wire: number | string — coerce with +v */
+  grossAmount: number | string;
+  currency: string;
+}
+
+export interface SalesReturnDto {
+  id: string;
+  uid: string;
+  companyId: string;
+  branchId: string;
+  returnNumber: string | null;
+  status: SalesReturnStatus;
+  deliveryId: string;
+  deliveryUid: string;
+  salesOrderUid: string;
+  customerId: string;
+  returnDate: string;
+  creditNoteUid: string | null;
+  cogsReversalGlEntryUid: string | null;
+  reason: string | null;
+  /** Wire: number | string — coerce with +v */
+  netAmount: number | string;
+  /** Wire: number | string — coerce with +v */
+  vatAmount: number | string;
+  /** Wire: number | string — coerce with +v */
+  grossAmount: number | string;
+  currency: string;
+  lines: SalesReturnLineDto[];
+}
+
+export interface CreateSalesReturnRequest {
+  deliveryUid: string;
+  returnDate: string;
+  reason?: string;
+  lines: Array<{
+    deliveryLineUid: string;
+    qtyReturned: string;
+  }>;
+}
