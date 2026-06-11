@@ -56,6 +56,11 @@ public class SalesOrder extends UidEntity {
     @Setter
     private String sourceQuotationUid;
 
+    /** Back-link to the CRM opportunity that converted to this SO (ADR-0031 D-7, V52). Nullable. */
+    @Column(name = "source_opportunity_uid", length = 26)
+    @Setter
+    private String sourceOpportunityUid;
+
     @Column(name = "doc_discount_amount", precision = 19, scale = 4)
     @Setter
     private BigDecimal docDiscountAmount;

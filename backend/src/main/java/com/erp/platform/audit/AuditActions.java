@@ -232,4 +232,22 @@ public final class AuditActions {
     public static final String COSTING_VALUE_UPDATE              = "COSTING.VALUE.UPDATE";
     public static final String COSTING_VALUE_DEACTIVATE          = "COSTING.VALUE.DEACTIVATE";
     public static final String COSTING_DIMENSION_MANDATORY_SET   = "COSTING.DIMENSION.MANDATORY.SET";
+    // --- crm (ADR-0031) ---
+    public static final String CRM_LEAD_CREATE       = "CRM.LEAD.CREATE";
+    public static final String CRM_LEAD_UPDATE       = "CRM.LEAD.UPDATE";
+    public static final String CRM_LEAD_CONTACT      = "CRM.LEAD.CONTACT";
+    public static final String CRM_LEAD_QUALIFY      = "CRM.LEAD.QUALIFY";
+    public static final String CRM_LEAD_DISQUALIFY   = "CRM.LEAD.DISQUALIFY";
+    public static final String CRM_OPPORTUNITY_CREATE        = "CRM.OPPORTUNITY.CREATE";
+    public static final String CRM_OPPORTUNITY_UPDATE        = "CRM.OPPORTUNITY.UPDATE";
+    public static final String CRM_OPPORTUNITY_LINE_ADD      = "CRM.OPPORTUNITY.LINE.ADD";
+    public static final String CRM_OPPORTUNITY_STAGE_ADVANCE = "CRM.OPPORTUNITY.STAGE.ADVANCE";
+    public static final String CRM_OPPORTUNITY_WIN           = "CRM.OPPORTUNITY.WIN";
+    public static final String CRM_OPPORTUNITY_LOSE          = "CRM.OPPORTUNITY.LOSE";
+    public static final String CRM_OPPORTUNITY_CONVERT       = "CRM.OPPORTUNITY.CONVERT";
+    public static final String CRM_ACTIVITY_CREATE   = "CRM.ACTIVITY.CREATE";
+    public static final String CRM_ACTIVITY_COMPLETE = "CRM.ACTIVITY.COMPLETE";
+    public static final String CRM_STAGE_CREATE      = "CRM.STAGE.CREATE";
+    public static final String CRM_STAGE_UPDATE      = "CRM.STAGE.UPDATE";
+    public static final String CRM_STAGE_DEACTIVATE  = "CRM.STAGE.DEACTIVATE";
 }

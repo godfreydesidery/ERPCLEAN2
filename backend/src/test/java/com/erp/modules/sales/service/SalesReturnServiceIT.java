@@ -470,7 +470,7 @@ class SalesReturnServiceIT extends PostgresIntegrationTest {
         setCtx();
         SalesOrderDto so = salesOrderService.create(new CreateSalesOrderRequest(
                 company.getUid(), customerUid, agentUid, "TZS",
-                LocalDate.now(), null, null, null));
+                LocalDate.now(), null, null, null, null));
 
         ProductDto product = stockableProduct("DiscTestProd", "1000");
 
@@ -514,7 +514,7 @@ class SalesReturnServiceIT extends PostgresIntegrationTest {
         setCtx();
         SalesOrderDto so = salesOrderService.create(new CreateSalesOrderRequest(
                 company.getUid(), customerUid, agentUid, "TZS",
-                LocalDate.now(), null, null, null));
+                LocalDate.now(), null, null, null, null));
         setCtx();
         salesOrderService.addLine(so.uid(), new AddSalesOrderLineRequest(
                 product.uid(), pcsUid, qty, null, null, null));

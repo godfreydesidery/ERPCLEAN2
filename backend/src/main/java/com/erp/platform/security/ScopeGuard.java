@@ -2,6 +2,11 @@ package com.erp.platform.security;
 
 import com.erp.modules.costing.repository.DimensionRepository;
 import com.erp.modules.costing.repository.DimensionValueRepository;
+// CRM (ADR-0031)
+import com.erp.modules.crm.repository.ActivityRepository;
+import com.erp.modules.crm.repository.LeadRepository;
+import com.erp.modules.crm.repository.OpportunityRepository;
+import com.erp.modules.crm.repository.PipelineStageRepository;
 import com.erp.modules.ap.repository.ApDebitNoteRepository;
 import com.erp.modules.ap.repository.ApPaymentRepository;
 import com.erp.modules.ap.repository.SupplierBillRepository;
@@ -134,6 +139,11 @@ public class ScopeGuard {
     // cost-centre (ADR-0025 D-5)
     private final DimensionRepository        dimensions;
     private final DimensionValueRepository   dimensionValues;
+    // CRM repositories (ADR-0031 D-11)
+    private final LeadRepository             crmLeads;
+    private final OpportunityRepository      crmOpportunities;
+    private final ActivityRepository         crmActivities;
+    private final PipelineStageRepository    crmPipelineStages;
     private final AuditService             audit;
 
     public ScopeGuard(CompanyRepository companies,
@@ -186,6 +196,11 @@ public class ScopeGuard {
                       // cost-centre (ADR-0025 D-5)
                       DimensionRepository dimensions,
                       DimensionValueRepository dimensionValues,
+                      // CRM (ADR-0031 D-11)
+                      LeadRepository crmLeads,
+                      OpportunityRepository crmOpportunities,
+                      ActivityRepository crmActivities,
+                      PipelineStageRepository crmPipelineStages,
                       AuditService audit) {
         this.companies      = companies;
         this.branches       = branches;
@@ -237,6 +252,11 @@ public class ScopeGuard {
         // cost-centre (ADR-0025 D-5)
         this.dimensions          = dimensions;
         this.dimensionValues     = dimensionValues;
+        // CRM (ADR-0031 D-11)
+        this.crmLeads            = crmLeads;
+        this.crmOpportunities    = crmOpportunities;
+        this.crmActivities       = crmActivities;
+        this.crmPipelineStages   = crmPipelineStages;
         this.audit               = audit;
     }
 
@@ -311,6 +331,11 @@ public class ScopeGuard {
             // cost-centre target types (ADR-0025 D-5)
             case "dimension"           -> dimensions.findCompanyIdByUid(uid);
             case "dimensionvalue"      -> dimensionValues.findCompanyIdByUid(uid);
+            // CRM target types (ADR-0031 D-11)
+            case "lead"                -> crmLeads.findCompanyIdByUid(uid);
+            case "opportunity"         -> crmOpportunities.findCompanyIdByUid(uid);
+            case "activity"            -> crmActivities.findCompanyIdByUid(uid);
+            case "pipelinestage"       -> crmPipelineStages.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };

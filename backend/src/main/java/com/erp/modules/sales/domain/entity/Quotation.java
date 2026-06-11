@@ -101,6 +101,11 @@ public class Quotation extends UidEntity {
     @Setter
     private String convertedOrderUid;
 
+    /** Back-link to the CRM opportunity that converted to this quote (ADR-0031 D-7, V52). Nullable. */
+    @Column(name = "source_opportunity_uid", length = 26)
+    @Setter
+    private String sourceOpportunityUid;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

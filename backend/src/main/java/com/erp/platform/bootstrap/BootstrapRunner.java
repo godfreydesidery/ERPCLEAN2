@@ -11,6 +11,7 @@ import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.repository.OrganisationRepository;
 import com.erp.modules.iam.repository.UserBranchRepository;
 import com.erp.modules.ap.service.ApGlSeeder;
+import com.erp.modules.crm.service.CrmStageSeeder;
 import com.erp.modules.documents.service.DocumentBrandingSeeder;
 import com.erp.modules.ar.service.ArGlSeeder;
 import com.erp.modules.cashbank.service.CashBankSeeder;
@@ -73,6 +74,8 @@ public class BootstrapRunner implements ApplicationRunner {
     private final InventoryGlSeeder inventoryGlSeeder;
     // Document branding + template registry seeder (ADR-0023 D-10)
     private final DocumentBrandingSeeder documentBrandingSeeder;
+    // CRM pipeline stage defaults seeder (ADR-0031 D-5)
+    private final CrmStageSeeder crmStageSeeder;
 
     public BootstrapRunner(BootstrapProperties props,
                            OrganisationRepository organisations,
@@ -91,7 +94,8 @@ public class BootstrapRunner implements ApplicationRunner {
                            ApGlSeeder apGlSeeder,
                            CashBankSeeder cashBankSeeder,
                            InventoryGlSeeder inventoryGlSeeder,
-                           DocumentBrandingSeeder documentBrandingSeeder) {
+                           DocumentBrandingSeeder documentBrandingSeeder,
+                           CrmStageSeeder crmStageSeeder) {
         this.props = props;
         this.organisations = organisations;
         this.companies = companies;
@@ -110,6 +114,7 @@ public class BootstrapRunner implements ApplicationRunner {
         this.cashBankSeeder    = cashBankSeeder;
         this.inventoryGlSeeder      = inventoryGlSeeder;
         this.documentBrandingSeeder = documentBrandingSeeder;
+        this.crmStageSeeder         = crmStageSeeder;
     }
 
     @Override
@@ -152,6 +157,8 @@ public class BootstrapRunner implements ApplicationRunner {
         inventoryGlSeeder.seedDefaults(company.getId());
         // Seed document branding profile + template registry (ADR-0023 D-10).
         documentBrandingSeeder.seedDefaults(company.getId());
+        // Seed default CRM pipeline stages (ADR-0031 D-5).
+        crmStageSeeder.seedDefaults(company.getId());
 
         Branch branch = new Branch(company, props.branchCode(), props.branchName());
         branch.setTimeZone(props.timeZone());

@@ -13,5 +13,7 @@ public record CreateSalesOrderRequest(
         @NotNull LocalDate orderDate,
         BigDecimal docDiscountAmount,
         BigDecimal docDiscountPercent,
-        String notes
+        String notes,
+        /** Optional: CRM opportunity that converted to this SO (ADR-0031 D-7, V52). Null for direct creates. */
+        String sourceOpportunityUid
 ) {}
