@@ -11,11 +11,13 @@ import {
   CreateDeliveryRequest,
   CreateQuotationRequest,
   CreateSalesOrderRequest,
+  CreateSalesReturnRequest,
   DeliveryDto,
   QuotationDto,
   QuotationLineDto,
   SalesOrderDto,
   SalesOrderLineDto,
+  SalesReturnDto,
 } from '../models/sales-orders.model';
 import { SalesInvoiceDto } from '../models/sales.model';
 
@@ -34,6 +36,11 @@ export interface DeliveryPage {
   meta: PageMeta;
 }
 
+export interface SalesReturnPage {
+  rows: SalesReturnDto[];
+  meta: PageMeta;
+}
+
 /**
  * Sales Orders / Order-to-Cash API client.
  * list*() use SKIP_UNWRAP to read both data and PageMeta.
@@ -45,6 +52,7 @@ export class SalesOrdersService {
   private readonly quoteBase = `${environment.apiBaseUrl}/quotations`;
   private readonly orderBase = `${environment.apiBaseUrl}/sales-orders`;
   private readonly deliveryBase = `${environment.apiBaseUrl}/deliveries`;
+  private readonly returnBase = `${environment.apiBaseUrl}/sales-returns`;
 
   // ── Quotations ────────────────────────────────────────────────────────────────
 
@@ -174,5 +182,46 @@ export class SalesOrdersService {
 
   createInvoiceFromDelivery(deliveryUid: string): Observable<SalesInvoiceDto> {
     return this.http.post<SalesInvoiceDto>(`${this.deliveryBase}/uid/${deliveryUid}/invoice`, {});
+  }
+
+  // ── Sales Returns ─────────────────────────────────────────────────────────
+
+  listReturns(companyId: string, page = 0, size = 20): Observable<SalesReturnPage> {
+    const params = new HttpParams()
+      .set('companyId', companyId)
+      .set('page', String(page))
+      .set('size', String(size));
+    const context = new HttpContext().set(SKIP_UNWRAP, true);
+    return this.http
+      .get<ApiResponse<SalesReturnDto[]>>(this.returnBase, { params, context })
+      .pipe(
+        map((env) => ({
+          rows: env.data ?? [],
+          meta: env.meta ?? { page, size, totalElements: env.data?.length ?? 0, totalPages: 1, hasNext: false },
+        })),
+      );
+  }
+
+  listReturnsForDelivery(deliveryUid: string, page = 0, size = 20): Observable<SalesReturnPage> {
+    const params = new HttpParams()
+      .set('page', String(page))
+      .set('size', String(size));
+    const context = new HttpContext().set(SKIP_UNWRAP, true);
+    return this.http
+      .get<ApiResponse<SalesReturnDto[]>>(`${this.returnBase}/for-delivery/${deliveryUid}`, { params, context })
+      .pipe(
+        map((env) => ({
+          rows: env.data ?? [],
+          meta: env.meta ?? { page, size, totalElements: env.data?.length ?? 0, totalPages: 1, hasNext: false },
+        })),
+      );
+  }
+
+  getReturnByUid(uid: string): Observable<SalesReturnDto> {
+    return this.http.get<SalesReturnDto>(`${this.returnBase}/uid/${uid}`);
+  }
+
+  createReturn(request: CreateSalesReturnRequest): Observable<SalesReturnDto> {
+    return this.http.post<SalesReturnDto>(this.returnBase, request);
   }
 }

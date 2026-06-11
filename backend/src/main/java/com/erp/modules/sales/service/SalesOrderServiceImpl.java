@@ -42,14 +42,19 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Transactional
 public class SalesOrderServiceImpl implements SalesOrderService {
+
+    private static final Logger log = LoggerFactory.getLogger(SalesOrderServiceImpl.class);
 
     private final SalesOrderRepository     orders;
     private final SalesOrderLineRepository orderLines;
@@ -115,6 +120,8 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         Customer customer = resolveCustomer(companyId, req.customerUid());
         Long agentId = resolveAgentId(companyId, req.agentUid(), ctx);
 
+        DiscountValidator.validateDocDiscount(req.docDiscountAmount(), req.docDiscountPercent());
+
         SalesOrder order = new SalesOrder(companyId, branchId, customer.getId(), agentId,
                 req.currency(), req.orderDate(), actorId());
         order.setDocDiscountAmount(req.docDiscountAmount());
@@ -158,6 +165,8 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         BigDecimal vatRate = resolveVatRate(order.getCompanyId(), product);
         BigDecimal qtyInBase = computeQtyInBase(product, unit, req.quantity());
         short lineNo = (short) (orderLines.findMaxLineNo(order.getId()) + 1);
+
+        DiscountValidator.validateLineDiscount(req.lineDiscountAmount(), req.lineDiscountPercent());
 
         SalesOrderLine line = new SalesOrderLine(
                 order.getId(), order.getCompanyId(), order.getBranchId(), lineNo,
@@ -204,6 +213,15 @@ public class SalesOrderServiceImpl implements SalesOrderService {
 
     @Override
     public SalesOrderDto confirm(String orderUid) {
+        try {
+            return doConfirm(orderUid);
+        } catch (ObjectOptimisticLockingFailureException ex) {
+            log.warn("SalesOrderService.confirm: optimistic lock conflict for uid={} — retrying once", orderUid);
+            return doConfirm(orderUid);
+        }
+    }
+
+    private SalesOrderDto doConfirm(String orderUid) {
         SalesOrder order = require(orderUid);
         scopeGuard.assertCanActIn(RequestContext.get(), order.getCompanyId());
         assertDraft(order);
@@ -236,6 +254,15 @@ public class SalesOrderServiceImpl implements SalesOrderService {
 
     @Override
     public void cancel(String orderUid, CancelSalesOrderRequest req) {
+        try {
+            doCancel(orderUid, req);
+        } catch (ObjectOptimisticLockingFailureException ex) {
+            log.warn("SalesOrderService.cancel: optimistic lock conflict for uid={} — retrying once", orderUid);
+            doCancel(orderUid, req);
+        }
+    }
+
+    private void doCancel(String orderUid, CancelSalesOrderRequest req) {
         SalesOrder order = require(orderUid);
         scopeGuard.assertCanActIn(RequestContext.get(), order.getCompanyId());
         if (order.getStatus() == SalesOrderStatus.CANCELLED

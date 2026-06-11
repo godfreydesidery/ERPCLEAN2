@@ -31,12 +31,16 @@ import com.erp.platform.events.OutboxPublisher;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -54,6 +58,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Transactional
 public class DeliveryServiceImpl implements DeliveryService {
+
+    private static final Logger log = LoggerFactory.getLogger(DeliveryServiceImpl.class);
 
     private final DeliveryRepository         deliveries;
     private final DeliveryLineRepository     deliveryLines;
@@ -110,6 +116,15 @@ public class DeliveryServiceImpl implements DeliveryService {
 
     @Override
     public DeliveryDto create(CreateDeliveryRequest req) {
+        try {
+            return doCreate(req);
+        } catch (ObjectOptimisticLockingFailureException ex) {
+            log.warn("DeliveryService.create: optimistic lock conflict on SO line — retrying once");
+            return doCreate(req);
+        }
+    }
+
+    private DeliveryDto doCreate(CreateDeliveryRequest req) {
         SalesOrder order = requireOrder(req.salesOrderUid());
         RequestContext.Principal ctx = RequestContext.get();
         scopeGuard.assertCanActIn(ctx, order.getCompanyId());
@@ -280,6 +295,59 @@ public class DeliveryServiceImpl implements DeliveryService {
             throw new IllegalStateException("SalesOrder " + order.getUid() + " has no agent.");
         }
 
+        // D-9 / FIX-4: if the SO carries a fixed docDiscountAmount, pro-rate it to the
+        // invoiced (delivered) subset so the partial invoice's VAT is on the correct
+        // discounted net, not the full-order discount applied to fewer lines.
+        // docDiscountPercent is copied verbatim — same rate gives the correct per-line share.
+        BigDecimal invoiceDocDiscountAmount = order.getDocDiscountAmount();
+        if (invoiceDocDiscountAmount != null
+                && invoiceDocDiscountAmount.compareTo(BigDecimal.ZERO) > 0) {
+            // Compute SO total raw net (unitPrice × qty − lineDiscount, floored at 0) for ratio.
+            List<SalesOrderLine> allSoLines =
+                    salesOrderLines.findBySalesOrderIdOrderByLineNo(order.getId());
+            BigDecimal soRawNetSum = allSoLines.stream()
+                    .map(sol -> {
+                        BigDecimal gross = sol.getUnitPriceAmount()
+                                .multiply(sol.getQtyOrderedBase());
+                        BigDecimal dis = sol.getLineDiscountAmount() != null
+                                && sol.getLineDiscountAmount().compareTo(BigDecimal.ZERO) > 0
+                                ? sol.getLineDiscountAmount()
+                                : sol.getLineDiscountPercent() != null
+                                && sol.getLineDiscountPercent().compareTo(BigDecimal.ZERO) > 0
+                                ? gross.multiply(sol.getLineDiscountPercent())
+                                .divide(BigDecimal.valueOf(100), 4,
+                                        RoundingMode.HALF_UP)
+                                : BigDecimal.ZERO;
+                        return gross.subtract(dis).max(BigDecimal.ZERO);
+                    })
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            // Compute the invoiced-lines' raw net sum (use qty-to-invoice for each billable line).
+            // We need the SOL for each billable line to get pricing — resolve inline.
+            BigDecimal invRawNetSum = BigDecimal.ZERO;
+            for (DeliveryLine dl : billable) {
+                SalesOrderLine sol = salesOrderLines.findById(dl.getSalesOrderLineId())
+                        .orElseThrow(() -> new NotFoundException(
+                                "SalesOrderLine not found id=" + dl.getSalesOrderLineId()));
+                BigDecimal qty = dl.openInvoiceQtyBase();
+                BigDecimal gross = sol.getUnitPriceAmount().multiply(qty);
+                BigDecimal dis = sol.getLineDiscountAmount() != null
+                        && sol.getLineDiscountAmount().compareTo(BigDecimal.ZERO) > 0
+                        ? sol.getLineDiscountAmount()
+                        : sol.getLineDiscountPercent() != null
+                        && sol.getLineDiscountPercent().compareTo(BigDecimal.ZERO) > 0
+                        ? gross.multiply(sol.getLineDiscountPercent())
+                        .divide(java.math.BigDecimal.valueOf(100), 4,
+                                java.math.RoundingMode.HALF_UP)
+                        : BigDecimal.ZERO;
+                invRawNetSum = invRawNetSum.add(gross.subtract(dis).max(BigDecimal.ZERO));
+            }
+            if (soRawNetSum.compareTo(BigDecimal.ZERO) > 0) {
+                invoiceDocDiscountAmount = invoiceDocDiscountAmount
+                        .multiply(invRawNetSum)
+                        .divide(soRawNetSum, 4, RoundingMode.HALF_UP);
+            }
+        }
+
         SalesInvoice invoice = new SalesInvoice(
                 delivery.getCompanyId(), delivery.getBranchId(),
                 delivery.getCustomerId(), agentId,
@@ -287,7 +355,8 @@ public class DeliveryServiceImpl implements DeliveryService {
         invoice.setOrigin(DocumentOrigin.SALES_ORDER);
         invoice.setSourceOrderUid(order.getUid());
         invoice.setSourceDeliveryUid(delivery.getUid());
-        invoice.setDocDiscountAmount(order.getDocDiscountAmount());
+        invoice.setDocDiscountAmount(invoiceDocDiscountAmount);
+        // Percent is copied verbatim: same rate × invoiced lines' raw net = correct share
         invoice.setDocDiscountPercent(order.getDocDiscountPercent());
 
         SalesInvoice savedInv = invoices.save(invoice);

@@ -75,11 +75,65 @@
                 }
               }
             }
+
+            <!-- Create Return -->
+            @if (isConfirmed() && canCreateReturn()) {
+              <button type="button" class="btn btn-outline-warning"
+                      (click)="createReturn()">
+                <i class="bi bi-arrow-return-left me-1" aria-hidden="true"></i>
+                Create Return
+              </button>
+            }
           </div>
         }
       }
     }
   </header>
+
+  <!-- Existing returns panel -->
+  @if (existingReturns().length > 0) {
+    <div class="mt-4">
+      <h2 class="h5 mb-2">Returns Against This Delivery</h2>
+      <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle bg-white">
+          <caption class="visually-hidden">Returns raised against this delivery</caption>
+          <thead>
+            <tr>
+              <th scope="col">Return #</th>
+              <th scope="col">Status</th>
+              <th scope="col">Return Date</th>
+              <th scope="col" class="text-end">Gross</th>
+              <th scope="col"><span class="visually-hidden">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (ret of existingReturns(); track ret.uid) {
+              <tr>
+                <td class="font-monospace">{{ ret.returnNumber ?? 'PENDING' }}</td>
+                <td>
+                  <span class="badge"
+                        [class]="ret.status === 'CONFIRMED' ? 'text-bg-success' : 'text-bg-warning'">
+                    {{ ret.status }}
+                  </span>
+                </td>
+                <td class="small text-muted">{{ ret.returnDate }}</td>
+                <td class="text-end font-monospace small">
+                  {{ ret.currency }} {{ +ret.grossAmount | number:'1.2-2' }}
+                </td>
+                <td>
+                  <a class="btn btn-sm btn-outline-primary"
+                     [routerLink]="['/admin/sales-returns/uid', ret.uid]"
+                     [attr.aria-label]="'Open return ' + (ret.returnNumber ?? ret.uid)">
+                    <i class="bi bi-eye me-1" aria-hidden="true"></i>Open
+                  </a>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  }
 
   <!-- Lines panel -->
   @if (delivery(); as d) {

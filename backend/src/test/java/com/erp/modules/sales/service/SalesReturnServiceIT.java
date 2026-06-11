@@ -25,6 +25,7 @@ import com.erp.modules.parties.domain.enums.CustomerKind;
 import com.erp.modules.parties.domain.enums.PartyType;
 import com.erp.modules.parties.service.AgentService;
 import com.erp.modules.parties.service.CustomerService;
+import com.erp.modules.products.domain.dto.AddComponentRequest;
 import com.erp.modules.products.domain.dto.CreatePriceListRequest;
 import com.erp.modules.products.domain.dto.CreateProductRequest;
 import com.erp.modules.products.domain.dto.CreateUnitOfMeasureRequest;
@@ -43,6 +44,7 @@ import com.erp.modules.sales.domain.dto.DeliveryDto;
 import com.erp.modules.sales.domain.dto.SalesOrderDto;
 import com.erp.modules.sales.domain.dto.SalesOrderLineDto;
 import com.erp.modules.sales.domain.dto.SalesReturnDto;
+import com.erp.modules.sales.repository.DeliveryLineRepository;
 import com.erp.modules.stock.domain.dto.StockReceivedPayload;
 import com.erp.modules.stock.domain.entity.StockOnHand;
 import com.erp.modules.stock.repository.StockOnHandRepository;
@@ -110,6 +112,7 @@ class SalesReturnServiceIT extends PostgresIntegrationTest {
     @Autowired private DeliveryService         deliveryService;
     @Autowired private SalesReturnService      salesReturnService;
 
+    @Autowired private DeliveryLineRepository  deliveryLineRepo;
     @Autowired private StockOnHandRepository   stockOnHandRepo;
     @Autowired private DomainEventRepository   domainEventRepo;
     @Autowired private DomainEventDispatcher   dispatcher;
@@ -385,6 +388,107 @@ class SalesReturnServiceIT extends PostgresIntegrationTest {
         assertThat(inventoryBalance())
                 .as("Inventory GL must increase by original issued cost (400)")
                 .isEqualByComparingTo(invBeforeReturn.add(new BigDecimal("400.0000")));
+    }
+
+    // =========================================================================
+    // Bar 6 — FIX-1: composed/recipe product delivery writes issue_value_amount;
+    //                 return posts DR Inventory / CR COGS at the ORIGINAL issued cost.
+    // =========================================================================
+
+    @Test
+    void composedProduct_deliveryWritesIssueValue_returnReversesCogsAtOriginalCost() {
+        // Two stockable components: comp1 @ 100, comp2 @ 200. Composed = 2×comp1 + 1×comp2.
+        // Deliver 1 composed unit → issued value = 2×100 + 1×200 = 400.
+        ProductDto comp1 = stockableProduct("KitComp1", "50");   // sell price irrelevant
+        ProductDto comp2 = stockableProduct("KitComp2", "50");
+        ProductDto kit   = stockableProduct("Kit",      "999");  // sell price irrelevant
+
+        setCtx();
+        productService.addComponent(kit.uid(), new AddComponentRequest(comp1.uid(), new BigDecimal("2")));
+        setCtx();
+        productService.addComponent(kit.uid(), new AddComponentRequest(comp2.uid(), new BigDecimal("1")));
+
+        // Stock up both components at known costs
+        publishAndDispatchReceipt(comp1, new BigDecimal("10"), new BigDecimal("100")); // avg=100
+        publishAndDispatchReceipt(comp2, new BigDecimal("10"), new BigDecimal("200")); // avg=200
+
+        // Create SO for 1 kit and deliver
+        SalesOrderDto so = createAndConfirmOrder(kit, BigDecimal.ONE);
+        DeliveryDto delivery = deliverAll(so, BigDecimal.ONE);
+
+        // Dispatch DELIVERY.CONFIRMED — DeliveryIssueStockHandler must now write
+        // issue_value_amount = 2×100 + 1×200 = 400 back to the delivery_line (FIX-1).
+        dispatcher.dispatchOne(pendingEvent(DomainEventType.DELIVERY_CONFIRMED));
+
+        // Assert delivery_line.issue_value_amount is non-null and = 400
+        String dlUid = delivery.lines().get(0).uid();
+        var dlRows = deliveryLineRepo.findByDeliveryIdOrderByLineNo(delivery.id());
+        assertThat(dlRows).hasSize(1);
+        assertThat(dlRows.get(0).getIssueValueAmount())
+                .as("delivery_line.issue_value_amount must be populated for composed product (FIX-1)")
+                .isNotNull()
+                .isEqualByComparingTo("400.0000");
+
+        BigDecimal expectedCogs = new BigDecimal("400.0000");
+        assertThat(cogsBalance())
+                .as("COGS GL must be 400 after composed-product delivery")
+                .isEqualByComparingTo(expectedCogs);
+
+        BigDecimal invBeforeReturn = inventoryBalance();
+
+        // Return the kit — SalesReturnServiceImpl reads issue_value_amount=400 and
+        // passes it as originalIssueValue so DeliveryReturnStockHandler reverses at 400.
+        setCtx();
+        SalesReturnDto ret = salesReturnService.create(new CreateSalesReturnRequest(
+                delivery.uid(), LocalDate.now(), "Kit return test",
+                List.of(new CreateSalesReturnRequest.ReturnLineRequest(dlUid, BigDecimal.ONE))));
+
+        assertThat(ret.returnNumber()).startsWith("RET-");
+        assertThat(ret.creditNoteUid()).isNotNull().isNotBlank();
+
+        // Dispatch DELIVERY.RETURNED
+        dispatcher.dispatchOne(pendingEvent(DomainEventType.DELIVERY_RETURNED));
+
+        // COGS fully reversed: 400 - 400 = 0
+        assertThat(cogsBalance())
+                .as("COGS must be fully reversed at the original issued cost (400) — not at current avg")
+                .isEqualByComparingTo(BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP));
+
+        // Inventory DR = 400
+        assertThat(inventoryBalance())
+                .as("Inventory GL must increase by the original issued cost (400)")
+                .isEqualByComparingTo(invBeforeReturn.add(new BigDecimal("400.0000")));
+    }
+
+    // =========================================================================
+    // Bar 7 — FIX-3: negative discount and >100% percent are rejected at service layer
+    // =========================================================================
+
+    @Test
+    @SuppressWarnings("java:S5778") // single-throw guard: DiscountValidator throws before any side effects
+    void addLine_negativeDiscount_rejected() {
+        setCtx();
+        SalesOrderDto so = salesOrderService.create(new CreateSalesOrderRequest(
+                company.getUid(), customerUid, agentUid, "TZS",
+                LocalDate.now(), null, null, null));
+
+        ProductDto product = stockableProduct("DiscTestProd", "1000");
+
+        // Negative line discount amount must be rejected
+        setCtx();
+        AddSalesOrderLineRequest negAmtReq = new AddSalesOrderLineRequest(
+                product.uid(), pcsUid, BigDecimal.ONE, null, new BigDecimal("-100"), null);
+        assertThatThrownBy(() -> salesOrderService.addLine(so.uid(), negAmtReq))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("cannot be negative");
+
+        // Discount percent > 100 must be rejected
+        setCtx();
+        AddSalesOrderLineRequest overPctReq = new AddSalesOrderLineRequest(
+                product.uid(), pcsUid, BigDecimal.ONE, null, null, new BigDecimal("101"));
+        assertThatThrownBy(() -> salesOrderService.addLine(so.uid(), overPctReq))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("cannot exceed 100");
     }
 
     // =========================================================================

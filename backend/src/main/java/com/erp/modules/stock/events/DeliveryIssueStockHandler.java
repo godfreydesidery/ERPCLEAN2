@@ -144,8 +144,22 @@ public class DeliveryIssueStockHandler implements DomainEventHandler {
                                 "no SALE_ISSUE posted for delivery uid={}",
                         line.productUid(), payload.deliveryUid());
             }
+            // OQ-SO-05: accumulate component costs and write back to delivery_line so that
+            // SalesReturnServiceImpl can pro-rate the original cost for partial returns (ADR-0021 D-11).
+            BigDecimal totalComponentValue = BigDecimal.ZERO;
             for (RecipeExplosionResolver.ExplosionLine comp : components) {
-                processComponent(event, payload, comp, cogsLegs);
+                BigDecimal compValue = processComponent(event, payload, comp, cogsLegs);
+                if (compValue != null) {
+                    totalComponentValue = totalComponentValue.add(compValue);
+                }
+            }
+            // Write accumulated component value to delivery_line (mirrors processSimpleLine lines 228-233)
+            final BigDecimal composedIssueValue = totalComponentValue;
+            if (composedIssueValue.compareTo(BigDecimal.ZERO) > 0 && line.deliveryLineId() != null) {
+                deliveryLineRepo.findById(line.deliveryLineId()).ifPresent(dl -> {
+                    dl.setIssueValueAmount(composedIssueValue);
+                    dl.setUpdatedAt(Instant.now());
+                });
             }
         } else if (!product.stockable()) {
             log.info("DeliveryIssueStockHandler: skipping non-stockable product uid={} on delivery uid={}",
@@ -155,14 +169,20 @@ public class DeliveryIssueStockHandler implements DomainEventHandler {
         }
     }
 
-    private void processComponent(DomainEvent event, DeliveryConfirmedPayload payload,
-                                   RecipeExplosionResolver.ExplosionLine comp,
-                                   List<CogsLeg> cogsLegs) {
+    /**
+     * Issues one BOM component, accumulates a COGS leg, and returns the issued value for
+     * aggregation back to delivery_line.issue_value_amount (OQ-SO-05).
+     *
+     * @return the issued value for this component, or {@code null} if avg_cost was not established.
+     */
+    private BigDecimal processComponent(DomainEvent event, DeliveryConfirmedPayload payload,
+                                        RecipeExplosionResolver.ExplosionLine comp,
+                                        List<CogsLeg> cogsLegs) {
         BigDecimal issuedMagnitude = comp.quantity().abs();
         if (issuedMagnitude.compareTo(BigDecimal.ZERO) == 0) {
             log.warn("DeliveryIssueStockHandler: zero issuedMagnitude for component productId={} on delivery uid={}",
                     comp.productId(), payload.deliveryUid());
-            return;
+            return null;
         }
 
         BigDecimal issuedValue = valuation.costIssue(
@@ -187,6 +207,7 @@ public class DeliveryIssueStockHandler implements DomainEventHandler {
         } else {
             cogsLegs.add(new CogsLeg(comp.productId(), comp.productId().toString(), issuedValue));
         }
+        return issuedValue;
     }
 
     private void processSimpleLine(DomainEvent event, DeliveryConfirmedPayload payload,
