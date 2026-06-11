@@ -14,8 +14,10 @@ import com.erp.modules.gl.domain.dto.JournalEntryDraft;
 import com.erp.modules.gl.domain.dto.JournalEntryDraft.LineDraft;
 import com.erp.modules.gl.domain.dto.JournalEntryDto;
 import com.erp.modules.gl.domain.entity.ChartOfAccount;
+import com.erp.modules.gl.domain.entity.JournalEntry;
 import com.erp.modules.gl.domain.enums.GlConfigKey;
 import com.erp.modules.gl.domain.enums.JournalSourceType;
+import com.erp.modules.gl.repository.JournalEntryRepository;
 import com.erp.modules.gl.service.GLConfigResolver;
 import com.erp.modules.gl.service.GLPostingService;
 import com.erp.modules.purchases.domain.dto.GoodsReceiptLineDto;
@@ -64,6 +66,7 @@ public class BillMatchServiceImpl implements BillMatchService {
     private final PurchaseMatchReader        purchaseReader;
     private final GLPostingService           glPosting;
     private final GLConfigResolver           glConfig;
+    private final JournalEntryRepository     journalEntries;   // FIX H: idempotency guard
     private final ApBillNumberGenerator      numbers;
     private final ScopeGuard                 scopeGuard;
     private final AuditService               audit;
@@ -75,6 +78,7 @@ public class BillMatchServiceImpl implements BillMatchService {
                                  PurchaseMatchReader purchaseReader,
                                  GLPostingService glPosting,
                                  GLConfigResolver glConfig,
+                                 JournalEntryRepository journalEntries,
                                  ApBillNumberGenerator numbers,
                                  ScopeGuard scopeGuard,
                                  AuditService audit,
@@ -85,6 +89,7 @@ public class BillMatchServiceImpl implements BillMatchService {
         this.purchaseReader = purchaseReader;
         this.glPosting      = glPosting;
         this.glConfig       = glConfig;
+        this.journalEntries = journalEntries;
         this.numbers        = numbers;
         this.scopeGuard     = scopeGuard;
         this.audit          = audit;
@@ -290,6 +295,22 @@ public class BillMatchServiceImpl implements BillMatchService {
      * <p>Finding #15 (bill_number) coexists independently — already handled in {@link #runMatch}.
      */
     private void postMatchedBillToGl(SupplierBill bill) {
+        // FIX H (adversarial review): idempotency guard — if a journal entry already exists for
+        // (companyId, AP_BILL, bill.uid) a previous run already posted; re-stamp the GL ref and
+        // return without double-posting (the AR/AP precedent — ADR-0020 D-4 NFR-INV-04).
+        JournalEntry existing = journalEntries
+                .findByCompanyIdAndSourceTypeAndSourceRef(
+                        bill.getCompanyId(), JournalSourceType.AP_BILL, bill.getUid())
+                .orElse(null);
+        if (existing != null) {
+            bill.setPostedGlEntryUid(existing.getUid());
+            audit.record(AuditEvent.of(AuditActions.AP_BILL_POST, "supplier_bills",
+                            bill.getId(), bill.getUid())
+                    .detail(Map.of("action", "idempotentSkip",
+                            "glEntryUid", existing.getUid())));
+            return;
+        }
+
         List<SupplierBillLine> billLines =
                 lines.findBySupplierBillIdOrderByLineNo(bill.getId());
 

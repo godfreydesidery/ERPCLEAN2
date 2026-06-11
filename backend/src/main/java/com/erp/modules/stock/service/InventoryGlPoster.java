@@ -7,7 +7,6 @@ import com.erp.modules.gl.domain.entity.ChartOfAccount;
 import com.erp.modules.gl.domain.enums.GlConfigKey;
 import com.erp.modules.gl.domain.enums.JournalSourceType;
 import com.erp.modules.gl.service.GLConfigResolver;
-import com.erp.modules.gl.service.GLPostingSafeInvoker;
 import com.erp.modules.gl.service.GLPostingService;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -16,15 +15,30 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Builds and posts GL drafts for all inventory valuation legs (ADR-0020 D-4).
  *
- * <p>Event-driven legs (receipt, sale, reversals) post via
- * {@link GLPostingSafeInvoker#postInNewTx} (REQUIRES_NEW, null-on-anomaly — never poisons the
- * dispatch TX). Human-act legs (opening valuation, adjustment) post via
+ * <p><strong>FIX B (adversarial review) — GL config resolution inside REQUIRES_NEW:</strong>
+ * Each event-driven post method ({@code postReceiptInNewTx}, {@code postCogsInNewTx},
+ * {@code postReceiptReversalInNewTx}, {@code postSaleReversalInNewTx}) is itself annotated
+ * {@code @Transactional(REQUIRES_NEW)} and performs {@code configResolver.resolve()} INSIDE
+ * that boundary, followed immediately by the {@link GLPostingService#post} call, all wrapped in
+ * a try/catch that returns {@code null} on any anomaly.
+ *
+ * <p>Why this matters: {@link GLConfigResolver} is {@code @Transactional(MANDATORY)} — if
+ * resolution were called in the handler's outer TX and threw (missing/INACTIVE account), Spring's
+ * TX interceptor would mark that outer TX rollback-only <em>before</em> the catch block ran,
+ * silently rolling back the physical stock movement (quantity deduction / receipt). Moving the
+ * resolve + build + post into one {@code REQUIRES_NEW} method means a GL-config failure rolls
+ * back only that inner TX, leaving the handler's stock TX intact (the exact guarantee
+ * {@link com.erp.modules.gl.service.GLPostingSafeInvoker} provides for the Sales module).
+ *
+ * <p>Human-act legs (opening valuation, adjustment) post via
  * {@link GLPostingService#post} directly — a missing config MUST fail the operator's command
- * (BR-INV-12).
+ * (BR-INV-12). Those paths are NOT annotated REQUIRES_NEW.
  *
  * <p>All amounts are base currency, HALF_UP (BR-INV-11). Accounts resolved via
  * {@link GLConfigResolver#resolve} (throws on missing/inactive — BR-GL-10 / BR-INV-12).
@@ -34,26 +48,24 @@ public class InventoryGlPoster {
 
     private static final Logger log = LoggerFactory.getLogger(InventoryGlPoster.class);
 
-    private final GLPostingSafeInvoker safeInvoker;
-    private final GLPostingService     directPosting;
-    private final GLConfigResolver     configResolver;
+    private final GLPostingService  directPosting;
+    private final GLConfigResolver  configResolver;
 
-    public InventoryGlPoster(GLPostingSafeInvoker safeInvoker,
-                              GLPostingService directPosting,
+    public InventoryGlPoster(GLPostingService directPosting,
                               GLConfigResolver configResolver) {
-        this.safeInvoker    = safeInvoker;
         this.directPosting  = directPosting;
         this.configResolver = configResolver;
     }
 
     // -------------------------------------------------------------------------
     // (a) Goods receipt: DR INVENTORY / CR GRNI (event-driven, REQUIRES_NEW)
+    //     FIX B: resolve + build + post all inside this REQUIRES_NEW boundary.
     // -------------------------------------------------------------------------
 
     /**
      * Post DR INVENTORY (1300) / CR GRNI (2150) for a goods receipt.
      * One journal per receipt, with one DR/CR leg pair per line (ADR-0020 D-4a).
-     * Uses safe invoker — returns null on GL anomaly, never propagates.
+     * REQUIRES_NEW — returns null on GL anomaly, never propagates to the handler TX.
      *
      * @param legs        per-line (lineUid, productCode, value) tuples
      * @param receiptUid  sourceRef
@@ -61,8 +73,9 @@ public class InventoryGlPoster {
      * @param currency    base currency code
      * @param companyId   tenant
      * @param branchId    branch
-     * @return posted JournalEntryDto uid, or null on anomaly
+     * @return posted JournalEntry uid, or null on anomaly
      */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public String postReceiptInNewTx(Long companyId, Long branchId, LocalDate postingDate,
                                       String receiptUid, String currency,
                                       List<ReceiptLeg> legs) {
@@ -86,7 +99,7 @@ public class InventoryGlPoster {
                     JournalSourceType.STOCK_RECEIPT, receiptUid,
                     null, null, lines);
 
-            JournalEntryDto result = safeInvoker.postInNewTx(draft);
+            JournalEntryDto result = directPosting.post(draft);
             return result != null ? result.uid() : null;
 
         } catch (Exception ex) {
@@ -98,16 +111,18 @@ public class InventoryGlPoster {
 
     // -------------------------------------------------------------------------
     // (b) Sale COGS: DR COGS / CR INVENTORY (event-driven, REQUIRES_NEW)
+    //     FIX B: resolve + build + post all inside this REQUIRES_NEW boundary.
     // -------------------------------------------------------------------------
 
     /**
      * Post DR COGS (5100) / CR INVENTORY (1300) for a sale.
      * One journal per SALE.FINALISED, one DR/CR leg pair per issued component (ADR-0020 D-4b).
-     * Returns null on GL anomaly; never propagates.
+     * REQUIRES_NEW — returns null on GL anomaly; never propagates.
      *
      * @param legs       per-component (productId, productCode, value) tuples
      * @param invoiceUid sourceRef
      */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public String postCogsInNewTx(Long companyId, Long branchId, LocalDate postingDate,
                                    String invoiceUid, String currency,
                                    List<CogsLeg> legs) {
@@ -132,7 +147,7 @@ public class InventoryGlPoster {
                     JournalSourceType.COGS, invoiceUid,
                     null, null, lines);
 
-            JournalEntryDto result = safeInvoker.postInNewTx(draft);
+            JournalEntryDto result = directPosting.post(draft);
             return result != null ? result.uid() : null;
 
         } catch (Exception ex) {
@@ -144,12 +159,14 @@ public class InventoryGlPoster {
 
     // -------------------------------------------------------------------------
     // (d) Receipt reversal: DR GRNI / CR INVENTORY (event-driven, REQUIRES_NEW)
+    //     FIX B: resolve + build + post all inside this REQUIRES_NEW boundary.
     // -------------------------------------------------------------------------
 
     /**
      * Post DR GRNI (2150) / CR INVENTORY (1300) for a receipt reversal at original cost.
-     * (ADR-0020 D-5). Returns null on anomaly; never propagates.
+     * (ADR-0020 D-5). REQUIRES_NEW — returns null on anomaly; never propagates.
      */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public String postReceiptReversalInNewTx(Long companyId, Long branchId, LocalDate postingDate,
                                               String receiptUid, String currency,
                                               BigDecimal totalOriginalValue) {
@@ -172,7 +189,7 @@ public class InventoryGlPoster {
                     JournalSourceType.STOCK_RECEIPT, receiptUid,
                     null, null, lines);
 
-            JournalEntryDto result = safeInvoker.postInNewTx(draft);
+            JournalEntryDto result = directPosting.post(draft);
             return result != null ? result.uid() : null;
 
         } catch (Exception ex) {
@@ -184,12 +201,14 @@ public class InventoryGlPoster {
 
     // -------------------------------------------------------------------------
     // (d) Sale reversal (COGS reversal): DR INVENTORY / CR COGS (event-driven, REQUIRES_NEW)
+    //     FIX B: resolve + build + post all inside this REQUIRES_NEW boundary.
     // -------------------------------------------------------------------------
 
     /**
      * Post DR INVENTORY (1300) / CR COGS (5100) for a sale void at original cost.
-     * (ADR-0020 D-5). Returns null on anomaly; never propagates.
+     * (ADR-0020 D-5). REQUIRES_NEW — returns null on anomaly; never propagates.
      */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public String postSaleReversalInNewTx(Long companyId, Long branchId, LocalDate postingDate,
                                            String invoiceUid, String currency,
                                            BigDecimal totalOriginalValue) {
@@ -212,7 +231,7 @@ public class InventoryGlPoster {
                     JournalSourceType.COGS, invoiceUid,
                     null, null, lines);
 
-            JournalEntryDto result = safeInvoker.postInNewTx(draft);
+            JournalEntryDto result = directPosting.post(draft);
             return result != null ? result.uid() : null;
 
         } catch (Exception ex) {
@@ -263,49 +282,50 @@ public class InventoryGlPoster {
      * Post DR STOCK_ADJUSTMENT (5160) / CR INVENTORY (1300) for an adjustment decrease,
      * or DR INVENTORY / CR STOCK_ADJUSTMENT for an increase.
      * Direct post — a missing config MUST fail the operator's command (BR-INV-12).
+     *
+     * @param cmd bundles the adjustment-specific posting parameters (movementUid, currency,
+     *            value, decrease flag, postedBy) to keep the method under the 7-param limit.
      */
     public JournalEntryDto postAdjustmentDirect(Long companyId, Long branchId,
                                                  LocalDate postingDate,
-                                                 String movementUid, String currency,
-                                                 BigDecimal value, boolean decrease,
-                                                 Long postedBy) {
+                                                 AdjustmentPostCmd cmd) {
         ChartOfAccount inventoryAcct   = configResolver.resolve(companyId, GlConfigKey.INVENTORY);
         ChartOfAccount adjustmentAcct  = configResolver.resolve(companyId, GlConfigKey.STOCK_ADJUSTMENT);
 
         List<LineDraft> lines;
-        if (decrease) {
+        if (cmd.decrease()) {
             // DR STOCK_ADJUSTMENT / CR INVENTORY
             lines = List.of(
                     new LineDraft(adjustmentAcct.getId(),
-                            value, BigDecimal.ZERO,
-                            currency, "Stock adjustment — " + movementUid),
+                            cmd.value(), BigDecimal.ZERO,
+                            cmd.currency(), "Stock adjustment — " + cmd.movementUid()),
                     new LineDraft(inventoryAcct.getId(),
-                            BigDecimal.ZERO, value,
-                            currency, "Inventory adjustment — " + movementUid)
+                            BigDecimal.ZERO, cmd.value(),
+                            cmd.currency(), "Inventory adjustment — " + cmd.movementUid())
             );
         } else {
             // DR INVENTORY / CR STOCK_ADJUSTMENT
             lines = List.of(
                     new LineDraft(inventoryAcct.getId(),
-                            value, BigDecimal.ZERO,
-                            currency, "Inventory adjustment — " + movementUid),
+                            cmd.value(), BigDecimal.ZERO,
+                            cmd.currency(), "Inventory adjustment — " + cmd.movementUid()),
                     new LineDraft(adjustmentAcct.getId(),
-                            BigDecimal.ZERO, value,
-                            currency, "Stock adjustment — " + movementUid)
+                            BigDecimal.ZERO, cmd.value(),
+                            cmd.currency(), "Stock adjustment — " + cmd.movementUid())
             );
         }
 
         JournalEntryDraft draft = new JournalEntryDraft(
                 companyId, branchId, postingDate,
-                "Stock adjustment " + movementUid,
-                JournalSourceType.STOCK_ADJUSTMENT, movementUid,
-                null, postedBy, lines);
+                "Stock adjustment " + cmd.movementUid(),
+                JournalSourceType.STOCK_ADJUSTMENT, cmd.movementUid(),
+                null, cmd.postedBy(), lines);
 
         return directPosting.post(draft);
     }
 
     // -------------------------------------------------------------------------
-    // Value-object legs
+    // Value-object legs / commands
     // -------------------------------------------------------------------------
 
     /** Per receipt-line GL leg data. */
@@ -313,4 +333,11 @@ public class InventoryGlPoster {
 
     /** Per sale-component GL leg data. */
     public record CogsLeg(Long productId, String productCode, BigDecimal value) {}
+
+    /**
+     * Parameters for {@link #postAdjustmentDirect} — bundles the 5 adjustment-specific
+     * fields so the method stays under the 7-parameter Sonar limit (java:S107).
+     */
+    public record AdjustmentPostCmd(String movementUid, String currency,
+                                    BigDecimal value, boolean decrease, Long postedBy) {}
 }

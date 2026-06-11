@@ -13,6 +13,7 @@ import com.erp.modules.ap.domain.dto.SupplierBillDto;
 import com.erp.modules.ap.domain.enums.SupplierBillStatus;
 import com.erp.modules.gl.domain.enums.GlConfigKey;
 import com.erp.modules.gl.repository.GlConfigRepository;
+import com.erp.modules.gl.repository.JournalEntryRepository;
 import com.erp.modules.gl.repository.JournalLineRepository;
 import com.erp.modules.gl.service.ChartOfAccountService;
 import com.erp.modules.gl.service.FiscalCalendarService;
@@ -126,6 +127,7 @@ class InventoryValuationServiceIT extends PostgresIntegrationTest {
     @Autowired private GlConfigService         glConfigService;
     @Autowired private GlConfigRepository      glConfigRepo;
     @Autowired private JournalLineRepository   journalLines;
+    @Autowired private JournalEntryRepository  journalEntryRepo;
 
     // ---- AP ----
     @Autowired private ApGlSeeder              apGlSeeder;
@@ -134,11 +136,12 @@ class InventoryValuationServiceIT extends PostgresIntegrationTest {
     @Autowired private SupplierService         supplierService;
 
     // ---- Stock ----
-    @Autowired private InventoryGlSeeder       invGlSeeder;
-    @Autowired private InventoryValuationService inventoryValuationService;
-    @Autowired private StockValuationQuery     valuationQuery;
-    @Autowired private StockService            stockService;
-    @Autowired private StockOnHandRepository   stockOnHandRepo;
+    @Autowired private InventoryGlSeeder           invGlSeeder;
+    @Autowired private InventoryValuationService   inventoryValuationService;
+    @Autowired private StockValuationQuery         valuationQuery;
+    @Autowired private StockService                stockService;
+    @Autowired private StockOnHandRepository       stockOnHandRepo;
+    @Autowired private com.erp.modules.stock.repository.StockMovementRepository stockMovementRepo;
 
     // ---- Products / Parties / Sales ----
     @Autowired private ProductService          productService;
@@ -704,6 +707,130 @@ class InventoryValuationServiceIT extends PostgresIntegrationTest {
         assertThat(inventoryBalance())
                 .as("Inventory GL net after receipt and adjustment decrease")
                 .isEqualByComparingTo(new BigDecimal("4500").setScale(4, RoundingMode.HALF_UP));
+    }
+
+    // =========================================================================
+    // FIX A regression: receipt-reversal that empties on-hand to zero keeps avg
+    // (not avg=0) — ADR-0020 D-5 keep-last-known guard.
+    // =========================================================================
+
+    @Test
+    void receiptReversal_emptyingOnHandToZero_keepsLastKnownAvg_notZero() {
+        ProductDto product = stockableProduct("FixA-Widget");
+
+        // Single receipt: 10 @ 400 → avg = 400, value = 4000
+        dispatcher.dispatchOne(publishReceiptEvent("RCPT-FIXA-001", product,
+                new BigDecimal("10"), new BigDecimal("400"), 1L));
+
+        StockOnHand afterReceipt = requireSoh(product.id());
+        assertThat(afterReceipt.getAvgCost()).isEqualByComparingTo(new BigDecimal("400"));
+        assertThat(afterReceipt.getQuantity()).isEqualByComparingTo(new BigDecimal("10"));
+
+        // Void the entire receipt — post-reversal qty = 0
+        StockReceiptVoidedPayload voidPayload = new StockReceiptVoidedPayload(
+                "RCPT-FIXA-001", company.getId(), branch.getId(),
+                List.of(new StockReceiptVoidedPayload.LineItem(
+                        product.id(), product.uid(), null, new BigDecimal("10"))));
+        txTemplate.execute(s -> {
+            outboxPublisher.publish(DomainEventType.STOCK_RECEIPT_VOIDED,
+                    DomainEventType.AGG_GOODS_RECEIPT, 1L, "RCPT-FIXA-001",
+                    company.getId(), branch.getId(), voidPayload);
+            return null;
+        });
+        dispatcher.dispatchOne(pendingEvent(DomainEventType.STOCK_RECEIPT_VOIDED));
+
+        StockOnHand afterVoid = requireSoh(product.id());
+        assertThat(afterVoid.getQuantity())
+                .as("FIX A: quantity must be zero after full receipt reversal")
+                .isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(afterVoid.getOnHandValue())
+                .as("FIX A: on_hand_value must be zero after full receipt reversal")
+                .isEqualByComparingTo(BigDecimal.ZERO);
+        // KEY assertion: avg_cost kept at last-known (400), NOT reset to 0/null (D-5)
+        assertThat(afterVoid.getAvgCost())
+                .as("FIX A: avg_cost must be kept at last-known value (400) when qty empties to zero")
+                .isEqualByComparingTo(new BigDecimal("400"));
+    }
+
+    // =========================================================================
+    // FIX C: ADJUSTMENT movement carries non-null unit_cost + signed value_amount
+    // =========================================================================
+
+    @Test
+    void adjustment_movementCarriesCost_unitCostAndValueNonNull() {
+        ProductDto product = stockableProduct("FixC-Widget");
+
+        // Receive 20 @ 250 → avg = 250, value = 5000
+        dispatcher.dispatchOne(publishReceiptEvent("RCPT-FIXC-001", product,
+                new BigDecimal("20"), new BigDecimal("250"), 1L));
+
+        // Adjust −3 (shrinkage)
+        setCtx();
+        com.erp.modules.stock.domain.dto.StockMovementDto movDto = stockService.adjust(
+                new AdjustStockRequest(product.uid(), new BigDecimal("-3"),
+                        AdjustmentReason.SHRINKAGE, "test-fixc"));
+
+        // The ADJUSTMENT movement must carry unit_cost = 250 and value = −750
+        com.erp.modules.stock.domain.entity.StockMovement adjMov =
+                stockMovementRepo.findByUid(movDto.uid()).orElseThrow();
+        assertThat(adjMov.getUnitCostAmount())
+                .as("FIX C: ADJUSTMENT movement must have non-null unit_cost_amount = avg_cost")
+                .isNotNull()
+                .isEqualByComparingTo(new BigDecimal("250"));
+        assertThat(adjMov.getValueAmount())
+                .as("FIX C: ADJUSTMENT movement value = −(|qty| × avg) = −750")
+                .isNotNull()
+                .isEqualByComparingTo(new BigDecimal("-750"));
+
+        // on_hand_value: 5000 − 3×250 = 4250
+        assertThat(requireSoh(product.id()).getOnHandValue())
+                .as("FIX C: on_hand_value must reflect adjustment cost")
+                .isEqualByComparingTo(new BigDecimal("4250").setScale(4, RoundingMode.HALF_UP));
+        // GL: STOCK_ADJUSTMENT DR = 750
+        assertThat(stockAdjBalance())
+                .as("FIX C: STOCK_ADJUSTMENT GL debited at avg_cost × |qty|")
+                .isEqualByComparingTo(new BigDecimal("750").setScale(4, RoundingMode.HALF_UP));
+    }
+
+    // =========================================================================
+    // FIX H: calling runMatch twice for the same bill posts only ONE GL journal
+    // =========================================================================
+
+    @Test
+    void billMatch_runMatchTwice_postsOnlyOneJournalEntry() {
+        ProductDto product = stockableProduct("FixH-Widget");
+        BigDecimal qty  = new BigDecimal("5");
+        BigDecimal cost = new BigDecimal("2000.00");
+
+        // Receive goods
+        dispatcher.dispatchOne(publishReceiptEvent("RCPT-FIXH-001", product, qty, cost, 1L));
+
+        // Enter a goods bill
+        String grLineUid = "GR-LINE-FIXH-001";
+        SupplierBillDto bill = billService.enterBill(new EnterBillRequest(
+                company.getUid(), supplierUid, "INV-FIXH-001",
+                null, LocalDate.now(), LocalDate.now().plusDays(30),
+                BigDecimal.ZERO, "TZS", null,
+                List.of(new BillLineRequest(null, null, grLineUid, "FIX H goods",
+                        qty, cost))));
+
+        // First match
+        BillMatchResultDto r1 = matchService.runMatch(bill.uid());
+        assertThat(r1.billStatus()).isEqualTo(SupplierBillStatus.MATCHED);
+
+        long journalCountAfterFirst = journalEntryRepo.findAll().stream()
+                .filter(e -> com.erp.modules.gl.domain.enums.JournalSourceType.AP_BILL
+                        .equals(e.getSourceType())
+                        && bill.uid().equals(e.getSourceRef()))
+                .count();
+        assertThat(journalCountAfterFirst)
+                .as("FIX H: exactly one AP_BILL journal entry after first match")
+                .isEqualTo(1L);
+
+        // AP balance: credited full amount (10 000) exactly once
+        assertThat(apBalance().negate())
+                .as("FIX H: AP credited exactly once — idempotency guard works")
+                .isEqualByComparingTo(qty.multiply(cost));
     }
 
     // =========================================================================

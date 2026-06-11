@@ -18,6 +18,8 @@ import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Map;
@@ -81,6 +83,24 @@ public class StockServiceImpl implements StockService {
             throw new IllegalArgumentException("Adjustment quantity must be non-zero.");
         }
 
+        // FIX C (adversarial review): resolve avg_cost BEFORE posting so the movement row
+        // carries unit_cost_amount + value_amount immediately (columns are immutable/updatable=false
+        // on the entity — they cannot be patched after the fact). If avg_cost is null (no cost
+        // established yet) pass null cost and skip the value — consistent with the D-2 null-cost edge.
+        StockOnHand sohBefore = onHands.findByCompanyIdAndBranchIdAndProductId(
+                product.companyId(), principal.branchId(), product.id()).orElse(null);
+        BigDecimal avgCostNow = sohBefore != null ? sohBefore.getAvgCost() : null;
+        BigDecimal movementValue = null;
+        if (avgCostNow != null) {
+            movementValue = request.quantity().abs()
+                    .multiply(avgCostNow)
+                    .setScale(4, RoundingMode.HALF_UP);
+            // sign: decrease → negative, increase → positive (D-2 convention)
+            if (request.quantity().signum() < 0) {
+                movementValue = movementValue.negate();
+            }
+        }
+
         String movementUid = posting.post(
                 product.companyId(),
                 principal.branchId(),
@@ -92,7 +112,7 @@ public class StockServiceImpl implements StockService {
                 request.note(),
                 Instant.now(),
                 principal.userId(),
-                null, null);  // cost populated later by InventoryValuationService.revalueAdjustment
+                avgCostNow, movementValue);  // FIX C: carry cost on the movement row
 
         // Audit the manual op (D-12).
         StockMovement movement = movements.findByUid(movementUid).orElseThrow();
@@ -106,6 +126,7 @@ public class StockServiceImpl implements StockService {
                 )));
 
         // Revalue on_hand_value + post GL DR STOCK_ADJUSTMENT / CR INVENTORY (ADR-0020 D-7).
+        // Re-read the on-hand row (posting.post may have upserted it if it was absent).
         StockOnHand soh = onHands.findByCompanyIdAndBranchIdAndProductId(
                 product.companyId(), principal.branchId(), product.id()).orElse(null);
         if (soh != null) {

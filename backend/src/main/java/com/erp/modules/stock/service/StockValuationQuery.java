@@ -59,15 +59,19 @@ public class StockValuationQuery {
         //    Native SQL join to products for code/name/uid — scalar cross-module read (no entity import).
         List<StockValuationRowDto> rows = new ArrayList<>();
 
+        // FIX F (adversarial review): per-row avgCost is the implied average
+        // SUM(on_hand_value) / NULLIF(SUM(quantity), 0) — not MAX(avg_cost), which would
+        // return the highest branch avg rather than the true company-level weighted average
+        // when stock exists across multiple branches (ADR-0020 D-6 / NFR-INV-06).
         List<Object[]> rawRows = jdbc.query(
                 """
                 SELECT soh.product_id,
                        p.uid           AS product_uid,
                        p.code          AS product_code,
                        p.name          AS product_name,
-                       SUM(soh.quantity)       AS total_qty,
-                       SUM(soh.on_hand_value)  AS total_value,
-                       MAX(soh.avg_cost)       AS avg_cost
+                       SUM(soh.quantity)                                        AS total_qty,
+                       SUM(soh.on_hand_value)                                   AS total_value,
+                       SUM(soh.on_hand_value) / NULLIF(SUM(soh.quantity), 0)   AS avg_cost
                 FROM   stock_on_hand soh
                 LEFT JOIN products p ON p.id = soh.product_id
                 WHERE  soh.company_id = ?

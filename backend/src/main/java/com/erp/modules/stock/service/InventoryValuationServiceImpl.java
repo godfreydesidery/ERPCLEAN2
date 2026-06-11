@@ -32,6 +32,17 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>Rounding: 4 dp HALF_UP throughout (OQ-INV-06). The stored {@code on_hand_value} is the
  * authoritative figure; {@code avg_cost} is derived to 4 dp and stored.
+ *
+ * <p>FIX A (adversarial review): {@link #reverseReceipt} computes postReversalQty as
+ * {@code soh.getQuantity().subtract(originalQty.abs())} — the posting service applies the negative
+ * delta AFTER this method returns, so soh holds the PRE-reversal qty at call time.
+ *
+ * <p>FIX D (adversarial review): {@link #costIssue}, {@link #reverseIssue},
+ * {@link #reverseReceipt}, and {@link #revalueAdjustment} each have a public retry wrapper and a
+ * private {@code doXxx()} implementation, mirroring {@link #recomputeOnReceipt}.
+ *
+ * <p>FIX G (adversarial review): {@link #costIssue} guards against zero issued qty to avoid
+ * division by zero in the unit-cost re-derivation in {@link com.erp.modules.stock.events.SaleIssueStockHandler}.
  */
 @Service
 @Transactional(propagation = Propagation.MANDATORY)
@@ -42,6 +53,9 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
     private static final RoundingMode RM = RoundingMode.HALF_UP;
     /** Base currency code used in GL line memos — sourced from context in operator paths. */
     private static final String BASE_CURRENCY = "TZS";
+    /** Retry-log template shared by all cost-mutation retry wrappers (FIX D). */
+    private static final String RETRY_MSG =
+            "company={} product={} — retrying once (FIX D / NFR-INV-05)";
 
     private final StockOnHandRepository onHands;
     private final InventoryGlPoster     glPoster;
@@ -118,11 +132,31 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
 
     // -------------------------------------------------------------------------
     // (b) Cost-issue: debit on_hand_value at current avg (ADR-0020 D-4b)
+    //     FIX D: public wrapper retries once on optimistic lock clash.
+    //     FIX G: guard against zero issued qty (div-by-zero in unit-cost re-derivation).
     // -------------------------------------------------------------------------
 
     @Override
     public BigDecimal costIssue(Long companyId, Long branchId, Long productId,
                                  BigDecimal issuedQty) {
+        try {
+            return doCostIssue(companyId, branchId, productId, issuedQty);
+        } catch (ObjectOptimisticLockingFailureException ex) {
+            log.debug("InventoryValuation: optimistic lock clash on costIssue " + RETRY_MSG,
+                    companyId, productId);
+            return doCostIssue(companyId, branchId, productId, issuedQty);
+        }
+    }
+
+    private BigDecimal doCostIssue(Long companyId, Long branchId, Long productId,
+                                    BigDecimal issuedQty) {
+        // FIX G: zero issued qty — skip COGS leg, no division
+        if (issuedQty == null || issuedQty.compareTo(BigDecimal.ZERO) == 0) {
+            log.warn("InventoryValuation: costIssue — issuedQty is zero for company={} product={} " +
+                             "— COGS leg skipped (FIX G div-guard)", companyId, productId);
+            return null;
+        }
+
         StockOnHand soh = onHands.findByCompanyIdAndBranchIdAndProductId(companyId, branchId, productId)
                 .orElse(null);
 
@@ -143,11 +177,23 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
 
     // -------------------------------------------------------------------------
     // (c) Reverse issue: restore on_hand_value at original cost (ADR-0020 D-5)
+    //     FIX D: public wrapper retries once on optimistic lock clash.
     // -------------------------------------------------------------------------
 
     @Override
     public void reverseIssue(Long companyId, Long branchId, Long productId,
                               BigDecimal originalValue) {
+        try {
+            doReverseIssue(companyId, branchId, productId, originalValue);
+        } catch (ObjectOptimisticLockingFailureException ex) {
+            log.debug("InventoryValuation: optimistic lock clash on reverseIssue " + RETRY_MSG,
+                    companyId, productId);
+            doReverseIssue(companyId, branchId, productId, originalValue);
+        }
+    }
+
+    private void doReverseIssue(Long companyId, Long branchId, Long productId,
+                                 BigDecimal originalValue) {
         StockOnHand soh = onHands.findByCompanyIdAndBranchIdAndProductId(companyId, branchId, productId)
                 .orElse(null);
         if (soh == null) return; // no on-hand row — cannot restore (shouldn't happen)
@@ -160,11 +206,26 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
 
     // -------------------------------------------------------------------------
     // (d) Reverse receipt: back out on_hand_value + recompute avg (ADR-0020 D-5)
+    //     FIX A: postReversalQty = soh.getQuantity().subtract(originalQty.abs())
+    //            because StockPostingService applies the negative qty delta AFTER this
+    //            method returns — soh holds the PRE-reversal qty at call time.
+    //     FIX D: public wrapper retries once on optimistic lock clash.
     // -------------------------------------------------------------------------
 
     @Override
     public void reverseReceipt(Long companyId, Long branchId, Long productId,
                                 BigDecimal originalQty, BigDecimal originalValue) {
+        try {
+            doReverseReceipt(companyId, branchId, productId, originalQty, originalValue);
+        } catch (ObjectOptimisticLockingFailureException ex) {
+            log.debug("InventoryValuation: optimistic lock clash on reverseReceipt " + RETRY_MSG,
+                    companyId, productId);
+            doReverseReceipt(companyId, branchId, productId, originalQty, originalValue);
+        }
+    }
+
+    private void doReverseReceipt(Long companyId, Long branchId, Long productId,
+                                   BigDecimal originalQty, BigDecimal originalValue) {
         StockOnHand soh = onHands.findByCompanyIdAndBranchIdAndProductId(companyId, branchId, productId)
                 .orElse(null);
         if (soh == null) return;
@@ -172,9 +233,12 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
         BigDecimal onHandVal = soh.getOnHandValue() != null ? soh.getOnHandValue() : BigDecimal.ZERO;
 
         BigDecimal newValue = onHandVal.subtract(originalValue);
-        // StockPostingService applied the negative delta BEFORE we are called,
-        // so soh.quantity already holds the post-reversal qty.
-        BigDecimal postReversalQty = soh.getQuantity();
+
+        // FIX A: StockPostingService applies the negative qty delta AFTER this method is called
+        // (in GoodsReceiptReversalStockHandler, valuation.reverseReceipt runs before posting.post).
+        // soh.getQuantity() is still the PRE-reversal qty here — subtract the original receipt qty
+        // to derive the POST-reversal qty (ADR-0020 D-5: newQty = qty − original.qty).
+        BigDecimal postReversalQty = soh.getQuantity().subtract(originalQty.abs());
 
         BigDecimal newAvg;
         if (postReversalQty.compareTo(BigDecimal.ZERO) > 0) {
@@ -248,11 +312,27 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
 
     // -------------------------------------------------------------------------
     // (f) Adjustment revaluation (ADR-0020 D-7)
+    //     FIX D: public wrapper retries once on optimistic lock clash.
     // -------------------------------------------------------------------------
 
     @Override
     public void revalueAdjustment(String movementUid, StockOnHand soh, BigDecimal adjustQty,
                                    LocalDate postingDate) {
+        try {
+            doRevalueAdjustment(movementUid, soh, adjustQty, postingDate);
+        } catch (ObjectOptimisticLockingFailureException ex) {
+            log.debug("InventoryValuation: optimistic lock clash on revalueAdjustment " +
+                              "company={} movement={} — retrying once (FIX D / NFR-INV-05)",
+                    soh.getCompanyId(), movementUid);
+            // Re-read fresh soh state before retry
+            StockOnHand freshSoh = onHands.findByCompanyIdAndBranchIdAndProductId(
+                    soh.getCompanyId(), soh.getBranchId(), soh.getProductId()).orElse(soh);
+            doRevalueAdjustment(movementUid, freshSoh, adjustQty, postingDate);
+        }
+    }
+
+    private void doRevalueAdjustment(String movementUid, StockOnHand soh, BigDecimal adjustQty,
+                                      LocalDate postingDate) {
         if (soh.getAvgCost() == null) {
             log.warn("InventoryValuation: revalueAdjustment — avg_cost IS NULL for company={} product={} " +
                              "movement={} — GL leg skipped (D-2 edge)", soh.getCompanyId(), soh.getProductId(), movementUid);
@@ -274,8 +354,9 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
         // Post GL directly — a missing config MUST fail the operator's command (BR-INV-12)
         glPoster.postAdjustmentDirect(
                 soh.getCompanyId(), soh.getBranchId(), postingDate,
-                movementUid, BASE_CURRENCY, value, decrease,
-                actorId(RequestContext.get()));
+                new InventoryGlPoster.AdjustmentPostCmd(
+                        movementUid, BASE_CURRENCY, value, decrease,
+                        actorId(RequestContext.get())));
     }
 
     // -------------------------------------------------------------------------
