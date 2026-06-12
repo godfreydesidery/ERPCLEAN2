@@ -84,13 +84,23 @@ public class ApprovalEngineImpl implements ApprovalEngine {
         RequestContext.Principal principal = RequestContext.get();
         scopeGuard.assertCanActIn(principal, req.companyId());
 
-        // Idempotency check — return existing request if already submitted (BR-APR-08)
+        // Idempotency check — return existing PENDING request; reject re-submit of a terminal one
+        // (BR-APR-08 + OQ-APR-06: "blocked — the consumer raises a new document (new uid)").
+        // Finding 5 fix: returning a terminal request as if it were active would let a consumer's
+        // workflow believe the old rejection is still in-progress.
         Optional<ApprovalRequest> existing = requestRepo.findByCompanyIdAndDocumentTypeAndDocumentUid(
                 req.companyId(), req.documentType(), req.documentUid());
         if (existing.isPresent()) {
-            log.debug("submitForApproval idempotency hit: existing request {} for ({}, {})",
-                      existing.get().getUid(), req.documentType(), req.documentUid());
-            return toDto(existing.get());
+            ApprovalRequest existingReq = existing.get();
+            if (!existingReq.getStatus().isTerminal()) {
+                log.debug("submitForApproval idempotency hit: returning PENDING request {} for ({}, {})",
+                          existingReq.getUid(), req.documentType(), req.documentUid());
+                return toDto(existingReq);
+            }
+            throw new com.erp.platform.common.api.ConflictException(
+                    "Document '" + req.documentType() + "/" + req.documentUid()
+                    + "' was already resolved with status " + existingReq.getStatus()
+                    + "; submit with a new document UID (OQ-APR-06)");
         }
 
         Long branchId = branchRepo.findByUid(req.branchUid())

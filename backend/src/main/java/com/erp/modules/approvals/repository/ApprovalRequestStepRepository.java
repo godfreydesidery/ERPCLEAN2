@@ -5,6 +5,7 @@ import com.erp.modules.approvals.domain.enums.ApprovalStepStatus;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -46,17 +47,39 @@ public interface ApprovalRequestStepRepository extends JpaRepository<ApprovalReq
                                                                 ApprovalStepStatus status);
 
     /**
+     * Atomically sets every PENDING step on a request to SKIPPED in a single DML statement
+     * (Finding 1 fix — ADR-0022 D-6 "one reject kills the chain"). A single UPDATE is
+     * atomic and eliminates the risk of intermediate inconsistent state from an entity loop.
+     * {@code @Modifying} clears the 1st-level cache after execution so subsequent reads see
+     * the updated status.
+     */
+    @Modifying(clearAutomatically = true)
+    @Query("""
+            UPDATE ApprovalRequestStep s
+            SET s.status = com.erp.modules.approvals.domain.enums.ApprovalStepStatus.SKIPPED
+            WHERE s.approvalRequestId = :requestId
+              AND s.status = com.erp.modules.approvals.domain.enums.ApprovalStepStatus.PENDING
+            """)
+    void updatePendingToSkipped(@Param("requestId") Long requestId);
+
+    /**
      * Inbox query: find request ids for PENDING requests where the current open step matches one of
-     * the caller's role codes, in the caller's company, excluding requests submitted by the caller.
+     * the caller's role codes, in the caller's company, excluding requests submitted by the caller,
+     * AND (for branch-scoped requests) the caller has a user_branch assignment for the request's
+     * branch (Finding 2 fix — ADR-0022 D-8: "for a BRANCH-scoped request the user has access to
+     * that branch via user_branch"). The LEFT JOIN + IS NOT NULL pattern mirrors canDecide().
      */
     @Query("""
             SELECT DISTINCT s.approvalRequestId FROM ApprovalRequestStep s
             JOIN ApprovalRequest r ON r.id = s.approvalRequestId
+            LEFT JOIN com.erp.modules.iam.domain.entity.UserBranch ub
+                   ON ub.userId = :callerId AND ub.branch.id = r.branchId
             WHERE s.status = com.erp.modules.approvals.domain.enums.ApprovalStepStatus.PENDING
               AND r.status = com.erp.modules.approvals.domain.enums.ApprovalRequestStatus.PENDING
               AND r.companyId = :companyId
               AND s.approverRoleCode IN :roleCodes
               AND r.submittedBy <> :callerId
+              AND ub.userId IS NOT NULL
               AND s.sequence = (
                   SELECT MIN(s2.sequence) FROM ApprovalRequestStep s2
                   WHERE s2.approvalRequestId = s.approvalRequestId
