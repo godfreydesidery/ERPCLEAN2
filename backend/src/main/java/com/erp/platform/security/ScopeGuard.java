@@ -7,6 +7,14 @@ import com.erp.modules.crm.repository.ActivityRepository;
 import com.erp.modules.crm.repository.LeadRepository;
 import com.erp.modules.crm.repository.OpportunityRepository;
 import com.erp.modules.crm.repository.PipelineStageRepository;
+// sales-depth (ADR-0029)
+import com.erp.modules.sales.repository.PosTillRepository;
+import com.erp.modules.sales.repository.PosSessionRepository;
+import com.erp.modules.sales.repository.BlanketOrderRepository;
+import com.erp.modules.sales.repository.StandingOrderRepository;
+import com.erp.modules.products.repository.PriceTierRepository;
+import com.erp.modules.products.repository.CustomerPriceRepository;
+import com.erp.modules.products.repository.PromotionRepository;
 import com.erp.modules.ap.repository.ApDebitNoteRepository;
 import com.erp.modules.ap.repository.ApPaymentRepository;
 import com.erp.modules.ap.repository.SupplierBillRepository;
@@ -164,6 +172,14 @@ public class ScopeGuard {
     private final OpportunityRepository      crmOpportunities;
     private final ActivityRepository         crmActivities;
     private final PipelineStageRepository    crmPipelineStages;
+    // sales-depth (ADR-0029)
+    private final PosTillRepository          posTills;
+    private final PosSessionRepository       posSessions;
+    private final BlanketOrderRepository     blanketOrders;
+    private final StandingOrderRepository    standingOrders;
+    private final PriceTierRepository        priceTiers;
+    private final CustomerPriceRepository    customerPrices;
+    private final PromotionRepository        promotions;
     private final AuditService             audit;
 
     public ScopeGuard(CompanyRepository companies,
@@ -231,6 +247,14 @@ public class ScopeGuard {
                       OpportunityRepository crmOpportunities,
                       ActivityRepository crmActivities,
                       PipelineStageRepository crmPipelineStages,
+                      // sales-depth (ADR-0029)
+                      PosTillRepository posTills,
+                      PosSessionRepository posSessions,
+                      BlanketOrderRepository blanketOrders,
+                      StandingOrderRepository standingOrders,
+                      PriceTierRepository priceTiers,
+                      CustomerPriceRepository customerPrices,
+                      PromotionRepository promotions,
                       AuditService audit) {
         this.companies      = companies;
         this.branches       = branches;
@@ -297,6 +321,14 @@ public class ScopeGuard {
         this.crmOpportunities    = crmOpportunities;
         this.crmActivities       = crmActivities;
         this.crmPipelineStages   = crmPipelineStages;
+        // sales-depth (ADR-0029)
+        this.posTills            = posTills;
+        this.posSessions         = posSessions;
+        this.blanketOrders       = blanketOrders;
+        this.standingOrders      = standingOrders;
+        this.priceTiers          = priceTiers;
+        this.customerPrices      = customerPrices;
+        this.promotions          = promotions;
         this.audit               = audit;
     }
 
@@ -386,6 +418,14 @@ public class ScopeGuard {
             case "opportunity"         -> crmOpportunities.findCompanyIdByUid(uid);
             case "activity"            -> crmActivities.findCompanyIdByUid(uid);
             case "pipelinestage"       -> crmPipelineStages.findCompanyIdByUid(uid);
+            // sales-depth target types (ADR-0029)
+            case "postill"             -> posTills.findCompanyIdByUid(uid);
+            case "possession"          -> posSessions.findCompanyIdByUid(uid);
+            case "blanketorder"        -> blanketOrders.findCompanyIdByUid(uid);
+            case "standingorder"       -> standingOrders.findCompanyIdByUid(uid);
+            case "pricetier"           -> priceTiers.findCompanyIdByUid(uid);
+            case "customerprice"       -> customerPrices.findCompanyIdByUid(uid);
+            case "promotion"           -> promotions.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };

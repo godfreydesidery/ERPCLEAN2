@@ -1,6 +1,7 @@
 package com.erp.modules.sales.repository;
 
 import com.erp.modules.sales.domain.entity.SalesInvoice;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -38,6 +39,28 @@ public interface SalesInvoiceRepository extends JpaRepository<SalesInvoice, Long
      * Scoped in the query so no cross-tenant read is possible.
      */
     Optional<SalesInvoice> findByUidAndCompanyId(String uid, Long companyId);
+
+    /**
+     * Gross total of all FINALISED POS invoices for a session — used by PosSessionServiceImpl
+     * to compute expected cash at session close (ADR-0029 D-5).
+     */
+    @Query("""
+            SELECT COALESCE(SUM(i.grossTotalAmount), 0)
+            FROM SalesInvoice i
+            WHERE i.posSessionId = :sessionId
+              AND i.status = 'FINALISED'
+            """)
+    BigDecimal sumGrossByPosSession(@Param("sessionId") Long sessionId);
+
+    /**
+     * Count of FINALISED invoices for a session — for X/Z-read reports.
+     */
+    @Query("""
+            SELECT COUNT(i) FROM SalesInvoice i
+            WHERE i.posSessionId = :sessionId
+              AND i.status = 'FINALISED'
+            """)
+    long countByPosSession(@Param("sessionId") Long sessionId);
 
     /**
      * FINALISED invoices whose finalised_at falls in [periodStart, periodEnd) —

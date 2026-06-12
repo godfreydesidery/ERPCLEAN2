@@ -169,6 +169,15 @@ public class SalesInvoice extends UidEntity {
     @Setter
     private Long departmentValueId;
 
+    // --- sales-depth (ADR-0029 D-5, V43) — POS session tag ---
+    /**
+     * FK → pos_sessions.id; set when origin=POS; null for all other origins.
+     * The till-closure reconciliation reads all FINALISED invoices with this session id.
+     */
+    @Column(name = "pos_session_id")
+    @Setter
+    private Long posSessionId;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

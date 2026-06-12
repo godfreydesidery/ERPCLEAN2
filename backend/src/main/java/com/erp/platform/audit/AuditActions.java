@@ -282,4 +282,46 @@ public final class AuditActions {
     public static final String CRM_STAGE_CREATE      = "CRM.STAGE.CREATE";
     public static final String CRM_STAGE_UPDATE      = "CRM.STAGE.UPDATE";
     public static final String CRM_STAGE_DEACTIVATE  = "CRM.STAGE.DEACTIVATE";
+
+    // ---- Sales Depth (ADR-0029) ----
+    // POS till
+    public static final String POS_TILL_CREATE           = "POS.TILL.CREATE";
+    public static final String POS_TILL_UPDATE           = "POS.TILL.UPDATE";
+    public static final String POS_TILL_DEACTIVATE       = "POS.TILL.DEACTIVATE";
+    // POS session lifecycle
+    public static final String POS_SESSION_OPEN          = "POS.SESSION.OPEN";
+    public static final String POS_SESSION_PAYOUT        = "POS.SESSION.PAYOUT";
+    public static final String POS_SESSION_CLOSE         = "POS.SESSION.CLOSE";
+    public static final String POS_SESSION_RECONCILE     = "POS.SESSION.RECONCILE";
+    // POS sale / refund
+    public static final String POS_SALE_RING             = "POS.SALE.RING";
+    public static final String POS_SALE_FINALISE         = "POS.SALE.FINALISE";
+    public static final String POS_REFUND                = "POS.REFUND";
+    // Pricing rules
+    public static final String PRICING_TIER_CREATE       = "PRICING.TIER.CREATE";
+    public static final String PRICING_TIER_UPDATE       = "PRICING.TIER.UPDATE";
+    public static final String PRICING_TIER_DEACTIVATE   = "PRICING.TIER.DEACTIVATE";
+    public static final String CUSTOMER_PRICE_CREATE     = "PRICING.CUSTOMER_PRICE.CREATE";
+    public static final String CUSTOMER_PRICE_UPDATE     = "PRICING.CUSTOMER_PRICE.UPDATE";
+    public static final String CUSTOMER_PRICE_DEACTIVATE = "PRICING.CUSTOMER_PRICE.DEACTIVATE";
+    public static final String PROMOTION_CREATE          = "PRICING.PROMOTION.CREATE";
+    public static final String PROMOTION_UPDATE          = "PRICING.PROMOTION.UPDATE";
+    public static final String PROMOTION_DEACTIVATE      = "PRICING.PROMOTION.DEACTIVATE";
+    // Drop-ship
+    public static final String DROPSHIP_FLAG             = "DROPSHIP.FLAG";
+    public static final String DROPSHIP_PO_RAISED        = "DROPSHIP.PO.RAISED";
+    public static final String DROPSHIP_FULFILLED        = "DROPSHIP.FULFILLED";
+    // Blanket orders
+    public static final String BLANKET_ORDER_CREATE      = "BLANKET.ORDER.CREATE";
+    public static final String BLANKET_ORDER_DRAW        = "BLANKET.ORDER.DRAW";
+    public static final String BLANKET_ORDER_CANCEL      = "BLANKET.ORDER.CANCEL";
+    public static final String BLANKET_ORDER_CALLOFF     = "BLANKET.ORDER.CALLOFF";
+    public static final String BLANKET_ORDER_CLOSE       = "BLANKET.ORDER.CLOSE";
+    // Standing orders
+    public static final String STANDING_ORDER_CREATE     = "STANDING.ORDER.CREATE";
+    public static final String STANDING_ORDER_PAUSE      = "STANDING.ORDER.PAUSE";
+    public static final String STANDING_ORDER_RESUME     = "STANDING.ORDER.RESUME";
+    public static final String STANDING_ORDER_CANCEL     = "STANDING.ORDER.CANCEL";
+    public static final String STANDING_ORDER_GENERATE   = "STANDING.ORDER.GENERATE";
+    public static final String STANDING_ORDER_GENERATED  = "STANDING.ORDER.GENERATED";
 }
