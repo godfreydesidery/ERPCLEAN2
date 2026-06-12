@@ -61,6 +61,18 @@ public class SalesOrder extends UidEntity {
     @Setter
     private String sourceOpportunityUid;
 
+    // --- sales-depth (ADR-0029 D-7/D-8, V45) --- blanket/standing back-links ---
+
+    /** UID of the blanket order this SO draws from (ADR-0029 D-7). Nullable. */
+    @Column(name = "source_blanket_uid", length = 26)
+    @Setter
+    private String sourceBlanketUid;
+
+    /** UID of the standing order that generated this SO (ADR-0029 D-8). Nullable. */
+    @Column(name = "source_standing_uid", length = 26)
+    @Setter
+    private String sourceStandingUid;
+
     @Column(name = "doc_discount_amount", precision = 19, scale = 4)
     @Setter
     private BigDecimal docDiscountAmount;

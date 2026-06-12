@@ -72,8 +72,9 @@ CREATE INDEX ix_stock_movements_location
     ON stock_movements (company_id, branch_id, location_id, product_id, occurred_at);
 
 -- ============================================================================
--- (4) Widen chk_stock_movement_type to admit TRANSFER_OUT + TRANSFER_IN
+-- (4) Widen chk_stock_movement_type to admit TRANSFER_OUT + TRANSFER_IN + PURCHASE_RETURN
 --     Union of ALL prior tokens + new tokens (additive DROP/ADD pattern, D-3, OQ-STOCK-08).
+--     PURCHASE_RETURN added here as superset for procurement-depth (V36 runs before V38).
 -- ============================================================================
 ALTER TABLE stock_movements
     DROP CONSTRAINT IF EXISTS chk_stock_movement_type;
@@ -83,7 +84,9 @@ ALTER TABLE stock_movements
         movement_type IN (
             'GOODS_RECEIPT', 'SALE_ISSUE', 'SALE_REVERSAL',
             'GOODS_RECEIPT_REVERSAL', 'ADJUSTMENT', 'OPENING_BALANCE',
-            'TRANSFER_OUT', 'TRANSFER_IN'
+            'TRANSFER_OUT', 'TRANSFER_IN',
+            -- procurement-depth (ADR-0027) ---
+            'PURCHASE_RETURN'
         )
     );
 

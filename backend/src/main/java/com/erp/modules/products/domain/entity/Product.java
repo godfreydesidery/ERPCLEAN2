@@ -99,6 +99,14 @@ public class Product extends UidEntity {
     @Setter
     private MasterStatus status = MasterStatus.ACTIVE;
 
+    /**
+     * Optional product category string — used by promotion CATEGORY target (ADR-0029 D-6, OQ-SD-05).
+     * Nullable; no new category master in v1.
+     */
+    @Column(name = "category", length = 60)
+    @Setter
+    private String category;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

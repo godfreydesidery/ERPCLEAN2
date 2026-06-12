@@ -86,6 +86,17 @@ public final class DomainEventType {
     public static final String AGG_LANDED_COST    = "LANDED_COST";
     public static final String AGG_PURCHASE_RETURN = "PURCHASE_RETURN";
 
+    // --- sales-depth (ADR-0029) ---
+
+    /** Drop-ship SO line fulfilled by supplier — triggers COGS at supplier cost (ADR-0029 D-11). */
+    public static final String DROPSHIP_FULFILLED       = "DROPSHIP.FULFILLED";
+
+    /** Standing order generation run produced a child SO (ADR-0029 D-14). */
+    public static final String STANDING_ORDER_GENERATED = "STANDING_ORDER.GENERATED";
+
+    public static final String AGG_SALES_ORDER    = "SALES_ORDER";
+    public static final String AGG_STANDING_ORDER = "STANDING_ORDER";
+
     private DomainEventType() {
     }
 }

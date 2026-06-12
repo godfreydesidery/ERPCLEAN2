@@ -131,6 +131,17 @@ public class PurchaseOrder extends UidEntity {
     @Setter
     private String sourceRequisitionUid;
 
+    // --- sales-depth (ADR-0029 D-3, V44) — drop-ship seam fields ---
+    /** FK → customers.id; set only on a drop-ship PO (ship directly to this customer). Nullable. */
+    @Column(name = "ship_to_customer_id")
+    @Setter
+    private Long shipToCustomerId;
+
+    /** UID of the sales order line that triggered this drop-ship PO. Nullable. */
+    @Column(name = "source_sales_order_uid", length = 26)
+    @Setter
+    private String sourceSalesOrderUid;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

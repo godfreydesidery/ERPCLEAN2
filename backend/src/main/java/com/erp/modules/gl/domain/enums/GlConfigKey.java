@@ -29,6 +29,9 @@ public enum GlConfigKey {
     // --- Inventory Valuation & COGS increment (ADR-0020 D-8) ---
     GRNI,
     STOCK_ADJUSTMENT,
+    // --- sales-depth (ADR-0029 D-4) — POS over/short variance accounts ---
+    POS_CASH_OVER,
+    POS_CASH_SHORT,
     // --- Fixed Assets increment (ADR-0030 D-3) ---
     FIXED_ASSETS,
     FIXED_ASSET_CLEARING,

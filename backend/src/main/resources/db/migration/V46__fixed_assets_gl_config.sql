@@ -128,8 +128,8 @@ ON CONFLICT (company_id, config_key) DO NOTHING;
 
 -- ============================================================================
 -- (4) journal source-type CHECK widens
--- Add FA_ACQUISITION, DEPRECIATION (admit the reserved token), FA_DISPOSAL, FA_REVALUATION.
--- Full union of V17 tokens + new tokens; V10–V17 DDL untouched.
+-- Full union: V17 base + procurement tokens (V36) + POS_VARIANCE (V43) + FA tokens.
+-- Superset of all prior DROP/ADD so no existing row violates the constraint.
 -- ============================================================================
 ALTER TABLE journal_batches
     DROP CONSTRAINT IF EXISTS chk_journal_batch_source_type;
@@ -144,6 +144,10 @@ ALTER TABLE journal_batches
             'VAT_RETURN',
             'YEAR_END_CLOSE',
             'STOCK_RECEIPT','COGS','STOCK_ADJUSTMENT','OPENING_INVENTORY',
+            -- procurement-depth (ADR-0027) ---
+            'LANDED_COST','PURCHASE_RETURN',
+            -- sales-depth (ADR-0029) ---
+            'POS_VARIANCE',
             -- fixed-assets (ADR-0030) ---
             'FA_ACQUISITION','DEPRECIATION','FA_DISPOSAL','FA_REVALUATION'
         ));
@@ -161,6 +165,10 @@ ALTER TABLE journal_entries
             'VAT_RETURN',
             'YEAR_END_CLOSE',
             'STOCK_RECEIPT','COGS','STOCK_ADJUSTMENT','OPENING_INVENTORY',
+            -- procurement-depth (ADR-0027) ---
+            'LANDED_COST','PURCHASE_RETURN',
+            -- sales-depth (ADR-0029) ---
+            'POS_VARIANCE',
             -- fixed-assets (ADR-0030) ---
             'FA_ACQUISITION','DEPRECIATION','FA_DISPOSAL','FA_REVALUATION'
         ));

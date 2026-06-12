@@ -50,7 +50,10 @@ public class GlConfigServiceImpl implements GlConfigService {
             Map.entry(GlConfigKey.GRNI,                "2150"),
             Map.entry(GlConfigKey.STOCK_ADJUSTMENT,    "5160"),
             // procurement-depth (ADR-0027 D-9)
-            Map.entry(GlConfigKey.LANDED_COST_CLEARING, "2160")
+            Map.entry(GlConfigKey.LANDED_COST_CLEARING, "2160"),
+            // sales-depth (ADR-0029 D-4) — POS over/short variance accounts
+            Map.entry(GlConfigKey.POS_CASH_OVER,       "4900"),
+            Map.entry(GlConfigKey.POS_CASH_SHORT,      "5170")
     );
 
     private final GlConfigRepository configs;

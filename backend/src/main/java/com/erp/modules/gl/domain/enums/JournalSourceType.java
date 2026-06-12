@@ -33,6 +33,8 @@ public enum JournalSourceType {
     COGS,
     STOCK_ADJUSTMENT,
     OPENING_INVENTORY,
+    // --- sales-depth (ADR-0029) — POS variance posting; admitted by the DB CHECK (V43 widens it) ---
+    POS_VARIANCE,
     // --- Fixed Assets increment (ADR-0030 D-6) — admitted by the DB CHECK (V46 widens it) ---
     FA_ACQUISITION,
     DEPRECIATION,

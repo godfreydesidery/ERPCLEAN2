@@ -13,6 +13,14 @@ import com.erp.modules.purchases.repository.RfqRepository;
 import com.erp.modules.purchases.repository.SupplierQuoteRepository;
 import com.erp.modules.purchases.repository.LandedCostRepository;
 import com.erp.modules.purchases.repository.PurchaseReturnRepository;
+// sales-depth (ADR-0029)
+import com.erp.modules.sales.repository.PosTillRepository;
+import com.erp.modules.sales.repository.PosSessionRepository;
+import com.erp.modules.sales.repository.BlanketOrderRepository;
+import com.erp.modules.sales.repository.StandingOrderRepository;
+import com.erp.modules.products.repository.PriceTierRepository;
+import com.erp.modules.products.repository.CustomerPriceRepository;
+import com.erp.modules.products.repository.PromotionRepository;
 import com.erp.modules.ap.repository.ApDebitNoteRepository;
 import com.erp.modules.ap.repository.ApPaymentRepository;
 import com.erp.modules.ap.repository.SupplierBillRepository;
@@ -176,6 +184,14 @@ public class ScopeGuard {
     private final SupplierQuoteRepository       supplierQuotes;
     private final LandedCostRepository          landedCosts;
     private final PurchaseReturnRepository      purchaseReturns;
+    // sales-depth (ADR-0029)
+    private final PosTillRepository          posTills;
+    private final PosSessionRepository       posSessions;
+    private final BlanketOrderRepository     blanketOrders;
+    private final StandingOrderRepository    standingOrders;
+    private final PriceTierRepository        priceTiers;
+    private final CustomerPriceRepository    customerPrices;
+    private final PromotionRepository        promotions;
     private final AuditService             audit;
 
     public ScopeGuard(CompanyRepository companies,
@@ -249,6 +265,14 @@ public class ScopeGuard {
                       SupplierQuoteRepository supplierQuotes,
                       LandedCostRepository landedCosts,
                       PurchaseReturnRepository purchaseReturns,
+                      // sales-depth (ADR-0029)
+                      PosTillRepository posTills,
+                      PosSessionRepository posSessions,
+                      BlanketOrderRepository blanketOrders,
+                      StandingOrderRepository standingOrders,
+                      PriceTierRepository priceTiers,
+                      CustomerPriceRepository customerPrices,
+                      PromotionRepository promotions,
                       AuditService audit) {
         this.companies      = companies;
         this.branches       = branches;
@@ -321,6 +345,14 @@ public class ScopeGuard {
         this.supplierQuotes       = supplierQuotes;
         this.landedCosts          = landedCosts;
         this.purchaseReturns      = purchaseReturns;
+        // sales-depth (ADR-0029)
+        this.posTills            = posTills;
+        this.posSessions         = posSessions;
+        this.blanketOrders       = blanketOrders;
+        this.standingOrders      = standingOrders;
+        this.priceTiers          = priceTiers;
+        this.customerPrices      = customerPrices;
+        this.promotions          = promotions;
         this.audit               = audit;
     }
 
@@ -416,6 +448,14 @@ public class ScopeGuard {
             case "supplierquote"       -> supplierQuotes.findCompanyIdByUid(uid);
             case "landedcost"          -> landedCosts.findCompanyIdByUid(uid);
             case "purchasereturn"      -> purchaseReturns.findCompanyIdByUid(uid);
+            // sales-depth target types (ADR-0029)
+            case "postill"             -> posTills.findCompanyIdByUid(uid);
+            case "possession"          -> posSessions.findCompanyIdByUid(uid);
+            case "blanketorder"        -> blanketOrders.findCompanyIdByUid(uid);
+            case "standingorder"       -> standingOrders.findCompanyIdByUid(uid);
+            case "pricetier"           -> priceTiers.findCompanyIdByUid(uid);
+            case "customerprice"       -> customerPrices.findCompanyIdByUid(uid);
+            case "promotion"           -> promotions.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };

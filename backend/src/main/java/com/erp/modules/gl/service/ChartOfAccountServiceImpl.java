@@ -61,7 +61,10 @@ public class ChartOfAccountServiceImpl implements ChartOfAccountService {
             new Object[]{"2150", "Goods Received Not Invoiced", AccountType.LIABILITY},
             new Object[]{"5160", "Stock Adjustment / Shrinkage",AccountType.EXPENSE},
             // procurement-depth (ADR-0027 D-9)
-            new Object[]{"2160", "Landed Cost Clearing",        AccountType.LIABILITY}
+            new Object[]{"2160", "Landed Cost Clearing",        AccountType.LIABILITY},
+            // sales-depth (ADR-0029 D-4) — POS over/short variance accounts
+            new Object[]{"4900", "Cash Over (Till Surplus)",    AccountType.INCOME},
+            new Object[]{"5170", "Cash Short / Till Shortage",  AccountType.EXPENSE}
     );
 
     public ChartOfAccountServiceImpl(ChartOfAccountRepository accounts,
