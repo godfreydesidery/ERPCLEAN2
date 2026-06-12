@@ -9,6 +9,7 @@ import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.IdempotencyGuard;
 import com.erp.platform.security.RequestContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -66,25 +67,39 @@ public class LandedCostStockHandler implements DomainEventHandler {
         RequestContext.set(new RequestContext.Principal(
                 null, "SYSTEM", false, event.getCompanyId(), event.getBranchId(), null));
         try {
+            // Sum allocation lines as the authoritative GL amount (ADR-0027 D-5 / adversarial fix).
+            // Using payload.totalAmount() is unsafe: if the field is null, zero, or corrupted during
+            // serialisation the GL post would be skipped while inventory value was already updated,
+            // breaking the DR INVENTORY / CR LANDED_COST_CLEARING balance.  The line sum is always
+            // consistent with what was capitalised (the largest-remainder allocation loop guarantees
+            // Σ allocated == totalCharge exactly).
+            BigDecimal glAmount = BigDecimal.ZERO;
             for (LandedCostAllocatedPayload.AllocationLine line : payload.lines()) {
                 valuation.applyLandedCost(
                         payload.companyId(), payload.branchId(),
                         line.productId(), line.allocatedAmount());
+                if (line.allocatedAmount() != null) {
+                    glAmount = glAmount.add(line.allocatedAmount());
+                }
             }
 
-            // GL: DR INVENTORY / CR LANDED_COST_CLEARING — one journal per landed cost confirm
-            if (payload.totalAmount() != null
-                    && payload.totalAmount().signum() > 0) {
+            // GL: DR INVENTORY / CR LANDED_COST_CLEARING — one journal per landed cost confirm.
+            // Amount = sum of per-line allocations (not payload.totalAmount() — see above).
+            if (glAmount.signum() > 0) {
                 String glEntryUid = glPoster.postLandedCostInNewTx(
                         payload.companyId(), payload.branchId(), LocalDate.now(),
                         payload.landedCostUid(),
                         payload.currency() != null ? payload.currency() : "TZS",
-                        payload.totalAmount());
+                        glAmount);
                 if (glEntryUid == null) {
                     log.warn("LandedCostStockHandler: GL post returned null for landedCost={} " +
                                      "— LANDED_COST_CLEARING not configured (valuation still updated)",
                             payload.landedCostUid());
                 }
+            } else {
+                log.warn("LandedCostStockHandler: computed GL amount is zero for landedCost={} " +
+                                 "— no allocation lines had a positive amount; GL post skipped",
+                        payload.landedCostUid());
             }
 
         } finally {

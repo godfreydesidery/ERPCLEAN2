@@ -105,8 +105,20 @@ public class PurchaseReturnStockHandler implements DomainEventHandler {
                 // movement uid recorded on the return header by PurchaseReturnService
             }
 
-            // GL: DR GRNI / CR INVENTORY — one journal for the full return
+            // GL: DR GRNI / CR INVENTORY — one journal for the full return (ADR-0027 D-7).
+            // When billed=true the GRNI was already cleared to AP; the DR GRNI here re-opens it
+            // as a temporary accrual.  The AP debit note raised synchronously in the confirm TX
+            // (DR AP / CR Purchases) handles the payable side.  The GRNI will net to zero once
+            // the next bill-match posts DR GRNI / CR AP — or the finance team manually clears it.
+            // See ADR-0027 OQ-RETURN-GL for the accepted trade-off.
             if (totalReturnValue.signum() > 0) {
+                if (payload.billed()) {
+                    log.warn("PurchaseReturnStockHandler: return={} marks receipt as already " +
+                                     "billed — posting DR GRNI / CR INVENTORY re-opens GRNI that " +
+                                     "was cleared by the matched bill.  Verify GRNI account (2150) " +
+                                     "reconciliation after the next bill-match (ADR-0027 OQ-RETURN-GL).",
+                            payload.purchaseReturnUid());
+                }
                 String glEntryUid = glPoster.postPurchaseReturnInNewTx(
                         payload.companyId(), payload.branchId(), LocalDate.now(),
                         payload.purchaseReturnUid(), currency, totalReturnValue);
