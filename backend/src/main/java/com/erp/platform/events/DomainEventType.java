@@ -70,6 +70,10 @@ public final class DomainEventType {
 
     public static final String AGG_STOCK_TRANSFER        = "STOCK_TRANSFER";
     public static final String AGG_STOCK_COUNT           = "STOCK_COUNT";
+    // --- fixed-assets (ADR-0030) ---
+    /** A depreciation run completed and the GL journal was posted (ADR-0030 D-8). */
+    public static final String DEPRECIATION_RUN_EXECUTED = "DEPRECIATION.RUN.EXECUTED";
+    public static final String AGG_DEPRECIATION_RUN      = "DEPRECIATION_RUN";
 
     private DomainEventType() {
     }

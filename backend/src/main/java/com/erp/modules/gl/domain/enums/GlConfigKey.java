@@ -28,5 +28,12 @@ public enum GlConfigKey {
     RETAINED_EARNINGS,
     // --- Inventory Valuation & COGS increment (ADR-0020 D-8) ---
     GRNI,
-    STOCK_ADJUSTMENT
+    STOCK_ADJUSTMENT,
+    // --- Fixed Assets increment (ADR-0030 D-3) ---
+    FIXED_ASSETS,
+    FIXED_ASSET_CLEARING,
+    ACCUMULATED_DEPRECIATION,
+    DEPRECIATION_EXPENSE,
+    GAIN_LOSS_ON_DISPOSAL,
+    REVALUATION_RESERVE
 }

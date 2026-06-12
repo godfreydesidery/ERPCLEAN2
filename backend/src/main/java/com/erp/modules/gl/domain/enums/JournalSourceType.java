@@ -33,10 +33,14 @@ public enum JournalSourceType {
     COGS,
     STOCK_ADJUSTMENT,
     OPENING_INVENTORY,
+    // --- Fixed Assets increment (ADR-0030 D-6) — admitted by the DB CHECK (V46 widens it) ---
+    FA_ACQUISITION,
+    DEPRECIATION,
+    FA_DISPOSAL,
+    FA_REVALUATION,
     // --- RESERVED — NOT yet admitted by the DB CHECK; widen when the increment lands ---
     AR,
     AP,
     CASH,
-    PAYROLL,
-    DEPRECIATION
+    PAYROLL
 }
