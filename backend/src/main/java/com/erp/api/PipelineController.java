@@ -32,7 +32,7 @@ public class PipelineController {
      * GET /api/v1/crm/pipeline?companyId=1&branchId=2
      */
     @GetMapping
-    @PreAuthorize("@perm.has('CRM.OPPORTUNITY.VIEW')")
+    @PreAuthorize("@perm.has('CRM.PIPELINE.VIEW')")
     public PipelineSummaryDto pipeline(@RequestParam Long companyId,
                                         @RequestParam Long branchId) {
         return pipelineQuery.pipeline(companyId, branchId);
@@ -43,7 +43,7 @@ public class PipelineController {
      * GET /api/v1/crm/pipeline/forecast?companyId=1&branchId=2&from=2026-01-01&to=2026-03-31
      */
     @GetMapping("/forecast")
-    @PreAuthorize("@perm.has('CRM.OPPORTUNITY.VIEW')")
+    @PreAuthorize("@perm.has('CRM.PIPELINE.VIEW')")
     public ForecastDto forecast(@RequestParam Long companyId,
                                  @RequestParam Long branchId,
                                  @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -56,7 +56,7 @@ public class PipelineController {
      * GET /api/v1/crm/pipeline/kpis?companyId=1&branchId=2&from=2026-01-01&to=2026-03-31
      */
     @GetMapping("/kpis")
-    @PreAuthorize("@perm.has('CRM.OPPORTUNITY.VIEW')")
+    @PreAuthorize("@perm.has('CRM.PIPELINE.VIEW')")
     public CrmKpiDto kpis(@RequestParam Long companyId,
                            @RequestParam Long branchId,
                            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,

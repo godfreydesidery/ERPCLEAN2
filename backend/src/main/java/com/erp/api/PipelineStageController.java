@@ -41,14 +41,14 @@ public class PipelineStageController {
     }
 
     @GetMapping("/uid/{uid}")
-    @PreAuthorize("@perm.scoped(#uid,'pipelinestage','CRM.STAGE.VIEW')")
+    @PreAuthorize("@perm.scoped(#uid,'pipelinestage','CRM.OPPORTUNITY.VIEW')")
     public PipelineStageDto getByUid(@PathVariable String uid) {
         return stageService.getByUid(uid);
     }
 
     /** All stages for a company, ordered by displayOrder. */
     @GetMapping
-    @PreAuthorize("@perm.has('CRM.STAGE.VIEW')")
+    @PreAuthorize("@perm.has('CRM.OPPORTUNITY.VIEW')")
     public List<PipelineStageDto> listByCompany(@RequestParam Long companyId) {
         return stageService.listByCompany(companyId);
     }
