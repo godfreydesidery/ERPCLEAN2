@@ -73,6 +73,12 @@ import com.erp.modules.sales.repository.SalesReturnRepository;
 import com.erp.modules.sales.repository.TaxRateRepository;
 import com.erp.modules.stock.repository.StockMovementRepository;
 import com.erp.modules.stock.repository.StockOnHandRepository;
+// inventory-depth (ADR-0028 D-10)
+import com.erp.modules.stock.repository.StockLocationRepository;
+import com.erp.modules.stock.repository.StockTransferRepository;
+import com.erp.modules.stock.repository.StockCountRepository;
+import com.erp.modules.stock.repository.StockBatchRepository;
+import com.erp.modules.stock.repository.StockSerialRepository;
 // approvals (ADR-0022)
 import com.erp.modules.approvals.repository.ApprovalPolicyRepository;
 import com.erp.modules.approvals.repository.ApprovalRequestRepository;

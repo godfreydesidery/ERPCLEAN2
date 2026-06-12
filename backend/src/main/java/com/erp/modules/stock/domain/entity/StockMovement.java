@@ -26,6 +26,8 @@ import java.time.Instant;
  * {@code uq_stock_movement_source_event (source_event_uid, product_id)} DB backstop ensures a given
  * (event, product) is deducted at most once.
  *
+ * <p>ADR-0028 D-3: {@code location_id} column added (V38 re-grain).
+ *
  * <p>No Lombok on entities (PROJECT-CONVENTIONS).
  */
 @Entity

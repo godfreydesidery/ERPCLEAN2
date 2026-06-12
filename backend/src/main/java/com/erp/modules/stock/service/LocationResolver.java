@@ -60,11 +60,14 @@ public class LocationResolver {
     }
 
     /**
-     * Returns the in-transit location id for a branch. The V37 migration seeds one per branch
-     * (LocationType OTHER, code='TRANSIT-<branchCode>'). Returns the first non-default location
-     * of type OTHER if found, otherwise throws.
+     * Returns the in-transit location id for a branch. The V37 migration seeds exactly one per
+     * branch (LocationType OTHER, code='TRANSIT-&lt;branchCode&gt;'). If none exists, this method
+     * throws {@link IllegalStateException} — silently falling back to the default (WAREHOUSE)
+     * location would post TRANSFER_OUT to the wrong account and corrupt the 1300 recon invariant
+     * (ADR-0020 Σ on_hand_value == accountBalance(1300)).
      *
-     * <p>In production the in-transit location is seeded by V37. This method is a fallback.
+     * <p>FIX — Finding 3 (adversarial review): removed the {@code orElseGet(() -> defaultLocationId...)}
+     * fallback that silently routed in-transit movements to the branch default location.
      */
     @Transactional(readOnly = true)
     public Long inTransitLocationId(Long companyId, Long branchId) {
@@ -73,10 +76,14 @@ public class LocationResolver {
                         companyId, branchId, MasterStatus.ACTIVE)
                 .stream()
                 .filter(l -> !l.isDefault()
-                        && l.getLocationType() == com.erp.modules.stock.domain.enums.LocationType.OTHER)
+                        && l.getLocationType() == LocationType.OTHER)
                 .findFirst()
                 .map(StockLocation::getId)
-                .orElseGet(() -> defaultLocationId(companyId, branchId)); // fallback
+                .orElseThrow(() -> new IllegalStateException(
+                        "No in-transit location (LocationType.OTHER) found for company=" + companyId
+                        + " branch=" + branchId
+                        + " — V37 migration may have failed to seed the in-transit location. "
+                        + "Transfer dispatch cannot proceed without an in-transit location."));
     }
 
     /**
