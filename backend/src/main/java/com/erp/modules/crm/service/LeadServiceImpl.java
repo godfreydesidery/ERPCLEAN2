@@ -64,7 +64,11 @@ public class LeadServiceImpl implements LeadService {
         scopeGuard.assertCanActIn(ctx, companyId);
         Long branchId = requireBranchId(ctx);
 
+        // Allocate LEAD-#### before INSERT so lead_number NOT NULL is satisfied (D-8)
+        String number = numberGen.nextLead(companyId);
+
         Lead lead = new Lead(companyId, branchId, req.displayName(), req.leadSource(), actorId());
+        lead.setLeadNumber(number);
         lead.setCompanyName(req.companyName());
         lead.setContactPerson(req.contactPerson());
         lead.setPhone(req.phone());
@@ -73,9 +77,6 @@ public class LeadServiceImpl implements LeadService {
         lead.setNotes(req.notes());
 
         Lead saved = leads.save(lead);
-        // Allocate LEAD-#### at create (D-8)
-        String number = numberGen.nextLead(companyId);
-        saved.setLeadNumber(number);
 
         audit.record(AuditEvent.of(AuditActions.CRM_LEAD_CREATE, "leads",
                 saved.getId(), saved.getUid())

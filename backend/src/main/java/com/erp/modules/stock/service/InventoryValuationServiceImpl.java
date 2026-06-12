@@ -59,17 +59,20 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
 
     private final StockOnHandRepository onHands;
     private final InventoryGlPoster     glPoster;
+    private final LocationResolver      locationResolver;
     private final ScopeGuard            scopeGuard;
     private final AuditService          audit;
 
     public InventoryValuationServiceImpl(StockOnHandRepository onHands,
                                           InventoryGlPoster glPoster,
+                                          LocationResolver locationResolver,
                                           ScopeGuard scopeGuard,
                                           AuditService audit) {
-        this.onHands    = onHands;
-        this.glPoster   = glPoster;
-        this.scopeGuard = scopeGuard;
-        this.audit      = audit;
+        this.onHands          = onHands;
+        this.glPoster         = glPoster;
+        this.locationResolver = locationResolver;
+        this.scopeGuard       = scopeGuard;
+        this.audit            = audit;
     }
 
     // -------------------------------------------------------------------------
@@ -98,7 +101,10 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
         }
 
         StockOnHand soh = onHands.findByCompanyIdAndBranchIdAndProductId(companyId, branchId, productId)
-                .orElseGet(() -> onHands.save(new StockOnHand(companyId, branchId, productId)));
+                .orElseGet(() -> {
+                    Long locId = locationResolver.defaultLocationId(companyId, branchId);
+                    return onHands.save(new StockOnHand(companyId, branchId, locId, productId));
+                });
 
         BigDecimal qty        = soh.getQuantity();           // current on-hand qty (before this receipt)
         BigDecimal avgCost    = soh.getAvgCost();            // may be null

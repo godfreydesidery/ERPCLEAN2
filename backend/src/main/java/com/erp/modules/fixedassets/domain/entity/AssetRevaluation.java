@@ -50,7 +50,8 @@ public class AssetRevaluation extends UidEntity {
     @Column(name = "carrying_after", nullable = false, precision = 19, scale = 4)
     private BigDecimal carryingAfter;
 
-    @Column(name = "gl_entry_uid", nullable = false, length = 26)
+    /** Set after the GL journal is posted in the same TX; nullable until then. */
+    @Column(name = "gl_entry_uid", length = 26)
     @Setter
     private String glEntryUid;
 

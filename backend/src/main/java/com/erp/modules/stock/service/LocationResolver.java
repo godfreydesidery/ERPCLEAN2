@@ -1,9 +1,12 @@
 package com.erp.modules.stock.service;
 
 import com.erp.modules.stock.domain.entity.StockLocation;
+import com.erp.modules.stock.domain.enums.LocationType;
 import com.erp.modules.stock.repository.StockLocationRepository;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,6 +23,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 public class LocationResolver {
 
+    private static final Logger log = LoggerFactory.getLogger(LocationResolver.class);
+
     private final StockLocationRepository locations;
 
     public LocationResolver(StockLocationRepository locations) {
@@ -28,16 +33,30 @@ public class LocationResolver {
 
     /**
      * Returns the ID of the branch's default location (DR-INVD-03 / BR-INVD-04).
-     * Throws if no default has been seeded for this branch (should not happen post-V37 backfill).
+     * If no default location exists (e.g. a branch created after the V37 backfill, as in tests),
+     * one is created lazily — mirroring the V37 seed logic so that new branches work without
+     * manual setup.
      */
-    @Transactional(readOnly = true)
+    @Transactional
     public Long defaultLocationId(Long companyId, Long branchId) {
         return locations
                 .findByCompanyIdAndBranchIdAndIsDefaultTrue(companyId, branchId)
                 .map(StockLocation::getId)
-                .orElseThrow(() -> new NotFoundException(
-                        "No default stock location configured for branch " + branchId +
-                        " in company " + companyId + ". Run the V37 migration or create a default location."));
+                .orElseGet(() -> seedDefaultLocation(companyId, branchId));
+    }
+
+    /** Creates and persists the WAREHOUSE default location for a branch that has none (V37 parity). */
+    private Long seedDefaultLocation(Long companyId, Long branchId) {
+        log.info("LocationResolver: no default stock location for company={} branch={} — seeding one (V37 parity)",
+                companyId, branchId);
+        StockLocation loc = new StockLocation(
+                companyId, branchId,
+                "MAIN-" + branchId,
+                "Main Store",
+                LocationType.WAREHOUSE,
+                true,
+                null);
+        return locations.save(loc).getId();
     }
 
     /**

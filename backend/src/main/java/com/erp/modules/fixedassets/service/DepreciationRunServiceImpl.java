@@ -116,12 +116,15 @@ public class DepreciationRunServiceImpl implements DepreciationRunService {
 
         FiscalPeriod period = requirePeriod(req.fiscalPeriodUid());
 
-        // Idempotency check (D-4): if already run for this (company, period) → return it
+        // Idempotency guard (D-4): depreciation run is once per (company, period) — reject repeats
         Optional<DepreciationRun> existing =
                 runs.findByCompanyIdAndFiscalPeriodId(req.companyId(), period.getId());
         if (existing.isPresent()) {
-            return toDto(existing.get(),
-                    runLines.findByDepreciationRunId(existing.get().getId()));
+            throw new IllegalStateException(
+                    "Depreciation run already posted for company=" + req.companyId()
+                            + " period=" + req.fiscalPeriodUid()
+                            + " (run=" + existing.get().getRunNumber() + "). "
+                            + "Duplicate runs are not allowed (ADR-0030 D-4).");
         }
 
         // Period gate — must be OPEN and postingDate must fall in it

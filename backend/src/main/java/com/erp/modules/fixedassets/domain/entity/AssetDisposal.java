@@ -50,7 +50,8 @@ public class AssetDisposal extends UidEntity {
     @Column(name = "gain_loss_amount", nullable = false, precision = 19, scale = 4)
     private BigDecimal gainLossAmount;
 
-    @Column(name = "gl_entry_uid", nullable = false, length = 26)
+    /** Set after the GL journal is posted in the same TX; nullable until then. */
+    @Column(name = "gl_entry_uid", length = 26)
     @Setter
     private String glEntryUid;
 

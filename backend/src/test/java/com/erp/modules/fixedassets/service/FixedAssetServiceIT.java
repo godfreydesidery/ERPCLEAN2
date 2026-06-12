@@ -167,7 +167,7 @@ class FixedAssetServiceIT extends PostgresIntegrationTest {
         FixedAssetDto asset = registerAsset(cat.id(), "Dell Laptop",
                 new BigDecimal("2500000.00"), BigDecimal.ZERO,
                 DepreciationMethod.STRAIGHT_LINE, 36, null,
-                LocalDate.now().minusMonths(1), openPeriodDate);
+                openPeriodDate, openPeriodDate);
 
         assertThat(asset.uid()).isNotBlank();
         assertThat(asset.status()).isEqualTo(FixedAssetStatus.DRAFT);
@@ -186,7 +186,7 @@ class FixedAssetServiceIT extends PostgresIntegrationTest {
         FixedAssetDto asset = registerAsset(cat.id(), "Generator",
                 new BigDecimal("5000000.00"), new BigDecimal("500000.00"),
                 DepreciationMethod.STRAIGHT_LINE, 24, null,
-                LocalDate.now().minusMonths(2), openPeriodDate);
+                openPeriodDate, openPeriodDate);
 
         long journalsBefore = journalEntries.count();
         FixedAssetDto inService = assetService.placeInService(
@@ -222,7 +222,7 @@ class FixedAssetServiceIT extends PostgresIntegrationTest {
         FixedAssetDto asset = registerAsset(cat.id(), "Lathe Machine",
                 new BigDecimal("12000000.00"), BigDecimal.ZERO,
                 DepreciationMethod.STRAIGHT_LINE, 12, null,
-                LocalDate.now().minusMonths(3), openPeriodDate);
+                openPeriodDate, openPeriodDate);
         assetService.placeInService(asset.uid(), new PlaceInServiceRequest(openPeriodDate));
 
         long journalsBefore = journalEntries.count();
@@ -254,7 +254,7 @@ class FixedAssetServiceIT extends PostgresIntegrationTest {
         FixedAssetDto asset = registerAsset(cat.id(), "Asset For Idempotency",
                 new BigDecimal("6000000.00"), BigDecimal.ZERO,
                 DepreciationMethod.STRAIGHT_LINE, 12, null,
-                LocalDate.now().minusMonths(1), openPeriodDate);
+                openPeriodDate, openPeriodDate);
         assetService.placeInService(asset.uid(), new PlaceInServiceRequest(openPeriodDate));
 
         runService.post(new RunDepreciationRequest(companyId, openPeriodUid, openPeriodDate));
@@ -280,7 +280,7 @@ class FixedAssetServiceIT extends PostgresIntegrationTest {
         FixedAssetDto asset = registerAsset(cat.id(), "Old Vehicle",
                 new BigDecimal("8000000.00"), BigDecimal.ZERO,
                 DepreciationMethod.STRAIGHT_LINE, 6, null,
-                LocalDate.now().minusMonths(6), openPeriodDate);
+                openPeriodDate, openPeriodDate);
         assetService.placeInService(asset.uid(), new PlaceInServiceRequest(openPeriodDate));
 
         // Run one depreciation period first

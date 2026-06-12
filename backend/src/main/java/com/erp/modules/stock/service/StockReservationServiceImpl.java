@@ -26,9 +26,12 @@ public class StockReservationServiceImpl implements StockReservationService {
     private static final Logger log = LoggerFactory.getLogger(StockReservationServiceImpl.class);
 
     private final StockOnHandRepository onHands;
+    private final LocationResolver       locationResolver;
 
-    public StockReservationServiceImpl(StockOnHandRepository onHands) {
-        this.onHands = onHands;
+    public StockReservationServiceImpl(StockOnHandRepository onHands,
+                                       LocationResolver locationResolver) {
+        this.onHands          = onHands;
+        this.locationResolver = locationResolver;
     }
 
     @Override
@@ -47,8 +50,11 @@ public class StockReservationServiceImpl implements StockReservationService {
                          BigDecimal delta, Long actorId) {
         StockOnHand soh = onHands
                 .findByCompanyIdAndBranchIdAndProductId(companyId, branchId, productId)
-                .orElseGet(() -> onHands.saveAndFlush(
-                        new StockOnHand(companyId, branchId, productId)));
+                .orElseGet(() -> {
+                    // ADR-0028 D-3: location_id NOT NULL — resolve branch default before first save.
+                    Long locId = locationResolver.defaultLocationId(companyId, branchId);
+                    return onHands.saveAndFlush(new StockOnHand(companyId, branchId, locId, productId));
+                });
 
         BigDecimal newReserved = soh.getReservedQty().add(delta);
         if (newReserved.compareTo(BigDecimal.ZERO) < 0) {

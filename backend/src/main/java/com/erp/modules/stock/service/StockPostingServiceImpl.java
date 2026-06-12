@@ -34,12 +34,15 @@ import org.springframework.transaction.annotation.Transactional;
 public class StockPostingServiceImpl implements StockPostingService {
 
     private final StockMovementRepository movements;
-    private final StockOnHandRepository onHands;
+    private final StockOnHandRepository   onHands;
+    private final LocationResolver        locationResolver;
 
     public StockPostingServiceImpl(StockMovementRepository movements,
-                                   StockOnHandRepository onHands) {
-        this.movements = movements;
-        this.onHands   = onHands;
+                                   StockOnHandRepository onHands,
+                                   LocationResolver locationResolver) {
+        this.movements        = movements;
+        this.onHands          = onHands;
+        this.locationResolver = locationResolver;
     }
 
     // -------------------------------------------------------------------------
@@ -67,6 +70,11 @@ public class StockPostingServiceImpl implements StockPostingService {
                        String reasonCode, String note, Instant occurredAt, Long actorId,
                        BigDecimal unitCostAmount, BigDecimal valueAmount,
                        Long costCentreValueId, Long departmentValueId) {
+
+        // ADR-0028 D-3: legacy callers pass null; resolve the branch default transparently.
+        if (locationId == null) {
+            locationId = locationResolver.defaultLocationId(companyId, branchId);
+        }
 
         // (1) Append the movement row — the immutable ledger entry.
         StockMovement movement = new StockMovement(
