@@ -449,6 +449,81 @@ class DimensionServiceIT extends PostgresIntegrationTest {
     }
 
     // =========================================================================
+    // 16. Mandatory dimension enforcement — GL posting must reject an untagged line
+    //     when Cost Centre is set mandatory (ADR-0025 D-4 step 3, FR-CC-08, BR-CC-03).
+    //     Proves the validateDimensions() gate in GLPostingServiceImpl.
+    // =========================================================================
+
+    @Test
+    void post_mandatoryDimension_rejectsUntaggedLine() {
+        DimensionDto cc = costCentreDim();
+
+        // Make Cost Centre mandatory for this company
+        dimensionService.setMandatory(cc.uid(), new SetDimensionMandatoryRequest(true));
+
+        Long cashId = accountId("1000");
+        Long cogsId = accountId("5100");
+
+        // Attempt to post with NO cost_centre_value_id on either line — must reject
+        assertThatThrownBy(() ->
+                postingService.post(new JournalEntryDraft(
+                        company.getId(), branch.getId(), LocalDate.now(),
+                        "Mandatory-dimension gate test",
+                        JournalSourceType.MANUAL, "REF-MAND-001",
+                        null, rootId,
+                        List.of(
+                                new LineDraft(cogsId, new BigDecimal("50"), BigDecimal.ZERO,
+                                        "TZS", "DR COGS"),
+                                new LineDraft(cashId, BigDecimal.ZERO, new BigDecimal("50"),
+                                        "TZS", "CR Cash")
+                        ))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("mandatory");
+    }
+
+    // =========================================================================
+    // 17. Inactive dimension value — GL posting must reject at the engine level
+    //     (ADR-0025 D-4 step 2, BR-CC-04).  Proves assertDimensionValueValid() in
+    //     GLPostingServiceImpl fires even when the poster (DimensionResolver) approved it
+    //     earlier but the value was deactivated before the post reaches the engine.
+    // =========================================================================
+
+    @Test
+    void post_inactiveDimensionValue_rejectedByGlEngine() {
+        DimensionDto cc = costCentreDim();
+        DimensionValueDto v = dimensionService.createValue(
+                new CreateDimensionValueRequest(cc.uid(), "CC-WILL-DEACT", "Will Deactivate", null));
+
+        // Resolve while still active (poster step — succeeds)
+        ResolvedDimensionTagDto resolved = dimensionResolver.resolveTag(
+                company.getId(),
+                new DimensionTagDto(v.uid(), null, null, null));
+
+        // Deactivate the value BEFORE the post reaches the engine
+        dimensionService.deactivateValue(v.uid());
+
+        Long cashId = accountId("1000");
+        Long cogsId = accountId("5100");
+
+        // The GL engine must reject the inactive value (step 2 re-assertion, D-4)
+        assertThatThrownBy(() ->
+                postingService.post(new JournalEntryDraft(
+                        company.getId(), branch.getId(), LocalDate.now(),
+                        "Inactive-value GL engine test",
+                        JournalSourceType.MANUAL, "REF-INACT-001",
+                        null, rootId,
+                        List.of(
+                                new LineDraft(cogsId, new BigDecimal("75"), BigDecimal.ZERO,
+                                        "TZS", "DR COGS",
+                                        resolved.costCentreValueId(), null, null, null),
+                                new LineDraft(cashId, BigDecimal.ZERO, new BigDecimal("75"),
+                                        "TZS", "CR Cash")
+                        ))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("inactive");
+    }
+
+    // =========================================================================
     // Helpers
     // =========================================================================
 

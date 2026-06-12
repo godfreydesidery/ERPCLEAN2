@@ -1,5 +1,10 @@
 package com.erp.modules.gl.service;
 
+import com.erp.modules.costing.domain.entity.Dimension;
+import com.erp.modules.costing.domain.entity.DimensionValue;
+import com.erp.modules.costing.domain.enums.DimensionSlot;
+import com.erp.modules.costing.repository.DimensionRepository;
+import com.erp.modules.costing.repository.DimensionValueRepository;
 import com.erp.modules.gl.domain.dto.JournalEntryDraft;
 import com.erp.modules.gl.domain.dto.JournalEntryDto;
 import com.erp.modules.gl.domain.dto.JournalLineDto;
@@ -23,6 +28,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,6 +55,10 @@ public class GLPostingServiceImpl implements GLPostingService {
     private final JournalLineRepository lines;
     private final CompanyRepository companies;
     private final AuditService audit;
+    // ADR-0025 D-4/D-7: GL re-asserts dimension validity via table-level read projections
+    // (no gl → costing.service edge — the two table-level read repositories are the approved boundary).
+    private final DimensionValueRepository dimensionValues;
+    private final DimensionRepository      dimensionTypes;
 
     public GLPostingServiceImpl(FiscalPeriodResolver periodResolver,
                                  JournalBatchNumberGenerator batchNumberGen,
@@ -57,7 +67,9 @@ public class GLPostingServiceImpl implements GLPostingService {
                                  JournalEntryRepository entries,
                                  JournalLineRepository lines,
                                  CompanyRepository companies,
-                                 AuditService audit) {
+                                 AuditService audit,
+                                 DimensionValueRepository dimensionValues,
+                                 DimensionRepository dimensionTypes) {
         this.periodResolver   = periodResolver;
         this.batchNumberGen   = batchNumberGen;
         this.accounts         = accounts;
@@ -66,6 +78,8 @@ public class GLPostingServiceImpl implements GLPostingService {
         this.lines            = lines;
         this.companies        = companies;
         this.audit            = audit;
+        this.dimensionValues  = dimensionValues;
+        this.dimensionTypes   = dimensionTypes;
     }
 
     @Override
@@ -89,6 +103,13 @@ public class GLPostingServiceImpl implements GLPostingService {
         for (JournalEntryDraft.LineDraft ld : draftLines) {
             validateLine(ld, draft.companyId(), baseCurrency, allowInactive);
         }
+
+        // 2b. Dimension validation (ADR-0025 D-4 steps 2-3, BR-CC-04, FR-CC-08).
+        //     GL re-asserts via table-level read projections — no gl → costing.service edge (D-7).
+        //     Step 2: for each non-null dimension value id, assert active + correct slot + same company.
+        //     Step 3: for each mandatory dimension slot, assert every line carries a value.
+        //     Both checks are no-ops when no dimension is configured (NFR-CC-01 zero-regression guard).
+        validateDimensions(draft.companyId(), draftLines);
 
         // 3. Σ debit == Σ credit (BR-GL-01, NFR-GL-02 — BigDecimal exact comparison)
         BigDecimal totalDebit  = draftLines.stream()
@@ -212,6 +233,90 @@ public class GLPostingServiceImpl implements GLPostingService {
     // -------------------------------------------------------------------------
     // Private helpers
     // -------------------------------------------------------------------------
+
+    /**
+     * ADR-0025 D-4 steps 2-3: dimension validation inside the GL posting engine.
+     *
+     * <p>Step 2: for each non-null dimension value id on any LineDraft, assert the value is
+     * active, belongs to the dimension occupying the expected slot, and lives in companyId.
+     * Rejects cross-company values, inactive values, and wrong-slot values (BR-CC-04).
+     *
+     * <p>Step 3: for each dimension whose {@code is_mandatory=true} for this company, assert every
+     * line carries a non-null value for that slot. Rejects the whole post if any line is missing a
+     * mandatory dimension (FR-CC-08, BR-CC-03).
+     *
+     * <p>Both steps are no-ops when no dimension is configured (mandatorySlots empty, all ids null)
+     * — the zero-regression guarantee (NFR-CC-01).
+     *
+     * <p>GL reads the costing tables directly via narrow repository projections (not via
+     * DimensionResolver service) — the approved table-level read edge (D-7).
+     */
+    private void validateDimensions(Long companyId,
+                                    List<JournalEntryDraft.LineDraft> draftLines) {
+        // Step 2: validate each non-null dimension value id
+        for (JournalEntryDraft.LineDraft ld : draftLines) {
+            assertDimensionValueValid(companyId, DimensionSlot.COST_CENTRE, ld.costCentreValueId());
+            assertDimensionValueValid(companyId, DimensionSlot.DEPARTMENT,  ld.departmentValueId());
+            assertDimensionValueValid(companyId, DimensionSlot.DIMENSION_3, ld.dimension3ValueId());
+            assertDimensionValueValid(companyId, DimensionSlot.DIMENSION_4, ld.dimension4ValueId());
+        }
+
+        // Step 3: mandatory-slot enforcement — skip entirely if no mandatory dimension exists
+        List<DimensionSlot> mandatory = dimensionTypes.findMandatorySlots(companyId);
+        if (mandatory.isEmpty()) {
+            return;
+        }
+        Set<DimensionSlot> mandatorySet = mandatory.size() == 1
+                ? Set.of(mandatory.get(0))
+                : java.util.EnumSet.copyOf(mandatory);
+
+        for (JournalEntryDraft.LineDraft ld : draftLines) {
+            for (DimensionSlot slot : mandatorySet) {
+                Long valueId = switch (slot) {
+                    case COST_CENTRE -> ld.costCentreValueId();
+                    case DEPARTMENT  -> ld.departmentValueId();
+                    case DIMENSION_3 -> ld.dimension3ValueId();
+                    case DIMENSION_4 -> ld.dimension4ValueId();
+                };
+                if (valueId == null) {
+                    throw new IllegalArgumentException(
+                            "Dimension slot " + slot + " is mandatory for company " + companyId
+                                    + " (FR-CC-08 / BR-CC-03). Journal line for account "
+                                    + ld.accountId() + " is missing a value for this slot.");
+                }
+            }
+        }
+    }
+
+    /**
+     * Assert a single dimension value id is valid for posting:
+     * active, correct slot, same company (BR-CC-04). No-op when valueId is null (untagged line).
+     *
+     * <p>Table-level read — GL reads dimension_values projection directly (ADR-0025 D-7).
+     */
+    private void assertDimensionValueValid(Long companyId, DimensionSlot expectedSlot, Long valueId) {
+        if (valueId == null) {
+            return; // untagged — always valid (BR-CC-03)
+        }
+        DimensionValue v = dimensionValues.findByIdAndCompanyId(valueId, companyId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Dimension value id=" + valueId + " not found in company " + companyId
+                                + " (BR-CC-04 — cross-company or unknown value rejected)."));
+        if (!v.isActive()) {
+            throw new IllegalArgumentException(
+                    "Dimension value id=" + valueId + " (code='" + v.getCode()
+                            + "') is inactive; cannot tag a posting with it (BR-CC-04 / FR-CC-07).");
+        }
+        Dimension dim = dimensionTypes.findById(v.getDimensionId())
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Dimension not found for value id=" + valueId));
+        if (dim.getSlot() != expectedSlot) {
+            throw new IllegalArgumentException(
+                    "Dimension value id=" + valueId + " belongs to slot " + dim.getSlot()
+                            + " but was supplied in slot " + expectedSlot
+                            + " (BR-CC-04 — wrong-slot value rejected).");
+        }
+    }
 
     private String resolveBaseCurrency(Long companyId) {
         var company = companies.findById(companyId)
