@@ -64,4 +64,24 @@ public interface DepreciationScheduleLineRepository extends JpaRepository<Deprec
     List<DepreciationScheduleLine> findEligibleForRun(
             @Param("companyId") Long companyId,
             @Param("periodDate") LocalDate periodDate);
+
+    /**
+     * Find all unposted schedule lines for a specific asset whose period_date is on or before
+     * the given date (current schedule version only). Used by the disposal flow to post any
+     * outstanding charges before the disposal journal — BR-FA-10 / ADR-0030 D-6c.
+     */
+    @Query("""
+            SELECT s FROM DepreciationScheduleLine s
+            WHERE s.fixedAssetId = :assetId
+              AND s.posted = false
+              AND s.periodDate <= :upToDate
+              AND s.scheduleVersion = (
+                  SELECT MAX(s2.scheduleVersion) FROM DepreciationScheduleLine s2
+                  WHERE s2.fixedAssetId = :assetId
+              )
+            ORDER BY s.periodSeq
+            """)
+    List<DepreciationScheduleLine> findUnpostedUpToDate(
+            @Param("assetId") Long assetId,
+            @Param("upToDate") LocalDate upToDate);
 }

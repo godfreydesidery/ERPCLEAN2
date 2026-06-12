@@ -5,12 +5,15 @@ import com.erp.modules.fixedassets.domain.dto.DisposeAssetRequest;
 import com.erp.modules.fixedassets.domain.dto.WriteOffAssetRequest;
 import com.erp.modules.fixedassets.domain.entity.AssetCategory;
 import com.erp.modules.fixedassets.domain.entity.AssetDisposal;
+import com.erp.modules.fixedassets.domain.entity.DepreciationScheduleLine;
 import com.erp.modules.fixedassets.domain.entity.FixedAsset;
 import com.erp.modules.fixedassets.domain.enums.AssetDisposalType;
 import com.erp.modules.fixedassets.domain.enums.FixedAssetStatus;
 import com.erp.modules.fixedassets.repository.AssetCategoryRepository;
 import com.erp.modules.fixedassets.repository.AssetDisposalRepository;
+import com.erp.modules.fixedassets.repository.DepreciationScheduleLineRepository;
 import com.erp.modules.fixedassets.repository.FixedAssetRepository;
+import com.erp.modules.fixedassets.service.FixedAssetGlPoster.CategoryCharge;
 import com.erp.modules.gl.domain.dto.JournalEntryDto;
 import com.erp.modules.gl.domain.entity.FiscalPeriod;
 import com.erp.modules.gl.repository.FiscalPeriodRepository;
@@ -23,6 +26,8 @@ import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,18 +36,20 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class AssetDisposalServiceImpl implements AssetDisposalService {
 
-    private final FixedAssetRepository     assets;
-    private final AssetCategoryRepository  categories;
-    private final AssetDisposalRepository  disposals;
-    private final FiscalPeriodRepository   fiscalPeriodRepo;
-    private final FiscalPeriodResolver     periodResolver;
-    private final FixedAssetGlPoster       glPoster;
-    private final ScopeGuard               scopeGuard;
-    private final AuditService             audit;
+    private final FixedAssetRepository                assets;
+    private final AssetCategoryRepository             categories;
+    private final AssetDisposalRepository             disposals;
+    private final DepreciationScheduleLineRepository  scheduleLines;
+    private final FiscalPeriodRepository              fiscalPeriodRepo;
+    private final FiscalPeriodResolver                periodResolver;
+    private final FixedAssetGlPoster                  glPoster;
+    private final ScopeGuard                          scopeGuard;
+    private final AuditService                        audit;
 
     public AssetDisposalServiceImpl(FixedAssetRepository assets,
                                      AssetCategoryRepository categories,
                                      AssetDisposalRepository disposals,
+                                     DepreciationScheduleLineRepository scheduleLines,
                                      FiscalPeriodRepository fiscalPeriodRepo,
                                      FiscalPeriodResolver periodResolver,
                                      FixedAssetGlPoster glPoster,
@@ -51,6 +58,7 @@ public class AssetDisposalServiceImpl implements AssetDisposalService {
         this.assets          = assets;
         this.categories      = categories;
         this.disposals       = disposals;
+        this.scheduleLines   = scheduleLines;
         this.fiscalPeriodRepo = fiscalPeriodRepo;
         this.periodResolver  = periodResolver;
         this.glPoster        = glPoster;
@@ -89,12 +97,47 @@ public class AssetDisposalServiceImpl implements AssetDisposalService {
         FiscalPeriod period = periodResolver.resolveOpen(asset.getCompanyId(), disposalDate);
 
         String currency = "TZS";
+
+        // BR-FA-10 / ADR-0030 D-6c: post any outstanding scheduled charge up to the disposal
+        // period BEFORE computing NBV and posting the disposal journal. Without this, the
+        // accumulated_depreciation on the asset is stale and the disposal GL journal removes
+        // the wrong accum-dep balance, corrupting the gain/loss calculation.
+        List<DepreciationScheduleLine> unpostedLines =
+                scheduleLines.findUnpostedUpToDate(asset.getId(), disposalDate);
+        if (!unpostedLines.isEmpty()) {
+            BigDecimal finalCharge = unpostedLines.stream()
+                    .map(DepreciationScheduleLine::getPlannedCharge)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            if (finalCharge.compareTo(BigDecimal.ZERO) > 0) {
+                // Post a single depreciation journal for the outstanding charges
+                Map<Long, CategoryCharge> chargeMap = new LinkedHashMap<>();
+                chargeMap.put(category.getId(), new CategoryCharge(category, finalCharge));
+                String runRef = "FINAL-DISPOSAL-" + asset.getUid();
+                glPoster.postDepreciationRun(
+                        asset.getCompanyId(), asset.getBranchId(), disposalDate,
+                        runRef, runRef, currency, actorId(), chargeMap);
+            }
+
+            // Mark lines posted and update the asset's accumulated depreciation
+            for (DepreciationScheduleLine sl : unpostedLines) {
+                sl.setPosted(true);
+                sl.setUpdatedAt(Instant.now());
+                sl.setUpdatedBy(actorId());
+            }
+            scheduleLines.saveAll(unpostedLines);
+
+            asset.setAccumulatedDepreciation(
+                    asset.getAccumulatedDepreciation().add(finalCharge));
+            assets.save(asset);
+        }
+
+        // Compute NBV and gain/loss using the now-current accumulated_depreciation (BR-FA-10)
         BigDecimal nbv     = asset.computeNbv();
         BigDecimal gainLoss = proceeds.subtract(nbv);
 
         // Post disposal GL journal (D-6c / D-6d)
-        // We use a temporary uid — will fill after disposal is saved
-        // Build a placeholder uid to pass as sourceRef; real uid will be set after save
+        // Save the disposal record to get its uid for the GL sourceRef
         AssetDisposal disposal = new AssetDisposal(
                 asset.getCompanyId(), asset.getBranchId(), asset.getId(),
                 disposalType, disposalDate, period.getId(),

@@ -50,8 +50,12 @@ public class AssetRevaluation extends UidEntity {
     @Column(name = "carrying_after", nullable = false, precision = 19, scale = 4)
     private BigDecimal carryingAfter;
 
-    /** Set after the GL journal is posted in the same TX; nullable until then. */
-    @Column(name = "gl_entry_uid", length = 26)
+    /**
+     * The GL journal uid posted for this revaluation. NOT NULL — the DB enforces that a
+     * persisted revaluation must have a successful GL post (ADR-0030 D-6). The service sets this
+     * after posting the GL journal in the same TX (em.persist is deferred until flush).
+     */
+    @Column(name = "gl_entry_uid", nullable = false, length = 26)
     @Setter
     private String glEntryUid;
 
