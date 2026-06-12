@@ -47,5 +47,10 @@ public enum JournalSourceType {
     AR,
     AP,
     CASH,
-    PAYROLL
+    PAYROLL,
+    // --- Manufacturing / Production increment (ADR-0035 D-4) — admitted by V74 DB CHECK widen ---
+    PRODUCTION_ISSUE,
+    PRODUCTION_RECEIPT,
+    PRODUCTION_LABOUR,
+    PRODUCTION_VARIANCE
 }

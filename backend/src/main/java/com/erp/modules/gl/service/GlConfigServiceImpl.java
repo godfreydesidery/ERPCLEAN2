@@ -63,7 +63,13 @@ public class GlConfigServiceImpl implements GlConfigService {
             Map.entry(GlConfigKey.SDL_PAYABLE,                 "2530"),
             Map.entry(GlConfigKey.HESLB_PAYABLE,               "2540"),
             Map.entry(GlConfigKey.NET_WAGES_PAYABLE,           "2550"),
-            Map.entry(GlConfigKey.EMPLOYEE_LOAN_RECEIVABLE,    "1450")
+            Map.entry(GlConfigKey.EMPLOYEE_LOAN_RECEIVABLE,    "1450"),
+            // Manufacturing / Production increment (ADR-0035 D-7)
+            Map.entry(GlConfigKey.WIP_INVENTORY,           "1320"),
+            Map.entry(GlConfigKey.FINISHED_GOODS,          "1300"),
+            Map.entry(GlConfigKey.LABOUR_APPLIED,          "2350"),
+            Map.entry(GlConfigKey.OVERHEAD_APPLIED,        "2360"),
+            Map.entry(GlConfigKey.MANUFACTURING_VARIANCE,  "5180")
     );
 
     private final GlConfigRepository configs;

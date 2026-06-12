@@ -388,4 +388,14 @@ public final class AuditActions {
     public static final String BUDGET_VERSION_RECALL    = "BUDGET.VERSION.RECALL";
     public static final String BUDGET_VERSION_APPROVE   = "BUDGET.VERSION.APPROVE";
     public static final String BUDGET_VERSION_REJECT    = "BUDGET.VERSION.REJECT";
+
+    // ---- Manufacturing / Production (ADR-0035) ----
+    public static final String WORKORDER_CREATE           = "WORKORDER.CREATE";
+    public static final String WORKORDER_UPDATE           = "WORKORDER.UPDATE";
+    public static final String WORKORDER_RELEASE          = "WORKORDER.RELEASE";
+    public static final String WORKORDER_CANCEL           = "WORKORDER.CANCEL";
+    public static final String WORKORDER_ISSUE_COMPONENTS = "WORKORDER.ISSUE_COMPONENTS";
+    public static final String WORKORDER_APPLY_COST       = "WORKORDER.APPLY_COST";
+    public static final String WORKORDER_COMPLETE         = "WORKORDER.COMPLETE";
+    public static final String WORKORDER_CLOSE            = "WORKORDER.CLOSE";
 }

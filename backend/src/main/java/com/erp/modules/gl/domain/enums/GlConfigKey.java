@@ -50,5 +50,11 @@ public enum GlConfigKey {
     SDL_PAYABLE,
     HESLB_PAYABLE,
     NET_WAGES_PAYABLE,
-    EMPLOYEE_LOAN_RECEIVABLE
+    EMPLOYEE_LOAN_RECEIVABLE,
+    // --- Manufacturing / Production increment (ADR-0035 D-7) ---
+    WIP_INVENTORY,
+    FINISHED_GOODS,
+    LABOUR_APPLIED,
+    OVERHEAD_APPLIED,
+    MANUFACTURING_VARIANCE
 }

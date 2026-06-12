@@ -51,7 +51,7 @@ public class NotificationRaiserImpl implements NotificationRaiser {
     private final AppUserRepository                 users;
     private final AudienceResolver                  audienceResolver;
     private final TemplateRenderer                  templateRenderer;
-    private final EmailSender                       emailSender;
+    private final Optional<EmailSender>              emailSender;
 
     public NotificationRaiserImpl(NotificationTypeRepository types,
                                    NotificationRepository notifications,
@@ -60,7 +60,7 @@ public class NotificationRaiserImpl implements NotificationRaiser {
                                    AppUserRepository users,
                                    AudienceResolver audienceResolver,
                                    TemplateRenderer templateRenderer,
-                                   EmailSender emailSender) {
+                                   Optional<EmailSender> emailSender) {
         this.types            = types;
         this.notifications    = notifications;
         this.preferences      = preferences;
@@ -205,7 +205,8 @@ public class NotificationRaiserImpl implements NotificationRaiser {
                         Long deliveryId = savedPending.getId();
                         Notification finalNotif = saved;
                         // @Async: fires after the caller's TX commits (BR-NOTIF-09)
-                        emailSender.sendAsync(deliveryId, email, finalNotif);
+                        // EmailSender is absent when no SMTP is configured (degrades cleanly, D-6)
+                        emailSender.ifPresent(s -> s.sendAsync(deliveryId, email, finalNotif));
                     }
                 }
             }

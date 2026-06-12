@@ -6,6 +6,7 @@ import com.erp.modules.notifications.repository.NotificationDeliveryRepository;
 import jakarta.mail.internet.MimeMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
@@ -19,10 +20,12 @@ import org.springframework.transaction.annotation.Transactional;
  * row and pass its ID here. This class transitions the row to SENT/FAILED in a separate TX
  * after the SMTP hand-off. A crash mid-async loses the in-flight email (acceptable per BR-NOTIF-09).
  *
- * <p>If {@link JavaMailSender} is not configured (no SMTP in the environment), the send
- * fast-fails as FAILED and the in-app channel is unaffected (degrades cleanly, D-6).
+ * <p>If {@link JavaMailSender} is not configured (no SMTP in the environment) this bean is absent
+ * and {@link NotificationRaiserImpl} receives an empty Optional — the EMAIL channel is skipped and
+ * the in-app channel is unaffected (degrades cleanly, D-6).
  */
 @Component
+@ConditionalOnBean(JavaMailSender.class)
 public class EmailSender {
 
     private static final Logger log = LoggerFactory.getLogger(EmailSender.class);

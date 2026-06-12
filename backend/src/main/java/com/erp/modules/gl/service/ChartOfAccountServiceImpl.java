@@ -74,7 +74,12 @@ public class ChartOfAccountServiceImpl implements ChartOfAccountService {
             new Object[]{"2530", "SDL Payable",                          AccountType.LIABILITY},
             new Object[]{"2540", "HESLB Payable",                        AccountType.LIABILITY},
             new Object[]{"2550", "Net Wages Payable",                    AccountType.LIABILITY},
-            new Object[]{"1450", "Employee Loans Receivable",            AccountType.ASSET}
+            new Object[]{"1450", "Employee Loans Receivable",            AccountType.ASSET},
+            // Manufacturing / Production increment (ADR-0035 D-7)
+            new Object[]{"1320", "Work In Progress",                     AccountType.ASSET},
+            new Object[]{"2350", "WIP Labour Clearing",                  AccountType.LIABILITY},
+            new Object[]{"2360", "WIP Overhead Clearing",                AccountType.LIABILITY},
+            new Object[]{"5180", "Manufacturing Variance",               AccountType.EXPENSE}
     );
 
     public ChartOfAccountServiceImpl(ChartOfAccountRepository accounts,

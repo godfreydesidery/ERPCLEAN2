@@ -100,6 +100,10 @@ import com.erp.modules.projects.repository.ProjectTaskRepository;
 // budgeting (ADR-0034)
 import com.erp.modules.budgeting.repository.BudgetRepository;
 import com.erp.modules.budgeting.repository.BudgetVersionRepository;
+// manufacturing (ADR-0035)
+import com.erp.modules.manufacturing.repository.WorkOrderRepository;
+import com.erp.modules.manufacturing.repository.WorkOrderComponentRepository;
+import com.erp.modules.manufacturing.repository.WorkOrderOperationRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -236,6 +240,10 @@ public class ScopeGuard {
     // budgeting (ADR-0034 D-13)
     private final BudgetRepository           budgetsRepo;
     private final BudgetVersionRepository    budgetVersionsRepo;
+    // manufacturing (ADR-0035 D-13)
+    private final WorkOrderRepository           workOrdersRepo;
+    private final WorkOrderComponentRepository  workOrderComponentsRepo;
+    private final WorkOrderOperationRepository  workOrderOperationsRepo;
     private final AuditService             audit;
 
     public ScopeGuard(CompanyRepository companies,
@@ -339,6 +347,10 @@ public class ScopeGuard {
                       // budgeting (ADR-0034 D-13)
                       BudgetRepository budgetsRepo,
                       BudgetVersionRepository budgetVersionsRepo,
+                      // manufacturing (ADR-0035 D-13)
+                      WorkOrderRepository workOrdersRepo,
+                      WorkOrderComponentRepository workOrderComponentsRepo,
+                      WorkOrderOperationRepository workOrderOperationsRepo,
                       AuditService audit) {
         this.companies      = companies;
         this.branches       = branches;
@@ -441,6 +453,10 @@ public class ScopeGuard {
         // budgeting (ADR-0034 D-13)
         this.budgetsRepo         = budgetsRepo;
         this.budgetVersionsRepo  = budgetVersionsRepo;
+        // manufacturing (ADR-0035 D-13)
+        this.workOrdersRepo           = workOrdersRepo;
+        this.workOrderComponentsRepo  = workOrderComponentsRepo;
+        this.workOrderOperationsRepo  = workOrderOperationsRepo;
         this.audit               = audit;
     }
 
@@ -566,6 +582,10 @@ public class ScopeGuard {
             // budgeting target types (ADR-0034 D-13)
             case "budget"              -> budgetsRepo.findCompanyIdByUid(uid);
             case "budgetversion"       -> budgetVersionsRepo.findCompanyIdByUid(uid);
+            // manufacturing target types (ADR-0035 D-13)
+            case "workorder"           -> workOrdersRepo.findCompanyIdByUid(uid);
+            case "workordercomponent"  -> workOrderComponentsRepo.findCompanyIdByUid(uid);
+            case "workorderoperation"  -> workOrderOperationsRepo.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };

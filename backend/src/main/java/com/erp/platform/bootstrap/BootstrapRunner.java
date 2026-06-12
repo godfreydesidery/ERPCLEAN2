@@ -20,6 +20,7 @@ import com.erp.modules.stock.service.InventoryGlSeeder;
 import com.erp.modules.fixedassets.service.FixedAssetGlSeeder;
 import com.erp.modules.hr.service.HrGlSeeder;
 import com.erp.modules.hr.service.HrStatutorySeeder;
+import com.erp.modules.manufacturing.service.ManufacturingGlSeeder;
 import com.erp.modules.gl.service.ChartOfAccountService;
 import com.erp.modules.gl.service.FiscalCalendarService;
 import com.erp.modules.gl.service.GlConfigService;
@@ -87,6 +88,8 @@ public class BootstrapRunner implements ApplicationRunner {
     private final HrStatutorySeeder hrStatutorySeeder;
     // Notifications type catalogue seeder (ADR-0024 D-9)
     private final NotificationTypeSeeder notificationTypeSeeder;
+    // Manufacturing GL seeder (ADR-0035 D-7)
+    private final ManufacturingGlSeeder manufacturingGlSeeder;
 
     public BootstrapRunner(BootstrapProperties props,
                            OrganisationRepository organisations,
@@ -110,7 +113,8 @@ public class BootstrapRunner implements ApplicationRunner {
                            CrmStageSeeder crmStageSeeder,
                            HrGlSeeder hrGlSeeder,
                            HrStatutorySeeder hrStatutorySeeder,
-                           NotificationTypeSeeder notificationTypeSeeder) {
+                           NotificationTypeSeeder notificationTypeSeeder,
+                           ManufacturingGlSeeder manufacturingGlSeeder) {
         this.props = props;
         this.organisations = organisations;
         this.companies = companies;
@@ -134,6 +138,7 @@ public class BootstrapRunner implements ApplicationRunner {
         this.hrGlSeeder             = hrGlSeeder;
         this.hrStatutorySeeder      = hrStatutorySeeder;
         this.notificationTypeSeeder = notificationTypeSeeder;
+        this.manufacturingGlSeeder  = manufacturingGlSeeder;
     }
 
     @Override
@@ -185,6 +190,8 @@ public class BootstrapRunner implements ApplicationRunner {
         hrStatutorySeeder.seedDefaults(company.getId());
         // Seed notification type catalogue (ADR-0024 D-9).
         notificationTypeSeeder.seedDefaults(company.getId());
+        // Seed Manufacturing GL accounts + gl_configs (ADR-0035 D-7).
+        manufacturingGlSeeder.seedDefaults(company.getId());
 
         Branch branch = new Branch(company, props.branchCode(), props.branchName());
         branch.setTimeZone(props.timeZone());

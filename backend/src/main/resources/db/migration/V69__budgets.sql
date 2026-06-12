@@ -53,7 +53,7 @@ CREATE TABLE budget_versions (
     fiscal_year_id       BIGINT           NOT NULL,
     -- Denormalised for the single-active-version partial unique; NULL = company-wide
     cost_centre_value_id BIGINT,
-    version_no           SMALLINT         NOT NULL,
+    version_no           INTEGER          NOT NULL,
     status               VARCHAR(20)      NOT NULL DEFAULT 'DRAFT',
     label                VARCHAR(120),
     -- Self-FK: the version whose lines were copied as a seed (FR-BUD-08c)

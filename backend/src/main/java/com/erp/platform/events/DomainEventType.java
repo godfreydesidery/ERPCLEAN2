@@ -126,6 +126,16 @@ public final class DomainEventType {
     public static final String BUDGET_VERSION_APPROVED = "BUDGET.VERSION.APPROVED";
     public static final String AGG_BUDGET_VERSION       = "BUDGET_VERSION";
 
+    // --- manufacturing (ADR-0035 D-11) ---
+
+    /** Work order released — BOM pinned, components planned; informational (ADR-0035 D-11). */
+    public static final String WORK_ORDER_RELEASED  = "WORK_ORDER.RELEASED";
+
+    /** Work order completed — finished goods received; informational (ADR-0035 D-11). */
+    public static final String WORK_ORDER_COMPLETED = "WORK_ORDER.COMPLETED";
+
+    public static final String AGG_WORK_ORDER = "WORK_ORDER";
+
     private DomainEventType() {
     }
 }

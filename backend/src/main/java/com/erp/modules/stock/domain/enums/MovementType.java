@@ -35,5 +35,18 @@ public enum MovementType {
     PURCHASE_RETURN,
 
     /** Material issued directly to a project task (ADR-0033 D-5). − sign on stock-on-hand. */
-    ISSUE_TO_PROJECT;
+    ISSUE_TO_PROJECT,
+
+    // --- Manufacturing / Production increment (ADR-0035 D-3, admitted by V74 widen) ---
+    /** Component material issued from stock to work-in-progress. − sign. */
+    PRODUCTION_ISSUE,
+
+    /** Finished goods received from a completed work order. + sign. */
+    PRODUCTION_RECEIPT,
+
+    /** Reversal of a PRODUCTION_ISSUE (cancel path). + sign. */
+    PRODUCTION_ISSUE_REVERSAL,
+
+    /** Reversal of a PRODUCTION_RECEIPT (cancel path). − sign. */
+    PRODUCTION_RECEIPT_REVERSAL;
 }
