@@ -97,6 +97,16 @@ public final class DomainEventType {
     public static final String AGG_SALES_ORDER    = "SALES_ORDER";
     public static final String AGG_STANDING_ORDER = "STANDING_ORDER";
 
+    // --- hr-payroll (ADR-0032) ---
+
+    /** Payroll run finalised/posted — GL posting + Cash disbursement trigger (ADR-0032 D-11). */
+    public static final String PAYROLL_FINALISED  = "PAYROLL.FINALISED";
+
+    /** Payroll run reversed — GL reversal trigger (ADR-0032 D-11). */
+    public static final String PAYROLL_REVERSED   = "PAYROLL.REVERSED";
+
+    public static final String AGG_PAYROLL_RUN    = "PAYROLL_RUN";
+
     private DomainEventType() {
     }
 }

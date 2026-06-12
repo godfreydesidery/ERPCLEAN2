@@ -53,7 +53,17 @@ public class GlConfigServiceImpl implements GlConfigService {
             Map.entry(GlConfigKey.LANDED_COST_CLEARING, "2160"),
             // sales-depth (ADR-0029 D-4) — POS over/short variance accounts
             Map.entry(GlConfigKey.POS_CASH_OVER,       "4900"),
-            Map.entry(GlConfigKey.POS_CASH_SHORT,      "5170")
+            Map.entry(GlConfigKey.POS_CASH_SHORT,      "5170"),
+            // HR & Payroll increment (ADR-0032 D-8)
+            Map.entry(GlConfigKey.SALARY_EXPENSE,              "5700"),
+            Map.entry(GlConfigKey.EMPLOYER_STATUTORY_EXPENSE,  "5710"),
+            Map.entry(GlConfigKey.PAYE_PAYABLE,                "2500"),
+            Map.entry(GlConfigKey.NSSF_PAYABLE,                "2510"),
+            Map.entry(GlConfigKey.WCF_PAYABLE,                 "2520"),
+            Map.entry(GlConfigKey.SDL_PAYABLE,                 "2530"),
+            Map.entry(GlConfigKey.HESLB_PAYABLE,               "2540"),
+            Map.entry(GlConfigKey.NET_WAGES_PAYABLE,           "2550"),
+            Map.entry(GlConfigKey.EMPLOYEE_LOAN_RECEIVABLE,    "1450")
     );
 
     private final GlConfigRepository configs;
