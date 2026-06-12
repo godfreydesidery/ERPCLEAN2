@@ -232,4 +232,12 @@ public final class AuditActions {
     public static final String COSTING_VALUE_UPDATE              = "COSTING.VALUE.UPDATE";
     public static final String COSTING_VALUE_DEACTIVATE          = "COSTING.VALUE.DEACTIVATE";
     public static final String COSTING_DIMENSION_MANDATORY_SET   = "COSTING.DIMENSION.MANDATORY.SET";
+
+    // ---- Budgeting & Management Accounting (ADR-0034) ----
+    public static final String BUDGET_CREATE            = "BUDGET.CREATE";
+    public static final String BUDGET_VERSION_CREATE    = "BUDGET.VERSION.CREATE";
+    public static final String BUDGET_VERSION_SUBMIT    = "BUDGET.VERSION.SUBMIT";
+    public static final String BUDGET_VERSION_RECALL    = "BUDGET.VERSION.RECALL";
+    public static final String BUDGET_VERSION_APPROVE   = "BUDGET.VERSION.APPROVE";
+    public static final String BUDGET_VERSION_REJECT    = "BUDGET.VERSION.REJECT";
 }

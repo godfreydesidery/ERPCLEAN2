@@ -57,6 +57,14 @@ public final class DomainEventType {
     public static final String DOCUMENT_GENERATED     = "DOCUMENT.GENERATED";
     public static final String AGG_GENERATED_DOCUMENT = "GENERATED_DOCUMENT";
 
+    // --- budgeting (ADR-0034) ---
+    /**
+     * Reserved for future deferred enforcement/commitment round (ADR-0034 D-9).
+     * Declared here to claim the namespace; NOT published in v1.
+     */
+    public static final String BUDGET_VERSION_APPROVED = "BUDGET.VERSION.APPROVED";
+    public static final String AGG_BUDGET_VERSION       = "BUDGET_VERSION";
+
     private DomainEventType() {
     }
 }

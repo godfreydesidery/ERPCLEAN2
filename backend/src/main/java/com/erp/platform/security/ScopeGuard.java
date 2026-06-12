@@ -49,6 +49,9 @@ import com.erp.modules.approvals.repository.ApprovalRequestRepository;
 import com.erp.modules.documents.repository.DocumentBrandingRepository;
 import com.erp.modules.documents.repository.DocumentTemplateRepository;
 import com.erp.modules.documents.repository.GeneratedDocumentRepository;
+// budgeting (ADR-0034)
+import com.erp.modules.budgeting.repository.BudgetRepository;
+import com.erp.modules.budgeting.repository.BudgetVersionRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -134,6 +137,9 @@ public class ScopeGuard {
     // cost-centre (ADR-0025 D-5)
     private final DimensionRepository        dimensions;
     private final DimensionValueRepository   dimensionValues;
+    // budgeting (ADR-0034 D-13)
+    private final BudgetRepository           budgetsRepo;
+    private final BudgetVersionRepository    budgetVersionsRepo;
     private final AuditService             audit;
 
     public ScopeGuard(CompanyRepository companies,
@@ -186,6 +192,9 @@ public class ScopeGuard {
                       // cost-centre (ADR-0025 D-5)
                       DimensionRepository dimensions,
                       DimensionValueRepository dimensionValues,
+                      // budgeting (ADR-0034 D-13)
+                      BudgetRepository budgetsRepo,
+                      BudgetVersionRepository budgetVersionsRepo,
                       AuditService audit) {
         this.companies      = companies;
         this.branches       = branches;
@@ -237,6 +246,9 @@ public class ScopeGuard {
         // cost-centre (ADR-0025 D-5)
         this.dimensions          = dimensions;
         this.dimensionValues     = dimensionValues;
+        // budgeting (ADR-0034 D-13)
+        this.budgetsRepo         = budgetsRepo;
+        this.budgetVersionsRepo  = budgetVersionsRepo;
         this.audit               = audit;
     }
 
@@ -311,6 +323,9 @@ public class ScopeGuard {
             // cost-centre target types (ADR-0025 D-5)
             case "dimension"           -> dimensions.findCompanyIdByUid(uid);
             case "dimensionvalue"      -> dimensionValues.findCompanyIdByUid(uid);
+            // budgeting target types (ADR-0034 D-13)
+            case "budget"              -> budgetsRepo.findCompanyIdByUid(uid);
+            case "budgetversion"       -> budgetVersionsRepo.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };
