@@ -39,16 +39,33 @@ public record JournalEntryDraft(
             Long costCentreValueId,
             Long departmentValueId,
             Long dimension3ValueId,
-            Long dimension4ValueId
+            Long dimension4ValueId,
+            // --- projects (ADR-0033 D-1) — dedicated scalar tags; null = untagged ---
+            Long projectId,
+            Long projectTaskId,
+            String projectCostType
     ) {
         /**
          * 5-arg convenience constructor — keeps every existing poster's call site unchanged
-         * (NFR-CC-01). Defaults all four dimension ids to null (untagged).
+         * (NFR-CC-01). Defaults all dimension and project ids to null (untagged).
          */
         public LineDraft(Long accountId, BigDecimal debitAmount, BigDecimal creditAmount,
                          String currency, String lineMemo) {
             this(accountId, debitAmount, creditAmount, currency, lineMemo,
-                 null, null, null, null);
+                 null, null, null, null, null, null, null);
+        }
+
+        /**
+         * 9-arg backward-compatible constructor for callers that set dimension ids but not
+         * project ids (ADR-0025 D-4 callers — zero regression, NFR-CC-01).
+         */
+        public LineDraft(Long accountId, BigDecimal debitAmount, BigDecimal creditAmount,
+                         String currency, String lineMemo,
+                         Long costCentreValueId, Long departmentValueId,
+                         Long dimension3ValueId, Long dimension4ValueId) {
+            this(accountId, debitAmount, creditAmount, currency, lineMemo,
+                 costCentreValueId, departmentValueId, dimension3ValueId, dimension4ValueId,
+                 null, null, null);
         }
     }
 }

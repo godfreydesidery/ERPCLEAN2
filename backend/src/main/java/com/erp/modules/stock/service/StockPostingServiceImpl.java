@@ -70,6 +70,21 @@ public class StockPostingServiceImpl implements StockPostingService {
                        String reasonCode, String note, Instant occurredAt, Long actorId,
                        BigDecimal unitCostAmount, BigDecimal valueAmount,
                        Long costCentreValueId, Long departmentValueId) {
+        return post(companyId, branchId, locationId, productId, quantity, movementType,
+                sourceEventUid, sourceDocumentType, sourceDocumentUid,
+                reasonCode, note, occurredAt, actorId, unitCostAmount, valueAmount,
+                costCentreValueId, departmentValueId, null, null);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public String post(Long companyId, Long branchId, Long locationId, Long productId,
+                       BigDecimal quantity, MovementType movementType,
+                       String sourceEventUid, String sourceDocumentType, String sourceDocumentUid,
+                       String reasonCode, String note, Instant occurredAt, Long actorId,
+                       BigDecimal unitCostAmount, BigDecimal valueAmount,
+                       Long costCentreValueId, Long departmentValueId,
+                       Long projectId, Long projectTaskId) {
 
         // ADR-0028 D-3: legacy callers pass null; resolve the branch default transparently.
         if (locationId == null) {
@@ -83,7 +98,8 @@ public class StockPostingServiceImpl implements StockPostingService {
                 sourceEventUid, sourceDocumentType, sourceDocumentUid,
                 reasonCode, note, occurredAt, actorId,
                 unitCostAmount, valueAmount,
-                costCentreValueId, departmentValueId);
+                costCentreValueId, departmentValueId,
+                projectId, projectTaskId);
         movements.save(movement);
 
         // (2) Upsert the on-hand row — first touch creates it at qty 0, then delta is applied.

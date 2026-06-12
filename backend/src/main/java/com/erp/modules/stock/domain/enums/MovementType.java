@@ -28,5 +28,8 @@ public enum MovementType {
 
     // Reserved — excluded from DB CHECK in v1 (OQ-STOCK-08). Do NOT store these values yet.
     TRANSFER_OUT,
-    TRANSFER_IN;
+    TRANSFER_IN,
+
+    /** Material issued directly to a project task (ADR-0033 D-5). − sign on stock-on-hand. */
+    ISSUE_TO_PROJECT;
 }

@@ -75,6 +75,12 @@ public final class DomainEventType {
     public static final String DEPRECIATION_RUN_EXECUTED = "DEPRECIATION.RUN.EXECUTED";
     public static final String AGG_DEPRECIATION_RUN      = "DEPRECIATION_RUN";
 
+    // --- projects (ADR-0033) ---
+
+    /** Materials issued to a project — triggers cost recording on the project dimension (ADR-0033 D-5). */
+    public static final String PROJECT_MATERIAL_ISSUED = "PROJECT.MATERIAL.ISSUED";
+    public static final String AGG_PROJECT_ISSUE       = "PROJECT_ISSUE";
+
     private DomainEventType() {
     }
 }

@@ -56,13 +56,26 @@ public class JournalLine extends UidEntity {
     @Column(name = "department_value_id")
     private Long departmentValueId;
 
-    /** Reserved for Projects module (ADR-0033 / slot 3 — no v1 poster writes this). */
+    /** Reserved for a third named dimension (slot 3 — no v1 poster writes this). */
     @Column(name = "dimension3_value_id")
     private Long dimension3ValueId;
 
     /** Reserved for a future dimension (slot 4 — no v1 poster writes this). */
     @Column(name = "dimension4_value_id")
     private Long dimension4ValueId;
+
+    // --- projects (ADR-0033 D-1, V64) — dedicated scalar project dimension tags ---
+    /** FK → projects(id); nullable — set by InventoryGlPoster on ISSUE_TO_PROJECT journals. */
+    @Column(name = "project_id")
+    private Long projectId;
+
+    /** FK → project_tasks(id); nullable. */
+    @Column(name = "project_task_id")
+    private Long projectTaskId;
+
+    /** ProjectCostType name (MATERIAL/LABOUR/OVERHEAD/…); nullable. */
+    @Column(name = "project_cost_type", length = 20)
+    private String projectCostType;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
@@ -91,6 +104,20 @@ public class JournalLine extends UidEntity {
                                     String lineMemo, Long createdBy,
                                     Long costCentreValueId, Long departmentValueId,
                                     Long dimension3ValueId, Long dimension4ValueId) {
+        return debit(companyId, branchId, entryId, lineNo, accountId, amount, currency,
+                     lineMemo, createdBy, costCentreValueId, departmentValueId,
+                     dimension3ValueId, dimension4ValueId, null, null, null);
+    }
+
+    /**
+     * Debit line with dimension + project tags (ADR-0033 D-1).
+     */
+    public static JournalLine debit(Long companyId, Long branchId, Long entryId, int lineNo,
+                                    Long accountId, BigDecimal amount, String currency,
+                                    String lineMemo, Long createdBy,
+                                    Long costCentreValueId, Long departmentValueId,
+                                    Long dimension3ValueId, Long dimension4ValueId,
+                                    Long projectId, Long projectTaskId, String projectCostType) {
         JournalLine l = new JournalLine();
         l.companyId          = companyId;
         l.branchId           = branchId;
@@ -106,6 +133,9 @@ public class JournalLine extends UidEntity {
         l.departmentValueId  = departmentValueId;
         l.dimension3ValueId  = dimension3ValueId;
         l.dimension4ValueId  = dimension4ValueId;
+        l.projectId          = projectId;
+        l.projectTaskId      = projectTaskId;
+        l.projectCostType    = projectCostType;
         return l;
     }
 
@@ -126,6 +156,20 @@ public class JournalLine extends UidEntity {
                                      String lineMemo, Long createdBy,
                                      Long costCentreValueId, Long departmentValueId,
                                      Long dimension3ValueId, Long dimension4ValueId) {
+        return credit(companyId, branchId, entryId, lineNo, accountId, amount, currency,
+                      lineMemo, createdBy, costCentreValueId, departmentValueId,
+                      dimension3ValueId, dimension4ValueId, null, null, null);
+    }
+
+    /**
+     * Credit line with dimension + project tags (ADR-0033 D-1).
+     */
+    public static JournalLine credit(Long companyId, Long branchId, Long entryId, int lineNo,
+                                     Long accountId, BigDecimal amount, String currency,
+                                     String lineMemo, Long createdBy,
+                                     Long costCentreValueId, Long departmentValueId,
+                                     Long dimension3ValueId, Long dimension4ValueId,
+                                     Long projectId, Long projectTaskId, String projectCostType) {
         JournalLine l = new JournalLine();
         l.companyId          = companyId;
         l.branchId           = branchId;
@@ -141,6 +185,9 @@ public class JournalLine extends UidEntity {
         l.departmentValueId  = departmentValueId;
         l.dimension3ValueId  = dimension3ValueId;
         l.dimension4ValueId  = dimension4ValueId;
+        l.projectId          = projectId;
+        l.projectTaskId      = projectTaskId;
+        l.projectCostType    = projectCostType;
         return l;
     }
 }

@@ -7,6 +7,9 @@ import com.erp.modules.crm.repository.ActivityRepository;
 import com.erp.modules.crm.repository.LeadRepository;
 import com.erp.modules.crm.repository.OpportunityRepository;
 import com.erp.modules.crm.repository.PipelineStageRepository;
+// projects (ADR-0033)
+import com.erp.modules.projects.repository.ProjectRepository;
+import com.erp.modules.projects.repository.ProjectTaskRepository;
 import com.erp.modules.ap.repository.ApDebitNoteRepository;
 import com.erp.modules.ap.repository.ApPaymentRepository;
 import com.erp.modules.ap.repository.SupplierBillRepository;
@@ -164,6 +167,9 @@ public class ScopeGuard {
     private final OpportunityRepository      crmOpportunities;
     private final ActivityRepository         crmActivities;
     private final PipelineStageRepository    crmPipelineStages;
+    // projects (ADR-0033 D-4)
+    private final ProjectRepository          projectsRepo;
+    private final ProjectTaskRepository      projectTasksRepo;
     private final AuditService             audit;
 
     public ScopeGuard(CompanyRepository companies,
@@ -231,6 +237,9 @@ public class ScopeGuard {
                       OpportunityRepository crmOpportunities,
                       ActivityRepository crmActivities,
                       PipelineStageRepository crmPipelineStages,
+                      // projects (ADR-0033 D-4)
+                      ProjectRepository projectsRepo,
+                      ProjectTaskRepository projectTasksRepo,
                       AuditService audit) {
         this.companies      = companies;
         this.branches       = branches;
@@ -297,6 +306,9 @@ public class ScopeGuard {
         this.crmOpportunities    = crmOpportunities;
         this.crmActivities       = crmActivities;
         this.crmPipelineStages   = crmPipelineStages;
+        // projects (ADR-0033 D-4)
+        this.projectsRepo        = projectsRepo;
+        this.projectTasksRepo    = projectTasksRepo;
         this.audit               = audit;
     }
 
@@ -386,6 +398,9 @@ public class ScopeGuard {
             case "opportunity"         -> crmOpportunities.findCompanyIdByUid(uid);
             case "activity"            -> crmActivities.findCompanyIdByUid(uid);
             case "pipelinestage"       -> crmPipelineStages.findCompanyIdByUid(uid);
+            // projects (ADR-0033 D-4)
+            case "project"             -> projectsRepo.findCompanyIdByUid(uid);
+            case "projecttask"         -> projectTasksRepo.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };

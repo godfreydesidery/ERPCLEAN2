@@ -57,6 +57,19 @@ public interface StockPostingService {
                 Long costCentreValueId, Long departmentValueId);
 
     /**
+     * Project-aware posting overload (ADR-0033 D-5).
+     * Adds projectId / projectTaskId; used by IssueToProjectServiceImpl for ISSUE_TO_PROJECT
+     * movements that must carry the project dimension on the stock movement row.
+     */
+    String post(Long companyId, Long branchId, Long locationId, Long productId,
+                BigDecimal quantity, MovementType movementType,
+                String sourceEventUid, String sourceDocumentType, String sourceDocumentUid,
+                String reasonCode, String note, Instant occurredAt, Long actorId,
+                BigDecimal unitCostAmount, BigDecimal valueAmount,
+                Long costCentreValueId, Long departmentValueId,
+                Long projectId, Long projectTaskId);
+
+    /**
      * Legacy location-unaware overload — routes to the default location via the impl.
      * @deprecated Prefer the location-aware overload; this is retained for backward compatibility.
      */

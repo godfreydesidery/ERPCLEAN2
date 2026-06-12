@@ -121,6 +121,15 @@ public class SalesOrderLine extends UidEntity {
     @Column(name = "currency", nullable = false, length = 3)
     private String currency;
 
+    // --- projects (ADR-0033 D-3, V66) ---
+    @Column(name = "project_id")
+    @Setter
+    private Long projectId;
+
+    @Column(name = "project_task_id")
+    @Setter
+    private Long projectTaskId;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
