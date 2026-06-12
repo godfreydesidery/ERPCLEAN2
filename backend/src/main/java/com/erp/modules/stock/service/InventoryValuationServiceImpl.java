@@ -14,6 +14,7 @@ import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,17 +26,26 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Moving-average cost engine (ADR-0020 D-2/D-5/D-5b/D-7).
  *
- * <p>Concurrency: the recompute is a read-modify-write on the {@code stock_on_hand} row that
- * already carries {@code @Version}. A clash raises {@link ObjectOptimisticLockingFailureException};
+ * <p>Concurrency: the recompute is a read-modify-write on the {@code stock_on_hand} rows that
+ * carry {@code @Version}. A clash raises {@link ObjectOptimisticLockingFailureException};
  * a single retry re-reads fresh state and recomputes against it. No SELECT FOR UPDATE (ADR-0020
  * D-2 / NFR-INV-05 decision).
  *
  * <p>Rounding: 4 dp HALF_UP throughout (OQ-INV-06). The stored {@code on_hand_value} is the
  * authoritative figure; {@code avg_cost} is derived to 4 dp and stored.
  *
- * <p>FIX A (adversarial review): {@link #reverseReceipt} computes postReversalQty as
- * {@code soh.getQuantity().subtract(originalQty.abs())} — the posting service applies the negative
- * delta AFTER this method returns, so soh holds the PRE-reversal qty at call time.
+ * <p><b>ADR-0028 D-2 FIX — Findings 1 &amp; 2 (adversarial review)</b>: avg_cost is
+ * per-company-product, not per-location. On every receipt (or receipt reversal), ALL location rows
+ * for the (company, product) are loaded via {@link StockOnHandRepository#findByCompanyIdAndProductId},
+ * the aggregate Σ qty and Σ on_hand_value are computed, the new avg is derived, and then EVERY
+ * location row is updated with the same avg_cost and its re-attributed on_hand_value
+ * ({@code qty × new_avg}). A receipt at LOC1 when stock also sits at LOC2 must propagate the same
+ * avg_cost to LOC2 — failing to do so lets the avg diverge per-location, breaking the
+ * {@code Σ on_hand_value == accountBalance(1300)} recon invariant (ADR-0020).
+ *
+ * <p>FIX A (adversarial review): {@link #reverseReceipt} computes postReversalQty as the
+ * aggregate total minus the original qty — the posting service applies the negative delta AFTER
+ * this method returns, so rows hold PRE-reversal quantities at call time.
  *
  * <p>FIX D (adversarial review): {@link #costIssue}, {@link #reverseIssue},
  * {@link #reverseReceipt}, and {@link #revalueAdjustment} each have a public retry wrapper and a
@@ -59,21 +69,24 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
 
     private final StockOnHandRepository onHands;
     private final InventoryGlPoster     glPoster;
+    private final LocationResolver      locationResolver;
     private final ScopeGuard            scopeGuard;
     private final AuditService          audit;
 
     public InventoryValuationServiceImpl(StockOnHandRepository onHands,
                                           InventoryGlPoster glPoster,
+                                          LocationResolver locationResolver,
                                           ScopeGuard scopeGuard,
                                           AuditService audit) {
-        this.onHands    = onHands;
-        this.glPoster   = glPoster;
-        this.scopeGuard = scopeGuard;
-        this.audit      = audit;
+        this.onHands          = onHands;
+        this.glPoster         = glPoster;
+        this.locationResolver = locationResolver;
+        this.scopeGuard       = scopeGuard;
+        this.audit            = audit;
     }
 
     // -------------------------------------------------------------------------
-    // (a) Recompute on receipt (ADR-0020 D-2 pseudocode)
+    // (a) Recompute on receipt (ADR-0020 D-2 pseudocode + ADR-0028 D-2 fix)
     // -------------------------------------------------------------------------
 
     @Override
@@ -88,6 +101,12 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
         }
     }
 
+    /**
+     * ADR-0028 D-2 FIX (Finding 1): loads ALL location rows for (company, product), aggregates
+     * Σ qty and Σ on_hand_value across the whole company, computes one new avg, then syncs every
+     * location row. The receiving location row is upserted first so it participates in the
+     * aggregate.
+     */
     private BigDecimal doRecomputeOnReceipt(Long companyId, Long branchId, Long productId,
                                               BigDecimal receiptQty, BigDecimal receiptCost) {
         // Defensive: null cost treated as zero-cost receipt (D-3 backward note)
@@ -97,41 +116,78 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
                              "avg will drift toward zero (BR-INV-01 edge (b))", companyId, productId);
         }
 
-        StockOnHand soh = onHands.findByCompanyIdAndBranchIdAndProductId(companyId, branchId, productId)
-                .orElseGet(() -> onHands.save(new StockOnHand(companyId, branchId, productId)));
-
-        BigDecimal qty        = soh.getQuantity();           // current on-hand qty (before this receipt)
-        BigDecimal avgCost    = soh.getAvgCost();            // may be null
-        BigDecimal onHandVal  = soh.getOnHandValue() != null ? soh.getOnHandValue() : BigDecimal.ZERO;
-
         BigDecimal receiptValue = round4(receiptQty.multiply(cost));
-        BigDecimal newQty = qty.add(receiptQty);
 
-        BigDecimal newAvg;
-        BigDecimal newValue;
+        // Ensure the receiving location row exists before we aggregate (upsert if absent).
+        // The posting service will add the qty delta AFTER we return, but avg_cost must be
+        // computed INCLUDING this receipt's contribution now.
+        Long receivingLocId = locationResolver.defaultLocationId(companyId, branchId);
+        StockOnHand receivingRow = onHands
+                .findByCompanyIdAndBranchIdAndLocationIdAndProductId(companyId, branchId, receivingLocId, productId)
+                .orElseGet(() -> {
+                    StockOnHand fresh = new StockOnHand(companyId, branchId, receivingLocId, productId);
+                    return onHands.save(fresh);
+                });
 
-        if (newQty.compareTo(BigDecimal.ZERO) <= 0) {
-            // Pathological: receipt into deep-negative — guard, do not divide by <= 0
-            newAvg   = (avgCost != null) ? avgCost : cost;
-            newValue = onHandVal.add(receiptValue);
-        } else if (avgCost == null || qty.compareTo(BigDecimal.ZERO) <= 0) {
-            // First receipt, or receipt onto zero/negative on-hand — reset to receipt cost
-            newAvg   = cost;
-            newValue = round4(newQty.multiply(cost));
-        } else {
-            // Normal weighted-average recompute: new_avg = (on_hand_value + recv_value) / new_qty
-            newValue = onHandVal.add(receiptValue);
-            newAvg   = round4(newValue.divide(newQty, SCALE, RM));
+        // Load ALL location rows for this company-product (ADR-0028 D-2).
+        List<StockOnHand> allRows = onHands.findByCompanyIdAndProductId(companyId, productId);
+
+        // Aggregate pre-receipt totals (Σ qty, Σ on_hand_value across all locations).
+        BigDecimal totalQty   = BigDecimal.ZERO;
+        BigDecimal totalValue = BigDecimal.ZERO;
+        boolean hasExistingAvg = false;
+        for (StockOnHand row : allRows) {
+            totalQty   = totalQty.add(row.getQuantity());
+            totalValue = totalValue.add(row.getOnHandValue() != null ? row.getOnHandValue() : BigDecimal.ZERO);
+            if (row.getAvgCost() != null) hasExistingAvg = true;
         }
 
-        soh.applyCostRecompute(newAvg, newValue, null);
-        onHands.save(soh);
+        // Compute new company-product avg (same formula as single-row, but on aggregated totals).
+        BigDecimal newQty = totalQty.add(receiptQty);
+        BigDecimal newAvg;
+        BigDecimal newTotalValue;
+
+        if (newQty.compareTo(BigDecimal.ZERO) <= 0) {
+            // Pathological: receipt into deep-negative aggregate — keep prior avg, add value
+            newAvg        = hasExistingAvg
+                    ? allRows.stream().filter(r -> r.getAvgCost() != null)
+                              .findFirst().map(StockOnHand::getAvgCost).orElse(cost)
+                    : cost;
+            newTotalValue = totalValue.add(receiptValue);
+        } else if (!hasExistingAvg || totalQty.compareTo(BigDecimal.ZERO) <= 0) {
+            // First receipt, or receipt onto zero/negative aggregate — reset to receipt cost
+            newAvg        = cost;
+            newTotalValue = round4(newQty.multiply(cost));
+        } else {
+            // Normal weighted-average recompute: new_avg = (total_value + recv_value) / new_total_qty
+            newTotalValue = totalValue.add(receiptValue);
+            newAvg        = round4(newTotalValue.divide(newQty, SCALE, RM));
+        }
+
+        // Sync new avg_cost and re-attributed on_hand_value to EVERY location row
+        // (on_hand_value per row = row.qty × new_avg, so Σ on_hand_value == new_total_value).
+        // The receiving row's qty will be incremented by the posting service AFTER we return;
+        // all other rows are stable — write their re-attributed values now.
+        for (StockOnHand row : allRows) {
+            BigDecimal rowNewValue = round4(row.getQuantity().multiply(newAvg));
+            row.applyCostRecompute(newAvg, rowNewValue, null);
+            onHands.save(row);
+        }
+
+        // If the receiving row is newly created (not in allRows yet because it was just saved),
+        // ensure its avg_cost is set. Its on_hand_value will be correct once posting adds qty.
+        if (allRows.stream().noneMatch(r -> r.getId().equals(receivingRow.getId()))) {
+            receivingRow.applyCostRecompute(newAvg, BigDecimal.ZERO, null);
+            onHands.save(receivingRow);
+        }
 
         return receiptValue;
     }
 
     // -------------------------------------------------------------------------
     // (b) Cost-issue: debit on_hand_value at current avg (ADR-0020 D-4b)
+    //     ADR-0028 D-2 FIX (Finding 2): avg_cost is read from the company-product aggregate,
+    //     not the single branch-row, so the issue costs at the true company-wide avg.
     //     FIX D: public wrapper retries once on optimistic lock clash.
     //     FIX G: guard against zero issued qty (div-by-zero in unit-cost re-derivation).
     // -------------------------------------------------------------------------
@@ -148,6 +204,12 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
         }
     }
 
+    /**
+     * ADR-0028 D-2 FIX (Finding 2): resolves avg_cost from all location rows for (company, product)
+     * so that an issue from LOC1 when stock also sits at LOC2 costs at the true company-product avg,
+     * not an isolated per-location avg. Only the specific branch row's on_hand_value is decremented
+     * (the qty delta is applied by the posting service to that row only).
+     */
     private BigDecimal doCostIssue(Long companyId, Long branchId, Long productId,
                                     BigDecimal issuedQty) {
         // FIX G: zero issued qty — skip COGS leg, no division
@@ -157,19 +219,38 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
             return null;
         }
 
-        StockOnHand soh = onHands.findByCompanyIdAndBranchIdAndProductId(companyId, branchId, productId)
+        // Derive company-product avg from ALL location rows (ADR-0028 D-2).
+        // All rows for the same company-product should carry the same avg_cost (synced on receipt).
+        // Read any non-null avg_cost as the authoritative company-product avg.
+        List<StockOnHand> allRows = onHands.findByCompanyIdAndProductId(companyId, productId);
+        BigDecimal companyAvgCost = allRows.stream()
+                .filter(r -> r.getAvgCost() != null)
+                .map(StockOnHand::getAvgCost)
+                .findFirst()
                 .orElse(null);
 
-        if (soh == null || soh.getAvgCost() == null) {
+        if (companyAvgCost == null) {
             log.warn("InventoryValuation: costIssue — avg_cost IS NULL for company={} product={} " +
                              "— COGS leg skipped (D-2 edge)", companyId, productId);
             return null;  // caller skips GL leg + logs anomaly
         }
 
-        BigDecimal issuedValue = round4(issuedQty.multiply(soh.getAvgCost()));
+        // Locate the specific issuing branch row to deduct on_hand_value from.
+        @SuppressWarnings("deprecation")
+        StockOnHand soh = onHands.findByCompanyIdAndBranchIdAndProductId(companyId, branchId, productId)
+                .orElse(null);
+
+        if (soh == null) {
+            log.warn("InventoryValuation: costIssue — no on-hand row for company={} branch={} product={} " +
+                             "— COGS value computed but on_hand_value not decremented", companyId, branchId, productId);
+            // Still return the issued value so the GL leg fires (quantity is moving via posting service)
+            return round4(issuedQty.multiply(companyAvgCost));
+        }
+
+        BigDecimal issuedValue = round4(issuedQty.multiply(companyAvgCost));
         BigDecimal newValue    = soh.getOnHandValue().subtract(issuedValue);
         // avg_cost is unchanged on issue (BR-INV-01)
-        soh.applyCostRecompute(soh.getAvgCost(), newValue, null);
+        soh.applyCostRecompute(companyAvgCost, newValue, null);
         onHands.save(soh);
 
         return issuedValue;
@@ -194,6 +275,7 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
 
     private void doReverseIssue(Long companyId, Long branchId, Long productId,
                                  BigDecimal originalValue) {
+        @SuppressWarnings("deprecation")
         StockOnHand soh = onHands.findByCompanyIdAndBranchIdAndProductId(companyId, branchId, productId)
                 .orElse(null);
         if (soh == null) return; // no on-hand row — cannot restore (shouldn't happen)
@@ -206,9 +288,9 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
 
     // -------------------------------------------------------------------------
     // (d) Reverse receipt: back out on_hand_value + recompute avg (ADR-0020 D-5)
-    //     FIX A: postReversalQty = soh.getQuantity().subtract(originalQty.abs())
-    //            because StockPostingService applies the negative qty delta AFTER this
-    //            method returns — soh holds the PRE-reversal qty at call time.
+    //     ADR-0028 D-2 FIX: aggregate ALL location rows, compute new avg on post-reversal totals,
+    //     sync to ALL rows (mirrors doRecomputeOnReceipt).
+    //     FIX A: postReversalQty derived from aggregate total minus original qty.
     //     FIX D: public wrapper retries once on optimistic lock clash.
     // -------------------------------------------------------------------------
 
@@ -224,31 +306,44 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
         }
     }
 
+    /**
+     * ADR-0028 D-2 FIX: aggregates ALL location rows to compute the post-reversal company-product
+     * avg, then syncs to all rows. FIX A: soh rows hold PRE-reversal quantities at call time
+     * (posting applies the delta after this returns), so postReversalQty = Σ qty − original qty.
+     */
     private void doReverseReceipt(Long companyId, Long branchId, Long productId,
                                    BigDecimal originalQty, BigDecimal originalValue) {
-        StockOnHand soh = onHands.findByCompanyIdAndBranchIdAndProductId(companyId, branchId, productId)
-                .orElse(null);
-        if (soh == null) return;
+        List<StockOnHand> allRows = onHands.findByCompanyIdAndProductId(companyId, productId);
+        if (allRows.isEmpty()) return;
 
-        BigDecimal onHandVal = soh.getOnHandValue() != null ? soh.getOnHandValue() : BigDecimal.ZERO;
-
-        BigDecimal newValue = onHandVal.subtract(originalValue);
-
-        // FIX A: StockPostingService applies the negative qty delta AFTER this method is called
-        // (in GoodsReceiptReversalStockHandler, valuation.reverseReceipt runs before posting.post).
-        // soh.getQuantity() is still the PRE-reversal qty here — subtract the original receipt qty
-        // to derive the POST-reversal qty (ADR-0020 D-5: newQty = qty − original.qty).
-        BigDecimal postReversalQty = soh.getQuantity().subtract(originalQty.abs());
-
-        BigDecimal newAvg;
-        if (postReversalQty.compareTo(BigDecimal.ZERO) > 0) {
-            newAvg = round4(newValue.divide(postReversalQty, SCALE, RM));
-        } else {
-            newAvg = soh.getAvgCost(); // keep last-known if empties to <= 0 (D-5)
+        // Aggregate PRE-reversal totals across all locations.
+        BigDecimal totalQty   = BigDecimal.ZERO;
+        BigDecimal totalValue = BigDecimal.ZERO;
+        for (StockOnHand row : allRows) {
+            totalQty   = totalQty.add(row.getQuantity());
+            totalValue = totalValue.add(row.getOnHandValue() != null ? row.getOnHandValue() : BigDecimal.ZERO);
         }
 
-        soh.applyCostRecompute(newAvg, newValue, null);
-        onHands.save(soh);
+        // FIX A: posting service applies the negative qty delta AFTER this method is called.
+        // PRE-reversal totals are used; subtract the original qty to derive POST-reversal total qty.
+        BigDecimal postReversalTotalQty   = totalQty.subtract(originalQty.abs());
+        BigDecimal postReversalTotalValue = totalValue.subtract(originalValue);
+
+        BigDecimal newAvg;
+        if (postReversalTotalQty.compareTo(BigDecimal.ZERO) > 0) {
+            newAvg = round4(postReversalTotalValue.divide(postReversalTotalQty, SCALE, RM));
+        } else {
+            // Aggregate went to <= 0 after reversal — keep last known avg (D-5)
+            newAvg = allRows.stream().filter(r -> r.getAvgCost() != null)
+                    .map(StockOnHand::getAvgCost).findFirst().orElse(BigDecimal.ZERO);
+        }
+
+        // Sync new avg and re-attributed on_hand_value to every location row.
+        for (StockOnHand row : allRows) {
+            BigDecimal rowNewValue = round4(row.getQuantity().multiply(newAvg));
+            row.applyCostRecompute(newAvg, rowNewValue, null);
+            onHands.save(row);
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -312,7 +407,9 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
 
     // -------------------------------------------------------------------------
     // (f) Adjustment revaluation (ADR-0020 D-7)
+    //     ADR-0028 D-2: soh passed in from caller — applies to the specific location row.
     //     FIX D: public wrapper retries once on optimistic lock clash.
+    //     FIX (retry re-read): use location-aware finder to re-read the SAME location row.
     // -------------------------------------------------------------------------
 
     @Override
@@ -326,9 +423,14 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
             log.debug("InventoryValuation: optimistic lock clash on revalueAdjustment " +
                               "company={} movement={} — retrying once (FIX D / NFR-INV-05)",
                     soh.getCompanyId(), movementUid);
-            // Re-read fresh soh state before retry
-            StockOnHand freshSoh = onHands.findByCompanyIdAndBranchIdAndProductId(
-                    soh.getCompanyId(), soh.getBranchId(), soh.getProductId()).orElse(soh);
+            // ADR-0028 D-2 FIX: re-read by LOCATION (not just company/branch/product) so the
+            // retry operates on the exact same row — not any other location's row for the same product.
+            StockOnHand freshSoh = (soh.getLocationId() != null)
+                    ? onHands.findByCompanyIdAndBranchIdAndLocationIdAndProductId(
+                            soh.getCompanyId(), soh.getBranchId(), soh.getLocationId(), soh.getProductId())
+                            .orElse(soh)
+                    : onHands.findByCompanyIdAndBranchIdAndProductId(
+                            soh.getCompanyId(), soh.getBranchId(), soh.getProductId()).orElse(soh);
             doRevalueAdjustment(movementUid, freshSoh, adjustQty, postingDate,
                     costCentreValueId, departmentValueId);
         }

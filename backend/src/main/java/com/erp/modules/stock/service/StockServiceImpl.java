@@ -55,6 +55,7 @@ public class StockServiceImpl implements StockService {
     private final ProductService            productService;
     private final InventoryValuationService valuation;
     private final DimensionResolver         dimensionResolver;
+    private final LocationResolver          locationResolver;
     private final ScopeGuard               scopeGuard;
     private final AuditService             audit;
 
@@ -64,6 +65,7 @@ public class StockServiceImpl implements StockService {
                             ProductService productService,
                             InventoryValuationService valuation,
                             DimensionResolver dimensionResolver,
+                            LocationResolver locationResolver,
                             ScopeGuard scopeGuard,
                             AuditService audit) {
         this.onHands           = onHands;
@@ -72,6 +74,7 @@ public class StockServiceImpl implements StockService {
         this.productService    = productService;
         this.valuation         = valuation;
         this.dimensionResolver = dimensionResolver;
+        this.locationResolver  = locationResolver;
         this.scopeGuard        = scopeGuard;
         this.audit             = audit;
     }
@@ -116,9 +119,13 @@ public class StockServiceImpl implements StockService {
                         request.departmentValueUid(),
                         null, null));
 
+        // ADR-0028 D-3: resolve the branch's default location for location-unaware callers.
+        Long locationId = locationResolver.defaultLocationId(product.companyId(), principal.branchId());
+
         String movementUid = posting.post(
                 product.companyId(),
                 principal.branchId(),
+                locationId,
                 product.id(),
                 request.quantity(),
                 MovementType.ADJUSTMENT,
@@ -166,9 +173,13 @@ public class StockServiceImpl implements StockService {
                     "Use an ADJUSTMENT to correct an existing level.");
         }
 
+        // ADR-0028 D-3: resolve the branch's default location for location-unaware callers.
+        Long locationId = locationResolver.defaultLocationId(product.companyId(), principal.branchId());
+
         String movementUid = posting.post(
                 product.companyId(),
                 principal.branchId(),
+                locationId,
                 product.id(),
                 request.quantity(),   // must be positive (validated by @Positive on the DTO)
                 MovementType.OPENING_BALANCE,

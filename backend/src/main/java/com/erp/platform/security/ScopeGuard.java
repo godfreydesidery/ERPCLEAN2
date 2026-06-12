@@ -42,6 +42,12 @@ import com.erp.modules.sales.repository.SalesReturnRepository;
 import com.erp.modules.sales.repository.TaxRateRepository;
 import com.erp.modules.stock.repository.StockMovementRepository;
 import com.erp.modules.stock.repository.StockOnHandRepository;
+// inventory-depth (ADR-0028 D-10)
+import com.erp.modules.stock.repository.StockLocationRepository;
+import com.erp.modules.stock.repository.StockTransferRepository;
+import com.erp.modules.stock.repository.StockCountRepository;
+import com.erp.modules.stock.repository.StockBatchRepository;
+import com.erp.modules.stock.repository.StockSerialRepository;
 // approvals (ADR-0022)
 import com.erp.modules.approvals.repository.ApprovalPolicyRepository;
 import com.erp.modules.approvals.repository.ApprovalRequestRepository;
@@ -134,6 +140,12 @@ public class ScopeGuard {
     // cost-centre (ADR-0025 D-5)
     private final DimensionRepository        dimensions;
     private final DimensionValueRepository   dimensionValues;
+    // inventory-depth (ADR-0028 D-10)
+    private final StockLocationRepository    stockLocations;
+    private final StockTransferRepository    stockTransfers;
+    private final StockCountRepository       stockCounts;
+    private final StockBatchRepository       stockBatches;
+    private final StockSerialRepository      stockSerials;
     private final AuditService             audit;
 
     public ScopeGuard(CompanyRepository companies,
@@ -186,6 +198,12 @@ public class ScopeGuard {
                       // cost-centre (ADR-0025 D-5)
                       DimensionRepository dimensions,
                       DimensionValueRepository dimensionValues,
+                      // inventory-depth (ADR-0028 D-10)
+                      StockLocationRepository stockLocations,
+                      StockTransferRepository stockTransfers,
+                      StockCountRepository stockCounts,
+                      StockBatchRepository stockBatches,
+                      StockSerialRepository stockSerials,
                       AuditService audit) {
         this.companies      = companies;
         this.branches       = branches;
@@ -237,6 +255,12 @@ public class ScopeGuard {
         // cost-centre (ADR-0025 D-5)
         this.dimensions          = dimensions;
         this.dimensionValues     = dimensionValues;
+        // inventory-depth (ADR-0028 D-10)
+        this.stockLocations      = stockLocations;
+        this.stockTransfers      = stockTransfers;
+        this.stockCounts         = stockCounts;
+        this.stockBatches        = stockBatches;
+        this.stockSerials        = stockSerials;
         this.audit               = audit;
     }
 
@@ -311,6 +335,12 @@ public class ScopeGuard {
             // cost-centre target types (ADR-0025 D-5)
             case "dimension"           -> dimensions.findCompanyIdByUid(uid);
             case "dimensionvalue"      -> dimensionValues.findCompanyIdByUid(uid);
+            // inventory-depth target types (ADR-0028 D-10)
+            case "stocklocation"       -> stockLocations.findCompanyIdByUid(uid);
+            case "stocktransfer"       -> stockTransfers.findCompanyIdByUid(uid);
+            case "stockcount"          -> stockCounts.findCompanyIdByUid(uid);
+            case "stockbatch"          -> stockBatches.findCompanyIdByUid(uid);
+            case "stockserial"         -> stockSerials.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };

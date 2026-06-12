@@ -232,4 +232,23 @@ public final class AuditActions {
     public static final String COSTING_VALUE_UPDATE              = "COSTING.VALUE.UPDATE";
     public static final String COSTING_VALUE_DEACTIVATE          = "COSTING.VALUE.DEACTIVATE";
     public static final String COSTING_DIMENSION_MANDATORY_SET   = "COSTING.DIMENSION.MANDATORY.SET";
+
+    // ---- Inventory depth: stock locations (ADR-0028 D-4) ----
+    public static final String STOCK_LOCATION_CREATE       = "STOCK.LOCATION.CREATE";
+    public static final String STOCK_LOCATION_UPDATE       = "STOCK.LOCATION.UPDATE";
+    public static final String STOCK_LOCATION_DEACTIVATE   = "STOCK.LOCATION.DEACTIVATE";
+    public static final String STOCK_LOCATION_SET_DEFAULT  = "STOCK.LOCATION.SET_DEFAULT";
+
+    // ---- Inventory depth: inter-location transfers (ADR-0028 D-5) ----
+    public static final String STOCK_TRANSFER_CREATE    = "STOCK.TRANSFER.CREATE";
+    public static final String STOCK_TRANSFER_DISPATCH  = "STOCK.TRANSFER.DISPATCH";
+    public static final String STOCK_TRANSFER_RECEIVE   = "STOCK.TRANSFER.RECEIVE";
+    public static final String STOCK_TRANSFER_COMPLETE  = "STOCK.TRANSFER.COMPLETE";
+    public static final String STOCK_TRANSFER_CANCEL    = "STOCK.TRANSFER.CANCEL";
+
+    // ---- Inventory depth: stock counts (ADR-0028 D-6) ----
+    public static final String STOCK_COUNT_CREATE  = "STOCK.COUNT.CREATE";
+    public static final String STOCK_COUNT_ENTER   = "STOCK.COUNT.ENTER";
+    public static final String STOCK_COUNT_POST    = "STOCK.COUNT.POST";
+    public static final String STOCK_COUNT_CANCEL  = "STOCK.COUNT.CANCEL";
 }

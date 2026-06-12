@@ -20,9 +20,18 @@ public interface StockOnHandRepository extends JpaRepository<StockOnHand, Long> 
     /**
      * The upsert-probe for the posting primitive (D-4): returns the existing on-hand row for
      * the (company, branch, product) triple, or empty if first-touch.
+     * @deprecated Use the location-aware overload (ADR-0028 D-3).
      */
+    @Deprecated
     Optional<StockOnHand> findByCompanyIdAndBranchIdAndProductId(
             Long companyId, Long branchId, Long productId);
+
+    /**
+     * Location-aware upsert-probe (ADR-0028 D-3): returns the existing on-hand row for
+     * (company, branch, location, product), or empty if first-touch.
+     */
+    Optional<StockOnHand> findByCompanyIdAndBranchIdAndLocationIdAndProductId(
+            Long companyId, Long branchId, Long locationId, Long productId);
 
     /** uid-lookup for the reorder-level edit endpoint (D-11). */
     Optional<StockOnHand> findByUid(String uid);
@@ -55,4 +64,30 @@ public interface StockOnHandRepository extends JpaRepository<StockOnHand, Long> 
      * to aggregate value per product (ADR-0020 D-6).
      */
     List<StockOnHand> findByCompanyId(Long companyId);
+
+    // --- notifications scanner (ADR-0024 D-7): low-stock scan ---
+
+    /**
+     * On-hand rows at or below reorder level (reorder_level is NOT NULL) for a company.
+     * Used by {@code NotificationScanner}. Backed by {@code ix_stock_on_hand_low_stock_scan} (V26).
+     */
+    @Query("""
+            SELECT s FROM StockOnHand s
+            WHERE s.companyId = :companyId
+              AND s.reorderLevel IS NOT NULL
+              AND s.quantity <= s.reorderLevel
+            """)
+    List<StockOnHand> findAtOrBelowReorderByCompany(@Param("companyId") Long companyId);
+
+    /**
+     * On-hand rows ABOVE reorder level that have a reorder_level set — re-arm sweep
+     * (low-stock recovery scan, BR-NOTIF-08).
+     */
+    @Query("""
+            SELECT s FROM StockOnHand s
+            WHERE s.companyId = :companyId
+              AND s.reorderLevel IS NOT NULL
+              AND s.quantity > s.reorderLevel
+            """)
+    List<StockOnHand> findAboveReorderByCompany(@Param("companyId") Long companyId);
 }

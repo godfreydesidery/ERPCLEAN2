@@ -57,6 +57,18 @@ public final class DomainEventType {
     public static final String DOCUMENT_GENERATED     = "DOCUMENT.GENERATED";
     public static final String AGG_GENERATED_DOCUMENT = "GENERATED_DOCUMENT";
 
+    // --- inventory depth: inter-location transfers (ADR-0028 D-5) ---
+    /** Transfer dispatched from source location — TRANSFER_OUT stock movement trigger. */
+    public static final String STOCK_TRANSFER_DISPATCHED = "STOCK.TRANSFER.DISPATCHED";
+    /** Transfer received at destination location — TRANSFER_IN stock movement trigger. */
+    public static final String STOCK_TRANSFER_RECEIVED   = "STOCK.TRANSFER.RECEIVED";
+    public static final String AGG_STOCK_TRANSFER        = "STOCK_TRANSFER";
+
+    // --- inventory depth: stock counts (ADR-0028 D-6) ---
+    /** Stock count posted — variance adjustments committed. */
+    public static final String STOCK_COUNT_POSTED = "STOCK.COUNT.POSTED";
+    public static final String AGG_STOCK_COUNT    = "STOCK_COUNT";
+
     private DomainEventType() {
     }
 }

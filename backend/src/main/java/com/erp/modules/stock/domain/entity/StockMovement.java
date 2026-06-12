@@ -26,6 +26,8 @@ import java.time.Instant;
  * {@code uq_stock_movement_source_event (source_event_uid, product_id)} DB backstop ensures a given
  * (event, product) is deducted at most once.
  *
+ * <p>ADR-0028 D-3: {@code location_id} column added (V38 re-grain).
+ *
  * <p>No Lombok on entities (PROJECT-CONVENTIONS).
  */
 @Entity
@@ -44,6 +46,13 @@ public class StockMovement {
 
     @Column(name = "branch_id", nullable = false, updatable = false)
     private Long branchId;
+
+    /**
+     * Scalar FK to stock_locations.id — the physical location affected by this movement.
+     * Added by ADR-0028 V38 re-grain; backfilled to the branch default location for existing rows.
+     */
+    @Column(name = "location_id", nullable = false, updatable = false)
+    private Long locationId;
 
     /** Scalar FK to products.id — no cross-module @ManyToOne (D-1). */
     @Column(name = "product_id", nullable = false, updatable = false)
@@ -131,42 +140,24 @@ public class StockMovement {
     }
 
     /**
-     * Full constructor used by {@link com.erp.modules.stock.service.StockPostingService}.
-     * The two trailing cost params are nullable — existing paths that post no cost pass null.
-     *
-     * @param companyId          tenant scope
-     * @param branchId           tenant branch scope
-     * @param productId          the product whose on-hand this row changes
-     * @param movementType       the signed movement category
-     * @param quantity           signed delta in base units (non-zero)
-     * @param sourceEventUid     the originating domain_events.uid (null for manual)
-     * @param sourceDocumentType SALES_INVOICE / GOODS_RECEIPT (null for manual)
-     * @param sourceDocumentUid  the invoice / receipt uid (null for manual)
-     * @param reasonCode         AdjustmentReason name (mandatory for ADJUSTMENT, null otherwise)
-     * @param note               optional free-text
-     * @param occurredAt         business time of the movement
-     * @param createdBy          operator id for manual movements; null for system
-     * @param unitCostAmount     unit cost at this movement (ADR-0020 D-2); null = no cost
-     * @param valueAmount        signed value = qty × unit_cost, HALF_UP 4dp; null = no cost
+     * Full constructor — location-aware (ADR-0028 D-3).
      */
-    public StockMovement(Long companyId, Long branchId, Long productId,
+    public StockMovement(Long companyId, Long branchId, Long locationId, Long productId,
                          MovementType movementType, BigDecimal quantity,
                          String sourceEventUid, String sourceDocumentType, String sourceDocumentUid,
                          String reasonCode, String note,
                          Instant occurredAt, Long createdBy,
                          BigDecimal unitCostAmount, BigDecimal valueAmount) {
-        this(companyId, branchId, productId, movementType, quantity,
+        this(companyId, branchId, locationId, productId, movementType, quantity,
              sourceEventUid, sourceDocumentType, sourceDocumentUid,
              reasonCode, note, occurredAt, createdBy, unitCostAmount, valueAmount,
              null, null);
     }
 
     /**
-     * Extended constructor with dimension default ids (ADR-0025 D-6, V28).
-     * The two trailing dimension ids are nullable — existing callers use the above constructor
-     * which defaults them to null (NFR-CC-01 zero-regression guarantee).
+     * Extended constructor with dimension default ids (ADR-0025 D-6, V28) + locationId (ADR-0028 D-3).
      */
-    public StockMovement(Long companyId, Long branchId, Long productId,
+    public StockMovement(Long companyId, Long branchId, Long locationId, Long productId,
                          MovementType movementType, BigDecimal quantity,
                          String sourceEventUid, String sourceDocumentType, String sourceDocumentUid,
                          String reasonCode, String note,
@@ -175,6 +166,7 @@ public class StockMovement {
                          Long costCentreValueId, Long departmentValueId) {
         this.companyId           = companyId;
         this.branchId            = branchId;
+        this.locationId          = locationId;
         this.productId           = productId;
         this.movementType        = movementType;
         this.quantity            = quantity;
@@ -189,6 +181,42 @@ public class StockMovement {
         this.valueAmount         = valueAmount;
         this.costCentreValueId   = costCentreValueId;
         this.departmentValueId   = departmentValueId;
+    }
+
+    /**
+     * Legacy 14-arg constructor (no locationId) — retained so existing callers compile.
+     * locationId defaults to null; the V38 migration backfills existing rows.
+     * @deprecated Use the locationId-bearing constructors (ADR-0028 D-3).
+     */
+    @Deprecated
+    public StockMovement(Long companyId, Long branchId, Long productId,
+                         MovementType movementType, BigDecimal quantity,
+                         String sourceEventUid, String sourceDocumentType, String sourceDocumentUid,
+                         String reasonCode, String note,
+                         Instant occurredAt, Long createdBy,
+                         BigDecimal unitCostAmount, BigDecimal valueAmount) {
+        this(companyId, branchId, null, productId, movementType, quantity,
+             sourceEventUid, sourceDocumentType, sourceDocumentUid,
+             reasonCode, note, occurredAt, createdBy, unitCostAmount, valueAmount,
+             null, null);
+    }
+
+    /**
+     * Legacy 16-arg constructor (no locationId) — retained so ADR-0025 callers compile.
+     * @deprecated Use the locationId-bearing constructors (ADR-0028 D-3).
+     */
+    @Deprecated
+    public StockMovement(Long companyId, Long branchId, Long productId,
+                         MovementType movementType, BigDecimal quantity,
+                         String sourceEventUid, String sourceDocumentType, String sourceDocumentUid,
+                         String reasonCode, String note,
+                         Instant occurredAt, Long createdBy,
+                         BigDecimal unitCostAmount, BigDecimal valueAmount,
+                         Long costCentreValueId, Long departmentValueId) {
+        this(companyId, branchId, null, productId, movementType, quantity,
+             sourceEventUid, sourceDocumentType, sourceDocumentUid,
+             reasonCode, note, occurredAt, createdBy, unitCostAmount, valueAmount,
+             costCentreValueId, departmentValueId);
     }
 
     @PrePersist
@@ -206,6 +234,7 @@ public class StockMovement {
     public String       getUid()                 { return uid; }
     public Long         getCompanyId()           { return companyId; }
     public Long         getBranchId()            { return branchId; }
+    public Long         getLocationId()          { return locationId; }
     public Long         getProductId()           { return productId; }
     public MovementType getMovementType()        { return movementType; }
     public BigDecimal   getQuantity()            { return quantity; }
