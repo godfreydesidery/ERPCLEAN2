@@ -162,15 +162,10 @@ public class ApprovalDecisionServiceImpl implements ApprovalDecisionService {
     }
 
     private void handleReject(ApprovalRequest request, Long actorId, Instant now) {
-        // Skip all remaining PENDING steps (one reject kills the chain — OQ-APR-04 default)
-        List<ApprovalRequestStep> remainingPending =
-                stepRepo.findByApprovalRequestIdAndStatus(request.getId(), ApprovalStepStatus.PENDING);
-        // The open step itself has already been set to REJECTED above; skip the rest
-        for (ApprovalRequestStep s : remainingPending) {
-            if (s.getStatus() == ApprovalStepStatus.PENDING) {
-                s.setStatus(ApprovalStepStatus.SKIPPED);
-            }
-        }
+        // Skip all remaining PENDING steps atomically (one reject kills the chain — OQ-APR-04 default).
+        // The open step was already set to REJECTED before this call, so only subsequent PENDING steps
+        // are affected. Single DML UPDATE avoids intermediate inconsistent state (Finding 1 fix).
+        stepRepo.updatePendingToSkipped(request.getId());
 
         request.setStatus(ApprovalRequestStatus.REJECTED);
         request.setResolvedAt(now);
@@ -304,8 +299,8 @@ public class ApprovalDecisionServiceImpl implements ApprovalDecisionService {
     // ------------------------------------------------------------------
 
     private void skipPendingSteps(Long requestId) {
-        stepRepo.findByApprovalRequestIdAndStatus(requestId, ApprovalStepStatus.PENDING)
-                .forEach(s -> s.setStatus(ApprovalStepStatus.SKIPPED));
+        // Single atomic UPDATE — eliminates entity loop inconsistency risk (Finding 1 fix).
+        stepRepo.updatePendingToSkipped(requestId);
     }
 
     private void publishResolved(ApprovalRequest request, Long resolvedBy, Instant resolvedAt) {

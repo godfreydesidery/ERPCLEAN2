@@ -40,6 +40,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 /**
@@ -286,6 +288,108 @@ class ApprovalsEngineIT extends PostgresIntegrationTest {
         ApprovalRequestDto recalled = decisionService.recall(request.uid());
         assertThat(recalled.status()).isEqualTo(ApprovalRequestStatus.RECALLED);
         assertThat(recalled.steps().get(0).status().name()).isEqualTo("SKIPPED");
+    }
+
+    // ------------------------------------------------------------------
+    // 7. Finding 1 fix: reject atomically SKIPs ALL later steps (not just the first)
+    //    Verifies the batch UPDATE path rather than the old entity-loop.
+    // ------------------------------------------------------------------
+    @Test
+    void reject_skipsAllLaterSteps_atomically() {
+        asPrincipal(buyerUser);
+        // Three-step policy: PM → FM → buyer (we reuse buyerUser as step-3 role holder for simplicity)
+        Role step3Role = roles.save(new Role("STEP3_ROLE", "Step3 Role"));
+        asPrincipal(buyerUser);
+        userRoleService.grant(new GrantRoleRequest(
+                fmUser.getUid(), step3Role.getUid(), company.getUid(), branch.getUid()));
+
+        policyService.create(new CreateApprovalPolicyRequest(
+                company.getId(), "PURCHASE_ORDER", "Three-step policy",
+                PolicyBranchScope.COMPANY_WIDE, null,
+                new BigDecimal("1000000"), new BigDecimal("100000000"), null,
+                List.of(new PolicyStepInputDto(1, "PURCHASING_MANAGER"),
+                        new PolicyStepInputDto(2, "FINANCE_MANAGER"),
+                        new PolicyStepInputDto(3, "STEP3_ROLE"))
+        ));
+        ApprovalRequestDto request = engine.submitForApproval(new SubmitForApprovalRequest(
+                "PURCHASE_ORDER", "po-uid-3step", new BigDecimal("12000000"), "TZS",
+                company.getId(), branch.getUid(), buyerUser.getId(), "3-step PO"));
+
+        assertThat(request.steps()).hasSize(3);
+
+        // PM rejects step 1 → request REJECTED, steps 2 and 3 both SKIPPED
+        asPrincipal(pmUser);
+        ApprovalRequestDto rejected = decisionService.decide(request.uid(),
+                new DecideRequest(DecisionAction.REJECT, "Not approved"));
+
+        assertThat(rejected.status()).isEqualTo(ApprovalRequestStatus.REJECTED);
+        assertThat(rejected.steps().get(0).status().name()).isEqualTo("REJECTED");
+        // Both remaining steps must be SKIPPED — proves the atomic batch UPDATE worked
+        assertThat(rejected.steps().get(1).status().name()).isEqualTo("SKIPPED");
+        assertThat(rejected.steps().get(2).status().name()).isEqualTo("SKIPPED");
+    }
+
+    // ------------------------------------------------------------------
+    // 8. Finding 2 fix: inbox does NOT show requests from branches the caller has no access to
+    // ------------------------------------------------------------------
+    @Test
+    void inbox_excludesRequestsFromUnassignedBranches() {
+        // Create a second branch; pmUser is NOT assigned to it
+        Branch branch2 = branches.save(new Branch(company, "APPR-B2", "Approvals Branch 2"));
+
+        asPrincipal(buyerUser);
+        policyService.create(new CreateApprovalPolicyRequest(
+                company.getId(), "PURCHASE_ORDER", "Policy",
+                PolicyBranchScope.COMPANY_WIDE, null,
+                new BigDecimal("1000000"), null, null,
+                List.of(new PolicyStepInputDto(1, "PURCHASING_MANAGER"))
+        ));
+
+        // Submit the PO from branch2 — pmUser has no user_branch assignment for branch2
+        ApprovalRequestDto request = engine.submitForApproval(new SubmitForApprovalRequest(
+                "PURCHASE_ORDER", "po-uid-branch2", new BigDecimal("5000000"), "TZS",
+                company.getId(), branch2.getUid(), buyerUser.getId(), "Branch-2 PO"));
+
+        assertThat(request.status()).isEqualTo(ApprovalRequestStatus.PENDING);
+
+        // pmUser has the PURCHASING_MANAGER role but no access to branch2 — must not appear in inbox
+        asPrincipal(pmUser);
+        Page<ApprovalRequestDto> inboxPage = decisionService.inbox(PageRequest.of(0, 20));
+        assertThat(inboxPage.getContent())
+                .as("PM user has no branch-2 access; request from branch-2 must not appear in inbox")
+                .noneMatch(r -> r.uid().equals(request.uid()));
+    }
+
+    // ------------------------------------------------------------------
+    // 9. Finding 5 fix: re-submitting a terminal (REJECTED) request with same UID → ConflictException
+    // ------------------------------------------------------------------
+    @Test
+    void resubmit_afterRejection_withSameUid_throwsConflict() {
+        asPrincipal(buyerUser);
+        policyService.create(new CreateApprovalPolicyRequest(
+                company.getId(), "PURCHASE_ORDER", "Policy",
+                PolicyBranchScope.COMPANY_WIDE, null,
+                new BigDecimal("1000000"), null, null,
+                List.of(new PolicyStepInputDto(1, "PURCHASING_MANAGER"))
+        ));
+        ApprovalRequestDto request = engine.submitForApproval(new SubmitForApprovalRequest(
+                "PURCHASE_ORDER", "po-uid-resubmit", new BigDecimal("5000000"), "TZS",
+                company.getId(), branch.getUid(), buyerUser.getId(), "PO to reject"));
+
+        // PM rejects it
+        asPrincipal(pmUser);
+        ApprovalRequestDto rejected = decisionService.decide(request.uid(),
+                new DecideRequest(DecisionAction.REJECT, "Rejected"));
+        assertThat(rejected.status()).isEqualTo(ApprovalRequestStatus.REJECTED);
+
+        // Consumer attempts re-submit with same document UID — must throw ConflictException (OQ-APR-06)
+        asPrincipal(buyerUser);
+        assertThatThrownBy(() -> engine.submitForApproval(new SubmitForApprovalRequest(
+                "PURCHASE_ORDER", "po-uid-resubmit", new BigDecimal("5000000"), "TZS",
+                company.getId(), branch.getUid(), buyerUser.getId(), "Re-submitted PO")))
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
+                .hasMessageContaining("already resolved")
+                .hasMessageContaining("REJECTED");
     }
 
     // ------------------------------------------------------------------
