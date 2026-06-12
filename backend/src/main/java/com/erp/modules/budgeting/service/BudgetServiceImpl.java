@@ -297,6 +297,7 @@ public class BudgetServiceImpl implements BudgetService {
                 BudgetLine line = existing.get();
                 line.setAmount(input.amount().setScale(4, RoundingMode.HALF_UP));
                 line.setLineMemo(input.lineMemo());
+                lines.save(line); // explicit save — do not rely on flush-mode for dirty-check (Fix #1)
             } else {
                 lines.save(new BudgetLine(
                         ver.getId(), ver.getCompanyId(), account.getId(), period.getId(),
@@ -326,7 +327,9 @@ public class BudgetServiceImpl implements BudgetService {
             Optional<BudgetLine> existing = lines.findByBudgetVersionIdAndAccountIdAndFiscalPeriodId(
                     ver.getId(), account.getId(), period.getId());
             if (existing.isPresent()) {
-                existing.get().setAmount(amt);
+                BudgetLine line = existing.get();
+                line.setAmount(amt);
+                lines.save(line); // explicit save — do not rely on flush-mode for dirty-check (Fix #2)
             } else {
                 lines.save(new BudgetLine(
                         ver.getId(), ver.getCompanyId(), account.getId(), period.getId(),
