@@ -41,6 +41,7 @@ import com.erp.platform.events.OutboxPublisher;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
+import java.text.DecimalFormat;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -263,11 +264,15 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                         "customerId", String.valueOf(customer.getId()),
                         "glEntryUid", posted.uid())));
 
-        // 11. Payment notification trigger — PAYMENT.RECEIVED (ADR-0024 D-8)
+        // 11. Payment notification trigger — PAYMENT.RECEIVED (ADR-0024 D-8).
+        // BR-NOTIF-13: amountFormatted must be a pre-formatted display string (e.g. "TZS 1,250.00"),
+        // never a raw BigDecimal string. DecimalFormat is not thread-safe; create a new instance here.
+        String amountFormatted = (currency != null ? currency + " " : "")
+                + new DecimalFormat("#,##0.00").format(receipt.getAmount());
         outbox.publish(DomainEventType.PAYMENT_RECEIVED, DomainEventType.AGG_AR_RECEIPT,
                 receipt.getId(), receipt.getUid(), companyId, receipt.getBranchId(),
                 new PaymentReceivedPayload(receipt.getUid(), companyId, receipt.getBranchId(),
-                        customer.getDisplayName(), receipt.getAmount().toPlainString(),
+                        customer.getDisplayName(), amountFormatted,
                         currency, Instant.now()));
 
         return toDto(receipt, savedAllocs, invoices);

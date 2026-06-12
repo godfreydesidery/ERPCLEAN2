@@ -92,10 +92,11 @@ public class NotificationScanner {
                 // Already notified — skip (BR-NOTIF-08)
                 continue;
             }
-            // New overdue invoice — create marker and fire
+            // New overdue invoice — fire notification, then persist marker only on success
+            // (BR-NOTIF-08 / finding #1: save AFTER raise so a raise failure leaves no marker,
+            // allowing the next scan to retry rather than permanently skipping this invoice)
             NotificationScanMarker marker = new NotificationScanMarker(
                     companyId, TYPE_INVOICE_OVERDUE, conditionKey);
-            markers.save(marker);
 
             long daysOverdue = ChronoUnit.DAYS.between(invoice.getDueDate(), today);
             Map<String, String> vals = new HashMap<>();
@@ -116,6 +117,7 @@ public class NotificationScanner {
             } catch (Exception ex) {
                 log.warn("NotificationScanner: failed to raise INVOICE_OVERDUE for invoice uid={}: {}",
                          invoice.getUid(), ex.getMessage());
+                // marker NOT saved — next scan will retry this invoice (idempotency preserved)
             }
         }
     }
