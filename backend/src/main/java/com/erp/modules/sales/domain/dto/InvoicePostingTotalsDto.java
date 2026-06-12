@@ -34,5 +34,10 @@ public record InvoicePostingTotalsDto(
         /** Cost Centre dimension default id (nullable — untagged when null). */
         Long costCentreValueId,
         /** Department dimension default id (nullable — untagged when null). */
-        Long departmentValueId
+        Long departmentValueId,
+        // --- projects (ADR-0033 D-4c) ---
+        /** Project id (nullable — untagged when null). Threaded onto the revenue GL leg. */
+        Long projectId,
+        /** Project task id (nullable). */
+        Long projectTaskId
 ) {}

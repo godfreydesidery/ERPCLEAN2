@@ -7,6 +7,7 @@ import com.erp.modules.projects.domain.dto.ProjectWipRowDto;
 import com.erp.modules.projects.domain.entity.Project;
 import com.erp.modules.projects.repository.ProjectCostingQueryRepository;
 import com.erp.modules.projects.repository.ProjectRepository;
+import com.erp.platform.common.api.ForbiddenException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
@@ -43,6 +44,11 @@ public class ProjectCostingQueryImpl implements ProjectCostingQuery {
         Project project = projects.findByUid(projectUid)
                 .orElseThrow(() -> new NotFoundException("Project not found: " + projectUid));
         scopeGuard.assertCanActIn(principal, project.getCompanyId());
+        // Branch-level isolation (ADR-0033 D-2 / NFR-PROJ-01): projects are branch-scoped;
+        // a principal from Branch A must not read Branch B's project costing.
+        if (principal.branchId() != null && !project.getBranchId().equals(principal.branchId())) {
+            throw ForbiddenException.notPermitted();
+        }
 
         BigDecimal[] rc = costRepo.revenueAndCost(project.getCompanyId(), project.getId());
         BigDecimal revenue = rc[0] != null ? rc[0] : BigDecimal.ZERO;
@@ -64,8 +70,12 @@ public class ProjectCostingQueryImpl implements ProjectCostingQuery {
         // WIP = max(0, cost − revenue billed) — floored at zero (BR-PROJ-07)
         BigDecimal wip = cost.subtract(revenue).max(BigDecimal.ZERO);
 
-        // Structural recon: because the roll-up IS the GL query, computed == GL by construction.
-        boolean balanced = revenue.compareTo(revenue) == 0 && cost.compareTo(cost) == 0;
+        // Structural recon: because the roll-up IS the GL query (a direct journal_lines GROUP BY),
+        // the computed totals ARE the GL totals by construction (ADR-0033 D-6/BR-PROJ-09).
+        // The tautology "revenue.compareTo(revenue)" is replaced with a definitive `true` and the
+        // ReconDto is populated with the actual values so mismatches can be detected if a second
+        // independent source is ever wired in.
+        boolean balanced = true;
         var recon = new ReconDto(revenue, cost, revenue, cost, balanced);
 
         return new ProjectPnlDto(
@@ -81,6 +91,8 @@ public class ProjectCostingQueryImpl implements ProjectCostingQuery {
     @Override
     public List<ProjectWipRowDto> wipReport(Long companyId, RequestContext.Principal principal) {
         scopeGuard.assertCanActIn(principal, companyId);
-        return costRepo.wipReport(companyId);
+        // Branch isolation for the WIP report: pass the principal's branchId so the SQL
+        // filters to the caller's branch only (ADR-0033 D-2 / NFR-PROJ-01).
+        return costRepo.wipReport(companyId, principal.branchId());
     }
 }

@@ -78,10 +78,12 @@ public class SupplierBillLine {
     // --- projects (ADR-0033 D-3, V65) — optional project dimension tag on AP lines ---
     /** FK → projects(id); nullable — analysis tag when this cost belongs to a project. */
     @Column(name = "project_id")
+    @Setter
     private Long projectId;
 
     /** FK → project_tasks(id); nullable. */
     @Column(name = "project_task_id")
+    @Setter
     private Long projectTaskId;
 
     @Column(name = "created_at", nullable = false, updatable = false)
