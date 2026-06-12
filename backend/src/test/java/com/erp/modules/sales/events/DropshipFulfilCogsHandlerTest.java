@@ -149,8 +149,10 @@ class DropshipFulfilCogsHandlerTest {
 
         DomainEvent event = buildEvent(payload, "EVT-003");
         when(guard.alreadyProcessed(DropshipFulfilCogsHandler.CONSUMER, "EVT-003")).thenReturn(false);
-        when(glConfig.resolve(1L, GlConfigKey.COGS)).thenReturn(mockCoa(51L));
-        when(glConfig.resolve(1L, GlConfigKey.GRNI)).thenReturn(mockCoa(21L));
+        ChartOfAccount cogsAcct3 = mockCoa(51L);
+        ChartOfAccount grniAcct3 = mockCoa(21L);
+        when(glConfig.resolve(1L, GlConfigKey.COGS)).thenReturn(cogsAcct3);
+        when(glConfig.resolve(1L, GlConfigKey.GRNI)).thenReturn(grniAcct3);
         when(glInvoker.postInNewTx(any())).thenReturn(
                 new JournalEntryDto(78L, "JE-002", 1L, null, null, null, null, null, null, null, null, null));
 

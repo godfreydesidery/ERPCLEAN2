@@ -205,7 +205,8 @@ class PosSessionServiceImplTest {
         when(sessions.findByUid("S5")).thenReturn(Optional.of(session));
         when(companies.findById(1L)).thenReturn(Optional.of(company));
         // POS_CASH_OVER config missing — throws
-        when(glConfig.resolve(1L, GlConfigKey.CASH)).thenReturn(mockCoa(10L));
+        ChartOfAccount cashAcctS5 = mockCoa(10L);
+        when(glConfig.resolve(1L, GlConfigKey.CASH)).thenReturn(cashAcctS5);
         when(glConfig.resolve(1L, GlConfigKey.POS_CASH_OVER))
                 .thenThrow(new NotFoundException("GL config POS_CASH_OVER not found"));
 
@@ -251,8 +252,10 @@ class PosSessionServiceImplTest {
         Company company = mockCompany(1L, "TZS");
         when(sessions.findByUid("S7")).thenReturn(Optional.of(session));
         when(companies.findById(1L)).thenReturn(Optional.of(company));
-        when(glConfig.resolve(1L, GlConfigKey.CASH)).thenReturn(mockCoa(10L));
-        when(glConfig.resolve(1L, GlConfigKey.POS_CASH_OVER)).thenReturn(mockCoa(20L));
+        ChartOfAccount cashAcctS7 = mockCoa(10L);
+        ChartOfAccount overAcctS7 = mockCoa(20L);
+        when(glConfig.resolve(1L, GlConfigKey.CASH)).thenReturn(cashAcctS7);
+        when(glConfig.resolve(1L, GlConfigKey.POS_CASH_OVER)).thenReturn(overAcctS7);
         when(glInvoker.postInNewTx(any())).thenReturn(new JournalEntryDto(99L, null, null, null, null, null, null, null, null, null, null, null));
         when(sessions.save(any())).thenReturn(session);
 

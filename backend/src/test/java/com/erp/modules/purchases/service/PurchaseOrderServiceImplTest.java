@@ -89,8 +89,9 @@ class PurchaseOrderServiceImplTest {
     void placeOrder_approvalGateDisabled_noApprovalRequired_succeeds() {
         // arrange
         PurchaseOrder po = stubDraftPo(1L, "PO-UID-1", 10L, new BigDecimal("5000.00"));
+        PurchaseOrderLine line1 = stubLine();
         when(orders.findByUid("PO-UID-1")).thenReturn(Optional.of(po));
-        when(lines.findByPurchaseOrderIdOrderByLineNo(1L)).thenReturn(List.of(stubLine()));
+        when(lines.findByPurchaseOrderIdOrderByLineNo(1L)).thenReturn(List.of(line1));
         when(approvalGate.requiresApproval(po, null)).thenReturn(false);
         when(numberGen.nextPurchaseOrder(10L)).thenReturn("PO-0001");
 
@@ -106,9 +107,10 @@ class PurchaseOrderServiceImplTest {
     void placeOrder_approvalRequired_poNotApproved_throws() {
         // arrange: approval gate enabled, PO total >= threshold, status is NOT_REQUIRED
         PurchaseOrder po = stubDraftPo(2L, "PO-UID-2", 10L, new BigDecimal("50000.00"));
+        PurchaseOrderLine line2 = stubLine();
         when(po.getApprovalStatus()).thenReturn(PoApprovalStatus.NOT_REQUIRED);
         when(orders.findByUid("PO-UID-2")).thenReturn(Optional.of(po));
-        when(lines.findByPurchaseOrderIdOrderByLineNo(2L)).thenReturn(List.of(stubLine()));
+        when(lines.findByPurchaseOrderIdOrderByLineNo(2L)).thenReturn(List.of(line2));
         when(approvalGate.requiresApproval(po, null)).thenReturn(true);
 
         // act + assert
@@ -125,9 +127,10 @@ class PurchaseOrderServiceImplTest {
     void placeOrder_approvalRequired_poPending_throws() {
         // arrange: gate on, PO status = PENDING
         PurchaseOrder po = stubDraftPo(3L, "PO-UID-3", 10L, new BigDecimal("50000.00"));
+        PurchaseOrderLine line3 = stubLine();
         when(po.getApprovalStatus()).thenReturn(PoApprovalStatus.PENDING);
         when(orders.findByUid("PO-UID-3")).thenReturn(Optional.of(po));
-        when(lines.findByPurchaseOrderIdOrderByLineNo(3L)).thenReturn(List.of(stubLine()));
+        when(lines.findByPurchaseOrderIdOrderByLineNo(3L)).thenReturn(List.of(line3));
         when(approvalGate.requiresApproval(po, null)).thenReturn(true);
 
         assertThatThrownBy(() -> service.placeOrder("PO-UID-3"))
@@ -139,9 +142,10 @@ class PurchaseOrderServiceImplTest {
     void placeOrder_approvalRequired_poApproved_succeeds() {
         // arrange: gate on but PO already APPROVED — must proceed to ORDERED
         PurchaseOrder po = stubDraftPo(4L, "PO-UID-4", 10L, new BigDecimal("50000.00"));
+        PurchaseOrderLine line4 = stubLine();
         when(po.getApprovalStatus()).thenReturn(PoApprovalStatus.APPROVED);
         when(orders.findByUid("PO-UID-4")).thenReturn(Optional.of(po));
-        when(lines.findByPurchaseOrderIdOrderByLineNo(4L)).thenReturn(List.of(stubLine()));
+        when(lines.findByPurchaseOrderIdOrderByLineNo(4L)).thenReturn(List.of(line4));
         when(approvalGate.requiresApproval(po, null)).thenReturn(true);
         when(numberGen.nextPurchaseOrder(10L)).thenReturn("PO-0002");
 
@@ -168,7 +172,14 @@ class PurchaseOrderServiceImplTest {
     }
 
     private PurchaseOrderLine stubLine() {
+        PurchaseOrder parentPo = mock(PurchaseOrder.class);
+        when(parentPo.getId()).thenReturn(1L);
         PurchaseOrderLine l = mock(PurchaseOrderLine.class);
+        when(l.getPurchaseOrder()).thenReturn(parentPo);
+        when(l.getId()).thenReturn(1L);
+        when(l.getUid()).thenReturn("LINE-UID-1");
+        when(l.getLineNo()).thenReturn((short) 1);
+        when(l.getProductId()).thenReturn(100L);
         when(l.getOrderedQtyInBase()).thenReturn(BigDecimal.ONE);
         when(l.getReceivedQtyInBase()).thenReturn(BigDecimal.ZERO);
         return l;

@@ -5,7 +5,9 @@ import com.erp.modules.manufacturing.domain.dto.CloseWorkOrderRequest;
 import com.erp.modules.manufacturing.domain.dto.CompleteWorkOrderRequest;
 import com.erp.modules.manufacturing.domain.dto.IssueComponentsRequest;
 import com.erp.modules.manufacturing.domain.dto.WorkOrderCostReportDto;
+import com.erp.modules.manufacturing.domain.dto.WorkOrderComponentDto;
 import com.erp.modules.manufacturing.domain.dto.WorkOrderDto;
+import com.erp.modules.manufacturing.domain.dto.WorkOrderOperationDto;
 import com.erp.modules.manufacturing.domain.entity.WorkOrder;
 import com.erp.modules.manufacturing.domain.entity.WorkOrderComponent;
 import com.erp.modules.manufacturing.domain.entity.WorkOrderOperation;
@@ -66,7 +68,6 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
     private final InventoryValuationService    valuation;
     private final LocationResolver             locationResolver;
     private final ManufacturingGlPoster        glPoster;
-    private final WorkOrderServiceImpl         woService;   // mapper reuse — avoid duplication
     private final ScopeGuard                   scopeGuard;
     private final AuditService                 audit;
     private final OutboxPublisher              outbox;
@@ -80,7 +81,6 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
                                         InventoryValuationService valuation,
                                         LocationResolver locationResolver,
                                         ManufacturingGlPoster glPoster,
-                                        WorkOrderServiceImpl woService,
                                         ScopeGuard scopeGuard,
                                         AuditService audit,
                                         OutboxPublisher outbox) {
@@ -93,7 +93,6 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
         this.valuation       = valuation;
         this.locationResolver = locationResolver;
         this.glPoster        = glPoster;
-        this.woService       = woService;
         this.scopeGuard      = scopeGuard;
         this.audit           = audit;
         this.outbox          = outbox;
@@ -198,7 +197,7 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
 
         audit.record(AuditEvent.of(AuditActions.WORKORDER_ISSUE_COMPONENTS, "work_orders", wo.getId(), wo.getUid())
                 .detail(Map.of("linesIssued", targets.size())));
-        return woService.toDto(wo);
+        return toDto(wo);
     }
 
     // -------------------------------------------------------------------------
@@ -238,7 +237,7 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
 
         audit.record(AuditEvent.of(AuditActions.WORKORDER_APPLY_COST, "work_orders", wo.getId(), wo.getUid())
                 .detail(Map.of("labour", labour, "overhead", overhead)));
-        return woService.toDto(wo);
+        return toDto(wo);
     }
 
     // -------------------------------------------------------------------------
@@ -328,7 +327,7 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
         audit.record(AuditEvent.of(AuditActions.WORKORDER_COMPLETE, "work_orders", wo.getId(), wo.getUid())
                 .detail(Map.of("goodQty", goodQty, "scrapQty", scrapQty,
                         "unitCost", unitCost, "relievedValue", relievedValue)));
-        return woService.toDto(wo);
+        return toDto(wo);
     }
 
     // -------------------------------------------------------------------------
@@ -357,7 +356,7 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
 
         audit.record(AuditEvent.of(AuditActions.WORKORDER_CLOSE, "work_orders", wo.getId(), wo.getUid())
                 .detail(Map.of("varianceAmount", residual)));
-        return woService.toDto(wo);
+        return toDto(wo);
     }
 
     // -------------------------------------------------------------------------
@@ -449,7 +448,7 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
 
         log.info("WorkOrderCostingServiceImpl.cancel: WO {} cancelled with full reversal (company {}).",
                 wo.getWoNumber(), wo.getCompanyId());
-        return woService.toDto(wo);
+        return toDto(wo);
     }
 
     // -------------------------------------------------------------------------
@@ -473,8 +472,8 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
                 wo.getWipDebitTotal(), wo.getWipCreditTotal(),
                 wo.getLabourAppliedTotal(), wo.getOverheadAppliedTotal(),
                 wo.getComputedUnitCost(), wo.getVarianceAmount(), wo.isIncompleteCost(),
-                compLines.stream().map(woService::toCompDto).toList(),
-                opLines.stream().map(woService::toOpDto).toList());
+                compLines.stream().map(this::toCompDto).toList(),
+                opLines.stream().map(this::toOpDto).toList());
     }
 
     // -------------------------------------------------------------------------
@@ -517,5 +516,37 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
             result.add(components.save(comp));
         }
         return result;
+    }
+
+    private WorkOrderDto toDto(WorkOrder wo) {
+        return new WorkOrderDto(
+                wo.getId(), wo.getUid(), wo.getWoNumber(), wo.getCompanyId(), wo.getBranchId(),
+                wo.getFinishedProductId(), wo.getFinishedProductCode(), wo.getFinishedProductName(),
+                wo.getBomId(), wo.getBomUid(),
+                wo.getPlannedQty(), wo.getGoodQty(), wo.getScrapQty(),
+                wo.getStatus(),
+                wo.getWipDebitTotal(), wo.getWipCreditTotal(),
+                wo.getLabourAppliedTotal(), wo.getOverheadAppliedTotal(),
+                wo.getComputedUnitCost(), wo.getVarianceAmount(),
+                wo.isIncompleteCost(), wo.getCostCentreValueId(),
+                wo.getPlannedDate(), wo.getReleasedAt(), wo.getCompletedAt(),
+                wo.getClosedAt(), wo.getCancelledAt(), wo.getNotes(),
+                wo.getCreatedAt(), wo.getCreatedBy(),
+                List.of(), List.of());
+    }
+
+    private WorkOrderComponentDto toCompDto(WorkOrderComponent c) {
+        return new WorkOrderComponentDto(
+                c.getId(), c.getUid(), c.getWorkOrderId(), c.getLineNo(),
+                c.getComponentProductId(), c.getComponentProductCode(), c.getComponentProductName(),
+                c.getPlannedQty(), c.getIssuedQty(), c.getIssuedValue(),
+                c.getUnitCostAtIssue(), c.isCostSkipped(), c.getStatus());
+    }
+
+    private WorkOrderOperationDto toOpDto(WorkOrderOperation op) {
+        return new WorkOrderOperationDto(
+                op.getId(), op.getUid(), op.getWorkOrderId(), op.getSeqNo(),
+                op.getDescription(), op.getWorkCentre(),
+                op.getLabourAmount(), op.getOverheadAmount(), op.isApplied());
     }
 }
