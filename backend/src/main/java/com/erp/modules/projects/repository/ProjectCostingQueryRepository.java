@@ -73,10 +73,15 @@ public class ProjectCostingQueryRepository {
     }
 
     /**
-     * Cross-project WIP rows for a company. WIP = max(0, cost − billed), floored at zero (BR-PROJ-07).
-     * Returns only projects that have at least one tagged journal line.
+     * Cross-project WIP rows for a company (and optionally a branch). WIP = max(0, cost − billed),
+     * floored at zero (BR-PROJ-07). Returns only projects that have at least one tagged journal line.
+     *
+     * <p>Branch isolation (ADR-0033 D-2 / NFR-PROJ-01): when {@code branchId} is non-null,
+     * results are restricted to projects whose {@code branch_id} matches the caller's branch.
+     * Passing {@code null} returns all branches (root/admin cross-branch view).
      */
-    public List<ProjectWipRowDto> wipReport(Long companyId) {
+    public List<ProjectWipRowDto> wipReport(Long companyId, Long branchId) {
+        String branchFilter = branchId != null ? " AND p.branch_id = ?" : "";
         String sql = """
                 SELECT
                     p.uid              AS project_uid,
@@ -92,9 +97,13 @@ public class ProjectCostingQueryRepository {
                 JOIN chart_of_accounts coa ON coa.id = jl.account_id
                 WHERE p.company_id = ?
                   AND jl.company_id = ?
+                """ + branchFilter + """
                 GROUP BY p.uid, p.project_number, p.name, p.currency
                 ORDER BY p.project_number
                 """;
+        Object[] params = branchId != null
+                ? new Object[]{companyId, companyId, branchId}
+                : new Object[]{companyId, companyId};
         return jdbc.query(sql, (rs, n) -> {
             BigDecimal cost   = rs.getBigDecimal("cost_incurred");
             BigDecimal billed = rs.getBigDecimal("billed");
@@ -106,6 +115,6 @@ public class ProjectCostingQueryRepository {
                     cost, billed, wip,
                     rs.getString("currency")
             );
-        }, companyId, companyId);
+        }, params);
     }
 }

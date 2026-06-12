@@ -135,7 +135,7 @@ public class IssueToProjectServiceImpl implements IssueToProjectService {
                     null, "PROJECT_ISSUE", issueUid,
                     null, req.reason() != null ? req.reason() : "Issue to project " + req.projectUid(),
                     Instant.now(), principal.userId(),
-                    unitCost, issuedValue.compareTo(BigDecimal.ZERO) > 0 ? issuedValue.negate() : null,
+                    unitCost, issuedValue.compareTo(BigDecimal.ZERO) > 0 ? issuedValue : null,
                     null, null,
                     tag.projectId(), tag.projectTaskId()
             );

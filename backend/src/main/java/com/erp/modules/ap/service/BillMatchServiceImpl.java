@@ -314,18 +314,6 @@ public class BillMatchServiceImpl implements BillMatchService {
         List<SupplierBillLine> billLines =
                 lines.findBySupplierBillIdOrderByLineNo(bill.getId());
 
-        // Partition net amount: goods (grLineUid != null) vs service.
-        BigDecimal goodsNet   = BigDecimal.ZERO;
-        BigDecimal serviceNet = BigDecimal.ZERO;
-        for (SupplierBillLine l : billLines) {
-            BigDecimal lineNet = l.getLineNetAmount() != null ? l.getLineNetAmount() : BigDecimal.ZERO;
-            if (l.getGrLineUid() != null) {
-                goodsNet = goodsNet.add(lineNet);
-            } else {
-                serviceNet = serviceNet.add(lineNet);
-            }
-        }
-
         ChartOfAccount apAcct = glConfig.resolve(bill.getCompanyId(), GlConfigKey.ACCOUNTS_PAYABLE);
         List<LineDraft> glLines = new ArrayList<>();
 
@@ -333,22 +321,36 @@ public class BillMatchServiceImpl implements BillMatchService {
         Long ccId   = bill.getCostCentreValueId();
         Long deptId = bill.getDepartmentValueId();
 
-        // Goods lines: DR GRNI (clears the GRNI accrual from goods receipt)
-        // GRNI is balance-sheet; per D-6 sub-decision it posts untagged in v1.
+        // Goods lines: DR GRNI per line (clears the GRNI accrual from goods receipt).
+        // GRNI is balance-sheet; posted untagged in v1 (D-6 sub-decision).
+        // Service lines: DR Purchases per line — P&L leg, carry per-line project tag (ADR-0033 D-4b).
+        // Threading each line's project_id onto its own LineDraft ensures multi-project bills
+        // correctly attribute cost to each project in the GL roll-up (BR-PROJ-03/05).
+        BigDecimal goodsNet   = BigDecimal.ZERO;
+        BigDecimal serviceNet = BigDecimal.ZERO;
+        for (SupplierBillLine l : billLines) {
+            BigDecimal lineNet = l.getLineNetAmount() != null ? l.getLineNetAmount() : BigDecimal.ZERO;
+            if (lineNet.compareTo(BigDecimal.ZERO) <= 0) continue;
+
+            if (l.getGrLineUid() != null) {
+                // Goods line: aggregated into a single GRNI clear (balance-sheet, untagged)
+                goodsNet = goodsNet.add(lineNet);
+            } else {
+                // Service line: one LineDraft per line with the line's own project tag
+                ChartOfAccount purchasesAcct = glConfig.resolve(bill.getCompanyId(), GlConfigKey.PURCHASES);
+                glLines.add(new LineDraft(purchasesAcct.getId(),
+                        lineNet, BigDecimal.ZERO,
+                        bill.getCurrency(), "Purchases — " + bill.getSupplierInvoiceNo(),
+                        ccId, deptId, null, null,
+                        l.getProjectId(), l.getProjectTaskId(), null));
+                serviceNet = serviceNet.add(lineNet);
+            }
+        }
         if (goodsNet.compareTo(BigDecimal.ZERO) > 0) {
             ChartOfAccount grniAcct = glConfig.resolve(bill.getCompanyId(), GlConfigKey.GRNI);
             glLines.add(new LineDraft(grniAcct.getId(),
                     goodsNet, BigDecimal.ZERO,
                     bill.getCurrency(), "GRNI clear — " + bill.getSupplierInvoiceNo()));
-        }
-
-        // Service lines: DR Purchases (periodic expense recognition) — P&L leg, carry tag
-        if (serviceNet.compareTo(BigDecimal.ZERO) > 0) {
-            ChartOfAccount purchasesAcct = glConfig.resolve(bill.getCompanyId(), GlConfigKey.PURCHASES);
-            glLines.add(new LineDraft(purchasesAcct.getId(),
-                    serviceNet, BigDecimal.ZERO,
-                    bill.getCurrency(), "Purchases — " + bill.getSupplierInvoiceNo(),
-                    ccId, deptId, null, null));
         }
 
         // Input VAT (ADR-0017 D-7): debit VAT_INPUT — balance-sheet, untagged in v1
