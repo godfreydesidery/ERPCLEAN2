@@ -2,17 +2,23 @@ package com.erp.modules.hr.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.erp.modules.gl.domain.enums.GlConfigKey;
+import com.erp.modules.gl.repository.ChartOfAccountRepository;
 import com.erp.modules.gl.repository.JournalEntryRepository;
 import com.erp.modules.gl.repository.JournalLineRepository;
 import com.erp.modules.gl.service.ChartOfAccountService;
 import com.erp.modules.gl.service.FiscalCalendarService;
 import com.erp.modules.gl.service.GlConfigService;
+import com.erp.modules.gl.repository.GlConfigRepository;
 import com.erp.modules.hr.domain.dto.CreateContractRequest;
 import com.erp.modules.hr.domain.dto.CreateEmployeeRequest;
 import com.erp.modules.hr.domain.dto.CreatePayrollRunRequest;
 import com.erp.modules.hr.domain.dto.PayrollRunDto;
+import com.erp.modules.hr.domain.entity.EmployeeLoan;
 import com.erp.modules.hr.domain.enums.ContractType;
 import com.erp.modules.hr.domain.enums.PayrollRunStatus;
+import com.erp.modules.hr.repository.EmployeeLoanRepository;
+import com.erp.modules.hr.repository.EmployeeRepository;
 import com.erp.modules.iam.domain.entity.AppUser;
 import com.erp.modules.iam.domain.entity.Branch;
 import com.erp.modules.iam.domain.entity.Company;
@@ -70,6 +76,11 @@ class PayrollPostingHandlerIT extends PostgresIntegrationTest {
     @Autowired private AppUserRepository users;
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private IamTestData testData;
+    // For fix #1/#2 loan-deduction balance test
+    @Autowired private EmployeeLoanRepository loanRepository;
+    @Autowired private EmployeeRepository employeeRepository;
+    @Autowired private ChartOfAccountRepository chartOfAccountRepository;
+    @Autowired private GlConfigRepository glConfigRepository;
 
     private Company company;
     private Branch branch;
@@ -238,6 +249,64 @@ class PayrollPostingHandlerIT extends PostgresIntegrationTest {
                 .toList();
         assertThat(entries).hasSize(2)
                 .as("two GL entries expected: original PAYROLL + PAYROLL_REVERSAL");
+    }
+
+    // =========================================================================
+    // Fix #1/#2: GL journal balanced when employee has a loan deduction
+    // =========================================================================
+
+    @Test
+    void dispatch_withLoanDeduction_journalStillBalanced() {
+        // Attach an active loan to the employee — this adds a DEDUCTION line-item
+        // that must post as CR to the loan-receivable account.
+        // Without fix #1, the handler would not post the CR → DR > CR → balance fails.
+        var emp = employeeRepository.findByUid(employeeUid)
+                .orElseThrow(() -> new AssertionError("employee not found"));
+
+        // Resolve loan-receivable GL account (seeded by hrGlSeeder)
+        Long loanAccountId = glConfigRepository
+                .findByCompanyIdAndConfigKey(company.getId(), GlConfigKey.EMPLOYEE_LOAN_RECEIVABLE)
+                .map(cfg -> cfg.getAccountId())
+                .orElseThrow(() -> new AssertionError("EMPLOYEE_LOAN_RECEIVABLE config not seeded"));
+
+        // Loan: principal 100k, installment 50k — less than gross so net stays positive (no FLAGGED)
+        loanRepository.save(new EmployeeLoan(
+                company.getId(), emp.getId(), "LN-TEST-001",
+                new BigDecimal("100000"), new BigDecimal("50000"),
+                loanAccountId,
+                LocalDate.of(2024, 1, 1), "TZS", rootId));
+
+        PayrollRunDto posted = createCalculateApprovePost();
+        DomainEvent event = getPendingEvent(DomainEventType.PAYROLL_FINALISED, posted.uid());
+        dispatcher.dispatchOne(event.getId());
+
+        var entries = journalEntryRepo.findAll().stream()
+                .filter(e -> posted.uid().equals(e.getSourceRef()))
+                .toList();
+        assertThat(entries).hasSize(1)
+                .as("exactly one GL entry for run with loan deduction");
+
+        Long entryId = entries.get(0).getId();
+        var jLines = journalLineRepo.findByEntryIdOrderByLineNo(entryId);
+
+        BigDecimal sumDebit  = jLines.stream()
+                .map(l -> l.getDebitAmount()  != null ? l.getDebitAmount()  : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal sumCredit = jLines.stream()
+                .map(l -> l.getCreditAmount() != null ? l.getCreditAmount() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        assertThat(sumDebit).isEqualByComparingTo(sumCredit)
+                .as("journal must balance (DR == CR) even when loan deduction creates a CR leg");
+
+        // Also verify the loan-receivable account appears as a CR line
+        boolean hasLoanCrLine = jLines.stream().anyMatch(l ->
+                loanAccountId.equals(l.getAccountId())
+                && l.getCreditAmount() != null
+                && l.getCreditAmount().compareTo(BigDecimal.ZERO) > 0);
+        assertThat(hasLoanCrLine)
+                .as("journal must contain CR line for loan-receivable account (fix #1)")
+                .isTrue();
     }
 
     // =========================================================================

@@ -89,7 +89,7 @@ class StatutoryCalculatorIT extends PostgresIntegrationTest {
         BigDecimal pensionable = new BigDecimal("700000");
 
         StatutoryResult result = calculator.compute(
-                company.getId(), PAY_DATE, gross, basic, pensionable, 20);
+                company.getId(), PAY_DATE, gross, basic, pensionable, 20, BigDecimal.ZERO, 22);
 
         // Band 4: lowerBound 760,001, cumulative 68,000, marginalRate 25%
         // excess = 800,000 - 760,001 = 39,999
@@ -108,7 +108,7 @@ class StatutoryCalculatorIT extends PostgresIntegrationTest {
     void paye_grossBelowThreshold_isZero() {
         BigDecimal gross = new BigDecimal("200000");
         StatutoryResult result = calculator.compute(
-                company.getId(), PAY_DATE, gross, gross, gross, 20);
+                company.getId(), PAY_DATE, gross, gross, gross, 20, BigDecimal.ZERO, 22);
 
         assertThat(result.paye()).isEqualByComparingTo(BigDecimal.ZERO)
                 .as("PAYE below 270k threshold must be zero");
@@ -125,7 +125,7 @@ class StatutoryCalculatorIT extends PostgresIntegrationTest {
         BigDecimal pensionable = new BigDecimal("500000"); // PENSIONABLE basis
 
         StatutoryResult result = calculator.compute(
-                company.getId(), PAY_DATE, gross, basic, pensionable, 20);
+                company.getId(), PAY_DATE, gross, basic, pensionable, 20, BigDecimal.ZERO, 22);
 
         // 10% of 500,000 = 50,000 each
         assertThat(result.nssfEmployee()).isEqualByComparingTo(new BigDecimal("50000"))
@@ -142,7 +142,7 @@ class StatutoryCalculatorIT extends PostgresIntegrationTest {
     void sdl_belowHeadcountThreshold_isZero() {
         BigDecimal gross = new BigDecimal("600000");
         StatutoryResult result = calculator.compute(
-                company.getId(), PAY_DATE, gross, gross, gross, 5); // headcount=5 < threshold=10
+                company.getId(), PAY_DATE, gross, gross, gross, 5, BigDecimal.ZERO, 22); // headcount=5 < threshold=10
 
         assertThat(result.sdlEmployer()).isEqualByComparingTo(BigDecimal.ZERO)
                 .as("SDL must be zero when headcount < 10");
@@ -157,7 +157,7 @@ class StatutoryCalculatorIT extends PostgresIntegrationTest {
         BigDecimal gross = new BigDecimal("700000");
         BigDecimal basic = new BigDecimal("500000"); // HESLB basis = BASIC
         StatutoryResult result = calculator.compute(
-                company.getId(), PAY_DATE, gross, basic, basic, 20);
+                company.getId(), PAY_DATE, gross, basic, basic, 20, BigDecimal.ZERO, 22);
 
         // 15% of 500,000 = 75,000
         assertThat(result.heslb()).isEqualByComparingTo(new BigDecimal("75000"))
@@ -172,12 +172,52 @@ class StatutoryCalculatorIT extends PostgresIntegrationTest {
     void compute_populatesSetUids() {
         BigDecimal gross = new BigDecimal("600000");
         StatutoryResult result = calculator.compute(
-                company.getId(), PAY_DATE, gross, gross, gross, 20);
+                company.getId(), PAY_DATE, gross, gross, gross, 20, BigDecimal.ZERO, 22);
 
         assertThat(result.payeBandSetUid()).as("PAYE band set uid").isNotNull();
         assertThat(result.nssfSetUid()).as("NSSF set uid").isNotNull();
         assertThat(result.wcfSetUid()).as("WCF set uid").isNotNull();
         assertThat(result.sdlSetUid()).as("SDL set uid").isNotNull();
         assertThat(result.heslbSetUid()).as("HESLB set uid").isNotNull();
+    }
+
+    // =========================================================================
+    // Bar 7 (Fix #3): unpaid leave pro-rata reduces PAYE taxable gross
+    //   gross=600000, 5 unpaid days out of 22 → grossForPeriod=600000*(22-5)/22=463636
+    //   below threshold 270000? No. PAYE on 463636: band 2 (lower 270000, 8%, cumul 0)
+    //   taxable = 463636 - nssfEmployee; NSSF on grossForPeriod (PENSIONABLE=full basic here)
+    //   Key assertion: paye with 5 unpaid days < paye with 0 unpaid days
+    // =========================================================================
+
+    @Test
+    void unpaidLeave_reducesPayeAndWcf() {
+        BigDecimal gross = new BigDecimal("600000");
+
+        StatutoryResult full = calculator.compute(
+                company.getId(), PAY_DATE, gross, gross, gross, 20, BigDecimal.ZERO, 22);
+
+        StatutoryResult proRated = calculator.compute(
+                company.getId(), PAY_DATE, gross, gross, gross, 20, new BigDecimal("5"), 22);
+
+        assertThat(proRated.paye())
+                .isLessThan(full.paye())
+                .as("PAYE must be lower when 5 unpaid days taken (pro-rata gross is smaller)");
+        assertThat(proRated.wcfEmployer())
+                .isLessThan(full.wcfEmployer())
+                .as("WCF (GROSS basis) must also be pro-rated with unpaid leave");
+    }
+
+    @Test
+    void fullUnpaidMonth_grossForPeriodIsZero_payeIsZero() {
+        BigDecimal gross = new BigDecimal("600000");
+
+        // all 22 working days are unpaid leave → grossForPeriod = 0
+        StatutoryResult result = calculator.compute(
+                company.getId(), PAY_DATE, gross, gross, gross, 20, new BigDecimal("22"), 22);
+
+        assertThat(result.paye()).isEqualByComparingTo(BigDecimal.ZERO)
+                .as("PAYE must be zero when full month is unpaid leave");
+        assertThat(result.wcfEmployer()).isEqualByComparingTo(BigDecimal.ZERO)
+                .as("WCF must be zero when full month is unpaid leave");
     }
 }

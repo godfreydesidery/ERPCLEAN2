@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class HrNumberGenerator {
 
     private static final String KIND_PAYROLL_RUN = "HR_PAYROLL_RUN";
+    private static final String KIND_PAYSLIP     = "HR_PAYSLIP";
     private static final String KIND_LOAN        = "HR_LOAN";
 
     private final CodeSequenceRepository sequences;
@@ -28,6 +29,14 @@ public class HrNumberGenerator {
                 .findByCompanyIdAndEntityKindForUpdate(companyId, KIND_PAYROLL_RUN)
                 .orElseGet(() -> sequences.saveAndFlush(new CodeSequence(companyId, KIND_PAYROLL_RUN)));
         return "PR-" + String.format("%05d", seq.consumeNext());
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public String nextPayslip(Long companyId) {
+        CodeSequence seq = sequences
+                .findByCompanyIdAndEntityKindForUpdate(companyId, KIND_PAYSLIP)
+                .orElseGet(() -> sequences.saveAndFlush(new CodeSequence(companyId, KIND_PAYSLIP)));
+        return "PAYSLIP-" + String.format("%05d", seq.consumeNext());
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
