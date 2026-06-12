@@ -34,6 +34,7 @@ import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -270,20 +271,38 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
         BigDecimal unitCost;
 
         if (goodQty.compareTo(BigDecimal.ZERO) > 0 && openWip.compareTo(BigDecimal.ZERO) > 0) {
-            // unit cost = open WIP / good qty (HALF_UP 4dp)
-            unitCost = openWip.divide(goodQty, SCALE, RoundingMode.HALF_UP);
-            relievedValue = unitCost.multiply(goodQty).setScale(SCALE, RoundingMode.HALF_UP);
+            // If this completion fills the full planned order qty, relieve ALL remaining open WIP
+            // exactly (no divide-then-multiply rounding loss) — Finding 4 fix (ADR-0035 OQ-MFG-02).
+            BigDecimal totalGoodAfterThis = wo.getGoodQty().add(goodQty);
+            boolean isFinalCompletion = totalGoodAfterThis.compareTo(wo.getPlannedQty()) >= 0;
+            if (isFinalCompletion) {
+                relievedValue = openWip; // exact — no rounding residual at final completion
+                unitCost = openWip.divide(goodQty, SCALE, RoundingMode.HALF_UP);
+            } else {
+                unitCost = openWip.divide(goodQty, SCALE, RoundingMode.HALF_UP);
+                // cap to openWip to prevent over-relief
+                relievedValue = unitCost.multiply(goodQty).setScale(SCALE, RoundingMode.HALF_UP)
+                                        .min(openWip);
+            }
         } else {
-            unitCost     = BigDecimal.ZERO;
+            if (openWip.compareTo(BigDecimal.ZERO) <= 0) {
+                // openWip is zero or negative — clamp to 0 per ADR-0035 D-5; log WARN (Finding 3 fix)
+                log.warn("WorkOrderCostingServiceImpl.complete: openWip={} for WO {} — relievedValue clamped to 0; "
+                        + "posting zero-value GL entry to maintain WIP recon integrity.",
+                        openWip, wo.getWoNumber());
+            }
+            unitCost      = BigDecimal.ZERO;
             relievedValue = BigDecimal.ZERO;
         }
 
         // Receive finished goods into stock at computed cost
         Long locationId = locationResolver.defaultLocationId(wo.getCompanyId(), wo.getBranchId());
-        if (relievedValue.compareTo(BigDecimal.ZERO) > 0) {
-            valuation.recomputeOnReceipt(
-                    wo.getCompanyId(), wo.getBranchId(), wo.getFinishedProductId(),
-                    goodQty, unitCost);
+        if (goodQty.compareTo(BigDecimal.ZERO) > 0) {
+            if (relievedValue.compareTo(BigDecimal.ZERO) > 0) {
+                valuation.recomputeOnReceipt(
+                        wo.getCompanyId(), wo.getBranchId(), wo.getFinishedProductId(),
+                        goodQty, unitCost);
+            }
             stockPosting.post(
                     wo.getCompanyId(), wo.getBranchId(), locationId,
                     wo.getFinishedProductId(),
@@ -292,9 +311,10 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
                     null, "WORK_ORDER", wo.getUid(),
                     null, "WO " + wo.getWoNumber() + " FG receipt",
                     Instant.now(), principal.userId(),
-                    unitCost, relievedValue);
+                    unitCost.compareTo(BigDecimal.ZERO) > 0 ? unitCost : null,
+                    relievedValue.compareTo(BigDecimal.ZERO) > 0 ? relievedValue : null);
 
-            // GL: DR Finished-Goods (1300) / CR WIP
+            // GL: DR Finished-Goods / CR WIP — always post to maintain WIP recon integrity (Finding 3 fix)
             glPoster.postFinishedGoodsReceipt(wo, relievedValue, req.postingDate(), principal.userId());
         }
 
@@ -337,6 +357,98 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
 
         audit.record(AuditEvent.of(AuditActions.WORKORDER_CLOSE, "work_orders", wo.getId(), wo.getUid())
                 .detail(Map.of("varianceAmount", residual)));
+        return woService.toDto(wo);
+    }
+
+    // -------------------------------------------------------------------------
+    // Cancel — reverse all issued components, FG receipts, labour/overhead (Finding 1 fix)
+    // -------------------------------------------------------------------------
+
+    @Override
+    public WorkOrderDto cancel(String workOrderUid, String reason, LocalDate postingDate) {
+        RequestContext.Principal principal = RequestContext.get();
+        WorkOrder wo = requireWorkOrder(workOrderUid);
+        scopeGuard.assertCanActIn(principal, wo.getCompanyId());
+
+        WorkOrderStatus st = wo.getStatus();
+        if (st == WorkOrderStatus.CLOSED || st == WorkOrderStatus.CANCELLED) {
+            throw new IllegalStateException("Cannot cancel a " + st + " work order.");
+        }
+        if (st == WorkOrderStatus.COMPLETED) {
+            throw new IllegalArgumentException(
+                    "Cannot cancel a COMPLETED work order — close it first or contact a manager.");
+        }
+
+        LocalDate effectiveDate = postingDate != null ? postingDate : LocalDate.now();
+        Long locationId = locationResolver.defaultLocationId(wo.getCompanyId(), wo.getBranchId());
+
+        // --- 1. Reverse all issued components (stock + GL) ---
+        List<WorkOrderComponent> compLines = components.findByWorkOrderIdOrderByLineNoAsc(wo.getId());
+        List<ComponentCostLeg> costLegs = new ArrayList<>();
+
+        for (WorkOrderComponent comp : compLines) {
+            if (comp.getIssuedQty().compareTo(BigDecimal.ZERO) <= 0) continue;
+            BigDecimal issuedQty   = comp.getIssuedQty();
+            BigDecimal issuedValue = comp.getIssuedValue();
+
+            // Stock: PRODUCTION_ISSUE_REVERSAL (positive qty restores on-hand)
+            stockPosting.post(
+                    wo.getCompanyId(), wo.getBranchId(), locationId,
+                    comp.getComponentProductId(),
+                    issuedQty,
+                    MovementType.PRODUCTION_ISSUE_REVERSAL,
+                    null, "WORK_ORDER", wo.getUid(),
+                    null, "WO " + wo.getWoNumber() + " cancel: component reversal",
+                    Instant.now(), principal.userId(),
+                    comp.getUnitCostAtIssue(), issuedValue.compareTo(BigDecimal.ZERO) > 0 ? issuedValue : null);
+
+            // Valuation: restore on_hand_value at original value (cost-skipped lines have issuedValue=0)
+            if (issuedValue.compareTo(BigDecimal.ZERO) > 0) {
+                valuation.reverseIssue(wo.getCompanyId(), wo.getBranchId(),
+                        comp.getComponentProductId(), issuedValue);
+                costLegs.add(new ComponentCostLeg(comp.getComponentProductCode(), issuedValue));
+            }
+
+            // Reset component line
+            comp.reverseIssue(issuedQty, issuedValue, principal.userId());
+            wo.reverseWipDebit(issuedValue, principal.userId());
+        }
+
+        // GL: DR Inventory / CR WIP for costed components
+        if (!costLegs.isEmpty()) {
+            glPoster.postCancelIssueReversal(wo, costLegs, effectiveDate, principal.userId());
+        }
+
+        // --- 2. Reverse applied labour/overhead (GL only — no stock movement) ---
+        BigDecimal labour   = wo.getLabourAppliedTotal();
+        BigDecimal overhead = wo.getOverheadAppliedTotal();
+        if (labour.add(overhead).compareTo(BigDecimal.ZERO) > 0) {
+            glPoster.postCancelLabourOverheadReversal(wo, labour, overhead, effectiveDate, principal.userId());
+            wo.reverseWipDebit(labour.add(overhead), principal.userId());
+        }
+
+        // --- 3. No FG receipt to reverse for IN_PROGRESS (COMPLETED is blocked above) ---
+        //    wipCreditTotal should be 0 for non-COMPLETED orders. If it is somehow non-zero,
+        //    reverse the credit leg to keep the WO accumulators consistent.
+        BigDecimal wipCredit = wo.getWipCreditTotal();
+        if (wipCredit.compareTo(BigDecimal.ZERO) > 0) {
+            log.warn("WorkOrderCostingServiceImpl.cancel: WO {} has wipCreditTotal={} in status {} — reversing credit.",
+                    wo.getWoNumber(), wipCredit, st);
+            glPoster.postCancelReceiptReversal(wo, wipCredit, effectiveDate, principal.userId());
+            wo.reverseWipCredit(wipCredit, principal.userId());
+        }
+
+        // --- 4. Set status to CANCELLED ---
+        wo.cancel(principal.userId());
+
+        audit.record(AuditEvent.of(AuditActions.WORKORDER_CANCEL, "work_orders", wo.getId(), wo.getUid())
+                .detail(Map.of("reason", reason != null ? reason : "",
+                               "componentLinesReversed", costLegs.size(),
+                               "labourReversed", labour,
+                               "overheadReversed", overhead)));
+
+        log.info("WorkOrderCostingServiceImpl.cancel: WO {} cancelled with full reversal (company {}).",
+                wo.getWoNumber(), wo.getCompanyId());
         return woService.toDto(wo);
     }
 
