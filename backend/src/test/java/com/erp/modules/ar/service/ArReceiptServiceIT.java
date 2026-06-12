@@ -511,6 +511,38 @@ class ArReceiptServiceIT extends PostgresIntegrationTest {
     }
 
     // =========================================================================
+    // Finding #2 (MEDIUM / BR-NOTIF-13): PAYMENT.RECEIVED payload carries
+    //   formatted amount (e.g. "TZS 1,180.00") not a raw BigDecimal string
+    // =========================================================================
+
+    @Test
+    void recordReceipt_outboxPayload_amountFormattedNotRawDecimal() {
+        // Need an open item to allocate against
+        creditSaleOpenItem(GROSS_1180);
+
+        ArReceiptDto receipt = receiptService.recordAndAllocate(new RecordReceiptRequest(
+                companyUid, creditCustomerUid,
+                GROSS_1180, TZS, LocalDate.now(), "CASH", null, List.of()));
+
+        // Retrieve the PAYMENT.RECEIVED event for this receipt from the outbox
+        var paymentEvent = domainEventRepository.findAll().stream()
+                .filter(e -> DomainEventType.PAYMENT_RECEIVED.equals(e.getEventType())
+                          && receipt.uid().equals(e.getAggregateUid()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError(
+                        "No PAYMENT.RECEIVED event found for receipt uid=" + receipt.uid()));
+
+        String payload = paymentEvent.getPayload();
+        assertThat(payload)
+                .as("PAYMENT.RECEIVED payload must contain a formatted amount (BR-NOTIF-13), not raw decimal.\n"
+                        + "payload=" + payload)
+                .contains("TZS 1,180.00");
+        assertThat(payload)
+                .as("Raw toPlainString() value '1180.0000' or '1180' must NOT appear as amountFormatted (BR-NOTIF-13)")
+                .doesNotContain("\"amountFormatted\":\"1180");
+    }
+
+    // =========================================================================
     // Bar 8: Closed fiscal period → receipt fails and rolls back
     // =========================================================================
 
