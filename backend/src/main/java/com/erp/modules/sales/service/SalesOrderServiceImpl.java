@@ -127,6 +127,8 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         order.setDocDiscountAmount(req.docDiscountAmount());
         order.setDocDiscountPercent(req.docDiscountPercent());
         order.setNotes(req.notes());
+        // ADR-0031 D-7 back-link: set when called from CRM OpportunityConversionService
+        order.setSourceOpportunityUid(req.sourceOpportunityUid());
         order.setOrderNumber(numberGen.nextSalesOrder(companyId));
 
         SalesOrder saved = orders.save(order);

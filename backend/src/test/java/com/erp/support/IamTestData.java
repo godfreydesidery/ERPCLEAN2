@@ -94,6 +94,10 @@ public class IamTestData {
                 "TRUNCATE approval_decisions, approval_request_steps, approval_requests, " +
                 "approval_policy_steps, approval_policies RESTART IDENTITY CASCADE")
                 .executeUpdate();
+        // 4d-CRM. Clear CRM tables BEFORE O2C (opportunity_lines FK → opportunities; activities FK → leads/opportunities).
+        em.createNativeQuery(
+                "TRUNCATE activities, opportunity_lines, opportunities, leads, pipeline_stages RESTART IDENTITY CASCADE")
+                .executeUpdate();
         // 4d-O2C. Clear ADR-0021 O2C tables BEFORE sales_invoices (delivery_lines FK → sales_order_lines;
         //         sales_order_lines FK → sales_orders; delivery_lines.delivery_id FK → deliveries).
         //         Order: leaf children first, then headers.

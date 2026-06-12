@@ -11,6 +11,7 @@ import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.repository.OrganisationRepository;
 import com.erp.modules.iam.repository.UserBranchRepository;
 import com.erp.modules.ap.service.ApGlSeeder;
+import com.erp.modules.crm.service.CrmStageSeeder;
 import com.erp.modules.documents.service.DocumentBrandingSeeder;
 import com.erp.modules.ar.service.ArGlSeeder;
 import com.erp.modules.cashbank.service.CashBankSeeder;
@@ -76,6 +77,8 @@ public class BootstrapRunner implements ApplicationRunner {
     private final DocumentBrandingSeeder documentBrandingSeeder;
     // Fixed Assets GL seeder (ADR-0030 D-7)
     private final FixedAssetGlSeeder fixedAssetGlSeeder;
+    // CRM pipeline stage defaults seeder (ADR-0031 D-5)
+    private final CrmStageSeeder crmStageSeeder;
 
     public BootstrapRunner(BootstrapProperties props,
                            OrganisationRepository organisations,
@@ -95,7 +98,8 @@ public class BootstrapRunner implements ApplicationRunner {
                            CashBankSeeder cashBankSeeder,
                            InventoryGlSeeder inventoryGlSeeder,
                            DocumentBrandingSeeder documentBrandingSeeder,
-                           FixedAssetGlSeeder fixedAssetGlSeeder) {
+                           FixedAssetGlSeeder fixedAssetGlSeeder,
+                           CrmStageSeeder crmStageSeeder) {
         this.props = props;
         this.organisations = organisations;
         this.companies = companies;
@@ -115,6 +119,7 @@ public class BootstrapRunner implements ApplicationRunner {
         this.inventoryGlSeeder      = inventoryGlSeeder;
         this.documentBrandingSeeder = documentBrandingSeeder;
         this.fixedAssetGlSeeder     = fixedAssetGlSeeder;
+        this.crmStageSeeder         = crmStageSeeder;
     }
 
     @Override
@@ -159,6 +164,8 @@ public class BootstrapRunner implements ApplicationRunner {
         documentBrandingSeeder.seedDefaults(company.getId());
         // Seed Fixed Assets GL accounts + gl_configs (ADR-0030 D-7).
         fixedAssetGlSeeder.seedDefaults(company.getId());
+        // Seed default CRM pipeline stages (ADR-0031 D-5).
+        crmStageSeeder.seedDefaults(company.getId());
 
         Branch branch = new Branch(company, props.branchCode(), props.branchName());
         branch.setTimeZone(props.timeZone());

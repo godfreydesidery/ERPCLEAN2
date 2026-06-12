@@ -29,6 +29,7 @@ public record QuotationDto(
         Instant rejectedAt,
         Instant expiredAt,
         String convertedOrderUid,
+        String sourceOpportunityUid,
         List<QuotationLineDto> lines
 ) {
     public static QuotationDto from(Quotation q, List<QuotationLineDto> lines) {
@@ -45,6 +46,7 @@ public record QuotationDto(
                 q.getNotes(),
                 q.getSentAt(), q.getAcceptedAt(), q.getRejectedAt(), q.getExpiredAt(),
                 q.getConvertedOrderUid(),
+                q.getSourceOpportunityUid(),
                 lines);
     }
 }

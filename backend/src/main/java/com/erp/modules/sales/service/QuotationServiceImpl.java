@@ -112,6 +112,8 @@ public class QuotationServiceImpl implements QuotationService {
         q.setDocDiscountAmount(req.docDiscountAmount());
         q.setDocDiscountPercent(req.docDiscountPercent());
         q.setNotes(req.notes());
+        // ADR-0031 D-7 back-link: set when called from CRM OpportunityConversionService
+        q.setSourceOpportunityUid(req.sourceOpportunityUid());
 
         Quotation saved = quotations.save(q);
         audit.record(AuditEvent.of(AuditActions.QUOTATION_CREATE, "quotations",
