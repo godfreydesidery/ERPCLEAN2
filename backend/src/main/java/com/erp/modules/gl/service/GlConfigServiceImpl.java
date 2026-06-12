@@ -48,7 +48,9 @@ public class GlConfigServiceImpl implements GlConfigService {
             Map.entry(GlConfigKey.RETAINED_EARNINGS,   "3900"),
             // Inventory Valuation & COGS increment (ADR-0020 D-8)
             Map.entry(GlConfigKey.GRNI,                "2150"),
-            Map.entry(GlConfigKey.STOCK_ADJUSTMENT,    "5160")
+            Map.entry(GlConfigKey.STOCK_ADJUSTMENT,    "5160"),
+            // procurement-depth (ADR-0027 D-9)
+            Map.entry(GlConfigKey.LANDED_COST_CLEARING, "2160")
     );
 
     private final GlConfigRepository configs;

@@ -28,5 +28,9 @@ public enum MovementType {
 
     // Reserved — excluded from DB CHECK in v1 (OQ-STOCK-08). Do NOT store these values yet.
     TRANSFER_OUT,
-    TRANSFER_IN;
+    TRANSFER_IN,
+
+    // --- procurement-depth (ADR-0027 D-7, admitted by V36 chk_stock_movement_type widen) ---
+    /** Goods returned to supplier from a Purchase Return confirm. − sign. */
+    PURCHASE_RETURN;
 }

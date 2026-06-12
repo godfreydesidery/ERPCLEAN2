@@ -366,6 +366,52 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
     }
 
     // -------------------------------------------------------------------------
+    // (g) Apply landed cost: add allocation amount to on_hand_value, recompute avg (ADR-0027 D-5)
+    //     REQUIRES MANDATORY — called from LandedCostStockHandler in its REQUIRED TX.
+    //     FIX D pattern: retry once on optimistic lock clash.
+    // -------------------------------------------------------------------------
+
+    @Override
+    public void applyLandedCost(Long companyId, Long branchId, Long productId,
+                                 BigDecimal allocatedAmount) {
+        try {
+            doApplyLandedCost(companyId, branchId, productId, allocatedAmount);
+        } catch (ObjectOptimisticLockingFailureException ex) {
+            log.debug("InventoryValuation: optimistic lock clash on applyLandedCost " + RETRY_MSG,
+                    companyId, productId);
+            doApplyLandedCost(companyId, branchId, productId, allocatedAmount);
+        }
+    }
+
+    private void doApplyLandedCost(Long companyId, Long branchId, Long productId,
+                                    BigDecimal allocatedAmount) {
+        if (allocatedAmount == null || allocatedAmount.compareTo(BigDecimal.ZERO) == 0) {
+            return;
+        }
+
+        StockOnHand soh = onHands.findByCompanyIdAndBranchIdAndProductId(companyId, branchId, productId)
+                .orElse(null);
+        if (soh == null) {
+            log.warn("InventoryValuation: applyLandedCost — no on-hand row for company={} branch={} product={} " +
+                             "— landed cost delta not applied", companyId, branchId, productId);
+            return;
+        }
+
+        BigDecimal onHandVal = soh.getOnHandValue() != null ? soh.getOnHandValue() : BigDecimal.ZERO;
+        BigDecimal newValue  = onHandVal.add(allocatedAmount);
+
+        // Recompute avg_cost = new_value / qty (guard against zero/null qty)
+        BigDecimal qty    = soh.getQuantity();
+        BigDecimal newAvg = soh.getAvgCost();   // default: keep prior avg if qty is zero
+        if (qty != null && qty.compareTo(BigDecimal.ZERO) > 0) {
+            newAvg = round4(newValue.divide(qty, SCALE, RM));
+        }
+
+        soh.applyCostRecompute(newAvg, newValue, null);
+        onHands.save(soh);
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 

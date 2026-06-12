@@ -75,6 +75,17 @@ public final class DomainEventType {
     public static final String DEPRECIATION_RUN_EXECUTED = "DEPRECIATION.RUN.EXECUTED";
     public static final String AGG_DEPRECIATION_RUN      = "DEPRECIATION_RUN";
 
+    // --- procurement-depth (ADR-0027) ---
+
+    /** Landed cost confirmed — capitalise allocated amounts into inventory value (ADR-0027 D-5). */
+    public static final String LANDED_COST_ALLOCATED = "LANDED_COST.ALLOCATED";
+
+    /** Purchase return confirmed — stock-out at original receipt cost + AP debit note (ADR-0027 D-7). */
+    public static final String PURCHASE_RETURNED      = "PURCHASE.RETURNED";
+
+    public static final String AGG_LANDED_COST    = "LANDED_COST";
+    public static final String AGG_PURCHASE_RETURN = "PURCHASE_RETURN";
+
     private DomainEventType() {
     }
 }

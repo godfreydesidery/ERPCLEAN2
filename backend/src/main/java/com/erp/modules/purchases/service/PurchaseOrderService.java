@@ -1,6 +1,7 @@
 package com.erp.modules.purchases.service;
 
 import com.erp.modules.purchases.domain.dto.AddPurchaseOrderLineRequest;
+import com.erp.modules.purchases.domain.dto.ApprovePoRequest;
 import com.erp.modules.purchases.domain.dto.CreatePurchaseOrderRequest;
 import com.erp.modules.purchases.domain.dto.PurchaseOrderDto;
 import com.erp.modules.purchases.domain.dto.PurchaseOrderLineDto;
@@ -49,4 +50,24 @@ public interface PurchaseOrderService {
 
     /** Transition {DRAFT, ORDERED, PARTIALLY_RECEIVED} → VOID. */
     PurchaseOrderDto voidOrder(String uid, VoidPurchaseOrderRequest req);
+
+    // --- procurement-depth approval seam (ADR-0027 D-6) ---
+
+    /**
+     * Permission-gated fallback approve: sets approval_status = APPROVED so placeOrder can proceed.
+     * Required permission: {@code PURCHASE.ORDER.APPROVE}.
+     */
+    PurchaseOrderDto approvePo(String uid, ApprovePoRequest req);
+
+    /**
+     * Permission-gated fallback reject: sets approval_status = REJECTED.
+     * Required permission: {@code PURCHASE.ORDER.REJECT}.
+     */
+    PurchaseOrderDto rejectPo(String uid, ApprovePoRequest req);
+
+    /**
+     * Create a PO from an awarded supplier quote (ADR-0027 D-4 award flow).
+     * Copies lines at quoted prices; sets source_quote_uid.
+     */
+    PurchaseOrderDto createFromQuote(String quoteUid);
 }
