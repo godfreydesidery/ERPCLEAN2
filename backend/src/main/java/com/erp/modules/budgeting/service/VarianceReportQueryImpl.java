@@ -167,7 +167,13 @@ public class VarianceReportQueryImpl implements VarianceReportQuery {
             }
 
             BigDecimal budget = budgetByAccount.getOrDefault(accountId, BigDecimal.ZERO);
-            BigDecimal actual = actualByAccount.getOrDefault(accountId, BigDecimal.ZERO);
+            // Fix #3: for company-wide (ccValueId==null) the unallocated amounts (journal_lines
+            // where cost_centre_value_id IS NULL) must be included in actual so that variance
+            // = actual − budget is correct.  For centre-specific queries the unallocated amounts
+            // are NOT merged into the centre row — they are surfaced separately below (OQ-BUD-07).
+            BigDecimal unalloc = unallocatedByAccount.getOrDefault(accountId, BigDecimal.ZERO);
+            BigDecimal actual = actualByAccount.getOrDefault(accountId, BigDecimal.ZERO)
+                    .add(ccValueId == null ? unalloc : BigDecimal.ZERO);
             BigDecimal variance = actual.subtract(budget);
             BigDecimal variancePct = budget.compareTo(BigDecimal.ZERO) != 0
                     ? variance.divide(budget, 4, RoundingMode.HALF_UP)
@@ -179,7 +185,11 @@ public class VarianceReportQueryImpl implements VarianceReportQuery {
                     ccValueId, ccValueName,
                     budget, actual, variance, variancePct));
 
-            // Unallocated bucket when centre is chosen (OQ-BUD-07)
+            // Unallocated bucket (OQ-BUD-07):
+            // - centre-specific view: add a separate Unallocated row so the user can see
+            //   untagged postings alongside the centre's own actuals.
+            // - company-wide view: already merged into `actual` above; do NOT add a duplicate
+            //   Unallocated row (it would double-count in totals).
             if (ccValueId != null && unallocatedByAccount.containsKey(accountId)) {
                 BigDecimal unallocActual = unallocatedByAccount.get(accountId);
                 rows.add(new VarianceRowDto(
