@@ -54,21 +54,38 @@ public class StatutoryCalculator {
     /**
      * Compute all statutory deductions for one employee line.
      *
-     * @param companyId    the company
-     * @param payDate      the pay date (used to select in-force rate sets)
-     * @param grossAmount  total gross (basic + all EARNING items) in TZS
-     * @param basicAmount  basic salary only (used for HESLB basis = BASIC)
-     * @param pensionable  pensionable pay (used for NSSF basis = PENSIONABLE; typically = basic)
-     * @param headcount    total number of employees this run (for SDL threshold check)
+     * @param companyId          the company
+     * @param payDate            the pay date (used to select in-force rate sets)
+     * @param grossAmount        total gross (basic + all EARNING items) in TZS
+     * @param basicAmount        basic salary only (used for HESLB basis = BASIC)
+     * @param pensionable        pensionable pay (used for NSSF basis = PENSIONABLE; typically = basic)
+     * @param headcount          total number of employees this run (for SDL threshold check)
+     * @param unpaidLeaveDays    calendar days of approved unpaid leave in this pay period (>= 0)
+     * @param periodWorkingDays  total working days in the pay period (> 0; typically 22 for monthly)
      */
     public StatutoryResult compute(Long companyId, LocalDate payDate,
                                     BigDecimal grossAmount, BigDecimal basicAmount,
-                                    BigDecimal pensionable, int headcount) {
-        BigDecimal paye = computePaye(companyId, payDate, grossAmount);
-        StatutoryRateResult nssf  = computeNssf(companyId, payDate, pensionable, grossAmount, basicAmount);
-        StatutoryRateResult wcf   = computeEmployerOnly(companyId, payDate, StatutoryRateType.WCF,   grossAmount, basicAmount, headcount);
-        StatutoryRateResult sdl   = computeEmployerOnly(companyId, payDate, StatutoryRateType.SDL,   grossAmount, basicAmount, headcount);
-        StatutoryRateResult heslb = computeEmployeeOnly(companyId, payDate, StatutoryRateType.HESLB, grossAmount, basicAmount, headcount);
+                                    BigDecimal pensionable, int headcount,
+                                    BigDecimal unpaidLeaveDays, int periodWorkingDays) {
+        // FR-HR-13 pro-rata: reduce gross by proportion of unpaid leave
+        // grossForPeriod = grossAmount × (periodWorkingDays − unpaidLeaveDays) / periodWorkingDays
+        BigDecimal grossForPeriod = grossAmount;
+        if (unpaidLeaveDays != null && unpaidLeaveDays.compareTo(BigDecimal.ZERO) > 0
+                && periodWorkingDays > 0) {
+            BigDecimal workingDays = BigDecimal.valueOf(periodWorkingDays);
+            BigDecimal factor = workingDays.subtract(unpaidLeaveDays)
+                    .divide(workingDays, 4, RoundingMode.HALF_UP);
+            // clamp to [0, 1] — unpaid days cannot exceed working days
+            if (factor.compareTo(BigDecimal.ZERO) < 0) factor = BigDecimal.ZERO;
+            grossForPeriod = grossAmount.multiply(factor).setScale(4, RoundingMode.HALF_UP);
+        }
+
+        BigDecimal paye = computePaye(companyId, payDate, grossForPeriod);
+        // WCF/SDL use GROSS basis → apply pro-rated grossForPeriod; NSSF uses PENSIONABLE (not reduced by leave)
+        StatutoryRateResult nssf  = computeNssf(companyId, payDate, pensionable, grossForPeriod, basicAmount);
+        StatutoryRateResult wcf   = computeEmployerOnly(companyId, payDate, StatutoryRateType.WCF,   grossForPeriod, basicAmount, headcount);
+        StatutoryRateResult sdl   = computeEmployerOnly(companyId, payDate, StatutoryRateType.SDL,   grossForPeriod, basicAmount, headcount);
+        StatutoryRateResult heslb = computeEmployeeOnly(companyId, payDate, StatutoryRateType.HESLB, grossForPeriod, basicAmount, headcount);
 
         return new StatutoryResult(
                 paye,

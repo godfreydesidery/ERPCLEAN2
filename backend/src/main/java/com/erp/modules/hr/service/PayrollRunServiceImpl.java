@@ -1,9 +1,15 @@
 package com.erp.modules.hr.service;
 
+import com.erp.modules.cashbank.domain.dto.RecordDirectEntryRequest;
+import com.erp.modules.cashbank.domain.enums.CashTxnDirection;
+import com.erp.modules.cashbank.service.CashDirectEntryService;
+import com.erp.modules.gl.domain.enums.GlConfigKey;
+import com.erp.modules.gl.service.GLConfigResolver;
 import com.erp.modules.hr.domain.dto.CreatePayrollRunRequest;
 import com.erp.modules.hr.domain.dto.DisburseRequest;
 import com.erp.modules.hr.domain.dto.PayrollLineDto;
 import com.erp.modules.hr.domain.dto.PayrollRunDto;
+import com.erp.modules.hr.domain.entity.Department;
 import com.erp.modules.hr.domain.entity.Employee;
 import com.erp.modules.hr.domain.entity.EmployeeLoan;
 import com.erp.modules.hr.domain.entity.EmployeeRecurringItem;
@@ -15,20 +21,25 @@ import com.erp.modules.hr.domain.entity.PayrollRun;
 import com.erp.modules.hr.domain.entity.PayrollStatutorySnapshot;
 import com.erp.modules.hr.domain.entity.Payslip;
 import com.erp.modules.hr.domain.enums.EmploymentStatus;
+import com.erp.modules.hr.domain.enums.PayComponentBasis;
+import com.erp.modules.hr.domain.enums.PayComponentKind;
 import com.erp.modules.hr.domain.enums.PayrollLineStatus;
 import com.erp.modules.hr.domain.enums.PayrollRunStatus;
 import com.erp.modules.hr.domain.event.PayrollFinalisedPayload;
 import com.erp.modules.hr.domain.event.PayrollReversedPayload;
+import com.erp.modules.hr.repository.DepartmentRepository;
 import com.erp.modules.hr.repository.EmployeeLoanRepository;
 import com.erp.modules.hr.repository.EmployeeRecurringItemRepository;
 import com.erp.modules.hr.repository.EmployeeRepository;
 import com.erp.modules.hr.repository.EmploymentContractRepository;
+import com.erp.modules.hr.repository.LeaveRequestRepository;
 import com.erp.modules.hr.repository.PayComponentRepository;
 import com.erp.modules.hr.repository.PayrollLineItemRepository;
 import com.erp.modules.hr.repository.PayrollLineRepository;
 import com.erp.modules.hr.repository.PayrollRunRepository;
 import com.erp.modules.hr.repository.PayrollStatutorySnapshotRepository;
 import com.erp.modules.hr.repository.PayslipRepository;
+import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -42,7 +53,9 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
+import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -62,11 +75,19 @@ public class PayrollRunServiceImpl implements PayrollRunService {
     private final EmployeeRecurringItemRepository     recurringItems;
     private final EmployeeLoanRepository              loans;
     private final PayComponentRepository              payComponents;
+    private final DepartmentRepository                departments;
+    private final LeaveRequestRepository              leaveRequests;
     private final StatutoryCalculator                 calculator;
     private final HrNumberGenerator                   numberGenerator;
     private final OutboxPublisher                     outbox;
     private final ScopeGuard                          scopeGuard;
     private final AuditService                        audit;
+    private final CashDirectEntryService              cashDirectEntryService;
+    private final GLConfigResolver                    glConfigResolver;
+    private final CompanyRepository                   companies;
+
+    /** Default working days per month (MONTHLY pay frequency, FR-HR-13). */
+    private static final int DEFAULT_PERIOD_WORKING_DAYS = 22;
 
     public PayrollRunServiceImpl(PayrollRunRepository runs,
                                   PayrollLineRepository lines,
@@ -78,26 +99,36 @@ public class PayrollRunServiceImpl implements PayrollRunService {
                                   EmployeeRecurringItemRepository recurringItems,
                                   EmployeeLoanRepository loans,
                                   PayComponentRepository payComponents,
+                                  DepartmentRepository departments,
+                                  LeaveRequestRepository leaveRequests,
                                   StatutoryCalculator calculator,
                                   HrNumberGenerator numberGenerator,
                                   OutboxPublisher outbox,
                                   ScopeGuard scopeGuard,
-                                  AuditService audit) {
-        this.runs           = runs;
-        this.lines          = lines;
-        this.lineItems      = lineItems;
-        this.snapshots      = snapshots;
-        this.payslips       = payslips;
-        this.employees      = employees;
-        this.contracts      = contracts;
-        this.recurringItems = recurringItems;
-        this.loans          = loans;
-        this.payComponents  = payComponents;
-        this.calculator     = calculator;
-        this.numberGenerator = numberGenerator;
-        this.outbox         = outbox;
-        this.scopeGuard     = scopeGuard;
-        this.audit          = audit;
+                                  AuditService audit,
+                                  CashDirectEntryService cashDirectEntryService,
+                                  GLConfigResolver glConfigResolver,
+                                  CompanyRepository companies) {
+        this.runs                 = runs;
+        this.lines                = lines;
+        this.lineItems            = lineItems;
+        this.snapshots            = snapshots;
+        this.payslips             = payslips;
+        this.employees            = employees;
+        this.contracts            = contracts;
+        this.recurringItems       = recurringItems;
+        this.loans                = loans;
+        this.payComponents        = payComponents;
+        this.departments          = departments;
+        this.leaveRequests        = leaveRequests;
+        this.calculator           = calculator;
+        this.numberGenerator      = numberGenerator;
+        this.outbox               = outbox;
+        this.scopeGuard           = scopeGuard;
+        this.audit                = audit;
+        this.cashDirectEntryService = cashDirectEntryService;
+        this.glConfigResolver     = glConfigResolver;
+        this.companies            = companies;
     }
 
     @Override
@@ -139,10 +170,22 @@ public class PayrollRunServiceImpl implements PayrollRunService {
         RequestContext.Principal p = RequestContext.get();
         PayrollRun run = requireByUid(uid);
         scopeGuard.assertCanActIn(p, run.getCompanyId());
-        requireStatus(run, PayrollRunStatus.DRAFT);
+        // Allow recalculate from DRAFT or CALCULATED or APPROVED (ADR-0032 D-2, D-6)
+        if (run.getStatus() != PayrollRunStatus.DRAFT
+                && run.getStatus() != PayrollRunStatus.CALCULATED
+                && run.getStatus() != PayrollRunStatus.APPROVED) {
+            throw new ConflictException(
+                    "Payroll run can only be (re)calculated in DRAFT/CALCULATED/APPROVED status; current: "
+                    + run.getStatus());
+        }
 
         Long companyId = run.getCompanyId();
         LocalDate payDate = run.getPayDate();
+
+        // Period bounds for leave overlap query (1st to last day of payroll month)
+        YearMonth ym = YearMonth.of(run.getPeriodYear(), run.getPeriodMonth());
+        LocalDate periodStart = ym.atDay(1);
+        LocalDate periodEnd   = ym.atEndOfMonth();
 
         // Delete any previously calculated lines (idempotent recalculate)
         List<PayrollLine> existing = lines.findByPayrollRunIdOrderByEmployeeIdAsc(run.getId());
@@ -174,9 +217,16 @@ public class PayrollRunServiceImpl implements PayrollRunService {
             BigDecimal basicSalary = contract.getBaseSalaryAmount();
             String currency = contract.getCurrency();
 
+            // --- Fix #9: snapshot department name ---
+            String departmentName = null;
+            if (emp.getDepartmentId() != null) {
+                departmentName = departments.findById(emp.getDepartmentId())
+                        .map(Department::getName).orElse(null);
+            }
+
             PayrollLine line = new PayrollLine(run.getId(), companyId, emp.getId(),
                     emp.getEmployeeNumber(), emp.getFullName(),
-                    null, currency, p.userId());
+                    departmentName, currency, p.userId());
             lines.save(line);
 
             // --- EARNINGS: base salary ---
@@ -187,35 +237,51 @@ public class PayrollRunServiceImpl implements PayrollRunService {
             lineItems.save(new PayrollLineItem(line.getId(), companyId, null,
                     "EARNING", "Basic Salary", basicSalary, null, p.userId()));
 
-            // --- EARNINGS: recurring items (allowances / benefits) ---
+            // --- EARNINGS & DEDUCTIONS: recurring items (allowances / deductions) ---
+            // Fix #6: use pc.getBasis() to detect percentage items
+            // Fix #2: handle DEDUCTION-kind components properly
+            BigDecimal voluntaryDeductTotal = BigDecimal.ZERO;
             List<EmployeeRecurringItem> recurring = recurringItems.findActiveForEmployee(companyId, emp.getId(), payDate);
             for (EmployeeRecurringItem ri : recurring) {
                 var pcOpt = payComponents.findById(ri.getPayComponentId());
                 if (pcOpt.isEmpty()) continue;
                 PayComponent pc = pcOpt.get();
                 BigDecimal itemAmount = ri.getAmountOrPercent();
-                if (itemAmount.scale() > 0 && itemAmount.compareTo(BigDecimal.ONE) < 0) {
-                    // percentage-based: apply against basic
+                // Fix #6: use basis field, not scale/value heuristic
+                if (pc.getBasis() == PayComponentBasis.PERCENT_OF_BASIC) {
                     itemAmount = basicSalary.multiply(itemAmount)
                             .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP);
                 }
-                grossAmount = grossAmount.add(itemAmount);
-                if (pc.isTaxable())      taxableAmount = taxableAmount.add(itemAmount);
-                if (pc.isPensionable())  pensionable   = pensionable.add(itemAmount);
-                lineItems.save(new PayrollLineItem(line.getId(), companyId, pc.getId(),
-                        "EARNING", pc.getName(), itemAmount, pc.getGlAccountId(), p.userId()));
+                if (pc.getKind() == PayComponentKind.EARNING) {
+                    grossAmount   = grossAmount.add(itemAmount);
+                    if (pc.isTaxable())     taxableAmount = taxableAmount.add(itemAmount);
+                    if (pc.isPensionable()) pensionable   = pensionable.add(itemAmount);
+                    lineItems.save(new PayrollLineItem(line.getId(), companyId, pc.getId(),
+                            "EARNING", pc.getName(), itemAmount, pc.getGlAccountId(), p.userId()));
+                } else {
+                    // Fix #2: DEDUCTION kind — reduce net, record as DEDUCTION line item
+                    voluntaryDeductTotal = voluntaryDeductTotal.add(itemAmount);
+                    lineItems.save(new PayrollLineItem(line.getId(), companyId, pc.getId(),
+                            "DEDUCTION", pc.getName(), itemAmount, pc.getGlAccountId(), p.userId()));
+                }
             }
+
+            // --- Fix #3: Unpaid leave pro-rata (FR-HR-13) ---
+            BigDecimal unpaidLeaveDays = leaveRequests.sumApprovedUnpaidDaysOverlapping(
+                    companyId, emp.getId(), periodStart, periodEnd);
+            if (unpaidLeaveDays == null) unpaidLeaveDays = BigDecimal.ZERO;
 
             // --- STATUTORY DEDUCTIONS ---
             StatutoryCalculator.StatutoryResult stat = calculator.compute(
-                    companyId, payDate, grossAmount, basicSalary, pensionable, headcount);
+                    companyId, payDate, grossAmount, basicSalary, pensionable, headcount,
+                    unpaidLeaveDays, DEFAULT_PERIOD_WORKING_DAYS);
 
-            BigDecimal payeAmt          = contract.isPayeResident()   ? stat.paye()           : BigDecimal.ZERO;
-            BigDecimal nssfEmpAmt       = contract.isNssfMember()      ? stat.nssfEmployee()   : BigDecimal.ZERO;
-            BigDecimal nssfErAmt        = contract.isNssfMember()      ? stat.nssfEmployer()   : BigDecimal.ZERO;
-            BigDecimal wcfAmt           = contract.isWcfCovered()      ? stat.wcfEmployer()    : BigDecimal.ZERO;
-            BigDecimal sdlAmt           = contract.isSdlCounted()      ? stat.sdlEmployer()    : BigDecimal.ZERO;
-            BigDecimal heslbAmt         = contract.isHeslbBorrower()   ? stat.heslb()          : BigDecimal.ZERO;
+            BigDecimal payeAmt    = contract.isPayeResident()  ? stat.paye()         : BigDecimal.ZERO;
+            BigDecimal nssfEmpAmt = contract.isNssfMember()    ? stat.nssfEmployee() : BigDecimal.ZERO;
+            BigDecimal nssfErAmt  = contract.isNssfMember()    ? stat.nssfEmployer() : BigDecimal.ZERO;
+            BigDecimal wcfAmt     = contract.isWcfCovered()    ? stat.wcfEmployer()  : BigDecimal.ZERO;
+            BigDecimal sdlAmt     = contract.isSdlCounted()    ? stat.sdlEmployer()  : BigDecimal.ZERO;
+            BigDecimal heslbAmt   = contract.isHeslbBorrower() ? stat.heslb()        : BigDecimal.ZERO;
 
             // --- LOAN DEDUCTIONS ---
             List<EmployeeLoan> activeLoans = loans.findActiveWithBalance(companyId, emp.getId());
@@ -231,12 +297,13 @@ public class PayrollRunServiceImpl implements PayrollRunService {
 
             // --- COMPUTE NET ---
             BigDecimal totalDeductions = payeAmt.add(nssfEmpAmt).add(heslbAmt)
-                    .add(loanDeductTotal);
+                    .add(loanDeductTotal).add(voluntaryDeductTotal);
             BigDecimal netAmount = grossAmount.subtract(totalDeductions);
+            // Fix #7: preserve negative net amount — do NOT force to zero (ADR-0032 D-6 chk_payroll_line_net_nonneg)
             if (netAmount.compareTo(BigDecimal.ZERO) < 0) {
                 line.setStatus(PayrollLineStatus.FLAGGED);
-                line.setFlagReason("Net amount negative after deductions");
-                netAmount = BigDecimal.ZERO;
+                line.setFlagReason("Net amount negative after deductions: " + netAmount.toPlainString());
+                // netAmount stays negative — DB allows it on FLAGGED lines
             }
 
             // Write summary to line
@@ -246,6 +313,7 @@ public class PayrollRunServiceImpl implements PayrollRunService {
             line.setPayeAmount(payeAmt);
             line.setNssfEmployeeAmount(nssfEmpAmt);
             line.setHeslbAmount(heslbAmt);
+            line.setVoluntaryDeductionTotal(voluntaryDeductTotal);
             line.setLoanDeductionTotal(loanDeductTotal);
             line.setNssfEmployerAmount(nssfErAmt);
             line.setWcfEmployerAmount(wcfAmt);
@@ -290,6 +358,16 @@ public class PayrollRunServiceImpl implements PayrollRunService {
         PayrollRun run = requireByUid(uid);
         scopeGuard.assertCanActIn(p, run.getCompanyId());
         requireStatus(run, PayrollRunStatus.CALCULATED);
+
+        // Fix #5: Guard — no FLAGGED lines allowed (ADR-0032 D-2/D-6, BR-HR-07)
+        List<PayrollLine> flaggedLines = lines.findByPayrollRunIdAndStatus(run.getId(), PayrollLineStatus.FLAGGED);
+        if (!flaggedLines.isEmpty()) {
+            String reasons = flaggedLines.stream()
+                    .map(l -> l.getEmployeeNumber() + ": " + l.getFlagReason())
+                    .collect(Collectors.joining("; "));
+            throw new ConflictException("Cannot approve run with FLAGGED payroll lines. Resolve: " + reasons);
+        }
+
         run.setStatus(PayrollRunStatus.APPROVED);
         run.setApprovedAt(Instant.now());
         run.setApprovedBy(p.userId());
@@ -333,9 +411,28 @@ public class PayrollRunServiceImpl implements PayrollRunService {
         if (run.getStatus() != PayrollRunStatus.POSTED) {
             throw new ConflictException("Payroll run must be in POSTED status to disburse.");
         }
-        // Disbursement via Cash & Bank is handled by the PayrollPostingHandler
-        // which reacts to PAYROLL_FINALISED and calls CashDirectEntryService.
-        // Here we only record the disbursement timestamp.
+        if (run.getNetTotal().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ConflictException("Payroll run net total must be > 0 to disburse.");
+        }
+
+        // Fix #4: post cash disbursement — DR NET_WAGES_PAYABLE / CR bank GL (ADR-0032 D-9, FR-HR-20)
+        String companyUid = companies.findById(run.getCompanyId())
+                .orElseThrow(() -> NotFoundException.of("Company", run.getCompanyId().toString()))
+                .getUid();
+        String netWagesPayableUid = glConfigResolver
+                .resolve(run.getCompanyId(), GlConfigKey.NET_WAGES_PAYABLE)
+                .getUid();
+        LocalDate txnDate = req.txnDate() != null ? req.txnDate() : run.getPayDate();
+        cashDirectEntryService.recordDirectEntry(new RecordDirectEntryRequest(
+                companyUid,
+                req.cashBankAccountUid(),
+                CashTxnDirection.OUT,
+                run.getNetTotal(),
+                txnDate,
+                netWagesPayableUid,
+                "Net wages disbursement for " + run.getRunNumber()
+        ));
+
         run.setStatus(PayrollRunStatus.PAID);
         run.setPaidAt(Instant.now());
         run.setUpdatedAt(Instant.now());
@@ -378,7 +475,6 @@ public class PayrollRunServiceImpl implements PayrollRunService {
 
     private void generatePayslips(PayrollRun run, Long userId) {
         List<PayrollLine> runLines = lines.findByPayrollRunIdOrderByEmployeeIdAsc(run.getId());
-        int seq = 1;
         for (PayrollLine line : runLines) {
             if (payslips.findByPayrollRunIdAndEmployeeId(run.getId(), line.getEmployeeId()).isPresent()) continue;
             BigDecimal totalDeduct = line.getPayeAmount()
@@ -389,7 +485,8 @@ public class PayrollRunServiceImpl implements PayrollRunService {
             BigDecimal employerCost = line.getNssfEmployerAmount()
                     .add(line.getWcfEmployerAmount())
                     .add(line.getSdlEmployerAmount());
-            String slipNumber = run.getRunNumber() + "-" + String.format("%04d", seq++);
+            // Fix #8: use global sequence for unique PAYSLIP-##### numbers (ADR-0032 D-14)
+            String slipNumber = numberGenerator.nextPayslip(run.getCompanyId());
             payslips.save(new Payslip(run.getCompanyId(), run.getId(), line.getId(), line.getEmployeeId(),
                     slipNumber, run.getPayDate(),
                     line.getGrossAmount(), totalDeduct, line.getNetAmount(), employerCost,

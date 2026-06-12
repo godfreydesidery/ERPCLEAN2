@@ -9,9 +9,22 @@ import com.erp.modules.gl.service.GlConfigService;
 import com.erp.modules.hr.domain.dto.CreateContractRequest;
 import com.erp.modules.hr.domain.dto.CreateEmployeeRequest;
 import com.erp.modules.hr.domain.dto.CreatePayrollRunRequest;
+import com.erp.modules.hr.domain.dto.PayrollLineDto;
 import com.erp.modules.hr.domain.dto.PayrollRunDto;
+import com.erp.modules.hr.domain.entity.Department;
+import com.erp.modules.hr.domain.entity.EmployeeRecurringItem;
+import com.erp.modules.hr.domain.entity.PayComponent;
 import com.erp.modules.hr.domain.enums.ContractType;
+import com.erp.modules.hr.domain.enums.PayComponentBasis;
+import com.erp.modules.hr.domain.enums.PayComponentKind;
+import com.erp.modules.hr.domain.enums.PayrollLineStatus;
 import com.erp.modules.hr.domain.enums.PayrollRunStatus;
+import com.erp.modules.hr.repository.DepartmentRepository;
+import com.erp.modules.hr.repository.EmployeeRecurringItemRepository;
+import com.erp.modules.hr.repository.EmployeeRepository;
+import com.erp.modules.hr.repository.PayComponentRepository;
+import com.erp.modules.hr.repository.PayrollLineRepository;
+import com.erp.modules.hr.repository.PayslipRepository;
 import com.erp.modules.iam.domain.entity.AppUser;
 import com.erp.modules.iam.domain.entity.Branch;
 import com.erp.modules.iam.domain.entity.Company;
@@ -26,6 +39,7 @@ import com.erp.support.IamTestData;
 import com.erp.support.PostgresIntegrationTest;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -62,6 +76,13 @@ class PayrollRunServiceIT extends PostgresIntegrationTest {
     @Autowired private AppUserRepository users;
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private IamTestData testData;
+    // For fix-verification tests
+    @Autowired private PayrollLineRepository payrollLineRepository;
+    @Autowired private PayslipRepository payslipRepository;
+    @Autowired private PayComponentRepository payComponentRepository;
+    @Autowired private EmployeeRecurringItemRepository recurringItemRepository;
+    @Autowired private EmployeeRepository employeeRepository;
+    @Autowired private DepartmentRepository departmentRepository;
 
     private Company company;
     private Branch branch;
@@ -191,6 +212,135 @@ class PayrollRunServiceIT extends PostgresIntegrationTest {
         assertThatThrownBy(this::createRun)
                 .isInstanceOf(ConflictException.class)
                 .as("duplicate payroll run for the same company/period must throw ConflictException");
+    }
+
+    // =========================================================================
+    // Fix #5 + #7: approve() rejects FLAGGED run; negative net preserved
+    // =========================================================================
+
+    @Test
+    void approve_blockedWhenFlaggedLinesExist_andNegativeNetPreserved() {
+        // Create a DEDUCTION pay component worth 700k (> 600k gross) to force net < 0
+        // Borrow a GL account id from the first seeded pay component (any valid id works
+        // since this test doesn't post to GL — it just checks calculate/approve)
+        var emp = employeeRepository.findByUid(employeeUid)
+                .orElseThrow(() -> new AssertionError("employee not found"));
+
+        // Use salary account — find any existing component for a valid gl_account_id seed
+        List<PayComponent> existing = payComponentRepository.findByCompanyId(company.getId());
+        long anyGlId = existing.isEmpty() ? 1L : existing.get(0).getGlAccountId();
+
+        PayComponent bigDeduction = new PayComponent(
+                company.getId(), "UNION-TEST", "Forced Deduction",
+                PayComponentKind.DEDUCTION, PayComponentBasis.FIXED,
+                anyGlId, false, false, rootId);
+        bigDeduction = payComponentRepository.save(bigDeduction);
+
+        // 700,000 FIXED deduction → net = 600000 - 700000 = -100000 (FLAGGED)
+        recurringItemRepository.save(new EmployeeRecurringItem(
+                company.getId(), emp.getId(), bigDeduction.getId(),
+                new BigDecimal("700000"),
+                LocalDate.of(2024, 1, 1), null, rootId));
+
+        PayrollRunDto run = payrollRunService.create(new CreatePayrollRunRequest(
+                (short) 7, (short) 2026, LocalDate.of(2026, 7, 31), branch.getId()));
+        payrollRunService.calculate(run.uid());
+
+        // Fix #5: line must be FLAGGED
+        List<PayrollLineDto> lineList = payrollRunService.listLines(run.uid());
+        assertThat(lineList).anySatisfy(l ->
+                assertThat(l.status()).isEqualTo(PayrollLineStatus.FLAGGED))
+                .as("line must be FLAGGED when net < 0");
+
+        // Fix #7: negative net preserved, not forced to zero
+        assertThat(lineList).anySatisfy(l ->
+                assertThat(l.netAmount()).isLessThan(BigDecimal.ZERO))
+                .as("FLAGGED line net_amount must be the actual negative value, not zero");
+
+        // Fix #5: approve must throw ConflictException
+        assertThatThrownBy(() -> payrollRunService.approve(run.uid()))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("FLAGGED")
+                .as("approve must reject a run with FLAGGED lines");
+    }
+
+    // =========================================================================
+    // Fix #6: PERCENT_OF_BASIC recurring item is applied correctly
+    // =========================================================================
+
+    @Test
+    void calculate_percentOfBasicAllowance_correctlyAddsToGross() {
+        // Add a 10% housing allowance recurring item
+        // Expected: grossTotal = 600000 + (10% * 600000) = 660000
+        var emp = employeeRepository.findByUid(employeeUid)
+                .orElseThrow(() -> new AssertionError("employee not found"));
+
+        // Borrow a valid GL account id from any existing seeded component
+        List<PayComponent> seeded = payComponentRepository.findByCompanyId(company.getId());
+        long anyGlId = seeded.isEmpty() ? 1L : seeded.get(0).getGlAccountId();
+
+        PayComponent housingComp = new PayComponent(
+                company.getId(), "HOUSING", "Housing Allowance",
+                PayComponentKind.EARNING, PayComponentBasis.PERCENT_OF_BASIC,
+                anyGlId, true, true, rootId);
+        housingComp = payComponentRepository.save(housingComp);
+
+        recurringItemRepository.save(new EmployeeRecurringItem(
+                company.getId(), emp.getId(), housingComp.getId(),
+                new BigDecimal("10"), // 10% of basic — stored as 10, not 0.10
+                LocalDate.of(2024, 1, 1), null, rootId));
+
+        PayrollRunDto run = payrollRunService.create(new CreatePayrollRunRequest(
+                (short) 8, (short) 2026, LocalDate.of(2026, 8, 31), branch.getId()));
+        PayrollRunDto calculated = payrollRunService.calculate(run.uid());
+
+        // gross = basic (600000) + 10% of 600000 (60000) = 660000
+        assertThat(calculated.grossTotal())
+                .isEqualByComparingTo(new BigDecimal("660000"))
+                .as("gross must include 10% PERCENT_OF_BASIC housing allowance (not treat 10 as fixed 10 TZS)");
+    }
+
+    // =========================================================================
+    // Fix #8: payslip numbers use global PAYSLIP-##### sequence
+    // =========================================================================
+
+    @Test
+    void post_payslipNumberUsesGlobalSequence() {
+        PayrollRunDto run = createRun();
+        payrollRunService.calculate(run.uid());
+        payrollRunService.approve(run.uid());
+        payrollRunService.post(run.uid());
+
+        var payslipList = payslipRepository.findByPayrollRunId(run.id());
+        assertThat(payslipList).isNotEmpty()
+                .as("payslips must be created at post");
+        payslipList.forEach(ps ->
+                assertThat(ps.getPayslipNumber()).startsWith("PAYSLIP-")
+                        .as("payslip number must start with PAYSLIP- (global sequence)"));
+    }
+
+    // =========================================================================
+    // Fix #9: department name is snapshotted on payroll line
+    // =========================================================================
+
+    @Test
+    void calculate_snapshotsDepartmentName() {
+        // Assign employee to a department
+        Department dept = departmentRepository.save(
+                new Department(company.getId(), "ENG", "Engineering", rootId));
+        var emp = employeeRepository.findByUid(employeeUid)
+                .orElseThrow(() -> new AssertionError("employee not found"));
+        emp.setDepartmentId(dept.getId());
+        employeeRepository.save(emp);
+
+        PayrollRunDto run = payrollRunService.create(new CreatePayrollRunRequest(
+                (short) 9, (short) 2026, LocalDate.of(2026, 9, 30), branch.getId()));
+        payrollRunService.calculate(run.uid());
+
+        List<PayrollLineDto> lineList = payrollRunService.listLines(run.uid());
+        assertThat(lineList).anySatisfy(l ->
+                assertThat(l.departmentName()).isEqualTo("Engineering"))
+                .as("payroll line must snapshot the employee's department name");
     }
 
     // =========================================================================

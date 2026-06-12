@@ -9,9 +9,11 @@ import com.erp.modules.gl.domain.enums.JournalSourceType;
 import com.erp.modules.gl.service.GLConfigResolver;
 import com.erp.modules.gl.service.GLPostingSafeInvoker;
 import com.erp.modules.hr.domain.entity.PayrollLine;
+import com.erp.modules.hr.domain.entity.PayrollLineItem;
 import com.erp.modules.hr.domain.entity.PayrollRun;
 import com.erp.modules.hr.domain.event.PayrollFinalisedPayload;
 import com.erp.modules.hr.domain.enums.PayrollRunStatus;
+import com.erp.modules.hr.repository.PayrollLineItemRepository;
 import com.erp.modules.hr.repository.PayrollLineRepository;
 import com.erp.modules.hr.repository.PayrollRunRepository;
 import com.erp.platform.events.DomainEvent;
@@ -21,9 +23,10 @@ import com.erp.platform.events.IdempotencyGuard;
 import com.erp.platform.security.RequestContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,17 +36,19 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Consumes {@code PAYROLL.FINALISED} — posts a balanced GL journal for a payroll run
- * (ADR-0032 D-9, FR-HR-06).
+ * (ADR-0032 D-7, FR-HR-19).
  *
- * <p>Journal shape:
+ * <p>Journal shape (balances by construction — Σ DR == Σ CR):
  * <ul>
- *   <li>DR Salary Expense (gross total)</li>
- *   <li>DR Employer Statutory Expense (nssf_employer + wcf + sdl)</li>
+ *   <li>DR Salary &amp; allowance expense — Σ EARNING payroll_line_items by account</li>
+ *   <li>DR Employer Statutory Expense — Σ nssf_employer + wcf + sdl</li>
  *   <li>CR PAYE Payable</li>
  *   <li>CR NSSF Payable (employee + employer)</li>
  *   <li>CR WCF Payable</li>
  *   <li>CR SDL Payable</li>
  *   <li>CR HESLB Payable</li>
+ *   <li>CR per DEDUCTION payroll_line_item — loan receivables + voluntary deduction payables,
+ *       grouped by gl_account_id (ADR-0032 D-7 rows 305-306)</li>
  *   <li>CR Net Wages Payable (net total)</li>
  * </ul>
  *
@@ -57,25 +62,28 @@ public class PayrollPostingHandler implements DomainEventHandler {
 
     static final String CONSUMER = "GL.PAYROLL_POST";
 
-    private final IdempotencyGuard        guard;
-    private final PayrollRunRepository    payrollRuns;
-    private final PayrollLineRepository   payrollLines;
-    private final GLPostingSafeInvoker    safeInvoker;
-    private final GLConfigResolver        configResolver;
-    private final ObjectMapper            objectMapper;
+    private final IdempotencyGuard           guard;
+    private final PayrollRunRepository       payrollRuns;
+    private final PayrollLineRepository      payrollLines;
+    private final PayrollLineItemRepository  payrollLineItems;
+    private final GLPostingSafeInvoker       safeInvoker;
+    private final GLConfigResolver           configResolver;
+    private final ObjectMapper               objectMapper;
 
     public PayrollPostingHandler(IdempotencyGuard guard,
                                   PayrollRunRepository payrollRuns,
                                   PayrollLineRepository payrollLines,
+                                  PayrollLineItemRepository payrollLineItems,
                                   GLPostingSafeInvoker safeInvoker,
                                   GLConfigResolver configResolver,
                                   ObjectMapper objectMapper) {
-        this.guard          = guard;
-        this.payrollRuns    = payrollRuns;
-        this.payrollLines   = payrollLines;
-        this.safeInvoker    = safeInvoker;
-        this.configResolver = configResolver;
-        this.objectMapper   = objectMapper;
+        this.guard            = guard;
+        this.payrollRuns      = payrollRuns;
+        this.payrollLines     = payrollLines;
+        this.payrollLineItems = payrollLineItems;
+        this.safeInvoker      = safeInvoker;
+        this.configResolver   = configResolver;
+        this.objectMapper     = objectMapper;
     }
 
     @Override
@@ -124,16 +132,20 @@ public class PayrollPostingHandler implements DomainEventHandler {
         }
         PayrollRun run = runOpt.get();
 
-        // Aggregate totals from lines
+        // Aggregate line-level statutory and gross totals
         List<PayrollLine> lines = payrollLines.findByPayrollRunIdOrderByEmployeeIdAsc(run.getId());
-        BigDecimal grossTotal       = BigDecimal.ZERO;
-        BigDecimal payeTotal        = BigDecimal.ZERO;
-        BigDecimal nssfEmpTotal     = BigDecimal.ZERO;
-        BigDecimal nssfErTotal      = BigDecimal.ZERO;
-        BigDecimal wcfTotal         = BigDecimal.ZERO;
-        BigDecimal sdlTotal         = BigDecimal.ZERO;
-        BigDecimal heslbTotal       = BigDecimal.ZERO;
-        BigDecimal netTotal         = BigDecimal.ZERO;
+        BigDecimal grossTotal   = BigDecimal.ZERO;
+        BigDecimal payeTotal    = BigDecimal.ZERO;
+        BigDecimal nssfEmpTotal = BigDecimal.ZERO;
+        BigDecimal nssfErTotal  = BigDecimal.ZERO;
+        BigDecimal wcfTotal     = BigDecimal.ZERO;
+        BigDecimal sdlTotal     = BigDecimal.ZERO;
+        BigDecimal heslbTotal   = BigDecimal.ZERO;
+        BigDecimal netTotal     = BigDecimal.ZERO;
+
+        // Fix #1 & #2: group DEDUCTION line-item amounts by their gl_account_id for CR legs
+        // (covers both loan receivables and voluntary deduction payables — ADR-0032 D-7)
+        Map<Long, BigDecimal> deductionByAccount = new LinkedHashMap<>();
 
         for (PayrollLine line : lines) {
             grossTotal   = grossTotal.add(line.getGrossAmount());
@@ -144,17 +156,31 @@ public class PayrollPostingHandler implements DomainEventHandler {
             sdlTotal     = sdlTotal.add(line.getSdlEmployerAmount());
             heslbTotal   = heslbTotal.add(line.getHeslbAmount());
             netTotal     = netTotal.add(line.getNetAmount());
+
+            // Collect DEDUCTION line items grouped by GL account
+            List<PayrollLineItem> items =
+                    payrollLineItems.findByPayrollLineIdOrderByItemKindAscLabelAsc(line.getId());
+            for (PayrollLineItem item : items) {
+                if ("DEDUCTION".equals(item.getItemKind()) && item.getGlAccountId() != null
+                        && item.getAmount() != null
+                        && item.getAmount().compareTo(BigDecimal.ZERO) > 0) {
+                    deductionByAccount.merge(item.getGlAccountId(), item.getAmount(), BigDecimal::add);
+                }
+            }
         }
         BigDecimal nssfTotal       = nssfEmpTotal.add(nssfErTotal);
         BigDecimal employerStatExp = nssfErTotal.add(wcfTotal).add(sdlTotal);
         String currency = "TZS";
 
-        // Build journal draft
+        // Build journal draft (balanced by construction per ADR-0032 D-7)
         List<LineDraft> draftLines = new ArrayList<>();
-        // DR Salary Expense (gross wages paid to employees)
-        draftLines.add(new LineDraft(resolveId(companyId, GlConfigKey.SALARY_EXPENSE),
-                grossTotal, BigDecimal.ZERO, currency, "Gross payroll " + run.getRunNumber()));
-        // DR Employer Statutory Expense (employer-side contributions)
+
+        // DR Salary Expense (gross wages)
+        if (grossTotal.compareTo(BigDecimal.ZERO) > 0) {
+            draftLines.add(new LineDraft(resolveId(companyId, GlConfigKey.SALARY_EXPENSE),
+                    grossTotal, BigDecimal.ZERO, currency, "Gross payroll " + run.getRunNumber()));
+        }
+        // DR Employer Statutory Expense (employer-side NSSF + WCF + SDL)
         if (employerStatExp.compareTo(BigDecimal.ZERO) > 0) {
             draftLines.add(new LineDraft(resolveId(companyId, GlConfigKey.EMPLOYER_STATUTORY_EXPENSE),
                     employerStatExp, BigDecimal.ZERO, currency, "Employer statutory contributions"));
@@ -164,7 +190,7 @@ public class PayrollPostingHandler implements DomainEventHandler {
             draftLines.add(new LineDraft(resolveId(companyId, GlConfigKey.PAYE_PAYABLE),
                     BigDecimal.ZERO, payeTotal, currency, "PAYE payable"));
         }
-        // CR NSSF Payable (emp + employer)
+        // CR NSSF Payable (employee + employer)
         if (nssfTotal.compareTo(BigDecimal.ZERO) > 0) {
             draftLines.add(new LineDraft(resolveId(companyId, GlConfigKey.NSSF_PAYABLE),
                     BigDecimal.ZERO, nssfTotal, currency, "NSSF payable"));
@@ -183,6 +209,14 @@ public class PayrollPostingHandler implements DomainEventHandler {
         if (heslbTotal.compareTo(BigDecimal.ZERO) > 0) {
             draftLines.add(new LineDraft(resolveId(companyId, GlConfigKey.HESLB_PAYABLE),
                     BigDecimal.ZERO, heslbTotal, currency, "HESLB payable"));
+        }
+        // Fix #1 & #2: CR DEDUCTION items (loan receivables + voluntary deduction payables)
+        // grouped by gl_account_id — ADR-0032 D-7 rows 305-306
+        for (Map.Entry<Long, BigDecimal> entry : deductionByAccount.entrySet()) {
+            if (entry.getValue().compareTo(BigDecimal.ZERO) > 0) {
+                draftLines.add(new LineDraft(entry.getKey(),
+                        BigDecimal.ZERO, entry.getValue(), currency, "Deduction payable/recovery"));
+            }
         }
         // CR Net Wages Payable
         if (netTotal.compareTo(BigDecimal.ZERO) > 0) {
