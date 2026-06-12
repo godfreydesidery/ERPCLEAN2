@@ -2,6 +2,18 @@ package com.erp.platform.security;
 
 import com.erp.modules.costing.repository.DimensionRepository;
 import com.erp.modules.costing.repository.DimensionValueRepository;
+// HR & Payroll (ADR-0032)
+import com.erp.modules.hr.repository.DepartmentRepository;
+import com.erp.modules.hr.repository.EmployeeRepository;
+import com.erp.modules.hr.repository.EmploymentContractRepository;
+import com.erp.modules.hr.repository.PayComponentRepository;
+import com.erp.modules.hr.repository.LeaveTypeRepository;
+import com.erp.modules.hr.repository.LeaveRequestRepository;
+import com.erp.modules.hr.repository.EmployeeLoanRepository;
+import com.erp.modules.hr.repository.PayeBandSetRepository;
+import com.erp.modules.hr.repository.StatutoryRateSetRepository;
+import com.erp.modules.hr.repository.PayrollRunRepository;
+import com.erp.modules.hr.repository.PayslipRepository;
 // CRM (ADR-0031)
 import com.erp.modules.crm.repository.ActivityRepository;
 import com.erp.modules.crm.repository.LeadRepository;
@@ -159,6 +171,18 @@ public class ScopeGuard {
     private final AssetCategoryRepository    assetCategories;
     private final FixedAssetRepository       fixedAssets;
     private final DepreciationRunRepository  depreciationRuns;
+    // HR & Payroll repositories (ADR-0032 D-10)
+    private final DepartmentRepository       hrDepartments;
+    private final EmployeeRepository         hrEmployees;
+    private final EmploymentContractRepository hrContracts;
+    private final PayComponentRepository     hrPayComponents;
+    private final LeaveTypeRepository        hrLeaveTypes;
+    private final LeaveRequestRepository     hrLeaveRequests;
+    private final EmployeeLoanRepository     hrLoans;
+    private final PayeBandSetRepository      hrPayeBandSets;
+    private final StatutoryRateSetRepository hrStatutoryRateSets;
+    private final PayrollRunRepository       hrPayrollRuns;
+    private final PayslipRepository          hrPayslips;
     // CRM repositories (ADR-0031 D-11)
     private final LeadRepository             crmLeads;
     private final OpportunityRepository      crmOpportunities;
@@ -226,6 +250,18 @@ public class ScopeGuard {
                       AssetCategoryRepository assetCategories,
                       FixedAssetRepository fixedAssets,
                       DepreciationRunRepository depreciationRuns,
+                      // HR & Payroll (ADR-0032 D-10)
+                      DepartmentRepository hrDepartments,
+                      EmployeeRepository hrEmployees,
+                      EmploymentContractRepository hrContracts,
+                      PayComponentRepository hrPayComponents,
+                      LeaveTypeRepository hrLeaveTypes,
+                      LeaveRequestRepository hrLeaveRequests,
+                      EmployeeLoanRepository hrLoans,
+                      PayeBandSetRepository hrPayeBandSets,
+                      StatutoryRateSetRepository hrStatutoryRateSets,
+                      PayrollRunRepository hrPayrollRuns,
+                      PayslipRepository hrPayslips,
                       // CRM (ADR-0031 D-11)
                       LeadRepository crmLeads,
                       OpportunityRepository crmOpportunities,
@@ -292,6 +328,18 @@ public class ScopeGuard {
         this.assetCategories     = assetCategories;
         this.fixedAssets         = fixedAssets;
         this.depreciationRuns    = depreciationRuns;
+        // HR & Payroll (ADR-0032 D-10)
+        this.hrDepartments       = hrDepartments;
+        this.hrEmployees         = hrEmployees;
+        this.hrContracts         = hrContracts;
+        this.hrPayComponents     = hrPayComponents;
+        this.hrLeaveTypes        = hrLeaveTypes;
+        this.hrLeaveRequests     = hrLeaveRequests;
+        this.hrLoans             = hrLoans;
+        this.hrPayeBandSets      = hrPayeBandSets;
+        this.hrStatutoryRateSets = hrStatutoryRateSets;
+        this.hrPayrollRuns       = hrPayrollRuns;
+        this.hrPayslips          = hrPayslips;
         // CRM (ADR-0031 D-11)
         this.crmLeads            = crmLeads;
         this.crmOpportunities    = crmOpportunities;
@@ -386,6 +434,18 @@ public class ScopeGuard {
             case "opportunity"         -> crmOpportunities.findCompanyIdByUid(uid);
             case "activity"            -> crmActivities.findCompanyIdByUid(uid);
             case "pipelinestage"       -> crmPipelineStages.findCompanyIdByUid(uid);
+            // HR & Payroll target types (ADR-0032 D-10)
+            case "hrdepartment"        -> hrDepartments.findCompanyIdByUid(uid);
+            case "employee"            -> hrEmployees.findCompanyIdByUid(uid);
+            case "employmentcontract"  -> hrContracts.findCompanyIdByUid(uid);
+            case "paycomponent"        -> hrPayComponents.findCompanyIdByUid(uid);
+            case "leavetype"           -> hrLeaveTypes.findCompanyIdByUid(uid);
+            case "leaverequest"        -> hrLeaveRequests.findCompanyIdByUid(uid);
+            case "employeeloan"        -> hrLoans.findCompanyIdByUid(uid);
+            case "payebandset"         -> hrPayeBandSets.findCompanyIdByUid(uid);
+            case "statutoryrateset"    -> hrStatutoryRateSets.findCompanyIdByUid(uid);
+            case "payrollrun"          -> hrPayrollRuns.findCompanyIdByUid(uid);
+            case "payslip"             -> hrPayslips.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };

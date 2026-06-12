@@ -264,6 +264,29 @@ public final class AuditActions {
     public static final String FA_ASSET_WRITE_OFF    = "FA.ASSET.WRITE_OFF";
     public static final String FA_ASSET_REVALUE      = "FA.ASSET.REVALUE";
     public static final String FA_DEPRECIATION_RUN   = "FA.DEPRECIATION.RUN";
+    // ---- HR & Payroll (ADR-0032) ----
+    public static final String HR_DEPARTMENT_CREATE    = "HR.DEPARTMENT.CREATE";
+    public static final String HR_DEPARTMENT_UPDATE    = "HR.DEPARTMENT.UPDATE";
+    public static final String HR_EMPLOYEE_CREATE      = "HR.EMPLOYEE.CREATE";
+    public static final String HR_EMPLOYEE_UPDATE      = "HR.EMPLOYEE.UPDATE";
+    public static final String HR_EMPLOYEE_ARCHIVE     = "HR.EMPLOYEE.ARCHIVE";
+    public static final String HR_CONTRACT_CREATE      = "HR.CONTRACT.CREATE";
+    public static final String HR_CONTRACT_TERMINATE   = "HR.CONTRACT.TERMINATE";
+    public static final String HR_PAYCOMPONENT_CREATE  = "HR.PAYCOMPONENT.CREATE";
+    public static final String HR_PAYCOMPONENT_UPDATE  = "HR.PAYCOMPONENT.UPDATE";
+    public static final String HR_LEAVE_REQUEST_SUBMIT = "HR.LEAVE.REQUEST.SUBMIT";
+    public static final String HR_LEAVE_REQUEST_DECIDE = "HR.LEAVE.REQUEST.DECIDE";
+    public static final String HR_LOAN_CREATE          = "HR.LOAN.CREATE";
+    public static final String HR_LOAN_APPROVE         = "HR.LOAN.APPROVE";
+    public static final String HR_STATUTORY_PAYE_CREATE  = "HR.STATUTORY.PAYE.CREATE";
+    public static final String HR_STATUTORY_RATE_CREATE  = "HR.STATUTORY.RATE.CREATE";
+    public static final String HR_PAYROLL_RUN_CREATE   = "HR.PAYROLL.RUN.CREATE";
+    public static final String HR_PAYROLL_RUN_CALCULATE = "HR.PAYROLL.RUN.CALCULATE";
+    public static final String HR_PAYROLL_RUN_APPROVE  = "HR.PAYROLL.RUN.APPROVE";
+    public static final String HR_PAYROLL_RUN_POST     = "HR.PAYROLL.RUN.POST";
+    public static final String HR_PAYROLL_RUN_DISBURSE = "HR.PAYROLL.RUN.DISBURSE";
+    public static final String HR_PAYROLL_RUN_REVERSE  = "HR.PAYROLL.RUN.REVERSE";
+
     // --- crm (ADR-0031) ---
     public static final String CRM_LEAD_CREATE       = "CRM.LEAD.CREATE";
     public static final String CRM_LEAD_UPDATE       = "CRM.LEAD.UPDATE";

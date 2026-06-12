@@ -59,7 +59,17 @@ public class ChartOfAccountServiceImpl implements ChartOfAccountService {
             new Object[]{"5400", "Utilities",                   AccountType.EXPENSE},
             // Inventory Valuation & COGS increment (ADR-0020 D-8)
             new Object[]{"2150", "Goods Received Not Invoiced", AccountType.LIABILITY},
-            new Object[]{"5160", "Stock Adjustment / Shrinkage",AccountType.EXPENSE}
+            new Object[]{"5160", "Stock Adjustment / Shrinkage",AccountType.EXPENSE},
+            // HR & Payroll increment (ADR-0032 D-8)
+            new Object[]{"5700", "Salaries & Wages Expense",            AccountType.EXPENSE},
+            new Object[]{"5710", "Employer Statutory Contributions",     AccountType.EXPENSE},
+            new Object[]{"2500", "PAYE Payable",                         AccountType.LIABILITY},
+            new Object[]{"2510", "NSSF Payable",                         AccountType.LIABILITY},
+            new Object[]{"2520", "WCF Payable",                          AccountType.LIABILITY},
+            new Object[]{"2530", "SDL Payable",                          AccountType.LIABILITY},
+            new Object[]{"2540", "HESLB Payable",                        AccountType.LIABILITY},
+            new Object[]{"2550", "Net Wages Payable",                    AccountType.LIABILITY},
+            new Object[]{"1450", "Employee Loans Receivable",            AccountType.ASSET}
     );
 
     public ChartOfAccountServiceImpl(ChartOfAccountRepository accounts,

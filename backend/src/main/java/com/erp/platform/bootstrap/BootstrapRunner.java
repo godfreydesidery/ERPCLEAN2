@@ -17,6 +17,8 @@ import com.erp.modules.ar.service.ArGlSeeder;
 import com.erp.modules.cashbank.service.CashBankSeeder;
 import com.erp.modules.stock.service.InventoryGlSeeder;
 import com.erp.modules.fixedassets.service.FixedAssetGlSeeder;
+import com.erp.modules.hr.service.HrGlSeeder;
+import com.erp.modules.hr.service.HrStatutorySeeder;
 import com.erp.modules.gl.service.ChartOfAccountService;
 import com.erp.modules.gl.service.FiscalCalendarService;
 import com.erp.modules.gl.service.GlConfigService;
@@ -79,6 +81,9 @@ public class BootstrapRunner implements ApplicationRunner {
     private final FixedAssetGlSeeder fixedAssetGlSeeder;
     // CRM pipeline stage defaults seeder (ADR-0031 D-5)
     private final CrmStageSeeder crmStageSeeder;
+    // HR & Payroll GL + statutory seeders (ADR-0032 D-8/D-9)
+    private final HrGlSeeder hrGlSeeder;
+    private final HrStatutorySeeder hrStatutorySeeder;
 
     public BootstrapRunner(BootstrapProperties props,
                            OrganisationRepository organisations,
@@ -99,7 +104,9 @@ public class BootstrapRunner implements ApplicationRunner {
                            InventoryGlSeeder inventoryGlSeeder,
                            DocumentBrandingSeeder documentBrandingSeeder,
                            FixedAssetGlSeeder fixedAssetGlSeeder,
-                           CrmStageSeeder crmStageSeeder) {
+                           CrmStageSeeder crmStageSeeder,
+                           HrGlSeeder hrGlSeeder,
+                           HrStatutorySeeder hrStatutorySeeder) {
         this.props = props;
         this.organisations = organisations;
         this.companies = companies;
@@ -120,6 +127,8 @@ public class BootstrapRunner implements ApplicationRunner {
         this.documentBrandingSeeder = documentBrandingSeeder;
         this.fixedAssetGlSeeder     = fixedAssetGlSeeder;
         this.crmStageSeeder         = crmStageSeeder;
+        this.hrGlSeeder             = hrGlSeeder;
+        this.hrStatutorySeeder      = hrStatutorySeeder;
     }
 
     @Override
@@ -166,6 +175,9 @@ public class BootstrapRunner implements ApplicationRunner {
         fixedAssetGlSeeder.seedDefaults(company.getId());
         // Seed default CRM pipeline stages (ADR-0031 D-5).
         crmStageSeeder.seedDefaults(company.getId());
+        // Seed HR GL accounts + gl_configs + TZ statutory defaults (ADR-0032 D-8/D-9).
+        hrGlSeeder.seedDefaults(company.getId());
+        hrStatutorySeeder.seedDefaults(company.getId());
 
         Branch branch = new Branch(company, props.branchCode(), props.branchName());
         branch.setTimeZone(props.timeZone());
