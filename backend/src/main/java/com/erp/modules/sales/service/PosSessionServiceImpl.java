@@ -6,6 +6,7 @@ import com.erp.modules.gl.domain.enums.GlConfigKey;
 import com.erp.modules.gl.domain.enums.JournalSourceType;
 import com.erp.modules.gl.service.GLConfigResolver;
 import com.erp.modules.gl.service.GLPostingSafeInvoker;
+import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.sales.domain.dto.CloseSessionRequest;
 import com.erp.modules.sales.domain.dto.OpenSessionRequest;
 import com.erp.modules.sales.domain.dto.PosPayoutRequest;
@@ -30,6 +31,7 @@ import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import org.springframework.data.domain.Page;
@@ -47,6 +49,7 @@ public class PosSessionServiceImpl implements PosSessionService {
     private final SalesInvoiceRepository     invoices;
     private final GLPostingSafeInvoker       glInvoker;
     private final GLConfigResolver           glConfig;
+    private final CompanyRepository          companies;
     private final ScopeGuard                 scopeGuard;
     private final AuditService               audit;
 
@@ -56,6 +59,7 @@ public class PosSessionServiceImpl implements PosSessionService {
                                   SalesInvoiceRepository invoices,
                                   GLPostingSafeInvoker glInvoker,
                                   GLConfigResolver glConfig,
+                                  CompanyRepository companies,
                                   ScopeGuard scopeGuard,
                                   AuditService audit) {
         this.sessions   = sessions;
@@ -64,6 +68,7 @@ public class PosSessionServiceImpl implements PosSessionService {
         this.invoices   = invoices;
         this.glInvoker  = glInvoker;
         this.glConfig   = glConfig;
+        this.companies  = companies;
         this.scopeGuard = scopeGuard;
         this.audit      = audit;
     }
@@ -125,11 +130,12 @@ public class PosSessionServiceImpl implements PosSessionService {
         scopeGuard.assertCanActIn(RequestContext.get(), session.getCompanyId());
         requireOpen(session);
 
-        // Compute expected cash: opening + cash-sales total + net payouts
+        // Compute expected cash: opening + cash-sales total − cash payouts (ADR-0029 D-3)
+        // All payouts (REFUND, PAID_OUT) are outflows — subtract the total from expected.
         BigDecimal cashSalesTotal = computeCashSalesTotal(session);
-        BigDecimal netPayouts     = payouts.netPayoutForSession(session.getId());
+        BigDecimal totalPayouts   = payouts.totalPayoutsForSession(session.getId());
         BigDecimal expected       = session.getOpeningFloatAmount()
-                .add(cashSalesTotal).add(netPayouts);
+                .add(cashSalesTotal).subtract(totalPayouts);
 
         session.setCountedCashAmount(req.countedCashAmount());
         session.setExpectedCashAmount(expected);
@@ -154,13 +160,14 @@ public class PosSessionServiceImpl implements PosSessionService {
         requireOpen(session);
 
         BigDecimal cashSalesTotal = computeCashSalesTotal(session);
-        BigDecimal netPayouts     = payouts.netPayoutForSession(session.getId());
-        BigDecimal expected       = session.getOpeningFloatAmount().add(cashSalesTotal).add(netPayouts);
+        BigDecimal totalPayouts   = payouts.totalPayoutsForSession(session.getId());
+        BigDecimal expected       = session.getOpeningFloatAmount()
+                .add(cashSalesTotal).subtract(totalPayouts);
         long invoiceCount         = countPosInvoices(session);
 
         return new XReadDto(session.getUid(), session.getPosTillId(), session.getCashierId(),
                 session.getOpenedAt().toString(), session.getOpeningFloatAmount(),
-                cashSalesTotal, netPayouts, expected, invoiceCount);
+                cashSalesTotal, totalPayouts, expected, invoiceCount);
     }
 
     @Override
@@ -171,14 +178,14 @@ public class PosSessionServiceImpl implements PosSessionService {
             throw new ConflictException("Session must be CLOSED before reconciliation.");
         }
 
-        // Post variance GL entry if non-zero
+        // Post variance GL entry if non-zero (ADR-0029 D-4).
+        // postVarianceGl propagates on missing GL config — the operator's command fails fast
+        // (BR-INV-12 precedent: a human act, not an async handler, so fail-fast is correct).
         BigDecimal variance = session.getVarianceAmount();
         Long journalId = null;
         if (variance != null && variance.compareTo(BigDecimal.ZERO) != 0) {
             var journalEntry = postVarianceGl(session, variance);
-            if (journalEntry != null) {
-                journalId = journalEntry.id();
-            }
+            journalId = journalEntry != null ? journalEntry.id() : null;
         }
 
         session.setVarianceJournalId(journalId);
@@ -201,7 +208,7 @@ public class PosSessionServiceImpl implements PosSessionService {
                 session.getReconciledAt().toString(),
                 session.getOpeningFloatAmount(),
                 computeCashSalesTotal(session),
-                payouts.netPayoutForSession(session.getId()),
+                payouts.totalPayoutsForSession(session.getId()),
                 session.getExpectedCashAmount(),
                 session.getCountedCashAmount(),
                 variance,
@@ -211,36 +218,48 @@ public class PosSessionServiceImpl implements PosSessionService {
 
     // ---- helpers ---------------------------------------------------------------
 
+    /**
+     * Posts the POS variance journal (ADR-0029 D-4).
+     * <ul>
+     *   <li>Over (variance > 0): DR CASH / CR POS_CASH_OVER 4900</li>
+     *   <li>Short (variance &lt; 0): DR POS_CASH_SHORT 5170 / CR CASH</li>
+     * </ul>
+     * Currency comes from the company's base currency (ADR-0005; never hardcoded).
+     * Posting date is the session's closed_at date so the entry falls in the correct GL period.
+     * Exceptions propagate: a missing GL config must fail the operator's reconcile command
+     * (ADR-0029 D-4 / BR-INV-12 precedent — not silently swallowed).
+     */
     private com.erp.modules.gl.domain.dto.JournalEntryDto postVarianceGl(PosSession session,
                                                                            BigDecimal variance) {
-        // positive variance = cash over → CR POS_CASH_OVER (income), DR Cash
-        // negative variance = cash short → DR POS_CASH_SHORT (expense), CR Cash
-        try {
-            var cashAcct = glConfig.resolve(session.getCompanyId(), GlConfigKey.CASH);
-            String currency = "USD"; // fallback; should come from company default
-            BigDecimal abs = variance.abs();
-            LineDraft debitLine;
-            LineDraft creditLine;
-            if (variance.compareTo(BigDecimal.ZERO) > 0) {
-                // over: DR Cash, CR POS_CASH_OVER
-                var overAcct = glConfig.resolve(session.getCompanyId(), GlConfigKey.POS_CASH_OVER);
-                debitLine  = new LineDraft(cashAcct.getId(), abs, BigDecimal.ZERO, currency, "POS over");
-                creditLine = new LineDraft(overAcct.getId(), BigDecimal.ZERO, abs, currency, "POS cash over");
-            } else {
-                // short: DR POS_CASH_SHORT, CR Cash
-                var shortAcct = glConfig.resolve(session.getCompanyId(), GlConfigKey.POS_CASH_SHORT);
-                debitLine  = new LineDraft(shortAcct.getId(), abs, BigDecimal.ZERO, currency, "POS cash short");
-                creditLine = new LineDraft(cashAcct.getId(), BigDecimal.ZERO, abs, currency, "POS short");
-            }
-            var draft = new JournalEntryDraft(
-                    session.getCompanyId(), session.getBranchId(), LocalDate.now(),
-                    "POS session variance " + session.getUid(),
-                    JournalSourceType.POS_VARIANCE, session.getUid(),
-                    null, actorId(), List.of(debitLine, creditLine));
-            return glInvoker.postInNewTx(draft);
-        } catch (Exception ex) {
-            return null;
+        var cashAcct = glConfig.resolve(session.getCompanyId(), GlConfigKey.CASH);
+        // Currency from company base currency (ADR-0005) — not hardcoded
+        String currency = companies.findById(session.getCompanyId())
+                .map(c -> c.getBaseCurrency())
+                .orElse("TZS");
+        // Posting date = session close date (not today) so GL period matches the session
+        LocalDate postingDate = session.getClosedAt() != null
+                ? session.getClosedAt().atZone(ZoneOffset.UTC).toLocalDate()
+                : LocalDate.now();
+        BigDecimal abs = variance.abs();
+        LineDraft debitLine;
+        LineDraft creditLine;
+        if (variance.compareTo(BigDecimal.ZERO) > 0) {
+            // over: DR Cash, CR POS_CASH_OVER
+            var overAcct = glConfig.resolve(session.getCompanyId(), GlConfigKey.POS_CASH_OVER);
+            debitLine  = new LineDraft(cashAcct.getId(), abs, BigDecimal.ZERO, currency, "POS cash over");
+            creditLine = new LineDraft(overAcct.getId(), BigDecimal.ZERO, abs, currency, "POS cash over income");
+        } else {
+            // short: DR POS_CASH_SHORT, CR Cash
+            var shortAcct = glConfig.resolve(session.getCompanyId(), GlConfigKey.POS_CASH_SHORT);
+            debitLine  = new LineDraft(shortAcct.getId(), abs, BigDecimal.ZERO, currency, "POS cash short expense");
+            creditLine = new LineDraft(cashAcct.getId(), BigDecimal.ZERO, abs, currency, "POS cash short");
         }
+        var draft = new JournalEntryDraft(
+                session.getCompanyId(), session.getBranchId(), postingDate,
+                "POS session variance " + session.getUid(),
+                JournalSourceType.POS_VARIANCE, session.getUid(),
+                null, actorId(), List.of(debitLine, creditLine));
+        return glInvoker.postInNewTx(draft);
     }
 
     private BigDecimal computeCashSalesTotal(PosSession session) {
