@@ -55,18 +55,18 @@ public interface OpportunityRepository extends JpaRepository<Opportunity, Long> 
                                @Param("to") LocalDate to);
 
     /** KPIs: won and lost counts + avg cycle in a period. */
-    @Query("""
-            SELECT o.opportunityStatus, COUNT(o.id),
-                   AVG(FUNCTION('extract', 'epoch' FROM o.wonAt) - FUNCTION('extract', 'epoch' FROM o.createdAt)) / 86400.0
-            FROM Opportunity o
-            WHERE o.companyId = :companyId
-              AND o.branchId = :branchId
+    @Query(value = """
+            SELECT o.opportunity_status, COUNT(o.id),
+                   AVG(EXTRACT(EPOCH FROM (o.won_at - o.created_at)) / 86400.0)
+            FROM opportunities o
+            WHERE o.company_id = :companyId
+              AND o.branch_id = :branchId
               AND (
-                  (o.opportunityStatus = 'WON'  AND o.wonAt  >= :from AND o.wonAt  <= :to)
-               OR (o.opportunityStatus = 'LOST' AND o.lostAt >= :from AND o.lostAt <= :to)
+                  (o.opportunity_status = 'WON'  AND o.won_at  >= :from AND o.won_at  <= :to)
+               OR (o.opportunity_status = 'LOST' AND o.lost_at >= :from AND o.lost_at <= :to)
               )
-            GROUP BY o.opportunityStatus
-            """)
+            GROUP BY o.opportunity_status
+            """, nativeQuery = true)
     List<Object[]> kpiRaw(@Param("companyId") Long companyId,
                           @Param("branchId") Long branchId,
                           @Param("from") java.time.Instant from,
