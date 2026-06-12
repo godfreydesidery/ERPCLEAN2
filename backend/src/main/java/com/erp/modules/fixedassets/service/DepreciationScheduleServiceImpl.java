@@ -96,7 +96,11 @@ public class DepreciationScheduleServiceImpl implements DepreciationScheduleServ
         int remaining = n - skipSeqs;
         if (remaining <= 0) return;
 
-        BigDecimal perSl    = base.divide(BigDecimal.valueOf(n), SCALE, RM);
+        // Distribute the base over the REMAINING periods, not the original life.
+        // On first generation remaining == n, so this is equivalent. On regeneration after
+        // revaluation remaining < n, and dividing by n would under-charge each period
+        // (leaving a residual that the final-period plug can never fully clear) — ADR-0030 D-5.
+        BigDecimal perSl    = base.divide(BigDecimal.valueOf(remaining), SCALE, RM);
         BigDecimal runningBase = base;  // for SL tracking
         BigDecimal openingNbv = carryingCost.subtract(accum); // for RB
 
