@@ -1,7 +1,6 @@
 package com.erp.modules.sales.repository;
 
 import com.erp.modules.sales.domain.entity.PosSessionPayout;
-import com.erp.modules.sales.domain.enums.PosPayoutType;
 import java.math.BigDecimal;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -15,14 +14,16 @@ public interface PosSessionPayoutRepository extends JpaRepository<PosSessionPayo
     @Query("SELECT p.companyId FROM PosSessionPayout p WHERE p.uid = :uid")
     Optional<Long> findCompanyIdByUid(@Param("uid") String uid);
 
-    /** Net payout delta for expected-cash computation (CASH_IN positive, CASH_OUT negative). */
+    /**
+     * Total payouts for expected-cash computation (ADR-0029 D-3).
+     * All payout types (REFUND, PAID_OUT) are outflows — they reduce the expected cash in
+     * the drawer. Returns the SUM of all payout amounts (always >= 0); the caller subtracts
+     * this from (opening_float + cash_tenders) to get expected_cash.
+     */
     @Query("""
-            SELECT COALESCE(
-                SUM(CASE WHEN p.payoutType = 'CASH_IN'  THEN p.amount ELSE 0 END)
-              - SUM(CASE WHEN p.payoutType = 'CASH_OUT' THEN p.amount ELSE 0 END),
-              0)
+            SELECT COALESCE(SUM(p.amount), 0)
             FROM PosSessionPayout p
             WHERE p.posSessionId = :sessionId
             """)
-    BigDecimal netPayoutForSession(@Param("sessionId") Long sessionId);
+    BigDecimal totalPayoutsForSession(@Param("sessionId") Long sessionId);
 }

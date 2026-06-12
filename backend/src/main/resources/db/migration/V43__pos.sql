@@ -106,7 +106,7 @@ CREATE TABLE pos_session_payouts (
     updated_by           BIGINT,
     CONSTRAINT uq_pos_session_payout_uid     UNIQUE (uid),
     CONSTRAINT fk_pos_session_payout_session FOREIGN KEY (pos_session_id) REFERENCES pos_sessions(id),
-    CONSTRAINT chk_pos_session_payout_type   CHECK (payout_type IN ('CASH_IN','CASH_OUT')),
+    CONSTRAINT chk_pos_session_payout_type   CHECK (payout_type IN ('REFUND','PAID_OUT')),
     CONSTRAINT chk_pos_session_payout_amount CHECK (amount > 0)
 );
 
