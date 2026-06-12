@@ -51,6 +51,7 @@ CREATE TABLE landed_cost_receipt (
     goods_receipt_uid       VARCHAR(26)      NOT NULL,
     company_id              BIGINT           NOT NULL,
     branch_id               BIGINT           NOT NULL,
+    version                 BIGINT           NOT NULL DEFAULT 0,
     created_at              TIMESTAMPTZ      NOT NULL DEFAULT now(),
     created_by              BIGINT,
 

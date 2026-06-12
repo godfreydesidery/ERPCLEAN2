@@ -78,7 +78,8 @@ ON CONFLICT (company_id, account_code) DO NOTHING;
 
 -- ============================================================================
 -- (2) chk_gl_config_key widen — FULL union of all prior keys + 6 FA keys
--- (prior union at V17: SALES_REVENUE..STOCK_ADJUSTMENT — no keys added between V17 and V46)
+-- Superset includes: V17 base + procurement-depth LANDED_COST_CLEARING (V34/V36)
+-- + sales-depth POS_CASH_OVER/SHORT (V43) + FA keys (ADR-0030)
 -- ============================================================================
 ALTER TABLE gl_configs
     DROP CONSTRAINT IF EXISTS chk_gl_config_key;
@@ -93,6 +94,10 @@ ALTER TABLE gl_configs
             'VAT_INPUT','VAT_DUE','WHT_PAYABLE','WHT_RECEIVABLE',
             'RETAINED_EARNINGS',
             'GRNI','STOCK_ADJUSTMENT',
+            -- procurement-depth (ADR-0027) ---
+            'LANDED_COST_CLEARING',
+            -- sales-depth (ADR-0029) ---
+            'POS_CASH_OVER','POS_CASH_SHORT',
             -- fixed-assets (ADR-0030) ---
             'FIXED_ASSETS','FIXED_ASSET_CLEARING','ACCUMULATED_DEPRECIATION',
             'DEPRECIATION_EXPENSE','GAIN_LOSS_ON_DISPOSAL','REVALUATION_RESERVE'
