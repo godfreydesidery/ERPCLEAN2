@@ -32,5 +32,8 @@ public enum MovementType {
 
     // --- procurement-depth (ADR-0027 D-7, admitted by V36 chk_stock_movement_type widen) ---
     /** Goods returned to supplier from a Purchase Return confirm. − sign. */
-    PURCHASE_RETURN;
+    PURCHASE_RETURN,
+
+    /** Material issued directly to a project task (ADR-0033 D-5). − sign on stock-on-hand. */
+    ISSUE_TO_PROJECT;
 }

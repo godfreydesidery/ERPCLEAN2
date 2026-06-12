@@ -369,4 +369,15 @@ public final class AuditActions {
 
     // ---- Notifications (ADR-0024) ----
     public static final String NOTIFICATION_TYPE_TOGGLE = "NOTIFICATION.TYPE.TOGGLE";
+
+    // --- projects / job-costing (ADR-0033) ---
+    public static final String PROJECT_CREATE          = "PROJECT.CREATE";
+    public static final String PROJECT_UPDATE          = "PROJECT.UPDATE";
+    public static final String PROJECT_STATUS_CHANGE   = "PROJECT.STATUS.CHANGE";
+    public static final String PROJECT_ARCHIVE         = "PROJECT.ARCHIVE";
+    public static final String PROJECT_TASK_CREATE     = "PROJECT.TASK.CREATE";
+    public static final String PROJECT_TASK_UPDATE     = "PROJECT.TASK.UPDATE";
+    public static final String PROJECT_TASK_DEACTIVATE = "PROJECT.TASK.DEACTIVATE";
+    public static final String PROJECT_TIMESHEET_RECORD = "PROJECT.TIMESHEET.RECORD";
+    public static final String PROJECT_MATERIAL_ISSUE  = "PROJECT.MATERIAL.ISSUE";
 }

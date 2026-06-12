@@ -94,6 +94,9 @@ import com.erp.modules.fixedassets.repository.FixedAssetRepository;
 import com.erp.modules.notifications.repository.NotificationRepository;
 import com.erp.modules.notifications.repository.NotificationTypeRepository;
 import com.erp.modules.notifications.repository.NotificationPreferenceRepository;
+// projects (ADR-0033)
+import com.erp.modules.projects.repository.ProjectRepository;
+import com.erp.modules.projects.repository.ProjectTaskRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -224,6 +227,9 @@ public class ScopeGuard {
     private final NotificationRepository          notificationsRepo;
     private final NotificationTypeRepository      notificationTypesRepo;
     private final NotificationPreferenceRepository notificationPrefsRepo;
+    // projects (ADR-0033 D-4)
+    private final ProjectRepository          projectsRepo;
+    private final ProjectTaskRepository      projectTasksRepo;
     private final AuditService             audit;
 
     public ScopeGuard(CompanyRepository companies,
@@ -321,6 +327,9 @@ public class ScopeGuard {
                       NotificationRepository notificationsRepo,
                       NotificationTypeRepository notificationTypesRepo,
                       NotificationPreferenceRepository notificationPrefsRepo,
+                      // projects (ADR-0033 D-4)
+                      ProjectRepository projectsRepo,
+                      ProjectTaskRepository projectTasksRepo,
                       AuditService audit) {
         this.companies      = companies;
         this.branches       = branches;
@@ -417,6 +426,9 @@ public class ScopeGuard {
         this.notificationsRepo      = notificationsRepo;
         this.notificationTypesRepo  = notificationTypesRepo;
         this.notificationPrefsRepo  = notificationPrefsRepo;
+        // projects (ADR-0033 D-4)
+        this.projectsRepo        = projectsRepo;
+        this.projectTasksRepo    = projectTasksRepo;
         this.audit               = audit;
     }
 
@@ -536,6 +548,9 @@ public class ScopeGuard {
             case "notification"        -> notificationsRepo.findCompanyIdByUid(uid);
             case "notificationtype"    -> notificationTypesRepo.findCompanyIdByUid(uid);
             case "notificationpref"    -> notificationPrefsRepo.findCompanyIdByUid(uid);
+            // projects (ADR-0033 D-4)
+            case "project"             -> projectsRepo.findCompanyIdByUid(uid);
+            case "projecttask"         -> projectTasksRepo.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };

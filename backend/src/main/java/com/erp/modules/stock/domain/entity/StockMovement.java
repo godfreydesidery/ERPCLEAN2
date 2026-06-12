@@ -122,6 +122,15 @@ public class StockMovement {
     @Column(name = "department_value_id", updatable = false)
     private Long departmentValueId;
 
+    // --- projects (ADR-0033 D-5, V67) ---
+    /** FK → projects(id); nullable — set only for ISSUE_TO_PROJECT movements. */
+    @Column(name = "project_id", updatable = false)
+    private Long projectId;
+
+    /** FK → project_tasks(id); nullable — set only for ISSUE_TO_PROJECT movements with a task. */
+    @Column(name = "project_task_id", updatable = false)
+    private Long projectTaskId;
+
     /** When the movement occurred (business time, not DB insert time). */
     @Column(name = "occurred_at", nullable = false, updatable = false)
     private Instant occurredAt;
@@ -179,6 +188,24 @@ public class StockMovement {
                          Instant occurredAt, Long createdBy,
                          BigDecimal unitCostAmount, BigDecimal valueAmount,
                          Long costCentreValueId, Long departmentValueId) {
+        this(companyId, branchId, locationId, productId, movementType, quantity,
+             sourceEventUid, sourceDocumentType, sourceDocumentUid,
+             reasonCode, note, occurredAt, createdBy, unitCostAmount, valueAmount,
+             costCentreValueId, departmentValueId, null, null);
+    }
+
+    /**
+     * Project-aware constructor (ADR-0033 D-5, V67).
+     * Adds projectId / projectTaskId to the dimension-bearing constructor.
+     */
+    public StockMovement(Long companyId, Long branchId, Long locationId, Long productId,
+                         MovementType movementType, BigDecimal quantity,
+                         String sourceEventUid, String sourceDocumentType, String sourceDocumentUid,
+                         String reasonCode, String note,
+                         Instant occurredAt, Long createdBy,
+                         BigDecimal unitCostAmount, BigDecimal valueAmount,
+                         Long costCentreValueId, Long departmentValueId,
+                         Long projectId, Long projectTaskId) {
         this.companyId           = companyId;
         this.branchId            = branchId;
         this.locationId          = locationId;
@@ -196,6 +223,8 @@ public class StockMovement {
         this.valueAmount         = valueAmount;
         this.costCentreValueId   = costCentreValueId;
         this.departmentValueId   = departmentValueId;
+        this.projectId           = projectId;
+        this.projectTaskId       = projectTaskId;
     }
 
     /**
@@ -266,4 +295,7 @@ public class StockMovement {
     // cost-centre (ADR-0025 D-6)
     public Long         getCostCentreValueId()   { return costCentreValueId; }
     public Long         getDepartmentValueId()   { return departmentValueId; }
+    // projects (ADR-0033 D-5)
+    public Long         getProjectId()           { return projectId; }
+    public Long         getProjectTaskId()       { return projectTaskId; }
 }

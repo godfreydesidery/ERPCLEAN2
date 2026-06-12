@@ -147,6 +147,17 @@ public class SalesInvoiceLine {
     @Column(name = "currency", nullable = false, length = 3)
     private String currency;
 
+    // --- projects (ADR-0033 D-3, V66) ---
+    /** FK → projects(id); nullable — analysis tag for project-billed sales. */
+    @Column(name = "project_id")
+    @Setter
+    private Long projectId;
+
+    /** FK → project_tasks(id); nullable. */
+    @Column(name = "project_task_id")
+    @Setter
+    private Long projectTaskId;
+
     /** Price resolution source diagnostic (ADR-0029 D-6, V42). Nullable. */
     @Enumerated(EnumType.STRING)
     @Column(name = "price_source", length = 20)
