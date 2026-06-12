@@ -2,6 +2,7 @@ package com.erp.modules.manufacturing.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.erp.modules.ap.service.ApGlSeeder;
 import com.erp.modules.gl.repository.JournalLineRepository;
 import com.erp.modules.gl.service.ChartOfAccountService;
 import com.erp.modules.gl.service.FiscalCalendarService;
@@ -79,6 +80,7 @@ class WorkOrderServiceImplIT extends PostgresIntegrationTest {
     @Autowired private ChartOfAccountService   chartOfAccountService;
     @Autowired private FiscalCalendarService   fiscalCalendarService;
     @Autowired private GlConfigService         glConfigService;
+    @Autowired private ApGlSeeder              apGlSeeder;
     @Autowired private ManufacturingGlSeeder   manufacturingGlSeeder;
 
     @Autowired private OrganisationRepository  organisations;
@@ -116,6 +118,7 @@ class WorkOrderServiceImplIT extends PostgresIntegrationTest {
         chartOfAccountService.seedDefaults(company.getId());
         fiscalCalendarService.seedCurrentYear(company.getId());
         glConfigService.seedDefaults(company.getId());
+        apGlSeeder.seedDefaults(company.getId());
         manufacturingGlSeeder.seedDefaults(company.getId());
 
         // Create UoM

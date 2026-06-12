@@ -54,6 +54,7 @@ class NotificationsIT extends PostgresIntegrationTest {
     @Autowired AppUserRepository           users;
     @Autowired IamTestData                 iam;
     @Autowired EntityManager              em;
+    @Autowired org.springframework.transaction.support.TransactionTemplate txTemplate;
 
     private Long   companyId;
     private Long   branchId;
@@ -115,32 +116,33 @@ class NotificationsIT extends PostgresIntegrationTest {
         // the seeded catalogue's audience_permission is used if null. We test via the trigger's
         // audiencePermission override resolved by UserRoleRepository in a real setup.
         // Here we use the lower-level approach: insert the role-permission manually for coverage.
-        em.createNativeQuery(
-                "INSERT INTO permissions (uid, code, description, version) VALUES ('PERM-NVIEW-01','NOTIFICATION.VIEW','View notifications',0) ON CONFLICT DO NOTHING")
-                .executeUpdate();
-        em.createNativeQuery(
-                "INSERT INTO roles (uid, company_id, name, is_system, version) VALUES ('ROLE-TEST-01',:cid,'Test Role',false,0)")
-                .setParameter("cid", companyId).executeUpdate();
-        Long roleId = (Long) em.createNativeQuery(
-                "SELECT id FROM roles WHERE uid='ROLE-TEST-01'").getSingleResult();
-        Long permId = (Long) em.createNativeQuery(
-                "SELECT id FROM permissions WHERE code='NOTIFICATION.VIEW'").getSingleResult();
-        em.createNativeQuery(
-                "INSERT INTO role_permission (role_id, permission_id) VALUES (:rid,:pid) ON CONFLICT DO NOTHING")
-                .setParameter("rid", roleId).setParameter("pid", permId).executeUpdate();
-        em.createNativeQuery(
-                "INSERT INTO user_role (uid, user_id, role_id, company_id, branch_id, version) " +
-                "VALUES ('UR-TEST-01',:uid,:rid,:cid,:bid,0) ON CONFLICT DO NOTHING")
-                .setParameter("uid", userId).setParameter("rid", roleId)
-                .setParameter("cid", companyId).setParameter("bid", branchId).executeUpdate();
-        em.flush();
+        txTemplate.executeWithoutResult(s -> {
+            em.createNativeQuery(
+                    "INSERT INTO permissions (code, module, description) VALUES ('NOTIFICATION.VIEW','notifications','View notifications') ON CONFLICT (code) DO NOTHING")
+                    .executeUpdate();
+            em.createNativeQuery(
+                    "INSERT INTO roles (uid, code, name, is_system, version) VALUES ('ROLE-TEST-01','TESTROLE','Test Role',false,0)")
+                    .executeUpdate();
+            Long roleId = (Long) em.createNativeQuery(
+                    "SELECT id FROM roles WHERE uid='ROLE-TEST-01'").getSingleResult();
+            Long permId = (Long) em.createNativeQuery(
+                    "SELECT id FROM permissions WHERE code='NOTIFICATION.VIEW'").getSingleResult();
+            em.createNativeQuery(
+                    "INSERT INTO role_permission (role_id, permission_id) VALUES (:rid,:pid) ON CONFLICT DO NOTHING")
+                    .setParameter("rid", roleId).setParameter("pid", permId).executeUpdate();
+            em.createNativeQuery(
+                    "INSERT INTO user_role (uid, user_id, role_id, company_id, branch_id, granted_by, version) " +
+                    "VALUES ('UR-TEST-01',:uid,:rid,:cid,:bid,:uid,0) ON CONFLICT DO NOTHING")
+                    .setParameter("uid", userId).setParameter("rid", roleId)
+                    .setParameter("cid", companyId).setParameter("bid", branchId).executeUpdate();
+        });
 
         NotificationTrigger trigger = new NotificationTrigger(
                 companyId, branchId, "GOODS_RECEIVED", "NOTIFICATION.VIEW",
                 "GOODS_RECEIPT", "GR-UID-001",
                 Map.of("documentNo", "GR-001"), "GR-UID-001-IN_APP");
 
-        raiser.raise(trigger);
+        txTemplate.executeWithoutResult(s -> raiser.raise(trigger));
 
         List<NotificationDto> inbox = inboxService
                 .listInbox(userId, companyId, false, PageRequest.of(0, 20))
@@ -202,21 +204,23 @@ class NotificationsIT extends PostgresIntegrationTest {
     @SuppressWarnings("unchecked")
     private void clearNotifications() {
         try {
-            em.createNativeQuery(
-                    "TRUNCATE notification_deliveries, notification_scan_markers, " +
-                    "notification_preferences, notifications, notification_types " +
-                    "RESTART IDENTITY CASCADE")
-                    .executeUpdate();
-            // Roles/permissions created in raiser test
-            em.createNativeQuery(
-                    "DELETE FROM user_role WHERE uid='UR-TEST-01'").executeUpdate();
-            em.createNativeQuery(
-                    "DELETE FROM role_permission WHERE role_id IN (SELECT id FROM roles WHERE uid='ROLE-TEST-01')")
-                    .executeUpdate();
-            em.createNativeQuery(
-                    "DELETE FROM roles WHERE uid='ROLE-TEST-01'").executeUpdate();
-            em.createNativeQuery(
-                    "DELETE FROM permissions WHERE code='NOTIFICATION.VIEW'").executeUpdate();
+            txTemplate.executeWithoutResult(s -> {
+                em.createNativeQuery(
+                        "TRUNCATE notification_deliveries, notification_scan_markers, " +
+                        "notification_preferences, notifications, notification_types " +
+                        "RESTART IDENTITY CASCADE")
+                        .executeUpdate();
+                // Roles/permissions created in raiser test
+                em.createNativeQuery(
+                        "DELETE FROM user_role WHERE uid='UR-TEST-01'").executeUpdate();
+                em.createNativeQuery(
+                        "DELETE FROM role_permission WHERE role_id IN (SELECT id FROM roles WHERE uid='ROLE-TEST-01')")
+                        .executeUpdate();
+                em.createNativeQuery(
+                        "DELETE FROM roles WHERE uid='ROLE-TEST-01'").executeUpdate();
+                // NOTIFICATION.VIEW is a seeded system permission (V25, granted to ORG_ADMIN) — do NOT delete it
+                // (FK from role_permission; idempotent INSERT ... ON CONFLICT handles re-runs).
+            });
         } catch (Exception ignored) {
             // table may not exist on first run before Flyway; safe to swallow
         }
