@@ -35,6 +35,46 @@ public interface UserRoleRepository extends JpaRepository<UserRole, Long> {
     /** Active assignments for a user (any scope) — for the user-admin grant list. */
     List<UserRole> findByUserIdAndRevokedAtIsNull(Long userId);
 
+    // --- notifications (ADR-0024 D-9): audience resolution outside a request ---
+
+    /**
+     * Distinct user IDs holding {@code permissionCode} in the given company, narrowed to
+     * {@code branchId} when provided (branch-scoped types, ADR-0024 D-9). Used by
+     * {@code AudienceResolver} running as SYSTEM (no {@code RequestContext}).
+     * {@code branchId} may be {@code null} for company-wide audience resolution.
+     */
+    @Query("""
+            SELECT DISTINCT ur.userId
+            FROM UserRole ur
+            JOIN ur.role r
+            JOIN r.permissions p
+            WHERE ur.revokedAt IS NULL
+              AND r.status = com.erp.platform.common.domain.MasterStatus.ACTIVE
+              AND ur.companyId = :companyId
+              AND (:branchId IS NULL OR ur.branchId IS NULL OR ur.branchId = :branchId)
+              AND p.code = :permissionCode
+            """)
+    List<Long> findUserIdsWithPermission(@Param("companyId") Long companyId,
+                                         @Param("branchId") Long branchId,
+                                         @Param("permissionCode") String permissionCode);
+
+    /**
+     * Branch-agnostic variant — all users holding the permission anywhere in the company,
+     * regardless of which branch they are assigned to. Used for non-branch-scoped types.
+     */
+    @Query("""
+            SELECT DISTINCT ur.userId
+            FROM UserRole ur
+            JOIN ur.role r
+            JOIN r.permissions p
+            WHERE ur.revokedAt IS NULL
+              AND r.status = com.erp.platform.common.domain.MasterStatus.ACTIVE
+              AND ur.companyId = :companyId
+              AND p.code = :permissionCode
+            """)
+    List<Long> findUserIdsWithPermissionInCompany(@Param("companyId") Long companyId,
+                                                  @Param("permissionCode") String permissionCode);
+
     /** Guard the company-wide duplicate case (branch_id NULL) the partial index can't (DATA-MODEL §1.8). */
     @Query("""
             SELECT COUNT(ur) > 0 FROM UserRole ur

@@ -366,4 +366,7 @@ public final class AuditActions {
     public static final String STANDING_ORDER_CANCEL     = "STANDING.ORDER.CANCEL";
     public static final String STANDING_ORDER_GENERATE   = "STANDING.ORDER.GENERATE";
     public static final String STANDING_ORDER_GENERATED  = "STANDING.ORDER.GENERATED";
+
+    // ---- Notifications (ADR-0024) ----
+    public static final String NOTIFICATION_TYPE_TOGGLE = "NOTIFICATION.TYPE.TOGGLE";
 }

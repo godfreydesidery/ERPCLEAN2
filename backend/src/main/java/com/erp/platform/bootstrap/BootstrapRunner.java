@@ -13,6 +13,7 @@ import com.erp.modules.iam.repository.UserBranchRepository;
 import com.erp.modules.ap.service.ApGlSeeder;
 import com.erp.modules.crm.service.CrmStageSeeder;
 import com.erp.modules.documents.service.DocumentBrandingSeeder;
+import com.erp.modules.notifications.service.NotificationTypeSeeder;
 import com.erp.modules.ar.service.ArGlSeeder;
 import com.erp.modules.cashbank.service.CashBankSeeder;
 import com.erp.modules.stock.service.InventoryGlSeeder;
@@ -84,6 +85,8 @@ public class BootstrapRunner implements ApplicationRunner {
     // HR & Payroll GL + statutory seeders (ADR-0032 D-8/D-9)
     private final HrGlSeeder hrGlSeeder;
     private final HrStatutorySeeder hrStatutorySeeder;
+    // Notifications type catalogue seeder (ADR-0024 D-9)
+    private final NotificationTypeSeeder notificationTypeSeeder;
 
     public BootstrapRunner(BootstrapProperties props,
                            OrganisationRepository organisations,
@@ -106,7 +109,8 @@ public class BootstrapRunner implements ApplicationRunner {
                            FixedAssetGlSeeder fixedAssetGlSeeder,
                            CrmStageSeeder crmStageSeeder,
                            HrGlSeeder hrGlSeeder,
-                           HrStatutorySeeder hrStatutorySeeder) {
+                           HrStatutorySeeder hrStatutorySeeder,
+                           NotificationTypeSeeder notificationTypeSeeder) {
         this.props = props;
         this.organisations = organisations;
         this.companies = companies;
@@ -120,15 +124,16 @@ public class BootstrapRunner implements ApplicationRunner {
         this.chartOfAccountService = chartOfAccountService;
         this.fiscalCalendarService = fiscalCalendarService;
         this.glConfigService = glConfigService;
-        this.arGlSeeder        = arGlSeeder;
-        this.apGlSeeder        = apGlSeeder;
-        this.cashBankSeeder    = cashBankSeeder;
+        this.arGlSeeder             = arGlSeeder;
+        this.apGlSeeder             = apGlSeeder;
+        this.cashBankSeeder         = cashBankSeeder;
         this.inventoryGlSeeder      = inventoryGlSeeder;
         this.documentBrandingSeeder = documentBrandingSeeder;
         this.fixedAssetGlSeeder     = fixedAssetGlSeeder;
         this.crmStageSeeder         = crmStageSeeder;
         this.hrGlSeeder             = hrGlSeeder;
         this.hrStatutorySeeder      = hrStatutorySeeder;
+        this.notificationTypeSeeder = notificationTypeSeeder;
     }
 
     @Override
@@ -178,6 +183,8 @@ public class BootstrapRunner implements ApplicationRunner {
         // Seed HR GL accounts + gl_configs + TZ statutory defaults (ADR-0032 D-8/D-9).
         hrGlSeeder.seedDefaults(company.getId());
         hrStatutorySeeder.seedDefaults(company.getId());
+        // Seed notification type catalogue (ADR-0024 D-9).
+        notificationTypeSeeder.seedDefaults(company.getId());
 
         Branch branch = new Branch(company, props.branchCode(), props.branchName());
         branch.setTimeZone(props.timeZone());

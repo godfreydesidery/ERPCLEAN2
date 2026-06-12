@@ -107,6 +107,11 @@ public final class DomainEventType {
 
     public static final String AGG_PAYROLL_RUN    = "PAYROLL_RUN";
 
+    // --- notifications (ADR-0024) ---
+    /** AR receipt recorded and allocated — payment notification trigger (ADR-0024 D-8). */
+    public static final String PAYMENT_RECEIVED       = "PAYMENT.RECEIVED";
+    public static final String AGG_AR_RECEIPT         = "AR_RECEIPT";
+
     private DomainEventType() {
     }
 }

@@ -88,6 +88,12 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- Email: spring-boot-starter-mail (JavaMailSender, ADR-0024 email channel) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+
         <!-- Export: PDF (OpenPDF, LGPL/MPL — ADR-0018 D-9; NOT iText which is AGPL) -->
         <dependency>
             <groupId>com.github.librepdf</groupId>

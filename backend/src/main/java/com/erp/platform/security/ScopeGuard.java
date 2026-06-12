@@ -90,6 +90,10 @@ import com.erp.modules.stock.repository.StockTransferRepository;
 import com.erp.modules.fixedassets.repository.AssetCategoryRepository;
 import com.erp.modules.fixedassets.repository.DepreciationRunRepository;
 import com.erp.modules.fixedassets.repository.FixedAssetRepository;
+// notifications (ADR-0024)
+import com.erp.modules.notifications.repository.NotificationRepository;
+import com.erp.modules.notifications.repository.NotificationTypeRepository;
+import com.erp.modules.notifications.repository.NotificationPreferenceRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -216,6 +220,10 @@ public class ScopeGuard {
     private final PriceTierRepository        priceTiers;
     private final CustomerPriceRepository    customerPrices;
     private final PromotionRepository        promotions;
+    // notifications (ADR-0024)
+    private final NotificationRepository          notificationsRepo;
+    private final NotificationTypeRepository      notificationTypesRepo;
+    private final NotificationPreferenceRepository notificationPrefsRepo;
     private final AuditService             audit;
 
     public ScopeGuard(CompanyRepository companies,
@@ -309,6 +317,10 @@ public class ScopeGuard {
                       PriceTierRepository priceTiers,
                       CustomerPriceRepository customerPrices,
                       PromotionRepository promotions,
+                      // notifications (ADR-0024)
+                      NotificationRepository notificationsRepo,
+                      NotificationTypeRepository notificationTypesRepo,
+                      NotificationPreferenceRepository notificationPrefsRepo,
                       AuditService audit) {
         this.companies      = companies;
         this.branches       = branches;
@@ -401,6 +413,10 @@ public class ScopeGuard {
         this.priceTiers          = priceTiers;
         this.customerPrices      = customerPrices;
         this.promotions          = promotions;
+        // notifications (ADR-0024)
+        this.notificationsRepo      = notificationsRepo;
+        this.notificationTypesRepo  = notificationTypesRepo;
+        this.notificationPrefsRepo  = notificationPrefsRepo;
         this.audit               = audit;
     }
 
@@ -516,6 +532,10 @@ public class ScopeGuard {
             case "statutoryrateset"    -> hrStatutoryRateSets.findCompanyIdByUid(uid);
             case "payrollrun"          -> hrPayrollRuns.findCompanyIdByUid(uid);
             case "payslip"             -> hrPayslips.findCompanyIdByUid(uid);
+            // notifications (ADR-0024)
+            case "notification"        -> notificationsRepo.findCompanyIdByUid(uid);
+            case "notificationtype"    -> notificationTypesRepo.findCompanyIdByUid(uid);
+            case "notificationpref"    -> notificationPrefsRepo.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };
