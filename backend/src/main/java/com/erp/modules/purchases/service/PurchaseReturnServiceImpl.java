@@ -1,6 +1,10 @@
 package com.erp.modules.purchases.service;
 
+import com.erp.modules.ap.domain.dto.ApDebitNoteDto;
+import com.erp.modules.ap.domain.dto.RaiseDebitNoteRequest;
+import com.erp.modules.ap.service.ApDebitNoteService;
 import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.modules.parties.repository.SupplierRepository;
 import com.erp.modules.purchases.domain.dto.CreatePurchaseReturnRequest;
 import com.erp.modules.purchases.domain.dto.PurchaseReturnDto;
 import com.erp.modules.purchases.domain.dto.PurchaseReturnLineDto;
@@ -28,6 +32,7 @@ import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -53,6 +58,8 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
     private final GoodsReceiptLineRepository   grLineRepo;
     private final PurchaseOrderRepository      poRepo;
     private final CompanyRepository            companies;
+    private final SupplierRepository           suppliers;
+    private final ApDebitNoteService           apDebitNoteService;
     private final PurchaseNumberGenerator      numberGen;
     private final OutboxPublisher              outbox;
     private final ScopeGuard                   scopeGuard;
@@ -64,20 +71,24 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
                                      GoodsReceiptLineRepository grLineRepo,
                                      PurchaseOrderRepository poRepo,
                                      CompanyRepository companies,
+                                     SupplierRepository suppliers,
+                                     ApDebitNoteService apDebitNoteService,
                                      PurchaseNumberGenerator numberGen,
                                      OutboxPublisher outbox,
                                      ScopeGuard scopeGuard,
                                      AuditService audit) {
-        this.returns     = returns;
-        this.returnLines = returnLines;
-        this.grRepo      = grRepo;
-        this.grLineRepo  = grLineRepo;
-        this.poRepo      = poRepo;
-        this.companies   = companies;
-        this.numberGen   = numberGen;
-        this.outbox      = outbox;
-        this.scopeGuard  = scopeGuard;
-        this.audit       = audit;
+        this.returns           = returns;
+        this.returnLines       = returnLines;
+        this.grRepo            = grRepo;
+        this.grLineRepo        = grLineRepo;
+        this.poRepo            = poRepo;
+        this.companies         = companies;
+        this.suppliers         = suppliers;
+        this.apDebitNoteService = apDebitNoteService;
+        this.numberGen         = numberGen;
+        this.outbox            = outbox;
+        this.scopeGuard        = scopeGuard;
+        this.audit             = audit;
     }
 
     @Override
@@ -188,11 +199,20 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         for (PurchaseReturnLine line : lines) {
             totalReturnValue = totalReturnValue.add(line.getLineValueAmount());
 
-            // Update cumulative returned qty on the GR line
+            // RE-VALIDATE before update (BR-PROC-10 guard against concurrent confirms).
+            // Also performs the increment under the same lock — prevents over-return race.
             grLineRepo.findById(line.getGoodsReceiptLineId()).ifPresent(grLine -> {
                 BigDecimal current = grLine.getReturnedQtyInBase() != null
                         ? grLine.getReturnedQtyInBase() : BigDecimal.ZERO;
-                grLine.setReturnedQtyInBase(current.add(line.getReturnedQtyInBase()));
+                BigDecimal newTotal = current.add(line.getReturnedQtyInBase());
+                if (newTotal.compareTo(grLine.getQtyInBase()) > 0) {
+                    throw new IllegalArgumentException(
+                            "Return qty " + line.getReturnedQtyInBase() + " for GR line "
+                            + line.getGoodsReceiptLineUid() + " would exceed receipted qty "
+                            + grLine.getQtyInBase() + " (already returned: " + current
+                            + ", total would be: " + newTotal + ") — BR-PROC-10");
+                }
+                grLine.setReturnedQtyInBase(newTotal);
                 grLineRepo.save(grLine);
             });
 
@@ -209,20 +229,44 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         ret.setUpdatedAt(Instant.now());
         ret.setUpdatedBy(actorId());
 
-        // Publish outbox: stock handler reverses qty + posts DR GRNI / CR INVENTORY
+        // Publish outbox: stock handler reverses qty + posts DR GRNI / CR INVENTORY (ADR-0027 D-7).
+        // billed=false is the conservative default: GRNI path is always correct for not-yet-billed
+        // receipts (the common case).  When the receipt WAS billed before the return, the GRNI
+        // re-open is a known accepted imprecision (ADR-0027 OQ-RETURN-GL); the AP debit note raised
+        // below reduces the payable regardless.
         PurchaseReturnedPayload payload = new PurchaseReturnedPayload(
                 ret.getUid(), ret.getCompanyId(), ret.getBranchId(),
-                totalReturnValue, DEFAULT_CURRENCY, payloadLines);
+                totalReturnValue, DEFAULT_CURRENCY, false, payloadLines);
         outbox.publish(DomainEventType.PURCHASE_RETURNED,
                 DomainEventType.AGG_PURCHASE_RETURN,
                 ret.getId(), ret.getUid(),
                 ret.getCompanyId(), ret.getBranchId(), payload);
 
-        // AP debit note: skipped here — AP team subscribes to PURCHASE.RETURNED outbox event
-        // and raises the debit note in the AP module (ADR cross-module boundary rule).
-        // The PURCHASE_RETURN:{uid} origin tag is carried in the event payload so AP can correlate.
-        log.info("Purchase return {} confirmed; PURCHASE.RETURNED event published for AP handler.",
-                ret.getReturnNumber());
+        // Raise AP debit note synchronously in this TX (ADR-0027 D-7 step 4).
+        // DR AP / CR Purchases to reduce the supplier payable for the returned goods.
+        if (totalReturnValue.signum() > 0) {
+            String companyUid = companies.findById(ret.getCompanyId())
+                    .orElseThrow(() -> new NotFoundException("Company id: " + ret.getCompanyId()))
+                    .getUid();
+            String supplierUid = suppliers.findById(ret.getSupplierId())
+                    .orElseThrow(() -> new NotFoundException("Supplier id: " + ret.getSupplierId()))
+                    .getUid();
+
+            RaiseDebitNoteRequest debitNoteReq = new RaiseDebitNoteRequest(
+                    companyUid,
+                    supplierUid,
+                    null,                                // no specific bill — general supplier credit
+                    LocalDate.now(),
+                    totalReturnValue,
+                    BigDecimal.ZERO,                     // no VAT on the goods cost reversal
+                    "Purchase return " + ret.getReturnNumber() + ": " + ret.getReason(),
+                    "PURCHASE_RETURN:" + ret.getUid());
+
+            ApDebitNoteDto debitNote = apDebitNoteService.raise(debitNoteReq);
+            ret.setDebitNoteUid(debitNote.uid());
+            log.info("Purchase return {} confirmed; AP debit note {} raised (uid={}).",
+                    ret.getReturnNumber(), debitNote.debitNoteNumber(), debitNote.uid());
+        }
 
         audit.record(AuditEvent.of(AuditActions.PURCHASE_RETURN_CONFIRM, "purchase_returns",
                 ret.getId(), ret.getUid())

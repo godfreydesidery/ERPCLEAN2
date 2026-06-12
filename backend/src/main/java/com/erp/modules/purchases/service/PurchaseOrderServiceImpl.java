@@ -307,6 +307,16 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         // Freeze totals
         totals.recompute(po, lineList);
 
+        // Approval gate check (ADR-0027 D-6, FR-PROC-13): block DRAFT→ORDERED if over-threshold
+        // and not yet approved.  requiresApproval() reads PurchaseSettings; returns false when gate
+        // is disabled (the default for new companies — safe fallback).
+        if (approvalGate.requiresApproval(po, null)
+                && po.getApprovalStatus() != PoApprovalStatus.APPROVED) {
+            throw new IllegalStateException(
+                    "PO requires approval (total >= threshold, FR-PROC-13). "
+                            + "Submit for approval and wait for APPROVED status before placing.");
+        }
+
         // Assign PO number (ADR-0011 D-6) — inside this TX
         String number = numberGen.nextPurchaseOrder(po.getCompanyId());
         po.setOrderNumber(number);
