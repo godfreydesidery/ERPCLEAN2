@@ -46,7 +46,8 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>All responses are auto-wrapped in {@code ApiResponse<T>} by {@code ApiResponseAdvice}.
  * Permission gates use {@code @perm.has} / {@code @perm.scoped} — NEVER {@code hasAuthority}
  * (PROJECT-CONVENTIONS §RBAC). {@code ScopeGuard.assertCanActIn} is enforced on every read path
- * in the delegated services (NFR-BOM-06).
+ * in the delegated services (NFR-BOM-06): BomExplosionServiceImpl.explode/explodeToLeaves and
+ * BomCostRollUpServiceImpl.rollUp each call the guard after resolving the BOM/branch company (D-11).
  *
  * <p>URL layout:
  * <ul>
@@ -185,7 +186,8 @@ public class BomController {
 
     /**
      * Multi-level explosion (FR-BOM-12/13, D-6).
-     * ScopeGuard.assertCanActIn called within BomExplosionServiceImpl (read-path guard).
+     * ScopeGuard.assertCanActIn is called inside BomExplosionServiceImpl.explode() and
+     * explodeToLeaves() after resolving the BOM (NFR-BOM-06, D-11 read-path guard).
      */
     @GetMapping("/explode")
     @PreAuthorize("@perm.scoped(#parentProductUid,'product','BOM.VIEW')")
