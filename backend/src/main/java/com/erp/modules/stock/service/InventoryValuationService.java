@@ -112,4 +112,18 @@ public interface InventoryValuationService {
                                    LocalDate postingDate) {
         revalueAdjustment(movementUid, soh, adjustQty, postingDate, null, null);
     }
+
+    /**
+     * Apply a landed-cost allocation to a single stock-on-hand row (ADR-0027 D-5 / BR-PROC-11).
+     *
+     * <p>Adds {@code allocatedAmount} to {@code on_hand_value} and recomputes {@code avg_cost}.
+     * Called from {@link com.erp.modules.stock.events.LandedCostStockHandler} per landed-cost
+     * allocation line (one call per GR line).
+     *
+     * @param companyId       tenant
+     * @param branchId        branch (scopes the on-hand row)
+     * @param productId       product whose avg_cost is adjusted
+     * @param allocatedAmount the landed-cost share to add to on_hand_value (positive)
+     */
+    void applyLandedCost(Long companyId, Long branchId, Long productId, BigDecimal allocatedAmount);
 }

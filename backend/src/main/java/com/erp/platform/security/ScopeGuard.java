@@ -7,6 +7,12 @@ import com.erp.modules.crm.repository.ActivityRepository;
 import com.erp.modules.crm.repository.LeadRepository;
 import com.erp.modules.crm.repository.OpportunityRepository;
 import com.erp.modules.crm.repository.PipelineStageRepository;
+// procurement-depth (ADR-0027)
+import com.erp.modules.purchases.repository.PurchaseRequisitionRepository;
+import com.erp.modules.purchases.repository.RfqRepository;
+import com.erp.modules.purchases.repository.SupplierQuoteRepository;
+import com.erp.modules.purchases.repository.LandedCostRepository;
+import com.erp.modules.purchases.repository.PurchaseReturnRepository;
 import com.erp.modules.ap.repository.ApDebitNoteRepository;
 import com.erp.modules.ap.repository.ApPaymentRepository;
 import com.erp.modules.ap.repository.SupplierBillRepository;
@@ -164,6 +170,12 @@ public class ScopeGuard {
     private final OpportunityRepository      crmOpportunities;
     private final ActivityRepository         crmActivities;
     private final PipelineStageRepository    crmPipelineStages;
+    // procurement-depth (ADR-0027 D-10)
+    private final PurchaseRequisitionRepository purchaseRequisitions;
+    private final RfqRepository                 rfqs;
+    private final SupplierQuoteRepository       supplierQuotes;
+    private final LandedCostRepository          landedCosts;
+    private final PurchaseReturnRepository      purchaseReturns;
     private final AuditService             audit;
 
     public ScopeGuard(CompanyRepository companies,
@@ -231,6 +243,12 @@ public class ScopeGuard {
                       OpportunityRepository crmOpportunities,
                       ActivityRepository crmActivities,
                       PipelineStageRepository crmPipelineStages,
+                      // procurement-depth (ADR-0027 D-10)
+                      PurchaseRequisitionRepository purchaseRequisitions,
+                      RfqRepository rfqs,
+                      SupplierQuoteRepository supplierQuotes,
+                      LandedCostRepository landedCosts,
+                      PurchaseReturnRepository purchaseReturns,
                       AuditService audit) {
         this.companies      = companies;
         this.branches       = branches;
@@ -297,6 +315,12 @@ public class ScopeGuard {
         this.crmOpportunities    = crmOpportunities;
         this.crmActivities       = crmActivities;
         this.crmPipelineStages   = crmPipelineStages;
+        // procurement-depth (ADR-0027 D-10)
+        this.purchaseRequisitions = purchaseRequisitions;
+        this.rfqs                 = rfqs;
+        this.supplierQuotes       = supplierQuotes;
+        this.landedCosts          = landedCosts;
+        this.purchaseReturns      = purchaseReturns;
         this.audit               = audit;
     }
 
@@ -386,6 +410,12 @@ public class ScopeGuard {
             case "opportunity"         -> crmOpportunities.findCompanyIdByUid(uid);
             case "activity"            -> crmActivities.findCompanyIdByUid(uid);
             case "pipelinestage"       -> crmPipelineStages.findCompanyIdByUid(uid);
+            // procurement-depth (ADR-0027 D-10)
+            case "requisition"         -> purchaseRequisitions.findCompanyIdByUid(uid);
+            case "rfq"                 -> rfqs.findCompanyIdByUid(uid);
+            case "supplierquote"       -> supplierQuotes.findCompanyIdByUid(uid);
+            case "landedcost"          -> landedCosts.findCompanyIdByUid(uid);
+            case "purchasereturn"      -> purchaseReturns.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };

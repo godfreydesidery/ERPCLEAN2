@@ -10,6 +10,7 @@ import com.erp.modules.products.repository.ProductBulkPackRepository;
 import com.erp.modules.products.repository.ProductRepository;
 import com.erp.modules.products.repository.UnitOfMeasureRepository;
 import com.erp.modules.purchases.domain.dto.AddPurchaseOrderLineRequest;
+import com.erp.modules.purchases.domain.dto.ApprovePoRequest;
 import com.erp.modules.purchases.domain.dto.CreatePurchaseOrderRequest;
 import com.erp.modules.purchases.domain.dto.PurchaseOrderDto;
 import com.erp.modules.purchases.domain.dto.PurchaseOrderLineDto;
@@ -19,11 +20,16 @@ import com.erp.modules.purchases.domain.dto.VoidPurchaseOrderRequest;
 import com.erp.modules.purchases.domain.entity.GoodsReceipt;
 import com.erp.modules.purchases.domain.entity.PurchaseOrder;
 import com.erp.modules.purchases.domain.entity.PurchaseOrderLine;
+import com.erp.modules.purchases.domain.entity.SupplierQuote;
+import com.erp.modules.purchases.domain.entity.SupplierQuoteLine;
 import com.erp.modules.purchases.domain.enums.GoodsReceiptStatus;
+import com.erp.modules.purchases.domain.enums.PoApprovalStatus;
 import com.erp.modules.purchases.domain.enums.PurchaseOrderStatus;
 import com.erp.modules.purchases.repository.GoodsReceiptRepository;
 import com.erp.modules.purchases.repository.PurchaseOrderLineRepository;
 import com.erp.modules.purchases.repository.PurchaseOrderRepository;
+import com.erp.modules.purchases.repository.SupplierQuoteLineRepository;
+import com.erp.modules.purchases.repository.SupplierQuoteRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -65,6 +71,10 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     private final PurchaseOrderTotalsCalculator totals;
     private final ScopeGuard                  scopeGuard;
     private final AuditService                audit;
+    // procurement-depth additions (ADR-0027)
+    private final PoApprovalGate              approvalGate;
+    private final SupplierQuoteRepository     quotes;
+    private final SupplierQuoteLineRepository quoteLines;
 
     public PurchaseOrderServiceImpl(PurchaseOrderRepository orders,
                                     PurchaseOrderLineRepository lines,
@@ -77,19 +87,25 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                                     PurchaseNumberGenerator numberGen,
                                     PurchaseOrderTotalsCalculator totals,
                                     ScopeGuard scopeGuard,
-                                    AuditService audit) {
-        this.orders    = orders;
-        this.lines     = lines;
-        this.receipts  = receipts;
-        this.suppliers = suppliers;
-        this.products  = products;
-        this.units     = units;
-        this.bulkPacks = bulkPacks;
-        this.companies = companies;
-        this.numberGen = numberGen;
-        this.totals    = totals;
-        this.scopeGuard = scopeGuard;
-        this.audit     = audit;
+                                    AuditService audit,
+                                    PoApprovalGate approvalGate,
+                                    SupplierQuoteRepository quotes,
+                                    SupplierQuoteLineRepository quoteLines) {
+        this.orders       = orders;
+        this.lines        = lines;
+        this.receipts     = receipts;
+        this.suppliers    = suppliers;
+        this.products     = products;
+        this.units        = units;
+        this.bulkPacks    = bulkPacks;
+        this.companies    = companies;
+        this.numberGen    = numberGen;
+        this.totals       = totals;
+        this.scopeGuard   = scopeGuard;
+        this.audit        = audit;
+        this.approvalGate = approvalGate;
+        this.quotes       = quotes;
+        this.quoteLines   = quoteLines;
     }
 
     // -------------------------------------------------------------------------
@@ -536,5 +552,97 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
             throw new IllegalStateException("No active branch in context.");
         }
         return branchId;
+    }
+
+    // -------------------------------------------------------------------------
+    // procurement-depth: approval fallback + createFromQuote (ADR-0027 D-3/D-6)
+    // -------------------------------------------------------------------------
+
+    @Override
+    public PurchaseOrderDto approvePo(String uid, ApprovePoRequest req) {
+        PurchaseOrder po = requireOrder(uid);
+        scopeGuard.assertCanActIn(RequestContext.get(), po.getCompanyId());
+
+        if (po.getApprovalStatus() == PoApprovalStatus.APPROVED) {
+            throw new IllegalStateException("PO is already approved.");
+        }
+        po.setApprovalStatus(PoApprovalStatus.APPROVED);
+        po.setUpdatedAt(Instant.now());
+        po.setUpdatedBy(actorId());
+
+        audit.record(AuditEvent.of(AuditActions.PO_APPROVE, "purchase_orders",
+                po.getId(), po.getUid())
+                .detail(Map.of("orderNumber", po.getOrderNumber() != null ? po.getOrderNumber() : "(DRAFT)")));
+        return toDto(po);
+    }
+
+    @Override
+    public PurchaseOrderDto rejectPo(String uid, ApprovePoRequest req) {
+        PurchaseOrder po = requireOrder(uid);
+        scopeGuard.assertCanActIn(RequestContext.get(), po.getCompanyId());
+
+        if (po.getApprovalStatus() == PoApprovalStatus.REJECTED) {
+            throw new IllegalStateException("PO is already rejected.");
+        }
+        String reason = req.reason();
+        if (reason == null || reason.isBlank()) {
+            throw new IllegalArgumentException("Rejection reason is required.");
+        }
+        po.setApprovalStatus(PoApprovalStatus.REJECTED);
+        po.setVoidReason(reason);   // reuse void_reason for the rejection note
+        po.setUpdatedAt(Instant.now());
+        po.setUpdatedBy(actorId());
+
+        audit.record(AuditEvent.of(AuditActions.PO_REJECT, "purchase_orders",
+                po.getId(), po.getUid())
+                .detail(Map.of("reason", reason)));
+        return toDto(po);
+    }
+
+    @Override
+    public PurchaseOrderDto createFromQuote(String quoteUid) {
+        RequestContext.Principal ctx = RequestContext.get();
+
+        SupplierQuote quote = quotes.findByUid(quoteUid)
+                .orElseThrow(() -> new NotFoundException("SupplierQuote not found: " + quoteUid));
+        scopeGuard.assertCanActIn(ctx, quote.getCompanyId());
+
+        Supplier supplier = suppliers.findById(quote.getSupplierId())
+                .orElseThrow(() -> new NotFoundException("Supplier not found for quote: " + quoteUid));
+
+        Long branchId = branchIdFromContext(ctx);
+
+        PurchaseOrder po = new PurchaseOrder(
+                quote.getCompanyId(), branchId,
+                supplier.getId(), supplier.getCode(), supplier.getDisplayName(),
+                quote.getCurrency(), actorId());
+        po.setSourceQuoteUid(quote.getUid());
+        PurchaseOrder saved = orders.save(po);
+
+        // Copy quote lines → PO lines at quoted prices
+        List<SupplierQuoteLine> qlines = quoteLines.findBySupplierQuoteIdOrderByLineNo(quote.getId());
+        for (SupplierQuoteLine ql : qlines) {
+            Product product = products.findById(ql.getProductId())
+                    .orElseThrow(() -> new NotFoundException("Product not found: " + ql.getProductId()));
+            UnitOfMeasure unit = units.findById(ql.getUnitId())
+                    .orElseThrow(() -> new NotFoundException("Unit not found: " + ql.getUnitId()));
+            BigDecimal qtyInBase = computeQtyInBase(product, unit, ql.getQuotedQty());
+            BigDecimal lineTotal = ql.getUnitPriceAmount().multiply(ql.getQuotedQty());
+            short lineNo = (short) (lines.findMaxLineNo(saved.getId()) + 1);
+
+            PurchaseOrderLine line = new PurchaseOrderLine(
+                    saved, lineNo,
+                    product.getId(), product.getCode(), product.getName(),
+                    unit.getId(), unit.getName(),
+                    ql.getQuotedQty(), qtyInBase,
+                    ql.getUnitPriceAmount(), lineTotal, actorId());
+            lines.save(line);
+        }
+        recomputeTotals(saved);
+
+        audit.record(AuditEvent.of(AuditActions.PURCHASE_ORDER_CREATE, "purchase_orders",
+                        saved.getId(), saved.getUid())
+                .detail(Map.of("sourceQuoteUid", quoteUid, "currency", quote.getCurrency())));
+        return toDto(saved);
     }
 }

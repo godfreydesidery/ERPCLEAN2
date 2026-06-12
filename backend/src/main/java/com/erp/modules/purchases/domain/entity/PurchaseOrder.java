@@ -1,5 +1,6 @@
 package com.erp.modules.purchases.domain.entity;
 
+import com.erp.modules.purchases.domain.enums.PoApprovalStatus;
 import com.erp.modules.purchases.domain.enums.PurchaseOrderStatus;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
@@ -107,6 +108,28 @@ public class PurchaseOrder extends UidEntity {
     @Column(name = "void_reason", length = 255)
     @Setter
     private String voidReason;
+
+    // --- procurement-depth (ADR-0027 D-3 approval seam) ---
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "approval_status", length = 20)
+    @Setter
+    private PoApprovalStatus approvalStatus;
+
+    /** Scalar uid of the pending/approved approval request (engine seam). */
+    @Column(name = "approval_request_uid", length = 26)
+    @Setter
+    private String approvalRequestUid;
+
+    /** Scalar uid of the supplier quote used to create this PO (ADR-0027 D-3). */
+    @Column(name = "source_quote_uid", length = 26)
+    @Setter
+    private String sourceQuoteUid;
+
+    /** Scalar uid of the requisition that originated this PO (ADR-0027 D-3). */
+    @Column(name = "source_requisition_uid", length = 26)
+    @Setter
+    private String sourceRequisitionUid;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();

@@ -264,6 +264,26 @@ public final class AuditActions {
     public static final String FA_ASSET_WRITE_OFF    = "FA.ASSET.WRITE_OFF";
     public static final String FA_ASSET_REVALUE      = "FA.ASSET.REVALUE";
     public static final String FA_DEPRECIATION_RUN   = "FA.DEPRECIATION.RUN";
+    // --- procurement-depth (ADR-0027) ---
+    public static final String REQUISITION_CREATE   = "PURCHASE.REQUISITION.CREATE";
+    public static final String REQUISITION_SUBMIT   = "PURCHASE.REQUISITION.SUBMIT";
+    public static final String REQUISITION_APPROVE  = "PURCHASE.REQUISITION.APPROVE";
+    public static final String REQUISITION_REJECT   = "PURCHASE.REQUISITION.REJECT";
+    public static final String REQUISITION_CONVERT  = "PURCHASE.REQUISITION.CONVERT";
+    public static final String REQUISITION_CANCEL   = "PURCHASE.REQUISITION.CANCEL";
+    public static final String RFQ_CREATE           = "PURCHASE.RFQ.CREATE";
+    public static final String RFQ_SEND             = "PURCHASE.RFQ.SEND";
+    public static final String RFQ_AWARD            = "PURCHASE.RFQ.AWARD";
+    public static final String RFQ_CANCEL           = "PURCHASE.RFQ.CANCEL";
+    public static final String SUPPLIER_QUOTE_CAPTURE = "PURCHASE.QUOTE.CAPTURE";
+    public static final String PO_APPROVE           = "PURCHASE.ORDER.APPROVE";
+    public static final String PO_REJECT            = "PURCHASE.ORDER.REJECT";
+    public static final String LANDED_COST_CREATE   = "PURCHASE.LANDEDCOST.CREATE";
+    public static final String LANDED_COST_CONFIRM  = "PURCHASE.LANDEDCOST.CONFIRM";
+    public static final String PURCHASE_RETURN_CREATE  = "PURCHASE.RETURN.CREATE";
+    public static final String PURCHASE_RETURN_CONFIRM = "PURCHASE.RETURN.CONFIRM";
+    public static final String PURCHASE_SETTINGS_UPDATE = "PURCHASE.SETTINGS.UPDATE";
+
     // --- crm (ADR-0031) ---
     public static final String CRM_LEAD_CREATE       = "CRM.LEAD.CREATE";
     public static final String CRM_LEAD_UPDATE       = "CRM.LEAD.UPDATE";

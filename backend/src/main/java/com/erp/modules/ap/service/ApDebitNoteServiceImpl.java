@@ -116,6 +116,9 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
                 noteNum, supplierBillId,
                 req.noteDate(), grossAmount, req.netAmount(), vatAmount,
                 currency, req.reason(), actorId());
+        if (req.origin() != null) {
+            note.setOrigin(req.origin());
+        }
         note = notes.save(note);
 
         // GL: DR AP / CR Purchases [+ CR VAT_PAYABLE if VAT > 0]
@@ -197,7 +200,7 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
                 n.getId(), n.getUid(), n.getCompanyId(), n.getBranchId(), n.getSupplierId(),
                 n.getDebitNoteNumber(), n.getSupplierBillId(), n.getNoteDate(),
                 n.getAmount(), n.getNetAmount(), n.getVatAmount(),
-                n.getCurrency(), n.getReason(), n.getGlEntryUid());
+                n.getCurrency(), n.getReason(), n.getGlEntryUid(), n.getOrigin());
     }
 
     private Long branchId() {

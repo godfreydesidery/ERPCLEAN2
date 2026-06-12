@@ -38,6 +38,9 @@ public enum JournalSourceType {
     DEPRECIATION,
     FA_DISPOSAL,
     FA_REVALUATION,
+    // --- procurement-depth (ADR-0027 D-8) — admitted by V34/V36 DB CHECK widen ---
+    LANDED_COST,
+    PURCHASE_RETURN,
     // --- RESERVED — NOT yet admitted by the DB CHECK; widen when the increment lands ---
     AR,
     AP,

@@ -329,6 +329,96 @@ public class InventoryGlPoster {
     }
 
     // -------------------------------------------------------------------------
+    // (g) Landed cost: DR INVENTORY / CR LANDED_COST_CLEARING (event-driven, REQUIRES_NEW)
+    //     ADR-0027 D-5 / D-9. GRNI-bridge pattern reused for LANDED_COST_CLEARING (2160).
+    // -------------------------------------------------------------------------
+
+    /**
+     * Post DR INVENTORY (1300) / CR LANDED_COST_CLEARING (2160) for the total landed-cost amount.
+     * One journal per landed cost confirm. REQUIRES_NEW — returns null on anomaly; never propagates.
+     *
+     * @param landedCostUid sourceRef (landed_cost.uid)
+     * @param totalAmount   sum of all charge allocations
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public String postLandedCostInNewTx(Long companyId, Long branchId, LocalDate postingDate,
+                                         String landedCostUid, String currency,
+                                         BigDecimal totalAmount) {
+        try {
+            ChartOfAccount inventoryAcct     = configResolver.resolve(companyId, GlConfigKey.INVENTORY);
+            ChartOfAccount landedClearAcct   = configResolver.resolve(companyId, GlConfigKey.LANDED_COST_CLEARING);
+
+            List<LineDraft> lines = List.of(
+                    new LineDraft(inventoryAcct.getId(),
+                            totalAmount, BigDecimal.ZERO,
+                            currency, "Landed cost — " + landedCostUid),
+                    new LineDraft(landedClearAcct.getId(),
+                            BigDecimal.ZERO, totalAmount,
+                            currency, "Landed cost clearing — " + landedCostUid)
+            );
+
+            JournalEntryDraft draft = new JournalEntryDraft(
+                    companyId, branchId, postingDate,
+                    "Landed cost " + landedCostUid,
+                    JournalSourceType.LANDED_COST, landedCostUid,
+                    null, null, lines);
+
+            JournalEntryDto result = directPosting.post(draft);
+            return result != null ? result.uid() : null;
+
+        } catch (Exception ex) {
+            log.warn("InventoryGlPoster: landed cost GL post failed for company={} landedCost={} — {}",
+                    companyId, landedCostUid, ex.getMessage());
+            return null;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // (h) Purchase return: DR GRNI / CR INVENTORY (event-driven, REQUIRES_NEW)
+    //     ADR-0027 D-7. Symmetric reverse of receipt: stock goes back to supplier.
+    // -------------------------------------------------------------------------
+
+    /**
+     * Post DR GRNI (2150) / CR INVENTORY (1300) for a purchase return at original receipt cost.
+     * One journal per confirmed purchase return. REQUIRES_NEW — returns null on anomaly; never propagates.
+     *
+     * @param returnUid      sourceRef (purchase_return.uid)
+     * @param totalReturnValue total value being returned (sum of line_value_amount from return lines)
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public String postPurchaseReturnInNewTx(Long companyId, Long branchId, LocalDate postingDate,
+                                             String returnUid, String currency,
+                                             BigDecimal totalReturnValue) {
+        try {
+            ChartOfAccount grniAcct      = configResolver.resolve(companyId, GlConfigKey.GRNI);
+            ChartOfAccount inventoryAcct = configResolver.resolve(companyId, GlConfigKey.INVENTORY);
+
+            List<LineDraft> lines = List.of(
+                    new LineDraft(grniAcct.getId(),
+                            totalReturnValue, BigDecimal.ZERO,
+                            currency, "Purchase return GRNI — " + returnUid),
+                    new LineDraft(inventoryAcct.getId(),
+                            BigDecimal.ZERO, totalReturnValue,
+                            currency, "Purchase return Inventory — " + returnUid)
+            );
+
+            JournalEntryDraft draft = new JournalEntryDraft(
+                    companyId, branchId, postingDate,
+                    "Purchase return " + returnUid,
+                    JournalSourceType.PURCHASE_RETURN, returnUid,
+                    null, null, lines);
+
+            JournalEntryDto result = directPosting.post(draft);
+            return result != null ? result.uid() : null;
+
+        } catch (Exception ex) {
+            log.warn("InventoryGlPoster: purchase return GL post failed for company={} return={} — {}",
+                    companyId, returnUid, ex.getMessage());
+            return null;
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Value-object legs / commands
     // -------------------------------------------------------------------------
 

@@ -2,6 +2,7 @@ package com.erp.modules.ap.domain.entity;
 
 import com.erp.platform.common.domain.Ulid;
 import jakarta.persistence.Column;
+import lombok.Setter;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -50,6 +51,14 @@ public class SupplierBillLine {
     /** Scalar uid of the GR line this bill line draws against — no FK (ADR-0015 D-11). */
     @Column(name = "gr_line_uid", length = 26)
     private String grLineUid;
+
+    /**
+     * Scalar uid of the landed cost that generated this freight/duty charge line (ADR-0027 D-5, V34).
+     * NULL for normal purchase lines.
+     */
+    @Column(name = "landed_cost_uid", length = 26)
+    @Setter
+    private String landedCostUid;
 
     @Column(name = "description", nullable = false, length = 200)
     private String description;

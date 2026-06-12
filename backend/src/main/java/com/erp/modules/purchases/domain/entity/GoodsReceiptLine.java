@@ -2,6 +2,7 @@ package com.erp.modules.purchases.domain.entity;
 
 import com.erp.platform.common.domain.Ulid;
 import jakarta.persistence.Column;
+import lombok.Setter;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
@@ -103,6 +104,14 @@ public class GoodsReceiptLine {
     /** Document currency; denormalised from PO/GR header. */
     @Column(name = "currency", nullable = false, length = 3)
     private String currency;
+
+    /**
+     * Cumulative qty returned in base units across all confirmed purchase returns (ADR-0027 D-7, V35).
+     * Defaults to 0 (DB DEFAULT 0); updated by PurchaseReturnService on confirm.
+     */
+    @Column(name = "returned_qty_in_base", precision = 19, scale = 6)
+    @Setter
+    private BigDecimal returnedQtyInBase = BigDecimal.ZERO;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
