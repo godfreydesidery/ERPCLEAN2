@@ -380,4 +380,12 @@ public final class AuditActions {
     public static final String PROJECT_TASK_DEACTIVATE = "PROJECT.TASK.DEACTIVATE";
     public static final String PROJECT_TIMESHEET_RECORD = "PROJECT.TIMESHEET.RECORD";
     public static final String PROJECT_MATERIAL_ISSUE  = "PROJECT.MATERIAL.ISSUE";
+
+    // ---- Budgeting & Management Accounting (ADR-0034) ----
+    public static final String BUDGET_CREATE            = "BUDGET.CREATE";
+    public static final String BUDGET_VERSION_CREATE    = "BUDGET.VERSION.CREATE";
+    public static final String BUDGET_VERSION_SUBMIT    = "BUDGET.VERSION.SUBMIT";
+    public static final String BUDGET_VERSION_RECALL    = "BUDGET.VERSION.RECALL";
+    public static final String BUDGET_VERSION_APPROVE   = "BUDGET.VERSION.APPROVE";
+    public static final String BUDGET_VERSION_REJECT    = "BUDGET.VERSION.REJECT";
 }

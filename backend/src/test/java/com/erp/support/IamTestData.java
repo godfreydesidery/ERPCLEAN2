@@ -111,6 +111,12 @@ public class IamTestData {
         em.createNativeQuery(
                 "TRUNCATE sales_invoice_payments, sales_invoice_lines, sales_invoices, tax_rates RESTART IDENTITY CASCADE")
                 .executeUpdate();
+        // 4-BUD. Clear budgeting tables BEFORE GL (budget_lines FK → chart_of_accounts + fiscal_periods;
+        //        budget_versions FK → fiscal_years + dimension_values; budgets FK → fiscal_years + dimension_values).
+        //        FK order: lines → versions → budgets; code_sequence for BUDGET kind cleared later with products.
+        em.createNativeQuery(
+                "TRUNCATE budget_lines, budget_versions, budgets RESTART IDENTITY CASCADE")
+                .executeUpdate();
         // 4e. Clear BOM tables BEFORE products (bom_components FK → products; boms FK → products).
         em.createNativeQuery(
                 "TRUNCATE bom_components, boms RESTART IDENTITY CASCADE")

@@ -97,6 +97,9 @@ import com.erp.modules.notifications.repository.NotificationPreferenceRepository
 // projects (ADR-0033)
 import com.erp.modules.projects.repository.ProjectRepository;
 import com.erp.modules.projects.repository.ProjectTaskRepository;
+// budgeting (ADR-0034)
+import com.erp.modules.budgeting.repository.BudgetRepository;
+import com.erp.modules.budgeting.repository.BudgetVersionRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -230,6 +233,9 @@ public class ScopeGuard {
     // projects (ADR-0033 D-4)
     private final ProjectRepository          projectsRepo;
     private final ProjectTaskRepository      projectTasksRepo;
+    // budgeting (ADR-0034 D-13)
+    private final BudgetRepository           budgetsRepo;
+    private final BudgetVersionRepository    budgetVersionsRepo;
     private final AuditService             audit;
 
     public ScopeGuard(CompanyRepository companies,
@@ -330,6 +336,9 @@ public class ScopeGuard {
                       // projects (ADR-0033 D-4)
                       ProjectRepository projectsRepo,
                       ProjectTaskRepository projectTasksRepo,
+                      // budgeting (ADR-0034 D-13)
+                      BudgetRepository budgetsRepo,
+                      BudgetVersionRepository budgetVersionsRepo,
                       AuditService audit) {
         this.companies      = companies;
         this.branches       = branches;
@@ -429,6 +438,9 @@ public class ScopeGuard {
         // projects (ADR-0033 D-4)
         this.projectsRepo        = projectsRepo;
         this.projectTasksRepo    = projectTasksRepo;
+        // budgeting (ADR-0034 D-13)
+        this.budgetsRepo         = budgetsRepo;
+        this.budgetVersionsRepo  = budgetVersionsRepo;
         this.audit               = audit;
     }
 
@@ -551,6 +563,9 @@ public class ScopeGuard {
             // projects (ADR-0033 D-4)
             case "project"             -> projectsRepo.findCompanyIdByUid(uid);
             case "projecttask"         -> projectTasksRepo.findCompanyIdByUid(uid);
+            // budgeting target types (ADR-0034 D-13)
+            case "budget"              -> budgetsRepo.findCompanyIdByUid(uid);
+            case "budgetversion"       -> budgetVersionsRepo.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };
