@@ -26,6 +26,14 @@ public interface WorkOrderCostingService {
     /** Clear residual WIP to Manufacturing Variance; transition to CLOSED. */
     WorkOrderDto close(String workOrderUid, CloseWorkOrderRequest req);
 
+    /**
+     * Reverse all issued-component stock + GL, reverse any FG receipt, reverse applied
+     * labour/overhead, then set the work order to CANCELLED (ADR-0035 D-5).
+     * Safe to call on PLANNED, RELEASED, IN_PROGRESS, or IN_PROGRESS states.
+     * Posting date defaults to today when null.
+     */
+    WorkOrderDto cancel(String workOrderUid, String reason, java.time.LocalDate postingDate);
+
     /** Full cost report: header + component issues + operations. */
     WorkOrderCostReportDto costReport(String workOrderUid);
 }

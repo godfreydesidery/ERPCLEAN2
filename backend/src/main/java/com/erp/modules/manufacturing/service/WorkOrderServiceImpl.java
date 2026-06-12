@@ -62,6 +62,12 @@ public class WorkOrderServiceImpl implements WorkOrderService {
     private final ScopeGuard                   scopeGuard;
     private final AuditService                 audit;
     private final OutboxPublisher              outbox;
+    /**
+     * Injected lazily via setter to break the circular dependency:
+     * WorkOrderServiceImpl → WorkOrderCostingServiceImpl → WorkOrderServiceImpl (mapper).
+     * Spring resolves this via the setter after both beans are constructed.
+     */
+    private WorkOrderCostingService costingService;
 
     public WorkOrderServiceImpl(WorkOrderRepository workOrders,
                                  WorkOrderComponentRepository components,
@@ -85,6 +91,12 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         this.scopeGuard      = scopeGuard;
         this.audit           = audit;
         this.outbox          = outbox;
+    }
+
+    /** Setter injection to break the circular reference with WorkOrderCostingServiceImpl. */
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setCostingService(WorkOrderCostingService costingService) {
+        this.costingService = costingService;
     }
 
     // -------------------------------------------------------------------------
@@ -230,24 +242,9 @@ public class WorkOrderServiceImpl implements WorkOrderService {
 
     @Override
     public WorkOrderDto cancel(String uid, String reason) {
-        RequestContext.Principal principal = RequestContext.get();
-        WorkOrder wo = requireWorkOrder(uid);
-        scopeGuard.assertCanActIn(principal, wo.getCompanyId());
-
-        WorkOrderStatus st = wo.getStatus();
-        if (st == WorkOrderStatus.CLOSED || st == WorkOrderStatus.CANCELLED) {
-            throw new IllegalStateException("Cannot cancel a " + st + " work order.");
-        }
-        if (st == WorkOrderStatus.COMPLETED) {
-            throw new IllegalArgumentException(
-                    "Cannot cancel a COMPLETED work order — close it first or contact a manager.");
-        }
-
-        wo.cancel(principal.userId());
-
-        audit.record(AuditEvent.of(AuditActions.WORKORDER_CANCEL, "work_orders", wo.getId(), wo.getUid())
-                .detail(Map.of("reason", reason != null ? reason : "")));
-        return toDto(wo);
+        // Delegate to costingService so that all issued-component stock + GL reversals are performed
+        // atomically with the status change (ADR-0035 D-5, Finding 1 fix).
+        return costingService.cancel(uid, reason, null);
     }
 
     // -------------------------------------------------------------------------
