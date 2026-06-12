@@ -13,9 +13,9 @@ public interface EmployeeLoanInstallmentRepository extends JpaRepository<Employe
     @Query("SELECT i.companyId FROM EmployeeLoanInstallment i WHERE i.uid = :uid")
     Optional<Long> findCompanyIdByUid(String uid);
 
-    List<EmployeeLoanInstallment> findByLoanIdOrderByInstallmentNoAsc(Long loanId);
+    List<EmployeeLoanInstallment> findByEmployeeLoanIdOrderByInstallmentNoAsc(Long employeeLoanId);
 
-    @Query("SELECT i FROM EmployeeLoanInstallment i WHERE i.loanId = :loanId AND i.paid = false " +
+    @Query("SELECT i FROM EmployeeLoanInstallment i WHERE i.employeeLoanId = :employeeLoanId AND i.status = 'PENDING' " +
            "ORDER BY i.installmentNo ASC")
-    List<EmployeeLoanInstallment> findUnpaidByLoanId(Long loanId);
+    List<EmployeeLoanInstallment> findUnpaidByLoanId(Long employeeLoanId);
 }

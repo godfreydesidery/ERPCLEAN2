@@ -182,11 +182,8 @@ CREATE INDEX ix_supplier_quotes_company    ON supplier_quotes (company_id);
 CREATE INDEX ix_supplier_quotes_rfq        ON supplier_quotes (rfq_id);
 CREATE INDEX ix_supplier_quote_lines_quote ON supplier_quote_lines (supplier_quote_id);
 -- The last-quoted-price reader index (BR-PROC-09, D-4):
-CREATE INDEX ix_supplier_quote_lines_supplier_product
-    ON supplier_quote_lines (company_id, supplier_id, product_id);
--- Note: supplier_id is on supplier_quotes, not lines; join needed for this index
--- Use a partial workaround via the parent table or include via denorm if needed.
--- For now, index the quote lines with product_id for fast lookup:
+-- supplier_id is on supplier_quotes (parent), not on quote_lines — cannot index here.
+-- Use a join-based query; index the quote lines with product_id for fast lookup:
 CREATE INDEX ix_supplier_quote_lines_product ON supplier_quote_lines (product_id, company_id);
 
 -- ============================================================================

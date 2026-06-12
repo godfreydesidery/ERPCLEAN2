@@ -15,6 +15,6 @@ public interface LeaveBalanceRepository extends JpaRepository<LeaveBalance, Long
 
     List<LeaveBalance> findByCompanyIdAndEmployeeId(Long companyId, Long employeeId);
 
-    Optional<LeaveBalance> findByCompanyIdAndEmployeeIdAndLeaveTypeIdAndYear(
-            Long companyId, Long employeeId, Long leaveTypeId, Integer year);
+    Optional<LeaveBalance> findByCompanyIdAndEmployeeIdAndLeaveTypeIdAndAsOfYear(
+            Long companyId, Long employeeId, Long leaveTypeId, Short asOfYear);
 }

@@ -114,7 +114,7 @@ public class PurchaseOrder extends UidEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "approval_status", length = 20)
     @Setter
-    private PoApprovalStatus approvalStatus;
+    private PoApprovalStatus approvalStatus = PoApprovalStatus.NOT_REQUIRED;
 
     /** Scalar uid of the pending/approved approval request (engine seam). */
     @Column(name = "approval_request_uid", length = 26)

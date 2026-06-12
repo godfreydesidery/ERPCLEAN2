@@ -76,9 +76,9 @@ class PayrollPostingHandlerIT extends PostgresIntegrationTest {
     private Long rootId;
     private String employeeUid;
 
-    private static final LocalDate PAY_DATE   = LocalDate.of(2025, 12, 31);
-    private static final short PERIOD_YEAR    = (short) 2025;
-    private static final short PERIOD_MONTH   = (short) 12;
+    private static final LocalDate PAY_DATE   = LocalDate.of(2026, 6, 30);
+    private static final short PERIOD_YEAR    = (short) 2026;
+    private static final short PERIOD_MONTH   = (short) 6;
 
     @BeforeEach
     void setUp() {

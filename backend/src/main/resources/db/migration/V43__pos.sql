@@ -57,6 +57,7 @@ CREATE TABLE pos_sessions (
     expected_cash_amount     NUMERIC(19,4),
     variance_amount          NUMERIC(19,4),
     variance_gl_entry_uid    VARCHAR(26),
+    variance_journal_id      BIGINT,
     reconciled_by            BIGINT,
     notes                    VARCHAR(500),
     version                  BIGINT          NOT NULL DEFAULT 0,
@@ -70,8 +71,9 @@ CREATE TABLE pos_sessions (
     CONSTRAINT fk_pos_session_branch          FOREIGN KEY (branch_id)   REFERENCES branches(id),
     CONSTRAINT fk_pos_session_till            FOREIGN KEY (pos_till_id) REFERENCES pos_tills(id),
     CONSTRAINT fk_pos_session_cashier         FOREIGN KEY (cashier_id)  REFERENCES app_users(id),
-    CONSTRAINT fk_pos_session_reconciled_by   FOREIGN KEY (reconciled_by) REFERENCES app_users(id),
-    CONSTRAINT chk_pos_session_status         CHECK (status IN ('OPEN','CLOSED','RECONCILED')),
+    CONSTRAINT fk_pos_session_reconciled_by    FOREIGN KEY (reconciled_by)       REFERENCES app_users(id),
+    CONSTRAINT fk_pos_session_variance_journal FOREIGN KEY (variance_journal_id) REFERENCES journal_entries(id),
+    CONSTRAINT chk_pos_session_status          CHECK (status IN ('OPEN','CLOSED','RECONCILED')),
     CONSTRAINT chk_pos_session_float          CHECK (opening_float_amount >= 0),
     CONSTRAINT chk_pos_session_counted_cash   CHECK (counted_cash_amount IS NULL OR counted_cash_amount >= 0),
     CONSTRAINT chk_pos_session_counted_mobile CHECK (counted_mobile_amount IS NULL OR counted_mobile_amount >= 0)
@@ -104,7 +106,7 @@ CREATE TABLE pos_session_payouts (
     updated_by           BIGINT,
     CONSTRAINT uq_pos_session_payout_uid     UNIQUE (uid),
     CONSTRAINT fk_pos_session_payout_session FOREIGN KEY (pos_session_id) REFERENCES pos_sessions(id),
-    CONSTRAINT chk_pos_session_payout_type   CHECK (payout_type IN ('REFUND','PAID_OUT')),
+    CONSTRAINT chk_pos_session_payout_type   CHECK (payout_type IN ('CASH_IN','CASH_OUT')),
     CONSTRAINT chk_pos_session_payout_amount CHECK (amount > 0)
 );
 

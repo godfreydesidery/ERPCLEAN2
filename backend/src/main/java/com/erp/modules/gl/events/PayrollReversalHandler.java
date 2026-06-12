@@ -62,7 +62,7 @@ public class PayrollReversalHandler implements DomainEventHandler {
                         payload.originalGlEntryUid(),
                         payload.payDate(),
                         JournalSourceType.PAYROLL,
-                        "REVERSAL:" + payload.runNumber(),
+                        payload.runUid(),
                         null);
                 log.info("PayrollReversalHandler: GL reversal posted for payroll run {} company={}.",
                         payload.runNumber(), event.getCompanyId());
