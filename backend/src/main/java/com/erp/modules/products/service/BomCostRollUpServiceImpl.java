@@ -7,6 +7,8 @@ import com.erp.modules.products.repository.ProductRepository;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.repository.Lookups;
 import com.erp.modules.iam.repository.BranchRepository;
+import com.erp.platform.security.RequestContext;
+import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
@@ -38,17 +40,20 @@ public class BomCostRollUpServiceImpl implements BomCostRollUpService {
     private final BomRepository boms;
     private final ProductRepository products;
     private final BranchRepository branches;
+    private final ScopeGuard scopeGuard;
 
     public BomCostRollUpServiceImpl(BomExplosionService explosion,
                                     LeafCostResolver leafCostResolver,
                                     BomRepository boms,
                                     ProductRepository products,
-                                    BranchRepository branches) {
+                                    BranchRepository branches,
+                                    ScopeGuard scopeGuard) {
         this.explosion = explosion;
         this.leafCostResolver = leafCostResolver;
         this.boms = boms;
         this.products = products;
         this.branches = branches;
+        this.scopeGuard = scopeGuard;
     }
 
     @Override
@@ -71,6 +76,9 @@ public class BomCostRollUpServiceImpl implements BomCostRollUpService {
                 .orElseThrow(() -> new NotFoundException("Branch not found: " + branchUid));
         Long companyId = branch.getCompany().getId();
         Long branchId = branch.getId();
+        // NFR-BOM-06 / D-11: tenant isolation guard — reject cross-tenant cost reads
+        // avg_cost is sensitive inventory data; must match the caller's active company.
+        scopeGuard.assertCanActIn(RequestContext.get(), companyId);
 
         // 3. Explode to leaves (multi-level = true for cost roll-up)
         List<BomExplosionLeafDto> leaves = explosion.explodeToLeaves(
