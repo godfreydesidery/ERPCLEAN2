@@ -857,5 +857,30 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./pos/pos-sale.component').then((m) => m.PosSaleComponent),
   },
+  // ── Stock Transfers ─────────────────���──────────────────────────��──────────
+  {
+    path: 'stock-transfers',
+    canActivate: [requirePermission('STOCK.TRANSFER.VIEW')],
+    loadComponent: () =>
+      import('./stock/transfer/stock-transfer-list.component').then(
+        (m) => m.StockTransferListComponent,
+      ),
+  },
+  {
+    path: 'stock-transfers/create',
+    canActivate: [requirePermission('STOCK.TRANSFER.CREATE')],
+    loadComponent: () =>
+      import('./stock/transfer/stock-transfer-create.component').then(
+        (m) => m.StockTransferCreateComponent,
+      ),
+  },
+  {
+    path: 'stock-transfers/uid/:uid',
+    canActivate: [requirePermission('STOCK.TRANSFER.VIEW')],
+    loadComponent: () =>
+      import('./stock/transfer/stock-transfer-detail.component').then(
+        (m) => m.StockTransferDetailComponent,
+      ),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];

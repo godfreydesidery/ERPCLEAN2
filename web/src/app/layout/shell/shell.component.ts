@@ -146,6 +146,7 @@ export class ShellComponent {
       label: 'Inventory',
       items: [
         { label: 'Stock On-Hand', route: '/admin/stock', icon: 'bi-boxes', available: true, permission: 'STOCK.VIEW' },
+        { label: 'Stock Transfers', route: '/admin/stock-transfers', icon: 'bi-arrow-left-right', available: true, permission: 'STOCK.TRANSFER.VIEW' },
         { label: 'Stock Valuation', route: '/admin/stock/valuation', icon: 'bi-clipboard-data', available: true, permission: 'INVENTORY.VALUATION.VIEW' },
         { label: 'Opening Valuation', route: '/admin/stock/valuation/opening', icon: 'bi-pencil-square', available: true, permission: 'INVENTORY.OPENING.SET' },
       ],

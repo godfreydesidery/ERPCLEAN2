@@ -1,0 +1,67 @@
+<section class="admin-page">
+  <div class="page-head">
+    <h1>Stock Transfers</h1>
+    @if (canCreate()) {
+      <a routerLink="/admin/stock-transfers/create" class="btn btn-primary btn-sm">
+        <i class="bi bi-plus-circle" aria-hidden="true"></i> New transfer
+      </a>
+    }
+  </div>
+
+  @switch (state()) {
+    @case ('loading') {
+      <p aria-live="polite" class="state">Loading stock transfers…</p>
+    }
+    @case ('forbidden') {
+      <p role="alert" class="state text-danger">You do not have permission to view stock transfers.</p>
+    }
+    @case ('error') {
+      <p role="alert" class="state text-danger">Failed to load stock transfers. Please try again.</p>
+    }
+    @default {
+      @if (isEmpty()) {
+        <p class="state text-muted">No stock transfers found.</p>
+      } @else {
+        <div class="table-responsive">
+          <table class="table table-hover align-middle bg-white grid">
+            <caption class="visually-hidden">Stock Transfers</caption>
+            <thead>
+              <tr>
+                <th scope="col">Transfer #</th>
+                <th scope="col">Date</th>
+                <th scope="col">Mode</th>
+                <th scope="col">Status</th>
+                <th scope="col">Source Loc.</th>
+                <th scope="col">Dest Loc.</th>
+                <th scope="col"><span class="visually-hidden">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of rows(); track row.uid) {
+                <tr>
+                  <td>{{ transferLabel(row) }}</td>
+                  <td>{{ row.transferDate | date:'yyyy-MM-dd' }}</td>
+                  <td>{{ row.transferMode }}</td>
+                  <td>
+                    <span class="badge" [class]="statusBadgeClass(row.status)">
+                      {{ row.status }}
+                    </span>
+                  </td>
+                  <td>{{ row.sourceLocationId }}</td>
+                  <td>{{ row.destLocationId }}</td>
+                  <td class="text-end">
+                    <a [routerLink]="['/admin/stock-transfers/uid', row.uid]"
+                       [attr.aria-label]="'View transfer ' + transferLabel(row)">
+                      <i class="bi bi-eye" aria-hidden="true"></i>
+                    </a>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <app-paginator [meta]="meta()" [label]="'Stock Transfers'" (pageChange)="goToPage($event)" />
+      }
+    }
+  }
+</section>

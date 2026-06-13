@@ -1,0 +1,150 @@
+<section class="admin-page">
+  <div class="page-head">
+    <h1>Stock Transfer</h1>
+    <a routerLink="/admin/stock-transfers" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left" aria-hidden="true"></i> Back to list
+    </a>
+  </div>
+
+  @switch (state()) {
+    @case ('loading') {
+      <p aria-live="polite" class="state">Loading transfer…</p>
+    }
+    @case ('forbidden') {
+      <p role="alert" class="state text-danger">You do not have permission to view this transfer.</p>
+    }
+    @case ('error') {
+      <p role="alert" class="state text-danger">Failed to load transfer. Please try again.</p>
+    }
+    @default {
+      @if (entity(); as t) {
+        <!-- Header card -->
+        <div class="card mb-3">
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-sm-6 col-lg-3">
+                <dt class="text-muted small mb-1">Transfer #</dt>
+                <dd class="fw-semibold">{{ t.transferNumber }}</dd>
+              </div>
+              <div class="col-sm-6 col-lg-3">
+                <dt class="text-muted small mb-1">Status</dt>
+                <dd>
+                  <span class="badge" [class]="statusBadgeClass(t.status)">{{ t.status }}</span>
+                </dd>
+              </div>
+              <div class="col-sm-6 col-lg-3">
+                <dt class="text-muted small mb-1">Mode</dt>
+                <dd>{{ t.transferMode }}</dd>
+              </div>
+              <div class="col-sm-6 col-lg-3">
+                <dt class="text-muted small mb-1">Transfer Date</dt>
+                <dd>{{ t.transferDate | date:'yyyy-MM-dd' }}</dd>
+              </div>
+              <div class="col-sm-6 col-lg-3">
+                <dt class="text-muted small mb-1">Source Location</dt>
+                <dd>{{ t.sourceLocationId }}</dd>
+              </div>
+              <div class="col-sm-6 col-lg-3">
+                <dt class="text-muted small mb-1">Destination Location</dt>
+                <dd>{{ t.destLocationId }}</dd>
+              </div>
+              @if (t.dispatchedAt) {
+                <div class="col-sm-6 col-lg-3">
+                  <dt class="text-muted small mb-1">Dispatched At</dt>
+                  <dd>{{ t.dispatchedAt | date:'yyyy-MM-dd HH:mm' }}</dd>
+                </div>
+              }
+              @if (t.receivedAt) {
+                <div class="col-sm-6 col-lg-3">
+                  <dt class="text-muted small mb-1">Received At</dt>
+                  <dd>{{ t.receivedAt | date:'yyyy-MM-dd HH:mm' }}</dd>
+                </div>
+              }
+              @if (t.notes) {
+                <div class="col-12">
+                  <dt class="text-muted small mb-1">Notes</dt>
+                  <dd>{{ t.notes }}</dd>
+                </div>
+              }
+            </div>
+          </div>
+        </div>
+
+        <!-- Action buttons gated by status -->
+        <div class="d-flex gap-2 flex-wrap mb-3" role="group" aria-label="Transfer actions">
+          @if (canCompleteInstant()) {
+            <button type="button" class="btn btn-success btn-sm"
+                    [disabled]="actionBusy()"
+                    (click)="completeInstant()">
+              <i class="bi bi-check-circle" aria-hidden="true"></i> Complete (Instant)
+            </button>
+          }
+          @if (canDispatch()) {
+            <button type="button" class="btn btn-primary btn-sm"
+                    [disabled]="actionBusy()"
+                    (click)="dispatch()">
+              <i class="bi bi-truck" aria-hidden="true"></i> Dispatch
+            </button>
+          }
+          @if (canReceiveTransfer()) {
+            <button type="button" class="btn btn-info btn-sm"
+                    [disabled]="actionBusy()"
+                    (click)="receive()">
+              <i class="bi bi-box-arrow-in-down" aria-hidden="true"></i> Receive
+            </button>
+          }
+          @if (canCancel()) {
+            <button type="button" class="btn btn-outline-danger btn-sm"
+                    [disabled]="actionBusy()"
+                    (click)="cancel()">
+              <i class="bi bi-x-circle" aria-hidden="true"></i> Cancel
+            </button>
+          }
+          @if (actionBusy()) {
+            <span class="spinner-border spinner-border-sm align-self-center" aria-hidden="true"></span>
+          }
+        </div>
+
+        @if (actionError()) {
+          <p role="alert" class="form-error">{{ actionError() }}</p>
+        }
+
+        <!-- Lines table -->
+        <h2 class="h6 mt-4">Line Items</h2>
+        @if (t.lines.length === 0) {
+          <p class="text-muted">No lines.</p>
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-hover align-middle bg-white grid">
+              <caption class="visually-hidden">Transfer line items</caption>
+              <thead>
+                <tr>
+                  <th scope="col">#</th>
+                  <th scope="col">Code</th>
+                  <th scope="col">Product</th>
+                  <th scope="col">Unit</th>
+                  <th scope="col" class="text-end">Qty</th>
+                  <th scope="col" class="text-end">Value</th>
+                  <th scope="col">Currency</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (line of t.lines; track line.uid) {
+                  <tr>
+                    <td>{{ line.lineNo }}</td>
+                    <td>{{ line.productCode }}</td>
+                    <td>{{ line.productName }}</td>
+                    <td>{{ line.unitName }}</td>
+                    <td class="text-end">{{ +line.qtyTransferred | number:'1.0-4' }}</td>
+                    <td class="text-end">{{ +line.valueAmount | number:'1.2-2' }}</td>
+                    <td>{{ line.currency }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      }
+    }
+  }
+</section>
