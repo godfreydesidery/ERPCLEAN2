@@ -521,6 +521,7 @@ export const ADMIN_ROUTES: Routes = [
     canActivate: [requirePermission('DOCUMENT.BRANDING.MANAGE')],
     loadComponent: () =>
       import('./documents/document-branding.component').then((m) => m.DocumentBrandingComponent),
+  },
   // ── Notifications ─────────────────────────────────────────────────────────
   {
     path: 'notifications',
@@ -545,6 +546,7 @@ export const ADMIN_ROUTES: Routes = [
     canActivate: [requirePermission('NOTIFICATION.ADMIN')],
     loadComponent: () =>
       import('./notifications/notification-delivery-log.component').then((m) => m.NotificationDeliveryLogComponent),
+  },
   // ── Costing (Cost Centres / Dimensions) ──────────────────────────────────
   {
     path: 'cost-centre/dimensions',
@@ -569,6 +571,7 @@ export const ADMIN_ROUTES: Routes = [
     canActivate: [requirePermission('COSTING.VIEW')],
     loadComponent: () =>
       import('./cost-centre/costing-report.component').then((m) => m.CostingReportComponent),
+  },
   // ── Fixed Assets ─────────────────────────────────────────────────────────────
   {
     path: 'asset-categories',
@@ -623,6 +626,7 @@ export const ADMIN_ROUTES: Routes = [
     canActivate: [requirePermission('FA.VIEW')],
     loadComponent: () =>
       import('./fixed-assets/depreciation-run-detail.component').then((m) => m.DepreciationRunDetailComponent),
+  },
   // ── CRM ───────────────────────────────────────────────────────────────────
   {
     path: 'crm/leads',
@@ -665,6 +669,7 @@ export const ADMIN_ROUTES: Routes = [
     canActivate: [requirePermission('CRM.STAGE.MANAGE')],
     loadComponent: () =>
       import('./crm/pipeline-stage-list.component').then((m) => m.PipelineStageListComponent),
+  },
   // ── HR & Payroll ──────────────────────────────────────────────────────────────
   {
     path: 'hr/employees',
@@ -725,6 +730,7 @@ export const ADMIN_ROUTES: Routes = [
     canActivate: [requirePermission('HR.LOAN.MANAGE')],
     loadComponent: () =>
       import('./hr-payroll/loan-detail.component').then((m) => m.LoanDetailComponent),
+  },
   // ── Projects ──────────────────────────────────────────────────────────────
   {
     path: 'projects',
@@ -743,6 +749,7 @@ export const ADMIN_ROUTES: Routes = [
     canActivate: [requirePermission('PROJECTS.COSTING.VIEW')],
     loadComponent: () =>
       import('./projects/project-wip-report.component').then((m) => m.ProjectWipReportComponent),
+  },
   // ── Budgeting & Management Accounting ────────────────────────────────────
   {
     path: 'budgets',
@@ -773,6 +780,7 @@ export const ADMIN_ROUTES: Routes = [
     canActivate: [requirePermission('BUDGETING.REPORT.VIEW')],
     loadComponent: () =>
       import('./budgeting/departmental-actuals-report.component').then((m) => m.DepartmentalActualsReportComponent),
+  },
   // ── Manufacturing ─────────────────────────────────────────────────────────
   {
     path: 'work-orders',
