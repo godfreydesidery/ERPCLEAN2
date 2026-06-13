@@ -243,9 +243,14 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
             return null;  // caller skips GL leg + logs anomaly
         }
 
-        // Locate the specific issuing branch row to deduct on_hand_value from.
-        @SuppressWarnings("deprecation")
-        StockOnHand soh = onHands.findByCompanyIdAndBranchIdAndProductId(companyId, branchId, productId)
+        // Locate the issuing branch row to deduct on_hand_value from. ADR-0028 D-2/D-3 FIX: the qty
+        // leg lands on the branch DEFAULT location (StockPostingServiceImpl resolves null → default),
+        // so the value decrement must target that SAME row. The deprecated single-(company,branch,
+        // product) finder throws NonUniqueResultException once the product has a second location row
+        // in the branch, so use the location-aware finder symmetric with doReverseIssue.
+        Long locId = locationResolver.defaultLocationId(companyId, branchId);
+        StockOnHand soh = onHands
+                .findByCompanyIdAndBranchIdAndLocationIdAndProductId(companyId, branchId, locId, productId)
                 .orElse(null);
 
         if (soh == null) {
@@ -283,8 +288,17 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
 
     private void doReverseIssue(Long companyId, Long branchId, Long productId,
                                  BigDecimal originalValue) {
-        @SuppressWarnings("deprecation")
-        StockOnHand soh = onHands.findByCompanyIdAndBranchIdAndProductId(companyId, branchId, productId)
+        // ADR-0028 D-2/D-3 FIX: the original issue's qty leg landed on the branch DEFAULT location
+        // (StockPostingServiceImpl resolves a null locationId to defaultLocationId), and the qty
+        // reversal lands there too. Restore on_hand_value to that SAME location row. The deprecated
+        // single-(company,branch,product) finder throws NonUniqueResultException once a second
+        // location row exists for the product in the branch (e.g. an in-branch transfer to a
+        // non-default location), poisoning the SALE.VOIDED / DELIVERY.RETURNED handler. avg_cost is
+        // NOT recomputed — an issue never moved it and a reversal does not either (D-5), so we do
+        // NOT aggregate like reverseReceipt; we write the one location row the qty leg touched.
+        Long locId = locationResolver.defaultLocationId(companyId, branchId);
+        StockOnHand soh = onHands
+                .findByCompanyIdAndBranchIdAndLocationIdAndProductId(companyId, branchId, locId, productId)
                 .orElse(null);
         if (soh == null) return; // no on-hand row — cannot restore (shouldn't happen)
 
@@ -494,41 +508,62 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
     @Override
     public void applyLandedCost(Long companyId, Long branchId, Long productId,
                                  BigDecimal allocatedAmount) {
+        // ADR-0028 D-2 FIX: landed cost capitalises into the company-product moving average across
+        // ALL location rows, so branchId is no longer needed below (the allocation is company-wide).
         try {
-            doApplyLandedCost(companyId, branchId, productId, allocatedAmount);
+            doApplyLandedCost(companyId, productId, allocatedAmount);
         } catch (ObjectOptimisticLockingFailureException ex) {
             log.debug("InventoryValuation: optimistic lock clash on applyLandedCost " + RETRY_MSG,
                     companyId, productId);
-            doApplyLandedCost(companyId, branchId, productId, allocatedAmount);
+            doApplyLandedCost(companyId, productId, allocatedAmount);
         }
     }
 
-    private void doApplyLandedCost(Long companyId, Long branchId, Long productId,
+    private void doApplyLandedCost(Long companyId, Long productId,
                                     BigDecimal allocatedAmount) {
         if (allocatedAmount == null || allocatedAmount.compareTo(BigDecimal.ZERO) == 0) {
             return;
         }
 
-        StockOnHand soh = onHands.findByCompanyIdAndBranchIdAndProductId(companyId, branchId, productId)
-                .orElse(null);
-        if (soh == null) {
-            log.warn("InventoryValuation: applyLandedCost — no on-hand row for company={} branch={} product={} " +
-                             "— landed cost delta not applied", companyId, branchId, productId);
+        // ADR-0028 D-2 FIX: landed cost capitalises into the company-product moving average and so
+        // MUST be applied across ALL location rows (mirrors doRecomputeOnReceipt), not a single
+        // branch row. The deprecated single-(company,branch,product) finder also throws
+        // NonUniqueResultException once the product has 2+ location rows in the branch, rolling back
+        // the landed-cost handler TX. Aggregate Σqty/Σvalue, derive one company-product avg, and
+        // sync the avg + re-attributed (row.qty × avg) value to every location row.
+        List<StockOnHand> allRows = onHands.findByCompanyIdAndProductId(companyId, productId);
+        if (allRows.isEmpty()) {
+            log.warn("InventoryValuation: applyLandedCost — no on-hand rows for company={} product={} " +
+                             "— landed cost delta not applied", companyId, productId);
             return;
         }
 
-        BigDecimal onHandVal = soh.getOnHandValue() != null ? soh.getOnHandValue() : BigDecimal.ZERO;
-        BigDecimal newValue  = onHandVal.add(allocatedAmount);
-
-        // Recompute avg_cost = new_value / qty (guard against zero/null qty)
-        BigDecimal qty    = soh.getQuantity();
-        BigDecimal newAvg = soh.getAvgCost();   // default: keep prior avg if qty is zero
-        if (qty != null && qty.compareTo(BigDecimal.ZERO) > 0) {
-            newAvg = round4(newValue.divide(qty, SCALE, RM));
+        BigDecimal totalQty   = BigDecimal.ZERO;
+        BigDecimal totalValue = BigDecimal.ZERO;
+        for (StockOnHand row : allRows) {
+            totalQty   = totalQty.add(row.getQuantity());
+            totalValue = totalValue.add(row.getOnHandValue() != null ? row.getOnHandValue() : BigDecimal.ZERO);
         }
 
-        soh.applyCostRecompute(newAvg, newValue, null);
-        onHands.save(soh);
+        BigDecimal newTotalValue = totalValue.add(allocatedAmount);
+
+        // Recompute the company-product avg = new_total_value / Σqty (guard against zero/null qty:
+        // keep the prior avg if the aggregate qty is non-positive — value still capitalised below).
+        BigDecimal priorAvg = allRows.stream().filter(r -> r.getAvgCost() != null)
+                .map(StockOnHand::getAvgCost).findFirst().orElse(BigDecimal.ZERO);
+        BigDecimal newAvg = priorAvg;
+        if (totalQty.compareTo(BigDecimal.ZERO) > 0) {
+            newAvg = round4(newTotalValue.divide(totalQty, SCALE, RM));
+        }
+
+        // Sync new avg + re-attributed on_hand_value (row.qty × newAvg) to EVERY location row.
+        // Σ (row.qty × newAvg) == totalQty × newAvg == newTotalValue (when totalQty > 0), so the
+        // Σ on_hand_value == GL 1300 invariant holds (the handler posts the same allocatedAmount to GL).
+        for (StockOnHand row : allRows) {
+            BigDecimal rowNewValue = round4(row.getQuantity().multiply(newAvg));
+            row.applyCostRecompute(newAvg, rowNewValue, null);
+            onHands.save(row);
+        }
     }
 
     // -------------------------------------------------------------------------
