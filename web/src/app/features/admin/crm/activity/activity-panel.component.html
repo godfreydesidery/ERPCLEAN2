@@ -1,0 +1,164 @@
+<section class="activity-panel mt-4">
+  <div class="d-flex align-items-center justify-content-between mb-2">
+    <h2 class="h6 mb-0">
+      <i class="bi bi-calendar2-event me-1" aria-hidden="true"></i>Activities
+    </h2>
+    @if (canManage()) {
+      <button type="button" class="btn btn-sm btn-outline-primary"
+              (click)="toggleLogForm()"
+              [attr.aria-expanded]="showLogForm()"
+              aria-controls="logActivityForm">
+        @if (showLogForm()) {
+          <i class="bi bi-x me-1" aria-hidden="true"></i>Cancel
+        } @else {
+          <i class="bi bi-plus me-1" aria-hidden="true"></i>Log Activity
+        }
+      </button>
+    }
+  </div>
+
+  <!-- Log activity form -->
+  @if (showLogForm()) {
+    <div id="logActivityForm" class="card card-body mb-3 border-primary-subtle">
+      <h3 class="h6 mb-3">Log New Activity</h3>
+      <div class="row g-2 mb-2">
+        <div class="col-sm-3">
+          <label class="form-label small text-muted mb-1" for="actFType">
+            Type <span class="text-danger" aria-hidden="true">*</span>
+          </label>
+          <select id="actFType" name="actFType" class="form-select form-select-sm"
+                  [ngModel]="fType()" (ngModelChange)="fType.set($event)"
+                  [disabled]="saving()">
+            @for (opt of activityTypeOptions; track opt.value) {
+              <option [value]="opt.value">{{ opt.label }}</option>
+            }
+          </select>
+        </div>
+        <div class="col-sm-9">
+          <label class="form-label small text-muted mb-1" for="actFSubject">
+            Subject <span class="text-danger" aria-hidden="true">*</span>
+          </label>
+          <input id="actFSubject" name="actFSubject" type="text" class="form-control form-control-sm"
+                 [ngModel]="fSubject()" (ngModelChange)="fSubject.set($event)"
+                 [disabled]="saving()" autocomplete="off"
+                 placeholder="Brief description of the activity" />
+        </div>
+        @if (!isTask()) {
+          <div class="col-sm-4">
+            <label class="form-label small text-muted mb-1" for="actFOccurredAt">Occurred At</label>
+            <input id="actFOccurredAt" name="actFOccurredAt" type="datetime-local"
+                   class="form-control form-control-sm"
+                   [ngModel]="fOccurredAt()" (ngModelChange)="fOccurredAt.set($event)"
+                   [disabled]="saving()" />
+          </div>
+        }
+        @if (isTask()) {
+          <div class="col-sm-4">
+            <label class="form-label small text-muted mb-1" for="actFDueDate">Due Date</label>
+            <input id="actFDueDate" name="actFDueDate" type="date" class="form-control form-control-sm"
+                   [ngModel]="fDueDate()" (ngModelChange)="fDueDate.set($event)"
+                   [disabled]="saving()" />
+          </div>
+        }
+        <div class="col-sm-8">
+          <label class="form-label small text-muted mb-1" for="actFBody">Notes</label>
+          <input id="actFBody" name="actFBody" type="text" class="form-control form-control-sm"
+                 [ngModel]="fBody()" (ngModelChange)="fBody.set($event)"
+                 [disabled]="saving()" autocomplete="off"
+                 placeholder="Optional notes" />
+        </div>
+      </div>
+      @if (formError(); as msg) {
+        <p class="form-error text-danger small mt-1 mb-2" role="alert">{{ msg }}</p>
+      }
+      <div class="d-flex gap-2 mt-1">
+        <button type="button" class="btn btn-sm btn-primary" [disabled]="saving()" (click)="logActivity()">
+          @if (saving()) {
+            <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+          }
+          Log Activity
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" (click)="toggleLogForm()">Cancel</button>
+      </div>
+    </div>
+  }
+
+  <!-- Activity list -->
+  @switch (listState()) {
+    @case ('loading') {
+      <p class="text-muted small d-flex align-items-center gap-2" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading activities…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger small" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load activities.
+      </p>
+    }
+    @default {
+      @if (isEmpty()) {
+        <p class="text-muted small">No activities logged yet.</p>
+      } @else {
+        <div class="table-responsive">
+          <table class="table table-sm table-hover align-middle bg-white">
+            <caption class="visually-hidden">Activities</caption>
+            <thead>
+              <tr>
+                <th scope="col">Type</th>
+                <th scope="col">Subject</th>
+                <th scope="col">Date</th>
+                <th scope="col">Done</th>
+                <th scope="col"><span class="visually-hidden">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of rows(); track row.uid) {
+                <tr>
+                  <td>
+                    <span class="badge" [class]="activityTypeBadgeClass(row.activityType)">
+                      {{ row.activityType }}
+                    </span>
+                  </td>
+                  <td>
+                    {{ row.subject }}
+                    @if (row.body) {
+                      <span class="d-block text-muted small">{{ row.body }}</span>
+                    }
+                  </td>
+                  <td class="small text-muted">
+                    {{ row.dueDate ?? (row.occurredAt ? row.occurredAt.slice(0, 10) : '—') }}
+                  </td>
+                  <td>
+                    @if (row.done) {
+                      <span class="badge text-bg-success">Done</span>
+                    } @else if (row.activityType === 'TASK') {
+                      <span class="badge text-bg-warning">Open</span>
+                    } @else {
+                      <span class="text-muted small">—</span>
+                    }
+                  </td>
+                  <td>
+                    @if (canManage() && row.activityType === 'TASK' && !row.done) {
+                      <button type="button" class="btn btn-sm btn-outline-success"
+                              [disabled]="completingUid() === row.uid"
+                              (click)="complete(row)"
+                              [attr.aria-label]="'Complete task: ' + row.subject">
+                        @if (completingUid() === row.uid) {
+                          <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                        } @else {
+                          <i class="bi bi-check-lg" aria-hidden="true"></i>
+                        }
+                      </button>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <app-paginator [meta]="meta()" [label]="'Activities'" (pageChange)="goToPage($event)" />
+      }
+    }
+  }
+</section>

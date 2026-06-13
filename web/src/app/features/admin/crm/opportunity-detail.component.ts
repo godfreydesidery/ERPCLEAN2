@@ -23,6 +23,7 @@ import {
   UpdateOpportunityRequest,
   WinOpportunityRequest,
 } from './models/crm.model';
+import { ActivityPanelComponent } from './activity/activity-panel.component';
 
 type LoadState = 'loading' | 'idle' | 'error';
 
@@ -33,7 +34,7 @@ type LoadState = 'loading' | 'idle' | 'error';
  */
 @Component({
   selector: 'app-opportunity-detail',
-  imports: [FormsModule, RouterLink, DecimalPipe, SlicePipe],
+  imports: [FormsModule, RouterLink, DecimalPipe, SlicePipe, ActivityPanelComponent],
   templateUrl: './opportunity-detail.component.html',
   styleUrl: './opportunity-detail.component.scss',
 })

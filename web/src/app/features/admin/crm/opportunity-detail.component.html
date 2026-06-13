@@ -469,6 +469,11 @@
             · <a [routerLink]="['/admin/crm/leads/uid', o.sourceLeadUid]" class="small">Source lead</a>
           }
         </p>
+
+        <!-- Activities panel -->
+        <app-activity-panel
+          [companyId]="o.companyId"
+          [opportunityUid]="o.uid" />
       }
     }
   }

@@ -19,6 +19,7 @@ import { CustomerModel } from '../models/party.model';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { UidPickerComponent, UidOption } from '../../../shared/uid-picker/uid-picker.component';
+import { ActivityPanelComponent } from './activity/activity-panel.component';
 
 type LoadState = 'loading' | 'idle' | 'error';
 
@@ -29,7 +30,7 @@ type LoadState = 'loading' | 'idle' | 'error';
  */
 @Component({
   selector: 'app-lead-detail',
-  imports: [FormsModule, RouterLink, SlicePipe, UidPickerComponent],
+  imports: [FormsModule, RouterLink, SlicePipe, UidPickerComponent, ActivityPanelComponent],
   templateUrl: './lead-detail.component.html',
   styleUrl: './lead-detail.component.scss',
 })
