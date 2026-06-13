@@ -311,6 +311,7 @@ export class ShellComponent {
       items: [
         { label: 'Work Orders', route: '/admin/work-orders', icon: 'bi-gear-wide-connected', available: true, permission: 'MANUFACTURING.VIEW' },
         { label: 'WIP Reconciliation', route: '/admin/manufacturing/wip-reconciliation', icon: 'bi-bank', available: true, permission: 'MANUFACTURING.VIEW' },
+        { label: 'Bills of Materials', route: '/admin/boms', icon: 'bi-diagram-3', available: true, permission: 'BOM.VIEW' },
       ],
     },
     // ── FX / Currency ─────────────────────────────────────────────────────────

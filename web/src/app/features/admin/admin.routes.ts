@@ -1034,5 +1034,18 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./sales/blanket/blanket-order-create.component').then((m) => m.BlanketOrderCreateComponent),
   },
+  // ── Bills of Materials ────────────────────────────────────────────────────
+  {
+    path: 'boms',
+    canActivate: [requirePermission('BOM.VIEW')],
+    loadComponent: () =>
+      import('./manufacturing/bom/bom-list.component').then((m) => m.BomListComponent),
+  },
+  {
+    path: 'boms/uid/:uid',
+    canActivate: [requirePermission('BOM.VIEW')],
+    loadComponent: () =>
+      import('./manufacturing/bom/bom-detail.component').then((m) => m.BomDetailComponent),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];
