@@ -1,0 +1,523 @@
+<section class="admin-page">
+  <header class="page-head">
+    <a class="btn btn-sm btn-outline-secondary me-2" routerLink="/admin/fixed-assets"
+       aria-label="Back to Fixed Assets">
+      <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Fixed Assets
+    </a>
+    <h1 class="h4 mb-1">
+      Fixed Asset
+      @if (asset(); as a) {
+        — {{ a.assetNumber }}: {{ a.name }}
+        <span class="badge ms-2" [class]="statusBadgeClass(a.status)">{{ a.status }}</span>
+      }
+    </h1>
+  </header>
+
+  @switch (state()) {
+    @case ('loading') {
+      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading asset…
+      </p>
+    }
+    @case ('error') {
+      <p class="state text-danger" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load asset.
+      </p>
+    }
+    @default {
+      @if (asset(); as a) {
+
+        <!-- ── Key metrics row ─────────────────────────────────────────────── -->
+        <div class="row g-2 mb-4">
+          <div class="col-sm-3">
+            <div class="card card-body text-center py-2">
+              <small class="text-muted">Acquisition Cost</small>
+              <div class="fw-semibold font-monospace">{{ +a.acquisitionCost | number:'1.2-2' }}</div>
+            </div>
+          </div>
+          <div class="col-sm-3">
+            <div class="card card-body text-center py-2">
+              <small class="text-muted">Carrying Cost</small>
+              <div class="fw-semibold font-monospace">{{ +a.carryingCost | number:'1.2-2' }}</div>
+            </div>
+          </div>
+          <div class="col-sm-3">
+            <div class="card card-body text-center py-2">
+              <small class="text-muted">Accum. Depreciation</small>
+              <div class="fw-semibold font-monospace">{{ +a.accumulatedDepreciation | number:'1.2-2' }}</div>
+            </div>
+          </div>
+          <div class="col-sm-3">
+            <div class="card card-body text-center py-2">
+              <small class="text-muted">NBV (Net Book Value)</small>
+              <div class="fw-bold font-monospace">{{ +a.nbv | number:'1.2-2' }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Asset metadata ─────────────────────────────────────────────── -->
+        <dl class="row small mb-4">
+          <dt class="col-sm-3">Asset Number</dt><dd class="col-sm-9 font-monospace">{{ a.assetNumber }}</dd>
+          <dt class="col-sm-3">Category ID</dt><dd class="col-sm-9">{{ a.categoryId }}</dd>
+          <dt class="col-sm-3">Branch ID</dt><dd class="col-sm-9">{{ a.branchId }}</dd>
+          <dt class="col-sm-3">Depreciation Method</dt><dd class="col-sm-9">{{ a.depreciationMethod === 'STRAIGHT_LINE' ? 'Straight Line' : 'Reducing Balance' }}</dd>
+          <dt class="col-sm-3">Life Periods</dt><dd class="col-sm-9">{{ a.lifePeriods }}</dd>
+          @if (a.reducingRate) {
+            <dt class="col-sm-3">Reducing Rate</dt><dd class="col-sm-9">{{ a.reducingRate }}%</dd>
+          }
+          <dt class="col-sm-3">Acquisition Date</dt><dd class="col-sm-9">{{ a.acquisitionDate }}</dd>
+          <dt class="col-sm-3">Dep. Start Date</dt><dd class="col-sm-9">{{ a.depreciationStartDate }}</dd>
+          @if (a.salvageValue) {
+            <dt class="col-sm-3">Salvage Value</dt><dd class="col-sm-9 font-monospace">{{ +a.salvageValue | number:'1.2-2' }}</dd>
+          }
+          @if (a.revaluationReserveBalance && +a.revaluationReserveBalance !== 0) {
+            <dt class="col-sm-3">Reval. Reserve</dt><dd class="col-sm-9 font-monospace">{{ +a.revaluationReserveBalance | number:'1.2-2' }}</dd>
+          }
+          @if (a.location) {
+            <dt class="col-sm-3">Location</dt><dd class="col-sm-9">{{ a.location }}</dd>
+          }
+          @if (a.assetTag) {
+            <dt class="col-sm-3">Asset Tag</dt><dd class="col-sm-9 font-monospace">{{ a.assetTag }}</dd>
+          }
+          @if (a.costCentreId) {
+            <dt class="col-sm-3">Cost Centre ID</dt><dd class="col-sm-9">{{ a.costCentreId }}</dd>
+          }
+          @if (a.sourceBillUid) {
+            <dt class="col-sm-3">Source Bill</dt><dd class="col-sm-9 small font-monospace">{{ a.sourceBillUid }}</dd>
+          }
+          @if (a.disposedAt) {
+            <dt class="col-sm-3">Disposed At</dt><dd class="col-sm-9">{{ a.disposedAt }}</dd>
+          }
+        </dl>
+
+        <!-- ── Last disposal result ───────────────────────────────────────── -->
+        @if (lastDisposal(); as d) {
+          <div class="alert alert-info mb-4" role="status">
+            <strong>Disposal recorded.</strong>
+            Type: {{ d.disposalType }} | Date: {{ d.disposalDate }} |
+            Proceeds: {{ +d.proceedsAmount | number:'1.2-2' }} |
+            NBV at disposal: {{ +d.nbvAtDisposal | number:'1.2-2' }} |
+            <span [class.text-success]="+d.gainLossAmount >= 0" [class.text-danger]="+d.gainLossAmount < 0">
+              Gain/Loss: {{ +d.gainLossAmount | number:'1.2-2' }}
+            </span>
+          </div>
+        }
+
+        <!-- ── Lifecycle action buttons ───────────────────────────────────── -->
+        <div class="d-flex flex-wrap gap-2 mb-3">
+          <!-- Place in service: DRAFT + MANAGE perm -->
+          @if (isDraft() && canManage()) {
+            <button type="button" class="btn btn-success"
+                    (click)="togglePlaceInServiceForm()"
+                    [attr.aria-expanded]="showPlaceInServiceForm()">
+              <i class="bi bi-check-circle me-1" aria-hidden="true"></i>Place in Service
+            </button>
+          }
+
+          <!-- Transfer: DRAFT or IN_SERVICE + MANAGE perm -->
+          @if (!isTerminal() && canManage()) {
+            <button type="button" class="btn btn-outline-primary"
+                    (click)="toggleTransferForm()"
+                    [attr.aria-expanded]="showTransferForm()">
+              <i class="bi bi-arrows-move me-1" aria-hidden="true"></i>Transfer
+            </button>
+          }
+
+          <!-- Revalue: IN_SERVICE + DISPOSE perm -->
+          @if (isInService() && canDispose()) {
+            <button type="button" class="btn btn-outline-info"
+                    (click)="toggleRevalueForm()"
+                    [attr.aria-expanded]="showRevalueForm()">
+              <i class="bi bi-bar-chart-line me-1" aria-hidden="true"></i>Revalue
+            </button>
+          }
+
+          <!-- Dispose (SALE): IN_SERVICE + DISPOSE perm -->
+          @if (isInService() && canDispose()) {
+            <button type="button" class="btn btn-outline-warning"
+                    (click)="toggleDisposeForm()"
+                    [attr.aria-expanded]="showDisposeForm()">
+              <i class="bi bi-cash-coin me-1" aria-hidden="true"></i>Dispose (Sale)
+            </button>
+          }
+
+          <!-- Write-off: IN_SERVICE + DISPOSE perm -->
+          @if (isInService() && canDispose()) {
+            <button type="button" class="btn btn-outline-danger"
+                    (click)="toggleWriteOffForm()"
+                    [attr.aria-expanded]="showWriteOffForm()">
+              <i class="bi bi-x-circle me-1" aria-hidden="true"></i>Write Off
+            </button>
+          }
+        </div>
+
+        <!-- ── Edit form (DRAFT + MANAGE perm) ───────────────────────────── -->
+        @if (isDraft() && canManage()) {
+          <form class="card card-body mb-4" (ngSubmit)="save()" aria-label="Edit fixed asset">
+            <h2 class="h6 mb-3">Edit Asset (DRAFT — financial fields locked after place-in-service)</h2>
+            <div class="row g-2 mb-2">
+              <div class="col-sm-5">
+                <label class="form-label small text-muted mb-1" for="fName">Asset Name <span class="text-danger" aria-hidden="true">*</span></label>
+                <input id="fName" name="fName" type="text" class="form-control"
+                       [ngModel]="fName()" (ngModelChange)="fName.set($event)"
+                       [disabled]="saving()" autocomplete="off" />
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="fLocation">Location</label>
+                <input id="fLocation" name="fLocation" type="text" class="form-control"
+                       [ngModel]="fLocation()" (ngModelChange)="fLocation.set($event)"
+                       [disabled]="saving()" autocomplete="off" />
+              </div>
+              <div class="col-sm-2">
+                <label class="form-label small text-muted mb-1" for="fAssetTag">Asset Tag</label>
+                <input id="fAssetTag" name="fAssetTag" type="text" class="form-control"
+                       [ngModel]="fAssetTag()" (ngModelChange)="fAssetTag.set($event)"
+                       [disabled]="saving()" autocomplete="off" />
+              </div>
+              <div class="col-sm-2">
+                <label class="form-label small text-muted mb-1" for="fCostCentreId">Cost Centre ID</label>
+                <input id="fCostCentreId" name="fCostCentreId" type="text" class="form-control"
+                       [ngModel]="fCostCentreId()" (ngModelChange)="fCostCentreId.set($event)"
+                       [disabled]="saving()" autocomplete="off" />
+              </div>
+            </div>
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-primary" [disabled]="saving()">
+                @if (saving()) {
+                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Saving…
+                } @else {
+                  Save Changes
+                }
+              </button>
+            </div>
+            @if (saveError(); as msg) {
+              <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+            }
+          </form>
+        }
+
+        <!-- ── Place-in-service form ──────────────────────────────────────── -->
+        @if (showPlaceInServiceForm()) {
+          <form class="card card-body mb-4 border-success" (ngSubmit)="placeInService()"
+                aria-label="Place asset in service">
+            <h2 class="h6 mb-3 text-success">Place in Service</h2>
+            <p class="small text-muted mb-3">
+              This will generate the depreciation schedule and post the capitalisation journal (DR Fixed Asset / CR Clearing account).
+              The fiscal period for the posting date must be OPEN.
+            </p>
+            <div class="row g-2 mb-2">
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="fPostingDate">Posting Date <span class="text-danger" aria-hidden="true">*</span></label>
+                <input id="fPostingDate" name="fPostingDate" type="date" class="form-control"
+                       [ngModel]="fPostingDate()" (ngModelChange)="fPostingDate.set($event)"
+                       [disabled]="placingInService()" />
+              </div>
+            </div>
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-success" [disabled]="placingInService()">
+                @if (placingInService()) {
+                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Processing…
+                } @else {
+                  Confirm Place in Service
+                }
+              </button>
+              <button type="button" class="btn btn-outline-secondary" (click)="togglePlaceInServiceForm()">Cancel</button>
+            </div>
+            @if (placeInServiceError(); as msg) {
+              <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+            }
+          </form>
+        }
+
+        <!-- ── Transfer form ──────────────────────────────────────────────── -->
+        @if (showTransferForm()) {
+          <form class="card card-body mb-4 border-primary" (ngSubmit)="transfer()"
+                aria-label="Transfer asset">
+            <h2 class="h6 mb-3 text-primary">Transfer Asset</h2>
+            <p class="small text-muted mb-3">
+              Audit-only transfer (no GL journal). Provide any field(s) to update.
+            </p>
+            <div class="row g-2 mb-2">
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="fTransferBranchId">New Branch ID</label>
+                <input id="fTransferBranchId" name="fTransferBranchId" type="text" class="form-control"
+                       [ngModel]="fTransferBranchId()" (ngModelChange)="fTransferBranchId.set($event)"
+                       [disabled]="transferring()" autocomplete="off" />
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label small text-muted mb-1" for="fTransferLocation">New Location</label>
+                <input id="fTransferLocation" name="fTransferLocation" type="text" class="form-control"
+                       [ngModel]="fTransferLocation()" (ngModelChange)="fTransferLocation.set($event)"
+                       [disabled]="transferring()" autocomplete="off" />
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="fTransferCostCentreId">New Cost Centre ID</label>
+                <input id="fTransferCostCentreId" name="fTransferCostCentreId" type="text" class="form-control"
+                       [ngModel]="fTransferCostCentreId()" (ngModelChange)="fTransferCostCentreId.set($event)"
+                       [disabled]="transferring()" autocomplete="off" />
+              </div>
+            </div>
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-primary" [disabled]="transferring()">
+                @if (transferring()) {
+                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Transferring…
+                } @else {
+                  Confirm Transfer
+                }
+              </button>
+              <button type="button" class="btn btn-outline-secondary" (click)="toggleTransferForm()">Cancel</button>
+            </div>
+            @if (transferError(); as msg) {
+              <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+            }
+          </form>
+        }
+
+        <!-- ── Revalue form ───────────────────────────────────────────────── -->
+        @if (showRevalueForm()) {
+          <form class="card card-body mb-4 border-info" (ngSubmit)="revalue()"
+                aria-label="Revalue asset">
+            <h2 class="h6 mb-3 text-info">Revalue Asset</h2>
+            <p class="small text-muted mb-3">
+              UP: DR Fixed Asset / CR Revaluation Reserve, carrying_cost increases.<br>
+              DOWN: DR Loss / CR Fixed Asset, carrying_cost decreases. Remaining schedule regenerated.
+            </p>
+            <div class="row g-2 mb-2">
+              <div class="col-sm-2">
+                <label class="form-label small text-muted mb-1" for="fRevalDirection">Direction <span class="text-danger" aria-hidden="true">*</span></label>
+                <select id="fRevalDirection" name="fRevalDirection" class="form-select"
+                        [ngModel]="fRevalDirection()" (ngModelChange)="fRevalDirection.set($event)"
+                        [disabled]="revaluing()">
+                  @for (d of directionOptions; track d) {
+                    <option [value]="d">{{ d }}</option>
+                  }
+                </select>
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="fRevalDelta">Delta Amount <span class="text-danger" aria-hidden="true">*</span></label>
+                <input id="fRevalDelta" name="fRevalDelta" type="number" step="0.01" min="0.01" class="form-control"
+                       [ngModel]="fRevalDelta()" (ngModelChange)="fRevalDelta.set($event)"
+                       [disabled]="revaluing()" />
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="fRevalDate">Revaluation Date <span class="text-danger" aria-hidden="true">*</span></label>
+                <input id="fRevalDate" name="fRevalDate" type="date" class="form-control"
+                       [ngModel]="fRevalDate()" (ngModelChange)="fRevalDate.set($event)"
+                       [disabled]="revaluing()" />
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label small text-muted mb-1" for="fRevalReason">Reason</label>
+                <input id="fRevalReason" name="fRevalReason" type="text" class="form-control"
+                       [ngModel]="fRevalReason()" (ngModelChange)="fRevalReason.set($event)"
+                       [disabled]="revaluing()" autocomplete="off" />
+              </div>
+            </div>
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-info text-white" [disabled]="revaluing()">
+                @if (revaluing()) {
+                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Revaluing…
+                } @else {
+                  Confirm Revaluation
+                }
+              </button>
+              <button type="button" class="btn btn-outline-secondary" (click)="toggleRevalueForm()">Cancel</button>
+            </div>
+            @if (revalueError(); as msg) {
+              <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+            }
+          </form>
+        }
+
+        <!-- ── Dispose (SALE) form ────────────────────────────────────────── -->
+        @if (showDisposeForm()) {
+          <form class="card card-body mb-4 border-warning" (ngSubmit)="dispose()"
+                aria-label="Dispose asset">
+            <h2 class="h6 mb-3 text-warning">Dispose Asset (Sale)</h2>
+            <p class="small text-muted mb-3">
+              Charges outstanding depreciation up to disposal period, then posts removal + gain/loss journal.
+              Gain/Loss = Proceeds − NBV. Asset transitions to DISPOSED status.
+            </p>
+            <div class="row g-2 mb-2">
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="fDisposalDate">Disposal Date <span class="text-danger" aria-hidden="true">*</span></label>
+                <input id="fDisposalDate" name="fDisposalDate" type="date" class="form-control"
+                       [ngModel]="fDisposalDate()" (ngModelChange)="fDisposalDate.set($event)"
+                       [disabled]="disposing()" />
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="fProceedsAmount">Proceeds Amount <span class="text-danger" aria-hidden="true">*</span></label>
+                <input id="fProceedsAmount" name="fProceedsAmount" type="number" step="0.01" min="0" class="form-control"
+                       [ngModel]="fProceedsAmount()" (ngModelChange)="fProceedsAmount.set($event)"
+                       [disabled]="disposing()" />
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label small text-muted mb-1" for="fDisposalReason">Reason</label>
+                <input id="fDisposalReason" name="fDisposalReason" type="text" class="form-control"
+                       [ngModel]="fDisposalReason()" (ngModelChange)="fDisposalReason.set($event)"
+                       [disabled]="disposing()" autocomplete="off" />
+              </div>
+            </div>
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-warning" [disabled]="disposing()">
+                @if (disposing()) {
+                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Disposing…
+                } @else {
+                  Confirm Disposal (SALE)
+                }
+              </button>
+              <button type="button" class="btn btn-outline-secondary" (click)="toggleDisposeForm()">Cancel</button>
+            </div>
+            @if (disposeError(); as msg) {
+              <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+            }
+          </form>
+        }
+
+        <!-- ── Write-off form ─────────────────────────────────────────────── -->
+        @if (showWriteOffForm()) {
+          <form class="card card-body mb-4 border-danger" (ngSubmit)="writeOff()"
+                aria-label="Write off asset">
+            <h2 class="h6 mb-3 text-danger">Write Off Asset</h2>
+            <p class="small text-muted mb-3">
+              Proceeds = 0, Loss = full NBV. Asset transitions to WRITTEN_OFF status.
+            </p>
+            <div class="row g-2 mb-2">
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="fWriteOffDate">Write-off Date <span class="text-danger" aria-hidden="true">*</span></label>
+                <input id="fWriteOffDate" name="fWriteOffDate" type="date" class="form-control"
+                       [ngModel]="fWriteOffDate()" (ngModelChange)="fWriteOffDate.set($event)"
+                       [disabled]="writingOff()" />
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label small text-muted mb-1" for="fWriteOffReason">Reason</label>
+                <input id="fWriteOffReason" name="fWriteOffReason" type="text" class="form-control"
+                       [ngModel]="fWriteOffReason()" (ngModelChange)="fWriteOffReason.set($event)"
+                       [disabled]="writingOff()" autocomplete="off" />
+              </div>
+            </div>
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-danger" [disabled]="writingOff()">
+                @if (writingOff()) {
+                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Writing off…
+                } @else {
+                  Confirm Write-off
+                }
+              </button>
+              <button type="button" class="btn btn-outline-secondary" (click)="toggleWriteOffForm()">Cancel</button>
+            </div>
+            @if (writeOffError(); as msg) {
+              <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+            }
+          </form>
+        }
+
+        <!-- ── Depreciation Schedule ──────────────────────────────────────── -->
+        @if (isInService() || schedule().length > 0) {
+          <section aria-labelledby="scheduleHeading" class="mb-4">
+            <h2 id="scheduleHeading" class="h6 mb-2">Depreciation Schedule</h2>
+            @switch (scheduleState()) {
+              @case ('loading') {
+                <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+                  <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading schedule…
+                </p>
+              }
+              @case ('error') {
+                <p class="text-danger small" role="alert">Could not load schedule.</p>
+              }
+              @default {
+                @if (schedule().length === 0) {
+                  <p class="text-muted small">No schedule generated yet.</p>
+                } @else {
+                  <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle bg-white grid">
+                      <caption class="visually-hidden">Depreciation Schedule</caption>
+                      <thead>
+                        <tr>
+                          <th scope="col">#</th>
+                          <th scope="col">Period Date</th>
+                          <th scope="col" class="text-end">Planned Charge</th>
+                          <th scope="col" class="text-end">Accum. After</th>
+                          <th scope="col" class="text-end">NBV After</th>
+                          <th scope="col">Posted</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        @for (line of schedule(); track line.uid) {
+                          <tr>
+                            <td class="text-muted small">{{ line.periodSeq }}</td>
+                            <td class="small">{{ line.periodDate }}</td>
+                            <td class="text-end font-monospace small">{{ +line.plannedCharge | number:'1.2-2' }}</td>
+                            <td class="text-end font-monospace small">{{ +line.accumulatedAfter | number:'1.2-2' }}</td>
+                            <td class="text-end font-monospace small">{{ +line.nbvAfter | number:'1.2-2' }}</td>
+                            <td>
+                              @if (line.posted) {
+                                <span class="badge text-bg-success">Posted</span>
+                              } @else {
+                                <span class="badge text-bg-light text-secondary">Pending</span>
+                              }
+                            </td>
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  </div>
+                }
+              }
+            }
+          </section>
+        }
+
+        <!-- ── Revaluation History ────────────────────────────────────────── -->
+        @if (revaluations().length > 0) {
+          <section aria-labelledby="revalHeading" class="mb-4">
+            <h2 id="revalHeading" class="h6 mb-2">Revaluation History</h2>
+            @switch (revalState()) {
+              @case ('loading') {
+                <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+                  <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading revaluations…
+                </p>
+              }
+              @case ('error') {
+                <p class="text-danger small" role="alert">Could not load revaluations.</p>
+              }
+              @default {
+                <div class="table-responsive">
+                  <table class="table table-sm table-hover align-middle bg-white grid">
+                    <caption class="visually-hidden">Revaluation History</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Date</th>
+                        <th scope="col">Direction</th>
+                        <th scope="col" class="text-end">Delta</th>
+                        <th scope="col" class="text-end">Carrying Before</th>
+                        <th scope="col" class="text-end">Carrying After</th>
+                        <th scope="col">Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (rv of revaluations(); track rv.uid) {
+                        <tr>
+                          <td class="small">{{ rv.revaluationDate }}</td>
+                          <td>
+                            <span class="badge" [class]="rv.direction === 'UP' ? 'text-bg-success' : 'text-bg-danger'">
+                              {{ rv.direction }}
+                            </span>
+                          </td>
+                          <td class="text-end font-monospace small">{{ +rv.deltaAmount | number:'1.2-2' }}</td>
+                          <td class="text-end font-monospace small">{{ +rv.carryingBefore | number:'1.2-2' }}</td>
+                          <td class="text-end font-monospace small">{{ +rv.carryingAfter | number:'1.2-2' }}</td>
+                          <td class="small text-muted">{{ rv.reason || '—' }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              }
+            }
+          </section>
+        }
+
+      }
+    }
+  }
+</section>

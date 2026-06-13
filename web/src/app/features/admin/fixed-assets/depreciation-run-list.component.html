@@ -1,0 +1,132 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Depreciation Runs</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-calendar3 me-1" aria-hidden="true"></i>
+      Posted depreciation runs per fiscal period. Each run is idempotent per company + period.
+    </p>
+  </header>
+
+  <!-- Company selector -->
+  @switch (companyState()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mb-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load companies.
+      </p>
+    }
+    @default {
+      @if (companies().length > 1) {
+        <div class="mb-3" style="max-width:320px">
+          <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+          <select id="companyPicker" name="companyPicker" class="form-select"
+                  [ngModel]="selectedCompanyId()"
+                  (ngModelChange)="onCompanyChange($event)">
+            @for (c of companies(); track c.uid) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+          </select>
+        </div>
+      }
+    }
+  }
+
+  @if (selectedCompanyId()) {
+    <!-- Toolbar -->
+    <div class="d-flex flex-wrap gap-2 mb-3 align-items-end">
+      @if (canDepreciate()) {
+        <a class="btn btn-primary ms-auto" routerLink="/admin/depreciation-runs/post"
+           aria-label="Preview or post a depreciation run">
+          <i class="bi bi-play-circle me-1" aria-hidden="true"></i>Run Depreciation
+        </a>
+      }
+    </div>
+
+    <!-- List states -->
+    @switch (state()) {
+      @case ('loading') {
+        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading runs…
+        </p>
+      }
+      @case ('error') {
+        <p class="state text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load depreciation runs.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="state text-muted">
+          <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>You don't have permission to view depreciation runs.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <p class="state text-muted">No depreciation runs yet. Use "Run Depreciation" to post one.</p>
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-hover align-middle bg-white grid">
+              <caption class="visually-hidden">Depreciation Runs</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Run #</th>
+                  <th scope="col">Fiscal Period</th>
+                  <th scope="col">Posting Date</th>
+                  <th scope="col">Status</th>
+                  <th scope="col" class="text-end">Total Charge</th>
+                  <th scope="col">Assets</th>
+                  <th scope="col">Executed</th>
+                  <th scope="col"><span class="visually-hidden">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (run of rows(); track run.uid) {
+                  <tr>
+                    <td class="font-monospace small">{{ run.runNumber }}</td>
+                    <td class="small">{{ run.fiscalPeriodId }}</td>
+                    <td class="small text-muted">{{ run.postingDate }}</td>
+                    <td><span class="badge text-bg-success">{{ run.status }}</span></td>
+                    <td class="text-end font-monospace small">{{ run.currency }} {{ +run.totalChargeAmount | number:'1.2-2' }}</td>
+                    <td class="text-end small">{{ run.assetCount }}</td>
+                    <td class="small text-muted">{{ run.executedAt.substring(0, 16) }}</td>
+                    <td>
+                      <a class="btn btn-sm btn-outline-primary"
+                         [routerLink]="['/admin/depreciation-runs/uid', run.uid]"
+                         [attr.aria-label]="'Open run ' + run.runNumber">
+                        <i class="bi bi-eye me-1" aria-hidden="true"></i>Open
+                      </a>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Pagination -->
+          @if (meta().totalPages > 1) {
+            <nav aria-label="Depreciation run list pagination" class="d-flex align-items-center gap-3 mt-2">
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      [disabled]="currentPage() === 0"
+                      (click)="prevPage()">
+                <i class="bi bi-chevron-left" aria-hidden="true"></i>
+                <span class="visually-hidden">Previous page</span>
+              </button>
+              <span class="small text-muted">
+                Page {{ meta().page + 1 }} of {{ meta().totalPages }} ({{ meta().totalElements }} total)
+              </span>
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      [disabled]="!meta().hasNext"
+                      (click)="nextPage()">
+                <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                <span class="visually-hidden">Next page</span>
+              </button>
+            </nav>
+          }
+        }
+      }
+    }
+  }
+</section>
