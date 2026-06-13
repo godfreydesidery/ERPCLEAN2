@@ -189,6 +189,15 @@ export class ShellComponent {
         { label: 'Account Ledger', route: '/admin/reporting/account-ledger', icon: 'bi-journal-text', available: true, permission: 'REPORT.LEDGER.VIEW' },
       ],
     },
+    // ── Approvals ─────────────────────────────────────────────────────────────
+    {
+      label: 'Approvals',
+      items: [
+        { label: 'My Inbox', route: '/admin/approvals/inbox', icon: 'bi-inbox', available: true, permission: 'APPROVALS.DECIDE' },
+        { label: 'All Requests', route: '/admin/approvals/requests', icon: 'bi-clipboard-check', available: true, permission: 'APPROVALS.REQUEST.VIEW' },
+        { label: 'Approval Policies', route: '/admin/approvals/policies', icon: 'bi-shield-check', available: true, permission: 'APPROVALS.POLICY.VIEW' },
+      ],
+    },
   ];
 
   /** Nav groups with permission-filtered items. Reactive: recomputes when permissions change. */
