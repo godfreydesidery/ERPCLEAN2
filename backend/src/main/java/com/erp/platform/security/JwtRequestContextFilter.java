@@ -11,6 +11,9 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.Optional;
+import java.util.UUID;
+import org.slf4j.MDC;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -30,11 +33,25 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * as the {@code ApiResponse} envelope by {@code SecurityErrorResponder} via the security
  * exception-translation path). Root may switch into any existing ACTIVE branch unchecked (D-4); a
  * non-existent or archived branch uid is still rejected for everyone (fail closed, D-3).
+ *
+ * <p><b>MDC / correlation-id (ADR-0038 D-2).</b> Every request gets a {@code requestId} — taken
+ * from the {@code X-Request-Id} header if present and non-blank, otherwise generated as a random
+ * UUID. Authenticated requests also push {@code userId}, {@code username}, {@code companyId}, and
+ * {@code branchId} into the SLF4J MDC so every log line for the request is traceable to a user and
+ * tenant. The {@code X-Request-Id} is echoed in the response header for client-side correlation.
+ * MDC is cleared in the {@code finally} block to prevent cross-request leakage on pooled threads.
+ *
+ * <p><b>Known limitation:</b> {@code @Async} outbox dispatcher and {@code @Scheduled} poller run on
+ * threads separate from the request thread. MDC context (requestId, companyId, etc.) does NOT
+ * propagate to async event handlers — log lines from GL/stock handlers triggered by an outbox event
+ * will have empty MDC fields. This is acceptable at current scale; full trace propagation requires a
+ * distributed-tracing bridge (deferred, ADR-0038 D-Fenced #9).
  */
 @Component
 public class JwtRequestContextFilter extends OncePerRequestFilter {
 
     static final String BRANCH_OVERRIDE_HEADER = "X-Branch-Uid";
+    static final String REQUEST_ID_HEADER      = "X-Request-Id";
 
     private final BranchRepository branches;
     private final UserBranchRepository userBranches;
@@ -54,6 +71,13 @@ public class JwtRequestContextFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain chain) throws ServletException, IOException {
+        // D-2 (ADR-0038): generate or accept a correlation id for every request — authenticated or not.
+        String requestId = Optional.ofNullable(request.getHeader(REQUEST_ID_HEADER))
+                .filter(s -> !s.isBlank())
+                .orElseGet(() -> UUID.randomUUID().toString());
+        MDC.put("requestId", requestId);
+        response.setHeader(REQUEST_ID_HEADER, requestId);
+
         try {
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
             if (auth != null && auth.getPrincipal() instanceof Jwt jwt) {
@@ -83,9 +107,17 @@ public class JwtRequestContextFilter extends OncePerRequestFilter {
                 }
 
                 RequestContext.set(principal);
+
+                // D-2: enrich MDC with tenant context so every log line carries user + tenant ids.
+                MDC.put("userId",    String.valueOf(principal.userId()));
+                MDC.put("username",  principal.username());
+                MDC.put("companyId", String.valueOf(principal.companyId()));
+                MDC.put("branchId",  String.valueOf(principal.branchId()));
             }
             chain.doFilter(request, response);
         } finally {
+            // D-2: clear MDC before the thread returns to the pool — must not leak across requests.
+            MDC.clear();
             RequestContext.clear();
         }
     }

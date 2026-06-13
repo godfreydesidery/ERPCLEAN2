@@ -1,8 +1,12 @@
 package com.erp.platform.events;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -58,17 +62,31 @@ public class DomainEventDispatcher {
      */
     private final ObjectProvider<DomainEventDispatcher> self;
 
+    // D-5 (ADR-0038): Micrometer metrics — dispatch timer + failure/retry counter.
+    // The dispatch timer surfaces end-to-end latency per event type; the poison counter makes
+    // the retry loop that was invisible (#20d) observable before it exhausts max-attempts.
+    private final Timer dispatchTimer;
+    private final Counter failureCounter;
+
     @Value("${erp.outbox.max-attempts:5}")
     private int maxAttempts;
 
     DomainEventDispatcher(DomainEventRepository repository,
                           List<DomainEventHandler> handlers,
-                          ObjectProvider<DomainEventDispatcher> self) {
+                          ObjectProvider<DomainEventDispatcher> self,
+                          MeterRegistry meterRegistry) {
         this.repository      = repository;
         this.self            = self;
         // Group handlers by their declared event type at construction time (eager — no per-poll map rebuild).
         this.handlersByType  = handlers.stream()
                 .collect(Collectors.groupingBy(DomainEventHandler::eventType));
+        // D-5: register metrics once at construction — cheap and thread-safe.
+        this.dispatchTimer   = Timer.builder("erp.outbox.dispatch")
+                .description("Time taken to dispatch a single domain event to all its handlers")
+                .register(meterRegistry);
+        this.failureCounter  = Counter.builder("erp.outbox.dispatch.failures")
+                .description("Number of domain event dispatch failures / retries (poison-event signal)")
+                .register(meterRegistry);
     }
 
     /**
@@ -109,16 +127,21 @@ public class DomainEventDispatcher {
             return;
         }
 
+        // D-5: time the full handler chain for this event. Tags by event type for per-type breakdowns.
+        long startNs = System.nanoTime();
         try {
             for (DomainEventHandler handler : handlers) {
                 handler.handle(event);
             }
             event.markDispatched(Instant.now());
             repository.save(event);
+            dispatchTimer.record(System.nanoTime() - startNs, TimeUnit.NANOSECONDS);
             log.debug("Dispatched event uid='{}' type='{}'", event.getUid(), event.getEventType());
         } catch (Exception ex) {
             event.recordFailure(ex.getMessage(), maxAttempts);
             repository.save(event);
+            // D-5: increment failure counter — makes the poison-event retry loop (#20d) visible in metrics.
+            failureCounter.increment();
             log.warn("Failed to dispatch event uid='{}' type='{}' attempt={}: {}",
                     event.getUid(), event.getEventType(), event.getAttemptCount(), ex.getMessage());
         }

@@ -108,6 +108,25 @@
             <version>5.3.0</version>
         </dependency>
 
+        <!-- D-3 (ADR-0038): JSON structured logging for the prod profile via logback-spring.xml.
+             optional=true → non-transitive; still included in THIS module's runtime + fat jar.
+             The prod logback block (LogstashEncoder) resolves at runtime when SPRING_PROFILES_ACTIVE=prod.
+             Tests run without the prod profile so the encoder is never instantiated in the test suite. -->
+        <dependency>
+            <groupId>net.logstash.logback</groupId>
+            <artifactId>logstash-logback-encoder</artifactId>
+            <version>7.4</version>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- D-5 (ADR-0038): Micrometer Prometheus registry — exposes /actuator/prometheus on the
+             management port (9090). Auto-configures PrometheusMeterRegistry in all Spring contexts
+             including test contexts. No IT asserts on the absence of /actuator/prometheus. -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+
         <!-- Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

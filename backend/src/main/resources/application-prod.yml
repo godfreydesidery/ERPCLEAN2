@@ -1,44 +1,40 @@
-# Production profile overrides — activated by SPRING_PROFILES_ACTIVE=prod.
-# Profile-gated so dev and test behaviour (plain-text logging, dev-in-memory JWT,
-# loose health detail) are UNCHANGED.
+# application-prod.yml — production profile overrides (ADR-0038 D-3, D-4).
+# Activated by SPRING_PROFILES_ACTIVE=prod. Profile-gated so dev and test behaviour (plain-text
+# logging, dev-in-memory JWT, loose health detail) is UNCHANGED — Spring profiles do not inherit,
+# so this is an explicit, version-controlled statement of intended prod settings, not a guard.
 #
 # What this file does:
 #   - Enables Kubernetes-style liveness + readiness probes (/actuator/health/liveness,
-#     /actuator/health/readiness) required by the HEALTHCHECK in infra/prod/Dockerfile
-#     and the prod compose healthcheck.
-#   - Exposes the readiness endpoint in the management exposure list.
-#   - Tightens Hikari pool for a single-node topology (tune for your DB tier).
-#   - Ensures debug-level logging from dev.yml cannot leak (belt-and-suspenders:
-#     dev.yml is only active under SPRING_PROFILES_ACTIVE=dev anyway).
+#     /actuator/health/readiness) required by the HEALTHCHECK in infra/prod/Dockerfile + the prod
+#     compose healthcheck (D-4).
+#   - Pins production log levels so verbosity is version-controlled/auditable; the dev profile's
+#     com.erp=DEBUG / hibernate.SQL=DEBUG MUST NOT reach prod (D-3).
+#
+# Hikari pool sizing is intentionally ABSENT (ADR-0038 review): a committed maximum-pool-size becomes
+# the default for every prod deploy regardless of the managed-Postgres connection limit — a footgun.
+# Wire pool sizing via SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE at deploy time; see docs/ops runbook.
+spring:
+  config:
+    activate:
+      on-profile: prod
 
 management:
   endpoint:
     health:
       probes:
-        # Enables /actuator/health/liveness and /actuator/health/readiness.
-        # Required by the Dockerfile HEALTHCHECK and the prod compose healthcheck.
+        # /actuator/health/liveness + /actuator/health/readiness — required by the Dockerfile +
+        # prod compose HEALTHCHECK.
         enabled: true
       show-details: when-authorized
   endpoints:
     web:
       exposure:
-        # Add readiness + liveness to the base health,info set.
         include: health,info
-
-spring:
-  datasource:
-    hikari:
-      # Conservative pool sizing for a single-node topology; tune to your DB tier.
-      maximum-pool-size: 20
-      minimum-idle: 5
-      connection-timeout: 30000
-      idle-timeout: 600000
-      max-lifetime: 1800000
 
 logging:
   level:
     root: INFO
     com.erp: INFO
     org.hibernate.SQL: WARN
-    # Suppress verbose Spring Security debug output in prod
+    org.hibernate.type.descriptor.sql: WARN
     org.springframework.security: WARN
