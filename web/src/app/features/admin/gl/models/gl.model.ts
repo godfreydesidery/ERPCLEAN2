@@ -97,12 +97,18 @@ export interface FiscalPeriodDto {
 }
 
 export interface FiscalYearDto {
+  id: string;
   uid: string;
+  companyId: string;
   yearCode: string;
   startMonth: number;
   startDate: string;
   endDate: string;
-  status: string;
+  status: PeriodStatus;
+  /** Populated on close (ADR-0019 D-7); null when OPEN or after reopen. */
+  closedAt: string | null;
+  closedBy: string | null;
+  closingJournalUid: string | null;
 }
 
 export interface OpenFiscalYearRequest {

@@ -1113,5 +1113,12 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./hr-payroll/statutory/statutory.component').then((m) => m.StatutoryComponent),
   },
+  // ── GL Year-End Close ──────────────────────────────────────────────────────
+  {
+    path: 'gl/year-end',
+    canActivate: [requirePermission('GL.YEAR.CLOSE')],
+    loadComponent: () =>
+      import('./gl/year-end/year-end-close.component').then((m) => m.YearEndCloseComponent),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];

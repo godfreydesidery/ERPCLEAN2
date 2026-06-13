@@ -179,6 +179,7 @@ export class ShellComponent {
         { label: 'Trial Balance', route: '/admin/gl/trial-balance', icon: 'bi-calculator', available: true, permission: 'GL.VIEW' },
         { label: 'Fiscal Periods', route: '/admin/gl/periods', icon: 'bi-calendar3', available: true, permission: 'GL.VIEW' },
         { label: 'Posting Accounts', route: '/admin/gl/config', icon: 'bi-gear', available: true, permission: 'GL.MANAGE' },
+        { label: 'Year-End Close', route: '/admin/gl/year-end', icon: 'bi-calendar-check', available: true, permission: 'GL.YEAR.CLOSE' },
         { label: 'Receivables', route: '/admin/ar/invoices', icon: 'bi-cash-coin', available: true, permission: 'AR.VIEW' },
         { label: 'Record Receipt', route: '/admin/ar/receipts/record', icon: 'bi-receipt', available: true, permission: 'AR.RECEIPT.RECORD' },
         { label: 'Customer Statement', route: '/admin/ar/statement', icon: 'bi-file-earmark-text', available: true, permission: 'AR.STATEMENT.VIEW' },
