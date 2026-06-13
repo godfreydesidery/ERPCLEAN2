@@ -293,3 +293,40 @@ genuine HIGHs (fixed) + 1 MEDIUM (deferred). **Full suite green** (`mvn verify` 
 | 19-d7 | procurement-depth | Return-cost reads `goods_receipt_lines.unit_cost_amount` snapshot rather than the GOODS_RECEIPT movement rows. | ADR-0027 D-7 explicitly permits the line-cost convenience; only a manual data-fix to the line cost could diverge it. |
 
 **Method note:** the synthesis cross-checked each claimed fix against the actual merged `feat/fix-*` diff (only counted as fixed if the diff genuinely addressed it). The two `inventory-depth` post-review HIGHs (19-iv4/iv5) were caught precisely *because* the synthesis flagged the original fixes as PARTIAL and an adversarial-verify pass confirmed them against the Σ on_hand_value == GL 1300 invariant — exactly the failure mode a single review pass would have shipped. The 14th module (**documents**, ADR-0023) had no confirmed BLOCKER/HIGH in its review and was not in the fix fan-out.
+
+## Finding #20 — QA fresh-data full e2e (Phase-B all-module seed, 2026-06-13)
+
+QA box `16.170.11.41` **wiped + redeployed fresh from `develop`** (all 14 backends + their new
+frontends), then seeded with LIVE data across every module so QA can browse populated screens:
+Tier-1 bulk (`e2e/seed-and-flow.js` — 6 branches, 100 users, 50 products, 50 suppliers, **1000
+customers**, PO→receive→20 sales invoices; **0 issues**, stock + invoice-number assertions pass) +
+a new **Phase-B seeder** (`e2e/phaseb-seed.js`, 10 authored module seed-fns) + a focused **top-up**
+(`e2e/phaseb-topup.js`) for CRM + cost-centre. The all-module seed surfaced **3 genuine backend
+bugs** the 785-test suite missed (all FIXED on `develop` + regression-tested) plus 1 config-interaction
+finding.
+
+| # | Sev | Status | Area | Issue → Fix |
+|---|-----|--------|------|-------------|
+| 20a | BLOCKER | **FIXED** (9798a66) | crm / OpportunityServiceImpl.create | `opportunities.save(opp)` ran BEFORE `setOpportunityNumber(number)`; `opportunity_number` is NOT NULL and the audit query's autoflush attempted the INSERT with a null number first → `null value violates not-null constraint` → **every opportunity create 500'd** (CRM unusable). Fix: assign the number BEFORE save (the documented autoflush-ordering trap; same class as AP bill-number #15). Regression `OpportunityServiceIT` (e7a556b) asserts a non-null OPP- number persists. Verified live on QA (OPP-0007 created). |
+| 20b | BLOCKER | **FIXED** (9798a66) | documents / GeneratedDocument.sourceParams | String mapped to a JSONB column with only `columnDefinition="JSONB"` → Hibernate bound it as varchar, Postgres rejected the implicit varchar→jsonb cast → **every parameterised document render 500'd**. Fix: add `@JdbcTypeCode(SqlTypes.JSON)` (the house pattern from SalesInvoice/AuditLog/DomainEvent). Regression `DocumentSourceParamsJsonbIT` (e7a556b) round-trips a JSON sourceParams through the real JSONB column. |
+| 20c | HIGH | **FIXED** (9955437) | costing / BootstrapRunner | `DimensionSeeder.seedBuiltIns()` (the COST_CENTRE + DEPARTMENT built-ins, ADR-0025 D-9) existed with a javadoc saying "Called from CompanyService.create or BootstrapRunner" but was wired into **NEITHER** → a freshly-bootstrapped company had **zero costing dimensions**, making the entire cost-centre module (dimension values, GL dimension tagging) unusable on a fresh install. Fix: call `dimensionSeeder.seedBuiltIns(company.getId())` in `BootstrapRunner` with the other seeders (idempotent). Verified live: COST_CENTRE + DEPARTMENT now seed at bootstrap → cost-centre seed then created 22 dimension values. |
+| 20d | MEDIUM | **OPEN** (config-interaction; documented) | costing / GL posters | Making a dimension **mandatory** (`PATCH /dimensions/uid/{uid}/mandatory {mandatory:true}`) causes the GL dimension-validation (the ADR-0025 cost-centre BLOCKER gate) to **reject every automated GL posting that doesn't tag that dimension** — observed: `STOCK.RECEIVED` from a goods-receipt became a poison event (`UnexpectedRollbackException` → retried forever) because `InventoryGlPoster` does not supply a COST_CENTRE value. The automated posters (inventory, and by inspection sales/AP/payroll) post GL without dimension tags, so a mandatory dimension breaks document-driven postings, not just manual journals. The validation itself is correct (it's the D-4 gate working); the gap is that the automated posters don't carry dimension context, so **mandatory dimensions are only safe once every poster threads a dimension value (or mandatory is scoped to manual journals only)**. WORKAROUND on QA: kept the dimension OPTIONAL (un-set mandatory, poison event then drained). The `phaseb-seed` cost-centre fn should NOT set a dimension mandatory until this is resolved. Worth an ADR-0025 follow-up: either default-tag automated postings (e.g. a branch's default cost centre) or make `mandatory` apply only to user-entered journals. |
+
+**Seed-script (NOT app) notes:** the generated CRM seed-fn's stage-creation 500'd because bootstrap
+already seeds the 5 pipeline stages (`uq_pipeline_stage_company_order` dup — app correctly rejects,
+though as a 500 not a 409 — minor), and its later steps gated on the created-count rather than the
+fetched-stage list, so it reported 0; the `phaseb-topup.js` script (using the bootstrap stages)
+created **16 leads + 10 opportunities** live. Dimensions are seeded built-ins (no POST endpoint) —
+the topup creates dimension *values* only.
+
+**Live-data inventory on QA after the run** (`http://16.170.11.41/`, login `rootadmin`): customers
+1000 · products 59 · employees 4 + 2 payroll runs + 2 loans · fixed-assets 7 (+ categories,
+depreciation/disposal/reval) · work-orders 6 (released/issued/completed/cancelled) · projects 4 (+ tasks,
+timesheets) · budgets 4 (+ 6 versions, approvals/rejections/recalls) · approval-policies 5 · CRM 16 leads
++ 10 opportunities · cost-centre 2 dimensions + 22 values · documents (branding + 6 templates + rendered) ·
+notifications (preferences + type toggles + delivery log). UI smoke 6/7 (0 console errors, 0 API 5xx;
+the 1 "login" fail is a driver-selector quirk — login returns a JWT and all authed screens render).
+
+**A re-seed convenience:** `e2e/phaseb-seed.js` + `e2e/phaseb-topup.js` are reusable operator tools
+(kept in `e2e/`, uncommitted like the other drivers) to repopulate a freshly-wiped QA box across all
+Phase-B modules.
