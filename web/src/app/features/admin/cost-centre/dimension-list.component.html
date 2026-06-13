@@ -1,0 +1,134 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Cost Centre Dimensions</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-diagram-3 me-1" aria-hidden="true"></i>
+      Dimension types (Cost Centre, Department, etc.) seeded per company. Toggle mandatory to require a value on every posting.
+    </p>
+  </header>
+
+  <!-- Company selector -->
+  @switch (companyState()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mb-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load companies.
+      </p>
+    }
+    @default {
+      @if (companies().length > 1) {
+        <div class="mb-3" style="max-width:320px">
+          <label class="form-label small text-muted mb-1" for="dimCompanyPicker">Company</label>
+          <select id="dimCompanyPicker" name="dimCompanyPicker" class="form-select"
+                  [ngModel]="selectedCompanyId()"
+                  (ngModelChange)="onCompanyChange($event)">
+            @for (c of companies(); track c.uid) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+          </select>
+        </div>
+      }
+    }
+  }
+
+  @if (selectedCompanyId()) {
+    <div class="d-flex mb-3">
+      <a class="btn btn-sm btn-outline-secondary ms-auto"
+         routerLink="/admin/cost-centre/values"
+         aria-label="Go to dimension values">
+        <i class="bi bi-list-ul me-1" aria-hidden="true"></i>
+        Dimension Values
+      </a>
+    </div>
+
+    @switch (state()) {
+      @case ('loading') {
+        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading dimensions…
+        </p>
+      }
+      @case ('error') {
+        <p class="state text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load dimensions. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="state text-muted d-flex align-items-center gap-2">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view dimensions.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <p class="state text-muted">No dimensions found for this company.</p>
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-hover align-middle bg-white grid">
+              <caption class="visually-hidden">Dimension types</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Code</th>
+                  <th scope="col">Name</th>
+                  <th scope="col">Slot</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Mandatory</th>
+                  <th scope="col">Built-in</th>
+                  <th scope="col"><span class="visually-hidden">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (dim of rows(); track dim.uid) {
+                  <tr>
+                    <td class="font-monospace">{{ dim.code }}</td>
+                    <td>{{ dim.name }}</td>
+                    <td><span class="badge text-bg-info">{{ dim.slot }}</span></td>
+                    <td>
+                      <span class="badge" [class]="statusBadgeClass(dim.status)">{{ dim.status }}</span>
+                    </td>
+                    <td>
+                      @if (dim.mandatory) {
+                        <span class="badge text-bg-warning">Mandatory</span>
+                      } @else {
+                        <span class="text-muted small">Optional</span>
+                      }
+                    </td>
+                    <td>
+                      @if (dim.builtIn) {
+                        <i class="bi bi-lock text-muted" aria-label="Built-in" title="Built-in"></i>
+                      }
+                    </td>
+                    <td>
+                      @if (canManage()) {
+                        <button type="button"
+                                class="btn btn-sm btn-outline-secondary"
+                                [disabled]="rowBusyUid() === dim.uid"
+                                (click)="toggleMandatory(dim)"
+                                [attr.aria-label]="'Toggle mandatory for ' + dim.name">
+                          @if (rowBusyUid() === dim.uid) {
+                            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                          } @else {
+                            @if (dim.mandatory) {
+                              <i class="bi bi-toggle-on me-1" aria-hidden="true"></i>Set Optional
+                            } @else {
+                              <i class="bi bi-toggle-off me-1" aria-hidden="true"></i>Set Mandatory
+                            }
+                          }
+                        </button>
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      }
+    }
+  }
+</section>

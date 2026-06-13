@@ -157,6 +157,33 @@ export class ShellComponent {
         { label: 'Goods Receipts', route: '/admin/goods-receipts', icon: 'bi-box-arrow-in-down', available: true, permission: 'PURCHASE.ORDER.VIEW' },
       ],
     },
+    // ── Costing ──────────────────────────────────────────────────────────────
+    {
+      label: 'Costing',
+      items: [
+        {
+          label: 'Dimension Types',
+          route: '/admin/cost-centre/dimensions',
+          icon: 'bi-diagram-3',
+          available: true,
+          permission: 'COSTING.VIEW',
+        },
+        {
+          label: 'Dimension Values',
+          route: '/admin/cost-centre/values',
+          icon: 'bi-tags',
+          available: true,
+          permission: 'COSTING.VIEW',
+        },
+        {
+          label: 'Sliced Trial Balance',
+          route: '/admin/cost-centre/report',
+          icon: 'bi-bar-chart-steps',
+          available: true,
+          permission: 'COSTING.VIEW',
+        },
+      ],
+    },
     {
       label: 'Accounting',
       items: [

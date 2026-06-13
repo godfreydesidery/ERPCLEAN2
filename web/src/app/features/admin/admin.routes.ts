@@ -466,5 +466,30 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./reporting/account-ledger.component').then((m) => m.AccountLedgerComponent),
   },
+  // ── Costing (Cost Centres / Dimensions) ──────────────────────────────────
+  {
+    path: 'cost-centre/dimensions',
+    canActivate: [requirePermission('COSTING.VIEW')],
+    loadComponent: () =>
+      import('./cost-centre/dimension-list.component').then((m) => m.DimensionListComponent),
+  },
+  {
+    path: 'cost-centre/values',
+    canActivate: [requirePermission('COSTING.VIEW')],
+    loadComponent: () =>
+      import('./cost-centre/dimension-value-list.component').then((m) => m.DimensionValueListComponent),
+  },
+  {
+    path: 'cost-centre/values/uid/:uid',
+    canActivate: [requirePermission('COSTING.VIEW')],
+    loadComponent: () =>
+      import('./cost-centre/dimension-value-detail.component').then((m) => m.DimensionValueDetailComponent),
+  },
+  {
+    path: 'cost-centre/report',
+    canActivate: [requirePermission('COSTING.VIEW')],
+    loadComponent: () =>
+      import('./cost-centre/costing-report.component').then((m) => m.CostingReportComponent),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];
