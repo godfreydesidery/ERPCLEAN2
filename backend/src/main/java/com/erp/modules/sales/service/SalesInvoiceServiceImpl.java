@@ -50,12 +50,16 @@ import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
+import com.erp.platform.common.money.ConvertedAmount;
+import com.erp.platform.common.money.FxDocumentConverter;
 import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -96,6 +100,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     /** ADR-0014 D-9: credit-limit check at finalise for CREDIT_ACCOUNT customers. */
     private final ArBalanceService arBalanceService;
     private final PermissionResolver permissionResolver;
+    /** ADR-0036 D-3/D-4: converts face amounts to base and stamps the FX triple at finalise. */
+    private final FxDocumentConverter fxConverter;
 
     public SalesInvoiceServiceImpl(SalesInvoiceRepository invoices,
                                    SalesInvoiceLineRepository lines,
@@ -116,7 +122,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                                    RouteService routeService,
                                    RouteRepository routeRepository,
                                    ArBalanceService arBalanceService,
-                                   PermissionResolver permissionResolver) {
+                                   PermissionResolver permissionResolver,
+                                   FxDocumentConverter fxConverter) {
         this.invoices = invoices;
         this.lines = lines;
         this.payments = payments;
@@ -137,6 +144,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         this.routeRepository = routeRepository;
         this.arBalanceService = arBalanceService;
         this.permissionResolver = permissionResolver;
+        this.fxConverter = fxConverter;
     }
 
     // -------------------------------------------------------------------------
@@ -213,6 +221,18 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
 
         // Recompute totals one final time and freeze
         totalsCalc.recompute(inv, lineList);
+
+        // ADR-0036 D-4: stamp the immutable FX rate-triple at finalise (totals are now frozen).
+        // toBase converts the gross to company base currency; for a base-currency invoice it is the
+        // identity short-circuit (rate=1, base==face) — the day-1 no-regression path (D-8). A foreign
+        // currency with no effective rate throws FxRateNotFoundException (the document cannot finalise
+        // without a rate — OQ-FX-06). The poster (GLPostingSafeInvoker) re-applies the same effective
+        // rate on the same posting date, so the stamped base equals the posted-journal base.
+        ConvertedAmount fxConv = fxConverter.toBase(
+                inv.getGrossTotalAmount(), inv.getCurrency(), inv.getCompanyId(), LocalDate.now());
+        inv.setFxRate(fxConv.rate());
+        inv.setBaseGrossTotalAmount(fxConv.baseAmount());
+        inv.setRateAt(fxConv.rateAt());
 
         // ADR-0014 D-9/D-10: resolve customer kind to decide cash-vs-credit path.
         Customer customer = customers.findById(inv.getCustomerId())

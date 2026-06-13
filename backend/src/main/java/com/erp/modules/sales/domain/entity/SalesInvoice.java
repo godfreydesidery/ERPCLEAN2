@@ -131,18 +131,28 @@ public class SalesInvoice extends UidEntity {
     // Stored on the document, NOT on journal_lines (the base-only-ledger stance, D-3).
     // -------------------------------------------------------------------------
 
-    /** Effective exchange rate at finalise (units of base per 1 foreign unit, scale 8). DEFAULT 1. */
-    @Column(name = "fx_rate", nullable = false, precision = 19, scale = 8, updatable = false)
+    /**
+     * Effective exchange rate at finalise (units of base per 1 foreign unit, scale 8). DEFAULT 1.
+     * Written once at finalise; service enforces immutability (no setter called after FINALISED).
+     * updatable=true because this column is NULL/DEFAULT until the DRAFT→FINALISED UPDATE (D-4).
+     */
+    @Column(name = "fx_rate", nullable = false, precision = 19, scale = 8)
     @Setter
     private BigDecimal fxRate = BigDecimal.ONE;
 
-    /** Gross total converted to company base currency at {@code fxRate}. NULL until finalised. */
-    @Column(name = "base_gross_total_amount", precision = 19, scale = 4, updatable = false)
+    /**
+     * Gross total converted to company base currency at {@code fxRate}. NULL until finalised.
+     * Written once at finalise by the FX stamp (ADR-0036 D-4); service enforces immutability.
+     */
+    @Column(name = "base_gross_total_amount", precision = 19, scale = 4)
     @Setter
     private BigDecimal baseGrossTotalAmount;
 
-    /** Timestamp when the rate was stamped (matches the rate effective date, immutable). */
-    @Column(name = "rate_at", updatable = false)
+    /**
+     * Timestamp when the rate was stamped (matches the rate effective date, immutable after write).
+     * Written once at finalise; updatable=true required so the DRAFT→FINALISED UPDATE persists it.
+     */
+    @Column(name = "rate_at")
     @Setter
     private Instant rateAt;
 
