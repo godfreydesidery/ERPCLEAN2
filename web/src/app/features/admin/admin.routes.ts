@@ -950,6 +950,24 @@ export const ADMIN_ROUTES: Routes = [
       import('./purchases/requisition/requisition-detail.component').then(
         (m) => m.RequisitionDetailComponent,
       ),
+  // ── RFQ / Sourcing ────────────────────────────────────────────────────────
+  {
+    path: 'rfqs',
+    canActivate: [requirePermission('PURCHASE.RFQ.VIEW')],
+    loadComponent: () =>
+      import('./purchases/rfq/rfq-list.component').then((m) => m.RfqListComponent),
+  },
+  {
+    path: 'rfqs/create',
+    canActivate: [requirePermission('PURCHASE.RFQ.CREATE')],
+    loadComponent: () =>
+      import('./purchases/rfq/rfq-create.component').then((m) => m.RfqCreateComponent),
+  },
+  {
+    path: 'rfqs/uid/:uid',
+    canActivate: [requirePermission('PURCHASE.RFQ.VIEW')],
+    loadComponent: () =>
+      import('./purchases/rfq/rfq-detail.component').then((m) => m.RfqDetailComponent),
   },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];

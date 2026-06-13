@@ -1,0 +1,336 @@
+<section class="admin-page">
+  <header class="page-head">
+    <a class="back-link text-muted small" routerLink="/admin/rfqs">
+      <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to RFQs
+    </a>
+    <h1 class="h4 mb-1 mt-1">RFQ Detail</h1>
+  </header>
+
+  @switch (state()) {
+    @case ('loading') {
+      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+      </p>
+    }
+    @case ('error') {
+      <p class="state text-danger" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load RFQ. Please try again.
+      </p>
+    }
+    @case ('forbidden') {
+      <p class="state text-muted d-flex align-items-center gap-2">
+        <i class="bi bi-shield-lock" aria-hidden="true"></i>
+        You don't have permission to view this RFQ.
+      </p>
+    }
+    @default {
+      @if (rfq(); as r) {
+
+        <!-- Header card -->
+        <div class="card card-body mb-3 bg-light border-0">
+          <dl class="row g-1 mb-0" style="font-size:0.875rem">
+            <dt class="col-sm-2 text-muted fw-normal">RFQ #</dt>
+            <dd class="col-sm-10 mb-0 font-monospace">{{ r.rfqNumber }}</dd>
+            <dt class="col-sm-2 text-muted fw-normal">Status</dt>
+            <dd class="col-sm-10 mb-0">
+              <span class="badge" [class]="rfqStatusBadgeClass(r.status)">{{ r.status }}</span>
+            </dd>
+            <dt class="col-sm-2 text-muted fw-normal">Response Due</dt>
+            <dd class="col-sm-10 mb-0">{{ r.responseDueDate ?? '—' }}</dd>
+            <dt class="col-sm-2 text-muted fw-normal">Sent At</dt>
+            <dd class="col-sm-10 mb-0">{{ r.sentAt ? (r.sentAt | date:'dd/MM/yyyy HH:mm') : '—' }}</dd>
+            @if (r.awardedPoUid) {
+              <dt class="col-sm-2 text-muted fw-normal">Awarded PO</dt>
+              <dd class="col-sm-10 mb-0">
+                <a [routerLink]="['/admin/purchase-orders/uid', r.awardedPoUid]"
+                   class="font-monospace">
+                  {{ r.awardedPoUid }}
+                </a>
+              </dd>
+            }
+            @if (r.notes) {
+              <dt class="col-sm-2 text-muted fw-normal">Notes</dt>
+              <dd class="col-sm-10 mb-0">{{ r.notes }}</dd>
+            }
+          </dl>
+        </div>
+
+        <!-- Lifecycle actions -->
+        @if (actionError(); as msg) {
+          <div class="alert alert-danger mb-2" role="alert">
+            <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
+            {{ msg }}
+          </div>
+        }
+
+        <div class="d-flex flex-wrap gap-2 mb-4">
+          @if (r.status === 'DRAFT' && canCreate()) {
+            <button type="button" class="btn btn-primary"
+                    (click)="send()" [disabled]="sending()">
+              @if (sending()) {
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                Sending…
+              } @else {
+                <i class="bi bi-send me-1" aria-hidden="true"></i>
+                Send to Suppliers
+              }
+            </button>
+          }
+          @if (r.status !== 'CANCELLED' && r.status !== 'AWARDED' && canCreate()) {
+            <button type="button" class="btn btn-outline-danger"
+                    (click)="cancel()" [disabled]="cancelling()">
+              @if (cancelling()) {
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                Cancelling…
+              } @else {
+                <i class="bi bi-x-circle me-1" aria-hidden="true"></i>
+                Cancel RFQ
+              }
+            </button>
+          }
+          @if ((r.status === 'SENT' || r.status === 'QUOTES_RECEIVED') && canCaptureQuote()) {
+            <button type="button" class="btn btn-outline-secondary"
+                    (click)="toggleCaptureForm()"
+                    [attr.aria-expanded]="showCaptureForm()"
+                    aria-controls="captureQuoteForm">
+              <i class="bi bi-plus-circle me-1" aria-hidden="true"></i>
+              {{ showCaptureForm() ? 'Hide Quote Form' : 'Capture Supplier Quote' }}
+            </button>
+          }
+        </div>
+
+        <!-- RFQ Lines -->
+        <h2 class="h6 mb-2">Line Items</h2>
+        <div class="table-responsive mb-4">
+          <table class="table table-sm table-bordered align-middle">
+            <caption class="visually-hidden">RFQ line items</caption>
+            <thead class="table-light">
+              <tr>
+                <th scope="col">#</th>
+                <th scope="col">Product</th>
+                <th scope="col">Unit</th>
+                <th scope="col" class="text-end">Qty Requested</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (line of r.lines; track line.uid) {
+                <tr>
+                  <td class="small text-muted">{{ line.lineNo }}</td>
+                  <td>
+                    <span class="font-monospace small">{{ line.productCode }}</span>
+                    <br /><span class="small text-muted">{{ line.productName }}</span>
+                  </td>
+                  <td class="small">{{ line.unitName }}</td>
+                  <td class="text-end font-monospace">{{ line.quantity }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Invited suppliers -->
+        <h2 class="h6 mb-2">Invited Suppliers</h2>
+        @if (r.supplierUids.length === 0) {
+          <p class="small text-muted mb-4">No suppliers were invited.</p>
+        } @else {
+          <ul class="list-group list-group-flush mb-4">
+            @for (uid of r.supplierUids; track uid) {
+              <li class="list-group-item small py-1 px-0">{{ supplierLabel(uid) }}</li>
+            }
+          </ul>
+        }
+
+        <!-- Capture quote form -->
+        @if (showCaptureForm()) {
+          <form id="captureQuoteForm" class="card card-body mb-4"
+                (ngSubmit)="submitCapture()" aria-label="Capture supplier quote">
+            <h2 class="h6 mb-3">Capture Supplier Quote</h2>
+
+            <div class="row g-3 mb-3">
+              <div class="col-sm-5">
+                <label class="form-label small text-muted mb-1" for="captureSupplier">
+                  Supplier <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <app-uid-picker
+                  id="captureSupplier"
+                  [ngModel]="captureSupplierUid()"
+                  (ngModelChange)="captureSupplierUid.set($event)"
+                  name="captureSupplier"
+                  [options]="supplierOptions()"
+                  placeholder="Select supplier"
+                  [required]="true"
+                  [disabled]="capturing()" />
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="captureValidUntil">
+                  Valid Until
+                </label>
+                <input id="captureValidUntil" name="captureValidUntil" type="date"
+                       class="form-control"
+                       [ngModel]="captureValidUntil()" (ngModelChange)="captureValidUntil.set($event)"
+                       [disabled]="capturing()" />
+              </div>
+              <div class="col-sm-2">
+                <label class="form-label small text-muted mb-1" for="captureLeadTime">
+                  Lead Time (days)
+                </label>
+                <input id="captureLeadTime" name="captureLeadTime" type="number" min="0"
+                       class="form-control"
+                       [ngModel]="captureLeadTimeDays()" (ngModelChange)="captureLeadTimeDays.set($event)"
+                       [disabled]="capturing()" />
+              </div>
+            </div>
+
+            <div class="mb-3" style="max-width:480px">
+              <label class="form-label small text-muted mb-1" for="captureQNotes">Notes</label>
+              <input id="captureQNotes" name="captureQNotes" type="text" class="form-control"
+                     [ngModel]="captureNotes()" (ngModelChange)="captureNotes.set($event)"
+                     [disabled]="capturing()" autocomplete="off" />
+            </div>
+
+            <h3 class="h6 mb-2">Quoted Prices</h3>
+            <div class="table-responsive mb-3">
+              <table class="table table-sm table-bordered align-middle">
+                <caption class="visually-hidden">Quote lines — enter prices</caption>
+                <thead class="table-light">
+                  <tr>
+                    <th scope="col">Product</th>
+                    <th scope="col">Unit</th>
+                    <th scope="col" class="text-end">RFQ Qty</th>
+                    <th scope="col" style="width:140px">Quoted Qty</th>
+                    <th scope="col" style="width:160px">Unit Price <span class="text-danger" aria-hidden="true">*</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (cl of captureLines(); track cl.rfqLineUid; let i = $index) {
+                    <tr>
+                      <td>
+                        <span class="small">{{ cl.productName }}</span>
+                      </td>
+                      <td class="small">{{ cl.unitName }}</td>
+                      <td class="text-end font-monospace small">{{ cl.rfqQty }}</td>
+                      <td>
+                        <label class="visually-hidden" [for]="'cqty-' + i">
+                          Quoted qty for {{ cl.productName }}
+                        </label>
+                        <input [id]="'cqty-' + i" [name]="'cqty-' + i"
+                               type="number" min="0.001" step="any"
+                               class="form-control form-control-sm"
+                               [ngModel]="cl.quotedQty"
+                               (ngModelChange)="updateCaptureLineQty(i, $event)"
+                               [disabled]="capturing()" />
+                      </td>
+                      <td>
+                        <label class="visually-hidden" [for]="'cprice-' + i">
+                          Unit price for {{ cl.productName }}
+                        </label>
+                        <input [id]="'cprice-' + i" [name]="'cprice-' + i"
+                               type="number" min="0" step="any"
+                               class="form-control form-control-sm"
+                               [ngModel]="cl.unitPriceAmount"
+                               (ngModelChange)="updateCaptureLinePrice(i, $event)"
+                               [disabled]="capturing()"
+                               placeholder="0.00" />
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+
+            @if (captureError(); as msg) {
+              <div class="alert alert-danger" role="alert">
+                <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
+                {{ msg }}
+              </div>
+            }
+
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-success" [disabled]="capturing()">
+                @if (capturing()) {
+                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  Saving…
+                } @else {
+                  <i class="bi bi-check-circle me-1" aria-hidden="true"></i>
+                  Save Quote
+                }
+              </button>
+              <button type="button" class="btn btn-outline-secondary"
+                      (click)="toggleCaptureForm()">Cancel</button>
+            </div>
+          </form>
+        }
+
+        <!-- Captured supplier quotes -->
+        <h2 class="h6 mb-2">Supplier Quotes</h2>
+
+        @switch (quotesState()) {
+          @case ('loading') {
+            <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+              <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading quotes…
+            </p>
+          }
+          @case ('error') {
+            <p class="text-danger" role="alert">Could not load supplier quotes.</p>
+          }
+          @default {
+            @if (quotes().length === 0) {
+              <p class="small text-muted mb-4">No quotes captured yet.</p>
+            } @else {
+              <div class="table-responsive mb-4">
+                <table class="table table-hover align-middle bg-white">
+                  <caption class="visually-hidden">Captured supplier quotes</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Quote #</th>
+                      <th scope="col">Supplier</th>
+                      <th scope="col">Status</th>
+                      <th scope="col" class="text-end">Total</th>
+                      <th scope="col">Currency</th>
+                      <th scope="col">Valid Until</th>
+                      <th scope="col">Lead (days)</th>
+                      <th scope="col"><span class="visually-hidden">Award</span></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (q of quotes(); track q.uid) {
+                      <tr>
+                        <td class="font-monospace small">{{ q.quoteNumber }}</td>
+                        <td>{{ q.supplierCode }} — {{ q.supplierName }}</td>
+                        <td>
+                          <span class="badge" [class]="quoteStatusBadgeClass(q.status)">{{ q.status }}</span>
+                        </td>
+                        <td class="text-end font-monospace">{{ +q.quoteTotalAmount | number:'1.2-2' }}</td>
+                        <td class="small">{{ q.currency }}</td>
+                        <td class="small">{{ q.validUntil ?? '—' }}</td>
+                        <td class="small text-end">{{ q.leadTimeDays ?? '—' }}</td>
+                        <td>
+                          @if ((r.status === 'SENT' || r.status === 'QUOTES_RECEIVED') && q.status === 'RECEIVED' && canAward()) {
+                            <button type="button" class="btn btn-sm btn-success"
+                                    (click)="award(q.uid)"
+                                    [disabled]="awarding()"
+                                    [attr.aria-label]="'Award RFQ to ' + q.supplierName">
+                              @if (awarding() && awardingQuoteUid() === q.uid) {
+                                <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                              } @else {
+                                <i class="bi bi-trophy me-1" aria-hidden="true"></i>
+                              }
+                              Award
+                            </button>
+                          }
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+              <app-paginator [meta]="quotesMeta()" [label]="'Quotes'" (pageChange)="loadQuotes()" />
+            }
+          }
+        }
+
+      }
+    }
+  }
+</section>

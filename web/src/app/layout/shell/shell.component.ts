@@ -161,6 +161,7 @@ export class ShellComponent {
         { label: 'Purchase Orders', route: '/admin/purchase-orders', icon: 'bi-cart', available: true, permission: 'PURCHASE.ORDER.VIEW' },
         { label: 'Goods Receipts', route: '/admin/goods-receipts', icon: 'bi-box-arrow-in-down', available: true, permission: 'PURCHASE.ORDER.VIEW' },
         { label: 'Purchase Requisitions', route: '/admin/purchase-requisitions', icon: 'bi-clipboard-plus', available: true, permission: 'PURCHASE.REQUISITION.VIEW' },
+        { label: 'RFQs / Sourcing', route: '/admin/rfqs', icon: 'bi-search', available: true, permission: 'PURCHASE.RFQ.VIEW' },
       ],
     },
     {
