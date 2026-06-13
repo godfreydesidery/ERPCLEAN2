@@ -164,6 +164,31 @@ export class ShellComponent {
         { label: 'Generated Documents', route: '/admin/documents', icon: 'bi-file-earmark-pdf', available: true, permission: 'DOCUMENT.VIEW' },
         { label: 'Document Templates', route: '/admin/document-templates', icon: 'bi-layout-text-sidebar', available: true, permission: 'DOCUMENT.TEMPLATE.MANAGE' },
         { label: 'Document Branding', route: '/admin/document-branding', icon: 'bi-palette', available: true, permission: 'DOCUMENT.BRANDING.MANAGE' },
+    // ── Costing ──────────────────────────────────────────────────────────────
+    {
+      label: 'Costing',
+      items: [
+        {
+          label: 'Dimension Types',
+          route: '/admin/cost-centre/dimensions',
+          icon: 'bi-diagram-3',
+          available: true,
+          permission: 'COSTING.VIEW',
+        },
+        {
+          label: 'Dimension Values',
+          route: '/admin/cost-centre/values',
+          icon: 'bi-tags',
+          available: true,
+          permission: 'COSTING.VIEW',
+        },
+        {
+          label: 'Sliced Trial Balance',
+          route: '/admin/cost-centre/report',
+          icon: 'bi-bar-chart-steps',
+          available: true,
+          permission: 'COSTING.VIEW',
+        },
       ],
     },
     {
