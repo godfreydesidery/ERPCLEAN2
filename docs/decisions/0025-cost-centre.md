@@ -330,3 +330,30 @@ ADR-0025 designs the **Cost-centre / accounting-dimension framework** in a new *
 **The defining guarantee (BR-CC-07, NFR-CC-01):** the framework **introduces no GL account, no `gl_config` key, no posting, no `JournalSourceType`, no movement type** — it **only tags** lines a posting already produces. With dimensions un-configured every existing posting is **byte-for-byte unchanged** (test-pinned). **No module cycle (D-7):** the two cross-module edges (`costing → gl` no-delete count; `gl → costing` post-validation) are *table-level read projections* (the `ScopeGuard` pattern), not service calls; the DB FKs are scalar-id, no cross-module JPA association.
 
 **Additive on frozen V1–V19**, in the reserved **`V27`–`V29`** range (V20–V26 reserved for in-flight modules): `V27` (the two masters + the four `journal_lines` slot-columns + perms + the #12-safe per-company built-in-dimension seed), `V28` (the four document-default ALTERs), `V29` reserved for the partial indexes on a future generic slot (`dimension3`/`dimension4`) when a future module first activates one **[Amended 2026-06-11 (Wave-2 collision #4): was "reserved for the Projects slot-3 indexes" — Projects uses its own `project_id`, not a slot; V29 is for whichever future module first activates a generic slot]**. **#12-safe** (the only per-company CROSS-JOIN seed-uid — the two built-in dimensions — uses the md5-bounded `'DIM'||lpad(company_id,6)||substr(md5(slot),1,12)` form; no dimension *values* are seeded). **`ScopeGuard`** gains `dimension`/`dimensionvalue` cases. **Perms** `COSTING.VIEW`/`COSTING.MANAGE`/`COSTING.TAG`. **Cross-module touch list:** (1) **gl** — the `LineDraft` extension + the four `journal_lines` slot-columns + the post-time dimension validation; (2) **sales** — the sales-invoice header default + the `SalesPostingHandler` stamp (extend `InvoicePostingTotalsDto`); (3) **purchases** — the supplier-bill header default + the `postMatchedBillToGl` stamp; (4) **stock** — the adjustment default + the `InventoryGlPoster` adjustment-leg stamp; (5) **platform** — the two `ScopeGuard` cases. **Ready for build** on the recommended defaults; the two LOAD-BEARING OQs (fixed-slots, poster-wiring set) carry architect recommendations the design is built to and are owner-confirmable without reshaping the model.
+
+---
+
+## Amendment (2026-06-13) — D-4 Step-3 mandatory enforcement scoped to MANUAL journals (ISSUES-REGISTER #20d)
+
+**Problem (found by QA fresh-data e2e, Finding #20d):** `GLPostingServiceImpl.validateDimensions()`
+Step-3 mandatory-slot enforcement fired on EVERY posting path. When an operator set a dimension
+mandatory (`PATCH /dimensions/uid/{uid}/mandatory`), every automated/event-driven GL posting that
+does not carry operator dimension context — inventory (`STOCK.RECEIVED` goods-receipt), sales,
+AR/AP settlement, payroll, depreciation, year-end close — was rejected, turning those events into
+poison events retried forever (observed: `UnexpectedRollbackException` on `STOCK.RECEIVED`).
+
+**Decision:** Step-3 (mandatory enforcement) now applies **only when `draft.sourceType() ==
+JournalSourceType.MANUAL`** — i.e. user-entered journals, where the operator can supply the
+dimension. Automated/system postings are exempt from the *mandatory* requirement. **Step 2** (a
+dimension value that IS present must be active, correct-slot, same-company) continues to apply to
+**all** postings, so the integrity of any supplied tag is unchanged.
+
+**Rationale:** the BR-CC-03/FR-CC-08 control is kept exactly where it is actionable (manual entry).
+Making automated postings carry a default cost-centre (the alternative) has no home today
+(`gl_configs` maps to accounts, not dimension values; there is no default-cost-centre store) and
+would silently mis-attribute system costs. If per-poster default tagging is wanted later, it is an
+additive enhancement on top of this fix.
+
+**Proof:** `DimensionServiceIT` Test 18 (`post_mandatoryDimension_systemSourceUntaggedLine_succeeds`)
+— a non-MANUAL posting succeeds with a mandatory dimension; the MANUAL path is still rejected
+(Test 16 unchanged). 18/18 green.

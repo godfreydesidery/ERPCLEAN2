@@ -524,6 +524,59 @@ class DimensionServiceIT extends PostgresIntegrationTest {
     }
 
     // =========================================================================
+    // 18. ADR-0025 amendment (ISSUES-REGISTER #20d): mandatory-dimension enforcement
+    //     (Step 3) applies ONLY to MANUAL journals. An automated/system poster (a
+    //     non-MANUAL source type) posting an untagged line must SUCCEED even when a
+    //     dimension is mandatory — otherwise event-driven postings (e.g. STOCK.RECEIVED
+    //     goods-receipt GL) become poison events. Step 2 still validates any tag present.
+    // =========================================================================
+
+    @Test
+    void post_mandatoryDimension_systemSourceUntaggedLine_succeeds() {
+        DimensionDto cc = costCentreDim();
+
+        // Cost Centre mandatory for this company (same precondition as Test 16)
+        dimensionService.setMandatory(cc.uid(), new SetDimensionMandatoryRequest(true));
+
+        Long cashId = accountId("1000");
+        Long cogsId = accountId("5100");
+
+        // A SYSTEM/event-driven posting (sourceType != MANUAL) with NO dimension tags must POST —
+        // the #20d scenario. We use COGS as a representative automated source.
+        var posted = postingService.post(new JournalEntryDraft(
+                company.getId(), branch.getId(), LocalDate.now(),
+                "Automated posting with mandatory dimension (#20d)",
+                JournalSourceType.COGS, "REF-20D-SYS-001",
+                null, null,
+                List.of(
+                        new LineDraft(cogsId, new BigDecimal("60"), BigDecimal.ZERO,
+                                "TZS", "DR COGS"),
+                        new LineDraft(cashId, BigDecimal.ZERO, new BigDecimal("60"),
+                                "TZS", "CR Cash")
+                )));
+
+        assertThat(posted).as("automated posting must succeed despite a mandatory dimension (#20d)")
+                .isNotNull();
+        assertThat(posted.uid()).isNotBlank();
+
+        // And the MANUAL path is STILL enforced (regression guard for the control that remains).
+        assertThatThrownBy(() ->
+                postingService.post(new JournalEntryDraft(
+                        company.getId(), branch.getId(), LocalDate.now(),
+                        "Manual posting still enforces mandatory",
+                        JournalSourceType.MANUAL, "REF-20D-MAN-001",
+                        null, rootId,
+                        List.of(
+                                new LineDraft(cogsId, new BigDecimal("60"), BigDecimal.ZERO,
+                                        "TZS", "DR COGS"),
+                                new LineDraft(cashId, BigDecimal.ZERO, new BigDecimal("60"),
+                                        "TZS", "CR Cash")
+                        ))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("mandatory");
+    }
+
+    // =========================================================================
     // Helpers
     // =========================================================================
 
