@@ -1,0 +1,24 @@
+# application-prod.yml — ADR-0038 D-3
+# Activated by SPRING_PROFILES_ACTIVE=prod (or includes "prod").
+#
+# Purpose: pin log levels for production so verbosity is version-controlled and auditable.
+# Dev profile sets com.erp=DEBUG and hibernate.SQL=DEBUG; those MUST NOT reach prod.
+# Spring profiles do not inherit — this file is not a "guard" against dev settings leaking,
+# it is an explicit version-controlled statement of intended prod log levels.
+#
+# Hikari pool sizing is intentionally ABSENT from this file. A committed maximumPoolSize becomes
+# the default for every prod deploy regardless of the managed-Postgres connection limit — a footgun.
+# Wire pool sizing via SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE at deploy time; see runbook.
+
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+logging:
+  level:
+    root: INFO
+    com.erp: INFO
+    org.hibernate.SQL: WARN
+    org.hibernate.type.descriptor.sql: WARN
+    org.hibernate.type.descriptor.sql.BasicBinder: WARN
