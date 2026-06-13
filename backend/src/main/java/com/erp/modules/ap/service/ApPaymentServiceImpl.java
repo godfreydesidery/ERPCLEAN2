@@ -230,6 +230,20 @@ public class ApPaymentServiceImpl implements ApPaymentService {
             throw new IllegalStateException("No open bills selected by the payment run criteria.");
         }
 
+        // FX adversarial-review HIGH (ADR-0036 D — same-currency guard): a payment run applies ONE
+        // settlement rate to every bill (the ApPayment header is single-currency). Mixing currencies
+        // would corrupt base-cash + realized FX on every bill but the first. Reject heterogeneous
+        // runs early — the caller must split them by currency.
+        long distinctCurrencies = openBills.stream()
+                .map(SupplierBill::getCurrency)
+                .distinct()
+                .count();
+        if (distinctCurrencies > 1) {
+            throw new IllegalStateException(
+                    "Payment run bills must share one currency — found " + distinctCurrencies
+                    + " distinct currencies. Split the run by currency.");
+        }
+
         String currency = openBills.get(0).getCurrency();
         // Resolve settlement rate once for the run
         ConvertedAmount settlementConv = fxConversion.toBase(

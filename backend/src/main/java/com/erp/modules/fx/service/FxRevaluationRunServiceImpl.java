@@ -186,9 +186,16 @@ public class FxRevaluationRunServiceImpl implements FxRevaluationRunService {
         if (existing.isPresent()) {
             FxRevaluationRun ex = existing.get();
             if (ex.getStatus() != FxRevaluationRunStatus.PREVIEWED) {
-                // Already posted or reversed — return existing (no-op)
+                // Already posted or reversed — true idempotent no-op (FX adversarial-review HIGH).
                 return toDto(ex, runLines.findByFxRevaluationRunId(ex.getId()));
             }
+            // A stale PREVIEWED run for this (company, period) exists (e.g. a prior GL-failed attempt
+            // that was committed before the delete-on-failure path, or a manual preview). REUSE the
+            // slot: delete its lines + header so the re-post below re-inserts cleanly, instead of
+            // falling through to a save() that would violate uq_fx_revaluation_run_company_period.
+            runLines.deleteAll(runLines.findByFxRevaluationRunId(ex.getId()));
+            runs.delete(ex);
+            runs.flush();
         }
 
         String baseCurrency = resolveBaseCurrency(req.companyId());
