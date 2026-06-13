@@ -1070,6 +1070,18 @@ export const ADMIN_ROUTES: Routes = [
     canActivate: [requirePermission('SALES.PRICING.RULE.VIEW')],
     loadComponent: () =>
       import('./sales/pricing/pricing-rules.component').then((m) => m.PricingRulesComponent),
+  // ── Other Parties ─────────────────────────────────────────────────────────
+  {
+    path: 'other-parties',
+    canActivate: [requirePermission('OTHERPARTY.VIEW')],
+    loadComponent: () =>
+      import('./parties/other/other-party-list.component').then((m) => m.OtherPartyListComponent),
+  },
+  {
+    path: 'other-parties/uid/:uid',
+    canActivate: [requirePermission('OTHERPARTY.VIEW')],
+    loadComponent: () =>
+      import('./parties/other/other-party-detail.component').then((m) => m.OtherPartyDetailComponent),
   },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];
