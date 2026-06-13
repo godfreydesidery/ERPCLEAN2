@@ -950,6 +950,7 @@ export const ADMIN_ROUTES: Routes = [
       import('./purchases/requisition/requisition-detail.component').then(
         (m) => m.RequisitionDetailComponent,
       ),
+  },
   // ── RFQ / Sourcing ────────────────────────────────────────────────────────
   {
     path: 'rfqs',
@@ -968,6 +969,7 @@ export const ADMIN_ROUTES: Routes = [
     canActivate: [requirePermission('PURCHASE.RFQ.VIEW')],
     loadComponent: () =>
       import('./purchases/rfq/rfq-detail.component').then((m) => m.RfqDetailComponent),
+  },
   // ── Purchase Returns ──────────────────────────────────────────────────────
   {
     path: 'purchase-returns',
@@ -1012,6 +1014,7 @@ export const ADMIN_ROUTES: Routes = [
     canActivate: [requirePermission('PURCHASE.SETTINGS.VIEW')],
     loadComponent: () =>
       import('./purchases/settings/purchase-settings.component').then((m) => m.PurchaseSettingsComponent),
+  },
   // ── Blanket Orders ────────────────────────────────────────────────────────
   {
     path: 'blanket-orders',
