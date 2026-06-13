@@ -71,7 +71,8 @@ public class ArOpeningBalanceServiceImpl implements ArOpeningBalanceService {
                 .orElseThrow(() -> new NotFoundException("Customer not found: " + req.customerUid()));
 
         String currency = req.currency() != null ? req.currency()
-                : companies.findById(companyId).map(c -> c.getBaseCurrency()).orElse("TZS");
+                : companies.findById(companyId).map(c -> c.getBaseCurrency())
+                        .orElseThrow(() -> new NotFoundException("Company not found: " + companyId));
 
         // Post DR AR control / CR Opening Balance Equity synchronously (D-4/D-6)
         ChartOfAccount arAcct     = glConfig.resolve(companyId, GlConfigKey.ACCOUNTS_RECEIVABLE);
