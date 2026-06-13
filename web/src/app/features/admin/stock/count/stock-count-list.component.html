@@ -1,0 +1,85 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Stock Counts</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-clipboard2-check me-1" aria-hidden="true"></i>
+      Physical and cycle count documents. Post to record variances in the GL.
+    </p>
+  </header>
+
+  @if (canCreate()) {
+    <div class="mb-3">
+      <a class="btn btn-primary" routerLink="/admin/stock-counts/create">
+        <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+        New Stock Count
+      </a>
+    </div>
+  }
+
+  @switch (state()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+        Loading stock counts…
+      </p>
+    }
+    @case ('forbidden') {
+      <p class="text-warning" role="alert">
+        <i class="bi bi-lock me-1" aria-hidden="true"></i>
+        You do not have permission to view stock counts.
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load stock counts. Is the API running?
+      </p>
+    }
+    @default {
+      @if (isEmpty()) {
+        <p class="text-muted state">
+          <i class="bi bi-clipboard2-x me-1" aria-hidden="true"></i>
+          No stock counts found. Create the first one.
+        </p>
+      } @else {
+        <div class="table-responsive">
+          <table class="table table-hover align-middle bg-white grid">
+            <caption class="visually-hidden">Stock Count Documents</caption>
+            <thead>
+              <tr>
+                <th scope="col">Count #</th>
+                <th scope="col">Count Date</th>
+                <th scope="col">Type</th>
+                <th scope="col">Status</th>
+                <th scope="col">Lines</th>
+                <th scope="col"><span class="visually-hidden">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of rows(); track row.uid) {
+                <tr>
+                  <td><code>{{ row.countNumber }}</code></td>
+                  <td>{{ row.countDate }}</td>
+                  <td>{{ row.countType }}</td>
+                  <td>
+                    <span class="badge" [class]="statusBadgeClass(row.status)">{{ row.status }}</span>
+                  </td>
+                  <td>{{ row.lines ? row.lines.length : 0 }}</td>
+                  <td class="text-end">
+                    <a [routerLink]="['/admin/stock-counts/uid', row.uid]"
+                       class="btn btn-sm btn-outline-secondary"
+                       [attr.aria-label]="'View count ' + row.countNumber">
+                      <i class="bi bi-eye" aria-hidden="true"></i>
+                    </a>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <app-paginator [meta]="meta()" [label]="'Stock Count'" (pageChange)="goToPage($event)" />
+      }
+    }
+  }
+</section>
