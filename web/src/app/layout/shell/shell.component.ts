@@ -248,6 +248,14 @@ export class ShellComponent {
         { label: 'FA Reconciliation', route: '/admin/fixed-assets/reconciliation', icon: 'bi-bar-chart-steps', available: true, permission: 'FA.VIEW' },
         { label: 'Depreciation Runs', route: '/admin/depreciation-runs', icon: 'bi-calendar3', available: true, permission: 'FA.VIEW' },
         { label: 'Run Depreciation', route: '/admin/depreciation-runs/post', icon: 'bi-play-circle', available: true, permission: 'FA.DEPRECIATE' },
+    // ── CRM ──────────────────────────────────────────────────────────────────
+    {
+      label: 'CRM',
+      items: [
+        { label: 'Leads', route: '/admin/crm/leads', icon: 'bi-person-lines-fill', available: true, permission: 'CRM.LEAD.VIEW' },
+        { label: 'Opportunities', route: '/admin/crm/opportunities', icon: 'bi-graph-up-arrow', available: true, permission: 'CRM.OPPORTUNITY.VIEW' },
+        { label: 'Pipeline Dashboard', route: '/admin/crm/pipeline', icon: 'bi-bar-chart-line', available: true, permission: 'CRM.PIPELINE.VIEW' },
+        { label: 'Pipeline Stages', route: '/admin/crm/settings/pipeline-stages', icon: 'bi-kanban', available: true, permission: 'CRM.STAGE.MANAGE' },
       ],
     },
   ];

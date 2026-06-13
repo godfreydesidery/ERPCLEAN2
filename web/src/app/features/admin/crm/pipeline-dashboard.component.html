@@ -1,0 +1,211 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Pipeline Dashboard</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-bar-chart-line me-1" aria-hidden="true"></i>
+      Pipeline board, weighted forecast, and win-rate KPIs.
+    </p>
+  </header>
+
+  <!-- Company + Branch selectors -->
+  @switch (companyState()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mb-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load companies.
+      </p>
+    }
+    @default {
+      <div class="row g-2 mb-3">
+        @if (companies().length > 1) {
+          <div class="col-sm-3">
+            <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+            <select id="companyPicker" name="companyPicker" class="form-select"
+                    [ngModel]="selectedCompanyId()"
+                    (ngModelChange)="onCompanyChange($event)">
+              @for (c of companies(); track c.uid) {
+                <option [value]="c.id">{{ c.name }}</option>
+              }
+            </select>
+          </div>
+        }
+        <div class="col-sm-3">
+          <label class="form-label small text-muted mb-1" for="branchPicker">Branch</label>
+          @if (branchState() === 'loading') {
+            <p class="text-muted small" aria-live="polite">Loading branches…</p>
+          } @else {
+            <select id="branchPicker" name="branchPicker" class="form-select"
+                    [ngModel]="selectedBranchId()"
+                    (ngModelChange)="onBranchChange($event)">
+              @if (branches().length === 0) {
+                <option value="">— no branches —</option>
+              }
+              @for (b of branches(); track b.uid) {
+                <option [value]="b.id">{{ b.code }} — {{ b.name }}</option>
+              }
+            </select>
+          }
+        </div>
+      </div>
+    }
+  }
+
+  @if (selectedCompanyId() && selectedBranchId()) {
+
+    <!-- Date range row -->
+    <div class="row g-2 mb-4 align-items-end">
+      <div class="col-sm-3">
+        <label class="form-label small text-muted mb-1" for="fromDate">From</label>
+        <input id="fromDate" name="fromDate" type="date" class="form-control"
+               [ngModel]="fromDate()" (ngModelChange)="fromDate.set($event)" />
+      </div>
+      <div class="col-sm-3">
+        <label class="form-label small text-muted mb-1" for="toDate">To</label>
+        <input id="toDate" name="toDate" type="date" class="form-control"
+               [ngModel]="toDate()" (ngModelChange)="toDate.set($event)" />
+      </div>
+      <div class="col-sm-2">
+        <button type="button" class="btn btn-outline-primary" (click)="applyDates()">
+          <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Refresh
+        </button>
+      </div>
+    </div>
+
+    <!-- ── Pipeline Board (by stage) ── -->
+    <h2 class="h5 mb-3">Pipeline Board</h2>
+    @switch (summaryState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-4" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading pipeline summary…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-4" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load pipeline summary.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="text-muted mb-4">
+          <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>
+          You don't have permission to view pipeline reports.
+        </p>
+      }
+      @default {
+        @if (summary()?.stages?.length) {
+          <div class="table-responsive mb-4">
+            <table class="table table-hover align-middle bg-white grid">
+              <caption class="visually-hidden">Pipeline board — open opportunities by stage</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Stage</th>
+                  <th scope="col" class="text-end">Open Opps</th>
+                  <th scope="col" class="text-end">Total Value</th>
+                  <th scope="col" class="text-end">Weighted Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of summary()!.stages; track row.stageUid) {
+                  <tr>
+                    <td>{{ row.stageName }}</td>
+                    <td class="text-end font-monospace">{{ row.openCount }}</td>
+                    <td class="text-end font-monospace">{{ row.currency }} {{ +row.totalValueAmount | number:'1.2-2' }}</td>
+                    <td class="text-end font-monospace">{{ row.currency }} {{ +row.weightedValueAmount | number:'1.2-2' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        } @else {
+          <p class="text-muted mb-4">No open opportunities in the pipeline for this branch.</p>
+        }
+      }
+    }
+
+    <!-- ── Forecast & KPIs row ── -->
+    <div class="row g-4 mb-4">
+      <!-- Forecast -->
+      <div class="col-md-6">
+        <h2 class="h5 mb-3">Forecast
+          <span class="text-muted small ms-2">({{ fromDate() }} — {{ toDate() }})</span>
+        </h2>
+        @switch (forecastState()) {
+          @case ('loading') {
+            <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+              <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading forecast…
+            </p>
+          }
+          @case ('error') {
+            <p class="text-danger" role="alert">
+              <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load forecast.
+            </p>
+          }
+          @case ('forbidden') {
+            <p class="text-muted">No permission to view forecast.</p>
+          }
+          @default {
+            @if (forecast(); as f) {
+              <dl class="row mb-0">
+                <dt class="col-sm-6">Open Opportunities</dt>
+                <dd class="col-sm-6 font-monospace">{{ f.openCount }}</dd>
+                <dt class="col-sm-6">Weighted Value</dt>
+                <dd class="col-sm-6 font-monospace text-primary fw-semibold">
+                  {{ f.currency }} {{ +f.weightedValueAmount | number:'1.2-2' }}
+                </dd>
+                <dt class="col-sm-6">Period</dt>
+                <dd class="col-sm-6 small text-muted">{{ f.periodStart }} – {{ f.periodEnd }}</dd>
+              </dl>
+            } @else {
+              <p class="text-muted">No forecast data.</p>
+            }
+          }
+        }
+      </div>
+
+      <!-- KPIs -->
+      <div class="col-md-6">
+        <h2 class="h5 mb-3">Win-Rate KPIs
+          <span class="text-muted small ms-2">({{ fromDate() }} — {{ toDate() }})</span>
+        </h2>
+        @switch (kpisState()) {
+          @case ('loading') {
+            <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+              <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading KPIs…
+            </p>
+          }
+          @case ('error') {
+            <p class="text-danger" role="alert">
+              <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load KPIs.
+            </p>
+          }
+          @case ('forbidden') {
+            <p class="text-muted">No permission to view KPIs.</p>
+          }
+          @default {
+            @if (kpis(); as k) {
+              <dl class="row mb-0">
+                <dt class="col-sm-6">Won</dt>
+                <dd class="col-sm-6 font-monospace text-success">{{ k.wonCount }}</dd>
+                <dt class="col-sm-6">Lost</dt>
+                <dd class="col-sm-6 font-monospace text-danger">{{ k.lostCount }}</dd>
+                <dt class="col-sm-6">Win Rate</dt>
+                <dd class="col-sm-6 font-monospace fw-semibold">{{ +k.winRatePercent | number:'1.1-1' }}%</dd>
+                <dt class="col-sm-6">Avg Cycle (days)</dt>
+                <dd class="col-sm-6 font-monospace">{{ +k.avgCycleDays | number:'1.1-1' }}</dd>
+                <dt class="col-sm-6">Period</dt>
+                <dd class="col-sm-6 small text-muted">{{ k.periodStart }} – {{ k.periodEnd }}</dd>
+              </dl>
+            } @else {
+              <p class="text-muted">No KPI data.</p>
+            }
+          }
+        }
+      </div>
+    </div>
+  }
+</section>
