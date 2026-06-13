@@ -1,0 +1,578 @@
+<section class="admin-page">
+  <header class="page-head">
+    <nav aria-label="Breadcrumb">
+      <a routerLink="/admin/work-orders" class="text-muted small">
+        <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Work Orders
+      </a>
+    </nav>
+    @if (wo(); as w) {
+      <h1 class="h4 mb-1">{{ w.woNumber }}</h1>
+      <div class="d-flex align-items-center gap-2">
+        <span class="badge" [class]="statusBadgeClass(w.status)">{{ w.status }}</span>
+        @if (w.incompleteCost) {
+          <span class="badge text-bg-warning" title="Incomplete cost — one or more components have no average cost">
+            <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>Incomplete Cost
+          </span>
+        }
+        <a [routerLink]="['/admin/work-orders/uid', uid(), 'cost-report']"
+           class="btn btn-sm btn-outline-secondary ms-auto"
+           aria-label="View cost report for this work order">
+          <i class="bi bi-bar-chart me-1" aria-hidden="true"></i>Cost Report
+        </a>
+      </div>
+    } @else if (woState() === 'loading') {
+      <h1 class="h4 mb-1 text-muted">Loading…</h1>
+    } @else {
+      <h1 class="h4 mb-1 text-muted">Work Order</h1>
+    }
+  </header>
+
+  @switch (woState()) {
+    @case ('loading') {
+      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+      </p>
+    }
+    @case ('error') {
+      <p class="state text-danger" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load work order. Please try again.
+      </p>
+    }
+    @default {
+      @if (wo(); as w) {
+
+        <!-- ── Summary card ─────────────────────────────────────────────── -->
+        <div class="card mb-4">
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-sm-4">
+                <div class="small text-muted">Finished Product</div>
+                <div class="fw-semibold">{{ w.finishedProductCode }}</div>
+                <div class="small text-muted">{{ w.finishedProductName }}</div>
+              </div>
+              <div class="col-sm-2">
+                <div class="small text-muted">Planned Qty</div>
+                <div class="font-monospace">{{ +w.plannedQty | number:'1.2-6' }}</div>
+              </div>
+              <div class="col-sm-2">
+                <div class="small text-muted">Good Qty</div>
+                <div class="font-monospace">{{ +w.goodQty | number:'1.2-6' }}</div>
+              </div>
+              <div class="col-sm-2">
+                <div class="small text-muted">Scrap Qty</div>
+                <div class="font-monospace">{{ +w.scrapQty | number:'1.2-6' }}</div>
+              </div>
+              <div class="col-sm-2">
+                <div class="small text-muted">Planned Date</div>
+                <div>{{ w.plannedDate || '—' }}</div>
+              </div>
+              <div class="col-sm-3">
+                <div class="small text-muted">WIP Debit (1320 DR)</div>
+                <div class="font-monospace">{{ +w.wipDebitTotal | number:'1.2-4' }}</div>
+              </div>
+              <div class="col-sm-3">
+                <div class="small text-muted">WIP Credit (1320 CR)</div>
+                <div class="font-monospace">{{ +w.wipCreditTotal | number:'1.2-4' }}</div>
+              </div>
+              <div class="col-sm-3">
+                <div class="small text-muted">Labour Applied (2350)</div>
+                <div class="font-monospace">{{ +w.labourAppliedTotal | number:'1.2-4' }}</div>
+              </div>
+              <div class="col-sm-3">
+                <div class="small text-muted">Overhead Applied (2360)</div>
+                <div class="font-monospace">{{ +w.overheadAppliedTotal | number:'1.2-4' }}</div>
+              </div>
+              <div class="col-sm-3">
+                <div class="small text-muted">Computed Unit Cost</div>
+                <div class="font-monospace">{{ w.computedUnitCost ? (+w.computedUnitCost | number:'1.2-4') : '—' }}</div>
+              </div>
+              <div class="col-sm-3">
+                <div class="small text-muted">Variance (5180)</div>
+                <div class="font-monospace"
+                     [class.text-danger]="+w.varianceAmount > 0"
+                     [class.text-success]="+w.varianceAmount < 0">
+                  {{ w.varianceAmount ? (+w.varianceAmount | number:'1.2-4') : '—' }}
+                </div>
+              </div>
+              @if (w.notes) {
+                <div class="col-12">
+                  <div class="small text-muted">Notes</div>
+                  <div>{{ w.notes }}</div>
+                </div>
+              }
+              <div class="col-sm-4">
+                <div class="small text-muted">Created</div>
+                <div class="small">{{ w.createdAt }} by {{ w.createdBy }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Edit form (PLANNED only) ─────────────────────────────────── -->
+        @if (canEdit()) {
+          <div class="card mb-4">
+            <div class="card-header fw-semibold">Edit Work Order</div>
+            <div class="card-body">
+              <form (ngSubmit)="save()" aria-label="Edit work order">
+                <div class="row g-2 align-items-start mb-2">
+                  <div class="col-sm-2">
+                    <label class="form-label small text-muted mb-1" for="fPlannedQty">
+                      Planned Qty <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <input id="fPlannedQty" name="fPlannedQty" type="number" class="form-control"
+                           step="0.000001" min="0.000001"
+                           [ngModel]="fPlannedQty()" (ngModelChange)="fPlannedQty.set($event)"
+                           [disabled]="saving()" />
+                  </div>
+                  <div class="col-sm-3">
+                    <label class="form-label small text-muted mb-1" for="fBomUid">BOM UID (override)</label>
+                    <input id="fBomUid" name="fBomUid" type="text" class="form-control"
+                           [ngModel]="fBomUid()" (ngModelChange)="fBomUid.set($event)"
+                           [disabled]="saving()" autocomplete="off" />
+                  </div>
+                  <div class="col-sm-3">
+                    <label class="form-label small text-muted mb-1" for="fBranchUid">Branch UID</label>
+                    <input id="fBranchUid" name="fBranchUid" type="text" class="form-control"
+                           [ngModel]="fBranchUid()" (ngModelChange)="fBranchUid.set($event)"
+                           [disabled]="saving()" autocomplete="off" />
+                  </div>
+                  <div class="col-sm-2">
+                    <label class="form-label small text-muted mb-1" for="fPlannedDate">Planned Date</label>
+                    <input id="fPlannedDate" name="fPlannedDate" type="date" class="form-control"
+                           [ngModel]="fPlannedDate()" (ngModelChange)="fPlannedDate.set($event)"
+                           [disabled]="saving()" />
+                  </div>
+                  <div class="col-sm-4">
+                    <label class="form-label small text-muted mb-1" for="fNotes">Notes</label>
+                    <input id="fNotes" name="fNotes" type="text" class="form-control"
+                           [ngModel]="fNotes()" (ngModelChange)="fNotes.set($event)"
+                           [disabled]="saving()" autocomplete="off" />
+                  </div>
+                  <div class="col-sm-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100" [disabled]="saving()">
+                      @if (saving()) {
+                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        Saving…
+                      } @else {
+                        Save
+                      }
+                    </button>
+                  </div>
+                </div>
+                @if (saveError(); as msg) {
+                  <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+                }
+              </form>
+            </div>
+          </div>
+        }
+
+        <!-- ── Lifecycle actions ─────────────────────────────────────────── -->
+        <div class="card mb-4">
+          <div class="card-header fw-semibold">Lifecycle Actions</div>
+          <div class="card-body d-flex flex-column gap-4">
+
+            <!-- Release -->
+            @if (canReleaseAction()) {
+              <div>
+                <h3 class="h6">Release Work Order</h3>
+                <p class="small text-muted mb-2">
+                  Explodes the BOM, materialises component plan lines. No stock/GL effect.
+                  Optionally pin a specific BOM UID.
+                </p>
+                <div class="d-flex gap-2 align-items-end flex-wrap">
+                  <div style="max-width:280px">
+                    <label class="form-label small text-muted mb-1" for="releaseBomUid">
+                      BOM UID (optional override)
+                    </label>
+                    <input id="releaseBomUid" name="releaseBomUid" type="text" class="form-control form-control-sm"
+                           placeholder="leave blank for active BOM"
+                           [ngModel]="releaseBomUid()" (ngModelChange)="releaseBomUid.set($event)"
+                           [disabled]="releasing()" autocomplete="off" />
+                  </div>
+                  <button type="button" class="btn btn-warning"
+                          (click)="release()" [disabled]="releasing()">
+                    @if (releasing()) {
+                      <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    }
+                    <i class="bi bi-play-fill me-1" aria-hidden="true"></i>Release
+                  </button>
+                </div>
+                @if (releaseError(); as msg) {
+                  <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+                }
+              </div>
+            }
+
+            <!-- Issue components -->
+            @if (canIssue()) {
+              <div>
+                <h3 class="h6">Issue Components (Full)</h3>
+                <p class="small text-muted mb-2">
+                  Posts PRODUCTION_ISSUE movements for all un-issued component lines
+                  (DR WIP 1320 / CR Inventory 1300). First issue transitions RELEASED → IN_PROGRESS.
+                </p>
+                <div class="d-flex gap-2 align-items-end flex-wrap">
+                  <div style="max-width:200px">
+                    <label class="form-label small text-muted mb-1" for="issuePostingDate">
+                      Posting Date <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <input id="issuePostingDate" name="issuePostingDate" type="date" class="form-control form-control-sm"
+                           [ngModel]="issuePostingDate()" (ngModelChange)="issuePostingDate.set($event)"
+                           [disabled]="issuing()" />
+                  </div>
+                  <button type="button" class="btn btn-info text-white"
+                          (click)="issueComponents()" [disabled]="issuing()">
+                    @if (issuing()) {
+                      <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    }
+                    <i class="bi bi-arrow-down-square me-1" aria-hidden="true"></i>Issue All Components
+                  </button>
+                </div>
+                @if (issueError(); as msg) {
+                  <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+                }
+              </div>
+            }
+
+            <!-- Apply cost -->
+            @if (canApplyCost()) {
+              <div>
+                <h3 class="h6">Apply Labour / Overhead Cost</h3>
+                <p class="small text-muted mb-2">
+                  DR WIP 1320 / CR Labour Applied 2350 / CR Overhead Applied 2360.
+                  Optionally link to a specific operation UID.
+                </p>
+                <div class="d-flex gap-2 align-items-end flex-wrap">
+                  <div style="max-width:160px">
+                    <label class="form-label small text-muted mb-1" for="costLabourAmount">Labour Amount</label>
+                    <input id="costLabourAmount" name="costLabourAmount" type="number" class="form-control form-control-sm"
+                           step="0.0001" min="0"
+                           [ngModel]="costLabourAmount()" (ngModelChange)="costLabourAmount.set($event)"
+                           [disabled]="applyingCost()" />
+                  </div>
+                  <div style="max-width:160px">
+                    <label class="form-label small text-muted mb-1" for="costOverheadAmount">Overhead Amount</label>
+                    <input id="costOverheadAmount" name="costOverheadAmount" type="number" class="form-control form-control-sm"
+                           step="0.0001" min="0"
+                           [ngModel]="costOverheadAmount()" (ngModelChange)="costOverheadAmount.set($event)"
+                           [disabled]="applyingCost()" />
+                  </div>
+                  <div style="max-width:220px">
+                    <label class="form-label small text-muted mb-1" for="costOperationUid">Operation UID (optional)</label>
+                    <input id="costOperationUid" name="costOperationUid" type="text" class="form-control form-control-sm"
+                           [ngModel]="costOperationUid()" (ngModelChange)="costOperationUid.set($event)"
+                           [disabled]="applyingCost()" autocomplete="off" />
+                  </div>
+                  <div style="max-width:200px">
+                    <label class="form-label small text-muted mb-1" for="costPostingDate">
+                      Posting Date <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <input id="costPostingDate" name="costPostingDate" type="date" class="form-control form-control-sm"
+                           [ngModel]="costPostingDate()" (ngModelChange)="costPostingDate.set($event)"
+                           [disabled]="applyingCost()" />
+                  </div>
+                  <button type="button" class="btn btn-secondary"
+                          (click)="applyCost()" [disabled]="applyingCost()">
+                    @if (applyingCost()) {
+                      <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    }
+                    <i class="bi bi-calculator me-1" aria-hidden="true"></i>Apply Cost
+                  </button>
+                </div>
+                @if (applyCostError(); as msg) {
+                  <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+                }
+              </div>
+            }
+
+            <!-- Complete -->
+            @if (canComplete()) {
+              <div>
+                <h3 class="h6">Complete Work Order</h3>
+                <p class="small text-muted mb-2">
+                  Computes unit cost = relieable WIP / good qty.
+                  Posts PRODUCTION_RECEIPT + recompute; DR Finished Goods 1300 / CR WIP 1320.
+                  Sets status → COMPLETED.
+                </p>
+                <div class="d-flex gap-2 align-items-end flex-wrap">
+                  <div style="max-width:160px">
+                    <label class="form-label small text-muted mb-1" for="completeGoodQty">
+                      Good Qty <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <input id="completeGoodQty" name="completeGoodQty" type="number" class="form-control form-control-sm"
+                           step="0.000001" min="0.000001"
+                           [ngModel]="completeGoodQty()" (ngModelChange)="completeGoodQty.set($event)"
+                           [disabled]="completing()" />
+                  </div>
+                  <div style="max-width:160px">
+                    <label class="form-label small text-muted mb-1" for="completeScrapQty">Scrap Qty</label>
+                    <input id="completeScrapQty" name="completeScrapQty" type="number" class="form-control form-control-sm"
+                           step="0.000001" min="0"
+                           [ngModel]="completeScrapQty()" (ngModelChange)="completeScrapQty.set($event)"
+                           [disabled]="completing()" />
+                  </div>
+                  <div style="max-width:200px">
+                    <label class="form-label small text-muted mb-1" for="completePostingDate">
+                      Posting Date <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <input id="completePostingDate" name="completePostingDate" type="date" class="form-control form-control-sm"
+                           [ngModel]="completePostingDate()" (ngModelChange)="completePostingDate.set($event)"
+                           [disabled]="completing()" />
+                  </div>
+                  <div class="d-flex align-items-center gap-1" style="padding-bottom:0.25rem">
+                    <input id="completeAllowOverRun" name="completeAllowOverRun" type="checkbox"
+                           class="form-check-input"
+                           [ngModel]="completeAllowOverRun()" (ngModelChange)="completeAllowOverRun.set($event)"
+                           [disabled]="completing()" />
+                    <label class="form-check-label small" for="completeAllowOverRun">Allow overrun</label>
+                  </div>
+                  <button type="button" class="btn btn-success"
+                          (click)="complete()" [disabled]="completing()">
+                    @if (completing()) {
+                      <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    }
+                    <i class="bi bi-check-circle me-1" aria-hidden="true"></i>Complete
+                  </button>
+                </div>
+                @if (completeError(); as msg) {
+                  <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+                }
+              </div>
+            }
+
+            <!-- Close -->
+            @if (canCloseAction()) {
+              <div>
+                <h3 class="h6">Close Work Order</h3>
+                <p class="small text-muted mb-2">
+                  Clears residual WIP to Manufacturing Variance 5180. Terminal state.
+                </p>
+                <div class="d-flex gap-2 align-items-end flex-wrap">
+                  <div style="max-width:200px">
+                    <label class="form-label small text-muted mb-1" for="closePostingDate">
+                      Posting Date <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <input id="closePostingDate" name="closePostingDate" type="date" class="form-control form-control-sm"
+                           [ngModel]="closePostingDate()" (ngModelChange)="closePostingDate.set($event)"
+                           [disabled]="closing()" />
+                  </div>
+                  <button type="button" class="btn btn-secondary"
+                          (click)="closeOrder()" [disabled]="closing()">
+                    @if (closing()) {
+                      <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    }
+                    <i class="bi bi-lock me-1" aria-hidden="true"></i>Close
+                  </button>
+                </div>
+                @if (closeError(); as msg) {
+                  <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+                }
+              </div>
+            }
+
+            <!-- Cancel -->
+            @if (canCancel()) {
+              <div>
+                <h3 class="h6">Cancel Work Order</h3>
+                <p class="small text-muted mb-2">
+                  Reverses all posted issues/receipts/labour at original cost.
+                </p>
+                <div class="d-flex gap-2 align-items-end flex-wrap">
+                  <div style="max-width:340px">
+                    <label class="form-label small text-muted mb-1" for="cancelReason">Reason (optional)</label>
+                    <input id="cancelReason" name="cancelReason" type="text" class="form-control form-control-sm"
+                           [ngModel]="cancelReason()" (ngModelChange)="cancelReason.set($event)"
+                           [disabled]="cancelling()" autocomplete="off" />
+                  </div>
+                  <button type="button" class="btn btn-danger"
+                          (click)="cancelOrder()" [disabled]="cancelling()">
+                    @if (cancelling()) {
+                      <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    }
+                    <i class="bi bi-x-circle me-1" aria-hidden="true"></i>Cancel
+                  </button>
+                </div>
+                @if (cancelError(); as msg) {
+                  <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+                }
+              </div>
+            }
+
+          </div>
+        </div>
+
+        <!-- ── Components table ──────────────────────────────────────────── -->
+        <div class="card mb-4">
+          <div class="card-header fw-semibold">Component Lines</div>
+          <div class="card-body p-0">
+            @if (w.components.length === 0) {
+              <p class="text-muted p-3 mb-0">No components — release the work order to explode the BOM.</p>
+            } @else {
+              <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                  <caption class="visually-hidden">Component lines for work order {{ w.woNumber }}</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">#</th>
+                      <th scope="col">Product</th>
+                      <th scope="col" class="text-end">Planned Qty</th>
+                      <th scope="col" class="text-end">Issued Qty</th>
+                      <th scope="col" class="text-end">Issued Value</th>
+                      <th scope="col" class="text-end">Unit Cost@Issue</th>
+                      <th scope="col">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (comp of w.components; track comp.uid) {
+                      <tr>
+                        <td class="small text-muted">{{ comp.lineNo }}</td>
+                        <td class="small">
+                          <div class="fw-semibold">{{ comp.componentProductCode }}</div>
+                          <div class="text-muted" style="font-size:0.8rem">{{ comp.componentProductName }}</div>
+                        </td>
+                        <td class="font-monospace small text-end">{{ +comp.plannedQty | number:'1.2-6' }}</td>
+                        <td class="font-monospace small text-end">{{ +comp.issuedQty | number:'1.2-6' }}</td>
+                        <td class="font-monospace small text-end">{{ +comp.issuedValue | number:'1.2-4' }}</td>
+                        <td class="font-monospace small text-end">
+                          @if (comp.costSkipped) {
+                            <span class="badge text-bg-warning" title="Issued with no average cost">no cost</span>
+                          } @else {
+                            {{ +comp.unitCostAtIssue | number:'1.2-4' }}
+                          }
+                        </td>
+                        <td>
+                          <span class="badge" [class]="componentBadgeClass(comp.status)">{{ comp.status }}</span>
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          </div>
+        </div>
+
+        <!-- ── Operations table ──────────────────────────────────────────── -->
+        <div class="card mb-4">
+          <div class="card-header fw-semibold">Operations</div>
+          <div class="card-body">
+            @if (w.operations.length === 0) {
+              <p class="text-muted mb-3">No operations defined.</p>
+            } @else {
+              <div class="table-responsive mb-3">
+                <table class="table table-hover align-middle mb-0">
+                  <caption class="visually-hidden">Operations for work order {{ w.woNumber }}</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Seq</th>
+                      <th scope="col">Description</th>
+                      <th scope="col">Work Centre</th>
+                      <th scope="col" class="text-end">Labour</th>
+                      <th scope="col" class="text-end">Overhead</th>
+                      <th scope="col">Applied</th>
+                      @if (canManage()) {
+                        <th scope="col"><span class="visually-hidden">Actions</span></th>
+                      }
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (op of w.operations; track op.uid) {
+                      <tr>
+                        <td class="small text-muted">{{ op.seqNo }}</td>
+                        <td class="small">{{ op.description }}</td>
+                        <td class="small text-muted">{{ op.workCentre || '—' }}</td>
+                        <td class="font-monospace small text-end">{{ +op.labourAmount | number:'1.2-4' }}</td>
+                        <td class="font-monospace small text-end">{{ +op.overheadAmount | number:'1.2-4' }}</td>
+                        <td>
+                          @if (op.applied) {
+                            <span class="badge text-bg-success">Applied</span>
+                          } @else {
+                            <span class="badge text-bg-secondary">Pending</span>
+                          }
+                        </td>
+                        @if (canManage()) {
+                          <td>
+                            <button type="button" class="btn btn-sm btn-outline-danger"
+                                    (click)="removeOperation(op)"
+                                    [disabled]="removingOpUid() !== null"
+                                    [attr.aria-label]="'Remove operation ' + op.description">
+                              @if (removingOpUid() === op.uid) {
+                                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                              } @else {
+                                <i class="bi bi-trash" aria-hidden="true"></i>
+                              }
+                            </button>
+                          </td>
+                        }
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+
+            <!-- Add operation form -->
+            @if (canAddOp()) {
+              <form (ngSubmit)="addOperation()" aria-label="Add operation">
+                <h3 class="h6">Add Operation</h3>
+                <div class="d-flex gap-2 align-items-end flex-wrap mb-2">
+                  <div style="max-width:80px">
+                    <label class="form-label small text-muted mb-1" for="opSeqNo">
+                      Seq <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <input id="opSeqNo" name="opSeqNo" type="number" class="form-control form-control-sm"
+                           min="1" step="1"
+                           [ngModel]="opSeqNo()" (ngModelChange)="opSeqNo.set($event)"
+                           [disabled]="addingOp()" />
+                  </div>
+                  <div style="max-width:240px">
+                    <label class="form-label small text-muted mb-1" for="opDescription">
+                      Description <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <input id="opDescription" name="opDescription" type="text" class="form-control form-control-sm"
+                           [ngModel]="opDescription()" (ngModelChange)="opDescription.set($event)"
+                           [disabled]="addingOp()" autocomplete="off" />
+                  </div>
+                  <div style="max-width:160px">
+                    <label class="form-label small text-muted mb-1" for="opWorkCentre">Work Centre</label>
+                    <input id="opWorkCentre" name="opWorkCentre" type="text" class="form-control form-control-sm"
+                           [ngModel]="opWorkCentre()" (ngModelChange)="opWorkCentre.set($event)"
+                           [disabled]="addingOp()" autocomplete="off" />
+                  </div>
+                  <div style="max-width:130px">
+                    <label class="form-label small text-muted mb-1" for="opLabourAmount">Labour Amt</label>
+                    <input id="opLabourAmount" name="opLabourAmount" type="number" class="form-control form-control-sm"
+                           step="0.0001" min="0"
+                           [ngModel]="opLabourAmount()" (ngModelChange)="opLabourAmount.set($event)"
+                           [disabled]="addingOp()" />
+                  </div>
+                  <div style="max-width:130px">
+                    <label class="form-label small text-muted mb-1" for="opOverheadAmount">Overhead Amt</label>
+                    <input id="opOverheadAmount" name="opOverheadAmount" type="number" class="form-control form-control-sm"
+                           step="0.0001" min="0"
+                           [ngModel]="opOverheadAmount()" (ngModelChange)="opOverheadAmount.set($event)"
+                           [disabled]="addingOp()" />
+                  </div>
+                  <button type="submit" class="btn btn-sm btn-outline-primary" [disabled]="addingOp()">
+                    @if (addingOp()) {
+                      <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                    } @else {
+                      <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+                    }
+                    Add
+                  </button>
+                </div>
+                @if (addOpError(); as msg) {
+                  <p class="text-danger small mt-1 mb-0" role="alert">{{ msg }}</p>
+                }
+              </form>
+            }
+          </div>
+        </div>
+
+      }
+    }
+  }
+</section>

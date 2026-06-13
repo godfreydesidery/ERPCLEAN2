@@ -191,9 +191,30 @@ export class ShellComponent {
     },
   ];
 
+  // ── Manufacturing ─────────────────────────────────────────────────────────
+  private readonly manufacturingNav: NavGroup = {
+    label: 'Manufacturing',
+    items: [
+      {
+        label: 'Work Orders',
+        route: '/admin/work-orders',
+        icon: 'bi-gear-wide-connected',
+        available: true,
+        permission: 'MANUFACTURING.VIEW',
+      },
+      {
+        label: 'WIP Reconciliation',
+        route: '/admin/manufacturing/wip-reconciliation',
+        icon: 'bi-bank',
+        available: true,
+        permission: 'MANUFACTURING.VIEW',
+      },
+    ],
+  };
+
   /** Nav groups with permission-filtered items. Reactive: recomputes when permissions change. */
   readonly nav = computed<readonly NavGroup[]>(() =>
-    this.allNav.map((group) => ({
+    [...this.allNav, this.manufacturingNav].map((group) => ({
       ...group,
       items: group.items.filter(
         (item) => !item.permission || this.session.hasPermission(item.permission),
