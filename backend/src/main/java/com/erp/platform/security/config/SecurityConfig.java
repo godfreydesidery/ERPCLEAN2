@@ -47,6 +47,12 @@ public class SecurityConfig {
                         .permitAll()
                         .requestMatchers("/api/**").authenticated()
                         .requestMatchers("/actuator/**").permitAll()
+                        // OpenAPI / Swagger UI (ADR-0038 D-9): springdoc controllers live in
+                        // org.springdoc — outside com.erp.api — so EndpointAuthorizationTest does NOT
+                        // scan them. These paths are technically covered by GET /** below, but explicit
+                        // matchers are cleaner and future-proof (e.g. POST /v3/api-docs/swagger-config).
+                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html")
+                        .permitAll()
                         // Co-located Angular SPA (QA single-container): the shell, built assets, and
                         // client-side routes (forwarded to index.html by SpaForwardController) are all
                         // GETs OUTSIDE /api — serve them publicly so the UI loads and deep-links work.

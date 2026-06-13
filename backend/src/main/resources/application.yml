@@ -31,6 +31,16 @@ management:
     health:
       show-details: when-authorized
 
+# OpenAPI / Swagger UI (ADR-0038 D-9).
+# Default true so dev/QA can browse the spec at /swagger-ui/index.html and /v3/api-docs.
+# Set ERP_SWAGGER_ENABLED=false in production to remove the docs surface.
+# SecurityConfig permits /v3/api-docs/**, /swagger-ui/**, /swagger-ui.html — see SecurityConfig.java.
+springdoc:
+  swagger-ui:
+    enabled: ${ERP_SWAGGER_ENABLED:true}
+  api-docs:
+    enabled: ${ERP_SWAGGER_ENABLED:true}
+
 erp:
   jwt:
     # dev-in-memory: an ephemeral RSA key is generated at startup (rotates each restart → all
