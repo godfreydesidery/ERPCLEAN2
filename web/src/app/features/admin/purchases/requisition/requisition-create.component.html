@@ -1,0 +1,179 @@
+<section class="admin-page">
+  <header class="page-head">
+    <a class="back-link text-muted small" routerLink="/admin/purchase-requisitions">
+      <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Requisitions
+    </a>
+    <h1 class="h4 mb-1 mt-1">New Purchase Requisition</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      Create a purchase requisition for approval and conversion to PO or RFQ.
+    </p>
+  </header>
+
+  <!-- Company loading -->
+  @if (companyState() === 'loading') {
+    <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+      <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+    </p>
+  } @else if (companyState() === 'error') {
+    <p class="text-danger mb-3" role="alert">Could not load companies.</p>
+  } @else {
+
+    <form class="create-form" (ngSubmit)="submit()" aria-label="Create purchase requisition">
+
+      <!-- Company (multi-company) -->
+      @if (companies().length > 1) {
+        <div class="mb-3" style="max-width:320px">
+          <label class="form-label small text-muted mb-1" for="companyPicker">
+            Company <span class="text-danger" aria-hidden="true">*</span>
+          </label>
+          <select id="companyPicker" name="companyPicker" class="form-select"
+                  [ngModel]="selectedCompanyId()"
+                  (ngModelChange)="onCompanyChange($event)"
+                  [disabled]="saving()">
+            @for (c of companies(); track c.uid) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+          </select>
+        </div>
+      }
+
+      <!-- Header fields -->
+      <div class="row g-3 mb-3">
+        <div class="col-sm-3">
+          <label class="form-label small text-muted mb-1" for="requiredByDate">Required By Date</label>
+          <input id="requiredByDate" name="requiredByDate" type="date" class="form-control"
+                 [ngModel]="requiredByDate()" (ngModelChange)="requiredByDate.set($event)"
+                 [disabled]="saving()" />
+        </div>
+        <div class="col-sm-3">
+          <label class="form-label small text-muted mb-1" for="costCentreCode">Cost Centre Code</label>
+          <input id="costCentreCode" name="costCentreCode" type="text" class="form-control"
+                 placeholder="e.g. CC-001"
+                 [ngModel]="costCentreCode()" (ngModelChange)="costCentreCode.set($event)"
+                 [disabled]="saving()" autocomplete="off" />
+        </div>
+        <div class="col-sm-6">
+          <label class="form-label small text-muted mb-1" for="reqNotes">Notes</label>
+          <input id="reqNotes" name="reqNotes" type="text" class="form-control"
+                 [ngModel]="notes()" (ngModelChange)="notes.set($event)"
+                 [disabled]="saving()" autocomplete="off" />
+        </div>
+      </div>
+
+      <!-- Line items -->
+      <h2 class="h6 mb-2">Line Items</h2>
+
+      @if (pickerState() === 'loading') {
+        <p class="text-muted small" aria-live="polite">
+          <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+          Loading products and units…
+        </p>
+      } @else if (pickerState() === 'error') {
+        <p class="text-danger small" role="alert">Could not load products/units.</p>
+      } @else {
+        <div class="table-responsive mb-2">
+          <table class="table table-sm align-middle" aria-label="Requisition line items">
+            <caption class="visually-hidden">Requisition lines</caption>
+            <thead>
+              <tr>
+                <th scope="col" style="min-width:200px">
+                  Product <span class="text-danger" aria-hidden="true">*</span>
+                </th>
+                <th scope="col" style="min-width:140px">
+                  Unit <span class="text-danger" aria-hidden="true">*</span>
+                </th>
+                <th scope="col" style="min-width:110px">
+                  Qty <span class="text-danger" aria-hidden="true">*</span>
+                </th>
+                <th scope="col" style="min-width:130px">Est. Unit Cost</th>
+                <th scope="col" style="min-width:160px">Note</th>
+                <th scope="col"><span class="visually-hidden">Remove</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (line of lines(); track $index; let i = $index) {
+                <tr>
+                  <td>
+                    <app-uid-picker
+                      [ngModel]="line.productUid"
+                      (ngModelChange)="updateLine(i, { productUid: $event })"
+                      [options]="productOptions()"
+                      placeholder="Select product"
+                      [required]="true"
+                      [attr.aria-label]="'Product for line ' + (i + 1)"
+                      [disabled]="saving()" />
+                  </td>
+                  <td>
+                    <app-uid-picker
+                      [ngModel]="line.unitUid"
+                      (ngModelChange)="updateLine(i, { unitUid: $event })"
+                      [options]="unitOptions()"
+                      placeholder="Select unit"
+                      [required]="true"
+                      [attr.aria-label]="'Unit for line ' + (i + 1)"
+                      [disabled]="saving()" />
+                  </td>
+                  <td>
+                    <input type="number" class="form-control form-control-sm"
+                           [ngModel]="line.requestedQty"
+                           (ngModelChange)="updateLine(i, { requestedQty: $event != null ? ('' + $event) : '' })"
+                           min="0.001" step="any"
+                           [attr.aria-label]="'Requested quantity for line ' + (i + 1)"
+                           [disabled]="saving()" required />
+                  </td>
+                  <td>
+                    <input type="number" class="form-control form-control-sm"
+                           [ngModel]="line.estimatedUnitCost"
+                           (ngModelChange)="updateLine(i, { estimatedUnitCost: $event != null ? ('' + $event) : '' })"
+                           min="0" step="any"
+                           [attr.aria-label]="'Estimated unit cost for line ' + (i + 1)"
+                           [disabled]="saving()" />
+                  </td>
+                  <td>
+                    <input type="text" class="form-control form-control-sm"
+                           [ngModel]="line.note"
+                           (ngModelChange)="updateLine(i, { note: $event })"
+                           [attr.aria-label]="'Note for line ' + (i + 1)"
+                           [disabled]="saving()" autocomplete="off" />
+                  </td>
+                  <td>
+                    @if (lines().length > 1) {
+                      <button type="button" class="btn btn-sm btn-outline-danger"
+                              (click)="removeLine(i)"
+                              [attr.aria-label]="'Remove line ' + (i + 1)"
+                              [disabled]="saving()">
+                        <i class="bi bi-trash" aria-hidden="true"></i>
+                      </button>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <button type="button" class="btn btn-sm btn-outline-secondary mb-3"
+                (click)="addLine()" [disabled]="saving()">
+          <i class="bi bi-plus me-1" aria-hidden="true"></i>Add line
+        </button>
+      }
+
+      @if (formError(); as msg) {
+        <p class="form-error text-danger small mb-2" role="alert">{{ msg }}</p>
+      }
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary" [disabled]="saving() || pickerState() !== 'idle'">
+          @if (saving()) {
+            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+            Saving…
+          } @else {
+            Create Requisition
+          }
+        </button>
+        <a class="btn btn-outline-secondary" routerLink="/admin/purchase-requisitions">Cancel</a>
+      </div>
+
+    </form>
+  }
+</section>

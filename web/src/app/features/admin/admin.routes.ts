@@ -926,5 +926,30 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./stock/count/stock-count-detail.component').then((m) => m.StockCountDetailComponent),
   },
+  // ── Purchase Requisitions ─────────────────────────────────────────────────
+  {
+    path: 'purchase-requisitions',
+    canActivate: [requirePermission('PURCHASE.REQUISITION.VIEW')],
+    loadComponent: () =>
+      import('./purchases/requisition/requisition-list.component').then(
+        (m) => m.RequisitionListComponent,
+      ),
+  },
+  {
+    path: 'purchase-requisitions/create',
+    canActivate: [requirePermission('PURCHASE.REQUISITION.CREATE')],
+    loadComponent: () =>
+      import('./purchases/requisition/requisition-create.component').then(
+        (m) => m.RequisitionCreateComponent,
+      ),
+  },
+  {
+    path: 'purchase-requisitions/uid/:uid',
+    canActivate: [requirePermission('PURCHASE.REQUISITION.VIEW')],
+    loadComponent: () =>
+      import('./purchases/requisition/requisition-detail.component').then(
+        (m) => m.RequisitionDetailComponent,
+      ),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];
