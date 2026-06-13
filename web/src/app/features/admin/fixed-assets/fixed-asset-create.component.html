@@ -59,12 +59,12 @@
           }
         </div>
 
-        <!-- Branch ID -->
+        <!-- Branch -->
         <div class="col-sm-3">
-          <label class="form-label small text-muted mb-1" for="fBranchId">Branch ID <span class="text-danger" aria-hidden="true">*</span></label>
-          <input id="fBranchId" name="fBranchId" type="text" class="form-control"
-                 [ngModel]="fBranchId()" (ngModelChange)="fBranchId.set($event)"
-                 [disabled]="saving()" autocomplete="off" />
+          <label class="form-label small text-muted mb-1">Branch <span class="text-danger" aria-hidden="true">*</span></label>
+          <app-uid-picker [(ngModel)]="fBranchUid" [options]="branchOptions()"
+                          placeholder="Select branch" [required]="true"
+                          name="fBranchUid" />
         </div>
 
         <!-- Name -->

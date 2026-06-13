@@ -11,6 +11,7 @@ import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { SupplierModel } from '../models/party.model';
 import { SupplierService } from '../parties/supplier.service';
+import { PurchasesService } from '../purchases/purchases.service';
 import {
   BillLineRequest,
   BillMatchResultDto,
@@ -19,6 +20,7 @@ import {
   SupplierBillDto,
 } from './models/ap.model';
 import { ApService } from './ap.service';
+import { UidOption, UidPickerComponent } from '../../../shared/uid-picker/uid-picker.component';
 
 /**
  * UI-only line row for the bill line editor.
@@ -43,7 +45,7 @@ interface LineRow {
  */
 @Component({
   selector: 'app-enter-bill',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, UidPickerComponent],
   templateUrl: './enter-bill.component.html',
   styleUrl: './enter-bill.component.scss',
 })
@@ -52,8 +54,14 @@ export class EnterBillComponent {
   private readonly companyService = inject(CompanyService);
   private readonly organisationService = inject(OrganisationService);
   private readonly supplierService = inject(SupplierService);
+  private readonly purchasesService = inject(PurchasesService);
   private readonly alerts = inject(AlertService);
   protected readonly session = inject(SessionStore);
+
+  // ── PO picker ─────────────────────────────────────────────────────────────
+  readonly poOptions = signal<UidOption[]>([]);
+  /** PO line options, loaded when a PO is selected. */
+  readonly poLineOptions = signal<UidOption[]>([]);
 
   // ── Company context ────────────────────────────────────────────────────────
   readonly companies = signal<Company[]>([]);
@@ -133,7 +141,10 @@ export class EnterBillComponent {
           next: (list) => {
             this.companies.set(list);
             this.companyState.set('idle');
-            if (list.length > 0) this.selectedCompanyId.set(list[0].id);
+            if (list.length > 0) {
+              this.selectedCompanyId.set(list[0].id);
+              this.loadPoOptions(list[0].id);
+            }
           },
           error: () => this.companyState.set('error'),
         });
@@ -142,9 +153,43 @@ export class EnterBillComponent {
     });
   }
 
+  private loadPoOptions(companyId: string): void {
+    this.purchasesService.listOrders(companyId, undefined, 'ORDERED', 0, 200).subscribe({
+      next: ({ rows }) => {
+        this.poOptions.set(
+          rows.map((po) => ({
+            uid: po.uid,
+            label: po.orderNumber ?? po.uid,
+            hint: po.supplierName,
+          })),
+        );
+      },
+      error: () => {},
+    });
+  }
+
+  onPoUidChange(uid: string): void {
+    this.purchaseOrderUid.set(uid);
+    this.poLineOptions.set([]);
+    if (!uid) return;
+    this.purchasesService.listOrderLines(uid).subscribe({
+      next: (lines) => {
+        this.poLineOptions.set(
+          lines.map((l) => ({
+            uid: l.uid,
+            label: `${l.productCode} — ${l.productName}`,
+            hint: `L${l.lineNo} qty ${l.orderedQty}`,
+          })),
+        );
+      },
+      error: () => {},
+    });
+  }
+
   onCompanyChange(id: string): void {
     this.selectedCompanyId.set(id);
     this.resetSupplier();
+    this.loadPoOptions(id);
   }
 
   // ── Supplier picker ────────────────────────────────────────────────────────

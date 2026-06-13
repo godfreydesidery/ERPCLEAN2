@@ -5,6 +5,9 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
+import { GlService } from '../gl/gl.service';
+import { CompanyService } from '../company/company.service';
+import { OrganisationService } from '../organisation/organisation.service';
 import {
   BudgetLineDto,
   BudgetVersionDto,
@@ -14,6 +17,7 @@ import {
   UpsertBudgetLineRequest,
 } from './models/budgeting.model';
 import { BudgetingService } from './budgeting.service';
+import { UidOption, UidPickerComponent } from '../../../shared/uid-picker/uid-picker.component';
 
 type LoadState = 'loading' | 'idle' | 'error';
 
@@ -23,14 +27,22 @@ type LoadState = 'loading' | 'idle' | 'error';
  */
 @Component({
   selector: 'app-budget-version-detail',
-  imports: [FormsModule, RouterLink, DecimalPipe],
+  imports: [FormsModule, RouterLink, DecimalPipe, UidPickerComponent],
   templateUrl: './budget-version-detail.component.html',
   styleUrl: './budget-version-detail.component.scss',
 })
 export class BudgetVersionDetailComponent {
   private readonly budgetingService = inject(BudgetingService);
+  private readonly glService = inject(GlService);
+  private readonly companyService = inject(CompanyService);
+  private readonly organisationService = inject(OrganisationService);
   private readonly alerts = inject(AlertService);
   protected readonly session = inject(SessionStore);
+
+  // ── Picker options ────────────────────────────────────────────────────────
+  readonly accountOptions = signal<UidOption[]>([]);
+  readonly fiscalPeriodOptions = signal<UidOption[]>([]);
+  readonly budgetVersionOptions = signal<UidOption[]>([]);
 
   /** Route input bound via withComponentInputBinding. */
   readonly uid = input.required<string>();
@@ -81,8 +93,63 @@ export class BudgetVersionDetailComponent {
       next: (v) => {
         this.version.set(v);
         this.versionState.set('idle');
+        this.loadPickerOptions(v);
       },
       error: () => this.versionState.set('error'),
+    });
+  }
+
+  private loadPickerOptions(v: BudgetVersionDto): void {
+    // Resolve companyId (numeric string) → companyUid for GL account/period lists.
+    this.organisationService.current().subscribe({
+      next: (org) => {
+        this.companyService.list(org.uid).subscribe({
+          next: (companies) => {
+            const company = companies.find((c) => c.id === v.companyId);
+            if (!company) return;
+            const companyId = company.id;
+            // Load accounts
+            this.glService.listAllActiveAccounts(companyId).subscribe({
+              next: (accounts) => {
+                this.accountOptions.set(
+                  accounts.map((a) => ({ uid: a.uid, label: a.name, hint: a.accountCode })),
+                );
+              },
+              error: () => {},
+            });
+            // Load fiscal periods
+            this.glService.listPeriods(companyId).subscribe({
+              next: (periods) => {
+                this.fiscalPeriodOptions.set(
+                  periods.map((p) => ({
+                    uid: p.uid,
+                    label: `P${p.periodNo} (${p.startDate} – ${p.endDate})`,
+                    hint: p.status,
+                  })),
+                );
+              },
+              error: () => {},
+            });
+          },
+          error: () => {},
+        });
+      },
+      error: () => {},
+    });
+    // Load budget versions for seed picker
+    this.budgetingService.getByUid(v.budgetUid).subscribe({
+      next: (budget) => {
+        this.budgetVersionOptions.set(
+          (budget.versions ?? [])
+            .filter((bv) => bv.uid !== v.uid)
+            .map((bv) => ({
+              uid: bv.uid,
+              label: `V${bv.versionNo}${bv.label ? ' — ' + bv.label : ''}`,
+              hint: bv.status,
+            })),
+        );
+      },
+      error: () => {},
     });
   }
 

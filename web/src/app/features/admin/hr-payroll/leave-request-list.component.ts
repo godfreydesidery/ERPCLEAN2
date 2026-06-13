@@ -13,6 +13,7 @@ import { OrganisationService } from '../organisation/organisation.service';
 import { HrPayrollService, LeaveRequestPage } from './hr-payroll.service';
 import { LeaveRequestDto, LeaveRequestStatus, SubmitLeaveRequest } from './models/hr-payroll.model';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
+import { UidOption, UidPickerComponent } from '../../../shared/uid-picker/uid-picker.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -24,7 +25,7 @@ interface LoadTrigger { page: number }
  */
 @Component({
   selector: 'app-leave-request-list',
-  imports: [FormsModule, RouterLink, PaginatorComponent],
+  imports: [FormsModule, RouterLink, PaginatorComponent, UidPickerComponent],
   templateUrl: './leave-request-list.component.html',
   styleUrl: './leave-request-list.component.scss',
 })
@@ -43,6 +44,9 @@ export class LeaveRequestListComponent {
   readonly meta = signal<PageMeta>({ page: 0, size: DEFAULT_SIZE, totalElements: 0, totalPages: 0, hasNext: false });
   readonly state = signal<'loading' | 'idle' | 'error' | 'forbidden'>('idle');
   readonly currentPage = signal(0);
+
+  // ── Employee picker options ────────────────────────────────────────────────
+  readonly employeeOptions = signal<UidOption[]>([]);
 
   // ── Submit form (needs employee uid) ─────────────────────────────────────────
   readonly showCreateForm = signal(false);
@@ -103,6 +107,7 @@ export class LeaveRequestListComponent {
             if (list.length > 0) {
               this.selectedCompanyId.set(list[0].id);
               this.load(0);
+              this.loadEmployeeOptions(list[0].id);
             }
           },
           error: () => this.companyState.set('error'),
@@ -112,9 +117,29 @@ export class LeaveRequestListComponent {
     });
   }
 
+  private loadEmployeeOptions(companyId: string): void {
+    this.hrService.listEmployees(companyId, 0, 500).subscribe({
+      next: ({ rows }) => {
+        this.employeeOptions.set(
+          rows
+            .filter((e) => e.status === 'ACTIVE')
+            .map((e) => ({
+              uid: e.uid,
+              label: `${e.firstName} ${e.lastName}`,
+              hint: e.employeeNumber,
+            })),
+        );
+      },
+      error: () => {},
+    });
+  }
+
   onCompanyChange(id: string): void {
     this.selectedCompanyId.set(id);
-    if (id) this.load(0);
+    if (id) {
+      this.load(0);
+      this.loadEmployeeOptions(id);
+    }
   }
 
   load(page: number): void {
@@ -149,7 +174,7 @@ export class LeaveRequestListComponent {
     const toDate = this.fToDate().trim();
     const days = this.fDays().trim();
 
-    if (!employeeUid) { this.formError.set('Employee UID is required.'); return; }
+    if (!employeeUid) { this.formError.set('Employee is required.'); return; }
     if (!leaveTypeId) { this.formError.set('Leave type ID is required.'); return; }
     if (!fromDate) { this.formError.set('From date is required.'); return; }
     if (!toDate) { this.formError.set('To date is required.'); return; }

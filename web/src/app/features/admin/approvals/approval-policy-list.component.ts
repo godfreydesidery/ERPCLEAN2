@@ -11,6 +11,7 @@ import { SessionStore } from '../../../core/auth/session.store';
 import { Company } from '../models/company.model';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
+import { BranchService } from '../branch/branch.service';
 import { ApprovalsService } from './approvals.service';
 import type { ApprovalPolicyPage } from './approvals.service';
 import {
@@ -21,6 +22,7 @@ import {
   PolicyStepInputDto,
 } from './models/approvals.model';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
+import { UidOption, UidPickerComponent } from '../../../shared/uid-picker/uid-picker.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -32,7 +34,7 @@ interface LoadTrigger { page: number }
  */
 @Component({
   selector: 'app-approval-policy-list',
-  imports: [FormsModule, RouterLink, DecimalPipe, PaginatorComponent],
+  imports: [FormsModule, RouterLink, DecimalPipe, PaginatorComponent, UidPickerComponent],
   templateUrl: './approval-policy-list.component.html',
   styleUrl: './approval-policy-list.component.scss',
 })
@@ -40,6 +42,7 @@ export class ApprovalPolicyListComponent {
   private readonly approvalsService = inject(ApprovalsService);
   private readonly companyService = inject(CompanyService);
   private readonly organisationService = inject(OrganisationService);
+  private readonly branchService = inject(BranchService);
   private readonly alerts = inject(AlertService);
   protected readonly session = inject(SessionStore);
 
@@ -47,6 +50,9 @@ export class ApprovalPolicyListComponent {
   readonly companies = signal<Company[]>([]);
   readonly selectedCompanyId = signal('');
   readonly companyState = signal<'loading' | 'idle' | 'error'>('loading');
+
+  // ── Picker options ────────────────────────────────────────────────────────
+  readonly branchOptions = signal<UidOption[]>([]);
 
   // ── Filters ──────────────────────────────────────────────────────────────────
   readonly filterDocumentType = signal('');
@@ -123,6 +129,7 @@ export class ApprovalPolicyListComponent {
             if (list.length > 0) {
               this.selectedCompanyId.set(list[0].id);
               this.load(0);
+              this.loadBranchOptions(list[0].uid);
             }
           },
           error: () => this.companyState.set('error'),
@@ -132,9 +139,24 @@ export class ApprovalPolicyListComponent {
     });
   }
 
+  private loadBranchOptions(companyUid: string): void {
+    this.branchService.list(companyUid).subscribe({
+      next: (branches) => {
+        this.branchOptions.set(
+          branches.filter((b) => b.status === 'ACTIVE').map((b) => ({ uid: b.uid, label: b.name, hint: b.code })),
+        );
+      },
+      error: () => {},
+    });
+  }
+
   onCompanyChange(id: string): void {
     this.selectedCompanyId.set(id);
-    if (id) this.load(0);
+    if (id) {
+      const company = this.companies().find((c) => c.id === id);
+      if (company) this.loadBranchOptions(company.uid);
+      this.load(0);
+    }
   }
 
   applyFilter(): void {

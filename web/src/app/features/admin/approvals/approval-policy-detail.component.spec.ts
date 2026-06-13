@@ -13,6 +13,9 @@ import { of, throwError } from 'rxjs';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
+import { BranchService } from '../branch/branch.service';
+import { CompanyService } from '../company/company.service';
+import { OrganisationService } from '../organisation/organisation.service';
 import { ApprovalsService } from './approvals.service';
 import { ApprovalPolicyDetailComponent } from './approval-policy-detail.component';
 import type { ApprovalPolicyDto } from './models/approvals.model';
@@ -55,6 +58,10 @@ function makeBed(
       provideRouter([]),
       { provide: ApprovalsService, useValue: svc },
       { provide: AlertService, useValue: { success: vi.fn(), error: vi.fn() } },
+      // Stubs for services injected by loadBranchOptions (called after policy loads)
+      { provide: OrganisationService, useValue: { current: vi.fn(() => of({ uid: 'org-1' })) } },
+      { provide: CompanyService, useValue: { list: vi.fn(() => of([])) } },
+      { provide: BranchService, useValue: { list: vi.fn(() => of([])) } },
       {
         provide: SessionStore,
         useValue: {
