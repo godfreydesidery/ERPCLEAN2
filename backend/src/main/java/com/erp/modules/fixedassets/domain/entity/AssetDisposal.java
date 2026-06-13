@@ -51,12 +51,11 @@ public class AssetDisposal extends UidEntity {
     private BigDecimal gainLossAmount;
 
     /**
-     * The GL journal uid posted for this disposal. NOT NULL — the DB enforces that a persisted
-     * disposal must have a successful GL post (ADR-0030 D-6). The service sets this after
-     * posting the GL journal in the same TX (em.persist is deferred until flush, so the INSERT
-     * sees the uid before the constraint fires).
+     * The GL journal uid posted for this disposal. Nullable — the disposal row is persisted first
+     * to obtain its uid for use as the GL sourceRef, then gl_entry_uid is set after the GL post
+     * returns in the same TX (ADR-0030 D-6). The DB column is also nullable for the same reason.
      */
-    @Column(name = "gl_entry_uid", nullable = false, length = 26)
+    @Column(name = "gl_entry_uid", nullable = true, length = 26)
     @Setter
     private String glEntryUid;
 

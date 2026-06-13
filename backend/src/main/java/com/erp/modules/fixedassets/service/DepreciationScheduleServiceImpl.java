@@ -87,7 +87,13 @@ public class DepreciationScheduleServiceImpl implements DepreciationScheduleServ
         BigDecimal carryingCost  = asset.getCarryingCost();
         BigDecimal salvage       = asset.getSalvageValue();
         int        n             = asset.getLifePeriods();
-        BigDecimal base          = carryingCost.subtract(salvage);
+        // ADR-0030 D-5 Finding 2 fix: the depreciable BASE for remaining periods must subtract
+        // already-posted accumulated depreciation. On first generation startingAccum=0 so behaviour
+        // is unchanged. On regeneration after revaluation:
+        //   base = new_carrying_cost - salvage - accumulated_depreciation_already_posted
+        // Without this subtraction the regenerated schedule over-charges by the accum_dep amount
+        // (e.g. 10M - 0 - 1M = 9M is correct; 10M - 0 = 10M incorrectly ignores posted charges).
+        BigDecimal base          = carryingCost.subtract(salvage).subtract(startingAccum);
         BigDecimal accum         = startingAccum;
 
         LocalDate startDate = asset.getDepreciationStartDate();

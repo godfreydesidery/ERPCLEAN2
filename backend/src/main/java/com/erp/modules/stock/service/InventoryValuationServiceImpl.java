@@ -164,20 +164,28 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
             newAvg        = round4(newTotalValue.divide(newQty, SCALE, RM));
         }
 
-        // Sync new avg_cost and re-attributed on_hand_value to EVERY location row
-        // (on_hand_value per row = row.qty × new_avg, so Σ on_hand_value == new_total_value).
-        // The receiving row's qty will be incremented by the posting service AFTER we return;
-        // all other rows are stable — write their re-attributed values now.
+        // Sync new avg_cost and re-attributed on_hand_value to EVERY location row.
+        // For non-receiving rows: on_hand_value = row.qty × new_avg (their qty is stable).
+        // For the receiving row: the posting service will add receiptQty AFTER this method
+        // returns, so the row still holds its PRE-receipt qty here. We must pre-compute the
+        // POST-receipt value: (preQty + receiptQty) × newAvg, so the row is consistent once
+        // the qty increment lands. This is the key fix for the per-location recompute.
+        final Long receivingRowId = receivingRow.getId();
         for (StockOnHand row : allRows) {
-            BigDecimal rowNewValue = round4(row.getQuantity().multiply(newAvg));
+            BigDecimal effectiveQty = row.getId().equals(receivingRowId)
+                    ? row.getQuantity().add(receiptQty)   // post-receipt qty for receiving row
+                    : row.getQuantity();                   // pre-receipt (stable) for all others
+            BigDecimal rowNewValue = round4(effectiveQty.multiply(newAvg));
             row.applyCostRecompute(newAvg, rowNewValue, null);
             onHands.save(row);
         }
 
-        // If the receiving row is newly created (not in allRows yet because it was just saved),
-        // ensure its avg_cost is set. Its on_hand_value will be correct once posting adds qty.
-        if (allRows.stream().noneMatch(r -> r.getId().equals(receivingRow.getId()))) {
-            receivingRow.applyCostRecompute(newAvg, BigDecimal.ZERO, null);
+        // If the receiving row is newly created (not yet in allRows at the time of the
+        // findByCompanyIdAndProductId call — the upsert save may not be visible yet),
+        // apply avg_cost + the post-receipt value directly.
+        if (allRows.stream().noneMatch(r -> r.getId().equals(receivingRowId))) {
+            BigDecimal rowNewValue = round4(receiptQty.multiply(newAvg));
+            receivingRow.applyCostRecompute(newAvg, rowNewValue, null);
             onHands.save(receivingRow);
         }
 
@@ -339,8 +347,18 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
         }
 
         // Sync new avg and re-attributed on_hand_value to every location row.
+        // When postReversalTotalQty > 0: distribute postReversalTotalValue by row proportion
+        // (row.qty × newAvg is equivalent since newAvg = postReversalTotalValue / postReversalTotalQty
+        //  and the rows not receiving the reversal still carry their pre-reversal qty, which is correct).
+        // When postReversalTotalQty <= 0: the aggregate value after reversal is postReversalTotalValue
+        // (nominally 0 for a full reversal). Set every row to that value (clamped ≥ 0) — do NOT
+        // multiply row.qty × newAvg because row.qty is still the PRE-reversal qty, giving a spurious
+        // positive value for a full reversal where the correct on_hand_value is zero (FIX A).
+        final boolean valueDepleted = postReversalTotalQty.compareTo(BigDecimal.ZERO) <= 0;
         for (StockOnHand row : allRows) {
-            BigDecimal rowNewValue = round4(row.getQuantity().multiply(newAvg));
+            BigDecimal rowNewValue = valueDepleted
+                    ? postReversalTotalValue.max(BigDecimal.ZERO)
+                    : round4(row.getQuantity().multiply(newAvg));
             row.applyCostRecompute(newAvg, rowNewValue, null);
             onHands.save(row);
         }

@@ -165,11 +165,18 @@ public class ApprovalDecisionServiceImpl implements ApprovalDecisionService {
         // Skip all remaining PENDING steps atomically (one reject kills the chain — OQ-APR-04 default).
         // The open step was already set to REJECTED before this call, so only subsequent PENDING steps
         // are affected. Single DML UPDATE avoids intermediate inconsistent state (Finding 1 fix).
+        //
+        // IMPORTANT: @Modifying(clearAutomatically = true) on updatePendingToSkipped evicts ALL
+        // managed entities from the 1st-level cache after the bulk UPDATE. This detaches the
+        // `request` entity, so mutations after this call are NOT tracked by dirty-checking and
+        // would never be flushed. We must explicitly save the request after updating it to ensure
+        // the REJECTED status is persisted within this TX.
         stepRepo.updatePendingToSkipped(request.getId());
 
         request.setStatus(ApprovalRequestStatus.REJECTED);
         request.setResolvedAt(now);
         request.setResolvedBy(actorId);
+        requestRepo.save(request);   // explicit save: entity is detached after cache-clear above
 
         publishResolved(request, actorId, now);
     }
@@ -198,11 +205,12 @@ public class ApprovalDecisionServiceImpl implements ApprovalDecisionService {
         }
 
         Instant now = Instant.now();
-        skipPendingSteps(request.getId());
+        skipPendingSteps(request.getId());   // clears 1st-level cache → entity detached
         request.setStatus(ApprovalRequestStatus.RECALLED);
         request.setResolvedAt(now);
         request.setResolvedBy(actorId);
         request.setUpdatedBy(actorId);
+        requestRepo.save(request);           // explicit save after cache-clear
 
         audit.record(AuditEvent.of(AuditActions.APPROVAL_REQUEST_RECALL, "approval_requests",
                 request.getId(), request.getUid()));
@@ -224,11 +232,12 @@ public class ApprovalDecisionServiceImpl implements ApprovalDecisionService {
 
         Long actorId = principal.userId();
         Instant now  = Instant.now();
-        skipPendingSteps(request.getId());
+        skipPendingSteps(request.getId());   // clears 1st-level cache → entity detached
         request.setStatus(ApprovalRequestStatus.CANCELLED);
         request.setResolvedAt(now);
         request.setResolvedBy(actorId);
         request.setUpdatedBy(actorId);
+        requestRepo.save(request);           // explicit save after cache-clear
 
         audit.record(AuditEvent.of(AuditActions.APPROVAL_REQUEST_CANCEL, "approval_requests",
                 request.getId(), request.getUid()));

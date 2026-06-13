@@ -225,21 +225,35 @@ class ApprovalsEngineIT extends PostgresIntegrationTest {
     }
 
     // ------------------------------------------------------------------
-    // 4. Idempotent submit — re-submit same (type, uid) returns existing
+    // 4. Idempotent submit — re-submit same (type, uid) returns existing PENDING request
+    //    (idempotency guard only returns the same request when it is still PENDING;
+    //     re-submitting a terminal request is a ConflictException per OQ-APR-06 / Finding 5 fix).
     // ------------------------------------------------------------------
     @Test
     void idempotentSubmit_returnsSameRequest() {
         asPrincipal(buyerUser);
+        // Create a policy so the submit goes PENDING (not auto-approved) — amount 5M > threshold 1M
+        policyService.create(new CreateApprovalPolicyRequest(
+                company.getId(), "PURCHASE_ORDER", "Idem Policy",
+                PolicyBranchScope.COMPANY_WIDE, null,
+                new BigDecimal("1000000"), null, null,
+                List.of(new PolicyStepInputDto(1, "PURCHASING_MANAGER"))
+        ));
+
         ApprovalRequestDto first = engine.submitForApproval(new SubmitForApprovalRequest(
-                "PURCHASE_ORDER", "po-uid-idem", new BigDecimal("200"), "TZS",
+                "PURCHASE_ORDER", "po-uid-idem", new BigDecimal("5000000"), "TZS",
                 company.getId(), branch.getUid(), buyerUser.getId(), null));
 
+        assertThat(first.status()).isEqualTo(ApprovalRequestStatus.PENDING);
+
+        // Re-submit the same document uid with same amount — must return the EXISTING PENDING request
         ApprovalRequestDto second = engine.submitForApproval(new SubmitForApprovalRequest(
-                "PURCHASE_ORDER", "po-uid-idem", new BigDecimal("200"), "TZS",
+                "PURCHASE_ORDER", "po-uid-idem", new BigDecimal("5000000"), "TZS",
                 company.getId(), branch.getUid(), buyerUser.getId(), null));
 
         assertThat(second.uid()).isEqualTo(first.uid());
         assertThat(second.requestNumber()).isEqualTo(first.requestNumber());
+        assertThat(second.status()).isEqualTo(ApprovalRequestStatus.PENDING);
     }
 
     // ------------------------------------------------------------------
