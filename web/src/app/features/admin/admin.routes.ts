@@ -825,5 +825,12 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./fx/fx-revaluation-list.component').then((m) => m.FxRevaluationListComponent),
   },
+  // ── Analytics ──────────────────────────────────────────────────────────────
+  {
+    path: 'dashboard',
+    canActivate: [requirePermission('BI.VIEW')],
+    loadComponent: () =>
+      import('./dashboard/dashboard.component').then((m) => m.DashboardComponent),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];

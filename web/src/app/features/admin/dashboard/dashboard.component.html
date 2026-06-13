@@ -1,0 +1,535 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">
+      <i class="bi bi-speedometer2 me-2" aria-hidden="true"></i>Analytics Dashboard
+    </h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      Executive view: finance, working capital, inventory, CRM and trends.
+    </p>
+  </header>
+
+  <!-- ── Company selector ─────────────────────────────────────────────────── -->
+  @switch (companyState()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mb-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load companies.
+      </p>
+    }
+    @default {
+      <div class="row g-2 mb-3">
+        @if (companies().length > 1) {
+          <div class="col-sm-3">
+            <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+            <select id="companyPicker" name="companyPicker" class="form-select form-select-sm"
+                    [ngModel]="selectedCompanyId()"
+                    (ngModelChange)="onCompanyChange($event)">
+              @for (c of companies(); track c.uid) {
+                <option [value]="c.id">{{ c.name }}</option>
+              }
+            </select>
+          </div>
+        }
+        <div class="col-sm-3">
+          <label class="form-label small text-muted mb-1" for="branchPicker">Branch</label>
+          @if (branchState() === 'loading') {
+            <p class="text-muted small" aria-live="polite">Loading branches…</p>
+          } @else {
+            <select id="branchPicker" name="branchPicker" class="form-select form-select-sm"
+                    [ngModel]="selectedBranchId()"
+                    (ngModelChange)="onBranchChange($event)">
+              @if (branches().length === 0) {
+                <option value="">— no branches —</option>
+              }
+              @for (b of branches(); track b.uid) {
+                <option [value]="b.id">{{ b.code }} — {{ b.name }}</option>
+              }
+            </select>
+          }
+        </div>
+        <div class="col-sm-3">
+          <label class="form-label small text-muted mb-1" for="fromDate">From</label>
+          <input id="fromDate" name="fromDate" type="date" class="form-control form-control-sm"
+                 [ngModel]="fromDate()" (ngModelChange)="fromDate.set($event)" />
+        </div>
+        <div class="col-sm-3">
+          <label class="form-label small text-muted mb-1" for="toDate">To</label>
+          <div class="d-flex gap-2 align-items-center">
+            <input id="toDate" name="toDate" type="date" class="form-control form-control-sm"
+                   [ngModel]="toDate()" (ngModelChange)="toDate.set($event)" />
+            <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyDates()"
+                    aria-label="Refresh dashboard">
+              <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    }
+  }
+
+  @if (selectedCompanyId()) {
+
+    <!-- ── Health strip ──────────────────────────────────────────────────────── -->
+    @if (health().length > 0) {
+      <div class="mb-4 d-flex flex-wrap gap-2" role="status" aria-label="Reconciliation health indicators">
+        @for (h of health(); track h.label) {
+          <span class="badge" [class]="healthBadgeClass(h.ties)">
+            {{ healthPrefix(h.ties) }} {{ h.label }}
+            @if (!h.ties) {
+              (diff: {{ +h.difference | number:'1.2-2' }})
+            }
+          </span>
+        }
+      </div>
+    }
+
+    <!-- ── Finance + Working Capital stat-cards row ─────────────────────────── -->
+    <div class="row g-3 mb-4">
+
+      <!-- Finance stat-cards -->
+      <div class="col-lg-8">
+        <h2 class="h5 mb-3">
+          Finance
+          <a routerLink="/admin/reporting/income-statement" class="ms-2 small text-muted"
+             aria-label="Go to income statement">
+            <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
+          </a>
+        </h2>
+        @switch (financeState()) {
+          @case ('loading') {
+            <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+              <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+            </p>
+          }
+          @case ('error') {
+            <p class="text-danger" role="alert">
+              <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load finance data.
+            </p>
+          }
+          @case ('forbidden') {
+            <p class="text-muted">
+              <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>You do not have permission to view finance KPIs.
+            </p>
+          }
+          @default {
+            @if (finance(); as f) {
+              <div class="row g-2">
+                <div class="col-6 col-md-4">
+                  <div class="card h-100 border-0 bg-light p-3">
+                    <div class="small text-muted mb-1">Revenue</div>
+                    <div class="fs-5 fw-semibold font-monospace">{{ +f.revenue | number:'1.2-2' }}</div>
+                  </div>
+                </div>
+                <div class="col-6 col-md-4">
+                  <div class="card h-100 border-0 bg-light p-3">
+                    <div class="small text-muted mb-1">OpEx</div>
+                    <div class="fs-5 fw-semibold font-monospace">{{ +f.opex | number:'1.2-2' }}</div>
+                  </div>
+                </div>
+                <div class="col-6 col-md-4">
+                  <div class="card h-100 border-0 bg-success bg-opacity-10 p-3">
+                    <div class="small text-muted mb-1">Net Profit (period)</div>
+                    <div class="fs-5 fw-bold font-monospace" [class.text-success]="+f.netProfitPeriod>=0" [class.text-danger]="+f.netProfitPeriod<0">
+                      {{ +f.netProfitPeriod | number:'1.2-2' }}
+                    </div>
+                  </div>
+                </div>
+                <div class="col-6 col-md-4">
+                  <div class="card h-100 border-0 p-3" [class.bg-light]="f.tbTies" [class.border-danger]="!f.tbTies">
+                    <div class="small text-muted mb-1">Trial Balance</div>
+                    <div class="d-flex align-items-center gap-2">
+                      <span class="badge" [class]="healthBadgeClass(f.tbTies)">
+                        {{ healthPrefix(f.tbTies) }} {{ f.tbTies ? 'Balanced' : 'Out of balance' }}
+                      </span>
+                    </div>
+                    <div class="small text-muted mt-1">
+                      <a routerLink="/admin/gl/trial-balance" aria-label="Go to trial balance">View TB</a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            } @else {
+              <p class="text-muted">No finance data yet for this period.</p>
+            }
+          }
+        }
+      </div>
+
+      <!-- Cash position -->
+      <div class="col-lg-4">
+        <h2 class="h5 mb-3">
+          Cash Position
+          <a routerLink="/admin/cash/accounts" class="ms-2 small text-muted"
+             aria-label="Go to cash accounts">
+            <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
+          </a>
+        </h2>
+        @switch (financeState()) {
+          @case ('loading') {
+            <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+              <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+            </p>
+          }
+          @case ('forbidden') {
+            <p class="text-muted">
+              <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>No access to cash data.
+            </p>
+          }
+          @case ('error') {
+            <p class="text-danger" role="alert">Could not load cash data.</p>
+          }
+          @default {
+            @if (finance()?.cash; as cash) {
+              <div class="card border-0 bg-light p-3 mb-3">
+                <div class="small text-muted mb-1">Total Book Balance</div>
+                <div class="fs-4 fw-bold font-monospace">{{ +cash.total | number:'1.2-2' }}</div>
+                <div class="mt-1">
+                  <span class="badge" [class]="healthBadgeClass(cash.cashTies)">
+                    {{ healthPrefix(cash.cashTies) }} Cash-GL recon
+                  </span>
+                </div>
+              </div>
+              @if (cash.accounts.length > 0) {
+                <div class="table-responsive">
+                  <table class="table table-sm align-middle bg-white">
+                    <caption class="visually-hidden">Cash account balances</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Account</th>
+                        <th scope="col" class="text-end">Balance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (acc of cash.accounts; track acc.cashBankAccountUid) {
+                        <tr>
+                          <td class="small">{{ acc.accountCode }} {{ acc.accountName }}</td>
+                          <td class="text-end font-monospace small">{{ acc.currency }} {{ +acc.bookBalance | number:'1.2-2' }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              }
+            } @else {
+              <p class="text-muted">No cash data yet.</p>
+            }
+          }
+        }
+      </div>
+    </div>
+
+    <!-- ── Working Capital row ───────────────────────────────────────────────── -->
+    <h2 class="h5 mb-3">Working Capital</h2>
+    @switch (workingCapitalState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-4" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-4" role="alert">Could not load working capital data.</p>
+      }
+      @case ('forbidden') {
+        <p class="text-muted mb-4">
+          <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>You do not have permission to view working capital.
+        </p>
+      }
+      @default {
+        @if (workingCapital(); as wc) {
+          <div class="row g-3 mb-4">
+            <div class="col-sm-6">
+              <div class="card border-0 bg-light p-3 h-100">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                  <div class="small text-muted">AR Outstanding</div>
+                  <span class="badge" [class]="healthBadgeClass(wc.arTies)">
+                    {{ healthPrefix(wc.arTies) }} AR-GL
+                  </span>
+                </div>
+                <div class="fs-4 fw-bold font-monospace">{{ +wc.arOutstanding | number:'1.2-2' }}</div>
+                <div class="mt-2">
+                  <a routerLink="/admin/ar/invoices" class="small" aria-label="Go to AR invoices">View Receivables</a>
+                </div>
+              </div>
+            </div>
+            <div class="col-sm-6">
+              <div class="card border-0 bg-light p-3 h-100">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                  <div class="small text-muted">AP Outstanding</div>
+                  <span class="badge" [class]="healthBadgeClass(wc.apTies)">
+                    {{ healthPrefix(wc.apTies) }} AP-GL
+                  </span>
+                </div>
+                <div class="fs-4 fw-bold font-monospace">{{ +wc.apOutstanding | number:'1.2-2' }}</div>
+                <div class="mt-2">
+                  <a routerLink="/admin/ap/supplier-bills" class="small" aria-label="Go to AP supplier bills">View Payables</a>
+                </div>
+              </div>
+            </div>
+          </div>
+        } @else {
+          <p class="text-muted mb-4">No working capital data yet for this period.</p>
+        }
+      }
+    }
+
+    <!-- ── Inventory panel ───────────────────────────────────────────────────── -->
+    <h2 class="h5 mb-3">
+      Inventory
+      <a routerLink="/admin/stock/valuation" class="ms-2 small text-muted"
+         aria-label="Go to stock valuation">
+        <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
+      </a>
+    </h2>
+    @switch (inventoryState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-4" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-4" role="alert">Could not load inventory data.</p>
+      }
+      @case ('forbidden') {
+        <p class="text-muted mb-4">
+          <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>You do not have permission to view inventory KPIs.
+        </p>
+      }
+      @default {
+        @if (inventory(); as inv) {
+          <div class="row g-3 mb-4">
+            <div class="col-sm-4">
+              <div class="card border-0 bg-light p-3">
+                <div class="small text-muted mb-1">Stock Value</div>
+                <div class="fs-4 fw-bold font-monospace">{{ +inv.stockValue | number:'1.2-2' }}</div>
+              </div>
+            </div>
+            <div class="col-sm-4">
+              <div class="card border-0 bg-light p-3">
+                <div class="small text-muted mb-1">Stock-GL (acct 1300)</div>
+                <span class="badge" [class]="healthBadgeClass(inv.stockTies)">
+                  {{ healthPrefix(inv.stockTies) }} {{ inv.stockTies ? 'Reconciled' : 'Difference: ' + (+inv.stockDifference | number:'1.2-2') }}
+                </span>
+              </div>
+            </div>
+          </div>
+        } @else {
+          <p class="text-muted mb-4">No inventory data yet.</p>
+        }
+      }
+    }
+
+    <!-- ── CRM panel ─────────────────────────────────────────────────────────── -->
+    <h2 class="h5 mb-3">
+      CRM
+      <a routerLink="/admin/crm/pipeline" class="ms-2 small text-muted"
+         aria-label="Go to CRM pipeline dashboard">
+        <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
+      </a>
+    </h2>
+    @switch (crmState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-4" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-4" role="alert">Could not load CRM data.</p>
+      }
+      @case ('forbidden') {
+        <p class="text-muted mb-4">
+          <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>You do not have permission to view CRM KPIs.
+        </p>
+      }
+      @default {
+        @if (crm(); as c) {
+          <div class="row g-4 mb-4">
+            <!-- Pipeline by stage — CSS bars -->
+            <div class="col-md-7">
+              <h3 class="h6 mb-3">Pipeline by Stage</h3>
+              @if (c.pipeline?.stages?.length) {
+                <div class="bi-bar-chart" role="img" aria-label="Pipeline by stage bar chart">
+                  @for (row of c.pipeline!.stages; track row.stageUid) {
+                    <div class="bi-bar-row mb-2">
+                      <div class="d-flex justify-content-between small mb-1">
+                        <span>{{ row.stageName }}</span>
+                        <span class="font-monospace text-muted">{{ row.openCount }} opps</span>
+                      </div>
+                      <div class="d-flex align-items-center gap-2">
+                        <div class="bi-bar-track flex-grow-1">
+                          <div class="bi-bar-fill" aria-hidden="true"
+                               [style.width.%]="trendBarWidth(row.totalValueAmount, pipelineMax(c.pipeline!.stages))">
+                          </div>
+                        </div>
+                        <span class="font-monospace small text-nowrap">
+                          {{ row.currency }} {{ +row.totalValueAmount | number:'1.2-2' }}
+                        </span>
+                      </div>
+                    </div>
+                  }
+                </div>
+              } @else {
+                <p class="text-muted">No open pipeline.</p>
+              }
+            </div>
+            <!-- CRM KPIs -->
+            <div class="col-md-5">
+              <h3 class="h6 mb-3">Win-Rate KPIs</h3>
+              @if (c.kpis; as k) {
+                <dl class="row mb-3">
+                  <dt class="col-6">Won</dt>
+                  <dd class="col-6 font-monospace text-success">{{ k.wonCount }}</dd>
+                  <dt class="col-6">Lost</dt>
+                  <dd class="col-6 font-monospace text-danger">{{ k.lostCount }}</dd>
+                  <dt class="col-6">Win Rate</dt>
+                  <dd class="col-6 font-monospace fw-semibold">{{ +k.winRatePercent | number:'1.1-1' }}%</dd>
+                  <dt class="col-6">Avg Cycle (days)</dt>
+                  <dd class="col-6 font-monospace">{{ +k.avgCycleDays | number:'1.1-1' }}</dd>
+                </dl>
+              }
+              @if (c.forecast; as f) {
+                <h3 class="h6 mb-2">Forecast</h3>
+                <dl class="row mb-0">
+                  <dt class="col-6">Open Opps</dt>
+                  <dd class="col-6 font-monospace">{{ f.openCount }}</dd>
+                  <dt class="col-6">Weighted Value</dt>
+                  <dd class="col-6 font-monospace text-primary fw-semibold">
+                    {{ f.currency }} {{ +f.weightedValueAmount | number:'1.2-2' }}
+                  </dd>
+                </dl>
+              }
+            </div>
+          </div>
+        } @else {
+          <p class="text-muted mb-4">No CRM data yet for this period.</p>
+        }
+      }
+    }
+
+    <!-- ── Revenue Trend (12-period CSS bars) ──────────────────────────────── -->
+    <h2 class="h5 mb-3">Revenue Trend (12 periods)</h2>
+    @switch (revenueTrendState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-4" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-4" role="alert">Could not load revenue trend.</p>
+      }
+      @case ('forbidden') {
+        <p class="text-muted mb-4">
+          <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>You do not have permission to view the revenue trend.
+        </p>
+      }
+      @default {
+        @if (revenueTrend(); as t) {
+          @if (t.points.length > 0) {
+            <div class="bi-bar-chart mb-2" role="img"
+                 [attr.aria-label]="t.metricLabel + ' trend, ' + t.currency">
+              @for (pt of t.points; track pt.periodLabel) {
+                <div class="bi-bar-row mb-1">
+                  <div class="d-flex justify-content-between small mb-1">
+                    <span class="text-muted">{{ pt.periodLabel }}</span>
+                    <span class="font-monospace text-muted small">
+                      {{ t.currency }} {{ +pt.value | number:'1.2-2' }}
+                    </span>
+                  </div>
+                  <div class="d-flex align-items-center gap-2">
+                    <div class="bi-bar-track flex-grow-1">
+                      <div class="bi-bar-fill bi-bar-fill--revenue" aria-hidden="true"
+                           [style.width.%]="trendBarWidth(pt.value, revenueTrendMax())">
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              }
+            </div>
+          } @else {
+            <p class="text-muted mb-4">No revenue trend data yet for this period.</p>
+          }
+        } @else {
+          <p class="text-muted mb-4">No revenue trend data yet for this period.</p>
+        }
+      }
+    }
+
+    <!-- ── Net Profit Trend (12-period CSS bars) ─────────────────────────────── -->
+    <h2 class="h5 mb-3 mt-3">Net Profit Trend (12 periods)</h2>
+    @switch (netProfitTrendState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-4" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-4" role="alert">Could not load net profit trend.</p>
+      }
+      @case ('forbidden') {
+        <p class="text-muted mb-4">
+          <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>You do not have permission to view the net profit trend.
+        </p>
+      }
+      @default {
+        @if (netProfitTrend(); as t) {
+          @if (t.points.length > 0) {
+            <div class="bi-bar-chart mb-4" role="img"
+                 [attr.aria-label]="t.metricLabel + ' trend, ' + t.currency">
+              @for (pt of t.points; track pt.periodLabel) {
+                <div class="bi-bar-row mb-1">
+                  <div class="d-flex justify-content-between small mb-1">
+                    <span class="text-muted">{{ pt.periodLabel }}</span>
+                    <span class="font-monospace small" [class.text-success]="+pt.value>=0" [class.text-danger]="+pt.value<0">
+                      {{ t.currency }} {{ +pt.value | number:'1.2-2' }}
+                    </span>
+                  </div>
+                  <div class="d-flex align-items-center gap-2">
+                    <div class="bi-bar-track flex-grow-1">
+                      <div class="bi-bar-fill" aria-hidden="true"
+                           [class.bi-bar-fill--profit]="+pt.value>=0"
+                           [class.bi-bar-fill--loss]="+pt.value<0"
+                           [style.width.%]="trendBarWidth(pt.value, netProfitTrendMax())">
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              }
+            </div>
+          } @else {
+            <p class="text-muted mb-4">No net profit trend data yet for this period.</p>
+          }
+        } @else {
+          <p class="text-muted mb-4">No net profit trend data yet for this period.</p>
+        }
+      }
+    }
+
+    <!-- ── Export ─────────────────────────────────────────────────────────────── -->
+    @if (canExport()) {
+      <div class="d-flex gap-2 align-items-center mt-2 mb-4 pt-2 border-top">
+        <label class="form-label mb-0 small text-muted" for="exportFormat">Export</label>
+        <select id="exportFormat" name="exportFormat" class="form-select form-select-sm w-auto"
+                [ngModel]="exportFormat()" (ngModelChange)="exportFormat.set($event)">
+          <option value="PDF">PDF</option>
+          <option value="XLSX">Excel</option>
+          <option value="CSV">CSV</option>
+        </select>
+        <button type="button" class="btn btn-outline-primary btn-sm"
+                (click)="exportDashboard()"
+                [disabled]="exporting()"
+                aria-label="Download dashboard export">
+          @if (exporting()) {
+            <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Exporting…
+          } @else {
+            <i class="bi bi-download me-1" aria-hidden="true"></i>Download
+          }
+        </button>
+      </div>
+    }
+
+  }
+</section>
