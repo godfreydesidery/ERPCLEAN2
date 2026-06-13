@@ -1,0 +1,164 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">
+      <i class="bi bi-calendar-check me-2" aria-hidden="true"></i>Year-End Close
+    </h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      Close a fiscal year to post the P&amp;L closing journal to Retained Earnings, or reopen
+      the most-recently-closed year to reverse the closing entry.
+    </p>
+  </header>
+
+  <!-- Company selector -->
+  @switch (companyState()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mb-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load companies.
+      </p>
+    }
+    @default {
+      @if (companies().length > 1) {
+        <div class="mb-3" style="max-width:320px">
+          <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+          <select id="companyPicker" name="companyPicker" class="form-select"
+                  [ngModel]="selectedCompanyId()"
+                  (ngModelChange)="onCompanyChange($event)">
+            @for (c of companies(); track c.uid) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+          </select>
+        </div>
+      }
+    }
+  }
+
+  @if (selectedCompanyId()) {
+
+    <!-- Confirmation panel (shown before executing close) -->
+    @if (confirmCloseUid(); as pendingUid) {
+      <div class="alert alert-warning d-flex gap-3 align-items-start mb-3" role="alert"
+           aria-live="assertive">
+        <i class="bi bi-exclamation-triangle-fill fs-5 mt-1 flex-shrink-0" aria-hidden="true"></i>
+        <div>
+          <strong>Confirm Year-End Close</strong>
+          <p class="mb-2 mt-1">
+            This will post a balanced closing journal that zeroes all P&amp;L accounts and
+            rolls the net into <strong>Retained Earnings (account 3900)</strong>.
+            All periods in this year will be automatically closed. This action cannot be undone
+            without reopening the year.
+          </p>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-warning btn-sm" (click)="confirmClose()">
+              <i class="bi bi-check-lg me-1" aria-hidden="true"></i>Close Year
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" (click)="cancelClose()">
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    }
+
+    <!-- Fiscal years table -->
+    @switch (state()) {
+      @case ('loading') {
+        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading fiscal years…
+        </p>
+      }
+      @case ('error') {
+        <p class="state text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load fiscal years.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="state text-warning" role="alert">
+          <i class="bi bi-shield-exclamation me-1" aria-hidden="true"></i>
+          You do not have permission to view fiscal years.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <p class="state text-muted">
+            No fiscal years found. Open a fiscal year on the
+            <a routerLink="/admin/gl/periods">Fiscal Periods</a> screen first.
+          </p>
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-hover align-middle bg-white grid">
+              <caption class="visually-hidden">Fiscal years — year-end close status</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Year Code</th>
+                  <th scope="col">Start Date</th>
+                  <th scope="col">End Date</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Closed At</th>
+                  <th scope="col">Closing Journal</th>
+                  @if (canYearClose()) {
+                    <th scope="col"><span class="visually-hidden">Actions</span></th>
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                @for (year of fiscalYears(); track year.uid) {
+                  <tr [class.table-secondary]="year.status === 'CLOSED'">
+                    <td class="fw-semibold">{{ year.yearCode }}</td>
+                    <td class="small">{{ year.startDate }}</td>
+                    <td class="small">{{ year.endDate }}</td>
+                    <td>
+                      <span class="badge" [class]="statusBadgeClass(year.status)">
+                        {{ year.status }}
+                      </span>
+                    </td>
+                    <td class="small text-muted">
+                      @if (year.closedAt) {
+                        {{ year.closedAt | slice:0:10 }}
+                      } @else {
+                        <span class="text-muted">—</span>
+                      }
+                    </td>
+                    <td class="small font-monospace text-muted">
+                      @if (year.closingJournalUid) {
+                        {{ year.closingJournalUid }}
+                      } @else {
+                        <span class="text-muted">—</span>
+                      }
+                    </td>
+                    @if (canYearClose()) {
+                      <td>
+                        @if (rowBusyUid() === year.uid) {
+                          <span class="spinner-border spinner-border-sm text-muted"
+                                aria-label="Processing…"></span>
+                        } @else if (year.status === 'OPEN') {
+                          <button type="button" class="btn btn-sm btn-outline-warning"
+                                  (click)="requestClose(year)"
+                                  [attr.aria-label]="'Close fiscal year ' + year.yearCode">
+                            <i class="bi bi-lock me-1" aria-hidden="true"></i>Close Year
+                          </button>
+                        } @else {
+                          <button type="button" class="btn btn-sm btn-outline-success"
+                                  (click)="reopen(year)"
+                                  [attr.aria-label]="'Reopen fiscal year ' + year.yearCode">
+                            <i class="bi bi-unlock me-1" aria-hidden="true"></i>Reopen Year
+                          </button>
+                        }
+                      </td>
+                    }
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      }
+    }
+  }
+</section>

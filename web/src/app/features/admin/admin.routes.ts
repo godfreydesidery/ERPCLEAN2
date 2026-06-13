@@ -1086,5 +1086,12 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./parties/other/other-party-detail.component').then((m) => m.OtherPartyDetailComponent),
   },
+  // ── GL Year-End Close ──────────────────────────────────────────────────────
+  {
+    path: 'gl/year-end',
+    canActivate: [requirePermission('GL.YEAR.CLOSE')],
+    loadComponent: () =>
+      import('./gl/year-end/year-end-close.component').then((m) => m.YearEndCloseComponent),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];
