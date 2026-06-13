@@ -1,0 +1,228 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Pay Components</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-sliders me-1" aria-hidden="true"></i>
+      Define earnings and deduction types for payroll calculation.
+    </p>
+  </header>
+
+  <!-- Company selector -->
+  @switch (companyState()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mb-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load companies. Is the API running?
+      </p>
+    }
+    @default {
+      @if (companies().length > 1) {
+        <div class="mb-3" style="max-width:320px">
+          <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+          <select id="companyPicker" name="companyPicker" class="form-select"
+                  [ngModel]="selectedCompanyId()"
+                  (ngModelChange)="onCompanyChange($event)">
+            @for (c of companies(); track c.uid) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+          </select>
+        </div>
+      }
+    }
+  }
+
+  @if (selectedCompanyId()) {
+    <!-- Toolbar -->
+    @if (canManage()) {
+      <div class="d-flex mb-3">
+        <button type="button" class="btn btn-primary ms-auto"
+                (click)="toggleCreateForm()"
+                [attr.aria-expanded]="showCreateForm()"
+                aria-controls="createPayCompForm">
+          <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+          New Pay Component
+        </button>
+      </div>
+    }
+
+    <!-- Create form -->
+    @if (showCreateForm()) {
+      <form id="createPayCompForm" class="create-form card card-body mb-3"
+            (ngSubmit)="create()" aria-label="Create pay component">
+        <h2 class="h6 mb-3">New Pay Component</h2>
+        <div class="row g-2 mb-2">
+          <div class="col-sm-2">
+            <label class="form-label small text-muted mb-1" for="pcCode">
+              Code <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="pcCode" name="pcCode" type="text" class="form-control"
+                   [ngModel]="fCode()" (ngModelChange)="fCode.set($event)"
+                   [disabled]="saving()" autocomplete="off" />
+          </div>
+          <div class="col-sm-3">
+            <label class="form-label small text-muted mb-1" for="pcName">
+              Name <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="pcName" name="pcName" type="text" class="form-control"
+                   [ngModel]="fName()" (ngModelChange)="fName.set($event)"
+                   [disabled]="saving()" autocomplete="off" />
+          </div>
+          <div class="col-sm-2">
+            <label class="form-label small text-muted mb-1" for="pcKind">
+              Kind <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <select id="pcKind" name="pcKind" class="form-select"
+                    [ngModel]="fKind()" (ngModelChange)="fKind.set($event)"
+                    [disabled]="saving()">
+              <option value="EARNING">Earning</option>
+              <option value="DEDUCTION">Deduction</option>
+            </select>
+          </div>
+          <div class="col-sm-2">
+            <label class="form-label small text-muted mb-1" for="pcBasis">
+              Basis <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <select id="pcBasis" name="pcBasis" class="form-select"
+                    [ngModel]="fBasis()" (ngModelChange)="fBasis.set($event)"
+                    [disabled]="saving()">
+              <option value="FIXED">Fixed</option>
+              <option value="PERCENT_OF_BASIC">% of Basic</option>
+            </select>
+          </div>
+          <div class="col-sm-3">
+            <label class="form-label small text-muted mb-1" for="pcGlAcct">
+              GL Account ID <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="pcGlAcct" name="pcGlAcct" type="text" class="form-control"
+                   placeholder="Numeric id"
+                   [ngModel]="fGlAccountId()" (ngModelChange)="fGlAccountId.set($event)"
+                   [disabled]="saving()" autocomplete="off" />
+          </div>
+        </div>
+        <div class="row g-2 mb-2">
+          <div class="col-auto">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="pcTaxable"
+                     [ngModel]="fTaxable()" (ngModelChange)="fTaxable.set($event)"
+                     [disabled]="saving()" />
+              <label class="form-check-label small" for="pcTaxable">Taxable</label>
+            </div>
+          </div>
+          <div class="col-auto">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="pcPensionable"
+                     [ngModel]="fPensionable()" (ngModelChange)="fPensionable.set($event)"
+                     [disabled]="saving()" />
+              <label class="form-check-label small" for="pcPensionable">Pensionable</label>
+            </div>
+          </div>
+          <div class="col d-flex justify-content-end">
+            <button type="submit" class="btn btn-primary" [disabled]="saving()">
+              @if (saving()) {
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                Saving…
+              } @else {
+                Create
+              }
+            </button>
+          </div>
+        </div>
+
+        @if (formError(); as msg) {
+          <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+        }
+      </form>
+    }
+
+    <!-- List states -->
+    @switch (state()) {
+      @case ('loading') {
+        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading pay components…
+        </p>
+      }
+      @case ('error') {
+        <p class="state text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load pay components. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="state text-muted d-flex align-items-center gap-2">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view pay components.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <p class="state text-muted">No pay components yet. Create one above.</p>
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-hover align-middle bg-white grid">
+              <caption class="visually-hidden">Pay Components</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Code</th>
+                  <th scope="col">Name</th>
+                  <th scope="col">Kind</th>
+                  <th scope="col">Basis</th>
+                  <th scope="col">Taxable</th>
+                  <th scope="col">Pensionable</th>
+                  <th scope="col">Active</th>
+                  <th scope="col"><span class="visually-hidden">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (p of rows(); track p.uid) {
+                  <tr>
+                    <td class="font-monospace small">{{ p.code }}</td>
+                    <td>{{ p.name }}</td>
+                    <td>
+                      <span class="badge" [class]="p.kind === 'EARNING' ? 'text-bg-success' : 'text-bg-warning'">
+                        {{ p.kind }}
+                      </span>
+                    </td>
+                    <td class="small text-muted">{{ p.basis }}</td>
+                    <td>
+                      @if (p.taxable) {
+                        <i class="bi bi-check-circle-fill text-success" aria-label="Yes" aria-hidden="false"></i>
+                      } @else {
+                        <i class="bi bi-dash-circle text-muted" aria-label="No" aria-hidden="false"></i>
+                      }
+                    </td>
+                    <td>
+                      @if (p.pensionable) {
+                        <i class="bi bi-check-circle-fill text-success" aria-label="Yes" aria-hidden="false"></i>
+                      } @else {
+                        <i class="bi bi-dash-circle text-muted" aria-label="No" aria-hidden="false"></i>
+                      }
+                    </td>
+                    <td>
+                      @if (p.active) {
+                        <span class="badge text-bg-success">Active</span>
+                      } @else {
+                        <span class="badge text-bg-secondary">Inactive</span>
+                      }
+                    </td>
+                    <td>
+                      <a class="btn btn-sm btn-outline-primary"
+                         [routerLink]="['/admin/hr/pay-components/uid', p.uid]"
+                         [attr.aria-label]="'Open pay component ' + p.name">
+                        <i class="bi bi-eye me-1" aria-hidden="true"></i>Open
+                      </a>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      }
+    }
+  }
+</section>

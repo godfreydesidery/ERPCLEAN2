@@ -157,6 +157,17 @@ export class ShellComponent {
         { label: 'Goods Receipts', route: '/admin/goods-receipts', icon: 'bi-box-arrow-in-down', available: true, permission: 'PURCHASE.ORDER.VIEW' },
       ],
     },
+    // ── HR & Payroll ─────────────────────────────────────────────────────────────
+    {
+      label: 'HR & Payroll',
+      items: [
+        { label: 'Employees', route: '/admin/hr/employees', icon: 'bi-people', available: true, permission: 'HR.EMPLOYEE.VIEW' },
+        { label: 'Pay Components', route: '/admin/hr/pay-components', icon: 'bi-sliders', available: true, permission: 'HR.PAYCOMPONENT.MANAGE' },
+        { label: 'Payroll Runs', route: '/admin/hr/payroll-runs', icon: 'bi-cash-stack', available: true, permission: 'HR.PAYROLL.VIEW' },
+        { label: 'Leave Requests', route: '/admin/hr/leave-requests', icon: 'bi-calendar-check', available: true, permission: 'HR.LEAVE.VIEW' },
+        { label: 'Employee Loans', route: '/admin/hr/loans', icon: 'bi-bank', available: true, permission: 'HR.LOAN.MANAGE' },
+      ],
+    },
     {
       label: 'Accounting',
       items: [
