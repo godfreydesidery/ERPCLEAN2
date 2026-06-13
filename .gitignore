@@ -10,6 +10,9 @@
 # templates qa.env.example / deploy.env are safe; qa.env / deploy.env.local are not.
 **/qa.env
 **/deploy.env.local
+# Prod secrets — .env and jwt-keys/ are never committed (only .env.example is).
+infra/prod/.env
+infra/prod/jwt-keys/
 
 # Backend (Maven / Java)
 backend/target/

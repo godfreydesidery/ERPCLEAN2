@@ -40,6 +40,9 @@ jobs:
       - name: Unit tests (vitest + axe a11y gate)
         run: npm test -- --watch=false
 
+      - name: npm audit (production deps, CVSS-7+ gate — ADR-0038 D-11)
+        run: npm audit --omit=dev --audit-level=high
+
   # ── Job 2: Playwright e2e (opt-in / manual; needs running backend) ──────────
   e2e:
     name: Playwright e2e (opt-in)

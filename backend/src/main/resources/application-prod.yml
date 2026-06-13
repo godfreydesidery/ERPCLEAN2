@@ -1,0 +1,40 @@
+# application-prod.yml — production profile overrides (ADR-0038 D-3, D-4).
+# Activated by SPRING_PROFILES_ACTIVE=prod. Profile-gated so dev and test behaviour (plain-text
+# logging, dev-in-memory JWT, loose health detail) is UNCHANGED — Spring profiles do not inherit,
+# so this is an explicit, version-controlled statement of intended prod settings, not a guard.
+#
+# What this file does:
+#   - Enables Kubernetes-style liveness + readiness probes (/actuator/health/liveness,
+#     /actuator/health/readiness) required by the HEALTHCHECK in infra/prod/Dockerfile + the prod
+#     compose healthcheck (D-4).
+#   - Pins production log levels so verbosity is version-controlled/auditable; the dev profile's
+#     com.erp=DEBUG / hibernate.SQL=DEBUG MUST NOT reach prod (D-3).
+#
+# Hikari pool sizing is intentionally ABSENT (ADR-0038 review): a committed maximum-pool-size becomes
+# the default for every prod deploy regardless of the managed-Postgres connection limit — a footgun.
+# Wire pool sizing via SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE at deploy time; see docs/ops runbook.
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+management:
+  endpoint:
+    health:
+      probes:
+        # /actuator/health/liveness + /actuator/health/readiness — required by the Dockerfile +
+        # prod compose HEALTHCHECK.
+        enabled: true
+      show-details: when-authorized
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    root: INFO
+    com.erp: INFO
+    org.hibernate.SQL: WARN
+    org.hibernate.type.descriptor.sql: WARN
+    org.springframework.security: WARN

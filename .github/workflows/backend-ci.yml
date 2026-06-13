@@ -1,0 +1,76 @@
+name: Backend CI
+
+# ADR-0038 D-8: the Java backend (compile, unit tests, ArchUnit boundary/auth gates, and the
+# ~100 Testcontainers Postgres integration tests) had NO CI before this — it ran only on
+# developer machines. Linux GitHub runners ship Docker, so the failsafe ITs run here for the
+# first time. Two jobs: a fast, REQUIRED unit/architecture gate on every PR; and a slower,
+# observe-only (non-required) integration-test job until it has proven stable across several runs.
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'feat/**'
+  pull_request:
+    branches:
+      - main
+      - develop
+
+defaults:
+  run:
+    working-directory: backend
+
+jobs:
+  # ── Job 1: REQUIRED — compile + unit tests + ArchUnit boundary/auth gates ──────────────
+  # surefire phase only (no Testcontainers); fast (~2-3 min). This is the PR gate.
+  fast-check:
+    name: Compile + unit + architecture gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # `test` runs surefire (unit + ArchUnit ModuleBoundaryTest / EndpointAuthorizationTest);
+      # it does NOT run the failsafe ITs (those are the verify phase, in job 2).
+      - name: Compile + unit + architecture tests
+        run: mvn -B -ntp clean test
+
+  # ── Job 2: OBSERVE-ONLY (non-required) — full Testcontainers integration suite ─────────
+  # Linux runners have Docker; the singleton-per-JVM Postgres container + Ryuk-disabled pattern
+  # (PostgresIntegrationTest / testcontainers.properties) works on the runner. Marked
+  # continue-on-error until proven stable across 5+ runs, then promote to a required check.
+  integration-test:
+    name: Integration tests (Testcontainers) [observe-only]
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # Full clean verify = surefire + failsafe ITs. `clean` is deliberate: ADR-0038 risk note —
+      # an incremental compile gave a false green in Wave 2; the clean build is the source of truth.
+      - name: Clean verify (unit + integration)
+        env:
+          TESTCONTAINERS_RYUK_DISABLED: 'true'
+        run: mvn -B -ntp clean verify
+
+      - name: Upload failsafe reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failsafe-reports
+          path: backend/target/failsafe-reports/
+          retention-days: 7

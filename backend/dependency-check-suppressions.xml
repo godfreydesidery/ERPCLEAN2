@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  OWASP dependency-check suppression file (ADR-0038 D-11).
+
+  Add suppressions here for false positives or findings where the vulnerability
+  is not exploitable in this application's context. Every suppression MUST include:
+    - <notes>: the rationale and date of review
+    - <cve> or <cpe>: the specific identifier being suppressed (never suppress by GAV alone)
+
+  Run the scan: mvn -P security-scan dependency-check:aggregate
+  See: docs/ops/security-sweep.md
+
+  Currently empty — no suppressions yet. Add entries here as the first scan runs
+  and any false positives are identified and documented.
+-->
+<suppressions
+    xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
+
+    <!--
+    Example suppression template (do NOT commit without filling in all fields):
+
+    <suppress>
+        <notes><![CDATA[
+            CVE-XXXX-XXXX: Affects [component] via [vector]. Not exploitable here because
+            [specific reason: e.g. "we do not use the affected API / the code path is not reachable"].
+            Reviewed by: <name>, <date>.
+        ]]></notes>
+        <packageUrl regex="true">^pkg:maven/com\.example/some-library@.*$</packageUrl>
+        <cve>CVE-XXXX-XXXX</cve>
+    </suppress>
+    -->
+
+</suppressions>

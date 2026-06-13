@@ -1,6 +1,8 @@
 package com.erp.platform.common.api;
 
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -17,6 +19,8 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
  */
 @RestControllerAdvice(basePackages = "com.erp.api")
 public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     /** Bean-validation failures on request DTOs → 400 with field messages. */
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -110,10 +114,15 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error(ex.getMessage()));
     }
 
-    /** Anything unexpected → 500 with a generic message; details go to logs, not the client. */
+    /**
+     * Anything unexpected → 500 with a generic message. The full stack is logged at ERROR (with the
+     * request's MDC context — correlation id, user, company, branch — when present) so an unexpected
+     * 500 is never invisible in the logs (ISSUES-REGISTER #4). The exception text is NEVER echoed to
+     * the client — only the generic envelope is returned (PROJECT-CONVENTIONS §3.1, no internal leak).
+     */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleUnexpected(Exception ex) {
-        // TODO(logging): wire a logger in Slice 0 follow-up; do not echo ex.getMessage() to client.
+        log.error("Unhandled exception processing request", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.error("An unexpected error occurred."));
     }
