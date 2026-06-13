@@ -23,18 +23,21 @@ import com.erp.modules.crm.domain.dto.ForecastDto;
 import com.erp.modules.crm.domain.dto.PipelineSummaryDto;
 import com.erp.modules.crm.service.PipelineQuery;
 import com.erp.modules.gl.domain.dto.TrialBalanceDto;
+import com.erp.modules.gl.domain.entity.ChartOfAccount;
 import com.erp.modules.gl.domain.entity.FiscalPeriod;
 import com.erp.modules.gl.domain.enums.AccountType;
 import com.erp.modules.gl.repository.FiscalPeriodRepository;
 import com.erp.modules.gl.service.TrialBalanceQuery;
 import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.modules.reporting.domain.enums.StatementSection;
 import com.erp.modules.reporting.service.AccountMovementQuery;
+import com.erp.modules.reporting.service.StatementClassifier;
 import com.erp.modules.stock.domain.dto.StockValuationReportDto;
 import com.erp.modules.stock.service.StockValuationQuery;
+import com.erp.platform.security.PermissionChecks;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -59,6 +62,14 @@ import org.springframework.transaction.annotation.Transactional;
  *       aggregate in SQL (GROUP BY), never sum raw lines in Java (NFR-REP-02 / D-4).
  *   <li>Each panel is independently nullable — a failing/forbidden upstream leaves that panel null,
  *       not the whole dashboard (D-6 graceful degrade).
+ *   <li>Adversarial-review HIGH-1 fix: composite dashboard() gates each panel on the fine perm
+ *       (BI.FINANCE.VIEW / BI.OPS.VIEW / BI.CRM.VIEW) via the injected PermissionChecks bean —
+ *       panels are nulled out rather than built when the fine perm is absent.
+ *   <li>Adversarial-review HIGH-2 fix: COGS derived from per-account StatementClassifier split
+ *       (EXPENSE 5100–5199 → COST_OF_SALES, remainder → OPERATING_EXPENSES) — same band the
+ *       income statement uses — replacing the hardcoded BigDecimal.ZERO that made grossMargin 100%.
+ *       grossMarginPct removed from FinanceSummaryDto as it equalled the income-statement value
+ *       only when this split is done correctly; income-statement is the authoritative surface.
  * </ul>
  */
 @Service
@@ -71,8 +82,10 @@ public class DashboardServiceImpl implements DashboardService {
     private static final int MAX_TREND_PERIODS = 12;
 
     private final ScopeGuard               scopeGuard;
+    private final PermissionChecks         permChecks;
     private final CompanyRepository        companyRepo;
     private final AccountMovementQuery     accountMovement;
+    private final StatementClassifier      classifier;
     private final TrialBalanceQuery        trialBalance;
     private final ArReconciliationQuery    arRecon;
     private final ApReconciliationQuery    apRecon;
@@ -83,8 +96,10 @@ public class DashboardServiceImpl implements DashboardService {
     private final FiscalPeriodRepository   fiscalPeriods;
 
     public DashboardServiceImpl(ScopeGuard scopeGuard,
+                                 PermissionChecks permChecks,
                                  CompanyRepository companyRepo,
                                  AccountMovementQuery accountMovement,
+                                 StatementClassifier classifier,
                                  TrialBalanceQuery trialBalance,
                                  ArReconciliationQuery arRecon,
                                  ApReconciliationQuery apRecon,
@@ -94,8 +109,10 @@ public class DashboardServiceImpl implements DashboardService {
                                  PipelineQuery pipeline,
                                  FiscalPeriodRepository fiscalPeriods) {
         this.scopeGuard     = scopeGuard;
+        this.permChecks     = permChecks;
         this.companyRepo    = companyRepo;
         this.accountMovement = accountMovement;
+        this.classifier     = classifier;
         this.trialBalance   = trialBalance;
         this.arRecon        = arRecon;
         this.apRecon        = apRecon;
@@ -115,8 +132,10 @@ public class DashboardServiceImpl implements DashboardService {
         // D-5: assertCanActIn FIRST — before any panel call
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
 
-        String companyName = resolveCompanyName(companyId);
-        String currency    = resolveBaseCurrency(companyId);
+        // Header resolution is wrapped so a CompanyRepository hiccup never kills the whole
+        // dashboard (adversarial-review MEDIUM: header outside degrade).
+        String companyName = resolveCompanyNameSafe(companyId);
+        String currency    = resolveBaseCurrencySafe(companyId);
 
         LocalDate effectiveFrom = from != null ? from : LocalDate.now().withDayOfMonth(1);
         LocalDate effectiveTo   = to   != null ? to   : LocalDate.now();
@@ -124,13 +143,20 @@ public class DashboardServiceImpl implements DashboardService {
 
         List<HealthIndicatorDto> health = new ArrayList<>();
 
-        // Each panel is wrapped in a try/catch so a failing upstream never kills the whole dashboard.
-        FinanceSummaryDto   financePanel   = safeFinance(companyId, effectiveFrom, effectiveTo, health);
-        WorkingCapitalDto   wcPanel        = safeWorkingCapital(companyId, health);
-        InventorySummaryDto inventoryPanel = safeInventory(companyId, health);
-        CrmSnapshotDto      crmPanel       = safeCrm(companyId, branchId, effectiveFrom, effectiveTo);
-        TrendDto            revTrend       = safeRevenueTrend(companyId, currency);
-        TrendDto            netTrend       = safeNetProfitTrend(companyId, currency);
+        // HIGH-1 fix: each panel is built ONLY when the caller holds the fine-grained permission
+        // (BI.FINANCE.VIEW / BI.OPS.VIEW / BI.CRM.VIEW). When the perm is absent the panel is
+        // left null — the frontend renders it as 'forbidden'. Root always short-circuits to true
+        // in PermissionChecks.has() via PermissionResolver, so this never breaks root access.
+        boolean canFinance = permChecks.has("BI.FINANCE.VIEW");
+        boolean canOps     = permChecks.has("BI.OPS.VIEW");
+        boolean canCrm     = permChecks.has("BI.CRM.VIEW");
+
+        FinanceSummaryDto   financePanel   = canFinance ? safeFinance(companyId, effectiveFrom, effectiveTo, health) : null;
+        WorkingCapitalDto   wcPanel        = canFinance ? safeWorkingCapital(companyId, health) : null;
+        InventorySummaryDto inventoryPanel = canOps     ? safeInventory(companyId, health)      : null;
+        CrmSnapshotDto      crmPanel       = canCrm     ? safeCrm(companyId, branchId, effectiveFrom, effectiveTo) : null;
+        TrendDto            revTrend       = canFinance ? safeRevenueTrend(companyId, currency) : null;
+        TrendDto            netTrend       = canFinance ? safeNetProfitTrend(companyId, currency) : null;
 
         BiHeaderDto header = new BiHeaderDto(
                 companyId, companyName, currency, periodLabel,
@@ -151,28 +177,42 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     private FinanceSummaryDto buildFinance(Long companyId, LocalDate from, LocalDate to) {
-        // F-1 / F-2: P&L summary via AccountMovementQuery.periodMovementByAccountType (one GROUP BY)
+        // F-1 / F-2: P&L summary via two AccountMovementQuery calls:
+        //   (a) periodMovementByAccountType — one GROUP BY accountType for revenue and total expense
+        //   (b) periodMovementByAccount — one GROUP BY accountId for the COGS split
+        // This mirrors the StatementClassifier band the income statement uses (5100–5199 → COST_OF_SALES)
+        // so revenue, opex and netProfit here equal the income-statement values by construction (D-1).
+        // HIGH-2 fix: COGS derived from per-account code split; grossMarginPct removed from DTO
+        // because it was previously hardcoded to ZERO / 100% — a missing metric beats a wrong one.
         Map<AccountType, BigDecimal[]> byType =
                 accountMovement.periodMovementByAccountType(companyId, from, to);
 
         BigDecimal[] incomeArr  = byType.getOrDefault(AccountType.INCOME,  zero2());
-        BigDecimal[] expenseArr = byType.getOrDefault(AccountType.EXPENSE, zero2());
 
         // Revenue = INCOME net (CREDIT-normal: credit − debit)
         BigDecimal revenue = incomeArr[1].subtract(incomeArr[0]);
-        // COGS: no separate AccountType for COGS in the five-type model — zero in v1 (not classifiable)
-        BigDecimal cogs = BigDecimal.ZERO;
-        BigDecimal grossProfit = revenue.subtract(cogs);
-        // Opex = EXPENSE net (DEBIT-normal: debit − credit)
-        BigDecimal opex = expenseArr[0].subtract(expenseArr[1]);
-        // Net profit = INCOME net − EXPENSE net (matches AccountMovementQuery.netIncomeForPeriod)
-        BigDecimal netProfit = revenue.subtract(opex);
-        // Gross margin %
-        BigDecimal grossMarginPct = revenue.compareTo(BigDecimal.ZERO) != 0
-                ? grossProfit.divide(revenue, 4, RoundingMode.HALF_UP)
-                        .multiply(BigDecimal.valueOf(100))
-                        .setScale(2, RoundingMode.HALF_UP)
-                : BigDecimal.ZERO;
+
+        // Split EXPENSE into COGS (5100–5199) vs OPEX via the same StatementClassifier the
+        // income statement uses, so these values equal the income statement by construction.
+        Map<Long, BigDecimal[]>    byAccount  = accountMovement.periodMovementByAccount(companyId, from, to);
+        Map<Long, ChartOfAccount>  accountMap = accountMovement.accountMapForCompany(companyId);
+
+        BigDecimal cogsNet = BigDecimal.ZERO;
+        BigDecimal opexNet = BigDecimal.ZERO;
+        for (Map.Entry<Long, BigDecimal[]> entry : byAccount.entrySet()) {
+            ChartOfAccount acct = accountMap.get(entry.getKey());
+            if (acct == null || acct.getAccountType() != AccountType.EXPENSE) continue;
+            BigDecimal net = entry.getValue()[0].subtract(entry.getValue()[1]); // debit − credit
+            StatementSection section = classifier.classify(acct.getAccountType(), acct.getAccountCode());
+            if (section == StatementSection.COST_OF_SALES) {
+                cogsNet = cogsNet.add(net);
+            } else {
+                opexNet = opexNet.add(net);
+            }
+        }
+
+        // Net profit = INCOME net − (COGS + OPEX) — matches AccountMovementQuery.netIncomeForPeriod
+        BigDecimal netProfit = revenue.subtract(cogsNet).subtract(opexNet);
 
         // F-3: Trial balance health (TrialBalanceQuery.compute)
         TrialBalanceDto tb = trialBalance.compute(companyId);
@@ -181,8 +221,11 @@ public class DashboardServiceImpl implements DashboardService {
         // F-4: Cash position (CashAccountStatementQuery.listBalances + CashGlReconciliationQuery.reconcileAll)
         CashPositionDto cashPos = buildCashPosition(companyId);
 
-        return new FinanceSummaryDto(netProfit, revenue, cogs, grossProfit, grossMarginPct,
-                opex, netProfit, tbTies, tb.totalDebits(), tb.totalCredits(), cashPos);
+        // opex in the DTO is the operating-expense portion only (COGS excluded), consistent with
+        // the income-statement's Operating Expenses subtotal. netProfitPeriod == netProfit (period
+        // view; a future cumulative field would use cumulativeByAccountTypeAsAt).
+        return new FinanceSummaryDto(netProfit, revenue, opexNet, netProfit,
+                tbTies, tb.totalDebits(), tb.totalCredits(), cashPos);
     }
 
     private CashPositionDto buildCashPosition(Long companyId) {
@@ -270,13 +313,13 @@ public class DashboardServiceImpl implements DashboardService {
     @Override
     public TrendDto revenueTrend(Long companyId) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
-        return buildTrend(companyId, "Revenue", resolveBaseCurrency(companyId), false);
+        return buildTrend(companyId, "Revenue", resolveBaseCurrencySafe(companyId), false);
     }
 
     @Override
     public TrendDto netProfitTrend(Long companyId) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
-        return buildTrend(companyId, "Net Profit", resolveBaseCurrency(companyId), true);
+        return buildTrend(companyId, "Net Profit", resolveBaseCurrencySafe(companyId), true);
     }
 
     /**
@@ -389,16 +432,33 @@ public class DashboardServiceImpl implements DashboardService {
     // Helpers
     // =========================================================================
 
-    private String resolveCompanyName(Long companyId) {
-        return companyRepo.findById(companyId)
-                .map(com.erp.modules.iam.domain.entity.Company::getName)
-                .orElse("Company " + companyId);
+    /**
+     * Safe company-name resolution: falls back to "Company &lt;id&gt;" on any exception so a
+     * CompanyRepository hiccup never kills the whole dashboard (adversarial-review MEDIUM fix).
+     */
+    private String resolveCompanyNameSafe(Long companyId) {
+        try {
+            return companyRepo.findById(companyId)
+                    .map(com.erp.modules.iam.domain.entity.Company::getName)
+                    .orElse("Company " + companyId);
+        } catch (Exception ex) {
+            log.warn("BI could not resolve company name for {}: {}", companyId, ex.getMessage());
+            return "Company " + companyId;
+        }
     }
 
-    private String resolveBaseCurrency(Long companyId) {
-        return companyRepo.findById(companyId)
-                .map(com.erp.modules.iam.domain.entity.Company::getBaseCurrency)
-                .orElse("TZS");
+    /**
+     * Safe base-currency resolution: falls back to "TZS" on any exception (same degrade contract).
+     */
+    private String resolveBaseCurrencySafe(Long companyId) {
+        try {
+            return companyRepo.findById(companyId)
+                    .map(com.erp.modules.iam.domain.entity.Company::getBaseCurrency)
+                    .orElse("TZS");
+        } catch (Exception ex) {
+            log.warn("BI could not resolve base currency for {}: {}", companyId, ex.getMessage());
+            return "TZS";
+        }
     }
 
     private static BigDecimal[] zero2() {

@@ -127,20 +127,6 @@
                 </div>
                 <div class="col-6 col-md-4">
                   <div class="card h-100 border-0 bg-light p-3">
-                    <div class="small text-muted mb-1">Gross Profit</div>
-                    <div class="fs-5 fw-semibold font-monospace" [class.text-success]="+f.grossProfit>=0" [class.text-danger]="+f.grossProfit<0">
-                      {{ +f.grossProfit | number:'1.2-2' }}
-                    </div>
-                  </div>
-                </div>
-                <div class="col-6 col-md-4">
-                  <div class="card h-100 border-0 bg-light p-3">
-                    <div class="small text-muted mb-1">Gross Margin %</div>
-                    <div class="fs-5 fw-semibold font-monospace">{{ +f.grossMarginPct | number:'1.1-1' }}%</div>
-                  </div>
-                </div>
-                <div class="col-6 col-md-4">
-                  <div class="card h-100 border-0 bg-light p-3">
                     <div class="small text-muted mb-1">OpEx</div>
                     <div class="fs-5 fw-semibold font-monospace">{{ +f.opex | number:'1.2-2' }}</div>
                   </div>
@@ -375,9 +361,8 @@
                       </div>
                       <div class="d-flex align-items-center gap-2">
                         <div class="bi-bar-track flex-grow-1">
-                          <div class="bi-bar-fill"
-                               [style.width.%]="trendBarWidth(row.totalValueAmount, pipelineMax(c.pipeline!.stages))"
-                               [attr.aria-label]="row.stageName + ': ' + (+row.totalValueAmount | number:'1.2-2')">
+                          <div class="bi-bar-fill" aria-hidden="true"
+                               [style.width.%]="trendBarWidth(row.totalValueAmount, pipelineMax(c.pipeline!.stages))">
                           </div>
                         </div>
                         <span class="font-monospace small text-nowrap">
@@ -456,9 +441,8 @@
                   </div>
                   <div class="d-flex align-items-center gap-2">
                     <div class="bi-bar-track flex-grow-1">
-                      <div class="bi-bar-fill bi-bar-fill--revenue"
-                           [style.width.%]="trendBarWidth(pt.value, revenueTrendMax())"
-                           [attr.aria-label]="pt.periodLabel + ': ' + (+pt.value | number:'1.2-2')">
+                      <div class="bi-bar-fill bi-bar-fill--revenue" aria-hidden="true"
+                           [style.width.%]="trendBarWidth(pt.value, revenueTrendMax())">
                       </div>
                     </div>
                   </div>
@@ -505,11 +489,10 @@
                   </div>
                   <div class="d-flex align-items-center gap-2">
                     <div class="bi-bar-track flex-grow-1">
-                      <div class="bi-bar-fill"
+                      <div class="bi-bar-fill" aria-hidden="true"
                            [class.bi-bar-fill--profit]="+pt.value>=0"
                            [class.bi-bar-fill--loss]="+pt.value<0"
-                           [style.width.%]="trendBarWidth(pt.value, netProfitTrendMax())"
-                           [attr.aria-label]="pt.periodLabel + ': ' + (+pt.value | number:'1.2-2')">
+                           [style.width.%]="trendBarWidth(pt.value, netProfitTrendMax())">
                       </div>
                     </div>
                   </div>

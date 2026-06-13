@@ -31,9 +31,6 @@ export interface HealthIndicatorDto {
 export interface FinanceSummaryDto {
   netProfitPeriod: string;
   revenue: string;
-  cogs: string;
-  grossProfit: string;
-  grossMarginPct: string;
   opex: string;
   netProfit: string;
   tbTies: boolean;

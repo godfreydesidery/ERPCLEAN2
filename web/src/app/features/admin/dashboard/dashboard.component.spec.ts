@@ -31,9 +31,6 @@ const MOCK_DTO: DashboardDto = {
   finance: {
     netProfitPeriod: '50000',
     revenue: '200000',
-    cogs: '120000',
-    grossProfit: '80000',
-    grossMarginPct: '40',
     opex: '30000',
     netProfit: '50000',
     tbTies: true,
