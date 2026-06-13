@@ -382,6 +382,11 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         ArReceipt receipt = Lookups.orNotFound(receipts.findByUid(receiptUid), "ArReceipt", receiptUid);
         scopeGuard.assertCanActIn(RequestContext.get(), receipt.getCompanyId());
 
+        // FX adversarial-review MEDIUM: BASE-amount scale must come from the company BASE currency's
+        // minor units, never the foreign invoice/receipt currency. Resolve it once here.
+        int baseScaleForReceipt = baseMinorUnits(companies.findById(receipt.getCompanyId())
+                .map(c -> c.getBaseCurrency()).orElse("TZS"));
+
         // Restore outstanding on currently allocated invoices
         List<ArReceiptAllocation> existing = allocations.findByReceiptId(receipt.getId());
         for (ArReceiptAllocation old : existing) {
@@ -392,7 +397,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                     BigDecimal invoiceRate = inv.getFxRate() != null ? inv.getFxRate() : BigDecimal.ONE;
                     BigDecimal baseRelievedRestored = old.getAllocatedAmount()
                             .multiply(invoiceRate)
-                            .setScale(baseMinorUnits(inv.getCurrency()), RoundingMode.HALF_UP);
+                            .setScale(baseScaleForReceipt, RoundingMode.HALF_UP);
                     BigDecimal newBase = (inv.getBaseOutstandingAmount() != null
                             ? inv.getBaseOutstandingAmount()
                             : BigDecimal.ZERO).add(baseRelievedRestored);
@@ -411,8 +416,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
 
         // Apply new allocation set
         BigDecimal settlementRate = receipt.getFxRate() != null ? receipt.getFxRate() : BigDecimal.ONE;
-        String currency = receipt.getCurrency();
-        int baseScale = baseMinorUnits(currency);
+        int baseScale = baseScaleForReceipt;  // base-currency minor units (not the foreign receipt currency)
 
         BigDecimal totalAllocated = BigDecimal.ZERO;
         List<ArReceiptAllocation> saved = new ArrayList<>();

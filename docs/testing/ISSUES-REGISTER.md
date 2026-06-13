@@ -330,3 +330,38 @@ the 1 "login" fail is a driver-selector quirk — login returns a JWT and all au
 **A re-seed convenience:** `e2e/phaseb-seed.js` + `e2e/phaseb-topup.js` are reusable operator tools
 (kept in `e2e/`, uncommitted like the other drivers) to repopulate a freshly-wiped QA box across all
 Phase-B modules.
+
+## Finding #21 — FX / Multi-currency (ADR-0036) adversarial review batch (2026-06-13)
+
+Multi-agent adversarial review of the FX/multi-currency feature (V77–V80, branch feat/fx-multicurrency)
+— 6 correctness dimensions, each finding adversarially verified, focused on the SACRED GL Σbase-balance
+invariant + realized/unrealized FX math + rounding/immutability + day-1 no-regression + tenant isolation.
+**26 findings → 13 confirmed BLOCKER/HIGH (all FIXED), 2 refuted, ~11 MEDIUM/LOW (1 fixed, rest deferred).**
+The green 820-test suite had MISSED all 13 — the FX ITs only exercised the AR/primary paths. Full suite
+green after fixes: **834 tests, BUILD SUCCESS, migrations → V80.**
+
+| # | Sev | Status | Issue → Fix |
+|---|-----|--------|-------------|
+| 21a | BLOCKER | **FIXED** | **AP (& mixed AR+AP) unrealized-revaluation journal was UNBALANCED** — the AP direction flip was applied TWICE (computeRevalLines stamped AP adjustment opposite to AR, AND postRevaluationJournal flipped the AP control-leg side again) → AP gain emitted CR-control + CR-fxGain (both credit) → Σbase≠0 → the FX_REVALUATION journal silently dropped to null (run stuck PREVIEWED with a false-success DTO). The revaluation IT only tested a single AR gain, so 820 tests passed. Fix: per-line FX complement keyed by (sourceType, sign) + **assert Σdebit==Σcredit before posting** (fail loud, never swallow) + delete-orphan-on-GL-failure. `FxRevaluationRunServiceIT` extended to 9 (AP-only, AP-loss, mixed AR+AP — all balance). |
+| 21b | BLOCKER | **FIXED** | **Foreign credit-sale AR open item never FX-stamped** (the dominant cluster — 5 findings) — `ArSalePostedHandler.createOpenItemIfCredit` created the open item with fx_rate defaulting to 1 / base amounts null, so realized FX (on receipt), unrealized revaluation, write-off, and AR-control-vs-GL reconciliation were ALL wrong for foreign credit sales. Fix: thread fx_rate/baseGrossTotalAmount/rateAt through `InvoicePostingTotalsDto` → stamp the open item (base = receivable×fxRate, base minor units) in `ArSalePostedHandler` + `ArOpeningBalanceServiceImpl`; fail-loud guard so a foreign open item can't persist at rate=1. |
+| 21c | HIGH | **FIXED** | AR **write-off** posted foreign FACE as base (permanent AR-control FX residual + misstated Bad Debt). Fix: relieve AR + debit Bad Debt at the carrying BASE value (`baseOutstandingAmount`, fallback to face for legacy rate=1), zero base_outstanding. |
+| 21d | HIGH | **FIXED** | AR **credit note** ignored document currency (foreign-face-as-base, no realized FX, base_outstanding untouched). Fix: carry req.currency() (default base), validate vs target invoice, convert to base, relieve at original rate, book realized-FX delta, decrement base_outstanding; identity short-circuit for base currency. |
+| 21e | HIGH | **FIXED** | AP **paymentRun** applied the FIRST bill's settlement rate to every bill (no same-currency guard) → corrupt base cash + realized FX on mixed-currency runs. Fix: reject a heterogeneous run early ("Payment run bills must share one currency"). |
+| 21f | HIGH | **FIXED** | FX revaluation **PREVIEWED idempotency** — a stale PREVIEWED (company,period) run fell through to a second insert → violated uq_fx_revaluation_run_company_period → a GL-failed period was permanently un-repostable. Fix: reuse the slot (delete stale PREVIEWED lines+header, re-post) + the delete-orphan-on-failure path from 21a. |
+| 21g | HIGH | **FIXED** | **V80 grant used `WHERE r.name = 'ORG_ADMIN'`** (zero-row match — roles keys on `code`) → FX.REVALUE/FX.EXPOSURE.VIEW seeded but NEVER granted → the whole FX revaluation surface unreachable by ORG_ADMIN. Fix: `r.code = 'ORG_ADMIN'`. |
+| 21h | HIGH | **FIXED** | **`CurrencyController.addRate` `@perm.scoped(#req.companyId(),'company',…)`** passed the numeric Long where a company UID String is required → 403 for EVERY non-root CURRENCY.MANAGE holder (rate maintenance bricked). Fix: `@perm.has('CURRENCY.MANAGE')` (the service-layer `assertCanActIn(req.companyId())` already enforces scope correctly). |
+| 21i | MEDIUM | **FIXED** | `ArReceiptServiceImpl.reallocate` scaled BASE amounts by the FOREIGN currency's minor units (`baseMinorUnits(inv.getCurrency())` / receipt currency). Fix: resolve base scale from the company base currency once. |
+
+**Deliberately DEFERRED (MEDIUM/LOW — no live impact on the single-base-currency (TZS, minor_units=2) system; changing rounding broadly would risk the 834 green tests for no live benefit):**
+- **rate_at = Instant.now() (stamping instant) rather than the rate's effective-date.** The *rate value* used is the correct effective rate; rate_at is an audit-surface nicety (already documented as "stamping instant" in ConvertedAmount). Defer; revisit if an auditor needs the effective-date provably on the triple (would add rate_id/effective_date to the triple).
+- **Hardcoded `DEFAULT_BASE_MINOR_UNITS=2` fallbacks** in FxRevaluationRunServiceImpl + AR/AP `baseMinorUnits` helpers. The shared `CurrencyConversionService` already resolves from the currencies master (the correct path); the fallbacks only bite a base currency with ≠2 minor units, and TZS (the live base) is 2 — so no live impact. Defer the consolidation to one shared MinorUnits helper.
+- **finalise stamps base_gross = convert(gross) vs the poster's convert(net)+convert(vat)** — a potential 1-minor-unit divergence between the stamped triple and the posted AR/GL base on a multi-line invoice. Within rounding tolerance; the journal still balances (the poster plugs to base). Defer; align to one source if a strict triple==ledger audit is required.
+- **Date-skew** between finalise stamp (LocalDate.now(), system zone) and poster date (finalisedAt→UTC). Same-day in practice; defer to a single explicit posting-date.
+- **Currency-code normalization** (uppercase/trim) at document creation — cosmetic; defer.
+
+**Refuted (2 — correctly):** the AR/AP opening-balance "foreign face-as-base" concern (the GL engine's BR-GL-06 hard-rejects a non-base line, so it can't silently post) and the "GL poster mutates the immutable triple" (the poster re-derives, never writes back).
+
+**The lesson (recorded):** FX is the highest-risk feature for the sacred GL Σbase-balance invariant, and the
+adversarial review caught a real unbalanced-journal BLOCKER + a whole-cluster correctness gap that the
+green test suite never exercised (AR-primary-path-only coverage). The review's per-finding adversarial-verify
+step kept the fix list honest (2 refuted). Worth the gate on every GL-touching feature.
