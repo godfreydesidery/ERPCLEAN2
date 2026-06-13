@@ -317,6 +317,15 @@ export class ShellComponent {
         { label: 'Dashboard', route: '/admin/dashboard', icon: 'bi-speedometer2', available: true, permission: 'BI.VIEW' },
       ],
     },
+    // ── Point of Sale ─────────────────────────────────────────────────────────
+    {
+      label: 'Point of Sale',
+      items: [
+        { label: 'Point of Sale', route: '/admin/pos/sell', icon: 'bi-cart-check', available: true, permission: 'POS.SALE.CREATE' },
+        { label: 'POS Sessions', route: '/admin/pos/sessions', icon: 'bi-shop', available: true, permission: 'POS.SESSION.VIEW' },
+        { label: 'POS Tills', route: '/admin/pos/tills', icon: 'bi-cash-register', available: true, permission: 'POS.TILL.VIEW' },
+      ],
+    },
   ];
 
   /** Nav groups with permission-filtered items. Reactive: recomputes when permissions change. */

@@ -832,5 +832,30 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./dashboard/dashboard.component').then((m) => m.DashboardComponent),
   },
+  // ── POS ──────────────────────────────────────────────────────────────────────
+  {
+    path: 'pos/tills',
+    canActivate: [requirePermission('POS.TILL.VIEW')],
+    loadComponent: () =>
+      import('./pos/pos-till-list.component').then((m) => m.PosTillListComponent),
+  },
+  {
+    path: 'pos/sessions',
+    canActivate: [requirePermission('POS.SESSION.VIEW')],
+    loadComponent: () =>
+      import('./pos/pos-session-list.component').then((m) => m.PosSessionListComponent),
+  },
+  {
+    path: 'pos/sessions/uid/:uid',
+    canActivate: [requirePermission('POS.SESSION.VIEW')],
+    loadComponent: () =>
+      import('./pos/pos-session-detail.component').then((m) => m.PosSessionDetailComponent),
+  },
+  {
+    path: 'pos/sell',
+    canActivate: [requirePermission('POS.SALE.CREATE')],
+    loadComponent: () =>
+      import('./pos/pos-sale.component').then((m) => m.PosSaleComponent),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];

@@ -1,0 +1,312 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">POS Session</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-shop me-1" aria-hidden="true"></i>
+      Session details, payouts, close and reconcile.
+    </p>
+  </header>
+
+  @switch (state()) {
+    @case ('loading') {
+      <output class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading session…
+      </output>
+    }
+    @case ('error') {
+      <p class="state text-danger" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load session. Please try again.
+      </p>
+    }
+    @case ('forbidden') {
+      <p class="state text-muted">
+        <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>
+        You don't have permission to view this session.
+      </p>
+    }
+    @default {
+      @if (entity(); as s) {
+        <!-- Session header -->
+        <div class="card mb-3">
+          <div class="card-body">
+            <div class="d-flex flex-wrap gap-3 align-items-start">
+              <div>
+                <p class="small text-muted mb-0">Status</p>
+                <span class="badge fs-6" [class]="statusBadgeClass(s.status)">{{ s.status }}</span>
+              </div>
+              <div>
+                <p class="small text-muted mb-0">Opened At</p>
+                <p class="mb-0">{{ s.openedAt ?? '—' }}</p>
+              </div>
+              <div>
+                <p class="small text-muted mb-0">Closed At</p>
+                <p class="mb-0">{{ s.closedAt ?? '—' }}</p>
+              </div>
+              <div>
+                <p class="small text-muted mb-0">Reconciled At</p>
+                <p class="mb-0">{{ s.reconciledAt ?? '—' }}</p>
+              </div>
+              <div>
+                <p class="small text-muted mb-0">Opening Float</p>
+                <p class="mb-0 font-monospace">{{ +s.openingFloatAmount | number:'1.2-2' }}</p>
+              </div>
+              @if (s.countedCashAmount) {
+                <div>
+                  <p class="small text-muted mb-0">Counted Cash</p>
+                  <p class="mb-0 font-monospace">{{ +s.countedCashAmount | number:'1.2-2' }}</p>
+                </div>
+              }
+              @if (s.expectedCashAmount) {
+                <div>
+                  <p class="small text-muted mb-0">Expected Cash</p>
+                  <p class="mb-0 font-monospace">{{ +s.expectedCashAmount | number:'1.2-2' }}</p>
+                </div>
+              }
+              @if (s.varianceAmount) {
+                <div>
+                  <p class="small text-muted mb-0">Variance</p>
+                  <span class="badge" [class]="varianceBadgeClass(s.varianceAmount)">
+                    {{ +s.varianceAmount | number:'1.2-2' }}
+                  </span>
+                </div>
+              }
+            </div>
+            @if (s.notes) {
+              <p class="text-muted small mt-2 mb-0">{{ s.notes }}</p>
+            }
+          </div>
+        </div>
+
+        <!-- X-Read panel -->
+        <div class="card mb-3">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <h2 class="h6 mb-0">
+              <i class="bi bi-receipt me-1" aria-hidden="true"></i>X-Read (Live Totals)
+            </h2>
+            <button type="button" class="btn btn-sm btn-outline-secondary"
+                    (click)="loadXRead(s.uid)" aria-label="Refresh X-read">
+              <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+            </button>
+          </div>
+          <div class="card-body">
+            @switch (xReadState()) {
+              @case ('loading') {
+                <output class="text-muted small d-flex gap-2 align-items-center" aria-live="polite">
+                  <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+                </output>
+              }
+              @case ('error') {
+                <p class="text-danger small mb-0" role="alert">Could not load X-read.</p>
+              }
+              @default {
+                @if (xRead(); as x) {
+                  <dl class="row mb-0">
+                    <dt class="col-sm-4 text-muted">Sales Total</dt>
+                    <dd class="col-sm-8 font-monospace">{{ +x.totalSalesAmount | number:'1.2-2' }}</dd>
+                    <dt class="col-sm-4 text-muted">Payouts</dt>
+                    <dd class="col-sm-8 font-monospace">{{ +x.totalPayoutsNetAmount | number:'1.2-2' }}</dd>
+                    <dt class="col-sm-4 text-muted">Expected Cash</dt>
+                    <dd class="col-sm-8 font-monospace">{{ +x.expectedCashAmount | number:'1.2-2' }}</dd>
+                    <dt class="col-sm-4 text-muted">Invoice Count</dt>
+                    <dd class="col-sm-8">{{ x.invoiceCount }}</dd>
+                  </dl>
+                }
+              }
+            }
+          </div>
+        </div>
+
+        <!-- Z-Read panel (shown after reconcile) -->
+        @if (zRead(); as z) {
+          <div class="card mb-3 border-secondary">
+            <div class="card-header bg-secondary text-white">
+              <h2 class="h6 mb-0">
+                <i class="bi bi-check2-circle me-1" aria-hidden="true"></i>Z-Read (Reconciliation)
+              </h2>
+            </div>
+            <div class="card-body">
+              <dl class="row mb-0">
+                <dt class="col-sm-4 text-muted">Opening Float</dt>
+                <dd class="col-sm-8 font-monospace">{{ +z.openingFloatAmount | number:'1.2-2' }}</dd>
+                <dt class="col-sm-4 text-muted">Sales Total</dt>
+                <dd class="col-sm-8 font-monospace">{{ +z.totalSalesAmount | number:'1.2-2' }}</dd>
+                <dt class="col-sm-4 text-muted">Payouts</dt>
+                <dd class="col-sm-8 font-monospace">{{ +z.totalPayoutsNetAmount | number:'1.2-2' }}</dd>
+                <dt class="col-sm-4 text-muted">Expected Cash</dt>
+                <dd class="col-sm-8 font-monospace">{{ +z.expectedCashAmount | number:'1.2-2' }}</dd>
+                <dt class="col-sm-4 text-muted">Counted Cash</dt>
+                <dd class="col-sm-8 font-monospace">{{ +z.countedCashAmount | number:'1.2-2' }}</dd>
+                <dt class="col-sm-4 text-muted">Variance</dt>
+                <dd class="col-sm-8">
+                  <span class="badge" [class]="varianceBadgeClass(z.varianceAmount)">
+                    {{ +z.varianceAmount | number:'1.2-2' }}
+                  </span>
+                </dd>
+                @if (z.varianceJournalId) {
+                  <dt class="col-sm-4 text-muted">Journal</dt>
+                  <dd class="col-sm-8 font-monospace">{{ z.varianceJournalId }}</dd>
+                }
+                <dt class="col-sm-4 text-muted">Invoice Count</dt>
+                <dd class="col-sm-8">{{ z.invoiceCount }}</dd>
+              </dl>
+            </div>
+          </div>
+        }
+
+        <!-- Action buttons -->
+        <div class="d-flex flex-wrap gap-2 mb-3">
+          @if (s.status === 'OPEN') {
+            <!-- Payout -->
+            <button type="button" class="btn btn-outline-warning"
+                    (click)="togglePayoutForm()"
+                    [attr.aria-expanded]="showPayoutForm()"
+                    aria-controls="payoutForm">
+              <i class="bi bi-cash-coin me-1" aria-hidden="true"></i>Record Payout
+            </button>
+
+            <!-- Close -->
+            @if (canClose()) {
+              <button type="button" class="btn btn-outline-danger"
+                      (click)="toggleCloseForm()"
+                      [attr.aria-expanded]="showCloseForm()"
+                      aria-controls="closeForm">
+                <i class="bi bi-x-circle me-1" aria-hidden="true"></i>Close Session
+              </button>
+            }
+          }
+
+          @if (s.status === 'CLOSED' && canReconcile()) {
+            <button type="button" class="btn btn-outline-secondary"
+                    (click)="toggleReconcileForm()"
+                    [attr.aria-expanded]="showReconcileForm()"
+                    aria-controls="reconcileForm">
+              <i class="bi bi-check2-all me-1" aria-hidden="true"></i>Reconcile
+            </button>
+          }
+        </div>
+
+        <!-- Payout form -->
+        @if (showPayoutForm()) {
+          <form id="payoutForm" class="create-form card card-body mb-3"
+                (ngSubmit)="recordPayout()" aria-label="Record payout">
+            <h2 class="h6 mb-3">Record Payout</h2>
+            <div class="row g-2 align-items-end mb-2">
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="payoutTypeField">
+                  Type <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <select id="payoutTypeField" name="payoutTypeField" class="form-select"
+                        [ngModel]="payoutType()" (ngModelChange)="payoutType.set($event)"
+                        [disabled]="paying()">
+                  @for (pt of payoutTypes; track pt) {
+                    <option [value]="pt">{{ pt }}</option>
+                  }
+                </select>
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="payoutAmountField">
+                  Amount <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="payoutAmountField" name="payoutAmountField" type="number"
+                       class="form-control" min="0.01" step="0.01"
+                       [ngModel]="payoutAmount()" (ngModelChange)="payoutAmount.set($event)"
+                       [disabled]="paying()" />
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label small text-muted mb-1" for="payoutReasonField">
+                  Reason <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="payoutReasonField" name="payoutReasonField" type="text"
+                       class="form-control"
+                       [ngModel]="payoutReason()" (ngModelChange)="payoutReason.set($event)"
+                       [disabled]="paying()" autocomplete="off" />
+              </div>
+              <div class="col-sm-2 d-flex align-items-end">
+                <button type="submit" class="btn btn-warning w-100" [disabled]="paying()">
+                  @if (paying()) {
+                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                  } @else {
+                    Record
+                  }
+                </button>
+              </div>
+            </div>
+            @if (payoutError(); as msg) {
+              <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+            }
+          </form>
+        }
+
+        <!-- Close form -->
+        @if (showCloseForm()) {
+          <form id="closeForm" class="create-form card card-body mb-3"
+                (ngSubmit)="closeSession()" aria-label="Close session">
+            <h2 class="h6 mb-3">Close Session</h2>
+            <div class="row g-2 align-items-end mb-2">
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="countedCashField">
+                  Counted Cash <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="countedCashField" name="countedCashField" type="number"
+                       class="form-control" min="0" step="0.01"
+                       [ngModel]="countedCash()" (ngModelChange)="countedCash.set($event)"
+                       [disabled]="closing()" />
+              </div>
+              <div class="col-sm-5">
+                <label class="form-label small text-muted mb-1" for="closeNotesField">Notes</label>
+                <input id="closeNotesField" name="closeNotesField" type="text"
+                       class="form-control"
+                       [ngModel]="closeNotes()" (ngModelChange)="closeNotes.set($event)"
+                       [disabled]="closing()" autocomplete="off" />
+              </div>
+              <div class="col-sm-4 d-flex align-items-end">
+                <button type="submit" class="btn btn-danger w-100" [disabled]="closing()">
+                  @if (closing()) {
+                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                    Closing…
+                  } @else {
+                    Close Session
+                  }
+                </button>
+              </div>
+            </div>
+            @if (closeError(); as msg) {
+              <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+            }
+          </form>
+        }
+
+        <!-- Reconcile form -->
+        @if (showReconcileForm()) {
+          <form id="reconcileForm" class="create-form card card-body mb-3"
+                (ngSubmit)="reconcile()" aria-label="Reconcile session">
+            <h2 class="h6 mb-3">Reconcile Session</h2>
+            <div class="row g-2 align-items-end mb-2">
+              <div class="col-sm-8">
+                <label class="form-label small text-muted mb-1" for="reconcileNotesField">Notes</label>
+                <input id="reconcileNotesField" name="reconcileNotesField" type="text"
+                       class="form-control"
+                       [ngModel]="reconcileNotes()" (ngModelChange)="reconcileNotes.set($event)"
+                       [disabled]="reconciling()" autocomplete="off" />
+              </div>
+              <div class="col-sm-4 d-flex align-items-end">
+                <button type="submit" class="btn btn-secondary w-100" [disabled]="reconciling()">
+                  @if (reconciling()) {
+                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                    Reconciling…
+                  } @else {
+                    Reconcile
+                  }
+                </button>
+              </div>
+            </div>
+            @if (reconcileError(); as msg) {
+              <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+            }
+          </form>
+        }
+      }
+    }
+  }
+</section>
