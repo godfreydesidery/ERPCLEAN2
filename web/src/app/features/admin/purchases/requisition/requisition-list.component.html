@@ -1,0 +1,136 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Purchase Requisitions</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-clipboard-plus me-1" aria-hidden="true"></i>
+      Raise and manage purchase requisitions.
+    </p>
+  </header>
+
+  <!-- Company selector -->
+  @switch (companyState()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mb-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load companies. Is the API running?
+      </p>
+    }
+    @default {
+      @if (companies().length > 1) {
+        <div class="mb-3" style="max-width:320px">
+          <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+          <select id="companyPicker" name="companyPicker" class="form-select"
+                  [ngModel]="selectedCompanyId()"
+                  (ngModelChange)="onCompanyChange($event)">
+            @for (c of companies(); track c.uid) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+          </select>
+        </div>
+      }
+    }
+  }
+
+  @if (selectedCompanyId()) {
+    <!-- Filter + create -->
+    <div class="d-flex flex-wrap gap-2 mb-3 align-items-end">
+      <!-- Status filter -->
+      <div>
+        <label class="form-label small text-muted mb-1" for="statusFilter">Status</label>
+        <select id="statusFilter" name="statusFilter" class="form-select"
+                style="min-width:160px"
+                [ngModel]="statusFilter()"
+                (ngModelChange)="onStatusChange($event)">
+          @for (s of statusOptions; track s.value) {
+            <option [value]="s.value">{{ s.label }}</option>
+          }
+        </select>
+      </div>
+
+      @if (canCreate()) {
+        <div class="ms-auto align-self-end">
+          <a class="btn btn-primary" routerLink="/admin/purchase-requisitions/create">
+            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+            New Requisition
+          </a>
+        </div>
+      }
+    </div>
+
+    <!-- List states -->
+    @switch (state()) {
+      @case ('loading') {
+        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading requisitions…
+        </p>
+      }
+      @case ('error') {
+        <p class="state text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load purchase requisitions. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="state text-muted d-flex align-items-center gap-2">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view purchase requisitions.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <p class="state text-muted">No purchase requisitions yet.
+            @if (canCreate()) {
+              <a routerLink="/admin/purchase-requisitions/create">Create one.</a>
+            }
+          </p>
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-hover align-middle bg-white grid">
+              <caption class="visually-hidden">Purchase requisitions</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Requisition #</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Required By</th>
+                  <th scope="col">Cost Centre</th>
+                  <th scope="col">Lines</th>
+                  <th scope="col">Created</th>
+                  <th scope="col"><span class="visually-hidden">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (r of rows(); track r.uid) {
+                  <tr>
+                    <td class="font-monospace">{{ reqLabel(r) }}</td>
+                    <td>
+                      <span class="badge" [class]="statusBadgeClass(r.status)">{{ r.status }}</span>
+                    </td>
+                    <td class="small text-muted">{{ r.requiredByDate ?? '—' }}</td>
+                    <td class="small text-muted">{{ r.costCentreCode ?? '—' }}</td>
+                    <td class="small">{{ r.lines.length }}</td>
+                    <td class="small text-muted">{{ r.createdAt | date:'dd/MM/yyyy' }}</td>
+                    <td>
+                      <a class="btn btn-sm btn-outline-primary"
+                         [routerLink]="['/admin/purchase-requisitions/uid', r.uid]"
+                         [attr.aria-label]="'Open requisition ' + reqLabel(r)">
+                        <i class="bi bi-eye me-1" aria-hidden="true"></i>Open
+                      </a>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Pagination -->
+          <app-paginator [meta]="meta()" [label]="'Purchase requisitions'" (pageChange)="goToPage($event)" />
+        }
+      }
+    }
+  }
+</section>

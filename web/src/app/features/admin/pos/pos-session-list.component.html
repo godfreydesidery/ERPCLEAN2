@@ -1,0 +1,167 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">POS Sessions</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-shop me-1" aria-hidden="true"></i>
+      Open, view, close and reconcile till sessions.
+    </p>
+  </header>
+
+  <!-- Company selector -->
+  @switch (companyState()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mb-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load companies. Is the API running?
+      </p>
+    }
+    @default {
+      @if (companies().length > 1) {
+        <div class="mb-3" style="max-width:320px">
+          <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+          <select id="companyPicker" name="companyPicker" class="form-select"
+                  [ngModel]="selectedCompanyId()"
+                  (ngModelChange)="onCompanyChange($event)">
+            @for (c of companies(); track c.uid) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+          </select>
+        </div>
+      }
+    }
+  }
+
+  @if (selectedCompanyId()) {
+    <!-- Toolbar -->
+    @if (canOpen()) {
+      <div class="mb-3">
+        <button type="button" class="btn btn-primary"
+                (click)="toggleOpenForm()"
+                [attr.aria-expanded]="showOpenForm()"
+                aria-controls="openSessionForm">
+          <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+          Open Session
+        </button>
+      </div>
+    }
+
+    <!-- Open-session form -->
+    @if (showOpenForm()) {
+      <form id="openSessionForm" class="create-form card card-body mb-3"
+            (ngSubmit)="openSession()" aria-label="Open POS session">
+        <h2 class="h6 mb-3">Open New Session</h2>
+        <div class="row g-2 align-items-end mb-2">
+          <div class="col-sm-5">
+            <label class="form-label small text-muted mb-1" for="newTillUid">
+              Till <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <app-uid-picker id="newTillUid"
+                            [ngModel]="newTillUid()"
+                            (ngModelChange)="newTillUid.set($event)"
+                            [options]="tillOptions()"
+                            placeholder="Select till"
+                            [required]="true"
+                            name="newTillUid" />
+          </div>
+          <div class="col-sm-3">
+            <label class="form-label small text-muted mb-1" for="newOpeningFloat">
+              Opening Float <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="newOpeningFloat" name="newOpeningFloat" type="number"
+                   class="form-control" min="0" step="0.01"
+                   [ngModel]="newOpeningFloat()" (ngModelChange)="newOpeningFloat.set($event)"
+                   [disabled]="opening()" />
+          </div>
+          <div class="col-sm-4 d-flex align-items-end">
+            <button type="submit" class="btn btn-primary w-100" [disabled]="opening()">
+              @if (opening()) {
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                Opening…
+              } @else {
+                Open Session
+              }
+            </button>
+          </div>
+        </div>
+        @if (openError(); as msg) {
+          <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+        }
+      </form>
+    }
+
+    <!-- List states -->
+    @switch (state()) {
+      @case ('loading') {
+        <output class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading sessions…
+        </output>
+      }
+      @case ('error') {
+        <p class="state text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load sessions. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="state text-muted d-flex align-items-center gap-2">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view POS sessions.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <p class="state text-muted">No sessions yet. Open one above.</p>
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-hover align-middle bg-white grid">
+              <caption class="visually-hidden">POS sessions</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Session UID</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Opened At</th>
+                  <th scope="col" class="text-end">Opening Float</th>
+                  <th scope="col" class="text-end">Expected Cash</th>
+                  <th scope="col"><span class="visually-hidden">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (s of rows(); track s.uid) {
+                  <tr>
+                    <td class="font-monospace small">{{ s.uid }}</td>
+                    <td>
+                      <span class="badge" [class]="statusBadgeClass(s.status)">{{ s.status }}</span>
+                    </td>
+                    <td class="small text-muted">{{ s.openedAt ?? '—' }}</td>
+                    <td class="text-end font-monospace">{{ +s.openingFloatAmount | number:'1.2-2' }}</td>
+                    <td class="text-end font-monospace">
+                      @if (s.expectedCashAmount) {
+                        {{ +s.expectedCashAmount | number:'1.2-2' }}
+                      } @else {
+                        —
+                      }
+                    </td>
+                    <td class="d-flex flex-wrap gap-1">
+                      <a class="btn btn-sm btn-outline-primary"
+                         [routerLink]="['/admin/pos/sessions/uid', s.uid]"
+                         [attr.aria-label]="'View session ' + s.uid">
+                        <i class="bi bi-eye me-1" aria-hidden="true"></i>View
+                      </a>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <app-paginator [meta]="meta()" [label]="'Sessions'" (pageChange)="goToPage($event)" />
+        }
+      }
+    }
+  }
+</section>

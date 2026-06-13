@@ -1,0 +1,292 @@
+<section class="admin-page">
+  <header class="page-head">
+    <a class="back-link text-muted small" routerLink="/admin/purchase-requisitions">
+      <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Requisitions
+    </a>
+    <h1 class="h4 mb-1 mt-1">Purchase Requisition</h1>
+  </header>
+
+  @switch (state()) {
+    @case ('loading') {
+      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+      </p>
+    }
+    @case ('error') {
+      <p class="state text-danger" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load requisition. Please try again.
+      </p>
+    }
+    @case ('forbidden') {
+      <p class="state text-muted">
+        <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>
+        You don't have permission to view this requisition.
+      </p>
+    }
+    @default {
+      @if (entity(); as r) {
+        <!-- Summary card -->
+        <div class="card card-body mb-4">
+          <div class="row g-3">
+            <div class="col-sm-3">
+              <p class="small text-muted mb-1">Requisition #</p>
+              <p class="fw-bold font-monospace mb-0">{{ r.requisitionNumber ?? 'DRAFT' }}</p>
+            </div>
+            <div class="col-sm-2">
+              <p class="small text-muted mb-1">Status</p>
+              <span class="badge" [class]="statusBadgeClass(r.status)">{{ r.status }}</span>
+            </div>
+            <div class="col-sm-2">
+              <p class="small text-muted mb-1">Required By</p>
+              <p class="mb-0">{{ r.requiredByDate ?? '—' }}</p>
+            </div>
+            <div class="col-sm-2">
+              <p class="small text-muted mb-1">Cost Centre</p>
+              <p class="mb-0 small">{{ r.costCentreCode ?? '—' }}</p>
+            </div>
+            <div class="col-sm-3">
+              <p class="small text-muted mb-1">Created</p>
+              <p class="mb-0 small text-muted">{{ r.createdAt | date:'dd/MM/yyyy HH:mm' }}</p>
+            </div>
+          </div>
+          @if (r.notes) {
+            <div class="mt-2 pt-2 border-top">
+              <p class="small text-muted mb-0"><strong>Notes:</strong> {{ r.notes }}</p>
+            </div>
+          }
+          <!-- Converted-to link -->
+          @if (r.convertedToUid && r.convertedToType) {
+            <div class="mt-2 pt-2 border-top">
+              <p class="small mb-0">
+                <i class="bi bi-box-arrow-right me-1" aria-hidden="true"></i>
+                Converted to {{ r.convertedToType }}:
+                <a [routerLink]="[convertedRouteBase(), r.convertedToUid]" class="font-monospace">
+                  {{ r.convertedToUid }}
+                </a>
+              </p>
+            </div>
+          }
+          <!-- Approval info -->
+          @if (r.approvalStatus) {
+            <div class="mt-2 pt-2 border-top">
+              <p class="small text-muted mb-0"><strong>Approval status:</strong> {{ r.approvalStatus }}</p>
+            </div>
+          }
+        </div>
+
+        <!-- Lines table -->
+        <h2 class="h6 mb-2">Lines</h2>
+        @if (r.lines && r.lines.length > 0) {
+          <div class="table-responsive mb-4">
+            <table class="table table-sm align-middle bg-white">
+              <caption class="visually-hidden">Requisition line items</caption>
+              <thead>
+                <tr>
+                  <th scope="col">#</th>
+                  <th scope="col">Product</th>
+                  <th scope="col">Unit</th>
+                  <th scope="col" class="text-end">Qty</th>
+                  <th scope="col" class="text-end">Est. Unit Cost</th>
+                  <th scope="col">Note</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (line of r.lines; track line.uid) {
+                  <tr>
+                    <td class="text-muted small">{{ line.lineNo }}</td>
+                    <td>
+                      <span class="fw-semibold">{{ line.productName }}</span>
+                      <span class="text-muted small ms-1">({{ line.productCode }})</span>
+                    </td>
+                    <td class="small">{{ line.unitName }}</td>
+                    <td class="text-end font-monospace">{{ +line.requestedQty | number:'1.3-3' }}</td>
+                    <td class="text-end font-monospace small">
+                      @if (line.estimatedUnitCost) {
+                        {{ +line.estimatedUnitCost | number:'1.2-2' }}
+                      } @else {
+                        —
+                      }
+                    </td>
+                    <td class="small text-muted">{{ line.note ?? '—' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        } @else {
+          <p class="text-muted small mb-4">No lines.</p>
+        }
+
+        <!-- Lifecycle timestamps -->
+        @if (r.submittedAt || r.approvedAt || r.rejectedAt || r.convertedAt || r.cancelledAt) {
+          <div class="card card-body mb-4 small text-muted">
+            @if (r.submittedAt) {
+              <p class="mb-1">Submitted: {{ r.submittedAt | date:'dd/MM/yyyy HH:mm' }}</p>
+            }
+            @if (r.approvedAt) {
+              <p class="mb-1">Approved: {{ r.approvedAt | date:'dd/MM/yyyy HH:mm' }}</p>
+            }
+            @if (r.rejectedAt) {
+              <p class="mb-1">Rejected: {{ r.rejectedAt | date:'dd/MM/yyyy HH:mm' }}</p>
+            }
+            @if (r.convertedAt) {
+              <p class="mb-1">Converted: {{ r.convertedAt | date:'dd/MM/yyyy HH:mm' }}</p>
+            }
+            @if (r.cancelledAt) {
+              <p class="mb-0">Cancelled: {{ r.cancelledAt | date:'dd/MM/yyyy HH:mm' }}</p>
+            }
+          </div>
+        }
+
+        <!-- Action error -->
+        @if (actionError(); as err) {
+          <p class="form-error text-danger small mb-3" role="alert">{{ err }}</p>
+        }
+
+        <!-- Lifecycle action buttons -->
+        <div class="d-flex flex-wrap gap-2 mb-3">
+          <!-- Submit (DRAFT → SUBMITTED) -->
+          @if (r.status === 'DRAFT' && canCreate()) {
+            <button type="button" class="btn btn-primary"
+                    (click)="submit()" [disabled]="actionBusy()">
+              @if (actionBusy()) {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+              }
+              Submit for Approval
+            </button>
+          }
+
+          <!-- Approve (SUBMITTED → APPROVED) -->
+          @if (r.status === 'SUBMITTED' && canApprove()) {
+            <button type="button" class="btn btn-success"
+                    (click)="approve()" [disabled]="actionBusy()">
+              @if (actionBusy()) {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+              }
+              <i class="bi bi-check-lg me-1" aria-hidden="true"></i>Approve
+            </button>
+          }
+
+          <!-- Reject (SUBMITTED → REJECTED) -->
+          @if (r.status === 'SUBMITTED' && canApprove()) {
+            <button type="button" class="btn btn-outline-danger"
+                    (click)="showRejectForm.set(!showRejectForm())"
+                    [attr.aria-expanded]="showRejectForm()">
+              <i class="bi bi-x-lg me-1" aria-hidden="true"></i>Reject
+            </button>
+          }
+
+          <!-- Convert (APPROVED → CONVERTED) -->
+          @if (r.status === 'APPROVED' && canApprove()) {
+            <button type="button" class="btn btn-outline-info"
+                    (click)="showConvertForm.set(!showConvertForm())"
+                    [attr.aria-expanded]="showConvertForm()">
+              <i class="bi bi-box-arrow-right me-1" aria-hidden="true"></i>Convert
+            </button>
+          }
+
+          <!-- Cancel (DRAFT or SUBMITTED) -->
+          @if ((r.status === 'DRAFT' || r.status === 'SUBMITTED') && canCreate()) {
+            <button type="button" class="btn btn-outline-secondary"
+                    (click)="showCancelForm.set(!showCancelForm())"
+                    [attr.aria-expanded]="showCancelForm()">
+              <i class="bi bi-slash-circle me-1" aria-hidden="true"></i>Cancel
+            </button>
+          }
+        </div>
+
+        <!-- Reject inline form -->
+        @if (showRejectForm()) {
+          <div class="card card-body mb-3" aria-live="polite">
+            <h3 class="h6 mb-2">Reject Requisition</h3>
+            <div class="mb-2" style="max-width:480px">
+              <label class="form-label small text-muted mb-1" for="rejectReason">
+                Reason <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <textarea id="rejectReason" name="rejectReason" class="form-control"
+                        rows="2"
+                        [ngModel]="rejectReason()"
+                        (ngModelChange)="rejectReason.set($event)"
+                        [disabled]="actionBusy()"
+                        placeholder="Explain why this requisition is being rejected…"></textarea>
+            </div>
+            <div class="d-flex gap-2">
+              <button type="button" class="btn btn-danger btn-sm"
+                      (click)="confirmReject()" [disabled]="actionBusy()">
+                @if (actionBusy()) {
+                  <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                }
+                Confirm Reject
+              </button>
+              <button type="button" class="btn btn-outline-secondary btn-sm"
+                      (click)="showRejectForm.set(false)" [disabled]="actionBusy()">
+                Cancel
+              </button>
+            </div>
+          </div>
+        }
+
+        <!-- Convert inline form -->
+        @if (showConvertForm()) {
+          <div class="card card-body mb-3" aria-live="polite">
+            <h3 class="h6 mb-2">Convert Requisition</h3>
+            <div class="mb-2" style="max-width:320px">
+              <label class="form-label small text-muted mb-1" for="convertTarget">
+                Convert to <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <select id="convertTarget" name="convertTarget" class="form-select"
+                      [ngModel]="convertTargetType()"
+                      (ngModelChange)="convertTargetType.set($event)"
+                      [disabled]="actionBusy()">
+                <option value="PURCHASE_ORDER">Purchase Order</option>
+                <option value="RFQ">Request for Quotation (RFQ)</option>
+              </select>
+            </div>
+            <div class="d-flex gap-2">
+              <button type="button" class="btn btn-info btn-sm text-white"
+                      (click)="confirmConvert()" [disabled]="actionBusy()">
+                @if (actionBusy()) {
+                  <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                }
+                Confirm Convert
+              </button>
+              <button type="button" class="btn btn-outline-secondary btn-sm"
+                      (click)="showConvertForm.set(false)" [disabled]="actionBusy()">
+                Cancel
+              </button>
+            </div>
+          </div>
+        }
+
+        <!-- Cancel inline form -->
+        @if (showCancelForm()) {
+          <div class="card card-body mb-3" aria-live="polite">
+            <h3 class="h6 mb-2">Cancel Requisition</h3>
+            <div class="mb-2" style="max-width:480px">
+              <label class="form-label small text-muted mb-1" for="cancelReason">Reason (optional)</label>
+              <input id="cancelReason" name="cancelReason" type="text" class="form-control"
+                     [ngModel]="cancelReason()"
+                     (ngModelChange)="cancelReason.set($event)"
+                     [disabled]="actionBusy()"
+                     placeholder="Reason for cancellation" />
+            </div>
+            <div class="d-flex gap-2">
+              <button type="button" class="btn btn-secondary btn-sm"
+                      (click)="confirmCancel()" [disabled]="actionBusy()">
+                @if (actionBusy()) {
+                  <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                }
+                Confirm Cancel
+              </button>
+              <button type="button" class="btn btn-outline-secondary btn-sm"
+                      (click)="showCancelForm.set(false)" [disabled]="actionBusy()">
+                Back
+              </button>
+            </div>
+          </div>
+        }
+      }
+    }
+  }
+</section>

@@ -241,6 +241,38 @@
             </p>
           }
 
+          <!-- ── AP Sub-ledger vs GL Reconciliation ───────────────────────── -->
+          @if (reconciliation(); as rec) {
+            <div class="card mb-4">
+              <div class="card-header small fw-semibold text-muted">
+                <i class="bi bi-bank me-1" aria-hidden="true"></i>AP Sub-ledger vs GL Reconciliation
+              </div>
+              <div class="card-body">
+                <dl class="row mb-0">
+                  <dt class="col-sm-4">Sub-ledger Total</dt>
+                  <dd class="col-sm-8 font-monospace">
+                    {{ rec.currency }} {{ fmtMoney(rec.subLedgerTotal) }}
+                  </dd>
+                  <dt class="col-sm-4">GL Control Balance</dt>
+                  <dd class="col-sm-8 font-monospace">
+                    {{ rec.currency }} {{ fmtMoney(rec.glControlBalance) }}
+                  </dd>
+                  <dt class="col-sm-4">Difference</dt>
+                  <dd class="col-sm-8 font-monospace"
+                      [class.text-danger]="+(rec.difference) !== 0"
+                      [class.text-success]="+(rec.difference) === 0">
+                    {{ rec.currency }} {{ fmtMoney(rec.difference) }}
+                    @if (+(rec.difference) === 0) {
+                      <span class="badge text-bg-success ms-2">Reconciled</span>
+                    } @else {
+                      <span class="badge text-bg-danger ms-2">Out of Balance</span>
+                    }
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          }
+
         }
       }
     }

@@ -13,6 +13,7 @@ import {
   AgeingBucket,
   ApAgeingRowDto,
   ApBalanceDto,
+  ApReconciliationDto,
   SupplierBillDto,
 } from './models/ap.model';
 import { ApService } from './ap.service';
@@ -64,6 +65,7 @@ export class SupplierStatementComponent {
   readonly balance = signal<ApBalanceDto | null>(null);
   readonly ageing = signal<ApAgeingRowDto[]>([]);
   readonly openBills = signal<SupplierBillDto[]>([]);
+  readonly reconciliation = signal<ApReconciliationDto | null>(null);
   readonly state = signal<LoadState>('idle');
 
   // ── Permissions ────────────────────────────────────────────────────────────
@@ -157,6 +159,7 @@ export class SupplierStatementComponent {
     this.balance.set(null);
     this.ageing.set([]);
     this.openBills.set([]);
+    this.reconciliation.set(null);
   }
 
   private loadStatement(supplierUid: string): void {
@@ -165,14 +168,15 @@ export class SupplierStatementComponent {
     this.state.set('loading');
     this.clearData();
 
-    // Load balance, ageing, and open bills in parallel.
+    // Load balance, ageing, open bills, and reconciliation in parallel.
     let balanceDone = false;
     let ageingDone = false;
     let billsDone = false;
+    let reconciliationDone = false;
     let errored = false;
 
     const checkDone = () => {
-      if (!errored && balanceDone && ageingDone && billsDone) {
+      if (!errored && balanceDone && ageingDone && billsDone && reconciliationDone) {
         this.state.set('idle');
       }
     };
@@ -198,13 +202,17 @@ export class SupplierStatementComponent {
 
     this.apService.listBills(companyId, supplierUid, undefined, 0, 100).subscribe({
       next: ({ rows }) => {
-        this.openBills.set(
-          rows.filter((b) => b.status !== 'PAID'),
-        );
+        this.openBills.set(rows.filter((b) => b.status !== 'PAID'));
         billsDone = true;
         checkDone();
       },
       error: handleError,
+    });
+
+    // Reconciliation is company-scoped (not supplier-scoped) — load once per company.
+    this.apService.getReconciliation(companyId).subscribe({
+      next: (r) => { this.reconciliation.set(r); reconciliationDone = true; checkDone(); },
+      error: () => { reconciliationDone = true; checkDone(); }, // non-fatal — don't block the rest
     });
   }
 

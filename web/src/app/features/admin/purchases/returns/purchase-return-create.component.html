@@ -1,0 +1,148 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">New Purchase Return</h1>
+    <a routerLink="/admin/purchase-returns" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Returns
+    </a>
+  </header>
+
+  @switch (companyState()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mb-3" role="alert">Could not load companies.</p>
+    }
+    @default {
+      @if (companies().length > 1) {
+        <div class="mb-3" style="max-width:320px">
+          <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+          <select id="companyPicker" name="companyPicker" class="form-select"
+                  [ngModel]="selectedCompanyId()"
+                  (ngModelChange)="onCompanyChange($event)">
+            @for (c of companies(); track c.uid) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+          </select>
+        </div>
+      }
+
+      <form class="create-form card card-body" (ngSubmit)="submit()" aria-label="Create purchase return">
+        <div class="row g-3 mb-3">
+          <!-- GR picker -->
+          <div class="col-sm-6">
+            <label class="form-label small text-muted mb-1" for="grPicker">
+              Goods Receipt <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <app-uid-picker id="grPicker"
+              [(ngModel)]="selectedGrUid"
+              name="grPicker"
+              [options]="grOptions()"
+              placeholder="Select goods receipt"
+              [required]="true"
+              (ngModelChange)="onGrPick($event)" />
+          </div>
+
+          <!-- Reason -->
+          <div class="col-sm-6">
+            <label class="form-label small text-muted mb-1" for="reason">
+              Reason <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="reason" name="reason" type="text" class="form-control"
+                   placeholder="Reason for return…"
+                   [ngModel]="reason()" (ngModelChange)="reason.set($event)"
+                   [disabled]="submitting()" autocomplete="off" />
+          </div>
+        </div>
+
+        <!-- GR loading state -->
+        @switch (grState()) {
+          @case ('loading') {
+            <p class="text-muted d-flex align-items-center gap-2 mb-2" aria-live="polite">
+              <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading receipt lines…
+            </p>
+          }
+          @case ('error') {
+            <p class="text-danger mb-2" role="alert">Could not load receipt lines.</p>
+          }
+          @default {}
+        }
+
+        <!-- Lines -->
+        @if (returnLines().length > 0) {
+          <h2 class="h6 mb-2">Lines to Return</h2>
+          <div class="table-responsive mb-3">
+            <table class="table table-sm align-middle">
+              <caption class="visually-hidden">Goods receipt lines</caption>
+              <thead>
+                <tr>
+                  <th scope="col"><span class="visually-hidden">Include</span></th>
+                  <th scope="col">Product</th>
+                  <th scope="col">Unit</th>
+                  <th scope="col" class="text-end">Received Qty</th>
+                  <th scope="col" class="text-end">Return Qty</th>
+                  <th scope="col"></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (entry of returnLines(); track entry.line.uid; let i = $index) {
+                  <tr>
+                    <td>
+                      <input type="checkbox" class="form-check-input"
+                             [id]="'inc-' + entry.line.uid"
+                             [checked]="entry.include"
+                             (change)="toggleLineInclude(i, $any($event.target).checked)"
+                             [attr.aria-label]="'Include ' + entry.line.productName" />
+                    </td>
+                    <td>
+                      <div class="fw-semibold small">{{ entry.line.productCode }}</div>
+                      <div class="text-muted small">{{ entry.line.productName }}</div>
+                    </td>
+                    <td class="small">{{ entry.line.unitName }}</td>
+                    <td class="text-end small font-monospace">{{ +entry.line.qtyInBase | number:'1.2-2' }}</td>
+                    <td>
+                      @if (entry.include) {
+                        <input type="number" class="form-control form-control-sm text-end"
+                               style="max-width:110px"
+                               [id]="'qty-' + entry.line.uid"
+                               [attr.aria-label]="'Return quantity for ' + entry.line.productName"
+                               [ngModel]="entry.returnedQty"
+                               (ngModelChange)="updateLineQty(i, $event)"
+                               min="0.001" step="any"
+                               [disabled]="submitting()" />
+                      }
+                    </td>
+                    <td>
+                      @if (lineErrors()[entry.line.uid]; as msg) {
+                        <span class="text-danger small">{{ msg }}</span>
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+
+        @if (formError(); as msg) {
+          <p class="form-error text-danger small mb-2" role="alert">{{ msg }}</p>
+        }
+
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary"
+                  [disabled]="submitting() || !hasIncludedLines()">
+            @if (submitting()) {
+              <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+              Saving…
+            } @else {
+              Create Return
+            }
+          </button>
+          <a routerLink="/admin/purchase-returns" class="btn btn-outline-secondary">Cancel</a>
+        </div>
+      </form>
+    }
+  }
+</section>

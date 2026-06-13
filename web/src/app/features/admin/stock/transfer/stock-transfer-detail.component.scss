@@ -1,0 +1,10 @@
+// Stock Transfer Detail — component-scoped overrides
+// Global .admin-page, .page-head, .grid, .state, .form-error from admin.styles.scss
+
+dt {
+  margin-bottom: 0;
+}
+
+dd {
+  margin-bottom: 0;
+}

@@ -1,0 +1,135 @@
+<div class="admin-page">
+  <div class="page-head">
+    <h1>Stock Batches</h1>
+  </div>
+
+  <!-- Company selector -->
+  @if (companies().length > 1) {
+    <div class="mb-3">
+      <label for="batchCompanySelect" class="form-label">Company</label>
+      <select id="batchCompanySelect" class="form-select form-select-sm w-auto"
+              [ngModel]="selectedCompanyId()"
+              (ngModelChange)="onCompanyChange($event)">
+        @for (c of companies(); track c.id) {
+          <option [value]="c.id">{{ c.name }}</option>
+        }
+      </select>
+    </div>
+  }
+
+  <!-- View mode tabs -->
+  <ul class="nav nav-tabs mb-3" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button type="button" class="nav-link" [class.active]="viewMode() === 'location'"
+              (click)="switchToLocation()" role="tab"
+              [attr.aria-selected]="viewMode() === 'location'">
+        By Location
+      </button>
+    </li>
+    @if (canExpiryView()) {
+      <li class="nav-item" role="presentation">
+        <button type="button" class="nav-link" [class.active]="viewMode() === 'expiring'"
+                (click)="switchToExpiring()" role="tab"
+                [attr.aria-selected]="viewMode() === 'expiring'">
+          Expiring Soon
+        </button>
+      </li>
+    }
+  </ul>
+
+  @if (viewMode() === 'location') {
+    <!-- Location + Product filters -->
+    <div class="row g-3 mb-3">
+      <div class="col-md-4">
+        <label class="form-label" for="locationPicker">Location <span aria-hidden="true">*</span></label>
+        <app-uid-picker id="locationPicker"
+                        [ngModel]="selectedLocationUid()"
+                        (ngModelChange)="onLocationChange($event)"
+                        [options]="locationOptions()"
+                        placeholder="Select location" />
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="productPicker">Product <span aria-hidden="true">*</span></label>
+        <app-uid-picker id="productPicker"
+                        [ngModel]="selectedProductUid()"
+                        (ngModelChange)="onProductChange($event)"
+                        [options]="productOptions()"
+                        placeholder="Select product" />
+      </div>
+    </div>
+    @if (!selectedLocationId() || !selectedProductId()) {
+      <p class="text-muted">Select a location and product to view batches.</p>
+    }
+  } @else {
+    <!-- Expiring horizon -->
+    <div class="row g-3 mb-3">
+      <div class="col-md-3">
+        <label for="horizonDate" class="form-label">Expiring on or before</label>
+        <input id="horizonDate" type="date" class="form-control form-control-sm"
+               [ngModel]="horizonDate()" (ngModelChange)="horizonDate.set($event); load(0)" />
+      </div>
+    </div>
+  }
+
+  <!-- Four-state switch -->
+  @switch (state()) {
+    @case ('loading') {
+      <div class="state" aria-live="polite" aria-busy="true">
+        <div class="spinner-border spinner-border-sm text-secondary" role="status">
+          <span class="visually-hidden">Loading batches…</span>
+        </div>
+        <span class="ms-2 text-muted">Loading…</span>
+      </div>
+    }
+    @case ('forbidden') {
+      <div class="state" role="alert">
+        <i class="bi bi-shield-x text-danger" aria-hidden="true"></i>
+        You do not have permission to view stock batches.
+      </div>
+    }
+    @case ('error') {
+      <div class="state" role="alert">
+        <i class="bi bi-exclamation-triangle text-danger" aria-hidden="true"></i>
+        Could not load batches. <button class="btn btn-sm btn-link" (click)="load(currentPage())">Retry</button>
+      </div>
+    }
+    @default {
+      @if (isEmpty()) {
+        <div class="state text-muted">No batches found for the selected filters.</div>
+      } @else {
+        <div class="table-responsive">
+          <table class="table table-hover align-middle bg-white grid">
+            <caption class="visually-hidden">Stock batches</caption>
+            <thead>
+              <tr>
+                <th scope="col">Lot #</th>
+                <th scope="col">Qty On Hand</th>
+                <th scope="col">Manufacture Date</th>
+                <th scope="col">Expiry Date</th>
+                <th scope="col">Expired</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of rows(); track row.uid) {
+                <tr>
+                  <td class="fw-semibold">{{ row.lotNumber }}</td>
+                  <td>{{ row.qtyOnHand }}</td>
+                  <td>{{ row.manufactureDate ?? '—' }}</td>
+                  <td>{{ row.expiryDate ?? '—' }}</td>
+                  <td>
+                    @if (row.expiryDate) {
+                      <span class="badge" [class]="expiryBadgeClass(row.expired)">
+                        {{ row.expired ? 'Expired' : 'OK' }}
+                      </span>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <app-paginator [meta]="meta()" [label]="'Batches'" (pageChange)="goToPage($event)" />
+      }
+    }
+  }
+</div>

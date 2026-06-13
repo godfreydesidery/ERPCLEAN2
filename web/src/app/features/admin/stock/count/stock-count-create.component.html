@@ -1,0 +1,135 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">New Stock Count</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-clipboard2-plus me-1" aria-hidden="true"></i>
+      Opens a count document, snapshots system quantities, and moves it to COUNTING.
+    </p>
+  </header>
+
+  @switch (companyState()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+        Loading…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load companies. Is the API running?
+      </p>
+    }
+    @default {
+      <form class="create-form card card-body" (ngSubmit)="submit()" aria-label="Create stock count">
+
+        <!-- Company -->
+        @if (companies().length > 1) {
+          <div class="mb-3" style="max-width:320px">
+            <label class="form-label" for="companyPicker">Company</label>
+            <select id="companyPicker" name="companyPicker" class="form-select"
+                    [ngModel]="selectedCompanyId()"
+                    (ngModelChange)="onCompanyChange($event)">
+              @for (c of companies(); track c.uid) {
+                <option [value]="c.id">{{ c.name }}</option>
+              }
+            </select>
+          </div>
+        }
+
+        <!-- Branch -->
+        @if (branches().length > 1) {
+          <div class="mb-3" style="max-width:320px">
+            <label class="form-label" for="branchPicker">Branch</label>
+            <select id="branchPicker" name="branchPicker" class="form-select"
+                    [ngModel]="selectedBranchUid()"
+                    (ngModelChange)="onBranchChange($event)">
+              @for (b of branches(); track b.uid) {
+                <option [value]="b.uid">{{ b.name }}</option>
+              }
+            </select>
+          </div>
+        }
+
+        <!-- Location picker -->
+        <div class="mb-3" style="max-width:320px">
+          <label class="form-label" for="locationPicker">
+            Stock Location <span class="text-danger" aria-hidden="true">*</span>
+          </label>
+          @if (locationsState() === 'loading') {
+            <p class="text-muted small" aria-live="polite">
+              <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+              Loading locations…
+            </p>
+          } @else if (locationsState() === 'error') {
+            <p class="text-danger small" role="alert">Could not load locations.</p>
+          } @else {
+            <app-uid-picker
+              id="locationPicker"
+              name="locationPicker"
+              [ngModel]="fLocationUid()"
+              (ngModelChange)="fLocationUid.set($event)"
+              [options]="locationOptions()"
+              placeholder="Select location"
+              [required]="true" />
+          }
+        </div>
+
+        <!-- Count Date -->
+        <div class="mb-3" style="max-width:200px">
+          <label class="form-label" for="countDate">
+            Count Date <span class="text-danger" aria-hidden="true">*</span>
+          </label>
+          <input id="countDate" name="countDate" type="date"
+                 class="form-control"
+                 [ngModel]="fCountDate()"
+                 (ngModelChange)="fCountDate.set($event)"
+                 required />
+        </div>
+
+        <!-- Count Type -->
+        <div class="mb-3" style="max-width:200px">
+          <label class="form-label" for="countType">Count Type</label>
+          <select id="countType" name="countType" class="form-select"
+                  [ngModel]="fCountType()"
+                  (ngModelChange)="fCountType.set($event)">
+            <option value="FULL">FULL</option>
+            <option value="CYCLE">CYCLE</option>
+          </select>
+          <div class="form-text">FULL = entire location. CYCLE = selected products.</div>
+        </div>
+
+        <!-- Notes -->
+        <div class="mb-3" style="max-width:480px">
+          <label class="form-label" for="notes">Notes</label>
+          <textarea id="notes" name="notes" class="form-control" rows="2"
+                    [ngModel]="fNotes()"
+                    (ngModelChange)="fNotes.set($event)"
+                    placeholder="Optional notes…"></textarea>
+        </div>
+
+        <!-- Error -->
+        @if (formError()) {
+          <p class="form-error text-danger" role="alert">
+            <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+            {{ formError() }}
+          </p>
+        }
+
+        <!-- Actions -->
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary" [disabled]="submitting()">
+            @if (submitting()) {
+              <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+              Creating…
+            } @else {
+              <i class="bi bi-check-lg me-1" aria-hidden="true"></i>
+              Create Count
+            }
+          </button>
+          <a routerLink="/admin/stock-counts" class="btn btn-outline-secondary">Cancel</a>
+        </div>
+      </form>
+    }
+  }
+</section>

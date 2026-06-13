@@ -226,6 +226,31 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./stock/stock-list.component').then((m) => m.StockListComponent),
   },
+  // ── Stock Locations / Batches / Serials ──────────────────────────────────
+  {
+    path: 'stock/locations',
+    canActivate: [requirePermission('STOCK.LOCATION.VIEW')],
+    loadComponent: () =>
+      import('./stock/locations/stock-location-list.component').then(
+        (m) => m.StockLocationListComponent,
+      ),
+  },
+  {
+    path: 'stock/batches',
+    canActivate: [requirePermission('STOCK.BATCH.VIEW')],
+    loadComponent: () =>
+      import('./stock/batches/stock-batch-list.component').then(
+        (m) => m.StockBatchListComponent,
+      ),
+  },
+  {
+    path: 'stock/serials',
+    canActivate: [requirePermission('STOCK.SERIAL.VIEW')],
+    loadComponent: () =>
+      import('./stock/serials/stock-serial-list.component').then(
+        (m) => m.StockSerialListComponent,
+      ),
+  },
   // ── Inventory Valuation ───────────────────────────────────────────────────
   {
     path: 'stock/valuation',
@@ -831,6 +856,316 @@ export const ADMIN_ROUTES: Routes = [
     canActivate: [requirePermission('BI.VIEW')],
     loadComponent: () =>
       import('./dashboard/dashboard.component').then((m) => m.DashboardComponent),
+  },
+  // ── POS ──────────────────────────────────────────────────────────────────────
+  {
+    path: 'pos/tills',
+    canActivate: [requirePermission('POS.TILL.VIEW')],
+    loadComponent: () =>
+      import('./pos/pos-till-list.component').then((m) => m.PosTillListComponent),
+  },
+  {
+    path: 'pos/sessions',
+    canActivate: [requirePermission('POS.SESSION.VIEW')],
+    loadComponent: () =>
+      import('./pos/pos-session-list.component').then((m) => m.PosSessionListComponent),
+  },
+  {
+    path: 'pos/sessions/uid/:uid',
+    canActivate: [requirePermission('POS.SESSION.VIEW')],
+    loadComponent: () =>
+      import('./pos/pos-session-detail.component').then((m) => m.PosSessionDetailComponent),
+  },
+  {
+    path: 'pos/sell',
+    canActivate: [requirePermission('POS.SALE.CREATE')],
+    loadComponent: () =>
+      import('./pos/pos-sale.component').then((m) => m.PosSaleComponent),
+  },
+  // ── Stock Transfers ─────────────────���──────────────────────────��──────────
+  {
+    path: 'stock-transfers',
+    canActivate: [requirePermission('STOCK.TRANSFER.VIEW')],
+    loadComponent: () =>
+      import('./stock/transfer/stock-transfer-list.component').then(
+        (m) => m.StockTransferListComponent,
+      ),
+  },
+  {
+    path: 'stock-transfers/create',
+    canActivate: [requirePermission('STOCK.TRANSFER.CREATE')],
+    loadComponent: () =>
+      import('./stock/transfer/stock-transfer-create.component').then(
+        (m) => m.StockTransferCreateComponent,
+      ),
+  },
+  {
+    path: 'stock-transfers/uid/:uid',
+    canActivate: [requirePermission('STOCK.TRANSFER.VIEW')],
+    loadComponent: () =>
+      import('./stock/transfer/stock-transfer-detail.component').then(
+        (m) => m.StockTransferDetailComponent,
+      ),
+  },
+  // ── Stock Counts (Physical / Cycle Count) ────────────────────────────────
+  {
+    path: 'stock-counts',
+    canActivate: [requirePermission('STOCK.COUNT.VIEW')],
+    loadComponent: () =>
+      import('./stock/count/stock-count-list.component').then((m) => m.StockCountListComponent),
+  },
+  {
+    path: 'stock-counts/create',
+    canActivate: [requirePermission('STOCK.COUNT.CREATE')],
+    loadComponent: () =>
+      import('./stock/count/stock-count-create.component').then((m) => m.StockCountCreateComponent),
+  },
+  {
+    path: 'stock-counts/uid/:uid',
+    canActivate: [requirePermission('STOCK.COUNT.VIEW')],
+    loadComponent: () =>
+      import('./stock/count/stock-count-detail.component').then((m) => m.StockCountDetailComponent),
+  },
+  // ── Purchase Requisitions ─────────────────────────────────────────────────
+  {
+    path: 'purchase-requisitions',
+    canActivate: [requirePermission('PURCHASE.REQUISITION.VIEW')],
+    loadComponent: () =>
+      import('./purchases/requisition/requisition-list.component').then(
+        (m) => m.RequisitionListComponent,
+      ),
+  },
+  {
+    path: 'purchase-requisitions/create',
+    canActivate: [requirePermission('PURCHASE.REQUISITION.CREATE')],
+    loadComponent: () =>
+      import('./purchases/requisition/requisition-create.component').then(
+        (m) => m.RequisitionCreateComponent,
+      ),
+  },
+  {
+    path: 'purchase-requisitions/uid/:uid',
+    canActivate: [requirePermission('PURCHASE.REQUISITION.VIEW')],
+    loadComponent: () =>
+      import('./purchases/requisition/requisition-detail.component').then(
+        (m) => m.RequisitionDetailComponent,
+      ),
+  },
+  // ── RFQ / Sourcing ────────────────────────────────────────────────────────
+  {
+    path: 'rfqs',
+    canActivate: [requirePermission('PURCHASE.RFQ.VIEW')],
+    loadComponent: () =>
+      import('./purchases/rfq/rfq-list.component').then((m) => m.RfqListComponent),
+  },
+  {
+    path: 'rfqs/create',
+    canActivate: [requirePermission('PURCHASE.RFQ.CREATE')],
+    loadComponent: () =>
+      import('./purchases/rfq/rfq-create.component').then((m) => m.RfqCreateComponent),
+  },
+  {
+    path: 'rfqs/uid/:uid',
+    canActivate: [requirePermission('PURCHASE.RFQ.VIEW')],
+    loadComponent: () =>
+      import('./purchases/rfq/rfq-detail.component').then((m) => m.RfqDetailComponent),
+  },
+  // ── Purchase Returns ──────────────────────────────────────────────────────
+  {
+    path: 'purchase-returns',
+    canActivate: [requirePermission('PURCHASE.RETURN.VIEW')],
+    loadComponent: () =>
+      import('./purchases/returns/purchase-return-list.component').then((m) => m.PurchaseReturnListComponent),
+  },
+  {
+    path: 'purchase-returns/create',
+    canActivate: [requirePermission('PURCHASE.RETURN.CREATE')],
+    loadComponent: () =>
+      import('./purchases/returns/purchase-return-create.component').then((m) => m.PurchaseReturnCreateComponent),
+  },
+  {
+    path: 'purchase-returns/uid/:uid',
+    canActivate: [requirePermission('PURCHASE.RETURN.VIEW')],
+    loadComponent: () =>
+      import('./purchases/returns/purchase-return-detail.component').then((m) => m.PurchaseReturnDetailComponent),
+  },
+  // ── Landed Costs ──────────────────────────────────────────────────────────
+  {
+    path: 'landed-costs',
+    canActivate: [requirePermission('PURCHASE.LANDED_COST.VIEW')],
+    loadComponent: () =>
+      import('./purchases/landed-costs/landed-cost-list.component').then((m) => m.LandedCostListComponent),
+  },
+  {
+    path: 'landed-costs/create',
+    canActivate: [requirePermission('PURCHASE.LANDED_COST.CREATE')],
+    loadComponent: () =>
+      import('./purchases/landed-costs/landed-cost-create.component').then((m) => m.LandedCostCreateComponent),
+  },
+  {
+    path: 'landed-costs/uid/:uid',
+    canActivate: [requirePermission('PURCHASE.LANDED_COST.VIEW')],
+    loadComponent: () =>
+      import('./purchases/landed-costs/landed-cost-detail.component').then((m) => m.LandedCostDetailComponent),
+  },
+  // ── Purchase Settings ─────────────────────────────────────────────────────
+  {
+    path: 'purchase-settings',
+    canActivate: [requirePermission('PURCHASE.SETTINGS.VIEW')],
+    loadComponent: () =>
+      import('./purchases/settings/purchase-settings.component').then((m) => m.PurchaseSettingsComponent),
+  },
+  // ── Blanket Orders ────────────────────────────────────────────────────────
+  {
+    path: 'blanket-orders',
+    canActivate: [requirePermission('SALES.BLANKET.VIEW')],
+    loadComponent: () =>
+      import('./sales/blanket/blanket-order-list.component').then((m) => m.BlanketOrderListComponent),
+  },
+  {
+    path: 'blanket-orders/uid/:uid',
+    canActivate: [requirePermission('SALES.BLANKET.VIEW')],
+    loadComponent: () =>
+      import('./sales/blanket/blanket-order-detail.component').then((m) => m.BlanketOrderDetailComponent),
+  },
+  {
+    path: 'blanket-orders/create',
+    canActivate: [requirePermission('SALES.BLANKET.CREATE')],
+    loadComponent: () =>
+      import('./sales/blanket/blanket-order-create.component').then((m) => m.BlanketOrderCreateComponent),
+  },
+  // ── Bills of Materials ────────────────────────────────────────────────────
+  {
+    path: 'boms',
+    canActivate: [requirePermission('BOM.VIEW')],
+    loadComponent: () =>
+      import('./manufacturing/bom/bom-list.component').then((m) => m.BomListComponent),
+  },
+  {
+    path: 'boms/uid/:uid',
+    canActivate: [requirePermission('BOM.VIEW')],
+    loadComponent: () =>
+      import('./manufacturing/bom/bom-detail.component').then((m) => m.BomDetailComponent),
+  },
+  // ── Standing Orders (Recurring Sales) ────────────────────────────────────────
+  {
+    path: 'standing-orders',
+    canActivate: [requirePermission('SALES.STANDING.VIEW')],
+    loadComponent: () =>
+      import('./sales/standing/standing-order-list.component').then((m) => m.StandingOrderListComponent),
+  },
+  {
+    path: 'standing-orders/create',
+    canActivate: [requirePermission('SALES.STANDING.CREATE')],
+    loadComponent: () =>
+      import('./sales/standing/standing-order-create.component').then((m) => m.StandingOrderCreateComponent),
+  },
+  {
+    path: 'standing-orders/uid/:uid',
+    canActivate: [requirePermission('SALES.STANDING.VIEW')],
+    loadComponent: () =>
+      import('./sales/standing/standing-order-detail.component').then((m) => m.StandingOrderDetailComponent),
+  },
+  // ── Pricing Rules ──────────────────────────────────────────────────────────
+  {
+    path: 'pricing-rules',
+    canActivate: [requirePermission('SALES.PRICING.RULE.VIEW')],
+    loadComponent: () =>
+      import('./sales/pricing/pricing-rules.component').then((m) => m.PricingRulesComponent),
+  },
+  // ── Other Parties ─────────────────────────────────────────────────────────
+  {
+    path: 'other-parties',
+    canActivate: [requirePermission('OTHERPARTY.VIEW')],
+    loadComponent: () =>
+      import('./parties/other/other-party-list.component').then((m) => m.OtherPartyListComponent),
+  },
+  {
+    path: 'other-parties/uid/:uid',
+    canActivate: [requirePermission('OTHERPARTY.VIEW')],
+    loadComponent: () =>
+      import('./parties/other/other-party-detail.component').then((m) => m.OtherPartyDetailComponent),
+  },
+  // ── CRM Activities ────────────────────────────────────────────────────────
+  {
+    path: 'crm/activities',
+    canActivate: [requirePermission('CRM.ACTIVITY.VIEW')],
+    loadComponent: () =>
+      import('./crm/activity/activity-tasks.component').then((m) => m.ActivityTasksComponent),
+  },
+  // ── HR Departments ────────────────────────────────────────────────────────
+  {
+    path: 'hr/departments',
+    canActivate: [requirePermission('HR.EMPLOYEE.VIEW')],
+    loadComponent: () =>
+      import('./hr-payroll/departments/department-list.component').then((m) => m.DepartmentListComponent),
+  },
+  // ── HR Contracts ─────────────────────────────────────────────────────────
+  {
+    path: 'hr/contracts',
+    canActivate: [requirePermission('HR.EMPLOYEE.VIEW')],
+    loadComponent: () =>
+      import('./hr-payroll/contracts/contract-list.component').then((m) => m.ContractListComponent),
+  },
+  // ── HR Statutory Setup ────────────────────────────────────────────────────
+  {
+    path: 'hr/statutory',
+    canActivate: [requirePermission('HR.STATUTORY.MANAGE')],
+    loadComponent: () =>
+      import('./hr-payroll/statutory/statutory.component').then((m) => m.StatutoryComponent),
+  },
+  // ── GL Year-End Close ──────────────────────────────────────────────────────
+  {
+    path: 'gl/year-end',
+    canActivate: [requirePermission('GL.YEAR.CLOSE')],
+    loadComponent: () =>
+      import('./gl/year-end/year-end-close.component').then((m) => m.YearEndCloseComponent),
+  },
+  // ── AR Receipts list + detail ─────────────────────────────────────────────
+  {
+    path: 'ar/receipts',
+    canActivate: [requirePermission('AR.VIEW')],
+    loadComponent: () =>
+      import('./ar/ar-receipts-list.component').then((m) => m.ArReceiptsListComponent),
+  },
+  {
+    path: 'ar/receipts/uid/:uid',
+    canActivate: [requirePermission('AR.VIEW')],
+    loadComponent: () =>
+      import('./ar/ar-receipt-detail.component').then((m) => m.ArReceiptDetailComponent),
+  },
+  // ── AR Ageing + Balance ───────────────────────────────────────────────────
+  {
+    path: 'ar/ageing',
+    canActivate: [requirePermission('AR.STATEMENT.VIEW')],
+    loadComponent: () =>
+      import('./ar/ar-ageing.component').then((m) => m.ArAgeingComponent),
+  },
+  // ── AP Payments list + detail ─────────────────────────────────────────────
+  {
+    path: 'ap/payments',
+    canActivate: [requirePermission('AP.VIEW')],
+    loadComponent: () =>
+      import('./ap/ap-payments-list.component').then((m) => m.ApPaymentsListComponent),
+  },
+  {
+    path: 'ap/payments/uid/:uid',
+    canActivate: [requirePermission('AP.VIEW')],
+    loadComponent: () =>
+      import('./ap/ap-payment-detail.component').then((m) => m.ApPaymentDetailComponent),
+  },
+  // ── Cash Transfers list + detail ──────────────────────────────────────────
+  {
+    path: 'cash/transfers',
+    canActivate: [requirePermission('CASH.VIEW')],
+    loadComponent: () =>
+      import('./cashbank/cash-transfers-list.component').then((m) => m.CashTransfersListComponent),
+  },
+  {
+    path: 'cash/transfers/uid/:uid',
+    canActivate: [requirePermission('CASH.VIEW')],
+    loadComponent: () =>
+      import('./cashbank/cash-transfer-detail.component').then((m) => m.CashTransferDetailComponent),
   },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];

@@ -87,3 +87,28 @@ export interface SetReorderLevelRequest {
   /** Nullable — null clears the threshold. */
   reorderLevel: string | null;
 }
+
+// ── LocationOnHandRowDto (ADR-0028 D-8, FR-INVD-05/06) ─────────────────────────
+
+/**
+ * Per-location on-hand row returned by GET /stock/on-hand/by-location and
+ * GET /stock/on-hand/by-product/uid/{productUid}.
+ * All Long/BigDecimal fields arrive as numbers or strings on the wire — coerce with +v.
+ */
+export interface LocationOnHandRowDto {
+  locationId: string;
+  locationUid: string;
+  locationCode: string;
+  locationName: string;
+  productId: string;
+  productUid: string;
+  productCode: string;
+  productName: string;
+  /** Wire: BigDecimal — coerce with +v */
+  quantity: number | string;
+  /** Wire: BigDecimal — coerce with +v */
+  onHandValue: number | string;
+  /** Wire: BigDecimal — coerce with +v */
+  avgCost: number | string;
+  currency: string;
+}

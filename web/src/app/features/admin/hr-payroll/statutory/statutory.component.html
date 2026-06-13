@@ -1,0 +1,381 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Statutory Setup</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-shield-check me-1" aria-hidden="true"></i>
+      Configure PAYE band sets and statutory contribution rates.
+    </p>
+  </header>
+
+  <!-- Company selector -->
+  @switch (companyState()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mb-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load companies. Is the API running?
+      </p>
+    }
+    @default {
+      @if (companies().length > 1) {
+        <div class="mb-4" style="max-width:320px">
+          <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+          <select id="companyPicker" name="companyPicker" class="form-select"
+                  [ngModel]="selectedCompanyId()"
+                  (ngModelChange)="onCompanyChange($event)">
+            @for (c of companies(); track c.uid) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+          </select>
+        </div>
+      }
+    }
+  }
+
+  @if (selectedCompanyId()) {
+
+    <!-- ══ Section 1: PAYE Band Sets ══════════════════════════════════════════ -->
+    <section aria-labelledby="payeBandsSectionHead" class="mb-5">
+      <div class="d-flex align-items-center mb-3">
+        <h2 class="h5 mb-0" id="payeBandsSectionHead">PAYE Band Sets</h2>
+        @if (canManage()) {
+          <button type="button" class="btn btn-primary btn-sm ms-auto"
+                  (click)="togglePayeForm()"
+                  [attr.aria-expanded]="showPayeForm()"
+                  aria-controls="createPayeForm">
+            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>New Band Set
+          </button>
+        }
+      </div>
+
+      @if (showPayeForm()) {
+        <form id="createPayeForm" class="create-form card card-body mb-3"
+              (ngSubmit)="createPayeBandSet()" aria-label="Create PAYE band set">
+          <h3 class="h6 mb-3">New PAYE Band Set</h3>
+          <div class="row g-2 mb-3">
+            <div class="col-sm-3">
+              <label class="form-label small text-muted mb-1" for="pEffectiveFrom">
+                Effective From <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="pEffectiveFrom" name="pEffectiveFrom" type="date" class="form-control"
+                     [ngModel]="pEffectiveFrom()" (ngModelChange)="pEffectiveFrom.set($event)"
+                     [disabled]="payeSaving()" />
+            </div>
+            <div class="col-sm-3">
+              <label class="form-label small text-muted mb-1" for="pTaxFreeThreshold">
+                Tax-Free Threshold <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="pTaxFreeThreshold" name="pTaxFreeThreshold" type="number" min="0"
+                     class="form-control"
+                     [ngModel]="pTaxFreeThreshold()" (ngModelChange)="pTaxFreeThreshold.set($event)"
+                     [disabled]="payeSaving()" />
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label small text-muted mb-1" for="pDescription">Description</label>
+              <input id="pDescription" name="pDescription" type="text" class="form-control"
+                     [ngModel]="pDescription()" (ngModelChange)="pDescription.set($event)"
+                     [disabled]="payeSaving()" autocomplete="off" />
+            </div>
+          </div>
+
+          <!-- Band rows -->
+          <h4 class="h6 mb-2 small text-muted text-uppercase fw-semibold">Tax Bands</h4>
+          <div class="table-responsive mb-2">
+            <table class="table table-sm align-middle">
+              <caption class="visually-hidden">PAYE tax bands</caption>
+              <thead>
+                <tr>
+                  <th scope="col" style="width:60px">#</th>
+                  <th scope="col">Lower Bound</th>
+                  <th scope="col">Marginal Rate (%)</th>
+                  <th scope="col">Cumulative Fixed Tax</th>
+                  <th scope="col"><span class="visually-hidden">Remove</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (band of pBands(); track band.bandNo; let i = $index) {
+                  <tr>
+                    <td class="text-muted small">{{ band.bandNo }}</td>
+                    <td>
+                      <label class="visually-hidden" [for]="'bLower' + i">Lower bound for band {{ band.bandNo }}</label>
+                      <input [id]="'bLower' + i" type="number" min="0" class="form-control form-control-sm"
+                             [ngModel]="band.lowerBound" (ngModelChange)="updateBand(i,'lowerBound',$event)"
+                             [disabled]="payeSaving()" />
+                    </td>
+                    <td>
+                      <label class="visually-hidden" [for]="'bRate' + i">Marginal rate for band {{ band.bandNo }}</label>
+                      <input [id]="'bRate' + i" type="number" min="0" max="100" step="0.01" class="form-control form-control-sm"
+                             [ngModel]="band.marginalRate" (ngModelChange)="updateBand(i,'marginalRate',$event)"
+                             [disabled]="payeSaving()" />
+                    </td>
+                    <td>
+                      <label class="visually-hidden" [for]="'bCumTax' + i">Cumulative fixed tax for band {{ band.bandNo }}</label>
+                      <input [id]="'bCumTax' + i" type="number" min="0" class="form-control form-control-sm"
+                             [ngModel]="band.cumulativeFixedTax" (ngModelChange)="updateBand(i,'cumulativeFixedTax',$event)"
+                             [disabled]="payeSaving()" />
+                    </td>
+                    <td>
+                      @if (pBands().length > 1) {
+                        <button type="button" class="btn btn-sm btn-outline-danger"
+                                (click)="removeBand(i)"
+                                [attr.aria-label]="'Remove band ' + band.bandNo">
+                          <i class="bi bi-trash" aria-hidden="true"></i>
+                        </button>
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <div class="d-flex gap-2 mb-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary"
+                    (click)="addBand()" [disabled]="payeSaving()">
+              <i class="bi bi-plus me-1" aria-hidden="true"></i>Add Band
+            </button>
+          </div>
+
+          @if (payeFormError(); as msg) {
+            <p class="form-error text-danger small mt-2 mb-2" role="alert">{{ msg }}</p>
+          }
+          <div class="d-flex justify-content-end">
+            <button type="submit" class="btn btn-primary" [disabled]="payeSaving()">
+              @if (payeSaving()) {
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                Saving…
+              } @else {
+                Create Band Set
+              }
+            </button>
+          </div>
+        </form>
+      }
+
+      @switch (payeState()) {
+        @case ('loading') {
+          <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading PAYE band sets…
+          </p>
+        }
+        @case ('error') {
+          <p class="state text-danger" role="alert">
+            <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+            Could not load PAYE band sets.
+          </p>
+        }
+        @case ('forbidden') {
+          <p class="state text-muted">
+            <i class="bi bi-shield-lock" aria-hidden="true"></i>
+            You don't have permission to manage statutory setup.
+          </p>
+        }
+        @default {
+          @if (payeBandSets().length === 0) {
+            <p class="text-muted small">No PAYE band sets yet.</p>
+          } @else {
+            @for (pbs of payeBandSets(); track pbs.uid) {
+              <div class="card mb-3">
+                <div class="card-header d-flex align-items-center">
+                  <strong>Effective from {{ pbs.effectiveFrom }}</strong>
+                  <span class="ms-3 text-muted small">Tax-free threshold: {{ pbs.taxFreeThreshold | number:'1.2-2' }}</span>
+                  @if (pbs.description) {
+                    <span class="ms-3 text-muted small fst-italic">{{ pbs.description }}</span>
+                  }
+                </div>
+                <div class="card-body p-2">
+                  <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                      <caption class="visually-hidden">PAYE bands for {{ pbs.effectiveFrom }}</caption>
+                      <thead>
+                        <tr>
+                          <th scope="col">#</th>
+                          <th scope="col">Lower Bound</th>
+                          <th scope="col">Marginal Rate (%)</th>
+                          <th scope="col">Cumulative Fixed Tax</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        @for (b of pbs.bands; track b.uid) {
+                          <tr>
+                            <td class="text-muted small">{{ b.bandNo }}</td>
+                            <td class="font-monospace small">{{ b.lowerBound | number:'1.2-2' }}</td>
+                            <td class="font-monospace small">{{ b.marginalRate | number:'1.4-4' }}%</td>
+                            <td class="font-monospace small">{{ b.cumulativeFixedTax | number:'1.2-2' }}</td>
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            }
+          }
+        }
+      }
+    </section>
+
+    <!-- ══ Section 2: Statutory Rate Sets ════════════════════════════════════ -->
+    <section aria-labelledby="rateSetsSectionHead">
+      <div class="d-flex align-items-center mb-3">
+        <h2 class="h5 mb-0" id="rateSetsSectionHead">Statutory Rate Sets</h2>
+        @if (canManage()) {
+          <button type="button" class="btn btn-primary btn-sm ms-auto"
+                  (click)="toggleRateForm()"
+                  [attr.aria-expanded]="showRateForm()"
+                  aria-controls="createRateForm">
+            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>New Rate Set
+          </button>
+        }
+      </div>
+
+      @if (showRateForm()) {
+        <form id="createRateForm" class="create-form card card-body mb-3"
+              (ngSubmit)="createRateSet()" aria-label="Create statutory rate set">
+          <h3 class="h6 mb-3">New Statutory Rate Set</h3>
+          <div class="row g-2 mb-2">
+            <div class="col-sm-2">
+              <label class="form-label small text-muted mb-1" for="rRateType">
+                Type <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <select id="rRateType" name="rRateType" class="form-select"
+                      [ngModel]="rRateType()" (ngModelChange)="rRateType.set($event)"
+                      [disabled]="rateSaving()">
+                @for (rt of rateTypes; track rt) {
+                  <option [value]="rt">{{ rt }}</option>
+                }
+              </select>
+            </div>
+            <div class="col-sm-2">
+              <label class="form-label small text-muted mb-1" for="rEffectiveFrom">
+                Effective From <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="rEffectiveFrom" name="rEffectiveFrom" type="date" class="form-control"
+                     [ngModel]="rEffectiveFrom()" (ngModelChange)="rEffectiveFrom.set($event)"
+                     [disabled]="rateSaving()" />
+            </div>
+            <div class="col-sm-2">
+              <label class="form-label small text-muted mb-1" for="rEmployeeRate">Employee Rate (%)</label>
+              <input id="rEmployeeRate" name="rEmployeeRate" type="number" min="0" max="100" step="0.01"
+                     class="form-control"
+                     [ngModel]="rEmployeeRate()" (ngModelChange)="rEmployeeRate.set($event)"
+                     [disabled]="rateSaving()" />
+            </div>
+            <div class="col-sm-2">
+              <label class="form-label small text-muted mb-1" for="rEmployerRate">Employer Rate (%)</label>
+              <input id="rEmployerRate" name="rEmployerRate" type="number" min="0" max="100" step="0.01"
+                     class="form-control"
+                     [ngModel]="rEmployerRate()" (ngModelChange)="rEmployerRate.set($event)"
+                     [disabled]="rateSaving()" />
+            </div>
+            <div class="col-sm-2">
+              <label class="form-label small text-muted mb-1" for="rBasis">
+                Basis <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="rBasis" name="rBasis" type="text" class="form-control"
+                     placeholder="e.g. GROSS"
+                     [ngModel]="rBasis()" (ngModelChange)="rBasis.set($event)"
+                     [disabled]="rateSaving()" autocomplete="off" />
+            </div>
+            <div class="col-sm-2">
+              <label class="form-label small text-muted mb-1" for="rCeiling">Ceiling Amount</label>
+              <input id="rCeiling" name="rCeiling" type="number" min="0" class="form-control"
+                     [ngModel]="rCeiling()" (ngModelChange)="rCeiling.set($event)"
+                     [disabled]="rateSaving()" />
+            </div>
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col-sm-3">
+              <label class="form-label small text-muted mb-1" for="rHeadcount">Headcount Threshold</label>
+              <input id="rHeadcount" name="rHeadcount" type="number" min="0" class="form-control"
+                     [ngModel]="rHeadcount()" (ngModelChange)="rHeadcount.set($event)"
+                     [disabled]="rateSaving()" />
+            </div>
+            <div class="col-sm-9">
+              <label class="form-label small text-muted mb-1" for="rDescription">Description</label>
+              <input id="rDescription" name="rDescription" type="text" class="form-control"
+                     [ngModel]="rDescription()" (ngModelChange)="rDescription.set($event)"
+                     [disabled]="rateSaving()" autocomplete="off" />
+            </div>
+          </div>
+          @if (rateFormError(); as msg) {
+            <p class="form-error text-danger small mt-2 mb-2" role="alert">{{ msg }}</p>
+          }
+          <div class="d-flex justify-content-end">
+            <button type="submit" class="btn btn-primary" [disabled]="rateSaving()">
+              @if (rateSaving()) {
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                Saving…
+              } @else {
+                Create Rate Set
+              }
+            </button>
+          </div>
+        </form>
+      }
+
+      @switch (rateState()) {
+        @case ('loading') {
+          <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading rate sets…
+          </p>
+        }
+        @case ('error') {
+          <p class="state text-danger" role="alert">
+            <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+            Could not load statutory rate sets.
+          </p>
+        }
+        @case ('forbidden') {
+          <p class="state text-muted">
+            <i class="bi bi-shield-lock" aria-hidden="true"></i>
+            You don't have permission to manage statutory setup.
+          </p>
+        }
+        @default {
+          @if (rateSets().length === 0) {
+            <p class="text-muted small">No statutory rate sets yet.</p>
+          } @else {
+            <div class="table-responsive">
+              <table class="table table-hover align-middle bg-white grid">
+                <caption class="visually-hidden">Statutory Rate Sets</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Type</th>
+                    <th scope="col">Effective From</th>
+                    <th scope="col">Employee Rate</th>
+                    <th scope="col">Employer Rate</th>
+                    <th scope="col">Basis</th>
+                    <th scope="col">Ceiling</th>
+                    <th scope="col">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (rs of rateSets(); track rs.uid) {
+                    <tr>
+                      <td><span class="badge text-bg-primary">{{ rs.rateType }}</span></td>
+                      <td class="small text-muted">{{ rs.effectiveFrom }}</td>
+                      <td class="font-monospace small">{{ rs.employeeRate ? rs.employeeRate + '%' : '—' }}</td>
+                      <td class="font-monospace small">{{ rs.employerRate ? rs.employerRate + '%' : '—' }}</td>
+                      <td class="small text-muted">{{ rs.basis }}</td>
+                      <td class="font-monospace small">{{ rs.ceilingAmount ?? '—' }}</td>
+                      <td>
+                        <span class="badge" [class]="rs.active ? 'text-bg-success' : 'text-bg-secondary'">
+                          {{ rs.active ? 'Active' : 'Inactive' }}
+                        </span>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        }
+      }
+    </section>
+
+  }
+</section>

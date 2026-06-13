@@ -206,3 +206,120 @@ export interface CreateLoanRequest {
   startDate: string;
   currency: string;
 }
+
+// ── Departments ────────────────────────────────────────────────────────────────
+
+export interface DepartmentDto {
+  id: string;
+  uid: string;
+  companyId: string;
+  code: string;
+  name: string;
+  active: boolean;
+}
+
+export interface CreateDepartmentRequest {
+  code: string;
+  name: string;
+}
+
+// ── Employment Contracts ───────────────────────────────────────────────────────
+
+export type ContractType = 'PERMANENT' | 'FIXED_TERM' | 'CASUAL' | 'PROBATION';
+export type PayFrequency = 'MONTHLY';
+
+export interface ContractDto {
+  id: string;
+  uid: string;
+  companyId: string;
+  employeeId: string;
+  contractType: ContractType;
+  baseSalaryAmount: string;
+  currency: string;
+  payFrequency: PayFrequency;
+  startDate: string;
+  endDate: string | null;
+  payeResident: boolean;
+  nssfMember: boolean;
+  heslbBorrower: boolean;
+  wcfCovered: boolean;
+  sdlCounted: boolean;
+  active: boolean;
+}
+
+export interface CreateContractRequest {
+  contractType: ContractType;
+  baseSalaryAmount: string;
+  startDate: string;
+  endDate?: string;
+  payeResident: boolean;
+  nssfMember: boolean;
+  heslbBorrower: boolean;
+  wcfCovered: boolean;
+  sdlCounted: boolean;
+}
+
+// ── PAYE Band Sets ─────────────────────────────────────────────────────────────
+
+export interface PayeBandDto {
+  id: string;
+  uid: string;
+  bandNo: number;
+  lowerBound: string;
+  marginalRate: string;
+  cumulativeFixedTax: string;
+}
+
+export interface PayeBandSetDto {
+  id: string;
+  uid: string;
+  companyId: string;
+  effectiveFrom: string;
+  taxFreeThreshold: string;
+  description: string | null;
+  bands: PayeBandDto[];
+}
+
+export interface BandRequest {
+  bandNo: number;
+  lowerBound: string;
+  marginalRate: string;
+  cumulativeFixedTax: string;
+}
+
+export interface CreatePayeBandSetRequest {
+  effectiveFrom: string;
+  taxFreeThreshold: string;
+  description?: string;
+  bands: BandRequest[];
+}
+
+// ── Statutory Rate Sets ────────────────────────────────────────────────────────
+
+export type StatutoryRateType = 'NSSF' | 'WCF' | 'SDL' | 'HESLB';
+
+export interface StatutoryRateSetDto {
+  id: string;
+  uid: string;
+  companyId: string;
+  rateType: StatutoryRateType;
+  effectiveFrom: string;
+  employeeRate: string | null;
+  employerRate: string | null;
+  basis: string;
+  ceilingAmount: string | null;
+  headcountThreshold: number | null;
+  active: boolean;
+  description: string | null;
+}
+
+export interface CreateStatutoryRateSetRequest {
+  rateType: StatutoryRateType;
+  effectiveFrom: string;
+  employeeRate?: string;
+  employerRate?: string;
+  basis: string;
+  ceilingAmount?: string;
+  headcountThreshold?: number;
+  description?: string;
+}

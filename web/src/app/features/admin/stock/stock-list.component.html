@@ -83,6 +83,31 @@
       }
     </div>
 
+    <!-- View mode tabs -->
+    <ul class="nav nav-tabs mb-3" role="tablist" aria-label="Stock view mode">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" [class.active]="viewMode() === 'on-hand'"
+                role="tab" [attr.aria-selected]="viewMode() === 'on-hand'"
+                type="button" (click)="setViewMode('on-hand')">
+          <i class="bi bi-boxes me-1" aria-hidden="true"></i>On-Hand
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" [class.active]="viewMode() === 'by-location'"
+                role="tab" [attr.aria-selected]="viewMode() === 'by-location'"
+                type="button" (click)="setViewMode('by-location')">
+          <i class="bi bi-geo-alt me-1" aria-hidden="true"></i>By Location
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" [class.active]="viewMode() === 'by-product'"
+                role="tab" [attr.aria-selected]="viewMode() === 'by-product'"
+                type="button" (click)="setViewMode('by-product')">
+          <i class="bi bi-box-seam me-1" aria-hidden="true"></i>By Product
+        </button>
+      </li>
+    </ul>
+
     <!-- Opening balance form -->
     @if (showOpeningForm()) {
       <form id="openingBalanceForm" class="create-form card card-body mb-3"
@@ -159,7 +184,8 @@
       </form>
     }
 
-    <!-- List states -->
+    <!-- List states (on-hand tab) -->
+    @if (viewMode() === 'on-hand') {
     @switch (state()) {
       @case ('loading') {
         <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
@@ -429,5 +455,134 @@
         }
       }
     }
+    }
+
+    <!-- ── By Location tab ─────────────────────────────────────────────── -->
+    @if (viewMode() === 'by-location') {
+      @if (!selectedBranchId()) {
+        <p class="text-muted fst-italic">Select a branch above to view on-hand by location.</p>
+      } @else {
+        @switch (byLocationState()) {
+          @case ('loading') {
+            <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+              <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading by location…
+            </p>
+          }
+          @case ('error') {
+            <p class="text-danger" role="alert">
+              <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load location data.
+            </p>
+          }
+          @default {
+            @if (byLocationEmpty()) {
+              <p class="text-muted fst-italic">No on-hand data found for this branch.</p>
+            } @else {
+              <div class="table-responsive">
+                <table class="table table-hover align-middle bg-white grid table-sm">
+                  <caption class="visually-hidden">Stock on-hand by location</caption>
+                  <thead class="table-light">
+                    <tr>
+                      <th scope="col">Location</th>
+                      <th scope="col">Product</th>
+                      <th scope="col" class="text-end">Qty</th>
+                      <th scope="col" class="text-end">Avg Cost</th>
+                      <th scope="col" class="text-end">On-Hand Value</th>
+                      <th scope="col">Ccy</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (row of byLocationRows(); track row.locationUid + row.productUid) {
+                      <tr>
+                        <td>
+                          <span class="fw-semibold">{{ row.locationCode }}</span><br>
+                          <span class="text-muted" style="font-size:0.82em">{{ row.locationName }}</span>
+                        </td>
+                        <td>
+                          <span class="fw-semibold">{{ row.productCode }}</span><br>
+                          <span class="text-muted" style="font-size:0.82em">{{ row.productName }}</span>
+                        </td>
+                        <td class="text-end font-monospace">{{ fmtQty(row.quantity) }}</td>
+                        <td class="text-end font-monospace">{{ fmtMoney(row.avgCost) }}</td>
+                        <td class="text-end font-monospace">{{ fmtMoney(row.onHandValue) }}</td>
+                        <td>{{ row.currency }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+              <app-paginator [meta]="byLocationMeta()" label="Location rows" (pageChange)="goToByLocationPage($event)" />
+            }
+          }
+        }
+      }
+    }
+
+    <!-- ── By Product tab ──────────────────────────────────────────────── -->
+    @if (viewMode() === 'by-product') {
+      <div class="mb-3" style="max-width:420px;position:relative">
+        <label for="byProductSearch" class="form-label fw-semibold">Product</label>
+        <input id="byProductSearch" type="text" class="form-control form-control-sm"
+               placeholder="Search product by code or name…"
+               [ngModel]="byProductQ()"
+               (ngModelChange)="onByProductSearchChange($event)"
+               autocomplete="off" />
+        @if (byProductResults().length > 0) {
+          <ul class="list-group position-absolute w-100 z-3 shadow-sm" role="listbox"
+              aria-label="Product suggestions">
+            @for (p of byProductResults(); track p.uid) {
+              <li class="list-group-item list-group-item-action py-1" role="option"
+                  aria-selected="false" tabindex="0"
+                  (click)="selectByProductProduct(p)"
+                  (keydown.enter)="selectByProductProduct(p)"
+                  style="cursor:pointer">
+                <span class="fw-semibold">{{ p.code }}</span> — {{ p.name }}
+              </li>
+            }
+          </ul>
+        }
+      </div>
+
+      @if (byProductState() === 'loading') {
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading by product…
+        </p>
+      } @else if (byProductState() === 'error') {
+        <p class="text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load product data.
+        </p>
+      } @else if (selectedByProductProduct() && byProductEmpty()) {
+        <p class="text-muted fst-italic">No stock found for this product across locations.</p>
+      } @else if (byProductRows().length > 0) {
+        <div class="table-responsive">
+          <table class="table table-hover align-middle bg-white grid table-sm">
+            <caption class="visually-hidden">Stock on-hand by location for selected product</caption>
+            <thead class="table-light">
+              <tr>
+                <th scope="col">Location</th>
+                <th scope="col" class="text-end">Qty</th>
+                <th scope="col" class="text-end">Avg Cost</th>
+                <th scope="col" class="text-end">On-Hand Value</th>
+                <th scope="col">Ccy</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of byProductRows(); track row.locationUid) {
+                <tr>
+                  <td>
+                    <span class="fw-semibold">{{ row.locationCode }}</span><br>
+                    <span class="text-muted" style="font-size:0.82em">{{ row.locationName }}</span>
+                  </td>
+                  <td class="text-end font-monospace">{{ fmtQty(row.quantity) }}</td>
+                  <td class="text-end font-monospace">{{ fmtMoney(row.avgCost) }}</td>
+                  <td class="text-end font-monospace">{{ fmtMoney(row.onHandValue) }}</td>
+                  <td>{{ row.currency }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    }
+
   }
 </section>

@@ -120,6 +120,7 @@ export class ShellComponent {
         { label: 'Customers', route: '/admin/customers', icon: 'bi-people-fill', available: true, permission: 'CUSTOMER.VIEW' },
         { label: 'Suppliers', route: '/admin/suppliers', icon: 'bi-truck', available: true, permission: 'SUPPLIER.VIEW' },
         { label: 'Sales Agents', route: '/admin/agents', icon: 'bi-person-badge', available: true, permission: 'AGENT.VIEW' },
+        { label: 'Other Parties', route: '/admin/other-parties', icon: 'bi-person-rolodex', available: true, permission: 'OTHERPARTY.VIEW' },
         { label: 'Routes', route: '/admin/routes', icon: 'bi-signpost', available: true, permission: 'ROUTE.VIEW' },
       ],
     },
@@ -140,14 +141,22 @@ export class ShellComponent {
         { label: 'Invoices', route: '/admin/sales-invoices', icon: 'bi-receipt', available: true, permission: 'SALES.INVOICE.VIEW' },
         { label: 'Sales Returns', route: '/admin/sales-returns', icon: 'bi-arrow-return-left', available: true, permission: 'SALES.RETURN.VIEW' },
         { label: 'Tax Rates', route: '/admin/tax-rates', icon: 'bi-percent', available: true, permission: 'TAXRATE.VIEW' },
+        { label: 'Blanket Orders', route: '/admin/blanket-orders', icon: 'bi-file-earmark-ruled', available: true, permission: 'SALES.BLANKET.VIEW' },
+        { label: 'Standing Orders', route: '/admin/standing-orders', icon: 'bi-arrow-repeat', available: true, permission: 'SALES.STANDING.VIEW' },
+        { label: 'Pricing Rules', route: '/admin/pricing-rules', icon: 'bi-tags-fill', available: true, permission: 'SALES.PRICING.RULE.VIEW' },
       ],
     },
     {
       label: 'Inventory',
       items: [
         { label: 'Stock On-Hand', route: '/admin/stock', icon: 'bi-boxes', available: true, permission: 'STOCK.VIEW' },
+        { label: 'Stock Transfers', route: '/admin/stock-transfers', icon: 'bi-arrow-left-right', available: true, permission: 'STOCK.TRANSFER.VIEW' },
+        { label: 'Stock Locations', route: '/admin/stock/locations', icon: 'bi-geo-alt', available: true, permission: 'STOCK.LOCATION.VIEW' },
+        { label: 'Stock Batches', route: '/admin/stock/batches', icon: 'bi-layers', available: true, permission: 'STOCK.BATCH.VIEW' },
+        { label: 'Serial Numbers', route: '/admin/stock/serials', icon: 'bi-upc-scan', available: true, permission: 'STOCK.SERIAL.VIEW' },
         { label: 'Stock Valuation', route: '/admin/stock/valuation', icon: 'bi-clipboard-data', available: true, permission: 'INVENTORY.VALUATION.VIEW' },
         { label: 'Opening Valuation', route: '/admin/stock/valuation/opening', icon: 'bi-pencil-square', available: true, permission: 'INVENTORY.OPENING.SET' },
+        { label: 'Stock Counts', route: '/admin/stock-counts', icon: 'bi-clipboard2-check', available: true, permission: 'STOCK.COUNT.VIEW' },
       ],
     },
     {
@@ -155,6 +164,11 @@ export class ShellComponent {
       items: [
         { label: 'Purchase Orders', route: '/admin/purchase-orders', icon: 'bi-cart', available: true, permission: 'PURCHASE.ORDER.VIEW' },
         { label: 'Goods Receipts', route: '/admin/goods-receipts', icon: 'bi-box-arrow-in-down', available: true, permission: 'PURCHASE.ORDER.VIEW' },
+        { label: 'Purchase Requisitions', route: '/admin/purchase-requisitions', icon: 'bi-clipboard-plus', available: true, permission: 'PURCHASE.REQUISITION.VIEW' },
+        { label: 'RFQs / Sourcing', route: '/admin/rfqs', icon: 'bi-search', available: true, permission: 'PURCHASE.RFQ.VIEW' },
+        { label: 'Purchase Returns', route: '/admin/purchase-returns', icon: 'bi-arrow-return-left', available: true, permission: 'PURCHASE.RETURN.VIEW' },
+        { label: 'Landed Costs', route: '/admin/landed-costs', icon: 'bi-box-arrow-in-right', available: true, permission: 'PURCHASE.LANDED_COST.VIEW' },
+        { label: 'Purchase Settings', route: '/admin/purchase-settings', icon: 'bi-gear', available: true, permission: 'PURCHASE.SETTINGS.VIEW' },
       ],
     },
     {
@@ -165,17 +179,22 @@ export class ShellComponent {
         { label: 'Trial Balance', route: '/admin/gl/trial-balance', icon: 'bi-calculator', available: true, permission: 'GL.VIEW' },
         { label: 'Fiscal Periods', route: '/admin/gl/periods', icon: 'bi-calendar3', available: true, permission: 'GL.VIEW' },
         { label: 'Posting Accounts', route: '/admin/gl/config', icon: 'bi-gear', available: true, permission: 'GL.MANAGE' },
+        { label: 'Year-End Close', route: '/admin/gl/year-end', icon: 'bi-calendar-check', available: true, permission: 'GL.YEAR.CLOSE' },
         { label: 'Receivables', route: '/admin/ar/invoices', icon: 'bi-cash-coin', available: true, permission: 'AR.VIEW' },
         { label: 'Record Receipt', route: '/admin/ar/receipts/record', icon: 'bi-receipt', available: true, permission: 'AR.RECEIPT.RECORD' },
+        { label: 'Receipts', route: '/admin/ar/receipts', icon: 'bi-cash-coin', available: true, permission: 'AR.VIEW' },
+        { label: 'AR Ageing', route: '/admin/ar/ageing', icon: 'bi-bar-chart-steps', available: true, permission: 'AR.STATEMENT.VIEW' },
         { label: 'Customer Statement', route: '/admin/ar/statement', icon: 'bi-file-earmark-text', available: true, permission: 'AR.STATEMENT.VIEW' },
         { label: 'AR Opening Balance', route: '/admin/ar/opening-balance', icon: 'bi-pencil-square', available: true, permission: 'AR.OPENING.SET' },
         { label: 'Payables', route: '/admin/ap/supplier-bills', icon: 'bi-receipt-cutoff', available: true, permission: 'AP.VIEW' },
         { label: 'Enter Bill', route: '/admin/ap/supplier-bills/enter', icon: 'bi-file-earmark-plus', available: true, permission: 'AP.BILL.ENTER' },
         { label: 'Record Payment', route: '/admin/ap/payments/record', icon: 'bi-cash-stack', available: true, permission: 'AP.PAYMENT.RUN' },
+        { label: 'Payments', route: '/admin/ap/payments', icon: 'bi-cash-stack', available: true, permission: 'AP.VIEW' },
         { label: 'Supplier Statement', route: '/admin/ap/statement', icon: 'bi-file-earmark-text', available: true, permission: 'AP.VIEW' },
         { label: 'AP Opening Balance', route: '/admin/ap/opening-balance', icon: 'bi-pencil-square', available: true, permission: 'AP.OPENING.SET' },
         { label: 'Cash & Bank Accounts', route: '/admin/cash/accounts', icon: 'bi-wallet2', available: true, permission: 'CASH.VIEW' },
         { label: 'Cash Transfer', route: '/admin/cash/transfers/record', icon: 'bi-arrow-left-right', available: true, permission: 'CASH.TRANSFER' },
+        { label: 'Transfers', route: '/admin/cash/transfers', icon: 'bi-arrow-left-right', available: true, permission: 'CASH.VIEW' },
         { label: 'Cash / Bank Entry', route: '/admin/cash/entries/record', icon: 'bi-cash', available: true, permission: 'CASH.ENTRY.RECORD' },
         { label: 'Cheques', route: '/admin/cash/cheques', icon: 'bi-card-checklist', available: true, permission: 'CHEQUE.MANAGE' },
         { label: 'Bank Reconciliation', route: '/admin/cash/reconciliations', icon: 'bi-bank', available: true, permission: 'CASH.RECONCILE' },
@@ -264,6 +283,7 @@ export class ShellComponent {
         { label: 'Opportunities', route: '/admin/crm/opportunities', icon: 'bi-graph-up-arrow', available: true, permission: 'CRM.OPPORTUNITY.VIEW' },
         { label: 'Pipeline Dashboard', route: '/admin/crm/pipeline', icon: 'bi-bar-chart-line', available: true, permission: 'CRM.PIPELINE.VIEW' },
         { label: 'Pipeline Stages', route: '/admin/crm/settings/pipeline-stages', icon: 'bi-kanban', available: true, permission: 'CRM.STAGE.MANAGE' },
+        { label: 'CRM Activities', route: '/admin/crm/activities', icon: 'bi-calendar2-check', available: true, permission: 'CRM.ACTIVITY.VIEW' },
       ],
     },
     // ── HR & Payroll ─────────────────────────────────────────────────────────────
@@ -271,10 +291,13 @@ export class ShellComponent {
       label: 'HR & Payroll',
       items: [
         { label: 'Employees', route: '/admin/hr/employees', icon: 'bi-people', available: true, permission: 'HR.EMPLOYEE.VIEW' },
+        { label: 'Departments', route: '/admin/hr/departments', icon: 'bi-diagram-3', available: true, permission: 'HR.EMPLOYEE.VIEW' },
+        { label: 'Employee Contracts', route: '/admin/hr/contracts', icon: 'bi-file-earmark-person', available: true, permission: 'HR.EMPLOYEE.VIEW' },
         { label: 'Pay Components', route: '/admin/hr/pay-components', icon: 'bi-sliders', available: true, permission: 'HR.PAYCOMPONENT.MANAGE' },
         { label: 'Payroll Runs', route: '/admin/hr/payroll-runs', icon: 'bi-cash-stack', available: true, permission: 'HR.PAYROLL.VIEW' },
         { label: 'Leave Requests', route: '/admin/hr/leave-requests', icon: 'bi-calendar-check', available: true, permission: 'HR.LEAVE.VIEW' },
         { label: 'Employee Loans', route: '/admin/hr/loans', icon: 'bi-bank', available: true, permission: 'HR.LOAN.MANAGE' },
+        { label: 'Statutory Setup', route: '/admin/hr/statutory', icon: 'bi-shield-check', available: true, permission: 'HR.STATUTORY.MANAGE' },
       ],
     },
     // ── Projects ──────────────────────────────────────────────────────────────
@@ -300,6 +323,7 @@ export class ShellComponent {
       items: [
         { label: 'Work Orders', route: '/admin/work-orders', icon: 'bi-gear-wide-connected', available: true, permission: 'MANUFACTURING.VIEW' },
         { label: 'WIP Reconciliation', route: '/admin/manufacturing/wip-reconciliation', icon: 'bi-bank', available: true, permission: 'MANUFACTURING.VIEW' },
+        { label: 'Bills of Materials', route: '/admin/boms', icon: 'bi-diagram-3', available: true, permission: 'BOM.VIEW' },
       ],
     },
     // ── FX / Currency ─────────────────────────────────────────────────────────
@@ -315,6 +339,15 @@ export class ShellComponent {
       label: 'Analytics',
       items: [
         { label: 'Dashboard', route: '/admin/dashboard', icon: 'bi-speedometer2', available: true, permission: 'BI.VIEW' },
+      ],
+    },
+    // ── Point of Sale ─────────────────────────────────────────────────────────
+    {
+      label: 'Point of Sale',
+      items: [
+        { label: 'Point of Sale', route: '/admin/pos/sell', icon: 'bi-cart-check', available: true, permission: 'POS.SALE.CREATE' },
+        { label: 'POS Sessions', route: '/admin/pos/sessions', icon: 'bi-shop', available: true, permission: 'POS.SESSION.VIEW' },
+        { label: 'POS Tills', route: '/admin/pos/tills', icon: 'bi-cash-register', available: true, permission: 'POS.TILL.VIEW' },
       ],
     },
   ];
