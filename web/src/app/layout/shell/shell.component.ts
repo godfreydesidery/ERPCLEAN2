@@ -189,6 +189,15 @@ export class ShellComponent {
         { label: 'Account Ledger', route: '/admin/reporting/account-ledger', icon: 'bi-journal-text', available: true, permission: 'REPORT.LEDGER.VIEW' },
       ],
     },
+    // ── Budgeting & Management Accounting ────────────────────────────────────
+    {
+      label: 'Budgeting',
+      items: [
+        { label: 'Budgets', route: '/admin/budgets', icon: 'bi-calculator', available: true, permission: 'BUDGETING.BUDGET.VIEW' },
+        { label: 'Budget Variance Report', route: '/admin/budgeting/variance', icon: 'bi-bar-chart', available: true, permission: 'BUDGETING.REPORT.VIEW' },
+        { label: 'Departmental Actuals', route: '/admin/budgeting/departmental-actuals', icon: 'bi-table', available: true, permission: 'BUDGETING.REPORT.VIEW' },
+      ],
+    },
   ];
 
   /** Nav groups with permission-filtered items. Reactive: recomputes when permissions change. */

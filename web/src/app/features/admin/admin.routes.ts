@@ -466,5 +466,36 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./reporting/account-ledger.component').then((m) => m.AccountLedgerComponent),
   },
+  // ── Budgeting & Management Accounting ────────────────────────────────────
+  {
+    path: 'budgets',
+    canActivate: [requirePermission('BUDGETING.BUDGET.VIEW')],
+    loadComponent: () =>
+      import('./budgeting/budget-list.component').then((m) => m.BudgetListComponent),
+  },
+  {
+    path: 'budgets/uid/:uid',
+    canActivate: [requirePermission('BUDGETING.BUDGET.VIEW')],
+    loadComponent: () =>
+      import('./budgeting/budget-detail.component').then((m) => m.BudgetDetailComponent),
+  },
+  {
+    path: 'budget-versions/uid/:uid',
+    canActivate: [requirePermission('BUDGETING.BUDGET.VIEW')],
+    loadComponent: () =>
+      import('./budgeting/budget-version-detail.component').then((m) => m.BudgetVersionDetailComponent),
+  },
+  {
+    path: 'budgeting/variance',
+    canActivate: [requirePermission('BUDGETING.REPORT.VIEW')],
+    loadComponent: () =>
+      import('./budgeting/budget-variance-report.component').then((m) => m.BudgetVarianceReportComponent),
+  },
+  {
+    path: 'budgeting/departmental-actuals',
+    canActivate: [requirePermission('BUDGETING.REPORT.VIEW')],
+    loadComponent: () =>
+      import('./budgeting/departmental-actuals-report.component').then((m) => m.DepartmentalActualsReportComponent),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];
