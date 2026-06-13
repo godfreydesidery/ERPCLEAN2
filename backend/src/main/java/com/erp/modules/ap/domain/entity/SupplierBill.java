@@ -116,6 +116,32 @@ public class SupplierBill extends UidEntity {
     @Setter
     private Long updatedBy;
 
+    // -------------------------------------------------------------------------
+    // ADR-0036 D-4 — FX base triple (V78). Stamped at match/post, immutable thereafter.
+    // base_gross_amount is immutable (the original posted base value; BR-CUR-05).
+    // base_outstanding_amount moves with outstanding_amount.
+    // -------------------------------------------------------------------------
+
+    /** Rate at match/post (units of base per 1 foreign unit; immutable; DEFAULT 1). */
+    @Column(name = "fx_rate", nullable = false, precision = 19, scale = 8, updatable = false)
+    @Setter
+    private BigDecimal fxRate = BigDecimal.ONE;
+
+    /** Gross amount in base currency at match/post (immutable). */
+    @Column(name = "base_gross_amount", precision = 19, scale = 4, updatable = false)
+    @Setter
+    private BigDecimal baseGrossAmount;
+
+    /** Outstanding amount in base currency. Decremented when payments/debit notes reduce it. */
+    @Column(name = "base_outstanding_amount", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal baseOutstandingAmount;
+
+    /** Timestamp when rate was stamped (immutable). */
+    @Column(name = "rate_at", updatable = false)
+    @Setter
+    private Instant rateAt;
+
     protected SupplierBill() {
         // JPA
     }

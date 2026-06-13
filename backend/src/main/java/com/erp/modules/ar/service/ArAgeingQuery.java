@@ -58,7 +58,8 @@ public class ArAgeingQuery {
     public List<ArAgeingRowDto> ageing(Long companyId, Long customerId, LocalDate asAt) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
         String currency = companies.findById(companyId)
-                .map(c -> c.getBaseCurrency()).orElse("TZS");
+                .map(c -> c.getBaseCurrency())
+                .orElseThrow(() -> NotFoundException.of("Company", String.valueOf(companyId)));
 
         List<ArInvoice> openItems = invoices.findOpenForStatement(companyId, customerId);
 
@@ -81,7 +82,8 @@ public class ArAgeingQuery {
     public ArStatementDto statement(Long companyId, Long customerId, LocalDate asAt) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
         String currency = companies.findById(companyId)
-                .map(c -> c.getBaseCurrency()).orElse("TZS");
+                .map(c -> c.getBaseCurrency())
+                .orElseThrow(() -> NotFoundException.of("Company", String.valueOf(companyId)));
 
         List<ArInvoice> openItems = invoices.findOpenForStatement(companyId, customerId);
         List<ArInvoiceDto> openDtos = openItems.stream()

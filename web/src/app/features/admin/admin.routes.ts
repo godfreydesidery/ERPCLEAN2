@@ -812,5 +812,18 @@ export const ADMIN_ROUTES: Routes = [
         (m) => m.WipReconciliationComponent,
       ),
   },
+  // ── FX / Multi-currency ───────────────────────────────────────────────────
+  {
+    path: 'fx/rates',
+    canActivate: [requirePermission('CURRENCY.VIEW')],
+    loadComponent: () =>
+      import('./fx/fx-rate-list.component').then((m) => m.FxRateListComponent),
+  },
+  {
+    path: 'fx/revaluation-runs',
+    canActivate: [requirePermission('FX.EXPOSURE.VIEW')],
+    loadComponent: () =>
+      import('./fx/fx-revaluation-list.component').then((m) => m.FxRevaluationListComponent),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];

@@ -19,6 +19,7 @@ import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
@@ -76,17 +77,26 @@ public class ArWriteOffServiceImpl implements ArWriteOffService {
                             + " — cannot write off.");
         }
 
-        BigDecimal writeOffAmount = inv.getOutstandingAmount();
-        if (writeOffAmount.compareTo(BigDecimal.ZERO) <= 0) {
+        BigDecimal faceOutstanding = inv.getOutstandingAmount();
+        if (faceOutstanding.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalStateException(
                     "Invoice " + inv.getUid() + " has no outstanding balance to write off.");
         }
 
-        String currency = companies.findById(inv.getCompanyId())
-                .map(c -> c.getBaseCurrency())
-                .orElse("TZS");
+        // ADR-0036 D-3/D-4: relieve AR and debit Bad Debt at the CARRYING BASE value.
+        // baseOutstandingAmount is populated by Task A (AR open-item FX stamp).
+        // For legacy rate=1 rows it is null → fall back to face (base==face when rate=1, D-8).
+        BigDecimal baseRelieved = inv.getBaseOutstandingAmount() != null
+                ? inv.getBaseOutstandingAmount()
+                : faceOutstanding;
 
-        // Post DR Bad Debt Expense / CR AR control synchronously (D-4, D-6)
+        // Base currency — GL engine (BR-GL-06) requires LineDraft.currency == company base (D-9).
+        String baseCurrency = companies.findById(inv.getCompanyId())
+                .map(c -> c.getBaseCurrency())
+                .orElseThrow(() -> NotFoundException.of("Company",
+                        String.valueOf(inv.getCompanyId())));
+
+        // Post DR Bad Debt Expense / CR AR control at CARRYING BASE (D-3, D-4, D-6)
         ChartOfAccount badDebtAcct = glConfig.resolve(inv.getCompanyId(), GlConfigKey.BAD_DEBT_EXPENSE);
         ChartOfAccount arAcct      = glConfig.resolve(inv.getCompanyId(), GlConfigKey.ACCOUNTS_RECEIVABLE);
 
@@ -100,25 +110,28 @@ public class ArWriteOffServiceImpl implements ArWriteOffService {
                 null,
                 actorId(),
                 List.of(
-                        new LineDraft(badDebtAcct.getId(), writeOffAmount, BigDecimal.ZERO,
-                                currency, "Bad debt write-off — " + inv.getUid()),
-                        new LineDraft(arAcct.getId(), BigDecimal.ZERO, writeOffAmount,
-                                currency, "AR control — write-off " + inv.getUid())
+                        new LineDraft(badDebtAcct.getId(), baseRelieved, BigDecimal.ZERO,
+                                baseCurrency, "Bad debt write-off — " + inv.getUid()),
+                        new LineDraft(arAcct.getId(), BigDecimal.ZERO, baseRelieved,
+                                baseCurrency, "AR control — write-off " + inv.getUid())
                 ));
 
         JournalEntryDto posted = glPosting.post(draft);
 
-        // Update the open item
+        // Update the open item — zero both face and base outstanding (D-4)
         inv.setOutstandingAmount(BigDecimal.ZERO);
+        if (inv.getBaseOutstandingAmount() != null) {
+            inv.setBaseOutstandingAmount(BigDecimal.ZERO);
+        }
         inv.setStatus(ArInvoiceStatus.WRITTEN_OFF);
         inv.setUpdatedAt(Instant.now());
         inv.setUpdatedBy(actorId());
         invoices.save(inv);
 
-        // Create the write-off record
+        // Create the write-off record (amount in face currency; the document face for the record)
         ArWriteOff writeOff = new ArWriteOff(
                 inv.getCompanyId(), inv.getBranchId(), inv.getCustomerId(), inv.getId(),
-                req.writeOffDate(), writeOffAmount, currency, req.reason(), actorId());
+                req.writeOffDate(), faceOutstanding, inv.getCurrency(), req.reason(), actorId());
         writeOff.setGlEntryUid(posted.uid());
         writeOff = writeOffs.save(writeOff);
 
@@ -126,7 +139,8 @@ public class ArWriteOffServiceImpl implements ArWriteOffService {
                         writeOff.getId(), writeOff.getUid())
                 .detail(Map.of(
                         "arInvoiceUid", inv.getUid(),
-                        "amount", writeOffAmount.toPlainString(),
+                        "amount", faceOutstanding.toPlainString(),
+                        "baseRelieved", baseRelieved.toPlainString(),
                         "glEntryUid", posted.uid())));
 
         return toDto(writeOff);

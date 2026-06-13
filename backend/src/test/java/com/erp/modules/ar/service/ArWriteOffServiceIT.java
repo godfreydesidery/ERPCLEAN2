@@ -8,6 +8,8 @@ import com.erp.modules.ar.domain.dto.ArWriteOffDto;
 import com.erp.modules.ar.domain.dto.SetOpeningBalanceRequest;
 import com.erp.modules.ar.domain.dto.WriteOffRequest;
 import com.erp.modules.ar.domain.enums.ArInvoiceStatus;
+import com.erp.modules.ar.repository.ArInvoiceRepository;
+import com.erp.modules.fx.domain.dto.UpsertRateRequest;
 import com.erp.modules.gl.domain.entity.ChartOfAccount;
 import com.erp.modules.gl.repository.ChartOfAccountRepository;
 import com.erp.modules.gl.repository.JournalEntryRepository;
@@ -28,6 +30,7 @@ import com.erp.modules.parties.domain.enums.CustomerKind;
 import com.erp.modules.parties.domain.enums.PartyType;
 import com.erp.modules.parties.service.CustomerService;
 import com.erp.platform.common.api.ForbiddenException;
+import com.erp.platform.common.money.FxRateService;
 import com.erp.platform.security.RequestContext;
 import com.erp.support.IamTestData;
 import com.erp.support.PostgresIntegrationTest;
@@ -58,6 +61,8 @@ class ArWriteOffServiceIT extends PostgresIntegrationTest {
     @Autowired private ArOpeningBalanceService openingBalanceService;
     @Autowired private ArGlSeeder arGlSeeder;
     @Autowired private CustomerService customerService;
+    @Autowired private ArInvoiceRepository arInvoiceRepo;
+    @Autowired private FxRateService fxRateService;
     @Autowired private JournalEntryRepository journalEntryRepo;
     @Autowired private JournalLineRepository journalLineRepo;
     @Autowired private ChartOfAccountRepository accountRepo;
@@ -247,6 +252,92 @@ class ArWriteOffServiceIT extends PostgresIntegrationTest {
         assertThatThrownBy(() -> writeOffService.writeOff(crossReq))
                 .as("cross-tenant write-off must be blocked by ScopeGuard")
                 .isInstanceOf(ForbiddenException.class);
+    }
+
+    // =========================================================================
+    // Bar 5: foreign write-off posts DR Bad-Debt / CR AR at CARRYING BASE,
+    //        not at face; AR control is cleared to zero (ADR-0036 D-3/D-4)
+    // =========================================================================
+
+    @Test
+    void writeOff_foreignInvoice_relievesAtCarryingBase_notFace() {
+        // Create a USD open item (100 USD @ rate 2500 = 250,000 TZS carrying base).
+        // Create the opening balance in TZS (GL base-currency gate passes), then native-patch
+        // currency to USD + outstanding to 100, and stamp the FX triple (simulating Task A).
+        fxRateService.addRate(new UpsertRateRequest(
+                company.getId(), "USD", "TZS",
+                new BigDecimal("2500.00000000"), LocalDate.now(), "SPOT", "test"));
+
+        ArInvoiceDto dto = openingBalanceService.setOpeningBalance(new SetOpeningBalanceRequest(
+                companyUid, customerUid, new BigDecimal("250000"), TZS,
+                LocalDate.now(), LocalDate.now().plusDays(30), null));
+
+        var tmp = arInvoiceRepo.findByUid(dto.uid()).orElseThrow();
+        // Single native patch — currency, outstanding, and FX triple are all updatable=false in JPA
+        arInvoiceRepo.patchForFxTest(tmp.getId(), "USD", new BigDecimal("100"),
+                new BigDecimal("2500.00000000"),
+                new BigDecimal("250000"), new BigDecimal("250000"));
+
+        WriteOffRequest req = new WriteOffRequest(dto.uid(), LocalDate.now(), "Uncollectable USD");
+        ArWriteOffDto result = writeOffService.writeOff(req);
+
+        // GL entry posted and balanced
+        assertThat(result.glEntryUid()).isNotBlank();
+        var entry = journalEntryRepo.findByUid(result.glEntryUid()).orElseThrow();
+        var lines = journalLineRepo.findByEntryIdOrderByLineNo(entry.getId());
+
+        BigDecimal sumDebit  = lines.stream()
+                .map(l -> l.getDebitAmount()  != null ? l.getDebitAmount()  : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal sumCredit = lines.stream()
+                .map(l -> l.getCreditAmount() != null ? l.getCreditAmount() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(sumDebit).as("GL entry must be balanced").isEqualByComparingTo(sumCredit);
+
+        // Amounts must be at CARRYING BASE (250,000 TZS), NOT the face (100 USD)
+        assertThat(sumDebit)
+                .as("DR Bad-Debt must be at carrying base 250000, not face 100")
+                .isEqualByComparingTo(new BigDecimal("250000"));
+
+        // Invoice: both face and base outstanding must be zero after write-off
+        var refreshed = arInvoiceRepo.findByUid(dto.uid()).orElseThrow();
+        assertThat(refreshed.getOutstandingAmount())
+                .as("face outstanding must be zero after write-off")
+                .isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(refreshed.getBaseOutstandingAmount())
+                .as("base outstanding must be zero after write-off")
+                .isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(refreshed.getStatus()).isEqualTo(ArInvoiceStatus.WRITTEN_OFF);
+    }
+
+    // =========================================================================
+    // Bar 6 (I-5): base-currency write-off is byte-identical to pre-FX behaviour
+    // =========================================================================
+
+    @Test
+    void writeOff_baseCurrency_byteIdentical_noRegression() {
+        ArInvoiceDto inv = openItem(AMOUNT_1000);
+
+        WriteOffRequest req = new WriteOffRequest(inv.uid(), LocalDate.now(), "Uncollectable TZS");
+        ArWriteOffDto result = writeOffService.writeOff(req);
+
+        var entry = journalEntryRepo.findByUid(result.glEntryUid()).orElseThrow();
+        var lines = journalLineRepo.findByEntryIdOrderByLineNo(entry.getId());
+
+        BigDecimal sumDebit  = lines.stream()
+                .map(l -> l.getDebitAmount()  != null ? l.getDebitAmount()  : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal sumCredit = lines.stream()
+                .map(l -> l.getCreditAmount() != null ? l.getCreditAmount() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        // Must match pre-FX: balanced, DR==CR==face amount (TZS 1000)
+        assertThat(sumDebit).isEqualByComparingTo(AMOUNT_1000);
+        assertThat(sumCredit).isEqualByComparingTo(AMOUNT_1000);
+        assertThat(lines).hasSize(2);
+
+        // Invoice status
+        assertThat(invoiceService.getByUid(inv.uid()).status()).isEqualTo(ArInvoiceStatus.WRITTEN_OFF);
     }
 
     // =========================================================================

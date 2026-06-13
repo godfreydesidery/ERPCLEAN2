@@ -6,6 +6,9 @@ import com.erp.modules.gl.domain.dto.JournalEntryDto;
 import com.erp.modules.gl.domain.entity.ChartOfAccount;
 import com.erp.modules.gl.domain.enums.GlConfigKey;
 import com.erp.modules.gl.domain.enums.JournalSourceType;
+import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.platform.common.money.ConvertedAmount;
+import com.erp.platform.common.money.FxDocumentConverter;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -39,12 +42,19 @@ public class GLPostingSafeInvoker {
 
     private static final Logger log = LoggerFactory.getLogger(GLPostingSafeInvoker.class);
 
-    private final GLPostingService postingService;
-    private final GLConfigResolver configResolver;
+    private final GLPostingService     postingService;
+    private final GLConfigResolver     configResolver;
+    private final FxDocumentConverter  fxConverter;
+    private final CompanyRepository    companies;
 
-    public GLPostingSafeInvoker(GLPostingService postingService, GLConfigResolver configResolver) {
+    public GLPostingSafeInvoker(GLPostingService    postingService,
+                                GLConfigResolver    configResolver,
+                                FxDocumentConverter fxConverter,
+                                CompanyRepository   companies) {
         this.postingService = postingService;
         this.configResolver = configResolver;
+        this.fxConverter    = fxConverter;
+        this.companies      = companies;
     }
 
     /**
@@ -72,6 +82,31 @@ public class GLPostingSafeInvoker {
                                            Long costCentreValueId, Long departmentValueId,
                                            Long projectId, Long projectTaskId) {
         try {
+            // ── ADR-0036 D-3: convert face amounts to BASE before building LineDrafts ──────
+            // The GL engine (GLPostingServiceImpl) is BYTE-UNTOUCHED; it only ever sees base
+            // currency lines. validateLine BR-GL-06 passes by construction. (D-3)
+            //
+            // Resolution of base currency: read from company record once per TX.
+            String baseCurrency = companies.findById(companyId)
+                    .map(com.erp.modules.iam.domain.entity.Company::getBaseCurrency)
+                    .orElse("TZS");
+
+            // Convert each leg independently HALF_UP, then compute the DR control leg as the
+            // BALANCING PLUG so Σbase == 0 exactly, absorbing any rounding residual. (D-3/D-8)
+            ConvertedAmount netConv = fxConverter.toBase(net, currency, companyId, postingDate);
+            String postCurrency = baseCurrency;  // every LineDraft carries base currency (D-3)
+
+            BigDecimal baseNet = netConv.baseAmount();
+            BigDecimal baseVat = BigDecimal.ZERO;
+            if (vat != null && vat.compareTo(BigDecimal.ZERO) > 0) {
+                baseVat = fxConverter.toBase(vat, currency, companyId, postingDate).baseAmount();
+            }
+
+            // DR Cash/AR = balancing plug = baseNet + baseVat (exact; absorbs residual) (D-3)
+            BigDecimal baseGross = fxConverter.balancingPlug(
+                    List.of(baseNet.negate(), baseVat.negate()),   // credits are negative
+                    netConv.baseAmount().scale());
+
             ChartOfAccount debitAcct = cashSale
                     ? configResolver.resolve(companyId, GlConfigKey.CASH)
                     : configResolver.resolve(companyId, GlConfigKey.ACCOUNTS_RECEIVABLE);
@@ -79,15 +114,17 @@ public class GLPostingSafeInvoker {
             ChartOfAccount vatPayableAcct = configResolver.resolve(companyId, GlConfigKey.VAT_PAYABLE);
 
             List<LineDraft> lines = new ArrayList<>();
-            // DR Cash/AR — balance-sheet control leg, untagged (ADR-0025 D-6)
-            lines.add(new LineDraft(debitAcct.getId(), gross, BigDecimal.ZERO, currency, "Gross sale"));
-            // CR Sales Revenue — P&L revenue leg, carry dimension + project tag (ADR-0025 D-6 / ADR-0033 D-4c)
-            lines.add(new LineDraft(revenueAcct.getId(), BigDecimal.ZERO, net, currency,
+            // DR Cash/AR — balancing plug in base currency, untagged (ADR-0025 D-6 / ADR-0036 D-3)
+            lines.add(new LineDraft(debitAcct.getId(), baseGross, BigDecimal.ZERO,
+                    postCurrency, "Gross sale"));
+            // CR Sales Revenue — base amount, carry dimension + project tag (ADR-0025 D-6 / ADR-0033 D-4c)
+            lines.add(new LineDraft(revenueAcct.getId(), BigDecimal.ZERO, baseNet, postCurrency,
                     "Sales revenue", costCentreValueId, departmentValueId, null, null,
                     projectId, projectTaskId, null));
             if (vat != null && vat.compareTo(BigDecimal.ZERO) > 0) {
-                // CR VAT Payable — balance-sheet control leg, untagged
-                lines.add(new LineDraft(vatPayableAcct.getId(), BigDecimal.ZERO, vat, currency, "VAT payable"));
+                // CR VAT Payable — base amount, untagged
+                lines.add(new LineDraft(vatPayableAcct.getId(), BigDecimal.ZERO, baseVat,
+                        postCurrency, "VAT payable"));
             }
             JournalEntryDraft draft = new JournalEntryDraft(
                     companyId, branchId, postingDate, "Sale " + invoiceUid,

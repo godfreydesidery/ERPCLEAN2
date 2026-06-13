@@ -9,6 +9,7 @@ import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
 import lombok.Getter;
+import lombok.Setter;
 
 /**
  * Junction: ap_payment ↔ supplier_bill (ADR-0015 D-2e).
@@ -34,6 +35,20 @@ public class ApPaymentAllocation {
 
     @Column(name = "allocated_amount", nullable = false, precision = 19, scale = 4, updatable = false)
     private BigDecimal allocatedAmount;
+
+    // ADR-0036 D-4 — per-allocation base capture (V78, graft from Proposal B).
+    // base_allocated_amount : face allocated × settlement rate, HALF_UP (Tranche 3 realized-FX).
+    // settlement_rate       : the payment's fx_rate at the time of allocation (immutable snapshot).
+
+    /** Allocated amount in base currency at the settlement rate. */
+    @Column(name = "base_allocated_amount", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal baseAllocatedAmount;
+
+    /** Settlement exchange rate (units of base per 1 foreign unit) used for this allocation. */
+    @Column(name = "settlement_rate", precision = 19, scale = 8)
+    @Setter
+    private BigDecimal settlementRate;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();

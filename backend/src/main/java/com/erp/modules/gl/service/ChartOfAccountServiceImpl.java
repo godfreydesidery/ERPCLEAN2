@@ -79,7 +79,12 @@ public class ChartOfAccountServiceImpl implements ChartOfAccountService {
             new Object[]{"1320", "Work In Progress",                     AccountType.ASSET},
             new Object[]{"2350", "WIP Labour Clearing",                  AccountType.LIABILITY},
             new Object[]{"2360", "WIP Overhead Clearing",                AccountType.LIABILITY},
-            new Object[]{"5180", "Manufacturing Variance",               AccountType.EXPENSE}
+            new Object[]{"5180", "Manufacturing Variance",               AccountType.EXPENSE},
+            // FX / Multi-currency increment (ADR-0036 D-5/D-6/D-10, V79): realized + unrealized FX gain/loss
+            new Object[]{"4910", "Unrealized FX Gain",                   AccountType.INCOME},
+            new Object[]{"4920", "Realized FX Gain",                     AccountType.INCOME},
+            new Object[]{"5190", "Realized FX Loss",                     AccountType.EXPENSE},
+            new Object[]{"5191", "Unrealized FX Loss",                   AccountType.EXPENSE}
     );
 
     public ChartOfAccountServiceImpl(ChartOfAccountRepository accounts,

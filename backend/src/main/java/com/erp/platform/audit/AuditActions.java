@@ -398,4 +398,10 @@ public final class AuditActions {
     public static final String WORKORDER_APPLY_COST       = "WORKORDER.APPLY_COST";
     public static final String WORKORDER_COMPLETE         = "WORKORDER.COMPLETE";
     public static final String WORKORDER_CLOSE            = "WORKORDER.CLOSE";
+
+    // ---- FX / Multi-currency (ADR-0036 D-10) ----
+    /** Emitted when a currency exchange rate is created or corrected. */
+    public static final String FX_RATE_SET             = "FX.RATE.SET";
+    /** Emitted when a period-end FX revaluation run is posted. */
+    public static final String FX_REVALUATION_RUN      = "FX.REVALUATION.RUN";
 }
