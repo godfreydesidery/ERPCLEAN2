@@ -1034,5 +1034,12 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./sales/blanket/blanket-order-create.component').then((m) => m.BlanketOrderCreateComponent),
   },
+  // ── Pricing Rules ──────────────────────────────────────────────────────────
+  {
+    path: 'pricing-rules',
+    canActivate: [requirePermission('SALES.PRICING.RULE.VIEW')],
+    loadComponent: () =>
+      import('./sales/pricing/pricing-rules.component').then((m) => m.PricingRulesComponent),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];

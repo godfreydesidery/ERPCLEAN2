@@ -1,0 +1,432 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Pricing Rules</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-tags me-1" aria-hidden="true"></i>
+      Manage quantity-break price tiers and customer-specific contract prices.
+    </p>
+  </header>
+
+  <!-- Company selector -->
+  @switch (companyState()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mb-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load companies. Is the API running?
+      </p>
+    }
+    @default {
+      @if (companies().length > 1) {
+        <div class="mb-3" style="max-width:320px">
+          <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+          <select id="companyPicker" name="companyPicker" class="form-select"
+                  [ngModel]="selectedCompanyId()"
+                  (ngModelChange)="onCompanyChange($event)">
+            @for (c of companies(); track c.uid) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+          </select>
+        </div>
+      }
+    }
+  }
+
+  @if (selectedCompanyId()) {
+    <!-- Tabs -->
+    <ul class="nav nav-tabs mb-3" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" [class.active]="activeTab() === 'tiers'"
+                type="button" role="tab"
+                [attr.aria-selected]="activeTab() === 'tiers'"
+                (click)="setTab('tiers')">
+          <i class="bi bi-layers me-1" aria-hidden="true"></i>Price Tiers
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" [class.active]="activeTab() === 'customer-prices'"
+                type="button" role="tab"
+                [attr.aria-selected]="activeTab() === 'customer-prices'"
+                (click)="setTab('customer-prices')">
+          <i class="bi bi-person-check me-1" aria-hidden="true"></i>Customer Prices
+        </button>
+      </li>
+    </ul>
+
+    <!-- ── TAB: Price Tiers ─────────────────────────────────────────────────── -->
+    @if (activeTab() === 'tiers') {
+      <div role="tabpanel" aria-label="Price Tiers">
+
+        <!-- Tier filter -->
+        <div class="row g-2 mb-3 align-items-end" style="max-width:680px">
+          <div class="col">
+            <label class="form-label small text-muted mb-1" for="tierProduct">Product</label>
+            <app-uid-picker id="tierProduct"
+                            [(ngModel)]="tierProductUid"
+                            [options]="productOptions()"
+                            placeholder="Select product"
+                            [required]="false" />
+          </div>
+          <div class="col">
+            <label class="form-label small text-muted mb-1" for="tierPriceList">Price List</label>
+            <app-uid-picker id="tierPriceList"
+                            [(ngModel)]="tierPriceListUid"
+                            [options]="priceListOptions()"
+                            placeholder="Select price list"
+                            [required]="false" />
+          </div>
+          <div class="col-auto">
+            <button type="button" class="btn btn-outline-primary btn-sm"
+                    (click)="loadTiers()"
+                    [disabled]="!tierProductUid() || !tierPriceListUid()">
+              <i class="bi bi-search me-1" aria-hidden="true"></i>Load Tiers
+            </button>
+          </div>
+        </div>
+
+        <!-- Tier create toggle -->
+        @if (canManage()) {
+          <button type="button" class="btn btn-sm btn-primary mb-3"
+                  (click)="toggleTierForm()"
+                  [attr.aria-expanded]="showTierForm()">
+            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+            {{ showTierForm() ? 'Cancel' : 'Add Price Tier' }}
+          </button>
+        }
+
+        <!-- Tier create form -->
+        @if (showTierForm()) {
+          <div class="create-form border rounded p-3 mb-3" style="max-width:580px">
+            <h2 class="h6 mb-3">New Price Tier</h2>
+            <form (ngSubmit)="createTier()" aria-label="Create price tier">
+              <div class="mb-2">
+                <label class="form-label small" for="newTierProduct">Product <span aria-hidden="true">*</span></label>
+                <app-uid-picker id="newTierProduct"
+                                [(ngModel)]="newTierProductUid"
+                                name="newTierProduct"
+                                [options]="productOptions()"
+                                placeholder="Select product"
+                                [required]="true" />
+              </div>
+              <div class="mb-2">
+                <label class="form-label small" for="newTierPriceList">Price List <span aria-hidden="true">*</span></label>
+                <app-uid-picker id="newTierPriceList"
+                                [(ngModel)]="newTierPriceListUid"
+                                name="newTierPriceList"
+                                [options]="priceListOptions()"
+                                placeholder="Select price list"
+                                [required]="true" />
+              </div>
+              <div class="row g-2 mb-2">
+                <div class="col">
+                  <label class="form-label small" for="newTierMinQty">Min Quantity <span aria-hidden="true">*</span></label>
+                  <input id="newTierMinQty" name="newTierMinQty" type="text" class="form-control form-control-sm"
+                         [ngModel]="newTierMinQty()" (ngModelChange)="newTierMinQty.set($event)"
+                         [disabled]="tierSaving()" placeholder="e.g. 10" autocomplete="off" />
+                </div>
+                <div class="col">
+                  <label class="form-label small" for="newTierPrice">Unit Price <span aria-hidden="true">*</span></label>
+                  <input id="newTierPrice" name="newTierPrice" type="text" class="form-control form-control-sm"
+                         [ngModel]="newTierPrice()" (ngModelChange)="newTierPrice.set($event)"
+                         [disabled]="tierSaving()" placeholder="e.g. 950.00" autocomplete="off" />
+                </div>
+                <div class="col">
+                  <label class="form-label small" for="newTierCurrency">Currency <span aria-hidden="true">*</span></label>
+                  <input id="newTierCurrency" name="newTierCurrency" type="text" class="form-control form-control-sm"
+                         [ngModel]="newTierCurrency()" (ngModelChange)="newTierCurrency.set($event)"
+                         [disabled]="tierSaving()" placeholder="TZS" autocomplete="off" maxlength="3" />
+                </div>
+              </div>
+              @if (tierFormError(); as msg) {
+                <p class="form-error text-danger small" role="alert">{{ msg }}</p>
+              }
+              <div class="d-flex gap-2 mt-2">
+                <button type="submit" class="btn btn-sm btn-primary" [disabled]="tierSaving()">
+                  @if (tierSaving()) {
+                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                  }
+                  Save Tier
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="toggleTierForm()" [disabled]="tierSaving()">Cancel</button>
+              </div>
+            </form>
+          </div>
+        }
+
+        <!-- Tier list states -->
+        @switch (tierState()) {
+          @case ('loading') {
+            <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+              <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading price tiers…
+            </p>
+          }
+          @case ('error') {
+            <p class="state text-danger" role="alert">
+              <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+              Could not load price tiers. Please try again.
+            </p>
+          }
+          @case ('forbidden') {
+            <p class="state text-muted d-flex align-items-center gap-2">
+              <i class="bi bi-shield-lock" aria-hidden="true"></i>
+              You don't have permission to view price tiers.
+            </p>
+          }
+          @default {
+            @if (tierIsEmpty()) {
+              <p class="state text-muted">
+                @if (!tierProductUid() || !tierPriceListUid()) {
+                  Select a product and price list, then click Load Tiers.
+                } @else {
+                  No price tiers found for the selected product and price list.
+                }
+              </p>
+            } @else {
+              <div class="table-responsive">
+                <table class="table table-hover align-middle bg-white grid">
+                  <caption class="visually-hidden">Price tiers</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Product</th>
+                      <th scope="col">Price List</th>
+                      <th scope="col" class="text-end">Min Qty</th>
+                      <th scope="col" class="text-end">Unit Price</th>
+                      <th scope="col">Currency</th>
+                      <th scope="col">Status</th>
+                      @if (canManage()) {
+                        <th scope="col"><span class="visually-hidden">Actions</span></th>
+                      }
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (tier of tierRows(); track tier.uid) {
+                      <tr>
+                        <td>{{ productLabel(tier.productId) }}</td>
+                        <td>{{ priceListLabel(tier.priceListId) }}</td>
+                        <td class="text-end font-monospace">{{ +tier.minQty | number:'1.3-3' }}</td>
+                        <td class="text-end font-monospace">{{ +tier.unitPriceAmount | number:'1.2-2' }}</td>
+                        <td>{{ tier.currency }}</td>
+                        <td>
+                          <span class="badge" [class]="statusBadgeClass(tier.status)">{{ tier.status }}</span>
+                        </td>
+                        @if (canManage()) {
+                          <td>
+                            @if (tier.status === 'ACTIVE') {
+                              <button type="button" class="btn btn-sm btn-outline-danger"
+                                      [disabled]="tierBusyUid() === tier.uid"
+                                      (click)="deactivateTier(tier)"
+                                      [attr.aria-label]="'Deactivate tier min qty ' + tier.minQty">
+                                @if (tierBusyUid() === tier.uid) {
+                                  <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                } @else {
+                                  <i class="bi bi-slash-circle" aria-hidden="true"></i>
+                                }
+                                <span class="visually-hidden">Deactivate</span>
+                              </button>
+                            }
+                          </td>
+                        }
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          }
+        }
+      </div>
+    }
+
+    <!-- ── TAB: Customer Prices ─────────────────────────────────────────────── -->
+    @if (activeTab() === 'customer-prices') {
+      <div role="tabpanel" aria-label="Customer Prices">
+
+        <!-- Customer filter -->
+        <div class="row g-2 mb-3 align-items-end" style="max-width:480px">
+          <div class="col">
+            <label class="form-label small text-muted mb-1" for="cpCustomer">Customer</label>
+            <app-uid-picker id="cpCustomer"
+                            [(ngModel)]="cpCustomerUid"
+                            [options]="customerOptions()"
+                            placeholder="Select customer"
+                            [required]="false" />
+          </div>
+          <div class="col-auto">
+            <button type="button" class="btn btn-outline-primary btn-sm"
+                    (click)="loadCustomerPrices()"
+                    [disabled]="!cpCustomerUid()">
+              <i class="bi bi-search me-1" aria-hidden="true"></i>Load Prices
+            </button>
+          </div>
+        </div>
+
+        <!-- Customer price create toggle -->
+        @if (canManage()) {
+          <button type="button" class="btn btn-sm btn-primary mb-3"
+                  (click)="toggleCpForm()"
+                  [attr.aria-expanded]="showCpForm()">
+            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+            {{ showCpForm() ? 'Cancel' : 'Add Customer Price' }}
+          </button>
+        }
+
+        <!-- Customer price create form -->
+        @if (showCpForm()) {
+          <div class="create-form border rounded p-3 mb-3" style="max-width:580px">
+            <h2 class="h6 mb-3">New Customer Price</h2>
+            <form (ngSubmit)="createCustomerPrice()" aria-label="Create customer price">
+              <div class="mb-2">
+                <label class="form-label small" for="newCpCustomer">Customer <span aria-hidden="true">*</span></label>
+                <app-uid-picker id="newCpCustomer"
+                                [(ngModel)]="newCpCustomerUid"
+                                name="newCpCustomer"
+                                [options]="customerOptions()"
+                                placeholder="Select customer"
+                                [required]="true" />
+              </div>
+              <div class="mb-2">
+                <label class="form-label small" for="newCpProduct">Product <span aria-hidden="true">*</span></label>
+                <app-uid-picker id="newCpProduct"
+                                [(ngModel)]="newCpProductUid"
+                                name="newCpProduct"
+                                [options]="productOptions()"
+                                placeholder="Select product"
+                                [required]="true" />
+              </div>
+              <div class="row g-2 mb-2">
+                <div class="col">
+                  <label class="form-label small" for="newCpPrice">Unit Price <span aria-hidden="true">*</span></label>
+                  <input id="newCpPrice" name="newCpPrice" type="text" class="form-control form-control-sm"
+                         [ngModel]="newCpPrice()" (ngModelChange)="newCpPrice.set($event)"
+                         [disabled]="cpSaving()" placeholder="e.g. 1200.00" autocomplete="off" />
+                </div>
+                <div class="col">
+                  <label class="form-label small" for="newCpCurrency">Currency <span aria-hidden="true">*</span></label>
+                  <input id="newCpCurrency" name="newCpCurrency" type="text" class="form-control form-control-sm"
+                         [ngModel]="newCpCurrency()" (ngModelChange)="newCpCurrency.set($event)"
+                         [disabled]="cpSaving()" placeholder="TZS" autocomplete="off" maxlength="3" />
+                </div>
+              </div>
+              <div class="row g-2 mb-2">
+                <div class="col">
+                  <label class="form-label small" for="newCpFrom">Effective From</label>
+                  <input id="newCpFrom" name="newCpFrom" type="date" class="form-control form-control-sm"
+                         [ngModel]="newCpEffectiveFrom()" (ngModelChange)="newCpEffectiveFrom.set($event)"
+                         [disabled]="cpSaving()" />
+                </div>
+                <div class="col">
+                  <label class="form-label small" for="newCpTo">Effective To</label>
+                  <input id="newCpTo" name="newCpTo" type="date" class="form-control form-control-sm"
+                         [ngModel]="newCpEffectiveTo()" (ngModelChange)="newCpEffectiveTo.set($event)"
+                         [disabled]="cpSaving()" />
+                </div>
+              </div>
+              @if (cpFormError(); as msg) {
+                <p class="form-error text-danger small" role="alert">{{ msg }}</p>
+              }
+              <div class="d-flex gap-2 mt-2">
+                <button type="submit" class="btn btn-sm btn-primary" [disabled]="cpSaving()">
+                  @if (cpSaving()) {
+                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                  }
+                  Save Price
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="toggleCpForm()" [disabled]="cpSaving()">Cancel</button>
+              </div>
+            </form>
+          </div>
+        }
+
+        <!-- Customer price list states -->
+        @switch (cpState()) {
+          @case ('loading') {
+            <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+              <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading customer prices…
+            </p>
+          }
+          @case ('error') {
+            <p class="state text-danger" role="alert">
+              <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+              Could not load customer prices. Please try again.
+            </p>
+          }
+          @case ('forbidden') {
+            <p class="state text-muted d-flex align-items-center gap-2">
+              <i class="bi bi-shield-lock" aria-hidden="true"></i>
+              You don't have permission to view customer prices.
+            </p>
+          }
+          @default {
+            @if (cpIsEmpty()) {
+              <p class="state text-muted">
+                @if (!cpCustomerUid()) {
+                  Select a customer, then click Load Prices.
+                } @else {
+                  No customer prices found for the selected customer.
+                }
+              </p>
+            } @else {
+              <div class="table-responsive">
+                <table class="table table-hover align-middle bg-white grid">
+                  <caption class="visually-hidden">Customer-specific prices</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Customer</th>
+                      <th scope="col">Product</th>
+                      <th scope="col" class="text-end">Unit Price</th>
+                      <th scope="col">Currency</th>
+                      <th scope="col">Effective From</th>
+                      <th scope="col">Effective To</th>
+                      <th scope="col">Status</th>
+                      @if (canManage()) {
+                        <th scope="col"><span class="visually-hidden">Actions</span></th>
+                      }
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (cp of cpRows(); track cp.uid) {
+                      <tr>
+                        <td>{{ customerLabel(cp.customerId) }}</td>
+                        <td>{{ productLabel(cp.productId) }}</td>
+                        <td class="text-end font-monospace">{{ +cp.unitPriceAmount | number:'1.2-2' }}</td>
+                        <td>{{ cp.currency }}</td>
+                        <td>{{ cp.effectiveFrom ?? '—' }}</td>
+                        <td>{{ cp.effectiveTo ?? '—' }}</td>
+                        <td>
+                          <span class="badge" [class]="statusBadgeClass(cp.status)">{{ cp.status }}</span>
+                        </td>
+                        @if (canManage()) {
+                          <td>
+                            @if (cp.status === 'ACTIVE') {
+                              <button type="button" class="btn btn-sm btn-outline-danger"
+                                      [disabled]="cpBusyUid() === cp.uid"
+                                      (click)="deactivateCustomerPrice(cp)"
+                                      [attr.aria-label]="'Deactivate price for ' + customerLabel(cp.customerId)">
+                                @if (cpBusyUid() === cp.uid) {
+                                  <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                } @else {
+                                  <i class="bi bi-slash-circle" aria-hidden="true"></i>
+                                }
+                                <span class="visually-hidden">Deactivate</span>
+                              </button>
+                            }
+                          </td>
+                        }
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          }
+        }
+      </div>
+    }
+  }
+</section>
