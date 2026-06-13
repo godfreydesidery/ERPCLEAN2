@@ -1,0 +1,124 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Document Templates</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-layout-text-sidebar me-1" aria-hidden="true"></i>
+      Company template registry — toggle active/inactive, update title and branding reference.
+    </p>
+  </header>
+
+  @switch (state()) {
+    @case ('loading') {
+      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading templates…
+      </p>
+    }
+    @case ('error') {
+      <p class="state text-danger" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load templates. Please try again.
+      </p>
+    }
+    @case ('forbidden') {
+      <p class="state text-muted d-flex align-items-center gap-2">
+        <i class="bi bi-shield-lock" aria-hidden="true"></i>
+        You don't have permission to manage document templates.
+      </p>
+    }
+    @default {
+      @if (isEmpty()) {
+        <p class="state text-muted">No templates found for this company.</p>
+      } @else {
+        <p class="text-muted small mb-3">
+          <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
+          Templates are seeded per company — one per document type. You can update the title, status, and branding reference.
+          Only ACTIVE templates can be used for rendering.
+        </p>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle bg-white grid">
+            <caption class="visually-hidden">Document Templates</caption>
+            <thead>
+              <tr>
+                <th scope="col">Document Type</th>
+                <th scope="col">Renderer</th>
+                <th scope="col">Title</th>
+                <th scope="col">Status</th>
+                <th scope="col">Branding ID</th>
+                @if (canManage()) {
+                  <th scope="col"><span class="visually-hidden">Save</span></th>
+                }
+              </tr>
+            </thead>
+            <tbody>
+              @for (t of rows(); track t.uid) {
+                @let edit = getEdit(t.uid);
+                <tr>
+                  <td>
+                    <span class="badge text-bg-secondary">{{ t.documentType }}</span>
+                  </td>
+                  <td class="small text-muted">{{ t.rendererKey }}</td>
+                  <td>
+                    @if (canManage() && edit) {
+                      <input type="text" class="form-control form-control-sm"
+                             [attr.aria-label]="'Title for ' + t.documentType"
+                             [ngModel]="edit.title"
+                             (ngModelChange)="updateEditField(t.uid, 'title', $event)"
+                             [disabled]="edit.saving" />
+                    } @else {
+                      {{ t.title }}
+                    }
+                  </td>
+                  <td>
+                    @if (canManage() && edit) {
+                      <select class="form-select form-select-sm" style="min-width:120px"
+                              [attr.aria-label]="'Status for ' + t.documentType"
+                              [ngModel]="edit.status"
+                              (ngModelChange)="updateEditField(t.uid, 'status', $event)"
+                              [disabled]="edit.saving">
+                        @for (s of statusOptions; track s) {
+                          <option [value]="s">{{ s }}</option>
+                        }
+                      </select>
+                    } @else {
+                      <span class="badge" [class]="statusBadgeClass(t.status)">{{ t.status }}</span>
+                    }
+                  </td>
+                  <td>
+                    @if (canManage() && edit) {
+                      <input type="text" class="form-control form-control-sm"
+                             [attr.aria-label]="'Branding ID for ' + t.documentType"
+                             placeholder="Branding ID (leave blank to keep)"
+                             [ngModel]="edit.brandingId"
+                             (ngModelChange)="updateEditField(t.uid, 'brandingId', $event)"
+                             [disabled]="edit.saving" />
+                    } @else {
+                      <span class="small font-monospace">{{ t.brandingId }}</span>
+                    }
+                  </td>
+                  @if (canManage() && edit) {
+                    <td>
+                      <button type="button" class="btn btn-sm btn-primary"
+                              [disabled]="edit.saving"
+                              (click)="save(t.uid)"
+                              [attr.aria-label]="'Save changes for ' + t.documentType">
+                        @if (edit.saving) {
+                          <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                        } @else {
+                          <i class="bi bi-check-lg me-1" aria-hidden="true"></i>
+                        }
+                        Save
+                      </button>
+                      @if (edit.error) {
+                        <p class="text-danger small mt-1 mb-0" role="alert">{{ edit.error }}</p>
+                      }
+                    </td>
+                  }
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    }
+  }
+</section>

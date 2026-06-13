@@ -1,0 +1,123 @@
+<section class="admin-page">
+  <header class="page-head">
+    <a class="btn btn-sm btn-outline-secondary me-2" routerLink="/admin/asset-categories"
+       aria-label="Back to Asset Categories">
+      <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Categories
+    </a>
+    <h1 class="h4 mb-1">
+      Asset Category
+      @if (category(); as cat) {
+        — {{ cat.code }}: {{ cat.name }}
+        <span class="badge ms-2" [class]="statusBadgeClass(cat.status)">{{ cat.status }}</span>
+      }
+    </h1>
+  </header>
+
+  @switch (state()) {
+    @case ('loading') {
+      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+      </p>
+    }
+    @case ('error') {
+      <p class="state text-danger" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load category.
+      </p>
+    }
+    @default {
+      @if (category(); as cat) {
+        <!-- Edit form (only when MANAGE perm) -->
+        @if (canManage()) {
+          <form class="card card-body mb-4" (ngSubmit)="save()" aria-label="Edit asset category">
+            <h2 class="h6 mb-3">Edit Category</h2>
+            <div class="row g-2 mb-2">
+              <div class="col-sm-4">
+                <label class="form-label small text-muted mb-1" for="fName">Name <span class="text-danger" aria-hidden="true">*</span></label>
+                <input id="fName" name="fName" type="text" class="form-control"
+                       [ngModel]="fName()" (ngModelChange)="fName.set($event)"
+                       [disabled]="saving()" autocomplete="off" />
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="fMethod">Method <span class="text-danger" aria-hidden="true">*</span></label>
+                <select id="fMethod" name="fMethod" class="form-select"
+                        [ngModel]="fMethod()" (ngModelChange)="fMethod.set($event)"
+                        [disabled]="saving()">
+                  @for (m of methodOptions; track m) {
+                    <option [value]="m">{{ m === 'STRAIGHT_LINE' ? 'Straight Line' : 'Reducing Balance' }}</option>
+                  }
+                </select>
+              </div>
+              <div class="col-sm-2">
+                <label class="form-label small text-muted mb-1" for="fLifePeriods">Life (periods) <span class="text-danger" aria-hidden="true">*</span></label>
+                <input id="fLifePeriods" name="fLifePeriods" type="number" min="1" class="form-control"
+                       [ngModel]="fLifePeriods()" (ngModelChange)="fLifePeriods.set($event)"
+                       [disabled]="saving()" />
+              </div>
+              @if (isReducingBalance()) {
+                <div class="col-sm-2">
+                  <label class="form-label small text-muted mb-1" for="fReducingRate">Rate % <span class="text-danger" aria-hidden="true">*</span></label>
+                  <input id="fReducingRate" name="fReducingRate" type="number" step="0.01" class="form-control"
+                         [ngModel]="fReducingRate()" (ngModelChange)="fReducingRate.set($event)"
+                         [disabled]="saving()" />
+                </div>
+              }
+            </div>
+            <div class="row g-2 mb-2">
+              <div class="col-sm-4">
+                <label class="form-label small text-muted mb-1" for="fAssetAccountId">Asset Account ID <span class="text-danger" aria-hidden="true">*</span></label>
+                <input id="fAssetAccountId" name="fAssetAccountId" type="text" class="form-control"
+                       [ngModel]="fAssetAccountId()" (ngModelChange)="fAssetAccountId.set($event)"
+                       [disabled]="saving()" autocomplete="off" />
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label small text-muted mb-1" for="fAccumDepAccountId">Accum Dep Account ID <span class="text-danger" aria-hidden="true">*</span></label>
+                <input id="fAccumDepAccountId" name="fAccumDepAccountId" type="text" class="form-control"
+                       [ngModel]="fAccumDepAccountId()" (ngModelChange)="fAccumDepAccountId.set($event)"
+                       [disabled]="saving()" autocomplete="off" />
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label small text-muted mb-1" for="fDepExpenseAccountId">Dep Expense Account ID <span class="text-danger" aria-hidden="true">*</span></label>
+                <input id="fDepExpenseAccountId" name="fDepExpenseAccountId" type="text" class="form-control"
+                       [ngModel]="fDepExpenseAccountId()" (ngModelChange)="fDepExpenseAccountId.set($event)"
+                       [disabled]="saving()" autocomplete="off" />
+              </div>
+            </div>
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-primary" [disabled]="saving()">
+                @if (saving()) {
+                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Saving…
+                } @else {
+                  Save
+                }
+              </button>
+              @if (isActive()) {
+                <button type="button" class="btn btn-outline-danger ms-auto"
+                        (click)="archive()" [disabled]="archiving()">
+                  @if (archiving()) {
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Archiving…
+                  } @else {
+                    <i class="bi bi-archive me-1" aria-hidden="true"></i>Archive
+                  }
+                </button>
+              }
+            </div>
+            @if (saveError(); as msg) {
+              <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+            }
+          </form>
+        } @else {
+          <!-- Read-only view -->
+          <dl class="row small mb-4">
+            <dt class="col-sm-3">Code</dt><dd class="col-sm-9 font-monospace">{{ cat.code }}</dd>
+            <dt class="col-sm-3">Name</dt><dd class="col-sm-9">{{ cat.name }}</dd>
+            <dt class="col-sm-3">Method</dt><dd class="col-sm-9">{{ cat.defaultMethod }}</dd>
+            <dt class="col-sm-3">Life periods</dt><dd class="col-sm-9">{{ cat.defaultLifePeriods }}</dd>
+            <dt class="col-sm-3">Reducing rate</dt><dd class="col-sm-9">{{ cat.defaultReducingRate || '—' }}</dd>
+            <dt class="col-sm-3">Status</dt>
+            <dd class="col-sm-9"><span class="badge" [class]="statusBadgeClass(cat.status)">{{ cat.status }}</span></dd>
+          </dl>
+        }
+      }
+    }
+  }
+</section>

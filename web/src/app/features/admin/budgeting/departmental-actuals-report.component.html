@@ -1,0 +1,157 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Departmental Actuals Report</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-table me-1" aria-hidden="true"></i>
+      GL actuals by cost centre and account — no budget comparison.
+    </p>
+  </header>
+
+  @if (!canView()) {
+    <p class="state text-muted d-flex align-items-center gap-2">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to view reports.
+    </p>
+  } @else {
+
+    <!-- Company selector -->
+    @switch (companyState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-3" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load companies.
+        </p>
+      }
+      @default {
+        <!-- Params form -->
+        <form class="create-form card card-body mb-3" (ngSubmit)="run()" aria-label="Departmental actuals report parameters">
+          <h2 class="h6 mb-2">Report Parameters</h2>
+          <div class="row g-2 align-items-end">
+            @if (companies().length > 1) {
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+                <select id="companyPicker" name="companyPicker" class="form-select"
+                        [ngModel]="selectedCompanyId()"
+                        (ngModelChange)="selectedCompanyId.set($event)">
+                  @for (c of companies(); track c.uid) {
+                    <option [value]="c.id">{{ c.name }}</option>
+                  }
+                </select>
+              </div>
+            }
+            <div class="col-sm-3">
+              <label class="form-label small text-muted mb-1" for="fFiscalYearUid">
+                Fiscal Year UID <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="fFiscalYearUid" name="fFiscalYearUid" type="text" class="form-control"
+                     placeholder="Paste UID"
+                     [ngModel]="fFiscalYearUid()" (ngModelChange)="fFiscalYearUid.set($event)"
+                     autocomplete="off" />
+            </div>
+            <div class="col-sm-1">
+              <label class="form-label small text-muted mb-1" for="fFromPeriod">From P</label>
+              <input id="fFromPeriod" name="fFromPeriod" type="number" class="form-control"
+                     [ngModel]="fFromPeriod()" (ngModelChange)="fFromPeriod.set($event)"
+                     min="1" max="12" />
+            </div>
+            <div class="col-sm-1">
+              <label class="form-label small text-muted mb-1" for="fToPeriod">To P</label>
+              <input id="fToPeriod" name="fToPeriod" type="number" class="form-control"
+                     [ngModel]="fToPeriod()" (ngModelChange)="fToPeriod.set($event)"
+                     min="1" max="12" />
+            </div>
+            <div class="col-sm-2 d-flex align-items-end">
+              <button type="submit" class="btn btn-primary w-100"
+                      [disabled]="reportState() === 'loading'">
+                @if (reportState() === 'loading') {
+                  <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                }
+                Run Report
+              </button>
+            </div>
+          </div>
+        </form>
+      }
+    }
+
+    @switch (reportState()) {
+      @case ('loading') {
+        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Running report…
+        </p>
+      }
+      @case ('error') {
+        <p class="state text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not run report. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="state text-muted d-flex align-items-center gap-2">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view this report.
+        </p>
+      }
+      @default {
+        @if (report(); as r) {
+
+          <!-- Header summary -->
+          <div class="card mb-3">
+            <div class="card-body py-2">
+              <dl class="row mb-0 small">
+                <dt class="col-sm-2 text-muted">Fiscal Year UID</dt>
+                <dd class="col-sm-4 font-monospace">{{ r.fiscalYearUid }}</dd>
+                <dt class="col-sm-2 text-muted">Date Range</dt>
+                <dd class="col-sm-4">{{ r.fromDate }} – {{ r.toDate }}</dd>
+              </dl>
+            </div>
+          </div>
+
+          <!-- Detail rows -->
+          @if (!r.rows || r.rows.length === 0) {
+            <p class="text-muted small">No rows returned for the selected parameters.</p>
+          } @else {
+            <div class="table-responsive">
+              <table class="table table-sm table-hover align-middle bg-white grid">
+                <caption class="visually-hidden">Departmental actuals detail rows</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Cost Centre</th>
+                    <th scope="col">Code</th>
+                    <th scope="col">Account</th>
+                    <th scope="col">Type</th>
+                    <th scope="col">Normal Balance</th>
+                    <th scope="col" class="text-end">Actual (TZS)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of r.rows; track row.accountId) {
+                    <tr>
+                      <td class="small text-muted">
+                        @if (row.costCentreValueName) {
+                          {{ row.costCentreValueName }}
+                        } @else {
+                          <span class="text-muted fst-italic">Unallocated</span>
+                        }
+                      </td>
+                      <td class="font-monospace small">{{ row.accountCode }}</td>
+                      <td class="small">{{ row.accountName }}</td>
+                      <td class="small text-muted">{{ row.accountType }}</td>
+                      <td class="small text-muted">{{ row.normalBalance }}</td>
+                      <td class="text-end font-monospace small">{{ +row.actualAmount | number:'1.2-2' }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        }
+      }
+    }
+  }
+</section>

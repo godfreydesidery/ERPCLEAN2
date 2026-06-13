@@ -1,0 +1,230 @@
+<section class="admin-page">
+  <header class="page-head">
+    <nav aria-label="Breadcrumb" class="mb-1">
+      <a [routerLink]="['/admin/approvals/policies']" class="text-muted small">
+        <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Approval Policies
+      </a>
+    </nav>
+    @if (policy(); as p) {
+      <h1 class="h4 mb-0">{{ p.name }}</h1>
+      <span class="badge ms-2" [class]="statusBadgeClass(p.status)">{{ p.status }}</span>
+    } @else {
+      <h1 class="h4 mb-0">Policy Detail</h1>
+    }
+  </header>
+
+  @switch (policyState()) {
+    @case ('loading') {
+      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading policy…
+      </p>
+    }
+    @case ('error') {
+      <p class="state text-danger" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load the policy. Please try again.
+      </p>
+    }
+    @default {
+      @if (policy(); as p) {
+
+        <!-- Lifecycle actions bar -->
+        @if (canManage()) {
+          <div class="d-flex flex-wrap gap-2 mb-3">
+            @if (isDeactivatable()) {
+              <button type="button" class="btn btn-sm btn-warning"
+                      [disabled]="deactivating()"
+                      (click)="deactivate()"
+                      aria-label="Deactivate this policy">
+                @if (deactivating()) {
+                  <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                }
+                <i class="bi bi-toggle-off me-1" aria-hidden="true"></i>Deactivate
+              </button>
+            }
+          </div>
+
+          @if (deactivateError(); as msg) {
+            <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
+          }
+        }
+
+        <!-- Read-only metadata -->
+        <div class="card card-body mb-3 bg-light small">
+          <div class="row g-2">
+            <div class="col-sm-3">
+              <span class="text-muted d-block">Document Type</span>
+              <span class="font-monospace">{{ p.documentType }}</span>
+            </div>
+            <div class="col-sm-3">
+              <span class="text-muted d-block">Scope</span>
+              <span>{{ p.branchScope === 'COMPANY_WIDE' ? 'Company-wide' : 'Branch' }}</span>
+            </div>
+            <div class="col-sm-3">
+              <span class="text-muted d-block">Amount Band (TZS)</span>
+              <span class="font-monospace">
+                {{ +p.minAmount | number:'1.2-2' }} –
+                @if (p.maxAmount) { {{ +p.maxAmount | number:'1.2-2' }} }
+                @else { ∞ }
+              </span>
+            </div>
+            <div class="col-sm-3">
+              <span class="text-muted d-block">Active</span>
+              <span>{{ p.active ? 'Yes' : 'No' }}</span>
+            </div>
+          </div>
+          @if (p.notes) {
+            <div class="mt-2">
+              <span class="text-muted d-block">Notes</span>
+              <span>{{ p.notes }}</span>
+            </div>
+          }
+        </div>
+
+        <!-- Steps (read-only view) -->
+        <div class="card card-body mb-3">
+          <h2 class="h6 mb-2">Approval Steps (current snapshot)</h2>
+          @if (p.steps.length === 0) {
+            <p class="text-muted small mb-0">No steps defined.</p>
+          } @else {
+            <ol class="list-group list-group-numbered">
+              @for (step of p.steps; track step.uid) {
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                  <span>Step {{ step.sequence }}</span>
+                  <span class="badge text-bg-secondary font-monospace">{{ step.approverRoleCode }}</span>
+                </li>
+              }
+            </ol>
+          }
+        </div>
+
+        <!-- Edit form (managers only) -->
+        @if (canManage()) {
+          <div class="card card-body">
+            <h2 class="h6 mb-3">Edit Policy</h2>
+            <form (ngSubmit)="save()" aria-label="Edit approval policy">
+              <div class="row g-2 mb-2">
+                <div class="col-sm-4">
+                  <label class="form-label small text-muted mb-1" for="fDocumentType">
+                    Document Type <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <input id="fDocumentType" name="fDocumentType" type="text" class="form-control"
+                         [ngModel]="fDocumentType()" (ngModelChange)="fDocumentType.set($event)"
+                         [disabled]="saving()" autocomplete="off" />
+                </div>
+                <div class="col-sm-4">
+                  <label class="form-label small text-muted mb-1" for="fName">
+                    Policy Name <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <input id="fName" name="fName" type="text" class="form-control"
+                         [ngModel]="fName()" (ngModelChange)="fName.set($event)"
+                         [disabled]="saving()" autocomplete="off" />
+                </div>
+                <div class="col-sm-2">
+                  <label class="form-label small text-muted mb-1" for="fBranchScope">Branch Scope</label>
+                  <select id="fBranchScope" name="fBranchScope" class="form-select"
+                          [ngModel]="fBranchScope()" (ngModelChange)="fBranchScope.set($event)"
+                          [disabled]="saving()">
+                    <option value="COMPANY_WIDE">Company-wide</option>
+                    <option value="BRANCH">Branch</option>
+                  </select>
+                </div>
+                <div class="col-sm-2">
+                  <label class="form-label small text-muted mb-1" for="fActive">Active</label>
+                  <select id="fActive" name="fActive" class="form-select"
+                          [ngModel]="fActive()" (ngModelChange)="fActive.set($event === 'true')"
+                          [disabled]="saving()">
+                    <option [value]="true">Yes</option>
+                    <option [value]="false">No</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="row g-2 mb-2">
+                @if (fBranchScope() === 'BRANCH') {
+                  <div class="col-sm-4">
+                    <label class="form-label small text-muted mb-1" for="fBranchUid">
+                      Branch UID <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <input id="fBranchUid" name="fBranchUid" type="text" class="form-control"
+                           placeholder="Enter branch UID"
+                           [ngModel]="fBranchUid()" (ngModelChange)="fBranchUid.set($event)"
+                           [disabled]="saving()" autocomplete="off" />
+                  </div>
+                }
+                <div class="col-sm-3">
+                  <label class="form-label small text-muted mb-1" for="fMinAmount">
+                    Min Amount (TZS) <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <input id="fMinAmount" name="fMinAmount" type="number" class="form-control"
+                         min="0" step="0.01"
+                         [ngModel]="fMinAmount()" (ngModelChange)="fMinAmount.set('' + $event)"
+                         [disabled]="saving()" />
+                </div>
+                <div class="col-sm-3">
+                  <label class="form-label small text-muted mb-1" for="fMaxAmount">Max Amount (TZS, blank = unbounded)</label>
+                  <input id="fMaxAmount" name="fMaxAmount" type="number" class="form-control"
+                         min="0" step="0.01"
+                         [ngModel]="fMaxAmount()" (ngModelChange)="fMaxAmount.set('' + $event)"
+                         [disabled]="saving()" />
+                </div>
+                <div class="col-sm-6">
+                  <label class="form-label small text-muted mb-1" for="fNotes">Notes</label>
+                  <input id="fNotes" name="fNotes" type="text" class="form-control"
+                         [ngModel]="fNotes()" (ngModelChange)="fNotes.set($event)"
+                         [disabled]="saving()" autocomplete="off" />
+                </div>
+              </div>
+
+              <!-- Edit steps -->
+              <div class="mb-2">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <span class="small text-muted fw-semibold">Approval Steps (replaces chain on save)</span>
+                  <button type="button" class="btn btn-sm btn-outline-secondary"
+                          (click)="addStep()" [disabled]="saving()">
+                    <i class="bi bi-plus me-1" aria-hidden="true"></i>Add Step
+                  </button>
+                </div>
+                @for (step of fSteps(); track step.sequence; let i = $index) {
+                  <div class="d-flex gap-2 align-items-center mb-1">
+                    <span class="badge text-bg-secondary" style="min-width:2rem;">{{ step.sequence }}</span>
+                    <input type="text" class="form-control form-control-sm"
+                           [attr.id]="'fStepRole_' + i"
+                           [attr.name]="'fStepRole_' + i"
+                           [attr.aria-label]="'Step ' + step.sequence + ' approver role code'"
+                           placeholder="Approver role code"
+                           [ngModel]="step.approverRoleCode"
+                           (ngModelChange)="updateStepRole(i, $event)"
+                           [disabled]="saving()" autocomplete="off" />
+                    @if (fSteps().length > 1) {
+                      <button type="button" class="btn btn-sm btn-outline-danger"
+                              [attr.aria-label]="'Remove step ' + step.sequence"
+                              (click)="removeStep(i)" [disabled]="saving()">
+                        <i class="bi bi-trash" aria-hidden="true"></i>
+                      </button>
+                    }
+                  </div>
+                }
+              </div>
+
+              <div class="d-flex gap-2 mt-2">
+                <button type="submit" class="btn btn-primary" [disabled]="saving()">
+                  @if (saving()) {
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    Saving…
+                  } @else {
+                    Save Changes
+                  }
+                </button>
+              </div>
+
+              @if (saveError(); as msg) {
+                <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+              }
+            </form>
+          </div>
+        }
+      }
+    }
+  }
+</section>

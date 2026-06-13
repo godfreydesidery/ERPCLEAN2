@@ -466,5 +466,351 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./reporting/account-ledger.component').then((m) => m.AccountLedgerComponent),
   },
+  // ── Approvals ─────────────────────────────────────────────────────────────
+  {
+    path: 'approvals/inbox',
+    canActivate: [requirePermission('APPROVALS.DECIDE')],
+    loadComponent: () =>
+      import('./approvals/approval-inbox.component').then((m) => m.ApprovalInboxComponent),
+  },
+  {
+    path: 'approvals/policies',
+    canActivate: [requirePermission('APPROVALS.POLICY.VIEW')],
+    loadComponent: () =>
+      import('./approvals/approval-policy-list.component').then((m) => m.ApprovalPolicyListComponent),
+  },
+  {
+    path: 'approvals/policies/uid/:uid',
+    canActivate: [requirePermission('APPROVALS.POLICY.VIEW')],
+    loadComponent: () =>
+      import('./approvals/approval-policy-detail.component').then((m) => m.ApprovalPolicyDetailComponent),
+  },
+  {
+    path: 'approvals/requests',
+    canActivate: [requirePermission('APPROVALS.REQUEST.VIEW')],
+    loadComponent: () =>
+      import('./approvals/approval-request-list.component').then((m) => m.ApprovalRequestListComponent),
+  },
+  {
+    path: 'approvals/requests/uid/:uid',
+    canActivate: [requirePermission('APPROVALS.REQUEST.VIEW')],
+    loadComponent: () =>
+      import('./approvals/approval-request-detail.component').then((m) => m.ApprovalRequestDetailComponent),
+  },
+  // ── Documents & PDF ───────────────────────────────────────────────────────
+  {
+    path: 'documents',
+    canActivate: [requirePermission('DOCUMENT.VIEW')],
+    loadComponent: () =>
+      import('./documents/document-list.component').then((m) => m.DocumentListComponent),
+  },
+  {
+    path: 'documents/uid/:uid',
+    canActivate: [requirePermission('DOCUMENT.VIEW')],
+    loadComponent: () =>
+      import('./documents/document-detail.component').then((m) => m.DocumentDetailComponent),
+  },
+  {
+    path: 'document-templates',
+    canActivate: [requirePermission('DOCUMENT.TEMPLATE.MANAGE')],
+    loadComponent: () =>
+      import('./documents/document-template-list.component').then((m) => m.DocumentTemplateListComponent),
+  },
+  {
+    path: 'document-branding',
+    canActivate: [requirePermission('DOCUMENT.BRANDING.MANAGE')],
+    loadComponent: () =>
+      import('./documents/document-branding.component').then((m) => m.DocumentBrandingComponent),
+  },
+  // ── Notifications ─────────────────────────────────────────────────────────
+  {
+    path: 'notifications',
+    canActivate: [requirePermission('NOTIFICATION.VIEW')],
+    loadComponent: () =>
+      import('./notifications/notification-inbox.component').then((m) => m.NotificationInboxComponent),
+  },
+  {
+    path: 'notification-preferences',
+    canActivate: [requirePermission('NOTIFICATION.PREFERENCE.MANAGE')],
+    loadComponent: () =>
+      import('./notifications/notification-preferences.component').then((m) => m.NotificationPreferencesComponent),
+  },
+  {
+    path: 'notification-types',
+    canActivate: [requirePermission('NOTIFICATION.ADMIN')],
+    loadComponent: () =>
+      import('./notifications/notification-types.component').then((m) => m.NotificationTypesComponent),
+  },
+  {
+    path: 'notification-deliveries',
+    canActivate: [requirePermission('NOTIFICATION.ADMIN')],
+    loadComponent: () =>
+      import('./notifications/notification-delivery-log.component').then((m) => m.NotificationDeliveryLogComponent),
+  },
+  // ── Costing (Cost Centres / Dimensions) ──────────────────────────────────
+  {
+    path: 'cost-centre/dimensions',
+    canActivate: [requirePermission('COSTING.VIEW')],
+    loadComponent: () =>
+      import('./cost-centre/dimension-list.component').then((m) => m.DimensionListComponent),
+  },
+  {
+    path: 'cost-centre/values',
+    canActivate: [requirePermission('COSTING.VIEW')],
+    loadComponent: () =>
+      import('./cost-centre/dimension-value-list.component').then((m) => m.DimensionValueListComponent),
+  },
+  {
+    path: 'cost-centre/values/uid/:uid',
+    canActivate: [requirePermission('COSTING.VIEW')],
+    loadComponent: () =>
+      import('./cost-centre/dimension-value-detail.component').then((m) => m.DimensionValueDetailComponent),
+  },
+  {
+    path: 'cost-centre/report',
+    canActivate: [requirePermission('COSTING.VIEW')],
+    loadComponent: () =>
+      import('./cost-centre/costing-report.component').then((m) => m.CostingReportComponent),
+  },
+  // ── Fixed Assets ─────────────────────────────────────────────────────────────
+  {
+    path: 'asset-categories',
+    canActivate: [requirePermission('FA.CATEGORY.VIEW')],
+    loadComponent: () =>
+      import('./fixed-assets/asset-category-list.component').then((m) => m.AssetCategoryListComponent),
+  },
+  {
+    path: 'asset-categories/uid/:uid',
+    canActivate: [requirePermission('FA.CATEGORY.VIEW')],
+    loadComponent: () =>
+      import('./fixed-assets/asset-category-detail.component').then((m) => m.AssetCategoryDetailComponent),
+  },
+  {
+    path: 'fixed-assets',
+    canActivate: [requirePermission('FA.VIEW')],
+    loadComponent: () =>
+      import('./fixed-assets/fixed-asset-list.component').then((m) => m.FixedAssetListComponent),
+  },
+  {
+    path: 'fixed-assets/create',
+    canActivate: [requirePermission('FA.REGISTER.MANAGE')],
+    loadComponent: () =>
+      import('./fixed-assets/fixed-asset-create.component').then((m) => m.FixedAssetCreateComponent),
+  },
+  {
+    path: 'fixed-assets/uid/:uid',
+    canActivate: [requirePermission('FA.VIEW')],
+    loadComponent: () =>
+      import('./fixed-assets/fixed-asset-detail.component').then((m) => m.FixedAssetDetailComponent),
+  },
+  {
+    path: 'fixed-assets/reconciliation',
+    canActivate: [requirePermission('FA.VIEW')],
+    loadComponent: () =>
+      import('./fixed-assets/fa-reconciliation.component').then((m) => m.FaReconciliationComponent),
+  },
+  {
+    path: 'depreciation-runs',
+    canActivate: [requirePermission('FA.VIEW')],
+    loadComponent: () =>
+      import('./fixed-assets/depreciation-run-list.component').then((m) => m.DepreciationRunListComponent),
+  },
+  {
+    path: 'depreciation-runs/post',
+    canActivate: [requirePermission('FA.DEPRECIATE')],
+    loadComponent: () =>
+      import('./fixed-assets/depreciation-post.component').then((m) => m.DepreciationPostComponent),
+  },
+  {
+    path: 'depreciation-runs/uid/:uid',
+    canActivate: [requirePermission('FA.VIEW')],
+    loadComponent: () =>
+      import('./fixed-assets/depreciation-run-detail.component').then((m) => m.DepreciationRunDetailComponent),
+  },
+  // ── CRM ───────────────────────────────────────────────────────────────────
+  {
+    path: 'crm/leads',
+    canActivate: [requirePermission('CRM.LEAD.VIEW')],
+    loadComponent: () =>
+      import('./crm/lead-list.component').then((m) => m.LeadListComponent),
+  },
+  {
+    path: 'crm/leads/uid/:uid',
+    canActivate: [requirePermission('CRM.LEAD.VIEW')],
+    loadComponent: () =>
+      import('./crm/lead-detail.component').then((m) => m.LeadDetailComponent),
+  },
+  {
+    path: 'crm/opportunities',
+    canActivate: [requirePermission('CRM.OPPORTUNITY.VIEW')],
+    loadComponent: () =>
+      import('./crm/opportunity-list.component').then((m) => m.OpportunityListComponent),
+  },
+  {
+    path: 'crm/opportunities/create',
+    canActivate: [requirePermission('CRM.OPPORTUNITY.MANAGE')],
+    loadComponent: () =>
+      import('./crm/opportunity-create.component').then((m) => m.OpportunityCreateComponent),
+  },
+  {
+    path: 'crm/opportunities/uid/:uid',
+    canActivate: [requirePermission('CRM.OPPORTUNITY.VIEW')],
+    loadComponent: () =>
+      import('./crm/opportunity-detail.component').then((m) => m.OpportunityDetailComponent),
+  },
+  {
+    path: 'crm/pipeline',
+    canActivate: [requirePermission('CRM.PIPELINE.VIEW')],
+    loadComponent: () =>
+      import('./crm/pipeline-dashboard.component').then((m) => m.PipelineDashboardComponent),
+  },
+  {
+    path: 'crm/settings/pipeline-stages',
+    canActivate: [requirePermission('CRM.STAGE.MANAGE')],
+    loadComponent: () =>
+      import('./crm/pipeline-stage-list.component').then((m) => m.PipelineStageListComponent),
+  },
+  // ── HR & Payroll ──────────────────────────────────────────────────────────────
+  {
+    path: 'hr/employees',
+    canActivate: [requirePermission('HR.EMPLOYEE.VIEW')],
+    loadComponent: () =>
+      import('./hr-payroll/employee-list.component').then((m) => m.EmployeeListComponent),
+  },
+  {
+    path: 'hr/employees/uid/:uid',
+    canActivate: [requirePermission('HR.EMPLOYEE.VIEW')],
+    loadComponent: () =>
+      import('./hr-payroll/employee-detail.component').then((m) => m.EmployeeDetailComponent),
+  },
+  {
+    path: 'hr/pay-components',
+    canActivate: [requirePermission('HR.PAYCOMPONENT.MANAGE')],
+    loadComponent: () =>
+      import('./hr-payroll/pay-component-list.component').then((m) => m.PayComponentListComponent),
+  },
+  {
+    path: 'hr/pay-components/uid/:uid',
+    canActivate: [requirePermission('HR.PAYCOMPONENT.MANAGE')],
+    loadComponent: () =>
+      import('./hr-payroll/pay-component-detail.component').then((m) => m.PayComponentDetailComponent),
+  },
+  {
+    path: 'hr/payroll-runs',
+    canActivate: [requirePermission('HR.PAYROLL.VIEW')],
+    loadComponent: () =>
+      import('./hr-payroll/payroll-run-list.component').then((m) => m.PayrollRunListComponent),
+  },
+  {
+    path: 'hr/payroll-runs/uid/:uid',
+    canActivate: [requirePermission('HR.PAYROLL.VIEW')],
+    loadComponent: () =>
+      import('./hr-payroll/payroll-run-detail.component').then((m) => m.PayrollRunDetailComponent),
+  },
+  {
+    path: 'hr/leave-requests',
+    canActivate: [requirePermission('HR.LEAVE.VIEW')],
+    loadComponent: () =>
+      import('./hr-payroll/leave-request-list.component').then((m) => m.LeaveRequestListComponent),
+  },
+  {
+    path: 'hr/leave-requests/uid/:uid',
+    canActivate: [requirePermission('HR.LEAVE.VIEW')],
+    loadComponent: () =>
+      import('./hr-payroll/leave-request-detail.component').then((m) => m.LeaveRequestDetailComponent),
+  },
+  {
+    path: 'hr/loans',
+    canActivate: [requirePermission('HR.LOAN.MANAGE')],
+    loadComponent: () =>
+      import('./hr-payroll/loan-list.component').then((m) => m.LoanListComponent),
+  },
+  {
+    path: 'hr/loans/uid/:uid',
+    canActivate: [requirePermission('HR.LOAN.MANAGE')],
+    loadComponent: () =>
+      import('./hr-payroll/loan-detail.component').then((m) => m.LoanDetailComponent),
+  },
+  // ── Projects ──────────────────────────────────────────────────────────────
+  {
+    path: 'projects',
+    canActivate: [requirePermission('PROJECTS.PROJECT.VIEW')],
+    loadComponent: () =>
+      import('./projects/project-list.component').then((m) => m.ProjectListComponent),
+  },
+  {
+    path: 'projects/uid/:uid',
+    canActivate: [requirePermission('PROJECTS.PROJECT.VIEW')],
+    loadComponent: () =>
+      import('./projects/project-detail.component').then((m) => m.ProjectDetailComponent),
+  },
+  {
+    path: 'projects/wip-report',
+    canActivate: [requirePermission('PROJECTS.COSTING.VIEW')],
+    loadComponent: () =>
+      import('./projects/project-wip-report.component').then((m) => m.ProjectWipReportComponent),
+  },
+  // ── Budgeting & Management Accounting ────────────────────────────────────
+  {
+    path: 'budgets',
+    canActivate: [requirePermission('BUDGETING.BUDGET.VIEW')],
+    loadComponent: () =>
+      import('./budgeting/budget-list.component').then((m) => m.BudgetListComponent),
+  },
+  {
+    path: 'budgets/uid/:uid',
+    canActivate: [requirePermission('BUDGETING.BUDGET.VIEW')],
+    loadComponent: () =>
+      import('./budgeting/budget-detail.component').then((m) => m.BudgetDetailComponent),
+  },
+  {
+    path: 'budget-versions/uid/:uid',
+    canActivate: [requirePermission('BUDGETING.BUDGET.VIEW')],
+    loadComponent: () =>
+      import('./budgeting/budget-version-detail.component').then((m) => m.BudgetVersionDetailComponent),
+  },
+  {
+    path: 'budgeting/variance',
+    canActivate: [requirePermission('BUDGETING.REPORT.VIEW')],
+    loadComponent: () =>
+      import('./budgeting/budget-variance-report.component').then((m) => m.BudgetVarianceReportComponent),
+  },
+  {
+    path: 'budgeting/departmental-actuals',
+    canActivate: [requirePermission('BUDGETING.REPORT.VIEW')],
+    loadComponent: () =>
+      import('./budgeting/departmental-actuals-report.component').then((m) => m.DepartmentalActualsReportComponent),
+  },
+  // ── Manufacturing ─────────────────────────────────────────────────────────
+  {
+    path: 'work-orders',
+    canActivate: [requirePermission('MANUFACTURING.VIEW')],
+    loadComponent: () =>
+      import('./manufacturing/work-order-list.component').then((m) => m.WorkOrderListComponent),
+  },
+  {
+    path: 'work-orders/uid/:uid',
+    canActivate: [requirePermission('MANUFACTURING.VIEW')],
+    loadComponent: () =>
+      import('./manufacturing/work-order-detail.component').then(
+        (m) => m.WorkOrderDetailComponent,
+      ),
+  },
+  {
+    path: 'work-orders/uid/:uid/cost-report',
+    canActivate: [requirePermission('MANUFACTURING.VIEW')],
+    loadComponent: () =>
+      import('./manufacturing/work-order-cost-report.component').then(
+        (m) => m.WorkOrderCostReportComponent,
+      ),
+  },
+  {
+    path: 'manufacturing/wip-reconciliation',
+    canActivate: [requirePermission('MANUFACTURING.VIEW')],
+    loadComponent: () =>
+      import('./manufacturing/wip-reconciliation.component').then(
+        (m) => m.WipReconciliationComponent,
+      ),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];

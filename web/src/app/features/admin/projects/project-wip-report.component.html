@@ -1,0 +1,133 @@
+<section class="admin-page">
+  <header class="page-head">
+    <a class="back-link text-muted small" routerLink="/admin/projects">
+      <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Projects
+    </a>
+    <h1 class="h4 mb-1 mt-1">Cross-Project WIP Report</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      Work-in-progress: cost incurred minus billed (unbooked, informational).
+    </p>
+  </header>
+
+  @if (!canCosting()) {
+    <p class="state text-muted d-flex align-items-center gap-2">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to view costing reports.
+    </p>
+  } @else {
+
+    <!-- Company selector -->
+    @switch (companyState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-3" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load companies.
+        </p>
+      }
+      @default {
+        <div class="d-flex flex-wrap gap-3 mb-3 align-items-end">
+          @if (companies().length > 1) {
+            <div style="max-width:280px">
+              <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+              <select id="companyPicker" name="companyPicker" class="form-select form-select-sm"
+                      [ngModel]="selectedCompanyId()"
+                      (ngModelChange)="onCompanyChange($event)">
+                @for (c of companies(); track c.uid) {
+                  <option [value]="c.id">{{ c.name }}</option>
+                }
+              </select>
+            </div>
+          }
+          <button type="button" class="btn btn-outline-info btn-sm"
+                  [disabled]="!selectedCompanyId() || reportState() === 'loading'"
+                  (click)="loadReport()">
+            @if (reportState() === 'loading') {
+              <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+              Loading…
+            } @else {
+              <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Run Report
+            }
+          </button>
+        </div>
+      }
+    }
+
+    <!-- Report states -->
+    @switch (reportState()) {
+      @case ('error') {
+        <p class="state text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load WIP report. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="state text-muted d-flex align-items-center gap-2">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view this report.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <p class="state text-muted">No active projects with WIP for the selected company.</p>
+        }
+
+        @if (rows().length > 0) {
+          <div class="table-responsive">
+            <table class="table table-hover align-middle bg-white grid">
+              <caption class="visually-hidden">Cross-project WIP report</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Project #</th>
+                  <th scope="col">Name</th>
+                  <th scope="col" class="text-end">Cost Incurred</th>
+                  <th scope="col" class="text-end">Billed</th>
+                  <th scope="col" class="text-end">WIP</th>
+                  <th scope="col"><span class="visually-hidden">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of rows(); track row.projectUid) {
+                  <tr>
+                    <td class="font-monospace small">{{ row.projectNumber }}</td>
+                    <td>{{ row.name }}</td>
+                    <td class="text-end font-monospace small">{{ row.currency }} {{ +row.costIncurred | number:'1.2-2' }}</td>
+                    <td class="text-end font-monospace small">{{ row.currency }} {{ +row.billed | number:'1.2-2' }}</td>
+                    <td class="text-end font-monospace small"
+                        [class.text-danger]="+row.wip > 0">
+                      {{ row.currency }} {{ +row.wip | number:'1.2-2' }}
+                    </td>
+                    <td>
+                      <a class="btn btn-sm btn-outline-primary"
+                         [routerLink]="['/admin/projects/uid', row.projectUid]"
+                         [attr.aria-label]="'Open project ' + row.projectNumber">
+                        <i class="bi bi-eye" aria-hidden="true"></i>
+                        <span class="visually-hidden">Open</span>
+                      </a>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+              <tfoot class="table-secondary fw-bold">
+                <tr>
+                  <td colspan="2">Totals</td>
+                  <td class="text-end font-monospace">{{ totalCostIncurred() | number:'1.2-2' }}</td>
+                  <td class="text-end font-monospace">{{ totalBilled() | number:'1.2-2' }}</td>
+                  <td class="text-end font-monospace"
+                      [class.text-danger]="totalWip() > 0">
+                    {{ totalWip() | number:'1.2-2' }}
+                  </td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        }
+      }
+    }
+  }
+</section>

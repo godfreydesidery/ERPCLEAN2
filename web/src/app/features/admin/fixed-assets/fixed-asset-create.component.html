@@ -1,0 +1,186 @@
+<section class="admin-page">
+  <header class="page-head">
+    <a class="btn btn-sm btn-outline-secondary me-2" routerLink="/admin/fixed-assets"
+       aria-label="Back to Fixed Assets">
+      <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Fixed Assets
+    </a>
+    <h1 class="h4 mb-1">Register New Asset</h1>
+  </header>
+
+  @if (!canCreate()) {
+    <p class="state text-muted">
+      <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>You don't have permission to register assets.
+    </p>
+  } @else {
+    <!-- Company selector -->
+    @switch (companyState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-3" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load companies.
+        </p>
+      }
+      @default {
+        @if (companies().length > 1) {
+          <div class="mb-3" style="max-width:320px">
+            <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+            <select id="companyPicker" name="companyPicker" class="form-select"
+                    [ngModel]="selectedCompanyId()"
+                    (ngModelChange)="onCompanyChange($event)">
+              @for (c of companies(); track c.uid) {
+                <option [value]="c.id">{{ c.name }}</option>
+              }
+            </select>
+          </div>
+        }
+      }
+    }
+
+    <form class="create-form card card-body" (ngSubmit)="create()" aria-label="Register fixed asset">
+      <div class="row g-2 mb-2">
+        <!-- Category -->
+        <div class="col-sm-4">
+          <label class="form-label small text-muted mb-1" for="fCategoryId">Category <span class="text-danger" aria-hidden="true">*</span></label>
+          @if (categoriesState() === 'loading') {
+            <input class="form-control" disabled value="Loading categories…" />
+          } @else {
+            <select id="fCategoryId" name="fCategoryId" class="form-select"
+                    [ngModel]="fCategoryId()" (ngModelChange)="fCategoryId.set($event)"
+                    [disabled]="saving()">
+              <option value="">— select category —</option>
+              @for (cat of categories(); track cat.uid) {
+                <option [value]="cat.id">{{ cat.code }} — {{ cat.name }}</option>
+              }
+            </select>
+          }
+        </div>
+
+        <!-- Branch ID -->
+        <div class="col-sm-3">
+          <label class="form-label small text-muted mb-1" for="fBranchId">Branch ID <span class="text-danger" aria-hidden="true">*</span></label>
+          <input id="fBranchId" name="fBranchId" type="text" class="form-control"
+                 [ngModel]="fBranchId()" (ngModelChange)="fBranchId.set($event)"
+                 [disabled]="saving()" autocomplete="off" />
+        </div>
+
+        <!-- Name -->
+        <div class="col-sm-5">
+          <label class="form-label small text-muted mb-1" for="fName">Asset Name <span class="text-danger" aria-hidden="true">*</span></label>
+          <input id="fName" name="fName" type="text" class="form-control"
+                 [ngModel]="fName()" (ngModelChange)="fName.set($event)"
+                 [disabled]="saving()" autocomplete="off" />
+        </div>
+      </div>
+
+      <div class="row g-2 mb-2">
+        <!-- Acquisition cost -->
+        <div class="col-sm-3">
+          <label class="form-label small text-muted mb-1" for="fAcquisitionCost">Acquisition Cost <span class="text-danger" aria-hidden="true">*</span></label>
+          <input id="fAcquisitionCost" name="fAcquisitionCost" type="number" step="0.01" min="0" class="form-control"
+                 [ngModel]="fAcquisitionCost()" (ngModelChange)="fAcquisitionCost.set($event)"
+                 [disabled]="saving()" />
+        </div>
+
+        <!-- Salvage value -->
+        <div class="col-sm-3">
+          <label class="form-label small text-muted mb-1" for="fSalvageValue">Salvage Value</label>
+          <input id="fSalvageValue" name="fSalvageValue" type="number" step="0.01" min="0" class="form-control"
+                 [ngModel]="fSalvageValue()" (ngModelChange)="fSalvageValue.set($event)"
+                 [disabled]="saving()" />
+        </div>
+
+        <!-- Method -->
+        <div class="col-sm-3">
+          <label class="form-label small text-muted mb-1" for="fMethod">Depreciation Method <span class="text-danger" aria-hidden="true">*</span></label>
+          <select id="fMethod" name="fMethod" class="form-select"
+                  [ngModel]="fMethod()" (ngModelChange)="fMethod.set($event)"
+                  [disabled]="saving()">
+            @for (m of methodOptions; track m) {
+              <option [value]="m">{{ m === 'STRAIGHT_LINE' ? 'Straight Line' : 'Reducing Balance' }}</option>
+            }
+          </select>
+        </div>
+
+        <!-- Life periods -->
+        <div class="col-sm-2">
+          <label class="form-label small text-muted mb-1" for="fLifePeriods">Life (periods) <span class="text-danger" aria-hidden="true">*</span></label>
+          <input id="fLifePeriods" name="fLifePeriods" type="number" min="1" class="form-control"
+                 [ngModel]="fLifePeriods()" (ngModelChange)="fLifePeriods.set($event)"
+                 [disabled]="saving()" />
+        </div>
+
+        @if (isReducingBalance()) {
+          <div class="col-sm-2">
+            <label class="form-label small text-muted mb-1" for="fReducingRate">Rate % <span class="text-danger" aria-hidden="true">*</span></label>
+            <input id="fReducingRate" name="fReducingRate" type="number" step="0.01" class="form-control"
+                   [ngModel]="fReducingRate()" (ngModelChange)="fReducingRate.set($event)"
+                   [disabled]="saving()" />
+          </div>
+        }
+      </div>
+
+      <div class="row g-2 mb-2">
+        <!-- Acquisition date -->
+        <div class="col-sm-3">
+          <label class="form-label small text-muted mb-1" for="fAcquisitionDate">Acquisition Date <span class="text-danger" aria-hidden="true">*</span></label>
+          <input id="fAcquisitionDate" name="fAcquisitionDate" type="date" class="form-control"
+                 [ngModel]="fAcquisitionDate()" (ngModelChange)="fAcquisitionDate.set($event)"
+                 [disabled]="saving()" />
+        </div>
+
+        <!-- Depreciation start date -->
+        <div class="col-sm-3">
+          <label class="form-label small text-muted mb-1" for="fDepStartDate">Dep. Start Date <span class="text-danger" aria-hidden="true">*</span></label>
+          <input id="fDepStartDate" name="fDepStartDate" type="date" class="form-control"
+                 [ngModel]="fDepStartDate()" (ngModelChange)="fDepStartDate.set($event)"
+                 [disabled]="saving()" />
+        </div>
+
+        <!-- Location -->
+        <div class="col-sm-3">
+          <label class="form-label small text-muted mb-1" for="fLocation">Location</label>
+          <input id="fLocation" name="fLocation" type="text" class="form-control"
+                 [ngModel]="fLocation()" (ngModelChange)="fLocation.set($event)"
+                 [disabled]="saving()" autocomplete="off" />
+        </div>
+
+        <!-- Asset tag -->
+        <div class="col-sm-3">
+          <label class="form-label small text-muted mb-1" for="fAssetTag">Asset Tag</label>
+          <input id="fAssetTag" name="fAssetTag" type="text" class="form-control"
+                 [ngModel]="fAssetTag()" (ngModelChange)="fAssetTag.set($event)"
+                 [disabled]="saving()" autocomplete="off" />
+        </div>
+      </div>
+
+      <div class="row g-2 mb-3">
+        <!-- Cost centre ID -->
+        <div class="col-sm-3">
+          <label class="form-label small text-muted mb-1" for="fCostCentreId">Cost Centre ID</label>
+          <input id="fCostCentreId" name="fCostCentreId" type="text" class="form-control"
+                 [ngModel]="fCostCentreId()" (ngModelChange)="fCostCentreId.set($event)"
+                 [disabled]="saving()" autocomplete="off" />
+        </div>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary" [disabled]="saving()">
+          @if (saving()) {
+            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Registering…
+          } @else {
+            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Register Asset
+          }
+        </button>
+        <a class="btn btn-outline-secondary" routerLink="/admin/fixed-assets">Cancel</a>
+      </div>
+
+      @if (formError(); as msg) {
+        <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+      }
+    </form>
+  }
+</section>
