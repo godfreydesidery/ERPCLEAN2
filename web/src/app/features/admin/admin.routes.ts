@@ -906,6 +906,7 @@ export const ADMIN_ROUTES: Routes = [
       import('./stock/transfer/stock-transfer-detail.component').then(
         (m) => m.StockTransferDetailComponent,
       ),
+  },
   // ── Stock Counts (Physical / Cycle Count) ────────────────────────────────
   {
     path: 'stock-counts',

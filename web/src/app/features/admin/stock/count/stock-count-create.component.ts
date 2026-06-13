@@ -9,7 +9,7 @@ import { Branch } from '../../models/branch.model';
 import { CompanyService } from '../../company/company.service';
 import { BranchService } from '../../branch/branch.service';
 import { OrganisationService } from '../../organisation/organisation.service';
-import { StockLocationService } from '../stock-location.service';
+import { StockLocationService } from '../locations/stock-location.service';
 import { UidPickerComponent, UidOption } from '../../../../shared/uid-picker/uid-picker.component';
 import { CreateStockCountRequest } from './stock-count.model';
 import { StockCountService } from './stock-count.service';
