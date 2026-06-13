@@ -3,13 +3,19 @@ package com.erp.modules.fx.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.erp.modules.ap.domain.entity.SupplierBill;
+import com.erp.modules.ap.domain.enums.SupplierBillSource;
+import com.erp.modules.ap.domain.enums.SupplierBillStatus;
+import com.erp.modules.ap.repository.SupplierBillRepository;
 import com.erp.modules.ar.domain.entity.ArInvoice;
 import com.erp.modules.ar.domain.enums.ArInvoiceSource;
 import com.erp.modules.ar.repository.ArInvoiceRepository;
 import com.erp.modules.parties.domain.entity.Customer;
+import com.erp.modules.parties.domain.entity.Supplier;
 import com.erp.modules.parties.domain.enums.CustomerKind;
 import com.erp.modules.parties.domain.enums.PartyType;
 import com.erp.modules.parties.repository.CustomerRepository;
+import com.erp.modules.parties.repository.SupplierRepository;
 import com.erp.modules.fx.domain.dto.FxRevaluationPreviewDto;
 import com.erp.modules.fx.domain.dto.FxRevaluationRunDto;
 import com.erp.modules.fx.domain.dto.PostFxRevaluationRequest;
@@ -35,6 +41,7 @@ import com.erp.platform.security.RequestContext;
 import com.erp.support.IamTestData;
 import com.erp.support.PostgresIntegrationTest;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -64,6 +71,7 @@ class FxRevaluationRunServiceIT extends PostgresIntegrationTest {
     @Autowired private FxRevaluationRunService runService;
     @Autowired private FxRateService           fxRateService;
     @Autowired private ArInvoiceRepository     arInvoiceRepo;
+    @Autowired private SupplierBillRepository  supplierBillRepo;
     @Autowired private FiscalPeriodRepository  fiscalPeriodRepo;
     @Autowired private JournalEntryRepository  journalEntryRepo;
     @Autowired private JournalLineRepository   journalLineRepo;
@@ -75,6 +83,7 @@ class FxRevaluationRunServiceIT extends PostgresIntegrationTest {
     @Autowired private BranchRepository        branches;
     @Autowired private AppUserRepository       users;
     @Autowired private CustomerRepository      customerRepo;
+    @Autowired private SupplierRepository      supplierRepo;
     @Autowired private PasswordEncoder         passwordEncoder;
     @Autowired private IamTestData             testData;
 
@@ -93,6 +102,7 @@ class FxRevaluationRunServiceIT extends PostgresIntegrationTest {
     private FiscalPeriod period;
     private Long         rootId;
     private Long         customerId;
+    private Long         supplierId;
 
     @BeforeEach
     void setUp() {
@@ -112,6 +122,12 @@ class FxRevaluationRunServiceIT extends PostgresIntegrationTest {
                 PartyType.BUSINESS, "FxReval Test Customer",
                 CustomerKind.CREDIT_ACCOUNT, rootId);
         customerId = customerRepo.save(customer).getId();
+
+        // Create a placeholder supplier for AP bill FK
+        Supplier supplier = new Supplier(company.getId(), "SUP-FX-001",
+                PartyType.BUSINESS, "FxReval Test Supplier",
+                com.erp.modules.parties.domain.enums.SupplierKind.GOODS, rootId);
+        supplierId = supplierRepo.save(supplier).getId();
 
         RequestContext.set(new RequestContext.Principal(
                 rootId, "fxreval_root", true, company.getId(), branch.getId(), null));
@@ -309,6 +325,126 @@ class FxRevaluationRunServiceIT extends PostgresIntegrationTest {
         assertThat(reversalLines).hasSameSizeAs(origLines);
     }
 
+    // ── Test 6: AP-only run (gain) — uses isolated company to avoid rate conflicts ────
+
+    /**
+     * AP gain: carrying_base (2,500,000) > revalued_base (2,400,000) → adjustment = +100,000.
+     * Correct journal: DR AP control 100,000 / CR UNREALIZED_FX_GAIN 100,000 → balanced.
+     * Previously emitted: CR AP 100,000 + CR FX_GAIN 100,000 → unbalanced.
+     *
+     * Uses a fresh company so rate seeding does not conflict with setUp()'s RATE_SPOT=2600.
+     */
+    @Test
+    void apOnlyRun_gain_balancedJournal_runPosted() {
+        ApOnlyTestContext ctx = buildApOnlyContext("FXRG", new BigDecimal("2400.00000000"));
+        // AP gain: carry(2500) > spot(2400) → carryBase - revaluedBase = +100,000
+        BigDecimal expectedGain = ctx.carryBase.subtract(
+                ctx.billFace.multiply(ctx.rateSpot).setScale(0, RoundingMode.HALF_UP));
+
+        PostFxRevaluationRequest req = new PostFxRevaluationRequest(
+                ctx.company.getId(), ctx.period.getUid(), ctx.period.getEndDate(), ctx.period.getEndDate());
+        FxRevaluationRunDto result = runService.post(req);
+
+        assertThat(result.glEntryUid())
+                .as("AP-only gain run must produce a GL entry (run must be POSTED, not PREVIEWED)")
+                .isNotNull();
+        assertThat(result.status())
+                .isIn(FxRevaluationRunStatus.POSTED, FxRevaluationRunStatus.REVERSED);
+        assertBalanced(result.glEntryUid());
+        assertThat(result.totalGainAmount()).isEqualByComparingTo(expectedGain);
+        assertThat(result.totalLossAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    // ── Test 7: AP-only run (loss) — uses isolated company to avoid rate conflicts ──
+
+    /**
+     * AP loss: carrying_base (2,500,000) < revalued_base (2,700,000) → adjustment = -200,000.
+     * Correct journal: DR UNREALIZED_FX_LOSS 200,000 / CR AP control 200,000 → balanced.
+     * Previously emitted: DR AP 200,000 + DR FX_LOSS 200,000 → unbalanced.
+     *
+     * Uses a fresh company so rate seeding does not conflict with setUp()'s RATE_SPOT=2600.
+     */
+    @Test
+    void apOnlyRun_loss_balancedJournal_runPosted() {
+        ApOnlyTestContext ctx = buildApOnlyContext("FXRL", new BigDecimal("2700.00000000"));
+        // AP loss: spot(2700) > carry(2500) → revaluedBase - carryBase = +200,000
+        BigDecimal expectedLoss = ctx.billFace.multiply(ctx.rateSpot).setScale(0, RoundingMode.HALF_UP)
+                .subtract(ctx.carryBase);
+
+        PostFxRevaluationRequest req = new PostFxRevaluationRequest(
+                ctx.company.getId(), ctx.period.getUid(), ctx.period.getEndDate(), ctx.period.getEndDate());
+        FxRevaluationRunDto result = runService.post(req);
+
+        assertThat(result.glEntryUid()).isNotNull();
+        assertThat(result.status()).isIn(FxRevaluationRunStatus.POSTED, FxRevaluationRunStatus.REVERSED);
+        assertBalanced(result.glEntryUid());
+        assertThat(result.totalLossAmount()).isEqualByComparingTo(expectedLoss);
+        assertThat(result.totalGainAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    // ── Test 8: Mixed AR gain + AP gain — main company, spot=2600 ────────────────
+
+    /**
+     * Mixed run using the main company (setUp already seeded RATE_SPOT=2600 at period end).
+     * AR inv: carry=2500, spot=2600 → AR gain = 1000 x 100 = 100,000.
+     * AP bill: carry=2800, spot=2600 → AP gain = 1000 x 200 = 200,000.
+     * Total gain = 300,000. Net non-zero, so a GL journal MUST be produced.
+     * Verifies that per-line complement approach stays balanced for mixed AR+AP.
+     */
+    @Test
+    void mixedArGainApGain_balancedJournal_runPosted() {
+        // setUp() already seeded: AR inv (carry=2500) + RATE_SPOT=2600.
+        // Seed AP bill with carry=2800 → AP gain = 1000*(2800-2600)=200,000
+        BigDecimal billFace  = new BigDecimal("1000.00");
+        BigDecimal rateApCarry = new BigDecimal("2800.00000000");
+        BigDecimal apCarryBase = billFace.multiply(rateApCarry).setScale(0, RoundingMode.HALF_UP);
+        seedApBill(billFace, rateApCarry, apCarryBase);
+        // RATE_SPOT=2600 already at period.getEndDate() from setUp — no extra seeding needed
+
+        PostFxRevaluationRequest req = new PostFxRevaluationRequest(
+                company.getId(), period.getUid(), period.getEndDate(), period.getEndDate());
+        FxRevaluationRunDto result = runService.post(req);
+
+        assertThat(result.glEntryUid())
+                .as("Mixed AR+AP gain run must produce a GL entry")
+                .isNotNull();
+        assertThat(result.status()).isIn(FxRevaluationRunStatus.POSTED, FxRevaluationRunStatus.REVERSED);
+        assertBalanced(result.glEntryUid());
+        assertThat(result.totalLossAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(result.totalGainAmount()).isGreaterThan(BigDecimal.ZERO);
+    }
+
+    // ── Test 9: Reversal of AP run — uses isolated company to avoid rate conflicts ─
+
+    @Test
+    void apOnlyRun_reversal_netsOut_balancedReversal() {
+        // AP gain scenario: carry=2500, spot=2400
+        ApOnlyTestContext ctx = buildApOnlyContext("FXRR", new BigDecimal("2400.00000000"));
+
+        PostFxRevaluationRequest req = new PostFxRevaluationRequest(
+                ctx.company.getId(), ctx.period.getUid(), ctx.period.getEndDate(), ctx.period.getEndDate());
+        FxRevaluationRunDto posted = runService.post(req);
+        assertThat(posted.glEntryUid()).isNotNull();
+
+        if (posted.status() == FxRevaluationRunStatus.REVERSED) {
+            assertThat(posted.reversalGlEntryUid()).isNotNull();
+            assertBalanced(posted.reversalGlEntryUid());
+            return;
+        }
+
+        var allPeriods = fiscalPeriodRepo.findByCompanyIdOrderByStartDateAsc(ctx.company.getId());
+        var nextPeriodOpt = allPeriods.stream()
+                .filter(p -> p.getStartDate().isAfter(ctx.period.getEndDate()))
+                .findFirst();
+        if (nextPeriodOpt.isEmpty()) return;
+
+        FxRevaluationRunDto reversed = runService.reverse(
+                posted.uid(), ctx.period.getEndDate().plusDays(1));
+        assertThat(reversed.status()).isEqualTo(FxRevaluationRunStatus.REVERSED);
+        assertThat(reversed.reversalGlEntryUid()).isNotNull();
+        assertBalanced(reversed.reversalGlEntryUid());
+    }
+
     // ── Test 5: day-1 single-currency — base-currency invoices produce zero lines ──
 
     @Test
@@ -364,5 +500,132 @@ class FxRevaluationRunServiceIT extends PostgresIntegrationTest {
         assertThat(preview.lines()).isEmpty();
         assertThat(preview.totalGainAmount()).isEqualByComparingTo(BigDecimal.ZERO);
         assertThat(preview.totalLossAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /**
+     * Value object carrying everything an AP-only test needs from a freshly-built isolated company.
+     * Using a fresh company per test avoids uq_currency_rate conflicts with setUp()'s RATE_SPOT=2600.
+     */
+    private record ApOnlyTestContext(
+            Company company,
+            Branch branch,
+            FiscalPeriod period,
+            Long apSupplierId,
+            BigDecimal billFace,
+            BigDecimal rateCarry,
+            BigDecimal carryBase,
+            BigDecimal rateSpot) {}
+
+    /**
+     * Creates an isolated org/company/branch/GL/fiscal-year/rate set and seeds one open AP bill.
+     *
+     * @param codeSuffix short suffix added to company/branch code (e.g. "FXRG") — must be unique
+     * @param rateSpot   USD/TZS spot rate to seed at the period end date
+     */
+    private ApOnlyTestContext buildApOnlyContext(String codeSuffix, BigDecimal rateSpot) {
+        Organisation apOrg = organisations.save(new Organisation("AP IT Org " + codeSuffix));
+        Company apCo  = companies.save(new Company(apOrg, codeSuffix, "AP IT Co " + codeSuffix));
+        Branch  apBr  = branches.save(new Branch(apCo, codeSuffix + "1", "AP IT Br " + codeSuffix));
+
+        RequestContext.set(new RequestContext.Principal(
+                rootId, "fxreval_root", true, apCo.getId(), apBr.getId(), null));
+
+        chartOfAccountService.seedDefaults(apCo.getId());
+        fiscalCalendarService.seedCurrentYear(apCo.getId());
+        glConfigService.seedDefaults(apCo.getId());
+
+        FiscalPeriod apPeriod = fiscalPeriodRepo.findByCompanyIdOrderByStartDateAsc(apCo.getId())
+                .stream().findFirst()
+                .orElseThrow(() -> new IllegalStateException("No period seeded for " + codeSuffix));
+
+        LocalDate billDate = apPeriod.getStartDate().plusDays(1);
+        BigDecimal rateCarry = new BigDecimal("2500.00000000");
+
+        // Seed the original carry rate at bill date
+        fxRateService.addRate(new UpsertRateRequest(
+                apCo.getId(), USD, TZS, rateCarry, billDate, "SPOT", "carry-" + codeSuffix));
+
+        // Seed the period-end spot rate
+        fxRateService.addRate(new UpsertRateRequest(
+                apCo.getId(), USD, TZS, rateSpot, apPeriod.getEndDate(), "SPOT", "spot-" + codeSuffix));
+
+        // Create supplier for this isolated company
+        Supplier apSupplier = new Supplier(apCo.getId(), "SUP-" + codeSuffix,
+                PartyType.BUSINESS, "Supplier " + codeSuffix,
+                com.erp.modules.parties.domain.enums.SupplierKind.GOODS, rootId);
+        Long apSuppId = supplierRepo.save(apSupplier).getId();
+
+        BigDecimal billFace = new BigDecimal("1000.00");
+        BigDecimal carryBase = billFace.multiply(rateCarry).setScale(0, RoundingMode.HALF_UP);
+
+        // Seed the AP bill for this isolated company
+        SupplierBill bill = new SupplierBill(
+                apCo.getId(), apBr.getId(), apSuppId,
+                "INV-AP-" + codeSuffix + "-" + System.nanoTime(),
+                SupplierBillSource.BILL,
+                null,
+                billDate, billDate.plusDays(30),
+                billFace, BigDecimal.ZERO, billFace,
+                USD, rootId);
+        bill.setBillNumber("BILL-" + codeSuffix + "-" + System.nanoTime());
+        bill.setStatus(SupplierBillStatus.MATCHED);
+        bill.setOutstandingAmount(billFace);
+        bill.setFxRate(rateCarry);
+        bill.setBaseGrossAmount(carryBase);
+        bill.setBaseOutstandingAmount(carryBase);
+        bill.setRateAt(java.time.Instant.now());
+        supplierBillRepo.save(bill);
+
+        // Restore context to main company so other tests aren't affected
+        RequestContext.set(new RequestContext.Principal(
+                rootId, "fxreval_root", true, company.getId(), branch.getId(), null));
+
+        return new ApOnlyTestContext(apCo, apBr, apPeriod, apSuppId,
+                billFace, rateCarry, carryBase, rateSpot);
+    }
+
+    /**
+     * Persists an open foreign USD AP bill with the given carrying base already stamped.
+     * Status is set to MATCHED (qualifying for revaluation per findOpenForeignForRevaluation).
+     * bill_number is required by chk_supplier_bill_number_when_posted when status is MATCHED.
+     */
+    private void seedApBill(BigDecimal face, BigDecimal fxRate, BigDecimal carryBase) {
+        LocalDate billDate = period.getStartDate().plusDays(1);
+        String invNo = "INV-AP-" + System.nanoTime();
+        SupplierBill bill = new SupplierBill(
+                company.getId(), branch.getId(), supplierId,
+                invNo,
+                SupplierBillSource.BILL,
+                null, // purchaseOrderUid
+                billDate, billDate.plusDays(30),
+                face, BigDecimal.ZERO, face, // net=face, vat=0, gross=face
+                USD, rootId);
+        bill.setBillNumber("BILL-" + System.nanoTime()); // required by DB CHECK when MATCHED
+        bill.setStatus(SupplierBillStatus.MATCHED);
+        bill.setOutstandingAmount(face);
+        bill.setFxRate(fxRate);
+        bill.setBaseGrossAmount(carryBase);
+        bill.setBaseOutstandingAmount(carryBase);
+        bill.setRateAt(java.time.Instant.now());
+        supplierBillRepo.save(bill);
+    }
+
+    /** Asserts that the GL journal entry identified by {@code glEntryUid} is balanced. */
+    private void assertBalanced(String glEntryUid) {
+        var entry = journalEntryRepo.findByUid(glEntryUid);
+        assertThat(entry).as("GL entry " + glEntryUid + " must exist").isPresent();
+        var lines = journalLineRepo.findByEntryIdOrderByLineNo(entry.get().getId());
+        BigDecimal sumDr = lines.stream()
+                .map(l -> l.getDebitAmount() != null ? l.getDebitAmount() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal sumCr = lines.stream()
+                .map(l -> l.getCreditAmount() != null ? l.getCreditAmount() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(sumDr)
+                .as("GL journal " + glEntryUid + " must be balanced: Σdebit=" + sumDr + " Σcredit=" + sumCr)
+                .isEqualByComparingTo(sumCr);
+        assertThat(sumDr).isGreaterThan(BigDecimal.ZERO);
     }
 }

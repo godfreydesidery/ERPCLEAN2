@@ -671,7 +671,11 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                             inv.getCostCentreValueId(), // ADR-0025 D-6: dimension defaults
                             inv.getDepartmentValueId(),
                             inv.getProjectId(),        // ADR-0033 D-4c: project tag → revenue leg
-                            inv.getProjectTaskId()
+                            inv.getProjectTaskId(),
+                            // ADR-0036 D-4 FX triple — stamped at finalise (fix: was missing)
+                            inv.getFxRate(),
+                            inv.getBaseGrossTotalAmount(),
+                            inv.getRateAt()
                     );
                 });
     }

@@ -13,6 +13,7 @@ import com.erp.modules.fx.domain.dto.PostFxRevaluationRequest;
 import com.erp.modules.fx.domain.entity.FxRevaluationRun;
 import com.erp.modules.fx.domain.entity.FxRevaluationRunLine;
 import com.erp.modules.fx.domain.enums.FxRevaluationRunStatus;
+import com.erp.modules.fx.repository.CurrencyRepository;
 import com.erp.modules.fx.repository.FxRevaluationRunLineRepository;
 import com.erp.modules.fx.repository.FxRevaluationRunRepository;
 import com.erp.modules.gl.domain.dto.JournalEntryDraft;
@@ -95,6 +96,7 @@ public class FxRevaluationRunServiceImpl implements FxRevaluationRunService {
     private final FiscalPeriodRepository         fiscalPeriods;
     private final JournalEntryRepository         journalEntries;
     private final CompanyRepository              companies;
+    private final CurrencyRepository             currencies;
     private final FxRateService                  fxRateService;
     private final GLConfigResolver               configResolver;
     private final GLPostingSafeInvoker           glSafeInvoker;
@@ -111,6 +113,7 @@ public class FxRevaluationRunServiceImpl implements FxRevaluationRunService {
             FiscalPeriodRepository fiscalPeriods,
             JournalEntryRepository journalEntries,
             CompanyRepository companies,
+            CurrencyRepository currencies,
             FxRateService fxRateService,
             GLConfigResolver configResolver,
             GLPostingSafeInvoker glSafeInvoker,
@@ -125,6 +128,7 @@ public class FxRevaluationRunServiceImpl implements FxRevaluationRunService {
         this.fiscalPeriods   = fiscalPeriods;
         this.journalEntries  = journalEntries;
         this.companies       = companies;
+        this.currencies      = currencies;
         this.fxRateService   = fxRateService;
         this.configResolver  = configResolver;
         this.glSafeInvoker   = glSafeInvoker;
@@ -226,14 +230,25 @@ public class FxRevaluationRunServiceImpl implements FxRevaluationRunService {
         run.setTotalLossAmount(totalLoss);
         run.setNetAdjustmentAmount(netAdj);
 
-        // Post the GL journal (REQUIRES_NEW via GLPostingSafeInvoker)
-        // D-6: one balanced base-currency journal for ALL currencies combined.
-        // Net gain  (netAdj > 0): DR AR/AP control × gainAmt · CR UNREALIZED_FX_GAIN × gainAmt
-        // Net loss  (netAdj < 0): DR UNREALIZED_FX_LOSS × lossAmt · CR AR/AP control × lossAmt
-        // We post one line per revaluation line + one aggregate FX gain/loss balancing leg.
+        // Post the GL journal (REQUIRES_NEW via GLPostingSafeInvoker).
+        // Per-line FX complement approach: each (control, FX) pair is self-balancing by construction.
+        // The balance assertion inside postRevaluationJournal throws before posting if Σ!=0.
         JournalEntryDto glEntry = postRevaluationJournal(
                 req.companyId(), run.getId(), run.getUid(), req.postingDate(),
                 baseCurrency, revalLines, netAdj, totalGain, totalLoss);
+
+        if (glEntry == null && !revalLines.isEmpty() && netAdj.compareTo(BigDecimal.ZERO) != 0) {
+            // GL infrastructure failure (missing gl_config, closed period, etc.).
+            // Do NOT leave the run in PREVIEWED with a success DTO — delete the orphan header
+            // so a retry can re-insert cleanly (mirrors DepreciationRunServiceImpl D-4 pattern:
+            // post GL first, save run last — but since we saved the header first for the run-number,
+            // we must clean up on failure).
+            runLines.deleteAll(savedLines);
+            runs.delete(run);
+            throw new IllegalStateException(
+                    "FX revaluation GL post failed for period " + req.fiscalPeriodUid()
+                    + " — GL config missing or period closed. Run was NOT committed. Retry after fixing GL config.");
+        }
 
         if (glEntry != null) {
             run.setGlEntryUid(glEntry.uid());
@@ -391,6 +406,8 @@ public class FxRevaluationRunServiceImpl implements FxRevaluationRunService {
             });
         }
 
+        int baseScale = resolveBaseMinorUnits(baseCurrency);
+
         for (Map.Entry<String, BigDecimal[]> entry : arByCcy.entrySet()) {
             String ccy = entry.getKey();
             BigDecimal totalFace = entry.getValue()[0];
@@ -398,9 +415,9 @@ public class FxRevaluationRunServiceImpl implements FxRevaluationRunService {
 
             BigDecimal spotRate = fxRateService.rateOn(companyId, ccy, baseCurrency, rateDate);
             BigDecimal revaluedBase = totalFace.multiply(spotRate)
-                    .setScale(DEFAULT_BASE_MINOR_UNITS, RoundingMode.HALF_UP);
+                    .setScale(baseScale, RoundingMode.HALF_UP);
             BigDecimal adjustment = revaluedBase.subtract(carryingBase)
-                    .setScale(DEFAULT_BASE_MINOR_UNITS, RoundingMode.HALF_UP);
+                    .setScale(baseScale, RoundingMode.HALF_UP);
 
             result.add(new RevalLine("AR", ccy, arAccountId,
                     totalFace, carryingBase, spotRate, revaluedBase, adjustment));
@@ -432,20 +449,20 @@ public class FxRevaluationRunServiceImpl implements FxRevaluationRunService {
             BigDecimal carryingBase = entry.getValue()[1];
 
             BigDecimal spotRate = fxRateService.rateOn(companyId, ccy, baseCurrency, rateDate);
-            // AP: a payable revaluation.
-            // revalued_base > carrying_base => the liability increased => LOSS (we owe more in base)
-            // revalued_base < carrying_base => liability decreased => GAIN
-            // So AP adjustment sign is opposite to AR: gain = carrying - revalued
-            // But we use the same ADR-0036 D-6 formula (revalued - carrying), and the GL legs
-            // account for the AP direction by using the AP control account on the opposite side.
+            // AP: revalued_base > carrying_base => the liability increased => LOSS (we owe more in base)
+            //     revalued_base < carrying_base => liability decreased => GAIN
+            // Use the SAME sign convention as AR (revalued − carrying) so postRevaluationJournal
+            // can key on (sourceType, sign) without a second sign-flip.
+            // AR gain (adj>0): DR AR / CR FX_GAIN — receivable went up, good.
+            // AP gain (adj<0 in revalued−carrying): revalued < carrying => liability fell => GAIN.
+            //   But if we invert sign (carrying−revalued) adj>0 means gain for AP too.
+            // To keep a uniform "adj>0 = gain, adj<0 = loss" across both sourceTypes,
+            // use carrying−revalued for AP (the company's perspective: gain = owe less).
             BigDecimal revaluedBase = totalFace.multiply(spotRate)
-                    .setScale(DEFAULT_BASE_MINOR_UNITS, RoundingMode.HALF_UP);
-            // For AP: the adjustment from the company's perspective:
-            // If revalued > carrying: we owe MORE in base => loss (negative)
-            // If revalued < carrying: we owe LESS in base => gain (positive)
-            // Sign: carrying - revalued (opposite to AR)
+                    .setScale(baseScale, RoundingMode.HALF_UP);
+            // AP adjustment: +ve = AP gain (liability fell), -ve = AP loss (liability rose).
             BigDecimal adjustment = carryingBase.subtract(revaluedBase)
-                    .setScale(DEFAULT_BASE_MINOR_UNITS, RoundingMode.HALF_UP);
+                    .setScale(baseScale, RoundingMode.HALF_UP);
 
             result.add(new RevalLine("AP", ccy, apAccountId,
                     totalFace, carryingBase, spotRate, revaluedBase, adjustment));
@@ -458,13 +475,23 @@ public class FxRevaluationRunServiceImpl implements FxRevaluationRunService {
      * Builds and posts a single balanced base-currency journal for the entire revaluation run
      * via {@link GLPostingSafeInvoker#postInNewTx} (REQUIRES_NEW).
      *
-     * <p>For each revaluation line:
+     * <p>Per-line FX complement approach (fix for B — AP/mixed run imbalance, ADR-0036 findings):
+     * For EACH revaluation line we emit TWO legs — the control leg AND its FX income/expense
+     * complement — keyed by (sourceType, sign):
      * <ul>
-     *   <li>gain (adj > 0): DR control account · CR UNREALIZED_FX_GAIN</li>
-     *   <li>loss (adj < 0): DR UNREALIZED_FX_LOSS · CR control account</li>
+     *   <li>AR gain (adj&gt;0): DR AR control / CR UNREALIZED_FX_GAIN</li>
+     *   <li>AR loss (adj&lt;0): DR UNREALIZED_FX_LOSS / CR AR control</li>
+     *   <li>AP gain (adj&gt;0): DR AP control / CR UNREALIZED_FX_GAIN  (gain = payable fell)</li>
+     *   <li>AP loss (adj&lt;0): DR UNREALIZED_FX_LOSS / CR AP control  (loss = payable rose)</li>
      * </ul>
-     * The entry balances by construction (Σ debits == Σ credits in base).
-     * Returns null on GL infrastructure failure (missing config, closed period).
+     * Each pair is self-balancing by construction; any number of lines therefore produces a
+     * balanced journal. No aggregate totalGain/totalLoss balancing leg is needed or used.
+     *
+     * <p>Asserts Σdebit==Σcredit BEFORE calling postInNewTx so any residual imbalance fails loud
+     * instead of being silently swallowed to null.
+     *
+     * <p>Returns null only on GL infrastructure failure (missing config, closed period) —
+     * NOT on an unbalanced draft (that throws).
      */
     private JournalEntryDto postRevaluationJournal(Long companyId, Long runId, String runUid,
                                                      LocalDate postingDate, String baseCurrency,
@@ -476,67 +503,59 @@ public class FxRevaluationRunServiceImpl implements FxRevaluationRunService {
             return null;
         }
 
+        // Resolve FX income/expense accounts before building drafts
+        ChartOfAccount fxGainAcct = resolveAccountSilently(companyId, GlConfigKey.UNREALIZED_FX_GAIN);
+        ChartOfAccount fxLossAcct = resolveAccountSilently(companyId, GlConfigKey.UNREALIZED_FX_LOSS);
+
+        if (fxGainAcct == null || fxLossAcct == null) {
+            // GL not configured for FX gain/loss — infrastructure failure; do not post
+            return null;
+        }
+
         List<LineDraft> lines = new ArrayList<>();
 
         for (RevalLine rl : revalLines) {
             if (rl.adjustment.compareTo(BigDecimal.ZERO) == 0) continue;
+            if (rl.controlAccountId == null) continue;
 
             BigDecimal absAdj = rl.adjustment.abs();
+            boolean isGain    = rl.adjustment.compareTo(BigDecimal.ZERO) > 0;
 
-            if (rl.adjustment.compareTo(BigDecimal.ZERO) > 0) {
-                // Gain: DR control (AR or AP account) / CR UNREALIZED_FX_GAIN
-                // For AR: revaluing the receivable upward => DR AR control
-                // For AP: revaluing the payable downward (gain) => CR AP control (reduce liability)
-                if ("AR".equals(rl.sourceType) && rl.controlAccountId != null) {
-                    lines.add(new LineDraft(rl.controlAccountId, absAdj, BigDecimal.ZERO,
-                            baseCurrency, "FX reval gain - AR " + rl.currency));
-                } else if ("AP".equals(rl.sourceType) && rl.controlAccountId != null) {
-                    // AP gain: payable reduced => CR AP control
-                    lines.add(new LineDraft(rl.controlAccountId, BigDecimal.ZERO, absAdj,
-                            baseCurrency, "FX reval gain - AP " + rl.currency));
-                }
+            if (isGain) {
+                // Gain: DR control (receivable up / payable down) · CR UNREALIZED_FX_GAIN
+                // AR gain: receivable worth more in base → DR AR (asset up)
+                // AP gain: payable worth less in base   → DR AP (liability down)
+                lines.add(new LineDraft(rl.controlAccountId, absAdj, BigDecimal.ZERO,
+                        baseCurrency, "FX reval gain - " + rl.sourceType + " " + rl.currency));
+                lines.add(new LineDraft(fxGainAcct.getId(), BigDecimal.ZERO, absAdj,
+                        baseCurrency, "Unrealized FX gain - " + rl.sourceType + " " + rl.currency));
             } else {
-                // Loss: DR UNREALIZED_FX_LOSS / CR control
-                // For AR: revaluing the receivable downward => CR AR control
-                // For AP: revaluing the payable upward (loss) => DR AP control
-                if ("AR".equals(rl.sourceType) && rl.controlAccountId != null) {
-                    lines.add(new LineDraft(rl.controlAccountId, BigDecimal.ZERO, absAdj,
-                            baseCurrency, "FX reval loss - AR " + rl.currency));
-                } else if ("AP".equals(rl.sourceType) && rl.controlAccountId != null) {
-                    lines.add(new LineDraft(rl.controlAccountId, absAdj, BigDecimal.ZERO,
-                            baseCurrency, "FX reval loss - AP " + rl.currency));
-                }
+                // Loss: DR UNREALIZED_FX_LOSS · CR control (receivable down / payable up)
+                // AR loss: receivable worth less in base → CR AR (asset down)
+                // AP loss: payable worth more in base   → CR AP (liability up)
+                lines.add(new LineDraft(fxLossAcct.getId(), absAdj, BigDecimal.ZERO,
+                        baseCurrency, "Unrealized FX loss - " + rl.sourceType + " " + rl.currency));
+                lines.add(new LineDraft(rl.controlAccountId, BigDecimal.ZERO, absAdj,
+                        baseCurrency, "FX reval loss - " + rl.sourceType + " " + rl.currency));
             }
         }
 
-        // Add the balancing UNREALIZED_FX_GAIN or UNREALIZED_FX_LOSS leg
-        // The FX gain/loss account is resolved inside the REQUIRES_NEW TX
-        // We build partial draft and add the FX account legs via configResolver inside postInNewTx.
-        // BUT: GLPostingSafeInvoker.postInNewTx just posts a draft — account resolution must happen
-        // before we call it (GLConfigResolver.resolve requires MANDATORY TX, which is the REQUIRES_NEW).
-        // Solution: pass the draft with placeholder; no — better: resolve accounts HERE then pass full draft.
-        // We call configResolver directly here since we ARE in a @Transactional method (MANDATORY satisfied).
-        ChartOfAccount fxGainAcct  = resolveAccountSilently(companyId, GlConfigKey.UNREALIZED_FX_GAIN);
-        ChartOfAccount fxLossAcct  = resolveAccountSilently(companyId, GlConfigKey.UNREALIZED_FX_LOSS);
-
-        if (fxGainAcct == null || fxLossAcct == null) {
-            // GL not configured for FX gain/loss — skip posting (mirrors GLPostingSafeInvoker.postSaleInNewTx behavior)
-            return null;
-        }
-
-        // Add the net FX gain/loss balancing leg
-        if (totalGain.compareTo(BigDecimal.ZERO) > 0) {
-            lines.add(new LineDraft(fxGainAcct.getId(), BigDecimal.ZERO, totalGain,
-                    baseCurrency, "Unrealized FX gain - run " + runUid));
-        }
-        if (totalLoss.compareTo(BigDecimal.ZERO) > 0) {
-            lines.add(new LineDraft(fxLossAcct.getId(), totalLoss, BigDecimal.ZERO,
-                    baseCurrency, "Unrealized FX loss - run " + runUid));
-        }
-
         if (lines.size() < 2) {
-            // Cannot post a single-line entry
+            // No non-zero adjustments produced any draft lines
             return null;
+        }
+
+        // FAIL-LOUD balance assertion: verify Σdebit == Σcredit BEFORE calling the poster.
+        // Each pair above is self-balancing; this catches any future code change that breaks that.
+        BigDecimal draftDebit  = lines.stream()
+                .map(LineDraft::debitAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal draftCredit = lines.stream()
+                .map(LineDraft::creditAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (draftDebit.compareTo(draftCredit) != 0) {
+            throw new IllegalStateException(
+                    "FX revaluation journal is unbalanced before posting (run=" + runUid
+                    + "): Σdebit=" + draftDebit + " Σcredit=" + draftCredit
+                    + " — this is a programming error; inspect computeRevalLines/postRevaluationJournal.");
         }
 
         JournalEntryDraft draft = new JournalEntryDraft(
@@ -573,6 +592,18 @@ public class FxRevaluationRunServiceImpl implements FxRevaluationRunService {
     private Long actorId() {
         RequestContext.Principal p = RequestContext.get();
         return p != null ? p.userId() : null;
+    }
+
+    /**
+     * Resolves the minor-unit scale for the company base currency from the currencies master.
+     * Falls back to DEFAULT_BASE_MINOR_UNITS (2) if the currency is not seeded (safe for most).
+     * TZS = 0, USD/EUR/KES/GBP = 2, BHD = 3.
+     */
+    private int resolveBaseMinorUnits(String baseCurrency) {
+        if (baseCurrency == null) return DEFAULT_BASE_MINOR_UNITS;
+        return currencies.findByCode(baseCurrency)
+                .map(c -> (int) c.getMinorUnits())
+                .orElse(DEFAULT_BASE_MINOR_UNITS);
     }
 
     private String generateRunNumber(Long companyId) {
