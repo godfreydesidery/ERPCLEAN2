@@ -5,6 +5,9 @@ import { PageMeta } from '../../../core/api/api-response.model';
 import { AUDIT_ACTIONS, AuditFilter, AuditLogEntry } from '../models/audit.model';
 import { AuditService } from './audit.service';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
+import { UserService } from '../user/user.service';
+import { User } from '../models/user.model';
+import { UidPickerComponent, UidOption } from '../../../shared/uid-picker/uid-picker.component';
 
 /** Default page size — matches backend default. */
 const DEFAULT_SIZE = 50;
@@ -16,12 +19,19 @@ const DEFAULT_SIZE = 50;
  */
 @Component({
   selector: 'app-audit-list',
-  imports: [FormsModule, PaginatorComponent],
+  imports: [FormsModule, PaginatorComponent, UidPickerComponent],
   templateUrl: './audit-list.component.html',
   styleUrl: './audit-list.component.scss',
 })
 export class AuditListComponent {
   private readonly auditService = inject(AuditService);
+  private readonly userService = inject(UserService);
+
+  // ── User picker for actor filter ──────────────────────────────────────────
+  readonly users = signal<User[]>([]);
+  readonly userOptions = computed<UidOption[]>(() =>
+    this.users().map((u) => ({ uid: u.uid, label: u.displayName, hint: u.username })),
+  );
 
   // ── Filter form state ─────────────────────────────────────────────────────
   readonly filterActorUid   = signal('');
@@ -47,6 +57,10 @@ export class AuditListComponent {
 
   constructor() {
     this.load(0);
+    this.userService.list().subscribe({
+      next: (rows) => this.users.set(rows),
+      error: () => undefined,
+    });
   }
 
   // ── Public template methods ───────────────────────────────────────────────

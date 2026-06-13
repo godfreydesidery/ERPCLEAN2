@@ -14,6 +14,11 @@ import {
   UpdateLeadRequest,
 } from './models/crm.model';
 import { CrmService } from './crm.service';
+import { CustomerService } from '../parties/customer.service';
+import { CustomerModel } from '../models/party.model';
+import { CompanyService } from '../company/company.service';
+import { OrganisationService } from '../organisation/organisation.service';
+import { UidPickerComponent, UidOption } from '../../../shared/uid-picker/uid-picker.component';
 
 type LoadState = 'loading' | 'idle' | 'error';
 
@@ -24,14 +29,23 @@ type LoadState = 'loading' | 'idle' | 'error';
  */
 @Component({
   selector: 'app-lead-detail',
-  imports: [FormsModule, RouterLink, SlicePipe],
+  imports: [FormsModule, RouterLink, SlicePipe, UidPickerComponent],
   templateUrl: './lead-detail.component.html',
   styleUrl: './lead-detail.component.scss',
 })
 export class LeadDetailComponent {
   private readonly crmService = inject(CrmService);
+  private readonly customerService = inject(CustomerService);
+  private readonly companyService = inject(CompanyService);
+  private readonly organisationService = inject(OrganisationService);
   private readonly alerts = inject(AlertService);
   protected readonly session = inject(SessionStore);
+
+  // ── Customer picker ────────────────────────────────────────────────────────
+  readonly customers = signal<CustomerModel[]>([]);
+  readonly customerOptions = computed<UidOption[]>(() =>
+    this.customers().map((c) => ({ uid: c.uid, label: c.displayName })),
+  );
 
   readonly uid = input.required<string>();
 
@@ -105,6 +119,27 @@ export class LeadDetailComponent {
 
   private init(): void {
     this.loadLead();
+    this.loadCustomers();
+  }
+
+  private loadCustomers(): void {
+    this.organisationService.current().subscribe({
+      next: (org) => {
+        this.companyService.list(org.uid).subscribe({
+          next: (companies) => {
+            // Load customers from the first company (context for qualify)
+            if (companies.length > 0) {
+              this.customerService.list(companies[0].id, undefined, 0, 200).subscribe({
+                next: ({ rows }) => this.customers.set(rows),
+                error: () => undefined,
+              });
+            }
+          },
+          error: () => undefined,
+        });
+      },
+      error: () => undefined,
+    });
   }
 
   private loadLead(): void {
