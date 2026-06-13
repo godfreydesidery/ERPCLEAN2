@@ -70,9 +70,9 @@ public class DocumentController {
 
     /**
      * Download a previously rendered document (re-renders from live source).
-     * GET /api/v1/documents/{uid}/download
+     * GET /api/v1/documents/uid/{uid}/download
      */
-    @GetMapping("/{uid}/download")
+    @GetMapping("/uid/{uid}/download")
     @PreAuthorize("@perm.scoped(#uid, 'generateddocument', 'DOCUMENT.RENDER')")
     public ResponseEntity<byte[]> download(@PathVariable String uid) {
         GeneratedDocumentDto meta = renderService.getByUid(uid);
@@ -104,9 +104,9 @@ public class DocumentController {
 
     /**
      * Get a single log record by uid.
-     * GET /api/v1/documents/{uid}
+     * GET /api/v1/documents/uid/{uid}
      */
-    @GetMapping("/{uid}")
+    @GetMapping("/uid/{uid}")
     @PreAuthorize("@perm.scoped(#uid, 'generateddocument', 'DOCUMENT.VIEW')")
     public GeneratedDocumentDto getByUid(@PathVariable String uid) {
         return renderService.getByUid(uid);

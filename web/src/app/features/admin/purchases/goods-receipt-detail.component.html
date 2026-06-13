@@ -32,10 +32,14 @@
             <dl class="row g-1 mb-0 flex-grow-1" style="font-size:0.875rem">
               <dt class="col-sm-3 text-muted fw-normal">Purchase Order</dt>
               <dd class="col-sm-9 mb-0 font-monospace">
-                <a [routerLink]="['/admin/purchase-orders/uid', g.purchaseOrderId]"
-                   aria-label="Open linked purchase order">
-                  {{ g.purchaseOrderId }}
-                </a>
+                @if (g.purchaseOrderUid) {
+                  <a [routerLink]="['/admin/purchase-orders/uid', g.purchaseOrderUid]"
+                     aria-label="Open linked purchase order">
+                    {{ g.purchaseOrderUid }}
+                  </a>
+                } @else {
+                  <span class="text-muted">—</span>
+                }
               </dd>
               @if (g.receivedAt) {
                 <dt class="col-sm-3 text-muted fw-normal">Received At</dt>

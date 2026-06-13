@@ -83,4 +83,10 @@ public interface StockSerialService {
      * Full history paged list by product (FR-INVD-27).
      */
     Page<StockSerialDto> listByProduct(Long companyId, Long productId, Pageable pageable);
+
+    /**
+     * Full history paged list by product uid (FR-INVD-27).
+     * Resolves uid → internal id internally; throws NotFoundException if not found.
+     */
+    Page<StockSerialDto> listByProductUid(Long companyId, String productUid, Pageable pageable);
 }
