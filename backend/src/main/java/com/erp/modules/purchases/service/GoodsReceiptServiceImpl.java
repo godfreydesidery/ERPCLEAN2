@@ -339,7 +339,10 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
     private GoodsReceiptDto toDto(GoodsReceipt gr, List<GoodsReceiptLine> lines) {
         List<GoodsReceiptLineDto> lineDtos = lines.stream()
                 .map(GoodsReceiptLineDto::from).toList();
-        return GoodsReceiptDto.from(gr, lineDtos);
+        String poUid = orders.findById(gr.getPurchaseOrderId())
+                .map(PurchaseOrder::getUid)
+                .orElse(null);
+        return GoodsReceiptDto.from(gr, poUid, lineDtos);
     }
 
     private Long actorId() {

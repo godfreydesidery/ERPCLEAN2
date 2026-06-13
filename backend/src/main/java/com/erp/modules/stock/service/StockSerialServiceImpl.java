@@ -1,5 +1,6 @@
 package com.erp.modules.stock.service;
 
+import com.erp.modules.products.repository.ProductRepository;
 import com.erp.modules.stock.domain.dto.StockSerialDto;
 import com.erp.modules.stock.domain.entity.StockSerial;
 import com.erp.modules.stock.domain.enums.SerialStatus;
@@ -24,11 +25,14 @@ import org.springframework.transaction.annotation.Transactional;
 public class StockSerialServiceImpl implements StockSerialService {
 
     private final StockSerialRepository serials;
+    private final ProductRepository     products;
     private final ScopeGuard            scopeGuard;
 
     public StockSerialServiceImpl(StockSerialRepository serials,
+                                   ProductRepository products,
                                    ScopeGuard scopeGuard) {
         this.serials    = serials;
+        this.products   = products;
         this.scopeGuard = scopeGuard;
     }
 
@@ -173,6 +177,19 @@ public class StockSerialServiceImpl implements StockSerialService {
     public Page<StockSerialDto> listByProduct(Long companyId, Long productId, Pageable pageable) {
         RequestContext.Principal principal = RequestContext.get();
         scopeGuard.assertCanActIn(principal, companyId);
+        return serials.findByCompanyIdAndProductId(companyId, productId, pageable)
+                .map(StockSerialServiceImpl::toDto);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<StockSerialDto> listByProductUid(Long companyId, String productUid,
+                                                  Pageable pageable) {
+        RequestContext.Principal principal = RequestContext.get();
+        scopeGuard.assertCanActIn(principal, companyId);
+        Long productId = products.findByCompanyIdAndUid(companyId, productUid)
+                .map(p -> p.getId())
+                .orElseThrow(() -> new NotFoundException("Product not found: " + productUid));
         return serials.findByCompanyIdAndProductId(companyId, productId, pageable)
                 .map(StockSerialServiceImpl::toDto);
     }

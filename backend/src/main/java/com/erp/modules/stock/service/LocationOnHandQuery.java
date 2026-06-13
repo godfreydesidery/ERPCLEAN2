@@ -1,10 +1,12 @@
 package com.erp.modules.stock.service;
 
+import com.erp.modules.products.repository.ProductRepository;
 import com.erp.modules.stock.domain.dto.LocationOnHandRowDto;
 import com.erp.modules.stock.domain.entity.StockLocation;
 import com.erp.modules.stock.domain.entity.StockOnHand;
 import com.erp.modules.stock.repository.StockLocationRepository;
 import com.erp.modules.stock.repository.StockOnHandRepository;
+import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
@@ -31,13 +33,16 @@ public class LocationOnHandQuery {
 
     private final StockOnHandRepository    onHands;
     private final StockLocationRepository  locations;
+    private final ProductRepository        products;
     private final ScopeGuard               scopeGuard;
 
     public LocationOnHandQuery(StockOnHandRepository onHands,
                                 StockLocationRepository locations,
+                                ProductRepository products,
                                 ScopeGuard scopeGuard) {
-        this.onHands   = onHands;
-        this.locations = locations;
+        this.onHands    = onHands;
+        this.locations  = locations;
+        this.products   = products;
         this.scopeGuard = scopeGuard;
     }
 
@@ -90,6 +95,18 @@ public class LocationOnHandQuery {
         int from  = (int) Math.min(pageable.getOffset(), total);
         int to    = (int) Math.min(pageable.getOffset() + pageable.getPageSize(), total);
         return new PageImpl<>(rows.subList(from, to), pageable, total);
+    }
+
+    /**
+     * Per-location on-hand for a specific product identified by uid at a company.
+     * Resolves the uid to an internal id, then delegates to {@link #queryForProduct}.
+     */
+    @Transactional(readOnly = true)
+    public List<LocationOnHandRowDto> queryForProductByUid(Long companyId, String productUid) {
+        Long productId = products.findByCompanyIdAndUid(companyId, productUid)
+                .map(p -> p.getId())
+                .orElseThrow(() -> new NotFoundException("Product not found: " + productUid));
+        return queryForProduct(companyId, productId);
     }
 
     /**

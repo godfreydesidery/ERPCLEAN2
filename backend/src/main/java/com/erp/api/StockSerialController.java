@@ -69,16 +69,16 @@ public class StockSerialController {
     }
 
     /**
-     * GET /api/v1/stock-serials/product/{productId}?companyId=
-     * Full history paged list by product (FR-INVD-27).
+     * GET /api/v1/stock-serials/product/uid/{productUid}?companyId=
+     * Full history paged list by product uid (FR-INVD-27).
      */
-    @GetMapping("/product/{productId}")
+    @GetMapping("/product/uid/{productUid}")
     @PreAuthorize("@perm.has('STOCK.SERIAL.VIEW')")
     public ApiResponse<List<StockSerialDto>> listByProduct(
-            @PathVariable Long productId,
+            @PathVariable String productUid,
             @RequestParam Long companyId,
             Pageable pageable) {
-        Page<StockSerialDto> page = serialService.listByProduct(companyId, productId, pageable);
+        Page<StockSerialDto> page = serialService.listByProductUid(companyId, productUid, pageable);
         return ApiResponse.ok(page.getContent(), PageMeta.from(page));
     }
 }

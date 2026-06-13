@@ -34,7 +34,7 @@ export const ADMIN_ROUTES: Routes = [
       import('./role/role-list.component').then((m) => m.RoleListComponent),
   },
   {
-    path: 'roles/:uid',
+    path: 'roles/uid/:uid',
     canActivate: [requirePermission('ROLE.MANAGE')],
     loadComponent: () =>
       import('./role/role-edit.component').then((m) => m.RoleEditComponent),
@@ -52,7 +52,7 @@ export const ADMIN_ROUTES: Routes = [
       import('./user/user-list.component').then((m) => m.UserListComponent),
   },
   {
-    path: 'users/:uid',
+    path: 'users/uid/:uid',
     canActivate: [requirePermission('USER.VIEW')],
     loadComponent: () =>
       import('./user/user-detail.component').then((m) => m.UserDetailComponent),

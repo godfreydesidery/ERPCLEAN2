@@ -14,6 +14,7 @@ public record GoodsReceiptDto(
         Long   companyId,
         Long   branchId,
         Long   purchaseOrderId,
+        String purchaseOrderUid,
         String receiptNumber,
         GoodsReceiptStatus status,
         Long   supplierId,
@@ -24,11 +25,30 @@ public record GoodsReceiptDto(
         Instant createdAt,
         List<GoodsReceiptLineDto> lines
 ) {
+    /**
+     * Convenience factory when the PO uid is not immediately available.
+     * Sets purchaseOrderUid to null — prefer the overload that supplies it.
+     */
     public static GoodsReceiptDto from(GoodsReceipt gr, List<GoodsReceiptLineDto> lines) {
         return new GoodsReceiptDto(
                 gr.getId(), gr.getUid(),
                 gr.getCompanyId(), gr.getBranchId(),
                 gr.getPurchaseOrderId(),
+                null,
+                gr.getReceiptNumber(), gr.getStatus(),
+                gr.getSupplierId(),
+                gr.getReceivedAt(), gr.getVoidedAt(), gr.getVoidReason(),
+                gr.getNotes(), gr.getCreatedAt(),
+                lines);
+    }
+
+    public static GoodsReceiptDto from(GoodsReceipt gr, String purchaseOrderUid,
+                                       List<GoodsReceiptLineDto> lines) {
+        return new GoodsReceiptDto(
+                gr.getId(), gr.getUid(),
+                gr.getCompanyId(), gr.getBranchId(),
+                gr.getPurchaseOrderId(),
+                purchaseOrderUid,
                 gr.getReceiptNumber(), gr.getStatus(),
                 gr.getSupplierId(),
                 gr.getReceivedAt(), gr.getVoidedAt(), gr.getVoidReason(),

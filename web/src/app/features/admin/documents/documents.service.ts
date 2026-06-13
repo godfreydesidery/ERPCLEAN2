@@ -73,7 +73,7 @@ export class DocumentsService {
   }
 
   getByUid(uid: string): Observable<GeneratedDocumentDto> {
-    return this.http.get<GeneratedDocumentDto>(`${this.base}/${uid}`);
+    return this.http.get<GeneratedDocumentDto>(`${this.base}/uid/${uid}`);
   }
 
   /** POST render — returns the log record (JSON). */
@@ -86,7 +86,7 @@ export class DocumentsService {
    * Returns a Blob (application/pdf).
    */
   downloadBlob(uid: string): Observable<Blob> {
-    return this.http.get(`${this.base}/${uid}/download`, { responseType: 'blob' });
+    return this.http.get(`${this.base}/uid/${uid}/download`, { responseType: 'blob' });
   }
 
   /**
