@@ -97,6 +97,23 @@ public interface ArInvoiceRepository extends JpaRepository<ArInvoice, Long> {
     /** Status check only. */
     boolean existsByCompanyIdAndUid(Long companyId, String uid);
 
+    // --- FX revaluation aggregate (ADR-0036 D-6) ---
+
+    /**
+     * Returns all OPEN/PARTIAL AR invoices in a foreign currency (currency != baseCurrency)
+     * for the given company — used by the period-end FX revaluation run to compute the
+     * unrealized adjustment per currency. Caller groups by currency in-service.
+     */
+    @Query("""
+            SELECT i FROM ArInvoice i
+            WHERE i.companyId = :companyId
+              AND i.status IN ('OPEN','PARTIAL')
+              AND i.currency <> :baseCurrency
+            """)
+    List<ArInvoice> findOpenForeignForRevaluation(
+            @Param("companyId") Long companyId,
+            @Param("baseCurrency") String baseCurrency);
+
     // --- notifications scanner (ADR-0024 D-7): invoice-overdue scan ---
 
     /**

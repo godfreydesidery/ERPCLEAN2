@@ -138,7 +138,10 @@ public class IamTestData {
         em.createNativeQuery(
                 "TRUNCATE customers, suppliers, agents, other_parties, party_code_sequence RESTART IDENTITY CASCADE")
                 .executeUpdate();
-        // 4-FX. Clear FX rate rows BEFORE companies (FK child of companies).
+        // 4-FX. Clear FX revaluation runs + rates BEFORE companies (FK children of companies).
+        em.createNativeQuery(
+                "TRUNCATE fx_revaluation_run_lines, fx_revaluation_runs RESTART IDENTITY CASCADE")
+                .executeUpdate();
         em.createNativeQuery("TRUNCATE currency_rates RESTART IDENTITY CASCADE").executeUpdate();
         // 7. Clear the rest of the IAM tables (CASCADE handles FK order within this set).
         //    audit_log has a NULLABLE FK to app_user (ON DELETE SET NULL per schema) so it does not
