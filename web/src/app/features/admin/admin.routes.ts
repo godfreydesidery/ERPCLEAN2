@@ -773,6 +773,36 @@ export const ADMIN_ROUTES: Routes = [
     canActivate: [requirePermission('BUDGETING.REPORT.VIEW')],
     loadComponent: () =>
       import('./budgeting/departmental-actuals-report.component').then((m) => m.DepartmentalActualsReportComponent),
+  // ── Manufacturing ─────────────────────────────────────────────────────────
+  {
+    path: 'work-orders',
+    canActivate: [requirePermission('MANUFACTURING.VIEW')],
+    loadComponent: () =>
+      import('./manufacturing/work-order-list.component').then((m) => m.WorkOrderListComponent),
+  },
+  {
+    path: 'work-orders/uid/:uid',
+    canActivate: [requirePermission('MANUFACTURING.VIEW')],
+    loadComponent: () =>
+      import('./manufacturing/work-order-detail.component').then(
+        (m) => m.WorkOrderDetailComponent,
+      ),
+  },
+  {
+    path: 'work-orders/uid/:uid/cost-report',
+    canActivate: [requirePermission('MANUFACTURING.VIEW')],
+    loadComponent: () =>
+      import('./manufacturing/work-order-cost-report.component').then(
+        (m) => m.WorkOrderCostReportComponent,
+      ),
+  },
+  {
+    path: 'manufacturing/wip-reconciliation',
+    canActivate: [requirePermission('MANUFACTURING.VIEW')],
+    loadComponent: () =>
+      import('./manufacturing/wip-reconciliation.component').then(
+        (m) => m.WipReconciliationComponent,
+      ),
   },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];

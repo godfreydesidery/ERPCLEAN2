@@ -1,0 +1,129 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">WIP Reconciliation</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-bank me-1" aria-hidden="true"></i>
+      Reconciles the sum of open work-order WIP (RELEASED/IN_PROGRESS/COMPLETED)
+      against the WIP Inventory GL account (1320).
+    </p>
+  </header>
+
+  @switch (companyState()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mb-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load companies. Is the API running?
+      </p>
+    }
+    @default {
+      @if (companies().length > 1) {
+        <div class="mb-3" style="max-width:320px">
+          <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+          <select id="companyPicker" name="companyPicker" class="form-select"
+                  [ngModel]="selectedCompanyId()"
+                  (ngModelChange)="onCompanyChange($event)">
+            @for (c of companies(); track c.uid) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+          </select>
+        </div>
+      }
+
+      <div class="mb-3">
+        <button type="button" class="btn btn-outline-secondary btn-sm"
+                (click)="load()" [disabled]="state() === 'loading'">
+          @if (state() === 'loading') {
+            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+          } @else {
+            <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>
+          }
+          Refresh
+        </button>
+      </div>
+    }
+  }
+
+  @switch (state()) {
+    @case ('loading') {
+      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Running reconciliation…
+      </p>
+    }
+    @case ('error') {
+      <p class="state text-danger" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load reconciliation. Please try again.
+      </p>
+    }
+    @case ('forbidden') {
+      <p class="state text-muted d-flex align-items-center gap-2">
+        <i class="bi bi-shield-lock" aria-hidden="true"></i>
+        You don't have permission to view the WIP reconciliation.
+      </p>
+    }
+    @default {
+      @if (report(); as r) {
+        @if (!r.ties) {
+          <div class="alert alert-danger d-flex align-items-center gap-2 mb-4" role="alert">
+            <i class="bi bi-exclamation-triangle-fill fs-5" aria-hidden="true"></i>
+            <div>
+              <strong>Finance-grade defect:</strong> WIP per work orders does not match the
+              WIP Inventory GL balance (account 1320). Immediate investigation required.
+            </div>
+          </div>
+        } @else {
+          <div class="alert alert-success d-flex align-items-center gap-2 mb-4" role="status">
+            <i class="bi bi-check-circle-fill fs-5" aria-hidden="true"></i>
+            <div>WIP balances reconcile — computed equals expected.</div>
+          </div>
+        }
+
+        <div class="card mb-4" style="max-width:640px">
+          <div class="card-header fw-semibold">{{ r.label }}</div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-sm-6">
+                <div class="small text-muted">Computed WIP (open work orders)</div>
+                <div class="font-monospace fs-5">{{ +r.computed | number:'1.2-4' }}</div>
+                <div class="small text-muted mt-1">
+                  Sum of (wip_debit_total - wip_credit_total) for
+                  RELEASED / IN_PROGRESS / COMPLETED orders
+                </div>
+              </div>
+              <div class="col-sm-6">
+                <div class="small text-muted">Expected (GL 1320 balance)</div>
+                <div class="font-monospace fs-5">{{ +r.expected | number:'1.2-4' }}</div>
+                <div class="small text-muted mt-1">WIP_INVENTORY account balance</div>
+              </div>
+              <div class="col-12">
+                <hr class="my-1" />
+                <div class="d-flex align-items-center gap-2">
+                  <span class="small text-muted">Difference:</span>
+                  <span class="font-monospace fw-semibold"
+                        [class.text-danger]="!r.ties"
+                        [class.text-success]="r.ties">
+                    {{ (+r.computed - +r.expected) | number:'1.2-4' }}
+                  </span>
+                  @if (r.ties) {
+                    <span class="badge text-bg-success ms-1">
+                      <i class="bi bi-check-lg me-1" aria-hidden="true"></i>Reconciled
+                    </span>
+                  } @else {
+                    <span class="badge text-bg-danger ms-1">
+                      <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Defect
+                    </span>
+                  }
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      }
+    }
+  }
+</section>
