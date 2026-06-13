@@ -1,0 +1,234 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Budget Version Detail</h1>
+    @if (version(); as v) {
+      <p class="text-muted mb-0 small">
+        Budget UID: {{ v.budgetUid }}
+        &mdash;
+        <a [routerLink]="['/admin/budgets/uid', v.budgetUid]">Back to budget</a>
+      </p>
+    }
+  </header>
+
+  @switch (versionState()) {
+    @case ('loading') {
+      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading version…
+      </p>
+    }
+    @case ('error') {
+      <p class="state text-danger" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load budget version.
+      </p>
+    }
+    @default {
+      @if (version(); as v) {
+        <!-- Version header -->
+        <div class="card mb-3">
+          <div class="card-body">
+            <dl class="row mb-0 small">
+              <dt class="col-sm-3 text-muted">Version</dt>
+              <dd class="col-sm-9">{{ v.versionNo }} @if (v.label) { — {{ v.label }} }</dd>
+              <dt class="col-sm-3 text-muted">Status</dt>
+              <dd class="col-sm-9">
+                <span class="badge" [class]="statusBadgeClass(v.status)">{{ v.status }}</span>
+              </dd>
+              <dt class="col-sm-3 text-muted">Lines</dt>
+              <dd class="col-sm-9">{{ v.lines?.length ?? 0 }}</dd>
+              @if (v.status !== 'DRAFT') {
+                <dt class="col-sm-3 text-muted">Note</dt>
+                <dd class="col-sm-9 text-muted fst-italic">Lines are read-only — version is {{ v.status }}. Recall to DRAFT to edit.</dd>
+              }
+            </dl>
+          </div>
+        </div>
+
+        <!-- Upsert lines toggle — DRAFT only -->
+        @if (canEditLines()) {
+          <div class="mb-2">
+            <button type="button" class="btn btn-outline-primary btn-sm"
+                    (click)="toggleUpsertForm()"
+                    [attr.aria-expanded]="showUpsertForm()"
+                    aria-controls="upsertLinesForm">
+              <i class="bi bi-pencil-square me-1" aria-hidden="true"></i>
+              Edit Lines (Replace All)
+            </button>
+          </div>
+        }
+
+        <!-- Upsert lines form -->
+        @if (showUpsertForm()) {
+          <form id="upsertLinesForm" class="create-form card card-body mb-3"
+                (ngSubmit)="upsertLines()" aria-label="Upsert budget lines">
+            <h2 class="h6 mb-2">Replace Budget Lines</h2>
+            <p class="text-muted small mb-2">
+              This operation <strong>replaces all lines</strong> wholesale. Choose an entry mode:
+            </p>
+
+            <!-- Mode selector -->
+            <div class="mb-3" style="max-width:400px">
+              <label class="form-label small text-muted mb-1" for="upsertMode">Entry mode</label>
+              <select id="upsertMode" name="upsertMode" class="form-select"
+                      [ngModel]="upsertMode()"
+                      (ngModelChange)="upsertMode.set($event)"
+                      [disabled]="upserting()">
+                @for (opt of modeOptions; track opt.value) {
+                  <option [value]="opt.value">{{ opt.label }}</option>
+                }
+              </select>
+            </div>
+
+            <!-- DIRECT mode -->
+            @if (upsertMode() === 'DIRECT') {
+              @for (line of directLines(); track $index) {
+                <div class="row g-2 align-items-end mb-1 border-bottom pb-1">
+                  <div class="col-sm-3">
+                    <label class="form-label small text-muted mb-1" [for]="'accUid' + $index">
+                      Account UID <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <input [id]="'accUid' + $index" [name]="'accUid' + $index" type="text"
+                           class="form-control form-control-sm"
+                           [ngModel]="line.accountUid"
+                           (ngModelChange)="updateDirectLine($index, 'accountUid', $event)"
+                           [disabled]="upserting()" autocomplete="off" />
+                  </div>
+                  <div class="col-sm-3">
+                    <label class="form-label small text-muted mb-1" [for]="'perUid' + $index">
+                      Period UID <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <input [id]="'perUid' + $index" [name]="'perUid' + $index" type="text"
+                           class="form-control form-control-sm"
+                           [ngModel]="line.fiscalPeriodUid"
+                           (ngModelChange)="updateDirectLine($index, 'fiscalPeriodUid', $event)"
+                           [disabled]="upserting()" autocomplete="off" />
+                  </div>
+                  <div class="col-sm-2">
+                    <label class="form-label small text-muted mb-1" [for]="'amt' + $index">
+                      Amount <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <input [id]="'amt' + $index" [name]="'amt' + $index" type="number"
+                           class="form-control form-control-sm"
+                           [ngModel]="line.amount"
+                           (ngModelChange)="updateDirectLine($index, 'amount', $event)"
+                           [disabled]="upserting()" min="0" step="0.01" />
+                  </div>
+                  <div class="col-sm-3">
+                    <label class="form-label small text-muted mb-1" [for]="'memo' + $index">Memo</label>
+                    <input [id]="'memo' + $index" [name]="'memo' + $index" type="text"
+                           class="form-control form-control-sm"
+                           [ngModel]="line.lineMemo"
+                           (ngModelChange)="updateDirectLine($index, 'lineMemo', $event)"
+                           [disabled]="upserting()" autocomplete="off" maxlength="255" />
+                  </div>
+                  <div class="col-sm-1">
+                    <button type="button" class="btn btn-sm btn-outline-danger"
+                            (click)="removeDirectLine($index)"
+                            [disabled]="upserting()"
+                            [attr.aria-label]="'Remove line ' + ($index + 1)">
+                      <i class="bi bi-trash" aria-hidden="true"></i>
+                    </button>
+                  </div>
+                </div>
+              }
+              <button type="button" class="btn btn-sm btn-outline-secondary mt-2"
+                      (click)="addDirectLine()" [disabled]="upserting()">
+                <i class="bi bi-plus" aria-hidden="true"></i> Add line
+              </button>
+            }
+
+            <!-- ANNUAL_SPREAD mode -->
+            @if (upsertMode() === 'ANNUAL_SPREAD') {
+              <div class="row g-2 mb-2">
+                <div class="col-sm-5">
+                  <label class="form-label small text-muted mb-1" for="fSpreadAccUid">
+                    Account UID <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <input id="fSpreadAccUid" name="fSpreadAccUid" type="text" class="form-control"
+                         [ngModel]="fSpreadAccountUid()" (ngModelChange)="fSpreadAccountUid.set($event)"
+                         [disabled]="upserting()" autocomplete="off" />
+                </div>
+                <div class="col-sm-3">
+                  <label class="form-label small text-muted mb-1" for="fAnnualAmt">
+                    Annual Amount <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <input id="fAnnualAmt" name="fAnnualAmt" type="number" class="form-control"
+                         [ngModel]="fAnnualAmount()" (ngModelChange)="fAnnualAmount.set($event)"
+                         [disabled]="upserting()" min="0" step="0.01" />
+                </div>
+              </div>
+              <p class="text-muted small">Amount will be spread evenly across 12 fiscal periods (HALF_UP rounding, remainder on last period).</p>
+            }
+
+            <!-- SEED mode -->
+            @if (upsertMode() === 'SEED') {
+              <div class="col-sm-6 mb-2">
+                <label class="form-label small text-muted mb-1" for="fSeedUid">
+                  Seed from Version UID <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="fSeedUid" name="fSeedUid" type="text" class="form-control"
+                       [ngModel]="fSeedVersionUid()" (ngModelChange)="fSeedVersionUid.set($event)"
+                       [disabled]="upserting()" autocomplete="off" />
+              </div>
+              <p class="text-muted small">Lines will be copied wholesale from the specified version.</p>
+            }
+
+            <div class="d-flex gap-2 mt-3">
+              <button type="submit" class="btn btn-warning" [disabled]="upserting()">
+                @if (upserting()) {
+                  <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                }
+                Replace Lines
+              </button>
+              <button type="button" class="btn btn-outline-secondary" (click)="toggleUpsertForm()">Cancel</button>
+            </div>
+            @if (upsertError(); as msg) {
+              <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+            }
+          </form>
+        }
+
+        <!-- Lines table -->
+        @if (!v.lines || v.lines.length === 0) {
+          <p class="text-muted small mt-2">No budget lines.
+            @if (canEditLines()) { Use "Edit Lines" to add lines before submitting. }
+            @else if (v.status !== 'DRAFT') { Recall to DRAFT to add lines. }
+          </p>
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle bg-white grid">
+              <caption class="visually-hidden">Budget lines for version {{ v.versionNo }}</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Account Code</th>
+                  <th scope="col">Account Name</th>
+                  <th scope="col">Period</th>
+                  <th scope="col" class="text-end">Amount (TZS)</th>
+                  <th scope="col">Memo</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (line of v.lines; track line.uid) {
+                  <tr>
+                    <td class="font-monospace small">{{ line.accountCode }}</td>
+                    <td class="small">{{ line.accountName }}</td>
+                    <td class="small text-muted">P{{ line.periodNo }}</td>
+                    <td class="text-end font-monospace">{{ +line.amount | number:'1.2-2' }}</td>
+                    <td class="small text-muted">{{ line.lineMemo ?? '' }}</td>
+                  </tr>
+                }
+              </tbody>
+              <tfoot>
+                <tr class="fw-semibold">
+                  <td colspan="3" class="text-end small">Grand Total</td>
+                  <td class="text-end font-monospace">{{ grandTotal(v.lines) | number:'1.2-2' }}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        }
+      }
+    }
+  }
+</section>

@@ -271,6 +271,13 @@ export class ShellComponent {
         { label: 'Opportunities', route: '/admin/crm/opportunities', icon: 'bi-graph-up-arrow', available: true, permission: 'CRM.OPPORTUNITY.VIEW' },
         { label: 'Pipeline Dashboard', route: '/admin/crm/pipeline', icon: 'bi-bar-chart-line', available: true, permission: 'CRM.PIPELINE.VIEW' },
         { label: 'Pipeline Stages', route: '/admin/crm/settings/pipeline-stages', icon: 'bi-kanban', available: true, permission: 'CRM.STAGE.MANAGE' },
+    // ── Budgeting & Management Accounting ────────────────────────────────────
+    {
+      label: 'Budgeting',
+      items: [
+        { label: 'Budgets', route: '/admin/budgets', icon: 'bi-calculator', available: true, permission: 'BUDGETING.BUDGET.VIEW' },
+        { label: 'Budget Variance Report', route: '/admin/budgeting/variance', icon: 'bi-bar-chart', available: true, permission: 'BUDGETING.REPORT.VIEW' },
+        { label: 'Departmental Actuals', route: '/admin/budgeting/departmental-actuals', icon: 'bi-table', available: true, permission: 'BUDGETING.REPORT.VIEW' },
       ],
     },
   ];
