@@ -1034,5 +1034,18 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./sales/blanket/blanket-order-create.component').then((m) => m.BlanketOrderCreateComponent),
   },
+  // ── Other Parties ─────────────────────────────────────────────────────────
+  {
+    path: 'other-parties',
+    canActivate: [requirePermission('OTHERPARTY.VIEW')],
+    loadComponent: () =>
+      import('./parties/other/other-party-list.component').then((m) => m.OtherPartyListComponent),
+  },
+  {
+    path: 'other-parties/uid/:uid',
+    canActivate: [requirePermission('OTHERPARTY.VIEW')],
+    loadComponent: () =>
+      import('./parties/other/other-party-detail.component').then((m) => m.OtherPartyDetailComponent),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];

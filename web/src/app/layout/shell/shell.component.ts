@@ -120,6 +120,7 @@ export class ShellComponent {
         { label: 'Customers', route: '/admin/customers', icon: 'bi-people-fill', available: true, permission: 'CUSTOMER.VIEW' },
         { label: 'Suppliers', route: '/admin/suppliers', icon: 'bi-truck', available: true, permission: 'SUPPLIER.VIEW' },
         { label: 'Sales Agents', route: '/admin/agents', icon: 'bi-person-badge', available: true, permission: 'AGENT.VIEW' },
+        { label: 'Other Parties', route: '/admin/other-parties', icon: 'bi-person-rolodex', available: true, permission: 'OTHERPARTY.VIEW' },
         { label: 'Routes', route: '/admin/routes', icon: 'bi-signpost', available: true, permission: 'ROUTE.VIEW' },
       ],
     },
