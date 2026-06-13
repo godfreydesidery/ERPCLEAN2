@@ -926,5 +926,24 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./stock/count/stock-count-detail.component').then((m) => m.StockCountDetailComponent),
   },
+  // ── Blanket Orders ────────────────────────────────────────────────────────
+  {
+    path: 'blanket-orders',
+    canActivate: [requirePermission('SALES.BLANKET.VIEW')],
+    loadComponent: () =>
+      import('./sales/blanket/blanket-order-list.component').then((m) => m.BlanketOrderListComponent),
+  },
+  {
+    path: 'blanket-orders/uid/:uid',
+    canActivate: [requirePermission('SALES.BLANKET.VIEW')],
+    loadComponent: () =>
+      import('./sales/blanket/blanket-order-detail.component').then((m) => m.BlanketOrderDetailComponent),
+  },
+  {
+    path: 'blanket-orders/create',
+    canActivate: [requirePermission('SALES.BLANKET.CREATE')],
+    loadComponent: () =>
+      import('./sales/blanket/blanket-order-create.component').then((m) => m.BlanketOrderCreateComponent),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];

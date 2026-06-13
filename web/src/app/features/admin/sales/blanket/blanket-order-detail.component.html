@@ -1,0 +1,282 @@
+<section class="admin-page">
+  <header class="page-head">
+    <a class="back-link text-muted small" routerLink="/admin/blanket-orders">
+      <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Blanket Orders
+    </a>
+
+    @switch (state()) {
+      @case ('loading') {
+        <h1 class="h4 mb-0 mt-1 d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+        </h1>
+      }
+      @case ('error') {
+        <h1 class="h4 mb-0 mt-1">Blanket Order</h1>
+        <p class="text-danger mt-2" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load blanket order.
+        </p>
+      }
+      @default {
+        @if (blanket(); as b) {
+          <div class="d-flex flex-wrap align-items-start gap-3 mt-1">
+            <div>
+              <h1 class="h4 mb-0">
+                <span class="font-monospace text-primary">{{ orderLabel() }}</span>
+              </h1>
+              <div class="d-flex gap-2 mt-1 flex-wrap align-items-center">
+                <span class="badge" [class]="statusBadgeClass(b.status)">{{ b.status }}</span>
+              </div>
+            </div>
+
+            <!-- Metadata -->
+            <dl class="row g-1 mb-0 flex-grow-1" style="font-size:0.875rem">
+              <dt class="col-sm-3 text-muted fw-normal">Customer ID</dt>
+              <dd class="col-sm-9 mb-0">{{ b.customerId }}</dd>
+              <dt class="col-sm-3 text-muted fw-normal">Currency</dt>
+              <dd class="col-sm-9 mb-0">{{ b.currency }}</dd>
+              <dt class="col-sm-3 text-muted fw-normal">Valid From</dt>
+              <dd class="col-sm-9 mb-0">{{ b.validFrom }}</dd>
+              <dt class="col-sm-3 text-muted fw-normal">Valid To</dt>
+              <dd class="col-sm-9 mb-0">{{ b.validTo }}</dd>
+              <dt class="col-sm-3 text-muted fw-normal">Committed</dt>
+              <dd class="col-sm-9 mb-0 font-monospace">{{ b.currency }} {{ +b.totalCommittedAmount | number:'1.2-2' }}</dd>
+              <dt class="col-sm-3 text-muted fw-normal">Drawn</dt>
+              <dd class="col-sm-9 mb-0 font-monospace">{{ b.currency }} {{ +b.totalDrawnAmount | number:'1.2-2' }}</dd>
+              @if (b.notes) {
+                <dt class="col-sm-3 text-muted fw-normal">Notes</dt>
+                <dd class="col-sm-9 mb-0">{{ b.notes }}</dd>
+              }
+            </dl>
+
+            <!-- Actions -->
+            @if (canManage()) {
+              <div class="d-flex gap-2 flex-wrap align-self-start">
+                @if (isActive()) {
+                  <button type="button" class="btn btn-success btn-sm"
+                          (click)="toggleDrawForm()"
+                          [attr.aria-expanded]="showDrawForm()"
+                          aria-controls="drawForm">
+                    <i class="bi bi-box-arrow-down me-1" aria-hidden="true"></i>Draw Release
+                  </button>
+                  <button type="button" class="btn btn-outline-danger btn-sm"
+                          (click)="toggleCancelConfirm()"
+                          [attr.aria-expanded]="showCancelConfirm()">
+                    <i class="bi bi-x-circle me-1" aria-hidden="true"></i>Cancel
+                  </button>
+                }
+              </div>
+            }
+          </div>
+
+          <!-- Drawn order notification -->
+          @if (drawnOrderUid(); as soUid) {
+            <div class="alert alert-success d-flex align-items-center gap-2 mt-3" role="status">
+              <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
+              Release created.
+              <a [routerLink]="['/admin/sales-orders/uid', soUid]" class="alert-link ms-1">
+                Open sales order
+              </a>
+            </div>
+          }
+
+          <!-- Draw form -->
+          @if (showDrawForm()) {
+            <div id="drawForm" class="card card-body mt-3">
+              <h2 class="h6 mb-3">Draw Release</h2>
+              <div class="row g-3 mb-3">
+
+                <!-- Branch ID (manual entry — detail screen doesn't have company uid to load branches) -->
+                <div class="col-sm-3">
+                  <label class="form-label small text-muted mb-1" for="drawBranchId">
+                    Branch ID <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <input id="drawBranchId" name="drawBranchId" type="text" class="form-control"
+                         placeholder="Numeric branch ID"
+                         [ngModel]="drawBranchId()" (ngModelChange)="drawBranchId.set($event)"
+                         [disabled]="drawBusy()" autocomplete="off" />
+                </div>
+
+                <!-- Agent picker -->
+                <div class="col-sm-5 position-relative">
+                  <label class="form-label small text-muted mb-1" for="agentSearch">
+                    Agent <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <input id="agentSearch" name="agentSearch" type="search"
+                         class="form-control"
+                         placeholder="Search agent…"
+                         [ngModel]="agentSearchQ()"
+                         (ngModelChange)="onAgentSearchChange($event)"
+                         [disabled]="drawBusy()"
+                         autocomplete="off"
+                         [attr.aria-expanded]="agentResults().length > 0"
+                         aria-haspopup="listbox"
+                         aria-autocomplete="list" />
+                  @if (selectedAgent()) {
+                    <div class="d-flex align-items-center gap-1 mt-1">
+                      <i class="bi bi-check-circle-fill text-success small" aria-hidden="true"></i>
+                      <span class="small text-muted">{{ selectedAgent()!.label }}</span>
+                    </div>
+                  }
+                  @if (agentResults().length > 0) {
+                    <ul class="list-group position-absolute shadow-sm mt-1 w-100" role="listbox"
+                        aria-label="Agent suggestions"
+                        style="z-index:1050;max-height:220px;overflow-y:auto;">
+                      @for (a of agentResults(); track a.uid) {
+                        <li class="list-group-item list-group-item-action small py-2"
+                            role="option" style="cursor:pointer"
+                            (click)="selectAgent(a)"
+                            (keydown.enter)="selectAgent(a)"
+                            tabindex="0">
+                          <strong>{{ a.code }}</strong> — {{ a.displayName }}
+                        </li>
+                      }
+                    </ul>
+                  }
+                </div>
+              </div>
+
+              <!-- Draw lines table -->
+              @if (drawLines().length === 0) {
+                <p class="text-muted small">All lines are fully drawn. No remaining quantity.</p>
+              } @else {
+                <div class="table-responsive mb-3">
+                  <table class="table table-sm align-middle">
+                    <caption class="visually-hidden">Draw lines</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col"><span class="visually-hidden">Include</span></th>
+                        <th scope="col">Product</th>
+                        <th scope="col">Unit</th>
+                        <th scope="col" class="text-end">Remaining Qty</th>
+                        <th scope="col" class="text-end">Draw Qty</th>
+                        <th scope="col" class="text-end">Unit Price</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (entry of drawLines(); track entry.line.uid; let i = $index) {
+                        <tr>
+                          <td>
+                            <input type="checkbox" class="form-check-input"
+                                   [ngModel]="entry.include"
+                                   (ngModelChange)="toggleDrawLineInclude(i, $event)"
+                                   [id]="'drawLine_' + i"
+                                   [attr.aria-label]="'Include ' + entry.line.productName" />
+                          </td>
+                          <td class="small">{{ entry.line.productCode }} — {{ entry.line.productName }}</td>
+                          <td class="small">{{ entry.line.unitName }}</td>
+                          <td class="text-end font-monospace small">{{ +entry.line.remainingQtyBase | number:'1.4-4' }}</td>
+                          <td class="text-end" style="width:140px">
+                            <input type="number" class="form-control form-control-sm text-end"
+                                   min="0.0001" step="any"
+                                   [ngModel]="entry.qtyBase"
+                                   (ngModelChange)="updateDrawLineQty(i, $event)"
+                                   [disabled]="!entry.include || drawBusy()"
+                                   [attr.aria-label]="'Draw quantity for ' + entry.line.productName" />
+                          </td>
+                          <td class="text-end font-monospace small">{{ b.currency }} {{ +entry.line.unitPriceAmount | number:'1.2-2' }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              }
+
+              @if (drawError(); as msg) {
+                <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
+              }
+              <div class="d-flex gap-2">
+                <button type="button" class="btn btn-success" (click)="submitDraw()"
+                        [disabled]="drawBusy() || drawLines().length === 0">
+                  @if (drawBusy()) {
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    Creating release…
+                  } @else {
+                    Create Release
+                  }
+                </button>
+                <button type="button" class="btn btn-outline-secondary"
+                        (click)="toggleDrawForm()">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          }
+
+          <!-- Cancel confirm -->
+          @if (showCancelConfirm()) {
+            <div class="card card-body border-danger mt-3">
+              <p class="mb-2 text-danger fw-semibold">
+                <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
+                Cancel this blanket order?
+              </p>
+              <p class="text-muted small mb-3">
+                This will mark the agreement as CANCELLED. Any sales orders already drawn will not be affected.
+              </p>
+              @if (cancelError(); as msg) {
+                <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
+              }
+              <div class="d-flex gap-2">
+                <button type="button" class="btn btn-danger btn-sm"
+                        (click)="submitCancel()" [disabled]="cancelling()">
+                  @if (cancelling()) {
+                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                    Cancelling…
+                  } @else {
+                    Confirm Cancel
+                  }
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm"
+                        (click)="toggleCancelConfirm()">
+                  Keep Agreement
+                </button>
+              </div>
+            </div>
+          }
+
+          <!-- Lines table -->
+          <h2 class="h6 mt-4 mb-2">Agreement Lines</h2>
+          @if (b.lines.length === 0) {
+            <p class="text-muted small">No lines.</p>
+          } @else {
+            <div class="table-responsive">
+              <table class="table table-hover align-middle bg-white grid">
+                <caption class="visually-hidden">Agreement lines</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">#</th>
+                    <th scope="col">Product</th>
+                    <th scope="col">Unit</th>
+                    <th scope="col" class="text-end">Committed</th>
+                    <th scope="col" class="text-end">Drawn</th>
+                    <th scope="col" class="text-end">Remaining</th>
+                    <th scope="col" class="text-end">Unit Price</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (l of b.lines; track l.uid) {
+                    <tr>
+                      <td class="small text-muted">{{ l.lineNo }}</td>
+                      <td class="small">
+                        <span class="font-monospace text-muted me-1">{{ l.productCode }}</span>{{ l.productName }}
+                      </td>
+                      <td class="small">{{ l.unitName }}</td>
+                      <td class="text-end font-monospace small">{{ +l.committedQtyBase | number:'1.4-4' }}</td>
+                      <td class="text-end font-monospace small">{{ +l.drawnQtyBase | number:'1.4-4' }}</td>
+                      <td class="text-end font-monospace small"
+                          [class.text-warning]="+(l.remainingQtyBase) <= 0"
+                          [class.fw-semibold]="+(l.remainingQtyBase) <= 0">
+                        {{ +l.remainingQtyBase | number:'1.4-4' }}
+                      </td>
+                      <td class="text-end font-monospace small">{{ l.currency }} {{ +l.unitPriceAmount | number:'1.2-2' }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        }
+      }
+    }
+  </header>
+</section>
