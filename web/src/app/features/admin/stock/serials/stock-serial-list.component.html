@@ -1,0 +1,182 @@
+<div class="admin-page">
+  <div class="page-head">
+    <h1>Serial Numbers</h1>
+  </div>
+
+  <!-- Company selector -->
+  @if (companies().length > 1) {
+    <div class="mb-3">
+      <label for="serialCompanySelect" class="form-label">Company</label>
+      <select id="serialCompanySelect" class="form-select form-select-sm w-auto"
+              [ngModel]="selectedCompanyId()"
+              (ngModelChange)="onCompanyChange($event)">
+        @for (c of companies(); track c.id) {
+          <option [value]="c.id">{{ c.name }}</option>
+        }
+      </select>
+    </div>
+  }
+
+  <!-- View mode tabs -->
+  <ul class="nav nav-tabs mb-3" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button type="button" class="nav-link" [class.active]="viewMode() === 'location'"
+              (click)="switchToLocation()" role="tab"
+              [attr.aria-selected]="viewMode() === 'location'">
+        By Location
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button type="button" class="nav-link" [class.active]="viewMode() === 'product'"
+              (click)="switchToProduct()" role="tab"
+              [attr.aria-selected]="viewMode() === 'product'">
+        Product History
+      </button>
+    </li>
+  </ul>
+
+  <!-- Filters -->
+  <div class="row g-3 mb-3">
+    @if (viewMode() === 'location') {
+      <div class="col-md-3">
+        <label class="form-label" for="serialLocationPicker">Location <span aria-hidden="true">*</span></label>
+        <app-uid-picker id="serialLocationPicker"
+                        [ngModel]="selectedLocationUid()"
+                        (ngModelChange)="selectedLocationUid.set($event); onFilterChange()"
+                        [options]="locationOptions()"
+                        placeholder="Select location" />
+      </div>
+    }
+    <div class="col-md-3">
+      <label class="form-label" for="serialProductPicker">Product <span aria-hidden="true">*</span></label>
+      <app-uid-picker id="serialProductPicker"
+                      [ngModel]="selectedProductUid()"
+                      (ngModelChange)="selectedProductUid.set($event); onFilterChange()"
+                      [options]="productOptions()"
+                      placeholder="Select product" />
+    </div>
+    @if (viewMode() === 'location') {
+      <div class="col-md-2">
+        <label for="serialStatusFilter" class="form-label">Status</label>
+        <select id="serialStatusFilter" class="form-select form-select-sm"
+                [ngModel]="statusFilter()" (ngModelChange)="statusFilter.set($event); onFilterChange()">
+          <option value="">All</option>
+          <option value="IN_STOCK">IN_STOCK</option>
+          <option value="ISSUED">ISSUED</option>
+          <option value="RETURNED">RETURNED</option>
+        </select>
+      </div>
+    }
+  </div>
+
+  @if (viewMode() === 'location' && (!selectedLocationId() || !selectedProductId())) {
+    <p class="text-muted">Select a location and product to view serials.</p>
+  } @else if (viewMode() === 'product' && !selectedProductUid()) {
+    <p class="text-muted">Select a product to view its serial history.</p>
+  } @else {
+    <!-- Lookup panel (location mode) -->
+    @if (viewMode() === 'location' && selectedProductId()) {
+      <div class="card mb-3">
+        <div class="card-body py-2">
+          <div class="d-flex gap-2 align-items-center flex-wrap">
+            <label for="lookupInput" class="form-label mb-0 fw-semibold">Lookup by serial #</label>
+            <input id="lookupInput" type="text" class="form-control form-control-sm w-auto"
+                   [ngModel]="lookupSerialNumber()" (ngModelChange)="lookupSerialNumber.set($event)"
+                   placeholder="Serial number"
+                   (keydown.enter)="lookupSerial()" />
+            <button type="button" class="btn btn-sm btn-outline-primary"
+                    (click)="lookupSerial()" [disabled]="!lookupSerialNumber().trim()">
+              Lookup
+            </button>
+            @if (lookupResult() || lookupState() !== 'idle') {
+              <button type="button" class="btn btn-sm btn-outline-secondary" (click)="clearLookup()">Clear</button>
+            }
+          </div>
+          @if (lookupState() === 'loading') {
+            <p class="text-muted mt-2">Searching…</p>
+          } @else if (lookupState() === 'not-found') {
+            <p class="text-warning mt-2" role="alert">Serial number not found for this product.</p>
+          } @else if (lookupState() === 'error') {
+            <p class="text-danger mt-2" role="alert">Lookup failed. Try again.</p>
+          } @else if (lookupResult()) {
+            <div class="mt-2 d-flex gap-3 flex-wrap">
+              <span><strong>Serial:</strong> {{ lookupResult()!.serialNumber }}</span>
+              <span>
+                <strong>Status:</strong>
+                <span class="badge ms-1" [class]="statusBadgeClass(lookupResult()!.serialStatus)">
+                  {{ lookupResult()!.serialStatus }}
+                </span>
+              </span>
+              @if (lookupResult()!.receivedDocumentUid) {
+                <span><strong>Received Doc:</strong> {{ lookupResult()!.receivedDocumentUid }}</span>
+              }
+              @if (lookupResult()!.issuedDocumentUid) {
+                <span><strong>Issued Doc:</strong> {{ lookupResult()!.issuedDocumentUid }}</span>
+              }
+            </div>
+          }
+        </div>
+      </div>
+    }
+
+    <!-- Four-state switch -->
+    @switch (state()) {
+      @case ('loading') {
+        <div class="state" aria-live="polite" aria-busy="true">
+          <div class="spinner-border spinner-border-sm text-secondary" role="status">
+            <span class="visually-hidden">Loading serials…</span>
+          </div>
+          <span class="ms-2 text-muted">Loading…</span>
+        </div>
+      }
+      @case ('forbidden') {
+        <div class="state" role="alert">
+          <i class="bi bi-shield-x text-danger" aria-hidden="true"></i>
+          You do not have permission to view serial numbers.
+        </div>
+      }
+      @case ('error') {
+        <div class="state" role="alert">
+          <i class="bi bi-exclamation-triangle text-danger" aria-hidden="true"></i>
+          Could not load serials. <button class="btn btn-sm btn-link" (click)="load(currentPage())">Retry</button>
+        </div>
+      }
+      @default {
+        @if (isEmpty()) {
+          <div class="state text-muted">No serial numbers found for the selected filters.</div>
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-hover align-middle bg-white grid">
+              <caption class="visually-hidden">Stock serial numbers</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Serial #</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Received Doc</th>
+                  <th scope="col">Issued Doc</th>
+                  <th scope="col">Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of rows(); track row.uid) {
+                  <tr>
+                    <td class="fw-semibold font-monospace">{{ row.serialNumber }}</td>
+                    <td>
+                      <span class="badge" [class]="statusBadgeClass(row.serialStatus)">
+                        {{ row.serialStatus }}
+                      </span>
+                    </td>
+                    <td>{{ row.receivedDocumentUid ?? '—' }}</td>
+                    <td>{{ row.issuedDocumentUid ?? '—' }}</td>
+                    <td>{{ row.createdAt ? (row.createdAt | slice:0:10) : '—' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <app-paginator [meta]="meta()" [label]="'Serials'" (pageChange)="goToPage($event)" />
+        }
+      }
+    }
+  }
+</div>
