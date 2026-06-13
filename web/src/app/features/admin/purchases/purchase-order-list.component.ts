@@ -19,6 +19,7 @@ import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { SupplierService } from '../parties/supplier.service';
 import { PurchasesService } from './purchases.service';
+import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -30,7 +31,7 @@ interface LoadTrigger { q: string; status: string; page: number }
  */
 @Component({
   selector: 'app-purchase-order-list',
-  imports: [FormsModule, RouterLink, DatePipe],
+  imports: [FormsModule, RouterLink, DatePipe, PaginatorComponent],
   templateUrl: './purchase-order-list.component.html',
   styleUrl: './purchase-order-list.component.scss',
 })
@@ -169,6 +170,8 @@ export class PurchaseOrderListComponent {
     if (!companyId) return;
     this.immediateTrigger$.next({ q: this.searchQ(), status: this.statusFilter(), page });
   }
+
+  goToPage(page: number): void { this.load(page); }
 
   prevPage(): void { if (this.currentPage() > 0) this.load(this.currentPage() - 1); }
   nextPage(): void { if (this.meta().hasNext) this.load(this.currentPage() + 1); }

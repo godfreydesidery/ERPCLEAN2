@@ -26,6 +26,7 @@ import type { TimesheetPage } from './projects.service';
 import { Company } from '../models/company.model';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
+import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 type LoadState = 'loading' | 'idle' | 'error';
 
@@ -45,7 +46,7 @@ const DEFAULT_TS_SIZE = 20;
  */
 @Component({
   selector: 'app-project-detail',
-  imports: [FormsModule, RouterLink, DecimalPipe],
+  imports: [FormsModule, RouterLink, DecimalPipe, PaginatorComponent],
   templateUrl: './project-detail.component.html',
   styleUrl: './project-detail.component.scss',
 })
@@ -358,6 +359,7 @@ export class ProjectDetailComponent {
 
   // ── Timesheets ─────────────────────────────────────────────────────────────
 
+  goToTsPage(page: number): void { this.loadTimesheets(page); }
   tsPrevPage(): void { if (this.tsPage() > 0) this.loadTimesheets(this.tsPage() - 1); }
   tsNextPage(): void { if (this.tsMeta().hasNext) this.loadTimesheets(this.tsPage() + 1); }
 

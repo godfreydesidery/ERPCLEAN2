@@ -17,6 +17,7 @@ import {
   BudgetVersionStatus,
   CreateBudgetRequest,
 } from './models/budgeting.model';
+import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -28,7 +29,7 @@ interface LoadTrigger { page: number }
  */
 @Component({
   selector: 'app-budget-list',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, PaginatorComponent],
   templateUrl: './budget-list.component.html',
   styleUrl: './budget-list.component.scss',
 })
@@ -140,6 +141,8 @@ export class BudgetListComponent {
     if (!companyId) return;
     this.immediateTrigger$.next({ page });
   }
+
+  goToPage(page: number): void { this.load(page); }
 
   prevPage(): void { if (this.currentPage() > 0) this.load(this.currentPage() - 1); }
   nextPage(): void { if (this.meta().hasNext) this.load(this.currentPage() + 1); }

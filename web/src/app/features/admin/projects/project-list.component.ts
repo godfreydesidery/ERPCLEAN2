@@ -14,6 +14,7 @@ import { OrganisationService } from '../organisation/organisation.service';
 import { ProjectsService } from './projects.service';
 import type { ProjectPage } from './projects.service';
 import { CreateProjectRequest, ProjectDto, ProjectStatus } from './models/projects.model';
+import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -25,7 +26,7 @@ interface LoadTrigger { page: number }
  */
 @Component({
   selector: 'app-project-list',
-  imports: [FormsModule, RouterLink, DecimalPipe],
+  imports: [FormsModule, RouterLink, DecimalPipe, PaginatorComponent],
   templateUrl: './project-list.component.html',
   styleUrl: './project-list.component.scss',
 })
@@ -124,6 +125,8 @@ export class ProjectListComponent {
     if (!companyId) return;
     this.immediateTrigger$.next({ page });
   }
+
+  goToPage(page: number): void { this.load(page); }
 
   prevPage(): void { if (this.currentPage() > 0) this.load(this.currentPage() - 1); }
   nextPage(): void { if (this.meta().hasNext) this.load(this.currentPage() + 1); }

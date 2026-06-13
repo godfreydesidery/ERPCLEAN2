@@ -18,6 +18,7 @@ import {
   WorkOrderDto,
   WorkOrderStatus,
 } from './models/manufacturing.model';
+import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -31,7 +32,7 @@ interface LoadTrigger {
  */
 @Component({
   selector: 'app-work-order-list',
-  imports: [FormsModule, RouterLink, DecimalPipe],
+  imports: [FormsModule, RouterLink, DecimalPipe, PaginatorComponent],
   templateUrl: './work-order-list.component.html',
   styleUrl: './work-order-list.component.scss',
 })
@@ -155,6 +156,8 @@ export class WorkOrderListComponent {
     if (!companyId) return;
     this.immediateTrigger$.next({ page });
   }
+
+  goToPage(page: number): void { this.load(page); }
 
   prevPage(): void {
     if (this.currentPage() > 0) this.load(this.currentPage() - 1);

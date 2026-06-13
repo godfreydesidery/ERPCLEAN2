@@ -13,6 +13,7 @@ import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { HrPayrollService, PayrollRunPage } from './hr-payroll.service';
 import { CreatePayrollRunRequest, PayrollRunDto, PayrollRunStatus } from './models/hr-payroll.model';
+import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -25,7 +26,7 @@ interface LoadTrigger { page: number }
  */
 @Component({
   selector: 'app-payroll-run-list',
-  imports: [FormsModule, RouterLink, DecimalPipe],
+  imports: [FormsModule, RouterLink, DecimalPipe, PaginatorComponent],
   templateUrl: './payroll-run-list.component.html',
   styleUrl: './payroll-run-list.component.scss',
 })
@@ -129,6 +130,8 @@ export class PayrollRunListComponent {
     if (!this.selectedCompanyId()) return;
     this.immediateTrigger$.next({ page });
   }
+
+  goToPage(page: number): void { this.load(page); }
 
   prevPage(): void { if (this.currentPage() > 0) this.load(this.currentPage() - 1); }
   nextPage(): void { if (this.meta().hasNext) this.load(this.currentPage() + 1); }

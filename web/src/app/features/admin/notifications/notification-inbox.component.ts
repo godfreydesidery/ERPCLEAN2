@@ -9,6 +9,7 @@ import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import { NotificationDto } from './models/notifications.model';
 import { NotificationsService, NotificationPage } from './notifications.service';
+import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -20,7 +21,7 @@ interface LoadTrigger { page: number }
  */
 @Component({
   selector: 'app-notification-inbox',
-  imports: [FormsModule, SlicePipe],
+  imports: [FormsModule, SlicePipe, PaginatorComponent],
   templateUrl: './notification-inbox.component.html',
   styleUrl: './notification-inbox.component.scss',
 })
@@ -80,6 +81,8 @@ export class NotificationInboxComponent {
   load(page: number): void {
     this.immediateTrigger$.next({ page });
   }
+
+  goToPage(page: number): void { this.load(page); }
 
   prevPage(): void { if (this.currentPage() > 0) this.load(this.currentPage() - 1); }
   nextPage(): void { if (this.meta().hasNext) this.load(this.currentPage() + 1); }

@@ -23,6 +23,7 @@ import { BranchService } from '../branch/branch.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { ProductService } from '../products/product.service';
 import { StockService, StockMovementPage } from './stock.service';
+import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -37,7 +38,7 @@ interface LoadTrigger { q: string; page: number }
  */
 @Component({
   selector: 'app-stock-list',
-  imports: [FormsModule, DatePipe],
+  imports: [FormsModule, DatePipe, PaginatorComponent],
   templateUrl: './stock-list.component.html',
   styleUrl: './stock-list.component.scss',
 })
@@ -266,6 +267,8 @@ export class StockListComponent {
     if (!companyId) return;
     this.immediateTrigger$.next({ q: this.searchQ(), page });
   }
+
+  goToPage(page: number): void { this.load(page); }
 
   prevPage(): void { if (this.currentPage() > 0) this.load(this.currentPage() - 1); }
   nextPage(): void { if (this.meta().hasNext) this.load(this.currentPage() + 1); }
@@ -497,6 +500,13 @@ export class StockListComponent {
       },
       error: () => this.movementsState.set('error'),
     });
+  }
+
+  goToMovementsPage(page: number): void {
+    const uid = this.movementsUid();
+    if (!uid) return;
+    const row = this.rows().find((r) => r.uid === uid);
+    if (row) this.loadMovements(row.productId, page);
   }
 
   movementsPrevPage(): void {

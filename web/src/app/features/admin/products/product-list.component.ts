@@ -20,6 +20,7 @@ import {
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { ProductService } from './product.service';
+import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -33,7 +34,7 @@ interface LoadTrigger { q: string; page: number }
  */
 @Component({
   selector: 'app-product-list',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, PaginatorComponent],
   templateUrl: './product-list.component.html',
   styleUrl: './product-list.component.scss',
 })
@@ -173,6 +174,8 @@ export class ProductListComponent {
     this.searchQ.set('');
     this.load(0);
   }
+
+  goToPage(page: number): void { this.load(page); }
 
   prevPage(): void {
     const p = this.currentPage();

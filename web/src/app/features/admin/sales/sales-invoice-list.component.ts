@@ -23,6 +23,7 @@ import { AgentModel } from '../models/party.model';
 import { RouteDto } from '../routes/models/route.model';
 import { RoutesService } from '../routes/routes.service';
 import { SalesService } from './sales.service';
+import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -35,7 +36,7 @@ interface LoadTrigger { q: string; status: string; page: number }
  */
 @Component({
   selector: 'app-sales-invoice-list',
-  imports: [FormsModule, RouterLink, DatePipe],
+  imports: [FormsModule, RouterLink, DatePipe, PaginatorComponent],
   templateUrl: './sales-invoice-list.component.html',
   styleUrl: './sales-invoice-list.component.scss',
 })
@@ -220,6 +221,8 @@ export class SalesInvoiceListComponent {
     this.statusFilter.set(status);
     this.load(0);
   }
+
+  goToPage(page: number): void { this.load(page); }
 
   prevPage(): void {
     const p = this.currentPage();

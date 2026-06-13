@@ -459,25 +459,7 @@
                   </tbody>
                 </table>
               </div>
-              @if (tsMeta().totalPages > 1) {
-                <nav aria-label="Timesheet list pagination" class="d-flex align-items-center gap-3 mt-2">
-                  <button type="button" class="btn btn-sm btn-outline-secondary"
-                          [disabled]="tsPage() === 0"
-                          (click)="tsPrevPage()">
-                    <i class="bi bi-chevron-left" aria-hidden="true"></i>
-                    <span class="visually-hidden">Previous page</span>
-                  </button>
-                  <span class="small text-muted">
-                    Page {{ tsMeta().page + 1 }} of {{ tsMeta().totalPages }}
-                  </span>
-                  <button type="button" class="btn btn-sm btn-outline-secondary"
-                          [disabled]="!tsMeta().hasNext"
-                          (click)="tsNextPage()">
-                    <i class="bi bi-chevron-right" aria-hidden="true"></i>
-                    <span class="visually-hidden">Next page</span>
-                  </button>
-                </nav>
-              }
+              <app-paginator [meta]="tsMeta()" [label]="'Timesheets'" (pageChange)="goToTsPage($event)" />
             }
           }
         }

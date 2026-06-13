@@ -16,6 +16,7 @@ import {
   PostFxRevaluationRequest,
 } from './models/fx.model';
 import { PageMeta } from '../../../core/api/api-response.model';
+import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 /**
  * FX revaluation run list + preview/post/reverse screen (ADR-0036 T5).
@@ -29,7 +30,7 @@ import { PageMeta } from '../../../core/api/api-response.model';
  */
 @Component({
   selector: 'app-fx-revaluation-list',
-  imports: [FormsModule],
+  imports: [FormsModule, PaginatorComponent],
   templateUrl: './fx-revaluation-list.component.html',
   styleUrl: './fx-revaluation-list.component.scss',
 })
@@ -140,6 +141,8 @@ export class FxRevaluationListComponent {
         this.state.set(err instanceof HttpErrorResponse && err.status === 403 ? 'forbidden' : 'error'),
     });
   }
+
+  goToPage(page: number): void { this.load(page); }
 
   prevPage(): void {
     const p = this.currentPage();

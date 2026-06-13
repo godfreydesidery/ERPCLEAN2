@@ -9,6 +9,8 @@ import { OrganisationService } from '../organisation/organisation.service';
 import { AccountLedgerDto, ExportFormat } from './models/reporting.model';
 import { ReportingService } from './reporting.service';
 import { downloadBlob } from './reporting.utils';
+import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
+import { PageMeta } from '../../../core/api/api-response.model';
 
 type LoadState = 'idle' | 'loading' | 'error' | 'forbidden';
 
@@ -20,7 +22,7 @@ type LoadState = 'idle' | 'loading' | 'error' | 'forbidden';
  */
 @Component({
   selector: 'app-account-ledger',
-  imports: [FormsModule],
+  imports: [FormsModule, PaginatorComponent],
   templateUrl: './account-ledger.component.html',
   styleUrl: './account-ledger.component.scss',
 })
@@ -64,6 +66,20 @@ export class AccountLedgerComponent implements OnInit {
     const l = this.ledger();
     if (!l) return false;
     return (this.page() + 1) * this.pageSize < l.totalElements;
+  });
+
+  /** Synthetic PageMeta for <app-paginator> — built from the ledger DTO fields. */
+  readonly ledgerMeta = computed<PageMeta | null>(() => {
+    const l = this.ledger();
+    if (!l) return null;
+    const totalPages = Math.max(1, Math.ceil(l.totalElements / this.pageSize));
+    return {
+      page: this.page(),
+      size: this.pageSize,
+      totalElements: l.totalElements,
+      totalPages,
+      hasNext: this.hasNextPage(),
+    };
   });
 
   ngOnInit(): void {
@@ -144,6 +160,8 @@ export class AccountLedgerComponent implements OnInit {
           ),
       });
   }
+
+  goToPage(page: number): void { this.loadPage(page); }
 
   prevPage(): void {
     if (this.page() > 0) this.loadPage(this.page() - 1);

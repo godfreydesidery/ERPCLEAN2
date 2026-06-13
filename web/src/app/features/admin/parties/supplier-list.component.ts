@@ -12,6 +12,7 @@ import { CreateSupplierRequest, PartyType, SupplierKind, SupplierModel } from '.
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { SupplierService } from './supplier.service';
+import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -19,7 +20,7 @@ interface LoadTrigger { q: string; page: number }
 
 @Component({
   selector: 'app-supplier-list',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, PaginatorComponent],
   templateUrl: './supplier-list.component.html',
   styleUrl: './supplier-list.component.scss',
 })
@@ -122,6 +123,8 @@ export class SupplierListComponent {
     this.searchQ.set('');
     this.load(0);
   }
+
+  goToPage(page: number): void { this.load(page); }
 
   prevPage(): void {
     const p = this.currentPage();

@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { PageMeta } from '../../../core/api/api-response.model';
 import { AUDIT_ACTIONS, AuditFilter, AuditLogEntry } from '../models/audit.model';
 import { AuditService } from './audit.service';
+import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 /** Default page size — matches backend default. */
 const DEFAULT_SIZE = 50;
@@ -15,7 +16,7 @@ const DEFAULT_SIZE = 50;
  */
 @Component({
   selector: 'app-audit-list',
-  imports: [FormsModule],
+  imports: [FormsModule, PaginatorComponent],
   templateUrl: './audit-list.component.html',
   styleUrl: './audit-list.component.scss',
 })
@@ -63,6 +64,8 @@ export class AuditListComponent {
     this.filterTo.set('');
     this.load(0);
   }
+
+  goToPage(page: number): void { this.load(page); }
 
   prevPage(): void {
     const p = this.currentPage();

@@ -97,26 +97,7 @@
         </div>
 
         <!-- Pagination -->
-        @if (meta().totalPages > 1) {
-          <nav aria-label="Delivery log pagination" class="d-flex align-items-center gap-3 mt-2">
-            <button type="button" class="btn btn-sm btn-outline-secondary"
-                    [disabled]="currentPage() === 0"
-                    (click)="prevPage()">
-              <i class="bi bi-chevron-left" aria-hidden="true"></i>
-              <span class="visually-hidden">Previous page</span>
-            </button>
-            <span class="small text-muted">
-              Page {{ meta().page + 1 }} of {{ meta().totalPages }}
-              ({{ meta().totalElements }} total)
-            </span>
-            <button type="button" class="btn btn-sm btn-outline-secondary"
-                    [disabled]="!meta().hasNext"
-                    (click)="nextPage()">
-              <i class="bi bi-chevron-right" aria-hidden="true"></i>
-              <span class="visually-hidden">Next page</span>
-            </button>
-          </nav>
-        }
+          <app-paginator [meta]="meta()" [label]="'Delivery log'" (pageChange)="goToPage($event)" />
       }
     }
   }

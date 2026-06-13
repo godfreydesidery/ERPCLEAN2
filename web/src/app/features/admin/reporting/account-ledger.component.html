@@ -202,23 +202,7 @@
           </div>
 
           <!-- Pagination -->
-          @if (l.totalElements > pageSize) {
-            <nav aria-label="Ledger pagination" class="d-flex justify-content-between align-items-center mt-2">
-              <div class="text-muted small">
-                Page {{ page() + 1 }} · {{ l.totalElements }} lines total
-              </div>
-              <div class="d-flex gap-2">
-                <button type="button" class="btn btn-sm btn-outline-secondary"
-                        (click)="prevPage()" [disabled]="page() === 0">
-                  <i class="bi bi-chevron-left" aria-hidden="true"></i> Previous
-                </button>
-                <button type="button" class="btn btn-sm btn-outline-secondary"
-                        (click)="nextPage()" [disabled]="!hasNextPage()">
-                  Next <i class="bi bi-chevron-right" aria-hidden="true"></i>
-                </button>
-              </div>
-            </nav>
-          }
+          <app-paginator [meta]="ledgerMeta()" [label]="'Ledger'" (pageChange)="goToPage($event)" />
 
         }
       }
