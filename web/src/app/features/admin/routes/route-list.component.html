@@ -138,22 +138,7 @@
       </table>
     </div>
 
-    <!-- ── Pagination ─────────────────────────────────────────────────────── -->
-    <nav aria-label="Routes pagination">
-      <div class="d-flex align-items-center gap-3">
-        <button class="btn btn-outline-secondary btn-sm" type="button"
-                [disabled]="currentPage() === 0" (click)="prevPage()">
-          <i class="bi bi-chevron-left" aria-hidden="true"></i> Prev
-        </button>
-        <span class="small text-muted">
-          Page {{ currentPage() + 1 }} of {{ meta().totalPages || 1 }}
-          ({{ meta().totalElements }} total)
-        </span>
-        <button class="btn btn-outline-secondary btn-sm" type="button"
-                [disabled]="!meta().hasNext" (click)="nextPage()">
-          Next <i class="bi bi-chevron-right" aria-hidden="true"></i>
-        </button>
-      </div>
-    </nav>
+    <!-- Pagination -->
+    <app-paginator [meta]="meta()" [label]="'Routes'" (pageChange)="goToPage($event)" />
   }
 </div>

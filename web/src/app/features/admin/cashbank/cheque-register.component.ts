@@ -16,6 +16,7 @@ import {
   RegisterChequeRequest,
 } from './models/cashbank.model';
 import { CashbankService } from './cashbank.service';
+import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -32,7 +33,7 @@ interface LoadTrigger {
  */
 @Component({
   selector: 'app-cheque-register',
-  imports: [FormsModule],
+  imports: [FormsModule, PaginatorComponent],
   templateUrl: './cheque-register.component.html',
   styleUrl: './cheque-register.component.scss',
 })
@@ -148,6 +149,8 @@ export class ChequeRegisterComponent {
     if (!companyId) return;
     this.loadTrigger$.next({ companyId, page });
   }
+
+  goToPage(page: number): void { this.load(page); }
 
   prevPage(): void {
     const p = this.currentPage();

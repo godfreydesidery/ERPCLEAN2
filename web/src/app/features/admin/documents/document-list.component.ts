@@ -18,6 +18,7 @@ import {
   GeneratedDocumentDto,
   RenderDocumentRequest,
 } from './models/documents.model';
+import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -30,7 +31,7 @@ interface LoadTrigger { page: number }
  */
 @Component({
   selector: 'app-document-list',
-  imports: [FormsModule, RouterLink, SlicePipe],
+  imports: [FormsModule, RouterLink, SlicePipe, PaginatorComponent],
   templateUrl: './document-list.component.html',
   styleUrl: './document-list.component.scss',
 })
@@ -164,6 +165,8 @@ export class DocumentListComponent {
   applyFilters(): void {
     this.load(0);
   }
+
+  goToPage(page: number): void { this.load(page); }
 
   prevPage(): void {
     if (this.currentPage() > 0) this.load(this.currentPage() - 1);

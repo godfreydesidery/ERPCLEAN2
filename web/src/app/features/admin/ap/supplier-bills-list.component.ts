@@ -19,6 +19,7 @@ import {
   RaiseDebitNoteRequest,
 } from './models/ap.model';
 import { ApService } from './ap.service';
+import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -37,7 +38,7 @@ interface LoadTrigger {
  */
 @Component({
   selector: 'app-supplier-bills-list',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, PaginatorComponent],
   templateUrl: './supplier-bills-list.component.html',
   styleUrl: './supplier-bills-list.component.scss',
 })
@@ -180,6 +181,8 @@ export class SupplierBillsListComponent {
       page,
     });
   }
+
+  goToPage(page: number): void { this.load(page); }
 
   prevPage(): void {
     const p = this.currentPage();

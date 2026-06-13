@@ -8,6 +8,7 @@ import { PageMeta } from '../../../core/api/api-response.model';
 import { SessionStore } from '../../../core/auth/session.store';
 import { NotificationDeliveryDto } from './models/notifications.model';
 import { NotificationsService, DeliveryLogPage } from './notifications.service';
+import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -19,7 +20,7 @@ interface LoadTrigger { page: number }
  */
 @Component({
   selector: 'app-notification-delivery-log',
-  imports: [FormsModule, SlicePipe],
+  imports: [FormsModule, SlicePipe, PaginatorComponent],
   templateUrl: './notification-delivery-log.component.html',
   styleUrl: './notification-delivery-log.component.scss',
 })
@@ -83,6 +84,8 @@ export class NotificationDeliveryLogComponent {
   load(page: number): void {
     this.immediateTrigger$.next({ page });
   }
+
+  goToPage(page: number): void { this.load(page); }
 
   prevPage(): void { if (this.currentPage() > 0) this.load(this.currentPage() - 1); }
   nextPage(): void { if (this.meta().hasNext) this.load(this.currentPage() + 1); }

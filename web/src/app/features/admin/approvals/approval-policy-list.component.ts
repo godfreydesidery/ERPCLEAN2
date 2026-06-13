@@ -20,6 +20,7 @@ import {
   PolicyBranchScope,
   PolicyStepInputDto,
 } from './models/approvals.model';
+import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -31,7 +32,7 @@ interface LoadTrigger { page: number }
  */
 @Component({
   selector: 'app-approval-policy-list',
-  imports: [FormsModule, RouterLink, DecimalPipe],
+  imports: [FormsModule, RouterLink, DecimalPipe, PaginatorComponent],
   templateUrl: './approval-policy-list.component.html',
   styleUrl: './approval-policy-list.component.scss',
 })
@@ -145,6 +146,8 @@ export class ApprovalPolicyListComponent {
     if (!companyId) return;
     this.immediateTrigger$.next({ page });
   }
+
+  goToPage(page: number): void { this.load(page); }
 
   prevPage(): void { if (this.currentPage() > 0) this.load(this.currentPage() - 1); }
   nextPage(): void { if (this.meta().hasNext) this.load(this.currentPage() + 1); }

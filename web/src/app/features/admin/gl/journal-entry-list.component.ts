@@ -11,6 +11,7 @@ import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { JournalEntryDto, JournalSourceType } from './models/gl.model';
 import { GlService } from './gl.service';
+import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -21,7 +22,7 @@ const DEFAULT_SIZE = 20;
  */
 @Component({
   selector: 'app-journal-entry-list',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, PaginatorComponent],
   templateUrl: './journal-entry-list.component.html',
   styleUrl: './journal-entry-list.component.scss',
 })
@@ -101,6 +102,8 @@ export class JournalEntryListComponent {
     if (!this.selectedCompanyId()) return;
     this.loadTrigger$.next(page);
   }
+
+  goToPage(page: number): void { this.load(page); }
 
   prevPage(): void {
     const p = this.currentPage();

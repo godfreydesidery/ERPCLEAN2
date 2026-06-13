@@ -411,25 +411,7 @@
                                     </tbody>
                                   </table>
                                 </div>
-                                @if (movementMeta().totalPages > 1) {
-                                  <nav aria-label="Movements pagination" class="d-flex align-items-center gap-2 mt-1">
-                                    <button type="button" class="btn btn-sm btn-outline-secondary"
-                                            [disabled]="movementsPage() === 0"
-                                            (click)="movementsPrevPage()">
-                                      <i class="bi bi-chevron-left" aria-hidden="true"></i>
-                                      <span class="visually-hidden">Previous</span>
-                                    </button>
-                                    <span class="small text-muted">
-                                      Page {{ movementMeta().page + 1 }} of {{ movementMeta().totalPages }}
-                                    </span>
-                                    <button type="button" class="btn btn-sm btn-outline-secondary"
-                                            [disabled]="!movementMeta().hasNext"
-                                            (click)="movementsNextPage()">
-                                      <i class="bi bi-chevron-right" aria-hidden="true"></i>
-                                      <span class="visually-hidden">Next</span>
-                                    </button>
-                                  </nav>
-                                }
+                                <app-paginator [meta]="movementMeta()" [label]="'Movements'" (pageChange)="goToMovementsPage($event)" />
                               }
                             }
                           }
@@ -443,26 +425,7 @@
           </div>
 
           <!-- Pagination -->
-          @if (meta().totalPages > 1) {
-            <nav aria-label="Stock list pagination" class="d-flex align-items-center gap-3 mt-2">
-              <button type="button" class="btn btn-sm btn-outline-secondary"
-                      [disabled]="currentPage() === 0"
-                      (click)="prevPage()">
-                <i class="bi bi-chevron-left" aria-hidden="true"></i>
-                <span class="visually-hidden">Previous page</span>
-              </button>
-              <span class="small text-muted">
-                Page {{ meta().page + 1 }} of {{ meta().totalPages }}
-                ({{ meta().totalElements }} total)
-              </span>
-              <button type="button" class="btn btn-sm btn-outline-secondary"
-                      [disabled]="!meta().hasNext"
-                      (click)="nextPage()">
-                <i class="bi bi-chevron-right" aria-hidden="true"></i>
-                <span class="visually-hidden">Next page</span>
-              </button>
-            </nav>
-          }
+          <app-paginator [meta]="meta()" [label]="'Stock'" (pageChange)="goToPage($event)" />
         }
       }
     }

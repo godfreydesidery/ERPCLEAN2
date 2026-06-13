@@ -17,6 +17,7 @@ import { CustomerService } from '../parties/customer.service';
 import { AgentService } from '../parties/agent.service';
 import { SalesOrdersService } from './sales-orders.service';
 import type { SalesOrderPage } from './sales-orders.service';
+import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -28,7 +29,7 @@ interface LoadTrigger { page: number }
  */
 @Component({
   selector: 'app-sales-order-list',
-  imports: [FormsModule, RouterLink, DecimalPipe],
+  imports: [FormsModule, RouterLink, DecimalPipe, PaginatorComponent],
   templateUrl: './sales-order-list.component.html',
   styleUrl: './sales-order-list.component.scss',
 })
@@ -191,6 +192,8 @@ export class SalesOrderListComponent {
     if (!companyId) return;
     this.immediateTrigger$.next({ page });
   }
+
+  goToPage(page: number): void { this.load(page); }
 
   prevPage(): void { if (this.currentPage() > 0) this.load(this.currentPage() - 1); }
   nextPage(): void { if (this.meta().hasNext) this.load(this.currentPage() + 1); }

@@ -148,26 +148,8 @@
           </table>
         </div>
 
-        <!-- Paging controls -->
-        <nav class="paging d-flex align-items-center gap-3 mt-2"
-             aria-label="Audit log pagination">
-          <button type="button" class="btn btn-outline-secondary btn-sm"
-                  [disabled]="currentPage() === 0"
-                  (click)="prevPage()">
-            <i class="bi bi-chevron-left" aria-hidden="true"></i>
-            <span class="ms-1">Prev</span>
-          </button>
-          <span class="small text-muted" aria-live="polite">
-            Page {{ meta().page + 1 }} of {{ meta().totalPages }}
-            ({{ meta().totalElements }} total)
-          </span>
-          <button type="button" class="btn btn-outline-secondary btn-sm"
-                  [disabled]="!meta().hasNext"
-                  (click)="nextPage()">
-            <span class="me-1">Next</span>
-            <i class="bi bi-chevron-right" aria-hidden="true"></i>
-          </button>
-        </nav>
+        <!-- Pagination -->
+        <app-paginator [meta]="meta()" [label]="'Audit log'" (pageChange)="goToPage($event)" />
       }
     }
   }

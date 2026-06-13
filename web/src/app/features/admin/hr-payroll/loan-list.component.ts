@@ -13,6 +13,7 @@ import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { HrPayrollService, LoanPage } from './hr-payroll.service';
 import { CreateLoanRequest, EmployeeLoanDto, LoanStatus } from './models/hr-payroll.model';
+import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -24,7 +25,7 @@ interface LoadTrigger { page: number }
  */
 @Component({
   selector: 'app-loan-list',
-  imports: [FormsModule, RouterLink, DecimalPipe],
+  imports: [FormsModule, RouterLink, DecimalPipe, PaginatorComponent],
   templateUrl: './loan-list.component.html',
   styleUrl: './loan-list.component.scss',
 })
@@ -122,6 +123,8 @@ export class LoanListComponent {
     if (!this.selectedCompanyId()) return;
     this.immediateTrigger$.next({ page });
   }
+
+  goToPage(page: number): void { this.load(page); }
 
   prevPage(): void { if (this.currentPage() > 0) this.load(this.currentPage() - 1); }
   nextPage(): void { if (this.meta().hasNext) this.load(this.currentPage() + 1); }

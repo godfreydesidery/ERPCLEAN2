@@ -12,6 +12,7 @@ import { GoodsReceiptDto, GoodsReceiptStatus } from '../models/purchases.model';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { PurchasesService } from './purchases.service';
+import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -24,7 +25,7 @@ interface LoadTrigger { q: string; page: number }
  */
 @Component({
   selector: 'app-goods-receipt-list',
-  imports: [FormsModule, RouterLink, DatePipe],
+  imports: [FormsModule, RouterLink, DatePipe, PaginatorComponent],
   templateUrl: './goods-receipt-list.component.html',
   styleUrl: './goods-receipt-list.component.scss',
 })
@@ -115,6 +116,8 @@ export class GoodsReceiptListComponent {
     if (!companyId) return;
     this.immediateTrigger$.next({ q: this.searchQ(), page });
   }
+
+  goToPage(page: number): void { this.load(page); }
 
   prevPage(): void { if (this.currentPage() > 0) this.load(this.currentPage() - 1); }
   nextPage(): void { if (this.meta().hasNext) this.load(this.currentPage() + 1); }

@@ -12,6 +12,7 @@ import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { HrPayrollService, EmployeePage } from './hr-payroll.service';
 import { CreateEmployeeRequest, EmployeeDto, EmploymentStatus } from './models/hr-payroll.model';
+import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -23,7 +24,7 @@ interface LoadTrigger { page: number }
  */
 @Component({
   selector: 'app-employee-list',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, PaginatorComponent],
   templateUrl: './employee-list.component.html',
   styleUrl: './employee-list.component.scss',
 })
@@ -125,6 +126,8 @@ export class EmployeeListComponent {
     if (!companyId) return;
     this.immediateTrigger$.next({ page });
   }
+
+  goToPage(page: number): void { this.load(page); }
 
   prevPage(): void { if (this.currentPage() > 0) this.load(this.currentPage() - 1); }
   nextPage(): void { if (this.meta().hasNext) this.load(this.currentPage() + 1); }
