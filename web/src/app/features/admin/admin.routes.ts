@@ -1046,6 +1046,24 @@ export const ADMIN_ROUTES: Routes = [
     canActivate: [requirePermission('BOM.VIEW')],
     loadComponent: () =>
       import('./manufacturing/bom/bom-detail.component').then((m) => m.BomDetailComponent),
+  // ── Standing Orders (Recurring Sales) ────────────────────────────────────────
+  {
+    path: 'standing-orders',
+    canActivate: [requirePermission('SALES.STANDING.VIEW')],
+    loadComponent: () =>
+      import('./sales/standing/standing-order-list.component').then((m) => m.StandingOrderListComponent),
+  },
+  {
+    path: 'standing-orders/create',
+    canActivate: [requirePermission('SALES.STANDING.CREATE')],
+    loadComponent: () =>
+      import('./sales/standing/standing-order-create.component').then((m) => m.StandingOrderCreateComponent),
+  },
+  {
+    path: 'standing-orders/uid/:uid',
+    canActivate: [requirePermission('SALES.STANDING.VIEW')],
+    loadComponent: () =>
+      import('./sales/standing/standing-order-detail.component').then((m) => m.StandingOrderDetailComponent),
   },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];

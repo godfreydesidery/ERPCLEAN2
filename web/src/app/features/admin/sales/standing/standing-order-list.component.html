@@ -1,0 +1,125 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Standing Orders</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>
+      Manage recurring sales orders.
+    </p>
+  </header>
+
+  <!-- Company selector -->
+  @switch (companyState()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mb-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load companies. Is the API running?
+      </p>
+    }
+    @default {
+      @if (companies().length > 1) {
+        <div class="mb-3" style="max-width:320px">
+          <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+          <select id="companyPicker" name="companyPicker" class="form-select"
+                  [ngModel]="selectedCompanyId()"
+                  (ngModelChange)="onCompanyChange($event)">
+            @for (c of companies(); track c.uid) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+          </select>
+        </div>
+      }
+    }
+  }
+
+  @if (selectedCompanyId()) {
+    <!-- Toolbar -->
+    <div class="d-flex flex-wrap gap-2 mb-3 align-items-end">
+      @if (canCreate()) {
+        <div class="ms-auto align-self-end">
+          <a class="btn btn-primary" [routerLink]="['/admin/standing-orders/create']">
+            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+            New Standing Order
+          </a>
+        </div>
+      }
+    </div>
+
+    <!-- List states -->
+    @switch (state()) {
+      @case ('loading') {
+        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading standing orders…
+        </p>
+      }
+      @case ('error') {
+        <p class="state text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load standing orders. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="state text-muted d-flex align-items-center gap-2">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view standing orders.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <p class="state text-muted">No standing orders yet.
+            @if (canCreate()) {
+              <a [routerLink]="['/admin/standing-orders/create']">Create the first one.</a>
+            }
+          </p>
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-hover align-middle bg-white grid">
+              <caption class="visually-hidden">Standing Orders</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Order #</th>
+                  <th scope="col">Customer ID</th>
+                  <th scope="col">Frequency</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Start Date</th>
+                  <th scope="col">Next Run</th>
+                  <th scope="col">Currency</th>
+                  <th scope="col"><span class="visually-hidden">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (so of rows(); track so.uid) {
+                  <tr>
+                    <td class="font-monospace">{{ orderLabel(so) }}</td>
+                    <td class="small text-muted">{{ so.customerId }}</td>
+                    <td class="small">{{ so.frequency }}</td>
+                    <td>
+                      <span class="badge" [class]="statusBadgeClass(so.status)">{{ so.status }}</span>
+                    </td>
+                    <td class="small text-muted">{{ so.startDate }}</td>
+                    <td class="small text-muted">{{ so.nextRunDate ?? '—' }}</td>
+                    <td class="small">{{ so.currency }}</td>
+                    <td>
+                      <a class="btn btn-sm btn-outline-primary"
+                         [routerLink]="['/admin/standing-orders/uid', so.uid]"
+                         [attr.aria-label]="'Open standing order ' + orderLabel(so)">
+                        <i class="bi bi-eye me-1" aria-hidden="true"></i>Open
+                      </a>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Pagination -->
+          <app-paginator [meta]="meta()" [label]="'Standing Orders'" (pageChange)="goToPage($event)" />
+        }
+      }
+    }
+  }
+</section>
