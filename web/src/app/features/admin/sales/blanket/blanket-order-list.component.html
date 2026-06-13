@@ -1,0 +1,123 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Blanket Orders</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-file-earmark-ruled me-1" aria-hidden="true"></i>
+      Sales blanket agreements — draw releases against committed quantities.
+    </p>
+  </header>
+
+  <!-- Company selector -->
+  @switch (companyState()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mb-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load companies. Is the API running?
+      </p>
+    }
+    @default {
+      @if (companies().length > 1) {
+        <div class="mb-3" style="max-width:320px">
+          <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+          <select id="companyPicker" name="companyPicker" class="form-select"
+                  [ngModel]="selectedCompanyId()"
+                  (ngModelChange)="onCompanyChange($event)">
+            @for (c of companies(); track c.uid) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+          </select>
+        </div>
+      }
+    }
+  }
+
+  @if (selectedCompanyId()) {
+    <!-- Toolbar -->
+    <div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
+      @if (canCreate()) {
+        <a class="btn btn-primary ms-auto" routerLink="/admin/blanket-orders/create">
+          <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>New Blanket Order
+        </a>
+      }
+    </div>
+
+    <!-- List states -->
+    @switch (state()) {
+      @case ('loading') {
+        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading blanket orders…
+        </p>
+      }
+      @case ('error') {
+        <p class="state text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load blanket orders. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="state text-muted d-flex align-items-center gap-2">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view blanket orders.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <p class="state text-muted">No blanket orders yet.
+            @if (canCreate()) {
+              <a routerLink="/admin/blanket-orders/create">Create one</a>.
+            }
+          </p>
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-hover align-middle bg-white grid">
+              <caption class="visually-hidden">Blanket orders</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Order #</th>
+                  <th scope="col">Customer ID</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Valid From</th>
+                  <th scope="col">Valid To</th>
+                  <th scope="col">Currency</th>
+                  <th scope="col" class="text-end">Committed</th>
+                  <th scope="col" class="text-end">Drawn</th>
+                  <th scope="col"><span class="visually-hidden">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (b of rows(); track b.uid) {
+                  <tr>
+                    <td class="font-monospace">{{ b.orderNumber ?? 'DRAFT' }}</td>
+                    <td class="small">{{ b.customerId }}</td>
+                    <td>
+                      <span class="badge" [class]="statusBadgeClass(b.status)">{{ b.status }}</span>
+                    </td>
+                    <td class="small text-muted">{{ b.validFrom }}</td>
+                    <td class="small text-muted">{{ b.validTo }}</td>
+                    <td class="small">{{ b.currency }}</td>
+                    <td class="text-end font-monospace small">{{ +b.totalCommittedAmount | number:'1.2-2' }}</td>
+                    <td class="text-end font-monospace small">{{ +b.totalDrawnAmount | number:'1.2-2' }}</td>
+                    <td>
+                      <a class="btn btn-sm btn-outline-primary"
+                         [routerLink]="['/admin/blanket-orders/uid', b.uid]"
+                         [attr.aria-label]="'Open blanket order ' + (b.orderNumber ?? 'DRAFT')">
+                        <i class="bi bi-eye me-1" aria-hidden="true"></i>Open
+                      </a>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <app-paginator [meta]="meta()" [label]="'Blanket orders'" (pageChange)="goToPage($event)" />
+        }
+      }
+    }
+  }
+</section>

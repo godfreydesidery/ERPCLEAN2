@@ -1012,6 +1012,24 @@ export const ADMIN_ROUTES: Routes = [
     canActivate: [requirePermission('PURCHASE.SETTINGS.VIEW')],
     loadComponent: () =>
       import('./purchases/settings/purchase-settings.component').then((m) => m.PurchaseSettingsComponent),
+  // ── Blanket Orders ────────────────────────────────────────────────────────
+  {
+    path: 'blanket-orders',
+    canActivate: [requirePermission('SALES.BLANKET.VIEW')],
+    loadComponent: () =>
+      import('./sales/blanket/blanket-order-list.component').then((m) => m.BlanketOrderListComponent),
+  },
+  {
+    path: 'blanket-orders/uid/:uid',
+    canActivate: [requirePermission('SALES.BLANKET.VIEW')],
+    loadComponent: () =>
+      import('./sales/blanket/blanket-order-detail.component').then((m) => m.BlanketOrderDetailComponent),
+  },
+  {
+    path: 'blanket-orders/create',
+    canActivate: [requirePermission('SALES.BLANKET.CREATE')],
+    loadComponent: () =>
+      import('./sales/blanket/blanket-order-create.component').then((m) => m.BlanketOrderCreateComponent),
   },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];

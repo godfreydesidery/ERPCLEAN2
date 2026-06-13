@@ -140,6 +140,7 @@ export class ShellComponent {
         { label: 'Invoices', route: '/admin/sales-invoices', icon: 'bi-receipt', available: true, permission: 'SALES.INVOICE.VIEW' },
         { label: 'Sales Returns', route: '/admin/sales-returns', icon: 'bi-arrow-return-left', available: true, permission: 'SALES.RETURN.VIEW' },
         { label: 'Tax Rates', route: '/admin/tax-rates', icon: 'bi-percent', available: true, permission: 'TAXRATE.VIEW' },
+        { label: 'Blanket Orders', route: '/admin/blanket-orders', icon: 'bi-file-earmark-ruled', available: true, permission: 'SALES.BLANKET.VIEW' },
       ],
     },
     {
