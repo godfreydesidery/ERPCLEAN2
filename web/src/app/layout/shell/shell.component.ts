@@ -310,6 +310,13 @@ export class ShellComponent {
         { label: 'Revaluation Runs', route: '/admin/fx/revaluation-runs', icon: 'bi-arrow-repeat', available: true, permission: 'FX.EXPOSURE.VIEW' },
       ],
     },
+    // ── Analytics ─────────────────────────────────────────────────────────────
+    {
+      label: 'Analytics',
+      items: [
+        { label: 'Dashboard', route: '/admin/dashboard', icon: 'bi-speedometer2', available: true, permission: 'BI.VIEW' },
+      ],
+    },
   ];
 
   /** Nav groups with permission-filtered items. Reactive: recomputes when permissions change. */
