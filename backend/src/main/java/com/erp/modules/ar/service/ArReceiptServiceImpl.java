@@ -26,6 +26,7 @@ import com.erp.modules.gl.domain.enums.GlConfigKey;
 import com.erp.modules.gl.domain.enums.JournalSourceType;
 import com.erp.modules.gl.service.GLConfigResolver;
 import com.erp.modules.gl.service.GLPostingService;
+import com.erp.modules.iam.domain.entity.Company;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.parties.domain.entity.Customer;
 import com.erp.modules.parties.repository.CustomerRepository;
@@ -35,12 +36,15 @@ import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.money.ConvertedAmount;
+import com.erp.platform.common.money.CurrencyConversionService;
 import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.OutboxPublisher;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.text.DecimalFormat;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -54,6 +58,12 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Records AR receipts, allocates them (oldest-first or manual override), and posts the cash leg
  * to GL synchronously in the same transaction (ADR-0014 D-3/D-4, FR-AR-06/07, BR-AR-04/05/12).
+ *
+ * <p>ADR-0036 T3: when the receipt currency differs from base, a realized FX gain/loss leg is
+ * injected as a base-currency balancing plug (D-5). The sacred Σbase invariant is preserved by
+ * construction — all legs are posted in base currency, so {@code GLPostingServiceImpl} is
+ * byte-untouched. When settlement currency == invoice currency == base the FX plug is zero and
+ * OMITTED so single-currency settlements remain byte-identical (D-8).
  *
  * <p>A GL failure (missing config, closed period) rolls back the whole command — the receipt is
  * not created and the sub-ledger is untouched. This is the correct atomicity (D-4).
@@ -73,6 +83,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
     private final CashBankAccountResolver cashBankAccountResolver;
     private final CashTransactionRecorder cashTxnRecorder;
     private final WhtCaptureService whtCapture;
+    private final CurrencyConversionService fxConversion;
     private final OutboxPublisher outbox;
     private final ScopeGuard scopeGuard;
     private final AuditService audit;
@@ -88,6 +99,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                                  CashBankAccountResolver cashBankAccountResolver,
                                  CashTransactionRecorder cashTxnRecorder,
                                  WhtCaptureService whtCapture,
+                                 CurrencyConversionService fxConversion,
                                  OutboxPublisher outbox,
                                  ScopeGuard scopeGuard,
                                  AuditService audit) {
@@ -102,6 +114,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         this.cashBankAccountResolver = cashBankAccountResolver;
         this.cashTxnRecorder         = cashTxnRecorder;
         this.whtCapture              = whtCapture;
+        this.fxConversion            = fxConversion;
         this.outbox                  = outbox;
         this.scopeGuard              = scopeGuard;
         this.audit                   = audit;
@@ -110,23 +123,33 @@ public class ArReceiptServiceImpl implements ArReceiptService {
     @Override
     public ArReceiptDto recordAndAllocate(RecordReceiptRequest req) {
         // 1. Resolve company and scope guard
-        Long companyId = companies.findByUid(req.companyUid())
-                .map(c -> c.getId())
+        Company company = companies.findByUid(req.companyUid())
                 .orElseThrow(() -> new NotFoundException("Company not found: " + req.companyUid()));
+        Long companyId = company.getId();
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+
+        String baseCurrency = company.getBaseCurrency();
 
         // 2. Resolve customer (must belong to the company)
         Customer customer = customers.findByCompanyIdAndUid(companyId, req.customerUid())
                 .orElseThrow(() -> new NotFoundException("Customer not found: " + req.customerUid()));
 
-        String currency = companies.findById(companyId)
-                .map(c -> c.getBaseCurrency())
-                .orElse("TZS");
+        // ADR-0036 D-5 / D-9: read currency from req (no longer forced to base).
+        // The single-currency fast path (req.currency() == base) still works byte-identically.
+        String currency = (req.currency() != null && !req.currency().isBlank())
+                ? req.currency()
+                : baseCurrency;
 
-        // 3. Generate receipt number
+        // 3. Resolve settlement rate via CurrencyConversionService (identity short-circuit when
+        //    currency == baseCurrency; throws FxRateNotFoundException for unknown foreign rates).
+        ConvertedAmount settlementConv = fxConversion.toBase(
+                BigDecimal.ONE, currency, companyId, req.receiptDate());
+        BigDecimal settlementRate = settlementConv.rate();
+
+        // 4. Generate receipt number
         String receiptNumber = numberGen.nextReceipt(companyId);
 
-        // 4. Create the receipt header (unallocated_amount starts == amount)
+        // 5. Create the receipt header (unallocated_amount starts == amount)
         ArReceipt receipt = new ArReceipt(
                 companyId,
                 RequestContext.get() != null ? RequestContext.get().branchId() : null,
@@ -137,9 +160,12 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                 currency,
                 req.tenderType(),
                 actorId());
+        // Stamp settlement rate (ADR-0036 D-4; immutable after persist)
+        receipt.setFxRate(settlementRate);
+        receipt.setRateAt(settlementConv.rateAt());
         receipt = receipts.save(receipt);
 
-        // 5. Build allocation set
+        // 6. Build allocation set
         List<ArReceiptAllocation> allocationList;
         if (req.allocations() == null || req.allocations().isEmpty()) {
             // Oldest-first auto-allocation (BR-AR-03)
@@ -149,8 +175,14 @@ public class ArReceiptServiceImpl implements ArReceiptService {
             allocationList = manualAllocate(receipt, companyId, req.allocations());
         }
 
-        // 6. Apply allocation — reduce open items, update receipt unallocated_amount
-        BigDecimal totalAllocated = BigDecimal.ZERO;
+        // 7. Apply allocation — reduce open items, capture base amounts for FX
+        //    ADR-0036 D-5: accumulate Σ base_relieved (AR booked at invoice rate) and
+        //    Σ base_settled (cash received at settlement rate). The difference is the FX delta.
+        BigDecimal totalAllocated   = BigDecimal.ZERO;
+        BigDecimal sumBaseRelieved  = BigDecimal.ZERO; // Σ(face × invoice_rate) — original AR base
+        BigDecimal sumBaseSettled   = BigDecimal.ZERO; // Σ(face × settlement_rate) — cash base
+        int baseScale = baseMinorUnits(baseCurrency);
+
         List<ArReceiptAllocation> savedAllocs = new ArrayList<>();
         for (ArReceiptAllocation alloc : allocationList) {
             ArInvoice inv = invoices.findById(alloc.getArInvoiceId())
@@ -162,34 +194,61 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                                 + " exceeds outstanding " + inv.getOutstandingAmount()
                                 + " on invoice uid=" + inv.getUid() + " (BR-AR-04).");
             }
+
+            // Per-allocation base amounts (ADR-0036 D-5, allocation-junction base capture D-4)
+            BigDecimal invoiceRate   = inv.getFxRate() != null ? inv.getFxRate() : BigDecimal.ONE;
+            BigDecimal baseRelieved  = alloc.getAllocatedAmount()
+                    .multiply(invoiceRate).setScale(baseScale, RoundingMode.HALF_UP);
+            BigDecimal baseSettledSlice = alloc.getAllocatedAmount()
+                    .multiply(settlementRate).setScale(baseScale, RoundingMode.HALF_UP);
+
+            // Capture per-allocation base capture columns (V78)
+            alloc.setBaseAllocatedAmount(baseSettledSlice);
+            alloc.setSettlementRate(settlementRate);
+
+            // Decrement outstanding in both face and base
             inv.setOutstandingAmount(inv.getOutstandingAmount().subtract(alloc.getAllocatedAmount()));
+            // Decrement base_outstanding_amount by the base value being relieved at invoice rate
+            BigDecimal currentBaseOutstanding = inv.getBaseOutstandingAmount() != null
+                    ? inv.getBaseOutstandingAmount()
+                    : inv.getOriginalAmount(); // fallback for pre-FX rows
+            inv.setBaseOutstandingAmount(
+                    currentBaseOutstanding.subtract(baseRelieved).max(BigDecimal.ZERO));
             inv.setStatus(deriveInvoiceStatus(inv.getOutstandingAmount(), inv.getOriginalAmount()));
             inv.setUpdatedAt(Instant.now());
             inv.setUpdatedBy(actorId());
             invoices.save(inv);
 
             savedAllocs.add(allocations.save(alloc));
-            totalAllocated = totalAllocated.add(alloc.getAllocatedAmount());
+            totalAllocated  = totalAllocated.add(alloc.getAllocatedAmount());
+            sumBaseRelieved = sumBaseRelieved.add(baseRelieved);
+            sumBaseSettled  = sumBaseSettled.add(baseSettledSlice);
         }
 
-        // 7. Guard: total allocated must not exceed receipt amount (BR-AR-04)
+        // 8. Guard: total allocated must not exceed receipt amount (BR-AR-04)
         if (totalAllocated.compareTo(receipt.getAmount()) > 0) {
             throw new IllegalStateException(
                     "Total allocated " + totalAllocated
                             + " exceeds receipt amount " + receipt.getAmount() + " (BR-AR-04).");
         }
 
-        // 8. Update receipt unallocated_amount and status
+        // 9. Update receipt unallocated_amount and status
         BigDecimal unallocated = receipt.getAmount().subtract(totalAllocated);
         receipt.setUnallocatedAmount(unallocated);
         receipt.setStatus(deriveReceiptStatus(unallocated, receipt.getAmount(), totalAllocated));
         receipt.setUpdatedAt(Instant.now());
         receipt.setUpdatedBy(actorId());
 
-        // 9. Post cash leg to GL synchronously (D-4). Failure rolls back the whole TX.
-        //    ADR-0016: resolve cash/bank account via CashBankAccountResolver (replaces glConfig.CASH).
-        //    ADR-0017 D-9: if WHT present, capture certificate first to get GL account, then reduce
-        //    the cash DR leg by whtAmount and append DR WHT_RECEIVABLE whtAmount.
+        // 10. Post cash leg to GL synchronously (D-4). Failure rolls back the whole TX.
+        //
+        //    ADR-0036 D-5 — realized FX settlement (base-currency legs only):
+        //      DR Cash            = Σ base_settled (unallocated portion also at settlement rate)
+        //      CR AR control      = Σ base_relieved  (original base value at invoice rate)
+        //      CR/DR Realized FX  = balancing plug = Σ base_relieved − Σ base_settled
+        //        positive delta (base_relieved > base_settled) → customer worth less in base → FX LOSS
+        //        negative delta (base_relieved < base_settled) → customer worth more  → FX GAIN
+        //    When settlement currency == base (rate == 1) the plug == 0 → no FX leg emitted
+        //    (single-currency path byte-identical, D-8).
         CashAccountGlResolutionDto cashRes = cashBankAccountResolver.resolve(
                 companyId, req.cashBankAccountUid());
         ChartOfAccount arAcct = glConfig.resolve(companyId, GlConfigKey.ACCOUNTS_RECEIVABLE);
@@ -212,18 +271,58 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                     actorId());
         }
 
-        List<LineDraft> glLines = new ArrayList<>();
-        // Cash DR = full amount minus any WHT withheld by customer
-        BigDecimal cashDr = hasWht ? receipt.getAmount().subtract(req.whtAmount()) : receipt.getAmount();
-        glLines.add(new LineDraft(cashRes.glAccountId(), cashDr, BigDecimal.ZERO, currency,
-                "Cash received from " + customer.getDisplayName()));
-        // WHT_RECEIVABLE DR leg (the WHT the customer held back on our behalf)
+        // Convert the unallocated (on-account) portion to base at settlement rate
+        BigDecimal baseUnallocated = unallocated.multiply(settlementRate)
+                .setScale(baseScale, RoundingMode.HALF_UP);
+        // Total base cash = base of all allocated + base of unallocated
+        BigDecimal totalBaseCash = sumBaseSettled.add(baseUnallocated);
+
+        // WHT is in receipt currency; convert to base
+        BigDecimal baseWht = BigDecimal.ZERO;
         if (hasWht) {
-            glLines.add(new LineDraft(whtResult.glAccountId(), req.whtAmount(), BigDecimal.ZERO, currency,
+            baseWht = req.whtAmount().multiply(settlementRate)
+                    .setScale(baseScale, RoundingMode.HALF_UP);
+        }
+
+        // FX leg: plug = Σ base_relieved − Σ base_settled (only on the allocated portion)
+        // Positive → FX loss (we receive less base than booked); negative → FX gain
+        BigDecimal fxDelta = sumBaseRelieved.subtract(sumBaseSettled);
+        boolean hasFxLeg = fxDelta.compareTo(BigDecimal.ZERO) != 0;
+
+        List<LineDraft> glLines = new ArrayList<>();
+
+        // Cash DR = total base cash minus base WHT
+        BigDecimal cashDrBase = hasWht ? totalBaseCash.subtract(baseWht) : totalBaseCash;
+        glLines.add(new LineDraft(cashRes.glAccountId(), cashDrBase, BigDecimal.ZERO, baseCurrency,
+                "Cash received from " + customer.getDisplayName()));
+
+        // WHT_RECEIVABLE DR leg (base amount)
+        if (hasWht) {
+            glLines.add(new LineDraft(whtResult.glAccountId(), baseWht, BigDecimal.ZERO, baseCurrency,
                     "WHT receivable — " + receiptNumber));
         }
-        // AR CR = full settled amount (cashDr + whtAmount = receipt.amount — balanced)
-        glLines.add(new LineDraft(arAcct.getId(), BigDecimal.ZERO, receipt.getAmount(), currency,
+
+        // FX gain/loss leg — OMITTED when delta is zero (D-8: single-currency byte-identical)
+        if (hasFxLeg) {
+            if (fxDelta.compareTo(BigDecimal.ZERO) > 0) {
+                // FX LOSS: we cleared AR at more base than we received in cash
+                // DR Realized FX Loss / (the Cash DR was already the smaller number)
+                ChartOfAccount fxLossAcct = glConfig.resolve(companyId, GlConfigKey.REALIZED_FX_LOSS);
+                glLines.add(new LineDraft(fxLossAcct.getId(), fxDelta, BigDecimal.ZERO, baseCurrency,
+                        "Realized FX loss — " + receiptNumber));
+            } else {
+                // FX GAIN: we received more base cash than we originally booked in AR
+                // CR Realized FX Gain
+                ChartOfAccount fxGainAcct = glConfig.resolve(companyId, GlConfigKey.REALIZED_FX_GAIN);
+                glLines.add(new LineDraft(fxGainAcct.getId(), BigDecimal.ZERO, fxDelta.negate(), baseCurrency,
+                        "Realized FX gain — " + receiptNumber));
+            }
+        }
+
+        // AR CR = Σ base_relieved + base_unallocated (the base value originally debited to AR)
+        // This is the balancing leg: Σ cash_DR + Σ WHT_DR + Σ FX_DR/CR = Σ AR_CR
+        BigDecimal arCrBase = sumBaseRelieved.add(baseUnallocated);
+        glLines.add(new LineDraft(arAcct.getId(), BigDecimal.ZERO, arCrBase, baseCurrency,
                 "AR control — " + receiptNumber));
 
         JournalEntryDraft draft = new JournalEntryDraft(
@@ -242,12 +341,12 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         receipt.setCashBankAccountId(cashRes.cashBankAccountId());
         receipt = receipts.save(receipt);
 
-        // 9b. Link journal entry uid back to WHT transaction (ADR-0017 D-9).
+        // 10b. Link journal entry uid back to WHT transaction (ADR-0017 D-9).
         if (hasWht && whtResult != null) {
             whtCapture.linkJournalEntry(whtResult.whtTransactionUid(), posted.uid());
         }
 
-        // 9c. Append cash_transaction row for this settlement (ADR-0016 D-13).
+        // 10c. Append cash_transaction row for this settlement (ADR-0016 D-13).
         cashTxnRecorder.recordSettlement(
                 companyId, receipt.getBranchId(), cashRes.cashBankAccountId(),
                 CashTxnType.AR_RECEIPT, CashTxnDirection.IN,
@@ -255,7 +354,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                 receipt.getUid(), posted.uid(),
                 receipt.getReceiptDate(), actorId());
 
-        // 10. Audit
+        // 11. Audit
         audit.record(AuditEvent.of(AuditActions.AR_RECEIPT_RECORD, "ar_receipts",
                         receipt.getId(), receipt.getUid())
                 .detail(Map.of(
@@ -264,7 +363,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                         "customerId", String.valueOf(customer.getId()),
                         "glEntryUid", posted.uid())));
 
-        // 11. Payment notification trigger — PAYMENT.RECEIVED (ADR-0024 D-8).
+        // 12. Payment notification trigger — PAYMENT.RECEIVED (ADR-0024 D-8).
         // BR-NOTIF-13: amountFormatted must be a pre-formatted display string (e.g. "TZS 1,250.00"),
         // never a raw BigDecimal string. DecimalFormat is not thread-safe; create a new instance here.
         String amountFormatted = (currency != null ? currency + " " : "")
@@ -288,6 +387,19 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         for (ArReceiptAllocation old : existing) {
             invoices.findById(old.getArInvoiceId()).ifPresent(inv -> {
                 inv.setOutstandingAmount(inv.getOutstandingAmount().add(old.getAllocatedAmount()));
+                // Restore base_outstanding_amount if base capture was recorded
+                if (old.getBaseAllocatedAmount() != null) {
+                    BigDecimal invoiceRate = inv.getFxRate() != null ? inv.getFxRate() : BigDecimal.ONE;
+                    BigDecimal baseRelievedRestored = old.getAllocatedAmount()
+                            .multiply(invoiceRate)
+                            .setScale(baseMinorUnits(inv.getCurrency()), RoundingMode.HALF_UP);
+                    BigDecimal newBase = (inv.getBaseOutstandingAmount() != null
+                            ? inv.getBaseOutstandingAmount()
+                            : BigDecimal.ZERO).add(baseRelievedRestored);
+                    BigDecimal cap = inv.getBaseOriginalAmount() != null
+                            ? inv.getBaseOriginalAmount() : inv.getOriginalAmount();
+                    inv.setBaseOutstandingAmount(newBase.min(cap));
+                }
                 inv.setStatus(deriveInvoiceStatus(inv.getOutstandingAmount(), inv.getOriginalAmount()));
                 inv.setUpdatedAt(Instant.now());
                 inv.setUpdatedBy(actorId());
@@ -298,6 +410,10 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         allocations.flush();
 
         // Apply new allocation set
+        BigDecimal settlementRate = receipt.getFxRate() != null ? receipt.getFxRate() : BigDecimal.ONE;
+        String currency = receipt.getCurrency();
+        int baseScale = baseMinorUnits(currency);
+
         BigDecimal totalAllocated = BigDecimal.ZERO;
         List<ArReceiptAllocation> saved = new ArrayList<>();
         for (AllocationLineRequest line : newAllocations) {
@@ -308,15 +424,28 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                         "Re-allocation " + line.allocatedAmount()
                                 + " exceeds outstanding on invoice " + line.arInvoiceUid());
             }
+            BigDecimal invoiceRate = inv.getFxRate() != null ? inv.getFxRate() : BigDecimal.ONE;
+            BigDecimal baseRelieved = line.allocatedAmount()
+                    .multiply(invoiceRate).setScale(baseScale, RoundingMode.HALF_UP);
+            BigDecimal baseSettledSlice = line.allocatedAmount()
+                    .multiply(settlementRate).setScale(baseScale, RoundingMode.HALF_UP);
+
             inv.setOutstandingAmount(inv.getOutstandingAmount().subtract(line.allocatedAmount()));
+            BigDecimal currentBase = inv.getBaseOutstandingAmount() != null
+                    ? inv.getBaseOutstandingAmount() : inv.getOriginalAmount();
+            inv.setBaseOutstandingAmount(
+                    currentBase.subtract(baseRelieved).max(BigDecimal.ZERO));
             inv.setStatus(deriveInvoiceStatus(inv.getOutstandingAmount(), inv.getOriginalAmount()));
             inv.setUpdatedAt(Instant.now());
             inv.setUpdatedBy(actorId());
             invoices.save(inv);
 
-            saved.add(allocations.save(new ArReceiptAllocation(
+            ArReceiptAllocation alloc = new ArReceiptAllocation(
                     receipt.getCompanyId(), receipt.getId(), inv.getId(),
-                    line.allocatedAmount(), actorId())));
+                    line.allocatedAmount(), actorId());
+            alloc.setBaseAllocatedAmount(baseSettledSlice);
+            alloc.setSettlementRate(settlementRate);
+            saved.add(allocations.save(alloc));
             totalAllocated = totalAllocated.add(line.allocatedAmount());
         }
         if (totalAllocated.compareTo(receipt.getAmount()) > 0) {
@@ -419,6 +548,19 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         if (allocated.compareTo(BigDecimal.ZERO) > 0
                 && unallocated.compareTo(BigDecimal.ZERO) > 0) return ArReceiptStatus.PARTIAL;
         return ArReceiptStatus.ALLOCATED;
+    }
+
+    /**
+     * Minor-unit scale for rounding. TZS=0, USD/EUR/KES/GBP=2.
+     * Defaults to 2 when the currency is unrecognised (safe fallback).
+     */
+    private static int baseMinorUnits(String currencyCode) {
+        if (currencyCode == null) return 2;
+        return switch (currencyCode) {
+            case "TZS", "JPY", "KRW" -> 0;
+            case "BHD", "KWD", "OMR" -> 3;
+            default -> 2;
+        };
     }
 
     // -------------------------------------------------------------------------

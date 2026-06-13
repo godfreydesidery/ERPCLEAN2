@@ -33,10 +33,13 @@ import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.money.ConvertedAmount;
+import com.erp.platform.common.money.CurrencyConversionService;
 import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -50,6 +53,20 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>Settles open bills (SELECT FOR UPDATE via repo — no-double-pay, NFR-AP-04).
  * GL: DR Accounts Payable / CR Cash — posted synchronously; GL failure rolls back atomically.
+ *
+ * <p>ADR-0036 T3: when the payment currency differs from base, a realized FX gain/loss leg is
+ * injected as a base-currency balancing plug (D-5). All GL legs are in base currency so the
+ * GL engine ({@code GLPostingServiceImpl}) is byte-untouched. When settlement currency == base the
+ * FX plug is zero and OMITTED (single-currency path byte-identical, D-8).
+ *
+ * <p>AP FX math (mirror of AR, signs inverted):
+ * <ul>
+ *   <li>DR AP control = Σ base_relieved (original bill rate — the base we originally booked)</li>
+ *   <li>CR Cash       = Σ base_settled  (settlement rate)</li>
+ *   <li>FX delta = base_settled − base_relieved</li>
+ *   <li>positive delta (we pay MORE base than booked) → FX LOSS → DR REALIZED_FX_LOSS</li>
+ *   <li>negative delta (we pay LESS base than booked)  → FX GAIN → CR REALIZED_FX_GAIN</li>
+ * </ul>
  */
 @Service
 @Transactional
@@ -66,6 +83,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
     private final CashBankAccountResolver       cashBankAccountResolver;
     private final CashTransactionRecorder       cashTxnRecorder;
     private final WhtCaptureService             whtCapture;
+    private final CurrencyConversionService     fxConversion;
     private final ScopeGuard                    scopeGuard;
     private final AuditService                  audit;
 
@@ -80,6 +98,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
                                  CashBankAccountResolver cashBankAccountResolver,
                                  CashTransactionRecorder cashTxnRecorder,
                                  WhtCaptureService whtCapture,
+                                 CurrencyConversionService fxConversion,
                                  ScopeGuard scopeGuard,
                                  AuditService audit) {
         this.bills                   = bills;
@@ -93,6 +112,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         this.cashBankAccountResolver = cashBankAccountResolver;
         this.cashTxnRecorder         = cashTxnRecorder;
         this.whtCapture              = whtCapture;
+        this.fxConversion            = fxConversion;
         this.scopeGuard              = scopeGuard;
         this.audit                   = audit;
     }
@@ -123,27 +143,50 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         String currency = bill.getCurrency();
         String payNum   = numbers.nextPayment(companyId);
 
+        // Resolve settlement rate (identity short-circuit when currency == base)
+        ConvertedAmount settlementConv = fxConversion.toBase(
+                BigDecimal.ONE, currency, companyId, req.paymentDate());
+        BigDecimal settlementRate = settlementConv.rate();
+        int baseScale = baseMinorUnits(currency);
+
         ApPayment payment = new ApPayment(
                 companyId, branchId(), bill.getSupplierId(),
                 payNum, ApPaymentKind.SINGLE,
                 req.paymentDate(), toAllocate, currency,
                 req.tenderType(), req.bankReference(), actorId());
+        // Stamp settlement rate on payment header (ADR-0036 D-4)
+        payment.setFxRate(settlementRate);
+        payment.setRateAt(settlementConv.rateAt());
         payment = payments.save(payment);
 
-        // Allocate to bill
+        // Compute per-allocation base amounts
+        BigDecimal billRate = bill.getFxRate() != null ? bill.getFxRate() : BigDecimal.ONE;
+        BigDecimal baseRelieved  = toAllocate.multiply(billRate)
+                .setScale(baseScale, RoundingMode.HALF_UP);
+        BigDecimal baseSettled   = toAllocate.multiply(settlementRate)
+                .setScale(baseScale, RoundingMode.HALF_UP);
+
+        // Allocate to bill — capture base columns (V78)
         ApPaymentAllocation alloc = new ApPaymentAllocation(
                 companyId, payment.getId(), bill.getId(), toAllocate, actorId());
+        alloc.setBaseAllocatedAmount(baseSettled);
+        alloc.setSettlementRate(settlementRate);
         allocations.save(alloc);
 
-        // Update bill outstanding + status
+        // Update bill outstanding + base_outstanding_amount + status
         bill.setOutstandingAmount(bill.getOutstandingAmount().subtract(toAllocate));
+        BigDecimal currentBase = bill.getBaseOutstandingAmount() != null
+                ? bill.getBaseOutstandingAmount() : bill.getGrossAmount();
+        bill.setBaseOutstandingAmount(currentBase.subtract(baseRelieved).max(BigDecimal.ZERO));
         bill.setStatus(billStatusAfterPayment(bill.getOutstandingAmount()));
         bills.save(bill);
 
-        // GL: DR AP / CR Cash (ADR-0016: cash leg routed via CashBankAccountResolver)
-        // ADR-0017 D-9: when WHT present, CR WHT_PAYABLE instead of full cash CR.
-        JournalEntryDto posted = postPaymentToGl(payment, companyId, bill.getBranchId(), currency,
-                req.cashBankAccountUid(), bill.getSupplierId(), req.whtTypeUid(), req.whtAmount());
+        // GL: DR AP / CR Cash (+FX leg if applicable)
+        JournalEntryDto posted = postPaymentToGl(
+                payment, companyId, bill.getBranchId(), currency,
+                req.cashBankAccountUid(), bill.getSupplierId(),
+                req.whtTypeUid(), req.whtAmount(),
+                baseRelieved, baseSettled);
         payment.setGlEntryUid(posted.uid());
         payment = payments.save(payment);
 
@@ -187,12 +230,18 @@ public class ApPaymentServiceImpl implements ApPaymentService {
             throw new IllegalStateException("No open bills selected by the payment run criteria.");
         }
 
+        String currency = openBills.get(0).getCurrency();
+        // Resolve settlement rate once for the run
+        ConvertedAmount settlementConv = fxConversion.toBase(
+                BigDecimal.ONE, currency, companyId, req.paymentDate());
+        BigDecimal settlementRate = settlementConv.rate();
+        int baseScale = baseMinorUnits(currency);
+
         // Compute total first so the INSERT never violates chk_ap_payment_amount (amount > 0)
         BigDecimal totalPaid = openBills.stream()
                 .map(SupplierBill::getOutstandingAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        String currency = openBills.get(0).getCurrency();
-        String payNum   = numbers.nextPayment(companyId);
+        String payNum = numbers.nextPayment(companyId);
 
         final Long finalSupplierId = supplierId;
         ApPayment payment = new ApPayment(
@@ -200,25 +249,44 @@ public class ApPaymentServiceImpl implements ApPaymentService {
                 payNum, ApPaymentKind.PAYMENT_RUN,
                 req.paymentDate(), totalPaid, currency,
                 req.tenderType(), req.bankReference(), actorId());
+        payment.setFxRate(settlementRate);
+        payment.setRateAt(settlementConv.rateAt());
         payment = payments.save(payment);
 
         List<ApPaymentAllocation> allocList = new ArrayList<>();
+        BigDecimal sumBaseRelieved = BigDecimal.ZERO;
+        BigDecimal sumBaseSettled  = BigDecimal.ZERO;
 
         for (SupplierBill bill : openBills) {
             BigDecimal toAllocate = bill.getOutstandingAmount();
+            BigDecimal billRate   = bill.getFxRate() != null ? bill.getFxRate() : BigDecimal.ONE;
+            BigDecimal baseRelieved = toAllocate.multiply(billRate)
+                    .setScale(baseScale, RoundingMode.HALF_UP);
+            BigDecimal baseSettled  = toAllocate.multiply(settlementRate)
+                    .setScale(baseScale, RoundingMode.HALF_UP);
+
             ApPaymentAllocation alloc = new ApPaymentAllocation(
                     companyId, payment.getId(), bill.getId(), toAllocate, actorId());
+            alloc.setBaseAllocatedAmount(baseSettled);
+            alloc.setSettlementRate(settlementRate);
             allocList.add(allocations.save(alloc));
 
             bill.setOutstandingAmount(BigDecimal.ZERO);
+            bill.setBaseOutstandingAmount(BigDecimal.ZERO);
             bill.setStatus(SupplierBillStatus.PAID);
             bills.save(bill);
+
+            sumBaseRelieved = sumBaseRelieved.add(baseRelieved);
+            sumBaseSettled  = sumBaseSettled.add(baseSettled);
         }
 
         // For a payment run the WHT applies to the batch total; supplier id from first bill if batch.
         Long runSupplierId = openBills.isEmpty() ? null : openBills.get(0).getSupplierId();
-        JournalEntryDto posted = postPaymentToGl(payment, companyId, branchId(), currency,
-                req.cashBankAccountUid(), runSupplierId, req.whtTypeUid(), req.whtAmount());
+        JournalEntryDto posted = postPaymentToGl(
+                payment, companyId, branchId(), currency,
+                req.cashBankAccountUid(), runSupplierId,
+                req.whtTypeUid(), req.whtAmount(),
+                sumBaseRelieved, sumBaseSettled);
         payment.setGlEntryUid(posted.uid());
         payment = payments.save(payment);
 
@@ -264,11 +332,35 @@ public class ApPaymentServiceImpl implements ApPaymentService {
     // GL posting
     // -------------------------------------------------------------------------
 
+    /**
+     * Posts the AP payment journal in base currency.
+     *
+     * <p>ADR-0036 D-5 math (AP mirror of AR):
+     * <ul>
+     *   <li>DR AP control  = sumBaseRelieved (original bill rate)</li>
+     *   <li>CR Cash        = sumBaseSettled  (settlement rate)</li>
+     *   <li>fxDelta = sumBaseSettled − sumBaseRelieved</li>
+     *   <li>positive (pay MORE base than booked) → FX LOSS → DR REALIZED_FX_LOSS</li>
+     *   <li>negative (pay LESS base than booked) → FX GAIN → CR REALIZED_FX_GAIN</li>
+     * </ul>
+     *
+     * <p>When rate==1 for all bills, fxDelta==0 and no FX leg is emitted — single-currency
+     * path byte-identical (D-8).
+     *
+     * @param sumBaseRelieved Σ(allocated_face × bill_fx_rate)   — base value originally booked
+     * @param sumBaseSettled  Σ(allocated_face × settlement_rate) — base value of cash paid
+     */
     private JournalEntryDto postPaymentToGl(ApPayment payment, Long companyId,
                                              Long branchId, String currency,
                                              String cashBankAccountUid,
                                              Long supplierId,
-                                             String whtTypeUid, BigDecimal whtAmount) {
+                                             String whtTypeUid, BigDecimal whtAmount,
+                                             BigDecimal sumBaseRelieved,
+                                             BigDecimal sumBaseSettled) {
+        String baseCurrency = companies.findById(companyId)
+                .map(c -> c.getBaseCurrency())
+                .orElseThrow(() -> new IllegalStateException("Company not found: " + companyId));
+
         ChartOfAccount apAcct = glConfig.resolve(companyId, GlConfigKey.ACCOUNTS_PAYABLE);
 
         // ADR-0016 D-8: resolve cash/bank account via CashBankAccountResolver (replaces glConfig.CASH)
@@ -284,29 +376,64 @@ public class ApPaymentServiceImpl implements ApPaymentService {
             whtResult = whtCapture.captureOnPayment(
                     companyId, branchId,
                     whtTypeUid,
-                    supplierId, "Supplier",   // party name resolved from supplier if needed
+                    supplierId, "Supplier",
                     payment.getUid(),
                     payment.getAmount(), whtAmount,
                     currency, payment.getPaymentDate(),
-                    null,   // journal entry uid linked after post
+                    null,
                     actorId());
         }
 
-        // DR AP = gross payment amount (bills settled at gross — balanced with cash + WHT legs)
-        // CR Cash = gross minus WHT; CR WHT_PAYABLE = WHT (ADR-0017 D-9)
-        BigDecimal cashCr = hasWht ? payment.getAmount().subtract(whtAmount) : payment.getAmount();
+        int baseScale = baseMinorUnits(baseCurrency);
+        BigDecimal settlementRate = payment.getFxRate() != null ? payment.getFxRate() : BigDecimal.ONE;
+
+        // Convert WHT to base
+        BigDecimal baseWht = BigDecimal.ZERO;
+        if (hasWht) {
+            baseWht = whtAmount.multiply(settlementRate)
+                    .setScale(baseScale, RoundingMode.HALF_UP);
+        }
+
+        // FX delta: how much MORE base we paid vs. what we booked
+        // positive → FX loss (we paid out more base than we originally recorded as payable)
+        // negative → FX gain (we paid out less base)
+        BigDecimal fxDelta   = sumBaseSettled.subtract(sumBaseRelieved);
+        boolean    hasFxLeg  = fxDelta.compareTo(BigDecimal.ZERO) != 0;
 
         List<LineDraft> glLines = new ArrayList<>();
+
+        // DR AP control = base value originally booked (invoice rate)
         glLines.add(new LineDraft(apAcct.getId(),
-                payment.getAmount(), BigDecimal.ZERO,
-                currency, "AP payment — " + payment.getPaymentNumber()));
+                sumBaseRelieved, BigDecimal.ZERO,
+                baseCurrency, "AP payment — " + payment.getPaymentNumber()));
+
+        // FX leg — OMITTED when delta is zero (D-8: single-currency byte-identical)
+        if (hasFxLeg) {
+            if (fxDelta.compareTo(BigDecimal.ZERO) > 0) {
+                // FX LOSS: we paid out more base than we booked
+                ChartOfAccount fxLossAcct = glConfig.resolve(companyId, GlConfigKey.REALIZED_FX_LOSS);
+                glLines.add(new LineDraft(fxLossAcct.getId(),
+                        fxDelta, BigDecimal.ZERO,
+                        baseCurrency, "Realized FX loss — " + payment.getPaymentNumber()));
+            } else {
+                // FX GAIN: we paid out less base than we booked
+                ChartOfAccount fxGainAcct = glConfig.resolve(companyId, GlConfigKey.REALIZED_FX_GAIN);
+                glLines.add(new LineDraft(fxGainAcct.getId(),
+                        BigDecimal.ZERO, fxDelta.negate(),
+                        baseCurrency, "Realized FX gain — " + payment.getPaymentNumber()));
+            }
+        }
+
+        // CR Cash = base settled minus base WHT
+        BigDecimal cashCrBase = hasWht ? sumBaseSettled.subtract(baseWht) : sumBaseSettled;
         glLines.add(new LineDraft(cashRes.glAccountId(),
-                BigDecimal.ZERO, cashCr,
-                currency, "Cash out — " + payment.getPaymentNumber()));
+                BigDecimal.ZERO, cashCrBase,
+                baseCurrency, "Cash out — " + payment.getPaymentNumber()));
+
         if (hasWht) {
             glLines.add(new LineDraft(whtResult.glAccountId(),
-                    BigDecimal.ZERO, whtAmount,
-                    currency, "WHT payable — " + payment.getPaymentNumber()));
+                    BigDecimal.ZERO, baseWht,
+                    baseCurrency, "WHT payable — " + payment.getPaymentNumber()));
         }
 
         JournalEntryDraft draft = new JournalEntryDraft(
@@ -341,6 +468,19 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         return outstanding.compareTo(BigDecimal.ZERO) == 0
                 ? SupplierBillStatus.PAID
                 : SupplierBillStatus.PARTIALLY_PAID;
+    }
+
+    /**
+     * Minor-unit scale for rounding. TZS=0, USD/EUR/KES/GBP=2.
+     * Defaults to 2 when the currency is unrecognised (safe fallback).
+     */
+    private static int baseMinorUnits(String currencyCode) {
+        if (currencyCode == null) return 2;
+        return switch (currencyCode) {
+            case "TZS", "JPY", "KRW" -> 0;
+            case "BHD", "KWD", "OMR" -> 3;
+            default -> 2;
+        };
     }
 
     private Long resolveCompany(String uid) {

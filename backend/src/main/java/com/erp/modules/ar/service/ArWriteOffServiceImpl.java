@@ -84,7 +84,7 @@ public class ArWriteOffServiceImpl implements ArWriteOffService {
 
         String currency = companies.findById(inv.getCompanyId())
                 .map(c -> c.getBaseCurrency())
-                .orElse("TZS");
+                .orElseThrow(() -> new IllegalStateException("Company not found: " + inv.getCompanyId()));
 
         // Post DR Bad Debt Expense / CR AR control synchronously (D-4, D-6)
         ChartOfAccount badDebtAcct = glConfig.resolve(inv.getCompanyId(), GlConfigKey.BAD_DEBT_EXPENSE);

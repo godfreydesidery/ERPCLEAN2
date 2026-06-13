@@ -86,7 +86,7 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
 
         String currency = companies.findById(companyId)
                 .map(c -> c.getBaseCurrency())
-                .orElse("TZS");
+                .orElseThrow(() -> new NotFoundException("Company not found: " + companyId));
 
         BigDecimal netAmount = req.netAmount() != null ? req.netAmount() : BigDecimal.ZERO;
         BigDecimal vatAmount = req.vatAmount() != null ? req.vatAmount() : BigDecimal.ZERO;
