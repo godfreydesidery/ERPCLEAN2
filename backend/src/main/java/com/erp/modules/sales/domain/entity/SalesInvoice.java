@@ -126,6 +126,27 @@ public class SalesInvoice extends UidEntity {
     private String notes;
 
     // -------------------------------------------------------------------------
+    // ADR-0036 D-4 — FX base triple (V78); stamped once at finalise, immutable thereafter.
+    // base_gross_total_amount is the gross total converted to the company's base currency.
+    // Stored on the document, NOT on journal_lines (the base-only-ledger stance, D-3).
+    // -------------------------------------------------------------------------
+
+    /** Effective exchange rate at finalise (units of base per 1 foreign unit, scale 8). DEFAULT 1. */
+    @Column(name = "fx_rate", nullable = false, precision = 19, scale = 8, updatable = false)
+    @Setter
+    private BigDecimal fxRate = BigDecimal.ONE;
+
+    /** Gross total converted to company base currency at {@code fxRate}. NULL until finalised. */
+    @Column(name = "base_gross_total_amount", precision = 19, scale = 4, updatable = false)
+    @Setter
+    private BigDecimal baseGrossTotalAmount;
+
+    /** Timestamp when the rate was stamped (matches the rate effective date, immutable). */
+    @Column(name = "rate_at", updatable = false)
+    @Setter
+    private Instant rateAt;
+
+    // -------------------------------------------------------------------------
     // ADR-0021 D-8 — invoice origin seam fields (additive, V18)
     // -------------------------------------------------------------------------
 

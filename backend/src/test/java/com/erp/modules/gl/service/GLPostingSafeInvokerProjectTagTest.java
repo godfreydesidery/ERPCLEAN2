@@ -10,9 +10,14 @@ import com.erp.modules.gl.domain.dto.JournalEntryDraft.LineDraft;
 import com.erp.modules.gl.domain.dto.JournalEntryDto;
 import com.erp.modules.gl.domain.entity.ChartOfAccount;
 import com.erp.modules.gl.domain.enums.GlConfigKey;
+import com.erp.modules.iam.domain.entity.Company;
+import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.platform.common.money.ConvertedAmount;
+import com.erp.platform.common.money.FxDocumentConverter;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -29,13 +34,31 @@ class GLPostingSafeInvokerProjectTagTest {
 
     private GLPostingService    postingService;
     private GLConfigResolver    configResolver;
+    private FxDocumentConverter fxConverter;
+    private CompanyRepository   companies;
     private GLPostingSafeInvoker invoker;
 
     @BeforeEach
     void setUp() {
         postingService  = mock(GLPostingService.class);
         configResolver  = mock(GLConfigResolver.class);
-        invoker         = new GLPostingSafeInvoker(postingService, configResolver);
+        fxConverter     = mock(FxDocumentConverter.class);
+        companies       = mock(CompanyRepository.class);
+
+        // Base-currency (rate=1) path: company base is TZS and the converter is the identity
+        // pass-through, so base amounts == face amounts and the project-tag assertions below
+        // exercise the exact same LineDraft amounts as before FX (ADR-0036 D-8 no-regression).
+        Company baseCo = mock(Company.class);
+        when(baseCo.getBaseCurrency()).thenReturn("TZS");
+        when(companies.findById(any())).thenReturn(Optional.of(baseCo));
+        when(fxConverter.toBase(any(), any(), any(), any()))
+                .thenAnswer(inv -> ConvertedAmount.identity(inv.getArgument(0)));
+        // plug = -Σ(otherLegs), so Σbase == 0 exactly (mirrors the real FxDocumentConverter).
+        when(fxConverter.balancingPlug(any(), org.mockito.ArgumentMatchers.anyInt()))
+                .thenAnswer(inv -> ((List<BigDecimal>) inv.getArgument(0)).stream()
+                        .reduce(BigDecimal.ZERO, BigDecimal::add).negate());
+
+        invoker = new GLPostingSafeInvoker(postingService, configResolver, fxConverter, companies);
     }
 
     /**

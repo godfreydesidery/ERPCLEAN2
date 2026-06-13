@@ -79,6 +79,21 @@ public class ApPayment extends UidEntity {
     @Setter
     private Long updatedBy;
 
+    // -------------------------------------------------------------------------
+    // ADR-0036 D-4 — FX settlement rate (V78). Stamped at payment creation; immutable.
+    // The settlement rate drives the realized-FX leg in Tranche 3.
+    // -------------------------------------------------------------------------
+
+    /** Settlement rate (units of base per 1 foreign unit; immutable; DEFAULT 1). */
+    @Column(name = "fx_rate", nullable = false, precision = 19, scale = 8, updatable = false)
+    @Setter
+    private BigDecimal fxRate = BigDecimal.ONE;
+
+    /** Timestamp when the settlement rate was stamped (immutable). */
+    @Column(name = "rate_at", updatable = false)
+    @Setter
+    private Instant rateAt;
+
     protected ApPayment() {
         // JPA
     }
