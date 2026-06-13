@@ -12,6 +12,8 @@ public interface GoodsReceiptLineRepository extends JpaRepository<GoodsReceiptLi
     /** All lines for a given GR, ordered for display. */
     List<GoodsReceiptLine> findByGoodsReceiptIdOrderByLineNo(Long goodsReceiptId);
 
+    Optional<GoodsReceiptLine> findByUid(String uid);
+
     /** GR line scoped under its parent GR (F16 child-by-parent, ADR-0011 D-12). */
     @Query("""
             SELECT l FROM GoodsReceiptLine l

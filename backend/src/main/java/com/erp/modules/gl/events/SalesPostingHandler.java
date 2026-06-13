@@ -121,11 +121,14 @@ public class SalesPostingHandler implements DomainEventHandler {
         // the shared dispatch TX rollback-only and silently roll back the Stock handler. The
         // invoker isolates the whole resolve+post unit and returns null on any GL anomaly.
         // ADR-0025 D-6: pass the invoice's header-level dimension default ids onto the revenue leg.
+        // ADR-0033 D-4c: pass the invoice's project tag onto the revenue leg so the project P&L
+        // roll-up includes this revenue (re-read from sales_invoices.project_id, not the payload).
         safeInvoker.postSaleInNewTx(
                 companyId, event.getBranchId(), payload.invoiceUid(),
                 totals.currency(), totals.grossTotalAmount(), totals.netTotalAmount(),
                 totals.vatTotalAmount(), totals.isCashSale(), postingDate,
-                totals.costCentreValueId(), totals.departmentValueId());
+                totals.costCentreValueId(), totals.departmentValueId(),
+                totals.projectId(), totals.projectTaskId());
         log.debug("SalesPostingHandler: GL posting attempted for invoice uid={} company={}",
                 payload.invoiceUid(), companyId);
     }

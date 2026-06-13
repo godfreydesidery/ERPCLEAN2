@@ -1,6 +1,8 @@
 package com.erp.modules.sales.domain.entity;
 
+import com.erp.modules.products.domain.enums.PriceSource;
 import com.erp.modules.products.domain.enums.VatStatus;
+import com.erp.modules.sales.domain.enums.FulfilmentMode;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -120,6 +122,44 @@ public class SalesOrderLine extends UidEntity {
 
     @Column(name = "currency", nullable = false, length = 3)
     private String currency;
+
+    // --- projects (ADR-0033 D-3, V66) ---
+    @Column(name = "project_id")
+    @Setter
+    private Long projectId;
+
+    @Column(name = "project_task_id")
+    @Setter
+    private Long projectTaskId;
+
+    // --- sales-depth (ADR-0029 D-3/D-4, V42/V44) --- additive columns ---
+
+    /** How this line is fulfilled: OWN_STOCK (default) or DROP_SHIP (ADR-0029 D-3). */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "fulfilment_mode", nullable = false, length = 20)
+    @Setter
+    private FulfilmentMode fulfilmentMode = FulfilmentMode.OWN_STOCK;
+
+    /** FK → suppliers.id; only set when fulfilment_mode = DROP_SHIP. */
+    @Column(name = "dropship_supplier_id")
+    @Setter
+    private Long dropshipSupplierId;
+
+    /** UID of the auto-raised PO for a drop-ship line; populated by DropshipService. */
+    @Column(name = "dropship_po_uid", length = 26)
+    @Setter
+    private String dropshipPoUid;
+
+    /** Supplier unit cost used for COGS posting when dropship PO is receipted. */
+    @Column(name = "dropship_unit_cost_amount", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal dropshipUnitCostAmount;
+
+    /** Price resolution source diagnostic (ADR-0029 D-6, V42). Nullable — set by pricing logic. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "price_source", length = 20)
+    @Setter
+    private PriceSource priceSource;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();

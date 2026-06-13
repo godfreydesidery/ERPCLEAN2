@@ -33,10 +33,24 @@ public enum JournalSourceType {
     COGS,
     STOCK_ADJUSTMENT,
     OPENING_INVENTORY,
+    // --- sales-depth (ADR-0029) — POS variance posting; admitted by the DB CHECK (V43 widens it) ---
+    POS_VARIANCE,
+    // --- Fixed Assets increment (ADR-0030 D-6) — admitted by the DB CHECK (V46 widens it) ---
+    FA_ACQUISITION,
+    DEPRECIATION,
+    FA_DISPOSAL,
+    FA_REVALUATION,
+    // --- procurement-depth (ADR-0027 D-8) — admitted by V34/V36 DB CHECK widen ---
+    LANDED_COST,
+    PURCHASE_RETURN,
     // --- RESERVED — NOT yet admitted by the DB CHECK; widen when the increment lands ---
     AR,
     AP,
     CASH,
     PAYROLL,
-    DEPRECIATION
+    // --- Manufacturing / Production increment (ADR-0035 D-4) — admitted by V74 DB CHECK widen ---
+    PRODUCTION_ISSUE,
+    PRODUCTION_RECEIPT,
+    PRODUCTION_LABOUR,
+    PRODUCTION_VARIANCE
 }

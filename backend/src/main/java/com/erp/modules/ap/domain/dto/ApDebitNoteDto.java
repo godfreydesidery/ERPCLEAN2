@@ -17,5 +17,6 @@ public record ApDebitNoteDto(
         BigDecimal vatAmount,
         String currency,
         String reason,
-        String glEntryUid
+        String glEntryUid,
+        String origin
 ) {}

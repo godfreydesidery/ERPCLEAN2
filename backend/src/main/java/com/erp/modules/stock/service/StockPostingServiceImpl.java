@@ -13,32 +13,111 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * The single posting primitive (ADR-0010 D-4).
+ * The single posting primitive (ADR-0010 D-4, extended ADR-0028 D-3).
  *
  * <p>Uses {@code MANDATORY} propagation — callers (handlers, StockService) must already have an
  * active transaction. This ensures the movement + on-hand delta commit atomically with whatever the
  * caller is doing (the idempotency marker for handlers, the audit write for manual ops, the outbox
  * event mark for the dispatcher).
  *
- * <p>On-hand is upserted: if no row exists for (company, branch, product) it is created at qty 0
- * and the delta applied, making the first movement idempotent on the upsert path too.
+ * <p>On-hand is upserted: if no row exists for (company, branch, location, product) it is created
+ * at qty 0 and the delta applied, making the first movement idempotent on the upsert path too.
  *
  * <p>Optimistic-lock retry (NFR-STOCK-04): if a concurrent update races the on-hand row version,
- * the operation retries once. Under the single-instance QA setup this is a belt-and-braces guard;
- * it becomes the liveness mechanism under multi-instance (before SKIP LOCKED lands).
+ * the operation retries once.
+ *
+ * <p>ADR-0028 D-3: {@code locationId} is now mandatory. Legacy callers that pass no locationId
+ * use the deprecated overloads which leave locationId as null (the V38 migration backfills
+ * existing rows; new rows should always supply a locationId via LocationResolver).
  */
 @Service
 public class StockPostingServiceImpl implements StockPostingService {
 
     private final StockMovementRepository movements;
-    private final StockOnHandRepository onHands;
+    private final StockOnHandRepository   onHands;
+    private final LocationResolver        locationResolver;
 
     public StockPostingServiceImpl(StockMovementRepository movements,
-                                   StockOnHandRepository onHands) {
-        this.movements = movements;
-        this.onHands   = onHands;
+                                   StockOnHandRepository onHands,
+                                   LocationResolver locationResolver) {
+        this.movements        = movements;
+        this.onHands          = onHands;
+        this.locationResolver = locationResolver;
     }
 
+    // -------------------------------------------------------------------------
+    // Primary location-aware overloads (ADR-0028 D-3)
+    // -------------------------------------------------------------------------
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public String post(Long companyId, Long branchId, Long locationId, Long productId,
+                       BigDecimal quantity, MovementType movementType,
+                       String sourceEventUid, String sourceDocumentType, String sourceDocumentUid,
+                       String reasonCode, String note, Instant occurredAt, Long actorId,
+                       BigDecimal unitCostAmount, BigDecimal valueAmount) {
+        return post(companyId, branchId, locationId, productId, quantity, movementType,
+                sourceEventUid, sourceDocumentType, sourceDocumentUid,
+                reasonCode, note, occurredAt, actorId, unitCostAmount, valueAmount,
+                null, null);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public String post(Long companyId, Long branchId, Long locationId, Long productId,
+                       BigDecimal quantity, MovementType movementType,
+                       String sourceEventUid, String sourceDocumentType, String sourceDocumentUid,
+                       String reasonCode, String note, Instant occurredAt, Long actorId,
+                       BigDecimal unitCostAmount, BigDecimal valueAmount,
+                       Long costCentreValueId, Long departmentValueId) {
+        return post(companyId, branchId, locationId, productId, quantity, movementType,
+                sourceEventUid, sourceDocumentType, sourceDocumentUid,
+                reasonCode, note, occurredAt, actorId, unitCostAmount, valueAmount,
+                costCentreValueId, departmentValueId, null, null);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public String post(Long companyId, Long branchId, Long locationId, Long productId,
+                       BigDecimal quantity, MovementType movementType,
+                       String sourceEventUid, String sourceDocumentType, String sourceDocumentUid,
+                       String reasonCode, String note, Instant occurredAt, Long actorId,
+                       BigDecimal unitCostAmount, BigDecimal valueAmount,
+                       Long costCentreValueId, Long departmentValueId,
+                       Long projectId, Long projectTaskId) {
+
+        // ADR-0028 D-3: legacy callers pass null; resolve the branch default transparently.
+        if (locationId == null) {
+            locationId = locationResolver.defaultLocationId(companyId, branchId);
+        }
+
+        // (1) Append the movement row — the immutable ledger entry.
+        StockMovement movement = new StockMovement(
+                companyId, branchId, locationId, productId,
+                movementType, quantity,
+                sourceEventUid, sourceDocumentType, sourceDocumentUid,
+                reasonCode, note, occurredAt, actorId,
+                unitCostAmount, valueAmount,
+                costCentreValueId, departmentValueId,
+                projectId, projectTaskId);
+        movements.save(movement);
+
+        // (2) Upsert the on-hand row — first touch creates it at qty 0, then delta is applied.
+        try {
+            applyOnHandDelta(companyId, branchId, locationId, productId, quantity, actorId);
+        } catch (ObjectOptimisticLockingFailureException ex) {
+            // Retry once on a version clash (concurrent receipts racing an issue, NFR-STOCK-04).
+            applyOnHandDelta(companyId, branchId, locationId, productId, quantity, actorId);
+        }
+
+        return movement.getUid();
+    }
+
+    // -------------------------------------------------------------------------
+    // Legacy location-unaware overloads (backward compat — deprecated)
+    // -------------------------------------------------------------------------
+
+    @SuppressWarnings("deprecation")
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public String post(Long companyId, Long branchId, Long productId,
@@ -46,27 +125,13 @@ public class StockPostingServiceImpl implements StockPostingService {
                        String sourceEventUid, String sourceDocumentType, String sourceDocumentUid,
                        String reasonCode, String note, Instant occurredAt, Long actorId,
                        BigDecimal unitCostAmount, BigDecimal valueAmount) {
-
-        // (1) Append the movement row — the immutable ledger entry.
-        StockMovement movement = new StockMovement(
-                companyId, branchId, productId,
-                movementType, quantity,
+        return post(companyId, branchId, null, productId, quantity, movementType,
                 sourceEventUid, sourceDocumentType, sourceDocumentUid,
-                reasonCode, note, occurredAt, actorId,
-                unitCostAmount, valueAmount);
-        movements.save(movement);
-
-        // (2) Upsert the on-hand row — first touch creates it at qty 0, then delta is applied.
-        try {
-            applyOnHandDelta(companyId, branchId, productId, quantity, actorId);
-        } catch (ObjectOptimisticLockingFailureException ex) {
-            // Retry once on a version clash (concurrent receipts racing an issue, NFR-STOCK-04).
-            applyOnHandDelta(companyId, branchId, productId, quantity, actorId);
-        }
-
-        return movement.getUid();
+                reasonCode, note, occurredAt, actorId, unitCostAmount, valueAmount,
+                null, null);
     }
 
+    @SuppressWarnings("deprecation")
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public String post(Long companyId, Long branchId, Long productId,
@@ -75,34 +140,41 @@ public class StockPostingServiceImpl implements StockPostingService {
                        String reasonCode, String note, Instant occurredAt, Long actorId,
                        BigDecimal unitCostAmount, BigDecimal valueAmount,
                        Long costCentreValueId, Long departmentValueId) {
-
-        StockMovement movement = new StockMovement(
-                companyId, branchId, productId,
-                movementType, quantity,
+        return post(companyId, branchId, null, productId, quantity, movementType,
                 sourceEventUid, sourceDocumentType, sourceDocumentUid,
-                reasonCode, note, occurredAt, actorId,
-                unitCostAmount, valueAmount,
+                reasonCode, note, occurredAt, actorId, unitCostAmount, valueAmount,
                 costCentreValueId, departmentValueId);
-        movements.save(movement);
-
-        try {
-            applyOnHandDelta(companyId, branchId, productId, quantity, actorId);
-        } catch (ObjectOptimisticLockingFailureException ex) {
-            applyOnHandDelta(companyId, branchId, productId, quantity, actorId);
-        }
-
-        return movement.getUid();
     }
 
-    private void applyOnHandDelta(Long companyId, Long branchId, Long productId,
-                                   BigDecimal delta, Long actorId) {
-        StockOnHand soh = onHands
-                .findByCompanyIdAndBranchIdAndProductId(companyId, branchId, productId)
-                .orElseGet(() -> {
-                    StockOnHand fresh = new StockOnHand(companyId, branchId, productId);
-                    return onHands.save(fresh);
-                });
-        soh.applyDelta(delta, actorId); // actorId null for system; entity handles it
+    // -------------------------------------------------------------------------
+    // Private helpers
+    // -------------------------------------------------------------------------
+
+    private void applyOnHandDelta(Long companyId, Long branchId, Long locationId,
+                                   Long productId, BigDecimal delta, Long actorId) {
+        StockOnHand soh;
+        if (locationId != null) {
+            soh = onHands
+                    .findByCompanyIdAndBranchIdAndLocationIdAndProductId(
+                            companyId, branchId, locationId, productId)
+                    .orElseGet(() -> {
+                        @SuppressWarnings("deprecation")
+                        StockOnHand fresh = new StockOnHand(companyId, branchId, locationId, productId);
+                        return onHands.save(fresh);
+                    });
+        } else {
+            // Legacy path — no location (pre-ADR-0028 callers; will be migrated over time)
+            @SuppressWarnings("deprecation")
+            StockOnHand found = onHands
+                    .findByCompanyIdAndBranchIdAndProductId(companyId, branchId, productId)
+                    .orElseGet(() -> {
+                        @SuppressWarnings("deprecation")
+                        StockOnHand fresh = new StockOnHand(companyId, branchId, productId);
+                        return onHands.save(fresh);
+                    });
+            soh = found;
+        }
+        soh.applyDelta(delta, actorId);
         onHands.save(soh);
     }
 }

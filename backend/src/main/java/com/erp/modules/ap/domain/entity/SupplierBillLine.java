@@ -2,6 +2,7 @@ package com.erp.modules.ap.domain.entity;
 
 import com.erp.platform.common.domain.Ulid;
 import jakarta.persistence.Column;
+import lombok.Setter;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -51,6 +52,14 @@ public class SupplierBillLine {
     @Column(name = "gr_line_uid", length = 26)
     private String grLineUid;
 
+    /**
+     * Scalar uid of the landed cost that generated this freight/duty charge line (ADR-0027 D-5, V34).
+     * NULL for normal purchase lines.
+     */
+    @Column(name = "landed_cost_uid", length = 26)
+    @Setter
+    private String landedCostUid;
+
     @Column(name = "description", nullable = false, length = 200)
     private String description;
 
@@ -65,6 +74,17 @@ public class SupplierBillLine {
 
     @Column(name = "currency", nullable = false, length = 3)
     private String currency;
+
+    // --- projects (ADR-0033 D-3, V65) — optional project dimension tag on AP lines ---
+    /** FK → projects(id); nullable — analysis tag when this cost belongs to a project. */
+    @Column(name = "project_id")
+    @Setter
+    private Long projectId;
+
+    /** FK → project_tasks(id); nullable. */
+    @Column(name = "project_task_id")
+    @Setter
+    private Long projectTaskId;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();

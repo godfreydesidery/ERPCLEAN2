@@ -1,5 +1,6 @@
 package com.erp.modules.sales.domain.entity;
 
+import com.erp.modules.products.domain.enums.PriceSource;
 import com.erp.modules.products.domain.enums.VatStatus;
 import com.erp.platform.common.domain.Ulid;
 import jakarta.persistence.Column;
@@ -145,6 +146,23 @@ public class SalesInvoiceLine {
     /** Document currency; denormalised from parent invoice (BR-SALES-04). */
     @Column(name = "currency", nullable = false, length = 3)
     private String currency;
+
+    // --- projects (ADR-0033 D-3, V66) ---
+    /** FK → projects(id); nullable — analysis tag for project-billed sales. */
+    @Column(name = "project_id")
+    @Setter
+    private Long projectId;
+
+    /** FK → project_tasks(id); nullable. */
+    @Column(name = "project_task_id")
+    @Setter
+    private Long projectTaskId;
+
+    /** Price resolution source diagnostic (ADR-0029 D-6, V42). Nullable. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "price_source", length = 20)
+    @Setter
+    private PriceSource priceSource;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();

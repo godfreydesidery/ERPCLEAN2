@@ -14,6 +14,8 @@ import com.erp.modules.products.repository.BomRepository;
 import com.erp.modules.products.repository.ProductRepository;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.repository.Lookups;
+import com.erp.platform.security.RequestContext;
+import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -62,17 +64,20 @@ public class BomExplosionServiceImpl implements BomExplosionService {
     private final BomComponentRepository bomComponents;
     private final ProductRepository products;
     private final BomCostRollUpService costRollUp;
+    private final ScopeGuard scopeGuard;
     private final int maxDepth;
 
     public BomExplosionServiceImpl(BomRepository boms,
                                    BomComponentRepository bomComponents,
                                    ProductRepository products,
                                    @Lazy BomCostRollUpService costRollUp,
+                                   ScopeGuard scopeGuard,
                                    @Value("${bom.max-explosion-depth:20}") int maxDepth) {
         this.boms = boms;
         this.bomComponents = bomComponents;
         this.products = products;
         this.costRollUp = costRollUp;
+        this.scopeGuard = scopeGuard;
         this.maxDepth = maxDepth;
     }
 
@@ -86,6 +91,8 @@ public class BomExplosionServiceImpl implements BomExplosionService {
                                          boolean withCost) {
         // 1. Resolve the BOM version
         Bom bom = resolveBom(parentProductUid, bomUid, asOfDate);
+        // NFR-BOM-06 / D-11: tenant isolation guard — reject cross-tenant read attempts
+        scopeGuard.assertCanActIn(RequestContext.get(), bom.getCompanyId());
         String resolvedParentUid = parentProductUid != null ? parentProductUid
                 : products.findById(bom.getParentProductId())
                           .map(p -> p.getUid())
@@ -119,6 +126,8 @@ public class BomExplosionServiceImpl implements BomExplosionService {
                                                       BigDecimal outputQty,
                                                       boolean multiLevel) {
         Bom bom = resolveBom(parentProductUid, null, null);
+        // NFR-BOM-06 / D-11: tenant isolation guard on leaf-only explosion path
+        scopeGuard.assertCanActIn(RequestContext.get(), bom.getCompanyId());
         BigDecimal multiplier = outputQty.divide(bom.getOutputQty(), 15, HALF_UP);
         BigDecimal headerInflate = HUNDRED.divide(bom.getYieldPercent(), 15, HALF_UP);
         BigDecimal topMultiplier = multiplier.multiply(headerInflate);

@@ -48,7 +48,28 @@ public class GlConfigServiceImpl implements GlConfigService {
             Map.entry(GlConfigKey.RETAINED_EARNINGS,   "3900"),
             // Inventory Valuation & COGS increment (ADR-0020 D-8)
             Map.entry(GlConfigKey.GRNI,                "2150"),
-            Map.entry(GlConfigKey.STOCK_ADJUSTMENT,    "5160")
+            Map.entry(GlConfigKey.STOCK_ADJUSTMENT,    "5160"),
+            // procurement-depth (ADR-0027 D-9)
+            Map.entry(GlConfigKey.LANDED_COST_CLEARING, "2160"),
+            // sales-depth (ADR-0029 D-4) — POS over/short variance accounts
+            Map.entry(GlConfigKey.POS_CASH_OVER,       "4900"),
+            Map.entry(GlConfigKey.POS_CASH_SHORT,      "5170"),
+            // HR & Payroll increment (ADR-0032 D-8)
+            Map.entry(GlConfigKey.SALARY_EXPENSE,              "5700"),
+            Map.entry(GlConfigKey.EMPLOYER_STATUTORY_EXPENSE,  "5710"),
+            Map.entry(GlConfigKey.PAYE_PAYABLE,                "2500"),
+            Map.entry(GlConfigKey.NSSF_PAYABLE,                "2510"),
+            Map.entry(GlConfigKey.WCF_PAYABLE,                 "2520"),
+            Map.entry(GlConfigKey.SDL_PAYABLE,                 "2530"),
+            Map.entry(GlConfigKey.HESLB_PAYABLE,               "2540"),
+            Map.entry(GlConfigKey.NET_WAGES_PAYABLE,           "2550"),
+            Map.entry(GlConfigKey.EMPLOYEE_LOAN_RECEIVABLE,    "1450"),
+            // Manufacturing / Production increment (ADR-0035 D-7)
+            Map.entry(GlConfigKey.WIP_INVENTORY,           "1320"),
+            Map.entry(GlConfigKey.FINISHED_GOODS,          "1300"),
+            Map.entry(GlConfigKey.LABOUR_APPLIED,          "2350"),
+            Map.entry(GlConfigKey.OVERHEAD_APPLIED,        "2360"),
+            Map.entry(GlConfigKey.MANUFACTURING_VARIANCE,  "5180")
     );
 
     private final GlConfigRepository configs;

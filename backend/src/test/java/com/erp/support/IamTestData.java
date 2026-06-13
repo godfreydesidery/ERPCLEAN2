@@ -64,6 +64,13 @@ public class IamTestData {
         em.createNativeQuery(
                 "TRUNCATE journal_lines, journal_entries, journal_batches, gl_configs, fiscal_periods, fiscal_years, chart_of_accounts RESTART IDENTITY CASCADE")
                 .executeUpdate();
+        // 4-FA. Clear Fixed Assets tables BEFORE GL, categories, companies (FK order: run lines → runs →
+        //       schedule lines → assets; disposals/revaluations → assets; assets → categories).
+        em.createNativeQuery(
+                "TRUNCATE asset_revaluations, asset_disposals, " +
+                "depreciation_run_lines, depreciation_runs, " +
+                "depreciation_schedule_lines, fixed_assets, asset_categories RESTART IDENTITY CASCADE")
+                .executeUpdate();
         // 4a. Clear purchases tables BEFORE products/parties (GR/PO lines FK → products/suppliers/units).
         em.createNativeQuery(
                 "TRUNCATE goods_receipt_lines, goods_receipts, purchase_order_lines, purchase_orders RESTART IDENTITY CASCADE")
@@ -87,6 +94,10 @@ public class IamTestData {
                 "TRUNCATE approval_decisions, approval_request_steps, approval_requests, " +
                 "approval_policy_steps, approval_policies RESTART IDENTITY CASCADE")
                 .executeUpdate();
+        // 4d-CRM. Clear CRM tables BEFORE O2C (opportunity_lines FK → opportunities; activities FK → leads/opportunities).
+        em.createNativeQuery(
+                "TRUNCATE activities, opportunity_lines, opportunities, leads, pipeline_stages RESTART IDENTITY CASCADE")
+                .executeUpdate();
         // 4d-O2C. Clear ADR-0021 O2C tables BEFORE sales_invoices (delivery_lines FK → sales_order_lines;
         //         sales_order_lines FK → sales_orders; delivery_lines.delivery_id FK → deliveries).
         //         Order: leaf children first, then headers.
@@ -99,6 +110,12 @@ public class IamTestData {
         //     sales_invoices.route_id nullable — routes already cleared above so FK is satisfied.
         em.createNativeQuery(
                 "TRUNCATE sales_invoice_payments, sales_invoice_lines, sales_invoices, tax_rates RESTART IDENTITY CASCADE")
+                .executeUpdate();
+        // 4-BUD. Clear budgeting tables BEFORE GL (budget_lines FK → chart_of_accounts + fiscal_periods;
+        //        budget_versions FK → fiscal_years + dimension_values; budgets FK → fiscal_years + dimension_values).
+        //        FK order: lines → versions → budgets; code_sequence for BUDGET kind cleared later with products.
+        em.createNativeQuery(
+                "TRUNCATE budget_lines, budget_versions, budgets RESTART IDENTITY CASCADE")
                 .executeUpdate();
         // 4e. Clear BOM tables BEFORE products (bom_components FK → products; boms FK → products).
         em.createNativeQuery(

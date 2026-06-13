@@ -14,5 +14,7 @@ public record RaiseDebitNoteRequest(
         @NotNull LocalDate noteDate,
         @NotNull @Positive BigDecimal netAmount,
         BigDecimal vatAmount,
-        @NotBlank String reason
+        @NotBlank String reason,
+        /** Optional — set by internal callers (e.g. PURCHASE_RETURN:{uid}). Null for manual notes. */
+        String origin
 ) {}

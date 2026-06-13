@@ -59,6 +59,14 @@ public class ApDebitNote extends UidEntity {
     @Setter
     private String glEntryUid;
 
+    /**
+     * Free-text origin tag — populated by callers that raise debit notes on behalf of another document
+     * (e.g. "PURCHASE_RETURN:{uid}" for ADR-0027 D-7, V35). NULL for manually raised notes.
+     */
+    @Column(name = "origin", length = 100)
+    @Setter
+    private String origin;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

@@ -60,12 +60,17 @@ public class GLPostingSafeInvoker {
      *
      * <p>ADR-0025 D-6: only the P&L-relevant revenue leg carries the dimension tag (the cash/AR
      * debit leg posts untagged — D-6 sub-decision). Both ids nullable (untagged when null).
+     *
+     * <p>ADR-0033 D-4c: {@code projectId}/{@code projectTaskId} are threaded onto the CR Sales
+     * Revenue leg so the project P&amp;L roll-up can include this revenue. Null = untagged (no
+     * change for untagged invoices — NFR-PROJ-04).
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public JournalEntryDto postSaleInNewTx(Long companyId, Long branchId, String invoiceUid,
                                            String currency, BigDecimal gross, BigDecimal net,
                                            BigDecimal vat, boolean cashSale, LocalDate postingDate,
-                                           Long costCentreValueId, Long departmentValueId) {
+                                           Long costCentreValueId, Long departmentValueId,
+                                           Long projectId, Long projectTaskId) {
         try {
             ChartOfAccount debitAcct = cashSale
                     ? configResolver.resolve(companyId, GlConfigKey.CASH)
@@ -76,9 +81,10 @@ public class GLPostingSafeInvoker {
             List<LineDraft> lines = new ArrayList<>();
             // DR Cash/AR — balance-sheet control leg, untagged (ADR-0025 D-6)
             lines.add(new LineDraft(debitAcct.getId(), gross, BigDecimal.ZERO, currency, "Gross sale"));
-            // CR Sales Revenue — P&L revenue leg, carry dimension tag (ADR-0025 D-6)
+            // CR Sales Revenue — P&L revenue leg, carry dimension + project tag (ADR-0025 D-6 / ADR-0033 D-4c)
             lines.add(new LineDraft(revenueAcct.getId(), BigDecimal.ZERO, net, currency,
-                    "Sales revenue", costCentreValueId, departmentValueId, null, null));
+                    "Sales revenue", costCentreValueId, departmentValueId, null, null,
+                    projectId, projectTaskId, null));
             if (vat != null && vat.compareTo(BigDecimal.ZERO) > 0) {
                 // CR VAT Payable — balance-sheet control leg, untagged
                 lines.add(new LineDraft(vatPayableAcct.getId(), BigDecimal.ZERO, vat, currency, "VAT payable"));
@@ -96,15 +102,29 @@ public class GLPostingSafeInvoker {
     }
 
     /**
+     * Backward-compatible overload for callers that supply dimension ids but not project ids.
+     * Delegates to the full form with null project ids (NFR-PROJ-04 / NFR-CC-01).
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public JournalEntryDto postSaleInNewTx(Long companyId, Long branchId, String invoiceUid,
+                                           String currency, BigDecimal gross, BigDecimal net,
+                                           BigDecimal vat, boolean cashSale, LocalDate postingDate,
+                                           Long costCentreValueId, Long departmentValueId) {
+        return postSaleInNewTx(companyId, branchId, invoiceUid, currency, gross, net, vat,
+                               cashSale, postingDate, costCentreValueId, departmentValueId,
+                               null, null);
+    }
+
+    /**
      * Backward-compatible overload for callers that do not supply dimension ids.
-     * Delegates to the full form with null dimension ids (NFR-CC-01).
+     * Delegates to the full form with null dimension and project ids (NFR-CC-01).
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public JournalEntryDto postSaleInNewTx(Long companyId, Long branchId, String invoiceUid,
                                            String currency, BigDecimal gross, BigDecimal net,
                                            BigDecimal vat, boolean cashSale, LocalDate postingDate) {
         return postSaleInNewTx(companyId, branchId, invoiceUid, currency, gross, net, vat,
-                               cashSale, postingDate, null, null);
+                               cashSale, postingDate, null, null, null, null);
     }
 
     /**

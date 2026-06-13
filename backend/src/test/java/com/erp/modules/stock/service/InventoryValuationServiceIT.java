@@ -64,7 +64,11 @@ import com.erp.modules.stock.domain.dto.StockReceiptVoidedPayload;
 import com.erp.modules.stock.domain.dto.StockValuationReportDto;
 import com.erp.modules.stock.domain.entity.StockOnHand;
 import com.erp.modules.stock.domain.enums.AdjustmentReason;
+import com.erp.modules.stock.domain.entity.StockLocation;
+import com.erp.modules.stock.domain.enums.LocationType;
+import com.erp.modules.stock.repository.StockLocationRepository;
 import com.erp.modules.stock.repository.StockOnHandRepository;
+import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.money.MoneyDto;
 import com.erp.platform.events.DomainEvent;
 import com.erp.platform.events.DomainEventDispatcher;
@@ -141,6 +145,8 @@ class InventoryValuationServiceIT extends PostgresIntegrationTest {
     @Autowired private StockValuationQuery         valuationQuery;
     @Autowired private StockService                stockService;
     @Autowired private StockOnHandRepository       stockOnHandRepo;
+    @Autowired private StockLocationRepository     stockLocationRepo;
+    @Autowired private LocationResolver            locationResolver;
     @Autowired private com.erp.modules.stock.repository.StockMovementRepository stockMovementRepo;
 
     // ---- Products / Parties / Sales ----
@@ -864,6 +870,287 @@ class InventoryValuationServiceIT extends PostgresIntegrationTest {
         assertThat(after2.getAvgCost())
                 .as("avg_cost must NOT be re-computed on re-dispatch")
                 .isEqualByComparingTo(new BigDecimal("500"));
+    }
+
+    // =========================================================================
+    // ADR-0028 D-2 FIX — Finding 1: receipt at LOC1 syncs avg to LOC2 as well
+    //
+    // Scenario:
+    //   LOC1 (default): has 10 units @ 400 avg (on_hand_value = 4000)
+    //   New receipt: 5 units @ 700 at LOC1
+    //   Expected new avg = (4000 + 3500) / 15 = 500.0000
+    //   BOTH LOC1 and LOC2 must carry avg_cost = 500.0000 after the receipt.
+    //   LOC2 on_hand_value must be re-attributed: LOC2.qty × 500 (not still at 400-avg).
+    // =========================================================================
+
+    @Test
+    void receipt_atLoc1_syncsAvgCostToLoc2_finding1() {
+        ProductDto product = stockableProduct("MultiLoc-P1");
+
+        // Seed LOC2 (a second non-default WAREHOUSE location at the same branch).
+        StockLocation loc2 = new StockLocation(
+                company.getId(), branch.getId(),
+                "LOC2-" + branch.getId(), "Warehouse B",
+                LocationType.WAREHOUSE, false, null);
+        loc2 = stockLocationRepo.save(loc2);
+        final Long loc2Id = loc2.getId();
+
+        // Directly seed an on-hand row at LOC2 simulating a prior receipt there:
+        // 10 units @ avg=400, on_hand_value=4000
+        StockOnHand loc2Soh = new StockOnHand(company.getId(), branch.getId(), loc2Id, product.id());
+        txTemplate.execute(s -> {
+            StockOnHand saved = stockOnHandRepo.save(loc2Soh);
+            // Simulate existing values via applyCostRecompute (qty not set here — posting service
+            // manages qty; we need avg_cost and on_hand_value in place for the avg-sync test).
+            saved.applyDelta(new BigDecimal("10"), null);   // qty = 10
+            saved.applyCostRecompute(new BigDecimal("400"),
+                    new BigDecimal("4000").setScale(4, java.math.RoundingMode.HALF_UP), null);
+            stockOnHandRepo.save(saved);
+            return null;
+        });
+
+        // Now dispatch a NEW receipt of 5 units @ 700 at the branch default LOC1.
+        // The valuation service must aggregate both LOC1 (qty=0) and LOC2 (qty=10) to compute avg.
+        dispatcher.dispatchOne(publishReceiptEvent("RCPT-MLOC-001", product,
+                new BigDecimal("5"), new BigDecimal("700"), 1L));
+
+        // Expected: totalQty = 10 + 5 = 15; totalValue = 4000 + 3500 = 7500; avg = 7500/15 = 500
+        BigDecimal expectedAvg = new BigDecimal("7500")
+                .divide(new BigDecimal("15"), 4, RoundingMode.HALF_UP);  // 500.0000
+
+        // LOC2 row must have avg_cost synced to the new company-product avg
+        StockOnHand loc2After = stockOnHandRepo
+                .findByCompanyIdAndBranchIdAndLocationIdAndProductId(
+                        company.getId(), branch.getId(), loc2Id, product.id())
+                .orElseThrow(() -> new AssertionError("No on-hand row at LOC2 after receipt"));
+
+        assertThat(loc2After.getAvgCost())
+                .as("Finding 1: receipt at LOC1 must sync avg_cost to LOC2 row (ADR-0028 D-2)")
+                .isEqualByComparingTo(expectedAvg);
+
+        assertThat(loc2After.getOnHandValue())
+                .as("Finding 1: LOC2 on_hand_value must be re-attributed (qty × new_avg = 10 × 500 = 5000)")
+                .isEqualByComparingTo(new BigDecimal("5000").setScale(4, RoundingMode.HALF_UP));
+
+        // Recon: Σ on_hand_value across all locations must equal 7500
+        BigDecimal totalOnHandValue = stockOnHandRepo.findByCompanyIdAndProductId(
+                        company.getId(), product.id()).stream()
+                .map(StockOnHand::getOnHandValue)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(totalOnHandValue)
+                .as("Finding 1: Σ on_hand_value across all locations must equal total inventory value")
+                .isEqualByComparingTo(new BigDecimal("7500").setScale(4, RoundingMode.HALF_UP));
+    }
+
+    // =========================================================================
+    // ADR-0028 D-2 FIX — Finding 2: costIssue uses company-product avg, not isolated per-location avg
+    //
+    // Scenario: company has product at two locations
+    //   LOC1: 8 units, avg_cost 300 (set from prior receipt)
+    //   LOC2: 4 units, avg_cost 300 (same company-product avg)
+    //   Issue 2 units from LOC1 — issued value must be 2 × 300 = 600, not some other avg.
+    //   If the bug was present, a freshly created LOC1 row with avg=null would cause COGS skip.
+    // =========================================================================
+
+    @Test
+    void costIssue_usesCompanyProductAvg_notIsolatedLocationAvg_finding2() {
+        ProductDto product = stockableProduct("MultiLoc-P2");
+
+        // Receive 12 units @ 300 at default location (LOC1-equivalent) → avg = 300, value = 3600
+        dispatcher.dispatchOne(publishReceiptEvent("RCPT-MLOC2-001", product,
+                new BigDecimal("12"), new BigDecimal("300"), 1L));
+
+        StockOnHand sohAfterReceipt = requireSoh(product.id());
+        assertThat(sohAfterReceipt.getAvgCost()).isEqualByComparingTo(new BigDecimal("300"));
+
+        // Sell 4 units — costIssue must use company avg = 300; issued value = 4 × 300 = 1200
+        SalesInvoiceDto draft = makeSaleInvoice(product.uid(), new BigDecimal("4"));
+        salesInvoiceService.finalise(draft.uid(), new FinaliseInvoiceRequest());
+        dispatcher.dispatchOne(pendingEvent(DomainEventType.SALE_FINALISED));
+
+        BigDecimal expectedIssuedValue = new BigDecimal("1200.0000");
+
+        // on_hand_value: 3600 − 1200 = 2400
+        assertThat(requireSoh(product.id()).getOnHandValue())
+                .as("Finding 2: on_hand_value must use company-product avg for COGS deduction")
+                .isEqualByComparingTo(new BigDecimal("2400").setScale(4, RoundingMode.HALF_UP));
+
+        // COGS GL: DR 1200
+        assertThat(cogsBalance())
+                .as("Finding 2: COGS must equal qty × company-product avg_cost = 4 × 300 = 1200")
+                .isEqualByComparingTo(expectedIssuedValue);
+
+        // Recon: on_hand_value must still equal inventory GL balance (invariant holds post-issue)
+        assertThat(inventoryBalance())
+                .as("Finding 2: Inventory GL balance must equal on_hand_value after issue")
+                .isEqualByComparingTo(requireSoh(product.id()).getOnHandValue());
+    }
+
+    // =========================================================================
+    // ADR-0028 D-2 FIX — Finding (post-review verify): costIssue + reverseIssue must target the
+    // branch DEFAULT location row, not use the deprecated single-(company,branch,product) finder.
+    //
+    // Once a second location row exists for the product in the branch (e.g. an in-branch transfer
+    // to a non-default location), the deprecated Optional finder matches 2 rows and throws
+    // NonUniqueResultException — poisoning the SALE.FINALISED / SALE.VOIDED handler so the COGS
+    // leg and its reversal never complete. This test reproduces that by seeding a second location
+    // row, then drives the full finalise → void flow which exercises costIssue then reverseIssue.
+    // =========================================================================
+
+    @Test
+    void costIssueAndReverseIssue_targetDefaultLocation_withSecondLocationRowPresent() {
+        ProductDto product = stockableProduct("MultiLoc-IssueVoid");
+
+        // Receipt 10 @ 500 at the branch default location → avg = 500, value = 5000 (default row).
+        dispatcher.dispatchOne(publishReceiptEvent("RCPT-MLOC-IV-001", product,
+                new BigDecimal("10"), new BigDecimal("500"), 1L));
+
+        // Seed a SECOND non-default location row for the SAME product in the SAME branch (the state
+        // an in-branch transfer would create). 4 units @ avg 500, value 2000 — keeps the company-
+        // product avg at 500 (Σvalue 7000 / Σqty 14 = 500).
+        StockLocation loc2 = stockLocationRepo.save(new StockLocation(
+                company.getId(), branch.getId(),
+                "LOC2-IV-" + branch.getId(), "Warehouse B (IV)",
+                LocationType.WAREHOUSE, false, null));
+        final Long loc2Id = loc2.getId();
+        txTemplate.execute(s -> {
+            StockOnHand row = stockOnHandRepo.save(
+                    new StockOnHand(company.getId(), branch.getId(), loc2Id, product.id()));
+            row.applyDelta(new BigDecimal("4"), null);
+            row.applyCostRecompute(new BigDecimal("500"),
+                    new BigDecimal("2000").setScale(4, RoundingMode.HALF_UP), null);
+            stockOnHandRepo.save(row);
+            return null;
+        });
+
+        // Default-location row value before the sale (for the post-void restoration assertion).
+        BigDecimal defaultValueBefore = stockOnHandRepo
+                .findByCompanyIdAndBranchIdAndLocationIdAndProductId(
+                        company.getId(), branch.getId(),
+                        locationResolver.defaultLocationId(company.getId(), branch.getId()),
+                        product.id())
+                .orElseThrow().getOnHandValue();   // 5000
+
+        // Sell 4 → SALE.FINALISED dispatch runs costIssue. PRE-FIX this throws
+        // NonUniqueResultException (two location rows) and the handler TX rolls back.
+        SalesInvoiceDto draft = makeSaleInvoice(product.uid(), new BigDecimal("4"));
+        salesInvoiceService.finalise(draft.uid(), new FinaliseInvoiceRequest());
+        dispatcher.dispatchOne(pendingEvent(DomainEventType.SALE_FINALISED));
+
+        // COGS = 4 × company avg 500 = 2000; default-location value drops 5000 → 3000.
+        assertThat(cogsBalance())
+                .as("costIssue must cost at the company-product avg (4 × 500) even with a second location row")
+                .isEqualByComparingTo(new BigDecimal("2000.0000"));
+        Long defaultLocId = locationResolver.defaultLocationId(company.getId(), branch.getId());
+        assertThat(stockOnHandRepo
+                .findByCompanyIdAndBranchIdAndLocationIdAndProductId(
+                        company.getId(), branch.getId(), defaultLocId, product.id())
+                .orElseThrow().getOnHandValue())
+                .as("costIssue must decrement the DEFAULT location row (where the qty leg landed)")
+                .isEqualByComparingTo(new BigDecimal("3000").setScale(4, RoundingMode.HALF_UP));
+
+        // Void → SALE.VOIDED dispatch runs reverseIssue. PRE-FIX this also throws.
+        salesInvoiceService.voidInvoice(draft.uid(), new VoidInvoiceRequest("multi-loc void"));
+        dispatcher.dispatchOne(pendingEvent(DomainEventType.SALE_VOIDED));
+
+        // reverseIssue restores the default-location row's value to its pre-sale figure (5000),
+        // avg untouched (D-5), and COGS nets back to zero.
+        assertThat(stockOnHandRepo
+                .findByCompanyIdAndBranchIdAndLocationIdAndProductId(
+                        company.getId(), branch.getId(), defaultLocId, product.id())
+                .orElseThrow().getOnHandValue())
+                .as("reverseIssue must restore the DEFAULT location row to its pre-sale value")
+                .isEqualByComparingTo(defaultValueBefore);
+        assertThat(cogsBalance())
+                .as("COGS must net to zero after void (issue DR cancelled by reversal CR)")
+                .isEqualByComparingTo(BigDecimal.ZERO);
+
+        // Recon: Σ on_hand_value across BOTH locations must equal the inventory GL balance PLUS the
+        // directly-seeded loc2 value (2000), which was injected via applyCostRecompute in this test
+        // and so never posted to the GL — the receipt (5000) is the only GL-backed movement, and
+        // issue+void net to zero. Σ = 5000 (default) + 2000 (seeded loc2) = 7000; GL 1300 = 5000.
+        BigDecimal seededLoc2Value = new BigDecimal("2000").setScale(4, RoundingMode.HALF_UP);
+        BigDecimal totalOnHandValue = stockOnHandRepo
+                .findByCompanyIdAndProductId(company.getId(), product.id()).stream()
+                .map(StockOnHand::getOnHandValue)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(totalOnHandValue)
+                .as("Σ on_hand_value = GL-backed inventory balance + the directly-seeded loc2 value")
+                .isEqualByComparingTo(inventoryBalance().add(seededLoc2Value));
+    }
+
+    // =========================================================================
+    // ADR-0028 D-2 FIX — Finding (post-review verify): applyLandedCost must capitalise into the
+    // company-product moving average across ALL location rows (mirrors doRecomputeOnReceipt), not
+    // a single branch row via the deprecated finder (which both diverges the per-location avg and
+    // throws NonUniqueResultException once 2+ location rows exist for the product in the branch).
+    // =========================================================================
+
+    @Test
+    void applyLandedCost_capitalisesAcrossAllLocationRows_keepsAvgSynced() {
+        ProductDto product = stockableProduct("MultiLoc-Landed");
+
+        // Receipt 10 @ 500 at the branch default location → avg = 500, value = 5000 (default row).
+        dispatcher.dispatchOne(publishReceiptEvent("RCPT-MLOC-LC-001", product,
+                new BigDecimal("10"), new BigDecimal("500"), 1L));
+
+        // Seed a SECOND location row: 5 units @ avg 500, value 2500. Σqty 15, Σvalue 7500, avg 500.
+        StockLocation loc2 = stockLocationRepo.save(new StockLocation(
+                company.getId(), branch.getId(),
+                "LOC2-LC-" + branch.getId(), "Warehouse B (LC)",
+                LocationType.WAREHOUSE, false, null));
+        final Long loc2Id = loc2.getId();
+        txTemplate.execute(s -> {
+            StockOnHand row = stockOnHandRepo.save(
+                    new StockOnHand(company.getId(), branch.getId(), loc2Id, product.id()));
+            row.applyDelta(new BigDecimal("5"), null);
+            row.applyCostRecompute(new BigDecimal("500"),
+                    new BigDecimal("2500").setScale(4, RoundingMode.HALF_UP), null);
+            stockOnHandRepo.save(row);
+            return null;
+        });
+
+        // Apply landed cost of 1500 across the company-product. New avg = (7500 + 1500) / 15 = 600.
+        // applyLandedCost is @Transactional(MANDATORY) → wrap in a tx. PRE-FIX this throws
+        // NonUniqueResultException (two location rows match the deprecated finder).
+        txTemplate.executeWithoutResult(s ->
+                inventoryValuationService.applyLandedCost(
+                        company.getId(), branch.getId(), product.id(), new BigDecimal("1500")));
+
+        BigDecimal expectedAvg = new BigDecimal("600").setScale(4, RoundingMode.HALF_UP);
+        Long defaultLocId = locationResolver.defaultLocationId(company.getId(), branch.getId());
+
+        StockOnHand defaultRow = stockOnHandRepo
+                .findByCompanyIdAndBranchIdAndLocationIdAndProductId(
+                        company.getId(), branch.getId(), defaultLocId, product.id())
+                .orElseThrow();
+        StockOnHand loc2Row = stockOnHandRepo
+                .findByCompanyIdAndBranchIdAndLocationIdAndProductId(
+                        company.getId(), branch.getId(), loc2Id, product.id())
+                .orElseThrow();
+
+        // BOTH rows carry the new synced company-product avg.
+        assertThat(defaultRow.getAvgCost())
+                .as("landed cost must sync the new avg to the default-location row")
+                .isEqualByComparingTo(expectedAvg);
+        assertThat(loc2Row.getAvgCost())
+                .as("landed cost must sync the new avg to the SECOND location row (D-2)")
+                .isEqualByComparingTo(expectedAvg);
+
+        // on_hand_value re-attributed: default 10 × 600 = 6000, loc2 5 × 600 = 3000.
+        assertThat(defaultRow.getOnHandValue())
+                .isEqualByComparingTo(new BigDecimal("6000").setScale(4, RoundingMode.HALF_UP));
+        assertThat(loc2Row.getOnHandValue())
+                .isEqualByComparingTo(new BigDecimal("3000").setScale(4, RoundingMode.HALF_UP));
+
+        // Recon: Σ on_hand_value = 9000 = prior 7500 + 1500 landed cost.
+        BigDecimal totalOnHandValue = stockOnHandRepo
+                .findByCompanyIdAndProductId(company.getId(), product.id()).stream()
+                .map(StockOnHand::getOnHandValue)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(totalOnHandValue)
+                .as("Σ on_hand_value must rise by exactly the allocated landed cost (7500 + 1500 = 9000)")
+                .isEqualByComparingTo(new BigDecimal("9000").setScale(4, RoundingMode.HALF_UP));
     }
 
     // =========================================================================

@@ -232,4 +232,170 @@ public final class AuditActions {
     public static final String COSTING_VALUE_UPDATE              = "COSTING.VALUE.UPDATE";
     public static final String COSTING_VALUE_DEACTIVATE          = "COSTING.VALUE.DEACTIVATE";
     public static final String COSTING_DIMENSION_MANDATORY_SET   = "COSTING.DIMENSION.MANDATORY.SET";
+
+    // --- inventory-depth (ADR-0028) ---
+    public static final String STOCK_LOCATION_CREATE      = "STOCK.LOCATION.CREATE";
+    public static final String STOCK_LOCATION_UPDATE      = "STOCK.LOCATION.UPDATE";
+    public static final String STOCK_LOCATION_DEACTIVATE  = "STOCK.LOCATION.DEACTIVATE";
+    public static final String STOCK_LOCATION_SET_DEFAULT = "STOCK.LOCATION.SET_DEFAULT";
+    public static final String STOCK_TRANSFER_CREATE      = "STOCK.TRANSFER.CREATE";
+    public static final String STOCK_TRANSFER_DISPATCH    = "STOCK.TRANSFER.DISPATCH";
+    public static final String STOCK_TRANSFER_RECEIVE     = "STOCK.TRANSFER.RECEIVE";
+    public static final String STOCK_TRANSFER_COMPLETE    = "STOCK.TRANSFER.COMPLETE";
+    public static final String STOCK_TRANSFER_CANCEL      = "STOCK.TRANSFER.CANCEL";
+    public static final String STOCK_COUNT_CREATE         = "STOCK.COUNT.CREATE";
+    public static final String STOCK_COUNT_FREEZE         = "STOCK.COUNT.FREEZE";
+    public static final String STOCK_COUNT_ENTER          = "STOCK.COUNT.ENTER";
+    public static final String STOCK_COUNT_POST           = "STOCK.COUNT.POST";
+    public static final String STOCK_COUNT_CANCEL         = "STOCK.COUNT.CANCEL";
+    public static final String STOCK_BATCH_RECEIVE        = "STOCK.BATCH.RECEIVE";
+    public static final String STOCK_SERIAL_RECEIVE       = "STOCK.SERIAL.RECEIVE";
+    public static final String STOCK_SERIAL_ISSUE         = "STOCK.SERIAL.ISSUE";
+    public static final String STOCK_SERIAL_RETURN        = "STOCK.SERIAL.RETURN";
+    // ---- Fixed Assets (ADR-0030) ----
+    public static final String FA_CATEGORY_CREATE    = "FA.CATEGORY.CREATE";
+    public static final String FA_CATEGORY_UPDATE    = "FA.CATEGORY.UPDATE";
+    public static final String FA_CATEGORY_ARCHIVE   = "FA.CATEGORY.ARCHIVE";
+    public static final String FA_ASSET_REGISTER     = "FA.ASSET.REGISTER";
+    public static final String FA_ASSET_UPDATE       = "FA.ASSET.UPDATE";
+    public static final String FA_ASSET_IN_SERVICE   = "FA.ASSET.IN_SERVICE";
+    public static final String FA_ASSET_TRANSFER     = "FA.ASSET.TRANSFER";
+    public static final String FA_ASSET_DISPOSE      = "FA.ASSET.DISPOSE";
+    public static final String FA_ASSET_WRITE_OFF    = "FA.ASSET.WRITE_OFF";
+    public static final String FA_ASSET_REVALUE      = "FA.ASSET.REVALUE";
+    public static final String FA_DEPRECIATION_RUN   = "FA.DEPRECIATION.RUN";
+    // --- procurement-depth (ADR-0027) ---
+    public static final String REQUISITION_CREATE   = "PURCHASE.REQUISITION.CREATE";
+    public static final String REQUISITION_SUBMIT   = "PURCHASE.REQUISITION.SUBMIT";
+    public static final String REQUISITION_APPROVE  = "PURCHASE.REQUISITION.APPROVE";
+    public static final String REQUISITION_REJECT   = "PURCHASE.REQUISITION.REJECT";
+    public static final String REQUISITION_CONVERT  = "PURCHASE.REQUISITION.CONVERT";
+    public static final String REQUISITION_CANCEL   = "PURCHASE.REQUISITION.CANCEL";
+    public static final String RFQ_CREATE           = "PURCHASE.RFQ.CREATE";
+    public static final String RFQ_SEND             = "PURCHASE.RFQ.SEND";
+    public static final String RFQ_AWARD            = "PURCHASE.RFQ.AWARD";
+    public static final String RFQ_CANCEL           = "PURCHASE.RFQ.CANCEL";
+    public static final String SUPPLIER_QUOTE_CAPTURE = "PURCHASE.QUOTE.CAPTURE";
+    public static final String PO_APPROVE           = "PURCHASE.ORDER.APPROVE";
+    public static final String PO_REJECT            = "PURCHASE.ORDER.REJECT";
+    public static final String LANDED_COST_CREATE   = "PURCHASE.LANDEDCOST.CREATE";
+    public static final String LANDED_COST_CONFIRM  = "PURCHASE.LANDEDCOST.CONFIRM";
+    public static final String PURCHASE_RETURN_CREATE  = "PURCHASE.RETURN.CREATE";
+    public static final String PURCHASE_RETURN_CONFIRM = "PURCHASE.RETURN.CONFIRM";
+    public static final String PURCHASE_SETTINGS_UPDATE = "PURCHASE.SETTINGS.UPDATE";
+    // ---- HR & Payroll (ADR-0032) ----
+    public static final String HR_DEPARTMENT_CREATE    = "HR.DEPARTMENT.CREATE";
+    public static final String HR_DEPARTMENT_UPDATE    = "HR.DEPARTMENT.UPDATE";
+    public static final String HR_EMPLOYEE_CREATE      = "HR.EMPLOYEE.CREATE";
+    public static final String HR_EMPLOYEE_UPDATE      = "HR.EMPLOYEE.UPDATE";
+    public static final String HR_EMPLOYEE_ARCHIVE     = "HR.EMPLOYEE.ARCHIVE";
+    public static final String HR_CONTRACT_CREATE      = "HR.CONTRACT.CREATE";
+    public static final String HR_CONTRACT_TERMINATE   = "HR.CONTRACT.TERMINATE";
+    public static final String HR_PAYCOMPONENT_CREATE  = "HR.PAYCOMPONENT.CREATE";
+    public static final String HR_PAYCOMPONENT_UPDATE  = "HR.PAYCOMPONENT.UPDATE";
+    public static final String HR_LEAVE_REQUEST_SUBMIT = "HR.LEAVE.REQUEST.SUBMIT";
+    public static final String HR_LEAVE_REQUEST_DECIDE = "HR.LEAVE.REQUEST.DECIDE";
+    public static final String HR_LOAN_CREATE          = "HR.LOAN.CREATE";
+    public static final String HR_LOAN_APPROVE         = "HR.LOAN.APPROVE";
+    public static final String HR_STATUTORY_PAYE_CREATE  = "HR.STATUTORY.PAYE.CREATE";
+    public static final String HR_STATUTORY_RATE_CREATE  = "HR.STATUTORY.RATE.CREATE";
+    public static final String HR_PAYROLL_RUN_CREATE   = "HR.PAYROLL.RUN.CREATE";
+    public static final String HR_PAYROLL_RUN_CALCULATE = "HR.PAYROLL.RUN.CALCULATE";
+    public static final String HR_PAYROLL_RUN_APPROVE  = "HR.PAYROLL.RUN.APPROVE";
+    public static final String HR_PAYROLL_RUN_POST     = "HR.PAYROLL.RUN.POST";
+    public static final String HR_PAYROLL_RUN_DISBURSE = "HR.PAYROLL.RUN.DISBURSE";
+    public static final String HR_PAYROLL_RUN_REVERSE  = "HR.PAYROLL.RUN.REVERSE";
+
+    // --- crm (ADR-0031) ---
+    public static final String CRM_LEAD_CREATE       = "CRM.LEAD.CREATE";
+    public static final String CRM_LEAD_UPDATE       = "CRM.LEAD.UPDATE";
+    public static final String CRM_LEAD_CONTACT      = "CRM.LEAD.CONTACT";
+    public static final String CRM_LEAD_QUALIFY      = "CRM.LEAD.QUALIFY";
+    public static final String CRM_LEAD_DISQUALIFY   = "CRM.LEAD.DISQUALIFY";
+    public static final String CRM_OPPORTUNITY_CREATE        = "CRM.OPPORTUNITY.CREATE";
+    public static final String CRM_OPPORTUNITY_UPDATE        = "CRM.OPPORTUNITY.UPDATE";
+    public static final String CRM_OPPORTUNITY_LINE_ADD      = "CRM.OPPORTUNITY.LINE.ADD";
+    public static final String CRM_OPPORTUNITY_STAGE_ADVANCE = "CRM.OPPORTUNITY.STAGE.ADVANCE";
+    public static final String CRM_OPPORTUNITY_WIN           = "CRM.OPPORTUNITY.WIN";
+    public static final String CRM_OPPORTUNITY_LOSE          = "CRM.OPPORTUNITY.LOSE";
+    public static final String CRM_OPPORTUNITY_CONVERT       = "CRM.OPPORTUNITY.CONVERT";
+    public static final String CRM_ACTIVITY_CREATE   = "CRM.ACTIVITY.CREATE";
+    public static final String CRM_ACTIVITY_COMPLETE = "CRM.ACTIVITY.COMPLETE";
+    public static final String CRM_STAGE_CREATE      = "CRM.STAGE.CREATE";
+    public static final String CRM_STAGE_UPDATE      = "CRM.STAGE.UPDATE";
+    public static final String CRM_STAGE_DEACTIVATE  = "CRM.STAGE.DEACTIVATE";
+
+    // ---- Sales Depth (ADR-0029) ----
+    // POS till
+    public static final String POS_TILL_CREATE           = "POS.TILL.CREATE";
+    public static final String POS_TILL_UPDATE           = "POS.TILL.UPDATE";
+    public static final String POS_TILL_DEACTIVATE       = "POS.TILL.DEACTIVATE";
+    // POS session lifecycle
+    public static final String POS_SESSION_OPEN          = "POS.SESSION.OPEN";
+    public static final String POS_SESSION_PAYOUT        = "POS.SESSION.PAYOUT";
+    public static final String POS_SESSION_CLOSE         = "POS.SESSION.CLOSE";
+    public static final String POS_SESSION_RECONCILE     = "POS.SESSION.RECONCILE";
+    // POS sale / refund
+    public static final String POS_SALE_RING             = "POS.SALE.RING";
+    public static final String POS_SALE_FINALISE         = "POS.SALE.FINALISE";
+    public static final String POS_REFUND                = "POS.REFUND";
+    // Pricing rules
+    public static final String PRICING_TIER_CREATE       = "PRICING.TIER.CREATE";
+    public static final String PRICING_TIER_UPDATE       = "PRICING.TIER.UPDATE";
+    public static final String PRICING_TIER_DEACTIVATE   = "PRICING.TIER.DEACTIVATE";
+    public static final String CUSTOMER_PRICE_CREATE     = "PRICING.CUSTOMER_PRICE.CREATE";
+    public static final String CUSTOMER_PRICE_UPDATE     = "PRICING.CUSTOMER_PRICE.UPDATE";
+    public static final String CUSTOMER_PRICE_DEACTIVATE = "PRICING.CUSTOMER_PRICE.DEACTIVATE";
+    public static final String PROMOTION_CREATE          = "PRICING.PROMOTION.CREATE";
+    public static final String PROMOTION_UPDATE          = "PRICING.PROMOTION.UPDATE";
+    public static final String PROMOTION_DEACTIVATE      = "PRICING.PROMOTION.DEACTIVATE";
+    // Drop-ship
+    public static final String DROPSHIP_FLAG             = "DROPSHIP.FLAG";
+    public static final String DROPSHIP_PO_RAISED        = "DROPSHIP.PO.RAISED";
+    public static final String DROPSHIP_FULFILLED        = "DROPSHIP.FULFILLED";
+    // Blanket orders
+    public static final String BLANKET_ORDER_CREATE      = "BLANKET.ORDER.CREATE";
+    public static final String BLANKET_ORDER_DRAW        = "BLANKET.ORDER.DRAW";
+    public static final String BLANKET_ORDER_CANCEL      = "BLANKET.ORDER.CANCEL";
+    public static final String BLANKET_ORDER_CALLOFF     = "BLANKET.ORDER.CALLOFF";
+    public static final String BLANKET_ORDER_CLOSE       = "BLANKET.ORDER.CLOSE";
+    // Standing orders
+    public static final String STANDING_ORDER_CREATE     = "STANDING.ORDER.CREATE";
+    public static final String STANDING_ORDER_PAUSE      = "STANDING.ORDER.PAUSE";
+    public static final String STANDING_ORDER_RESUME     = "STANDING.ORDER.RESUME";
+    public static final String STANDING_ORDER_CANCEL     = "STANDING.ORDER.CANCEL";
+    public static final String STANDING_ORDER_GENERATE   = "STANDING.ORDER.GENERATE";
+    public static final String STANDING_ORDER_GENERATED  = "STANDING.ORDER.GENERATED";
+
+    // ---- Notifications (ADR-0024) ----
+    public static final String NOTIFICATION_TYPE_TOGGLE = "NOTIFICATION.TYPE.TOGGLE";
+
+    // --- projects / job-costing (ADR-0033) ---
+    public static final String PROJECT_CREATE          = "PROJECT.CREATE";
+    public static final String PROJECT_UPDATE          = "PROJECT.UPDATE";
+    public static final String PROJECT_STATUS_CHANGE   = "PROJECT.STATUS.CHANGE";
+    public static final String PROJECT_ARCHIVE         = "PROJECT.ARCHIVE";
+    public static final String PROJECT_TASK_CREATE     = "PROJECT.TASK.CREATE";
+    public static final String PROJECT_TASK_UPDATE     = "PROJECT.TASK.UPDATE";
+    public static final String PROJECT_TASK_DEACTIVATE = "PROJECT.TASK.DEACTIVATE";
+    public static final String PROJECT_TIMESHEET_RECORD = "PROJECT.TIMESHEET.RECORD";
+    public static final String PROJECT_MATERIAL_ISSUE  = "PROJECT.MATERIAL.ISSUE";
+
+    // ---- Budgeting & Management Accounting (ADR-0034) ----
+    public static final String BUDGET_CREATE            = "BUDGET.CREATE";
+    public static final String BUDGET_VERSION_CREATE    = "BUDGET.VERSION.CREATE";
+    public static final String BUDGET_VERSION_SUBMIT    = "BUDGET.VERSION.SUBMIT";
+    public static final String BUDGET_VERSION_RECALL    = "BUDGET.VERSION.RECALL";
+    public static final String BUDGET_VERSION_APPROVE   = "BUDGET.VERSION.APPROVE";
+    public static final String BUDGET_VERSION_REJECT    = "BUDGET.VERSION.REJECT";
+
+    // ---- Manufacturing / Production (ADR-0035) ----
+    public static final String WORKORDER_CREATE           = "WORKORDER.CREATE";
+    public static final String WORKORDER_UPDATE           = "WORKORDER.UPDATE";
+    public static final String WORKORDER_RELEASE          = "WORKORDER.RELEASE";
+    public static final String WORKORDER_CANCEL           = "WORKORDER.CANCEL";
+    public static final String WORKORDER_ISSUE_COMPONENTS = "WORKORDER.ISSUE_COMPONENTS";
+    public static final String WORKORDER_APPLY_COST       = "WORKORDER.APPLY_COST";
+    public static final String WORKORDER_COMPLETE         = "WORKORDER.COMPLETE";
+    public static final String WORKORDER_CLOSE            = "WORKORDER.CLOSE";
 }

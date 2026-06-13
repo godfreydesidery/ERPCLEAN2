@@ -1,9 +1,19 @@
 package com.erp.support;
 
+import jakarta.mail.Session;
+import jakarta.mail.internet.MimeMessage;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.mail.MailException;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessagePreparator;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
+
+import java.io.InputStream;
 
 /**
  * Base for integration tests that exercise the real schema (Flyway) and real queries against
@@ -44,5 +54,29 @@ public abstract class PostgresIntegrationTest {
         // DomainEventDispatcher.dispatchOne(...); the @Scheduled poller would otherwise race the
         // test for the same event row (intermittent optimistic-lock failures). ADR-0009 D-4.
         registry.add("erp.outbox.scheduling-enabled", () -> "false");
+    }
+
+    /**
+     * No-op JavaMailSender stub. The notifications module requires a JavaMailSender bean but SMTP
+     * is not configured in the IT environment. EmailSender degrades gracefully at runtime (ADR-0024
+     * D-6); this stub satisfies the dependency graph so the context loads without an SMTP server.
+     */
+    @TestConfiguration
+    static class MailStubConfig {
+
+        @Bean
+        JavaMailSender noOpMailSender() {
+            return new JavaMailSender() {
+                @Override public MimeMessage createMimeMessage() {
+                    return new MimeMessage((Session) null);
+                }
+                @Override public MimeMessage createMimeMessage(InputStream is) {
+                    return createMimeMessage();
+                }
+                @Override public void send(MimeMessage... mimeMessages) throws MailException { }
+                @Override public void send(MimeMessagePreparator... preparators) throws MailException { }
+                @Override public void send(SimpleMailMessage... simpleMessages) throws MailException { }
+            };
+        }
     }
 }

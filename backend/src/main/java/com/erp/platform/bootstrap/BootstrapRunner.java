@@ -11,10 +11,16 @@ import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.repository.OrganisationRepository;
 import com.erp.modules.iam.repository.UserBranchRepository;
 import com.erp.modules.ap.service.ApGlSeeder;
+import com.erp.modules.crm.service.CrmStageSeeder;
 import com.erp.modules.documents.service.DocumentBrandingSeeder;
+import com.erp.modules.notifications.service.NotificationTypeSeeder;
 import com.erp.modules.ar.service.ArGlSeeder;
 import com.erp.modules.cashbank.service.CashBankSeeder;
 import com.erp.modules.stock.service.InventoryGlSeeder;
+import com.erp.modules.fixedassets.service.FixedAssetGlSeeder;
+import com.erp.modules.hr.service.HrGlSeeder;
+import com.erp.modules.hr.service.HrStatutorySeeder;
+import com.erp.modules.manufacturing.service.ManufacturingGlSeeder;
 import com.erp.modules.gl.service.ChartOfAccountService;
 import com.erp.modules.gl.service.FiscalCalendarService;
 import com.erp.modules.gl.service.GlConfigService;
@@ -73,6 +79,17 @@ public class BootstrapRunner implements ApplicationRunner {
     private final InventoryGlSeeder inventoryGlSeeder;
     // Document branding + template registry seeder (ADR-0023 D-10)
     private final DocumentBrandingSeeder documentBrandingSeeder;
+    // Fixed Assets GL seeder (ADR-0030 D-7)
+    private final FixedAssetGlSeeder fixedAssetGlSeeder;
+    // CRM pipeline stage defaults seeder (ADR-0031 D-5)
+    private final CrmStageSeeder crmStageSeeder;
+    // HR & Payroll GL + statutory seeders (ADR-0032 D-8/D-9)
+    private final HrGlSeeder hrGlSeeder;
+    private final HrStatutorySeeder hrStatutorySeeder;
+    // Notifications type catalogue seeder (ADR-0024 D-9)
+    private final NotificationTypeSeeder notificationTypeSeeder;
+    // Manufacturing GL seeder (ADR-0035 D-7)
+    private final ManufacturingGlSeeder manufacturingGlSeeder;
 
     public BootstrapRunner(BootstrapProperties props,
                            OrganisationRepository organisations,
@@ -91,7 +108,13 @@ public class BootstrapRunner implements ApplicationRunner {
                            ApGlSeeder apGlSeeder,
                            CashBankSeeder cashBankSeeder,
                            InventoryGlSeeder inventoryGlSeeder,
-                           DocumentBrandingSeeder documentBrandingSeeder) {
+                           DocumentBrandingSeeder documentBrandingSeeder,
+                           FixedAssetGlSeeder fixedAssetGlSeeder,
+                           CrmStageSeeder crmStageSeeder,
+                           HrGlSeeder hrGlSeeder,
+                           HrStatutorySeeder hrStatutorySeeder,
+                           NotificationTypeSeeder notificationTypeSeeder,
+                           ManufacturingGlSeeder manufacturingGlSeeder) {
         this.props = props;
         this.organisations = organisations;
         this.companies = companies;
@@ -105,11 +128,17 @@ public class BootstrapRunner implements ApplicationRunner {
         this.chartOfAccountService = chartOfAccountService;
         this.fiscalCalendarService = fiscalCalendarService;
         this.glConfigService = glConfigService;
-        this.arGlSeeder        = arGlSeeder;
-        this.apGlSeeder        = apGlSeeder;
-        this.cashBankSeeder    = cashBankSeeder;
+        this.arGlSeeder             = arGlSeeder;
+        this.apGlSeeder             = apGlSeeder;
+        this.cashBankSeeder         = cashBankSeeder;
         this.inventoryGlSeeder      = inventoryGlSeeder;
         this.documentBrandingSeeder = documentBrandingSeeder;
+        this.fixedAssetGlSeeder     = fixedAssetGlSeeder;
+        this.crmStageSeeder         = crmStageSeeder;
+        this.hrGlSeeder             = hrGlSeeder;
+        this.hrStatutorySeeder      = hrStatutorySeeder;
+        this.notificationTypeSeeder = notificationTypeSeeder;
+        this.manufacturingGlSeeder  = manufacturingGlSeeder;
     }
 
     @Override
@@ -152,6 +181,17 @@ public class BootstrapRunner implements ApplicationRunner {
         inventoryGlSeeder.seedDefaults(company.getId());
         // Seed document branding profile + template registry (ADR-0023 D-10).
         documentBrandingSeeder.seedDefaults(company.getId());
+        // Seed Fixed Assets GL accounts + gl_configs (ADR-0030 D-7).
+        fixedAssetGlSeeder.seedDefaults(company.getId());
+        // Seed default CRM pipeline stages (ADR-0031 D-5).
+        crmStageSeeder.seedDefaults(company.getId());
+        // Seed HR GL accounts + gl_configs + TZ statutory defaults (ADR-0032 D-8/D-9).
+        hrGlSeeder.seedDefaults(company.getId());
+        hrStatutorySeeder.seedDefaults(company.getId());
+        // Seed notification type catalogue (ADR-0024 D-9).
+        notificationTypeSeeder.seedDefaults(company.getId());
+        // Seed Manufacturing GL accounts + gl_configs (ADR-0035 D-7).
+        manufacturingGlSeeder.seedDefaults(company.getId());
 
         Branch branch = new Branch(company, props.branchCode(), props.branchName());
         branch.setTimeZone(props.timeZone());

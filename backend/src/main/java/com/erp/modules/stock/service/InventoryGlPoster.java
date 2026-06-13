@@ -158,6 +158,61 @@ public class InventoryGlPoster {
     }
 
     // -------------------------------------------------------------------------
+    // (c) Project material issue COGS: DR COGS (project-tagged) / CR INVENTORY
+    //     (ADR-0033 D-5, REQUIRES_NEW)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Post DR COGS (5100, tagged with project) / CR INVENTORY (1300) for a project material issue.
+     * Reuses the existing COGS / INVENTORY gl_config keys (ADR-0033 D-8 — no new GL config keys).
+     * REQUIRES_NEW — returns null on GL anomaly; never propagates to caller TX.
+     *
+     * @param legs          per-line (productId, productCode, value, projectCostType) tuples
+     * @param issueRef      issue document uid (sourceRef)
+     * @param projectId     FK to projects(id) — stamped on the COGS leg
+     * @param projectTaskId FK to project_tasks(id) — stamped on the COGS leg (nullable)
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public String postCogsForProjectInNewTx(Long companyId, Long branchId, LocalDate postingDate,
+                                             String issueRef, String currency,
+                                             Long projectId, Long projectTaskId,
+                                             List<ProjectCogsLeg> legs) {
+        if (legs.isEmpty()) return null;
+        try {
+            ChartOfAccount cogsAcct      = configResolver.resolve(companyId, GlConfigKey.COGS);
+            ChartOfAccount inventoryAcct = configResolver.resolve(companyId, GlConfigKey.INVENTORY);
+
+            List<LineDraft> lines = new ArrayList<>();
+            for (ProjectCogsLeg leg : legs) {
+                // COGS leg: project-tagged (ADR-0033 D-1 — project_id / project_task_id scalars)
+                lines.add(new LineDraft(cogsAcct.getId(),
+                        leg.value(), BigDecimal.ZERO,
+                        currency, "Project COGS " + leg.productCode() + " — " + issueRef,
+                        null, null, null, null,
+                        projectId, projectTaskId, leg.projectCostType()));
+                // Inventory CR leg: untagged (balance-sheet leg, ADR-0025 D-6 pattern)
+                lines.add(new LineDraft(inventoryAcct.getId(),
+                        BigDecimal.ZERO, leg.value(),
+                        currency, "Inventory out " + leg.productCode() + " — " + issueRef));
+            }
+
+            JournalEntryDraft draft = new JournalEntryDraft(
+                    companyId, branchId, postingDate,
+                    "Project material issue — " + issueRef,
+                    JournalSourceType.COGS, issueRef,
+                    null, null, lines);
+
+            JournalEntryDto result = directPosting.post(draft);
+            return result != null ? result.uid() : null;
+
+        } catch (Exception ex) {
+            log.warn("InventoryGlPoster: project COGS GL post failed for company={} issue={} — {}",
+                    companyId, issueRef, ex.getMessage());
+            return null;
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // (d) Receipt reversal: DR GRNI / CR INVENTORY (event-driven, REQUIRES_NEW)
     //     FIX B: resolve + build + post all inside this REQUIRES_NEW boundary.
     // -------------------------------------------------------------------------
@@ -329,6 +384,96 @@ public class InventoryGlPoster {
     }
 
     // -------------------------------------------------------------------------
+    // (g) Landed cost: DR INVENTORY / CR LANDED_COST_CLEARING (event-driven, REQUIRES_NEW)
+    //     ADR-0027 D-5 / D-9. GRNI-bridge pattern reused for LANDED_COST_CLEARING (2160).
+    // -------------------------------------------------------------------------
+
+    /**
+     * Post DR INVENTORY (1300) / CR LANDED_COST_CLEARING (2160) for the total landed-cost amount.
+     * One journal per landed cost confirm. REQUIRES_NEW — returns null on anomaly; never propagates.
+     *
+     * @param landedCostUid sourceRef (landed_cost.uid)
+     * @param totalAmount   sum of all charge allocations
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public String postLandedCostInNewTx(Long companyId, Long branchId, LocalDate postingDate,
+                                         String landedCostUid, String currency,
+                                         BigDecimal totalAmount) {
+        try {
+            ChartOfAccount inventoryAcct     = configResolver.resolve(companyId, GlConfigKey.INVENTORY);
+            ChartOfAccount landedClearAcct   = configResolver.resolve(companyId, GlConfigKey.LANDED_COST_CLEARING);
+
+            List<LineDraft> lines = List.of(
+                    new LineDraft(inventoryAcct.getId(),
+                            totalAmount, BigDecimal.ZERO,
+                            currency, "Landed cost — " + landedCostUid),
+                    new LineDraft(landedClearAcct.getId(),
+                            BigDecimal.ZERO, totalAmount,
+                            currency, "Landed cost clearing — " + landedCostUid)
+            );
+
+            JournalEntryDraft draft = new JournalEntryDraft(
+                    companyId, branchId, postingDate,
+                    "Landed cost " + landedCostUid,
+                    JournalSourceType.LANDED_COST, landedCostUid,
+                    null, null, lines);
+
+            JournalEntryDto result = directPosting.post(draft);
+            return result != null ? result.uid() : null;
+
+        } catch (Exception ex) {
+            log.warn("InventoryGlPoster: landed cost GL post failed for company={} landedCost={} — {}",
+                    companyId, landedCostUid, ex.getMessage());
+            return null;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // (h) Purchase return: DR GRNI / CR INVENTORY (event-driven, REQUIRES_NEW)
+    //     ADR-0027 D-7. Symmetric reverse of receipt: stock goes back to supplier.
+    // -------------------------------------------------------------------------
+
+    /**
+     * Post DR GRNI (2150) / CR INVENTORY (1300) for a purchase return at original receipt cost.
+     * One journal per confirmed purchase return. REQUIRES_NEW — returns null on anomaly; never propagates.
+     *
+     * @param returnUid      sourceRef (purchase_return.uid)
+     * @param totalReturnValue total value being returned (sum of line_value_amount from return lines)
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public String postPurchaseReturnInNewTx(Long companyId, Long branchId, LocalDate postingDate,
+                                             String returnUid, String currency,
+                                             BigDecimal totalReturnValue) {
+        try {
+            ChartOfAccount grniAcct      = configResolver.resolve(companyId, GlConfigKey.GRNI);
+            ChartOfAccount inventoryAcct = configResolver.resolve(companyId, GlConfigKey.INVENTORY);
+
+            List<LineDraft> lines = List.of(
+                    new LineDraft(grniAcct.getId(),
+                            totalReturnValue, BigDecimal.ZERO,
+                            currency, "Purchase return GRNI — " + returnUid),
+                    new LineDraft(inventoryAcct.getId(),
+                            BigDecimal.ZERO, totalReturnValue,
+                            currency, "Purchase return Inventory — " + returnUid)
+            );
+
+            JournalEntryDraft draft = new JournalEntryDraft(
+                    companyId, branchId, postingDate,
+                    "Purchase return " + returnUid,
+                    JournalSourceType.PURCHASE_RETURN, returnUid,
+                    null, null, lines);
+
+            JournalEntryDto result = directPosting.post(draft);
+            return result != null ? result.uid() : null;
+
+        } catch (Exception ex) {
+            log.warn("InventoryGlPoster: purchase return GL post failed for company={} return={} — {}",
+                    companyId, returnUid, ex.getMessage());
+            return null;
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Value-object legs / commands
     // -------------------------------------------------------------------------
 
@@ -337,6 +482,10 @@ public class InventoryGlPoster {
 
     /** Per sale-component GL leg data. */
     public record CogsLeg(Long productId, String productCode, BigDecimal value) {}
+
+    /** Per project-issue GL leg data (ADR-0033 D-5). */
+    public record ProjectCogsLeg(Long productId, String productCode, BigDecimal value,
+                                 String projectCostType) {}
 
     /**
      * Parameters for {@link #postAdjustmentDirect} — bundles the adjustment-specific

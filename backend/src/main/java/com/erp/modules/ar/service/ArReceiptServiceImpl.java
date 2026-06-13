@@ -2,6 +2,7 @@ package com.erp.modules.ar.service;
 
 import com.erp.modules.ar.domain.dto.ArReceiptDto;
 import com.erp.modules.ar.domain.dto.ArReceiptDto.AllocationDto;
+import com.erp.modules.ar.domain.dto.PaymentReceivedPayload;
 import com.erp.modules.ar.domain.dto.RecordReceiptRequest;
 import com.erp.modules.ar.domain.dto.RecordReceiptRequest.AllocationLineRequest;
 import com.erp.modules.ar.domain.entity.ArInvoice;
@@ -35,9 +36,12 @@ import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.repository.Lookups;
+import com.erp.platform.events.DomainEventType;
+import com.erp.platform.events.OutboxPublisher;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
+import java.text.DecimalFormat;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -69,6 +73,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
     private final CashBankAccountResolver cashBankAccountResolver;
     private final CashTransactionRecorder cashTxnRecorder;
     private final WhtCaptureService whtCapture;
+    private final OutboxPublisher outbox;
     private final ScopeGuard scopeGuard;
     private final AuditService audit;
 
@@ -83,6 +88,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                                  CashBankAccountResolver cashBankAccountResolver,
                                  CashTransactionRecorder cashTxnRecorder,
                                  WhtCaptureService whtCapture,
+                                 OutboxPublisher outbox,
                                  ScopeGuard scopeGuard,
                                  AuditService audit) {
         this.receipts                = receipts;
@@ -96,6 +102,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         this.cashBankAccountResolver = cashBankAccountResolver;
         this.cashTxnRecorder         = cashTxnRecorder;
         this.whtCapture              = whtCapture;
+        this.outbox                  = outbox;
         this.scopeGuard              = scopeGuard;
         this.audit                   = audit;
     }
@@ -256,6 +263,17 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                         "amount", receipt.getAmount().toPlainString(),
                         "customerId", String.valueOf(customer.getId()),
                         "glEntryUid", posted.uid())));
+
+        // 11. Payment notification trigger — PAYMENT.RECEIVED (ADR-0024 D-8).
+        // BR-NOTIF-13: amountFormatted must be a pre-formatted display string (e.g. "TZS 1,250.00"),
+        // never a raw BigDecimal string. DecimalFormat is not thread-safe; create a new instance here.
+        String amountFormatted = (currency != null ? currency + " " : "")
+                + new DecimalFormat("#,##0.00").format(receipt.getAmount());
+        outbox.publish(DomainEventType.PAYMENT_RECEIVED, DomainEventType.AGG_AR_RECEIPT,
+                receipt.getId(), receipt.getUid(), companyId, receipt.getBranchId(),
+                new PaymentReceivedPayload(receipt.getUid(), companyId, receipt.getBranchId(),
+                        customer.getDisplayName(), amountFormatted,
+                        currency, Instant.now()));
 
         return toDto(receipt, savedAllocs, invoices);
     }

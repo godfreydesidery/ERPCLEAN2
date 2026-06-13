@@ -7,5 +7,7 @@ package com.erp.modules.sales.domain.enums;
  */
 public enum DocumentOrigin {
     DIRECT,
-    SALES_ORDER
+    SALES_ORDER,
+    /** POS sale — a DIRECT-class invoice tagged with a pos_session_id (ADR-0029 D-5). */
+    POS
 }

@@ -59,7 +59,27 @@ public class ChartOfAccountServiceImpl implements ChartOfAccountService {
             new Object[]{"5400", "Utilities",                   AccountType.EXPENSE},
             // Inventory Valuation & COGS increment (ADR-0020 D-8)
             new Object[]{"2150", "Goods Received Not Invoiced", AccountType.LIABILITY},
-            new Object[]{"5160", "Stock Adjustment / Shrinkage",AccountType.EXPENSE}
+            new Object[]{"5160", "Stock Adjustment / Shrinkage",AccountType.EXPENSE},
+            // procurement-depth (ADR-0027 D-9)
+            new Object[]{"2160", "Landed Cost Clearing",        AccountType.LIABILITY},
+            // sales-depth (ADR-0029 D-4) — POS over/short variance accounts
+            new Object[]{"4900", "Cash Over (Till Surplus)",    AccountType.INCOME},
+            new Object[]{"5170", "Cash Short / Till Shortage",  AccountType.EXPENSE},
+            // HR & Payroll increment (ADR-0032 D-8)
+            new Object[]{"5700", "Salaries & Wages Expense",            AccountType.EXPENSE},
+            new Object[]{"5710", "Employer Statutory Contributions",     AccountType.EXPENSE},
+            new Object[]{"2500", "PAYE Payable",                         AccountType.LIABILITY},
+            new Object[]{"2510", "NSSF Payable",                         AccountType.LIABILITY},
+            new Object[]{"2520", "WCF Payable",                          AccountType.LIABILITY},
+            new Object[]{"2530", "SDL Payable",                          AccountType.LIABILITY},
+            new Object[]{"2540", "HESLB Payable",                        AccountType.LIABILITY},
+            new Object[]{"2550", "Net Wages Payable",                    AccountType.LIABILITY},
+            new Object[]{"1450", "Employee Loans Receivable",            AccountType.ASSET},
+            // Manufacturing / Production increment (ADR-0035 D-7)
+            new Object[]{"1320", "Work In Progress",                     AccountType.ASSET},
+            new Object[]{"2350", "WIP Labour Clearing",                  AccountType.LIABILITY},
+            new Object[]{"2360", "WIP Overhead Clearing",                AccountType.LIABILITY},
+            new Object[]{"5180", "Manufacturing Variance",               AccountType.EXPENSE}
     );
 
     public ChartOfAccountServiceImpl(ChartOfAccountRepository accounts,

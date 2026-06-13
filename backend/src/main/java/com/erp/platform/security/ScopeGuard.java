@@ -2,6 +2,37 @@ package com.erp.platform.security;
 
 import com.erp.modules.costing.repository.DimensionRepository;
 import com.erp.modules.costing.repository.DimensionValueRepository;
+// HR & Payroll (ADR-0032)
+import com.erp.modules.hr.repository.DepartmentRepository;
+import com.erp.modules.hr.repository.EmployeeRepository;
+import com.erp.modules.hr.repository.EmploymentContractRepository;
+import com.erp.modules.hr.repository.PayComponentRepository;
+import com.erp.modules.hr.repository.LeaveTypeRepository;
+import com.erp.modules.hr.repository.LeaveRequestRepository;
+import com.erp.modules.hr.repository.EmployeeLoanRepository;
+import com.erp.modules.hr.repository.PayeBandSetRepository;
+import com.erp.modules.hr.repository.StatutoryRateSetRepository;
+import com.erp.modules.hr.repository.PayrollRunRepository;
+import com.erp.modules.hr.repository.PayslipRepository;
+// CRM (ADR-0031)
+import com.erp.modules.crm.repository.ActivityRepository;
+import com.erp.modules.crm.repository.LeadRepository;
+import com.erp.modules.crm.repository.OpportunityRepository;
+import com.erp.modules.crm.repository.PipelineStageRepository;
+// procurement-depth (ADR-0027)
+import com.erp.modules.purchases.repository.PurchaseRequisitionRepository;
+import com.erp.modules.purchases.repository.RfqRepository;
+import com.erp.modules.purchases.repository.SupplierQuoteRepository;
+import com.erp.modules.purchases.repository.LandedCostRepository;
+import com.erp.modules.purchases.repository.PurchaseReturnRepository;
+// sales-depth (ADR-0029)
+import com.erp.modules.sales.repository.PosTillRepository;
+import com.erp.modules.sales.repository.PosSessionRepository;
+import com.erp.modules.sales.repository.BlanketOrderRepository;
+import com.erp.modules.sales.repository.StandingOrderRepository;
+import com.erp.modules.products.repository.PriceTierRepository;
+import com.erp.modules.products.repository.CustomerPriceRepository;
+import com.erp.modules.products.repository.PromotionRepository;
 import com.erp.modules.ap.repository.ApDebitNoteRepository;
 import com.erp.modules.ap.repository.ApPaymentRepository;
 import com.erp.modules.ap.repository.SupplierBillRepository;
@@ -42,6 +73,12 @@ import com.erp.modules.sales.repository.SalesReturnRepository;
 import com.erp.modules.sales.repository.TaxRateRepository;
 import com.erp.modules.stock.repository.StockMovementRepository;
 import com.erp.modules.stock.repository.StockOnHandRepository;
+// inventory-depth (ADR-0028 D-10)
+import com.erp.modules.stock.repository.StockLocationRepository;
+import com.erp.modules.stock.repository.StockTransferRepository;
+import com.erp.modules.stock.repository.StockCountRepository;
+import com.erp.modules.stock.repository.StockBatchRepository;
+import com.erp.modules.stock.repository.StockSerialRepository;
 // approvals (ADR-0022)
 import com.erp.modules.approvals.repository.ApprovalPolicyRepository;
 import com.erp.modules.approvals.repository.ApprovalRequestRepository;
@@ -49,6 +86,30 @@ import com.erp.modules.approvals.repository.ApprovalRequestRepository;
 import com.erp.modules.documents.repository.DocumentBrandingRepository;
 import com.erp.modules.documents.repository.DocumentTemplateRepository;
 import com.erp.modules.documents.repository.GeneratedDocumentRepository;
+// inventory-depth (ADR-0028)
+import com.erp.modules.stock.repository.StockBatchRepository;
+import com.erp.modules.stock.repository.StockCountRepository;
+import com.erp.modules.stock.repository.StockLocationRepository;
+import com.erp.modules.stock.repository.StockSerialRepository;
+import com.erp.modules.stock.repository.StockTransferRepository;
+// fixed-assets (ADR-0030 D-14)
+import com.erp.modules.fixedassets.repository.AssetCategoryRepository;
+import com.erp.modules.fixedassets.repository.DepreciationRunRepository;
+import com.erp.modules.fixedassets.repository.FixedAssetRepository;
+// notifications (ADR-0024)
+import com.erp.modules.notifications.repository.NotificationRepository;
+import com.erp.modules.notifications.repository.NotificationTypeRepository;
+import com.erp.modules.notifications.repository.NotificationPreferenceRepository;
+// projects (ADR-0033)
+import com.erp.modules.projects.repository.ProjectRepository;
+import com.erp.modules.projects.repository.ProjectTaskRepository;
+// budgeting (ADR-0034)
+import com.erp.modules.budgeting.repository.BudgetRepository;
+import com.erp.modules.budgeting.repository.BudgetVersionRepository;
+// manufacturing (ADR-0035)
+import com.erp.modules.manufacturing.repository.WorkOrderRepository;
+import com.erp.modules.manufacturing.repository.WorkOrderComponentRepository;
+import com.erp.modules.manufacturing.repository.WorkOrderOperationRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -134,6 +195,61 @@ public class ScopeGuard {
     // cost-centre (ADR-0025 D-5)
     private final DimensionRepository        dimensions;
     private final DimensionValueRepository   dimensionValues;
+    // inventory-depth (ADR-0028 D-10)
+    private final StockLocationRepository    stockLocations;
+    private final StockTransferRepository    stockTransfers;
+    private final StockCountRepository       stockCounts;
+    private final StockBatchRepository       stockBatches;
+    private final StockSerialRepository      stockSerials;
+    // fixed-assets (ADR-0030 D-14)
+    private final AssetCategoryRepository    assetCategories;
+    private final FixedAssetRepository       fixedAssets;
+    private final DepreciationRunRepository  depreciationRuns;
+    // HR & Payroll repositories (ADR-0032 D-10)
+    private final DepartmentRepository       hrDepartments;
+    private final EmployeeRepository         hrEmployees;
+    private final EmploymentContractRepository hrContracts;
+    private final PayComponentRepository     hrPayComponents;
+    private final LeaveTypeRepository        hrLeaveTypes;
+    private final LeaveRequestRepository     hrLeaveRequests;
+    private final EmployeeLoanRepository     hrLoans;
+    private final PayeBandSetRepository      hrPayeBandSets;
+    private final StatutoryRateSetRepository hrStatutoryRateSets;
+    private final PayrollRunRepository       hrPayrollRuns;
+    private final PayslipRepository          hrPayslips;
+    // CRM repositories (ADR-0031 D-11)
+    private final LeadRepository             crmLeads;
+    private final OpportunityRepository      crmOpportunities;
+    private final ActivityRepository         crmActivities;
+    private final PipelineStageRepository    crmPipelineStages;
+    // procurement-depth (ADR-0027 D-10)
+    private final PurchaseRequisitionRepository purchaseRequisitions;
+    private final RfqRepository                 rfqs;
+    private final SupplierQuoteRepository       supplierQuotes;
+    private final LandedCostRepository          landedCosts;
+    private final PurchaseReturnRepository      purchaseReturns;
+    // sales-depth (ADR-0029)
+    private final PosTillRepository          posTills;
+    private final PosSessionRepository       posSessions;
+    private final BlanketOrderRepository     blanketOrders;
+    private final StandingOrderRepository    standingOrders;
+    private final PriceTierRepository        priceTiers;
+    private final CustomerPriceRepository    customerPrices;
+    private final PromotionRepository        promotions;
+    // notifications (ADR-0024)
+    private final NotificationRepository          notificationsRepo;
+    private final NotificationTypeRepository      notificationTypesRepo;
+    private final NotificationPreferenceRepository notificationPrefsRepo;
+    // projects (ADR-0033 D-4)
+    private final ProjectRepository          projectsRepo;
+    private final ProjectTaskRepository      projectTasksRepo;
+    // budgeting (ADR-0034 D-13)
+    private final BudgetRepository           budgetsRepo;
+    private final BudgetVersionRepository    budgetVersionsRepo;
+    // manufacturing (ADR-0035 D-13)
+    private final WorkOrderRepository           workOrdersRepo;
+    private final WorkOrderComponentRepository  workOrderComponentsRepo;
+    private final WorkOrderOperationRepository  workOrderOperationsRepo;
     private final AuditService             audit;
 
     public ScopeGuard(CompanyRepository companies,
@@ -186,6 +302,61 @@ public class ScopeGuard {
                       // cost-centre (ADR-0025 D-5)
                       DimensionRepository dimensions,
                       DimensionValueRepository dimensionValues,
+                      // inventory-depth (ADR-0028 D-10)
+                      StockLocationRepository stockLocations,
+                      StockTransferRepository stockTransfers,
+                      StockCountRepository stockCounts,
+                      StockBatchRepository stockBatches,
+                      StockSerialRepository stockSerials,
+                      // fixed-assets (ADR-0030 D-14)
+                      AssetCategoryRepository assetCategories,
+                      FixedAssetRepository fixedAssets,
+                      DepreciationRunRepository depreciationRuns,
+                      // HR & Payroll (ADR-0032 D-10)
+                      DepartmentRepository hrDepartments,
+                      EmployeeRepository hrEmployees,
+                      EmploymentContractRepository hrContracts,
+                      PayComponentRepository hrPayComponents,
+                      LeaveTypeRepository hrLeaveTypes,
+                      LeaveRequestRepository hrLeaveRequests,
+                      EmployeeLoanRepository hrLoans,
+                      PayeBandSetRepository hrPayeBandSets,
+                      StatutoryRateSetRepository hrStatutoryRateSets,
+                      PayrollRunRepository hrPayrollRuns,
+                      PayslipRepository hrPayslips,
+                      // CRM (ADR-0031 D-11)
+                      LeadRepository crmLeads,
+                      OpportunityRepository crmOpportunities,
+                      ActivityRepository crmActivities,
+                      PipelineStageRepository crmPipelineStages,
+                      // procurement-depth (ADR-0027 D-10)
+                      PurchaseRequisitionRepository purchaseRequisitions,
+                      RfqRepository rfqs,
+                      SupplierQuoteRepository supplierQuotes,
+                      LandedCostRepository landedCosts,
+                      PurchaseReturnRepository purchaseReturns,
+                      // sales-depth (ADR-0029)
+                      PosTillRepository posTills,
+                      PosSessionRepository posSessions,
+                      BlanketOrderRepository blanketOrders,
+                      StandingOrderRepository standingOrders,
+                      PriceTierRepository priceTiers,
+                      CustomerPriceRepository customerPrices,
+                      PromotionRepository promotions,
+                      // notifications (ADR-0024)
+                      NotificationRepository notificationsRepo,
+                      NotificationTypeRepository notificationTypesRepo,
+                      NotificationPreferenceRepository notificationPrefsRepo,
+                      // projects (ADR-0033 D-4)
+                      ProjectRepository projectsRepo,
+                      ProjectTaskRepository projectTasksRepo,
+                      // budgeting (ADR-0034 D-13)
+                      BudgetRepository budgetsRepo,
+                      BudgetVersionRepository budgetVersionsRepo,
+                      // manufacturing (ADR-0035 D-13)
+                      WorkOrderRepository workOrdersRepo,
+                      WorkOrderComponentRepository workOrderComponentsRepo,
+                      WorkOrderOperationRepository workOrderOperationsRepo,
                       AuditService audit) {
         this.companies      = companies;
         this.branches       = branches;
@@ -237,6 +408,61 @@ public class ScopeGuard {
         // cost-centre (ADR-0025 D-5)
         this.dimensions          = dimensions;
         this.dimensionValues     = dimensionValues;
+        // inventory-depth (ADR-0028 D-10)
+        this.stockLocations      = stockLocations;
+        this.stockTransfers      = stockTransfers;
+        this.stockCounts         = stockCounts;
+        this.stockBatches        = stockBatches;
+        this.stockSerials        = stockSerials;
+        // fixed-assets (ADR-0030 D-14)
+        this.assetCategories     = assetCategories;
+        this.fixedAssets         = fixedAssets;
+        this.depreciationRuns    = depreciationRuns;
+        // HR & Payroll (ADR-0032 D-10)
+        this.hrDepartments       = hrDepartments;
+        this.hrEmployees         = hrEmployees;
+        this.hrContracts         = hrContracts;
+        this.hrPayComponents     = hrPayComponents;
+        this.hrLeaveTypes        = hrLeaveTypes;
+        this.hrLeaveRequests     = hrLeaveRequests;
+        this.hrLoans             = hrLoans;
+        this.hrPayeBandSets      = hrPayeBandSets;
+        this.hrStatutoryRateSets = hrStatutoryRateSets;
+        this.hrPayrollRuns       = hrPayrollRuns;
+        this.hrPayslips          = hrPayslips;
+        // CRM (ADR-0031 D-11)
+        this.crmLeads            = crmLeads;
+        this.crmOpportunities    = crmOpportunities;
+        this.crmActivities       = crmActivities;
+        this.crmPipelineStages   = crmPipelineStages;
+        // procurement-depth (ADR-0027 D-10)
+        this.purchaseRequisitions = purchaseRequisitions;
+        this.rfqs                 = rfqs;
+        this.supplierQuotes       = supplierQuotes;
+        this.landedCosts          = landedCosts;
+        this.purchaseReturns      = purchaseReturns;
+        // sales-depth (ADR-0029)
+        this.posTills            = posTills;
+        this.posSessions         = posSessions;
+        this.blanketOrders       = blanketOrders;
+        this.standingOrders      = standingOrders;
+        this.priceTiers          = priceTiers;
+        this.customerPrices      = customerPrices;
+        this.promotions          = promotions;
+        // notifications (ADR-0024)
+        this.notificationsRepo      = notificationsRepo;
+        this.notificationTypesRepo  = notificationTypesRepo;
+        this.notificationPrefsRepo  = notificationPrefsRepo;
+        // projects (ADR-0033 D-4)
+        this.projectsRepo        = projectsRepo;
+        this.projectTasksRepo    = projectTasksRepo;
+        // budgeting (ADR-0034 D-13)
+        this.budgetsRepo         = budgetsRepo;
+        this.budgetVersionsRepo  = budgetVersionsRepo;
+        // manufacturing (ADR-0035 D-13)
+        this.workOrdersRepo           = workOrdersRepo;
+        this.workOrderComponentsRepo  = workOrderComponentsRepo;
+        this.workOrderOperationsRepo  = workOrderOperationsRepo;
         this.audit               = audit;
     }
 
@@ -311,6 +537,61 @@ public class ScopeGuard {
             // cost-centre target types (ADR-0025 D-5)
             case "dimension"           -> dimensions.findCompanyIdByUid(uid);
             case "dimensionvalue"      -> dimensionValues.findCompanyIdByUid(uid);
+            // inventory-depth (ADR-0028 D-10)
+            case "stocklocation"       -> stockLocations.findCompanyIdByUid(uid);
+            case "stocktransfer"       -> stockTransfers.findCompanyIdByUid(uid);
+            case "stockcount"          -> stockCounts.findCompanyIdByUid(uid);
+            case "stockbatch"          -> stockBatches.findCompanyIdByUid(uid);
+            case "stockserial"         -> stockSerials.findCompanyIdByUid(uid);
+            // fixed-assets (ADR-0030 D-14)
+            case "assetcategory"       -> assetCategories.findCompanyIdByUid(uid);
+            case "fixedasset"          -> fixedAssets.findCompanyIdByUid(uid);
+            case "depreciationrun"     -> depreciationRuns.findCompanyIdByUid(uid);
+            // CRM target types (ADR-0031 D-11)
+            case "lead"                -> crmLeads.findCompanyIdByUid(uid);
+            case "opportunity"         -> crmOpportunities.findCompanyIdByUid(uid);
+            case "activity"            -> crmActivities.findCompanyIdByUid(uid);
+            case "pipelinestage"       -> crmPipelineStages.findCompanyIdByUid(uid);
+            // procurement-depth (ADR-0027 D-10)
+            case "requisition"         -> purchaseRequisitions.findCompanyIdByUid(uid);
+            case "rfq"                 -> rfqs.findCompanyIdByUid(uid);
+            case "supplierquote"       -> supplierQuotes.findCompanyIdByUid(uid);
+            case "landedcost"          -> landedCosts.findCompanyIdByUid(uid);
+            case "purchasereturn"      -> purchaseReturns.findCompanyIdByUid(uid);
+            // sales-depth target types (ADR-0029)
+            case "postill"             -> posTills.findCompanyIdByUid(uid);
+            case "possession"          -> posSessions.findCompanyIdByUid(uid);
+            case "blanketorder"        -> blanketOrders.findCompanyIdByUid(uid);
+            case "standingorder"       -> standingOrders.findCompanyIdByUid(uid);
+            case "pricetier"           -> priceTiers.findCompanyIdByUid(uid);
+            case "customerprice"       -> customerPrices.findCompanyIdByUid(uid);
+            case "promotion"           -> promotions.findCompanyIdByUid(uid);
+            // HR & Payroll target types (ADR-0032 D-10)
+            case "hrdepartment"        -> hrDepartments.findCompanyIdByUid(uid);
+            case "employee"            -> hrEmployees.findCompanyIdByUid(uid);
+            case "employmentcontract"  -> hrContracts.findCompanyIdByUid(uid);
+            case "paycomponent"        -> hrPayComponents.findCompanyIdByUid(uid);
+            case "leavetype"           -> hrLeaveTypes.findCompanyIdByUid(uid);
+            case "leaverequest"        -> hrLeaveRequests.findCompanyIdByUid(uid);
+            case "employeeloan"        -> hrLoans.findCompanyIdByUid(uid);
+            case "payebandset"         -> hrPayeBandSets.findCompanyIdByUid(uid);
+            case "statutoryrateset"    -> hrStatutoryRateSets.findCompanyIdByUid(uid);
+            case "payrollrun"          -> hrPayrollRuns.findCompanyIdByUid(uid);
+            case "payslip"             -> hrPayslips.findCompanyIdByUid(uid);
+            // notifications (ADR-0024)
+            case "notification"        -> notificationsRepo.findCompanyIdByUid(uid);
+            case "notificationtype"    -> notificationTypesRepo.findCompanyIdByUid(uid);
+            case "notificationpref"    -> notificationPrefsRepo.findCompanyIdByUid(uid);
+            // projects (ADR-0033 D-4)
+            case "project"             -> projectsRepo.findCompanyIdByUid(uid);
+            case "projecttask"         -> projectTasksRepo.findCompanyIdByUid(uid);
+            // budgeting target types (ADR-0034 D-13)
+            case "budget"              -> budgetsRepo.findCompanyIdByUid(uid);
+            case "budgetversion"       -> budgetVersionsRepo.findCompanyIdByUid(uid);
+            // manufacturing target types (ADR-0035 D-13)
+            case "workorder"           -> workOrdersRepo.findCompanyIdByUid(uid);
+            case "workordercomponent"  -> workOrderComponentsRepo.findCompanyIdByUid(uid);
+            case "workorderoperation"  -> workOrderOperationsRepo.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };

@@ -28,5 +28,33 @@ public enum GlConfigKey {
     RETAINED_EARNINGS,
     // --- Inventory Valuation & COGS increment (ADR-0020 D-8) ---
     GRNI,
-    STOCK_ADJUSTMENT
+    STOCK_ADJUSTMENT,
+    // --- sales-depth (ADR-0029 D-4) — POS over/short variance accounts ---
+    POS_CASH_OVER,
+    POS_CASH_SHORT,
+    // --- Fixed Assets increment (ADR-0030 D-3) ---
+    FIXED_ASSETS,
+    FIXED_ASSET_CLEARING,
+    ACCUMULATED_DEPRECIATION,
+    DEPRECIATION_EXPENSE,
+    GAIN_LOSS_ON_DISPOSAL,
+    REVALUATION_RESERVE,
+    // --- procurement-depth (ADR-0027 D-9) ---
+    LANDED_COST_CLEARING,
+    // --- HR & Payroll increment (ADR-0032 D-8) ---
+    SALARY_EXPENSE,
+    EMPLOYER_STATUTORY_EXPENSE,
+    PAYE_PAYABLE,
+    NSSF_PAYABLE,
+    WCF_PAYABLE,
+    SDL_PAYABLE,
+    HESLB_PAYABLE,
+    NET_WAGES_PAYABLE,
+    EMPLOYEE_LOAN_RECEIVABLE,
+    // --- Manufacturing / Production increment (ADR-0035 D-7) ---
+    WIP_INVENTORY,
+    FINISHED_GOODS,
+    LABOUR_APPLIED,
+    OVERHEAD_APPLIED,
+    MANUFACTURING_VARIANCE
 }

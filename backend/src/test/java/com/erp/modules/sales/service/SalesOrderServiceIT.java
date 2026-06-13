@@ -181,7 +181,7 @@ class SalesOrderServiceIT extends PostgresIntegrationTest {
         QuotationDto quote = quotationService.create(new CreateQuotationRequest(
                 company.getUid(), customerUid, agentUid, "TZS",
                 LocalDate.now(), LocalDate.now().plusDays(30),
-                null, null, null));
+                null, null, null, null));
         assertThat(quote.status()).isEqualTo(QuotationStatus.DRAFT.name());
         assertThat(quote.quoteNumber()).isNull();
 
@@ -306,7 +306,7 @@ class SalesOrderServiceIT extends PostgresIntegrationTest {
         setCtx();
         SalesOrderDto so = salesOrderService.create(new CreateSalesOrderRequest(
                 company.getUid(), customerUid, agentUid, "TZS",
-                LocalDate.now(), null, null, null));
+                LocalDate.now(), null, null, null, null));
 
         setCtx();
         salesOrderService.addLine(so.uid(), new AddSalesOrderLineRequest(
@@ -383,7 +383,7 @@ class SalesOrderServiceIT extends PostgresIntegrationTest {
         setCtx();
         SalesOrderDto so = salesOrderService.create(new CreateSalesOrderRequest(
                 company.getUid(), customerUid, agentUid, "TZS",
-                LocalDate.now(), null, null, null));
+                LocalDate.now(), null, null, null, null));
         setCtx();
         salesOrderService.addLine(so.uid(), new AddSalesOrderLineRequest(
                 product.uid(), pcsUid, qty, null, null, null));

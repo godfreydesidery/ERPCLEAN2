@@ -1,6 +1,7 @@
 package com.erp.api;
 
 import com.erp.modules.purchases.domain.dto.AddPurchaseOrderLineRequest;
+import com.erp.modules.purchases.domain.dto.ApprovePoRequest;
 import com.erp.modules.purchases.domain.dto.CreatePurchaseOrderRequest;
 import com.erp.modules.purchases.domain.dto.PurchaseOrderDto;
 import com.erp.modules.purchases.domain.dto.PurchaseOrderLineDto;
@@ -128,5 +129,29 @@ public class PurchaseOrderController {
     public ApiResponse<PurchaseOrderDto> voidOrder(@PathVariable String uid,
                                                     @RequestBody VoidPurchaseOrderRequest req) {
         return ApiResponse.ok(service.voidOrder(uid, req));
+    }
+
+    /** Approve a PO that is pending approval (ADR-0027 D-6). */
+    @PostMapping("/uid/{uid}/approve")
+    @PreAuthorize("@perm.scoped(#uid, 'purchaseorder', 'PURCHASE.ORDER.APPROVE')")
+    public ApiResponse<PurchaseOrderDto> approvePo(@PathVariable String uid,
+                                                    @RequestBody ApprovePoRequest req) {
+        return ApiResponse.ok(service.approvePo(uid, req));
+    }
+
+    /** Reject a PO that is pending approval (ADR-0027 D-6). */
+    @PostMapping("/uid/{uid}/reject")
+    @PreAuthorize("@perm.scoped(#uid, 'purchaseorder', 'PURCHASE.ORDER.APPROVE')")
+    public ApiResponse<PurchaseOrderDto> rejectPo(@PathVariable String uid,
+                                                   @RequestBody ApprovePoRequest req) {
+        return ApiResponse.ok(service.rejectPo(uid, req));
+    }
+
+    /** Create a PO from an awarded supplier quote (ADR-0027 D-4). */
+    @PostMapping("/from-quote/{quoteUid}")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("@perm.has('PURCHASE.ORDER.CREATE')")
+    public ApiResponse<PurchaseOrderDto> createFromQuote(@PathVariable String quoteUid) {
+        return ApiResponse.ok(service.createFromQuote(quoteUid));
     }
 }

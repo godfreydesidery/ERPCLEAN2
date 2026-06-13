@@ -96,4 +96,21 @@ public interface ArInvoiceRepository extends JpaRepository<ArInvoice, Long> {
 
     /** Status check only. */
     boolean existsByCompanyIdAndUid(Long companyId, String uid);
+
+    // --- notifications scanner (ADR-0024 D-7): invoice-overdue scan ---
+
+    /**
+     * Open/partial invoices past due date for a company — used by {@code NotificationScanner}
+     * (ADR-0024 D-7). Backed by {@code ix_ar_invoices_overdue_scan} (V26).
+     */
+    @Query("""
+            SELECT i FROM ArInvoice i
+            WHERE i.companyId = :companyId
+              AND i.status IN ('OPEN','PARTIAL')
+              AND i.dueDate < :today
+            ORDER BY i.dueDate ASC
+            """)
+    List<ArInvoice> findOverdueByCompany(
+            @Param("companyId") Long companyId,
+            @Param("today") java.time.LocalDate today);
 }
