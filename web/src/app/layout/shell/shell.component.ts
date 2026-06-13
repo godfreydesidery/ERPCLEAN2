@@ -157,6 +157,14 @@ export class ShellComponent {
         { label: 'Goods Receipts', route: '/admin/goods-receipts', icon: 'bi-box-arrow-in-down', available: true, permission: 'PURCHASE.ORDER.VIEW' },
       ],
     },
+    // ── Projects ──────────────────────────────────────────────────────────────
+    {
+      label: 'Projects',
+      items: [
+        { label: 'Projects', route: '/admin/projects', icon: 'bi-kanban', available: true, permission: 'PROJECTS.PROJECT.VIEW' },
+        { label: 'WIP Report', route: '/admin/projects/wip-report', icon: 'bi-graph-up-arrow', available: true, permission: 'PROJECTS.COSTING.VIEW' },
+      ],
+    },
     {
       label: 'Accounting',
       items: [

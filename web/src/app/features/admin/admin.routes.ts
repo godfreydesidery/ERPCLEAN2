@@ -466,5 +466,24 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./reporting/account-ledger.component').then((m) => m.AccountLedgerComponent),
   },
+  // ── Projects ──────────────────────────────────────────────────────────────
+  {
+    path: 'projects',
+    canActivate: [requirePermission('PROJECTS.PROJECT.VIEW')],
+    loadComponent: () =>
+      import('./projects/project-list.component').then((m) => m.ProjectListComponent),
+  },
+  {
+    path: 'projects/uid/:uid',
+    canActivate: [requirePermission('PROJECTS.PROJECT.VIEW')],
+    loadComponent: () =>
+      import('./projects/project-detail.component').then((m) => m.ProjectDetailComponent),
+  },
+  {
+    path: 'projects/wip-report',
+    canActivate: [requirePermission('PROJECTS.COSTING.VIEW')],
+    loadComponent: () =>
+      import('./projects/project-wip-report.component').then((m) => m.ProjectWipReportComponent),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];
