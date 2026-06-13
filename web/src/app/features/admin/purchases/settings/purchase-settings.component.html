@@ -1,0 +1,121 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Purchase Settings</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-gear me-1" aria-hidden="true"></i>
+      Configure PO approval threshold per company.
+    </p>
+  </header>
+
+  @switch (companyState()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mb-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load companies.
+      </p>
+    }
+    @default {
+      <div class="mb-3" style="max-width:320px">
+        <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+        <select id="companyPicker" name="companyPicker" class="form-select"
+                [ngModel]="selectedCompanyUid()"
+                (ngModelChange)="onCompanyChange($event)">
+          @for (c of companies(); track c.uid) {
+            <option [value]="c.uid">{{ c.name }}</option>
+          }
+        </select>
+      </div>
+
+      @switch (state()) {
+        @case ('loading') {
+          <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading settings…
+          </p>
+        }
+        @case ('error') {
+          <p class="state text-danger" role="alert">
+            <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+            Could not load purchase settings.
+          </p>
+        }
+        @case ('forbidden') {
+          <p class="state text-muted d-flex align-items-center gap-2">
+            <i class="bi bi-shield-lock" aria-hidden="true"></i>
+            You don't have permission to view purchase settings.
+          </p>
+        }
+        @default {
+          @if (settings()) {
+            <form class="create-form card card-body" (ngSubmit)="save()" aria-label="Purchase settings">
+              <h2 class="h6 mb-3">PO Approval</h2>
+
+              <div class="mb-3">
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" role="switch"
+                         id="poApprovalEnabled"
+                         [ngModel]="fPoApprovalEnabled()"
+                         (ngModelChange)="fPoApprovalEnabled.set($event)"
+                         name="poApprovalEnabled"
+                         [disabled]="saving() || !canEdit()" />
+                  <label class="form-check-label" for="poApprovalEnabled">
+                    Enable PO Approval Workflow
+                  </label>
+                </div>
+              </div>
+
+              @if (fPoApprovalEnabled()) {
+                <div class="row g-3 mb-3">
+                  <div class="col-sm-4">
+                    <label class="form-label small text-muted mb-1" for="threshold">
+                      Approval Threshold Amount
+                    </label>
+                    <input id="threshold" name="threshold" type="number"
+                           class="form-control"
+                           placeholder="0.00"
+                           [ngModel]="fThresholdAmount()"
+                           (ngModelChange)="fThresholdAmount.set($event)"
+                           min="0" step="any"
+                           [disabled]="saving() || !canEdit()" />
+                    <div class="form-text">POs above this value require approval.</div>
+                  </div>
+                  <div class="col-sm-2">
+                    <label class="form-label small text-muted mb-1" for="currency">Currency</label>
+                    <input id="currency" name="currency" type="text"
+                           class="form-control"
+                           placeholder="TZS"
+                           [ngModel]="fCurrency()"
+                           (ngModelChange)="fCurrency.set($event)"
+                           [disabled]="saving() || !canEdit()"
+                           autocomplete="off" />
+                  </div>
+                </div>
+              }
+
+              @if (saveError(); as msg) {
+                <p class="form-error text-danger small mb-2" role="alert">{{ msg }}</p>
+              }
+
+              @if (canEdit()) {
+                <div>
+                  <button type="submit" class="btn btn-primary" [disabled]="saving()">
+                    @if (saving()) {
+                      <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                      Saving…
+                    } @else {
+                      <i class="bi bi-save me-1" aria-hidden="true"></i>Save Settings
+                    }
+                  </button>
+                </div>
+              }
+            </form>
+          }
+        }
+      }
+    }
+  }
+</section>

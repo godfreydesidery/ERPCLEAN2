@@ -1,0 +1,172 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">New Landed Cost</h1>
+    <a routerLink="/admin/landed-costs" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Landed Costs
+    </a>
+  </header>
+
+  @switch (companyState()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mb-3" role="alert">Could not load companies.</p>
+    }
+    @default {
+      @if (companies().length > 1) {
+        <div class="mb-3" style="max-width:320px">
+          <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+          <select id="companyPicker" name="companyPicker" class="form-select"
+                  [ngModel]="selectedCompanyId()"
+                  (ngModelChange)="onCompanyChange($event)">
+            @for (c of companies(); track c.uid) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+          </select>
+        </div>
+      }
+
+      <form class="create-form card card-body" (ngSubmit)="submit()" aria-label="Create landed cost">
+
+        <!-- Allocation Basis -->
+        <div class="row g-3 mb-3">
+          <div class="col-sm-6">
+            <label class="form-label small text-muted mb-1" for="basis">
+              Allocation Basis <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <select id="basis" name="basis" class="form-select"
+                    [ngModel]="basis()" (ngModelChange)="basis.set($event)"
+                    [disabled]="submitting()">
+              @for (opt of basisOptions; track opt.value) {
+                <option [value]="opt.value">{{ opt.label }}</option>
+              }
+            </select>
+          </div>
+
+          <!-- Notes -->
+          <div class="col-sm-6">
+            <label class="form-label small text-muted mb-1" for="notes">Notes</label>
+            <input id="notes" name="notes" type="text" class="form-control"
+                   placeholder="Optional notes…"
+                   [ngModel]="notes()" (ngModelChange)="notes.set($event)"
+                   [disabled]="submitting()" autocomplete="off" />
+          </div>
+        </div>
+
+        <!-- GR selection -->
+        <h2 class="h6 mb-2">Goods Receipts Covered</h2>
+        <div class="d-flex gap-2 align-items-end mb-2">
+          <div style="min-width:260px">
+            <label class="form-label small text-muted mb-1" for="grPicker">Add Goods Receipt</label>
+            <app-uid-picker id="grPicker"
+              [(ngModel)]="pickedGrUid"
+              name="grPicker"
+              [options]="grOptions()"
+              placeholder="Select receipt to add"
+              (ngModelChange)="pickedGrUid.set($event)" />
+          </div>
+          <button type="button" class="btn btn-outline-secondary align-self-end"
+                  (click)="addGr()" [disabled]="!pickedGrUid()">
+            <i class="bi bi-plus" aria-hidden="true"></i>
+            <span class="visually-hidden">Add receipt</span>
+          </button>
+        </div>
+
+        @if (selectedGrUids().length > 0) {
+          <ul class="list-group list-group-flush mb-3">
+            @for (uid of selectedGrUids(); track uid) {
+              <li class="list-group-item d-flex align-items-center justify-content-between px-0 py-1">
+                <span class="small font-monospace">{{ grLabel(uid) }}</span>
+                <button type="button" class="btn btn-sm btn-outline-danger"
+                        (click)="removeGr(uid)"
+                        [attr.aria-label]="'Remove ' + grLabel(uid)">
+                  <i class="bi bi-x" aria-hidden="true"></i>
+                </button>
+              </li>
+            }
+          </ul>
+        }
+
+        <!-- Charges -->
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <h2 class="h6 mb-0">Charge Lines</h2>
+          <button type="button" class="btn btn-sm btn-outline-secondary"
+                  (click)="addCharge()">
+            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add Charge
+          </button>
+        </div>
+
+        @if (charges().length > 0) {
+          <div class="table-responsive mb-3">
+            <table class="table table-sm align-middle">
+              <caption class="visually-hidden">Charge lines</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Charge Type</th>
+                  <th scope="col" class="text-end">Amount</th>
+                  <th scope="col"><span class="visually-hidden">Remove</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (charge of charges(); track $index; let i = $index) {
+                  <tr>
+                    <td>
+                      <select class="form-select form-select-sm"
+                              [id]="'chargeType-' + i"
+                              [attr.aria-label]="'Charge type for line ' + (i + 1)"
+                              [ngModel]="charge.chargeType"
+                              (ngModelChange)="updateChargeType(i, $event)"
+                              [disabled]="submitting()">
+                        @for (t of chargeTypeOptions; track t) {
+                          <option [value]="t">{{ t }}</option>
+                        }
+                      </select>
+                    </td>
+                    <td>
+                      <input type="number" class="form-control form-control-sm text-end"
+                             style="max-width:140px"
+                             [id]="'chargeAmt-' + i"
+                             [attr.aria-label]="'Amount for charge ' + (i + 1)"
+                             [ngModel]="charge.amount"
+                             (ngModelChange)="updateChargeAmount(i, $event)"
+                             min="0.01" step="any"
+                             [disabled]="submitting()" />
+                    </td>
+                    <td>
+                      @if (charges().length > 1) {
+                        <button type="button" class="btn btn-sm btn-outline-danger"
+                                (click)="removeCharge(i)"
+                                [attr.aria-label]="'Remove charge line ' + (i + 1)">
+                          <i class="bi bi-trash" aria-hidden="true"></i>
+                        </button>
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+
+        @if (formError(); as msg) {
+          <p class="form-error text-danger small mb-2" role="alert">{{ msg }}</p>
+        }
+
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary" [disabled]="submitting()">
+            @if (submitting()) {
+              <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+              Saving…
+            } @else {
+              Create Landed Cost
+            }
+          </button>
+          <a routerLink="/admin/landed-costs" class="btn btn-outline-secondary">Cancel</a>
+        </div>
+      </form>
+    }
+  }
+</section>

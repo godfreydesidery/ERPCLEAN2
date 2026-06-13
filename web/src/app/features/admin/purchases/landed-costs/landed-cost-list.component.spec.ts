@@ -1,0 +1,105 @@
+/**
+ * LandedCostListComponent — key behaviour specs.
+ * 1. Loads list on company selection.
+ * 2. 403 → state = 'forbidden'.
+ * 3. Empty result → isEmpty() true.
+ */
+import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { signal } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
+import { of, throwError } from 'rxjs';
+import { AlertService } from '../../../../core/feedback/alert.service';
+import { SessionStore } from '../../../../core/auth/session.store';
+import { CompanyService } from '../../company/company.service';
+import { OrganisationService } from '../../organisation/organisation.service';
+import { LandedCostService } from './landed-cost.service';
+import { LandedCostListComponent } from './landed-cost-list.component';
+
+const STUB_ORG = { uid: 'ORG1', id: '1', name: 'Acme' };
+const STUB_COMPANY = { uid: 'CO1', id: '10', name: 'Main Co' };
+
+const STUB_LC = {
+  uid: 'LC1', id: '1', companyId: '10', branchId: '1',
+  landedCostNumber: 'LC-0001', status: 'DRAFT',
+  basis: 'BY_VALUE', totalChargeAmount: '5000',
+  currency: 'TZS', glEntryUid: null, notes: null,
+  confirmedAt: null, createdAt: null,
+  receiptUids: ['GR1'], charges: [],
+};
+
+const emptyPage = () => ({
+  rows: [],
+  meta: { page: 0, size: 20, totalElements: 0, totalPages: 0, hasNext: false },
+});
+
+const lcPage = () => ({
+  rows: [STUB_LC],
+  meta: { page: 0, size: 20, totalElements: 1, totalPages: 1, hasNext: false },
+});
+
+function makeBed(overrides: { listSpy?: ReturnType<typeof vi.fn> } = {}) {
+  const listSpy = overrides.listSpy ?? vi.fn(() => of(lcPage()));
+
+  TestBed.configureTestingModule({
+    imports: [LandedCostListComponent],
+    providers: [
+      provideHttpClient(),
+      provideHttpClientTesting(),
+      provideRouter([]),
+      { provide: LandedCostService, useValue: { list: listSpy } },
+      { provide: OrganisationService, useValue: { current: vi.fn(() => of(STUB_ORG)) } },
+      { provide: CompanyService, useValue: { list: vi.fn(() => of([STUB_COMPANY])) } },
+      { provide: AlertService, useValue: { success: vi.fn(), error: vi.fn() } },
+      {
+        provide: SessionStore,
+        useValue: {
+          hasPermission: vi.fn(() => true),
+          isAuthenticated: signal(true),
+          user: signal(null),
+          permissions: signal([]),
+          activeBranchUid: signal(null),
+        },
+      },
+    ],
+  });
+  return { listSpy };
+}
+
+describe('LandedCostListComponent', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('loads landed costs on company selection', async () => {
+    const { listSpy } = makeBed();
+    const fixture = TestBed.createComponent(LandedCostListComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    expect(listSpy).toHaveBeenCalled();
+    expect(comp.rows()).toHaveLength(1);
+    expect(comp.state()).toBe('idle');
+  });
+
+  it('isEmpty() is true when no rows returned', async () => {
+    makeBed({ listSpy: vi.fn(() => of(emptyPage())) });
+    const fixture = TestBed.createComponent(LandedCostListComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    expect(comp.isEmpty()).toBe(true);
+  });
+
+  it('sets state=forbidden on 403 response', async () => {
+    const listSpy = vi.fn(() =>
+      throwError(() => new HttpErrorResponse({ status: 403, error: { errors: ['Forbidden'] } })),
+    );
+    makeBed({ listSpy });
+    const fixture = TestBed.createComponent(LandedCostListComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    expect(comp.state()).toBe('forbidden');
+  });
+});

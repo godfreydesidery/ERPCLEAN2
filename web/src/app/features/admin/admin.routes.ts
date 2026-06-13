@@ -968,6 +968,50 @@ export const ADMIN_ROUTES: Routes = [
     canActivate: [requirePermission('PURCHASE.RFQ.VIEW')],
     loadComponent: () =>
       import('./purchases/rfq/rfq-detail.component').then((m) => m.RfqDetailComponent),
+  // ── Purchase Returns ──────────────────────────────────────────────────────
+  {
+    path: 'purchase-returns',
+    canActivate: [requirePermission('PURCHASE.RETURN.VIEW')],
+    loadComponent: () =>
+      import('./purchases/returns/purchase-return-list.component').then((m) => m.PurchaseReturnListComponent),
+  },
+  {
+    path: 'purchase-returns/create',
+    canActivate: [requirePermission('PURCHASE.RETURN.CREATE')],
+    loadComponent: () =>
+      import('./purchases/returns/purchase-return-create.component').then((m) => m.PurchaseReturnCreateComponent),
+  },
+  {
+    path: 'purchase-returns/uid/:uid',
+    canActivate: [requirePermission('PURCHASE.RETURN.VIEW')],
+    loadComponent: () =>
+      import('./purchases/returns/purchase-return-detail.component').then((m) => m.PurchaseReturnDetailComponent),
+  },
+  // ── Landed Costs ──────────────────────────────────────────────────────────
+  {
+    path: 'landed-costs',
+    canActivate: [requirePermission('PURCHASE.LANDED_COST.VIEW')],
+    loadComponent: () =>
+      import('./purchases/landed-costs/landed-cost-list.component').then((m) => m.LandedCostListComponent),
+  },
+  {
+    path: 'landed-costs/create',
+    canActivate: [requirePermission('PURCHASE.LANDED_COST.CREATE')],
+    loadComponent: () =>
+      import('./purchases/landed-costs/landed-cost-create.component').then((m) => m.LandedCostCreateComponent),
+  },
+  {
+    path: 'landed-costs/uid/:uid',
+    canActivate: [requirePermission('PURCHASE.LANDED_COST.VIEW')],
+    loadComponent: () =>
+      import('./purchases/landed-costs/landed-cost-detail.component').then((m) => m.LandedCostDetailComponent),
+  },
+  // ── Purchase Settings ─────────────────────────────────────────────────────
+  {
+    path: 'purchase-settings',
+    canActivate: [requirePermission('PURCHASE.SETTINGS.VIEW')],
+    loadComponent: () =>
+      import('./purchases/settings/purchase-settings.component').then((m) => m.PurchaseSettingsComponent),
   },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];
