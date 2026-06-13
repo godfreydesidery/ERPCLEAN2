@@ -44,12 +44,9 @@ public class BiExportFlattener {
         FinanceSummaryDto fs = dto.finance();
         if (fs != null) {
             rows.add(Row.sectionHeader("Finance Summary"));
-            rows.add(Row.line("Revenue",       bd(fs.revenue()),      BigDecimal.ZERO));
-            rows.add(Row.line("COGS",           bd(fs.cogs()),         BigDecimal.ZERO));
-            rows.add(Row.subtotal("Gross Profit", bd(fs.grossProfit()), BigDecimal.ZERO));
-            rows.add(Row.line("Operating Expenses", bd(fs.opex()),     BigDecimal.ZERO));
-            rows.add(Row.total("Net Profit",    bd(fs.netProfit()),    BigDecimal.ZERO));
-            rows.add(Row.line("Gross Margin %", bd(fs.grossMarginPct()), BigDecimal.ZERO));
+            rows.add(Row.line("Revenue",            bd(fs.revenue()),   BigDecimal.ZERO));
+            rows.add(Row.line("Operating Expenses", bd(fs.opex()),      BigDecimal.ZERO));
+            rows.add(Row.total("Net Profit",        bd(fs.netProfit()), BigDecimal.ZERO));
             // TB health
             BigDecimal tbDiff = fs.tbTotalDebit() != null && fs.tbTotalCredit() != null
                     ? fs.tbTotalDebit().subtract(fs.tbTotalCredit()) : BigDecimal.ZERO;
