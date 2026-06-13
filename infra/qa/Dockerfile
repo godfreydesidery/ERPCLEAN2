@@ -68,7 +68,7 @@ COPY --from=api-build /api/app.jar /opt/erpclean2/app.jar
 COPY infra/qa/application-qa.yml /opt/erpclean2/application-qa.yml
 ENV SPRING_CONFIG_ADDITIONAL_LOCATION=file:/opt/erpclean2/application-qa.yml \
     SPRING_PROFILES_ACTIVE=qa \
-    JWT_SIGNING_MODE=dev-in-memory
+    ERP_JWT_SIGNING_MODE=dev-in-memory
 
 VOLUME ["/var/lib/postgresql/data"]
 EXPOSE 8081
