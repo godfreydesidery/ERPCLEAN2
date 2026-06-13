@@ -27,24 +27,24 @@ function makePolicy(overrides = {}) {
 }
 
 describe('ApprovalPolicyListComponent', () => {
-  let approvalsService: ReturnType<typeof vi.fn>;
-  let organisationService: ReturnType<typeof vi.fn>;
-  let companyService: ReturnType<typeof vi.fn>;
+  let approvalsService: { listPolicies: ReturnType<typeof vi.fn>; createPolicy: ReturnType<typeof vi.fn> };
+  let organisationService: { current: ReturnType<typeof vi.fn> };
+  let companyService: { list: ReturnType<typeof vi.fn> };
   let sessionStore: { hasPermission: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     approvalsService = {
       listPolicies: vi.fn(() => of({ rows: [], meta: EMPTY_META })),
       createPolicy: vi.fn(),
-    } as unknown as ReturnType<typeof vi.fn>;
+    };
 
     organisationService = {
       current: vi.fn(() => of({ uid: 'org-1', name: 'Test Org' })),
-    } as unknown as ReturnType<typeof vi.fn>;
+    };
 
     companyService = {
       list: vi.fn(() => of([{ id: '10', uid: 'co-1', name: 'Test Co' }])),
-    } as unknown as ReturnType<typeof vi.fn>;
+    };
 
     sessionStore = { hasPermission: vi.fn(() => false) };
 
@@ -72,7 +72,7 @@ describe('ApprovalPolicyListComponent', () => {
   });
 
   it('populates rows on successful load', async () => {
-    (approvalsService.listPolicies as ReturnType<typeof vi.fn>).mockReturnValue(
+    approvalsService.listPolicies.mockReturnValue(
       of({ rows: [makePolicy()], meta: { ...EMPTY_META, totalElements: 1 } }),
     );
     const fixture = TestBed.createComponent(ApprovalPolicyListComponent);
@@ -85,7 +85,7 @@ describe('ApprovalPolicyListComponent', () => {
   });
 
   it('sets forbidden state on 403', async () => {
-    (approvalsService.listPolicies as ReturnType<typeof vi.fn>).mockReturnValue(
+    approvalsService.listPolicies.mockReturnValue(
       throwError(() => new HttpErrorResponse({ status: 403, statusText: 'Forbidden' })),
     );
     const fixture = TestBed.createComponent(ApprovalPolicyListComponent);
@@ -97,7 +97,7 @@ describe('ApprovalPolicyListComponent', () => {
   });
 
   it('sets error state on generic API error', async () => {
-    (approvalsService.listPolicies as ReturnType<typeof vi.fn>).mockReturnValue(
+    approvalsService.listPolicies.mockReturnValue(
       throwError(() => new HttpErrorResponse({ status: 500 })),
     );
     const fixture = TestBed.createComponent(ApprovalPolicyListComponent);
