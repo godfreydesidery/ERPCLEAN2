@@ -1,0 +1,44 @@
+# Production profile overrides — activated by SPRING_PROFILES_ACTIVE=prod.
+# Profile-gated so dev and test behaviour (plain-text logging, dev-in-memory JWT,
+# loose health detail) are UNCHANGED.
+#
+# What this file does:
+#   - Enables Kubernetes-style liveness + readiness probes (/actuator/health/liveness,
+#     /actuator/health/readiness) required by the HEALTHCHECK in infra/prod/Dockerfile
+#     and the prod compose healthcheck.
+#   - Exposes the readiness endpoint in the management exposure list.
+#   - Tightens Hikari pool for a single-node topology (tune for your DB tier).
+#   - Ensures debug-level logging from dev.yml cannot leak (belt-and-suspenders:
+#     dev.yml is only active under SPRING_PROFILES_ACTIVE=dev anyway).
+
+management:
+  endpoint:
+    health:
+      probes:
+        # Enables /actuator/health/liveness and /actuator/health/readiness.
+        # Required by the Dockerfile HEALTHCHECK and the prod compose healthcheck.
+        enabled: true
+      show-details: when-authorized
+  endpoints:
+    web:
+      exposure:
+        # Add readiness + liveness to the base health,info set.
+        include: health,info
+
+spring:
+  datasource:
+    hikari:
+      # Conservative pool sizing for a single-node topology; tune to your DB tier.
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+logging:
+  level:
+    root: INFO
+    com.erp: INFO
+    org.hibernate.SQL: WARN
+    # Suppress verbose Spring Security debug output in prod
+    org.springframework.security: WARN
