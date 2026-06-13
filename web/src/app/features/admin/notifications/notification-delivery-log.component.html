@@ -1,0 +1,123 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Notification Delivery Log</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-journal-text me-1" aria-hidden="true"></i>
+      Audit trail of every dispatch attempt — filter by channel or outcome.
+    </p>
+  </header>
+
+  <!-- Filters -->
+  <div class="d-flex flex-wrap gap-2 mb-3 align-items-end">
+    <div style="min-width:160px">
+      <label class="form-label small text-muted mb-1" for="filterChannel">Channel</label>
+      <select id="filterChannel" name="filterChannel" class="form-select form-select-sm"
+              [ngModel]="filterChannel()"
+              (ngModelChange)="filterChannel.set($event)">
+        <option value="">All channels</option>
+        <option value="IN_APP">IN_APP</option>
+        <option value="EMAIL">EMAIL</option>
+        <option value="SMS">SMS</option>
+        <option value="PUSH">PUSH</option>
+      </select>
+    </div>
+    <div style="min-width:160px">
+      <label class="form-label small text-muted mb-1" for="filterOutcome">Outcome</label>
+      <select id="filterOutcome" name="filterOutcome" class="form-select form-select-sm"
+              [ngModel]="filterOutcome()"
+              (ngModelChange)="filterOutcome.set($event)">
+        <option value="">All outcomes</option>
+        <option value="SENT">SENT</option>
+        <option value="FAILED">FAILED</option>
+        <option value="SUPPRESSED">SUPPRESSED</option>
+        <option value="PENDING">PENDING</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- List states -->
+  @switch (state()) {
+    @case ('loading') {
+      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading delivery log…
+      </p>
+    }
+    @case ('error') {
+      <p class="state text-danger" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load delivery log. Please try again.
+      </p>
+    }
+    @case ('forbidden') {
+      <p class="state text-muted d-flex align-items-center gap-2">
+        <i class="bi bi-shield-lock" aria-hidden="true"></i>
+        You don't have permission to view the delivery log.
+      </p>
+    }
+    @default {
+      @if (isEmpty()) {
+        <p class="state text-muted">No delivery log entries for the selected filters.</p>
+      } @else {
+        <div class="table-responsive">
+          <table class="table table-hover align-middle bg-white grid">
+            <caption class="visually-hidden">Notification delivery log</caption>
+            <thead>
+              <tr>
+                <th scope="col">Type Key</th>
+                <th scope="col">Channel</th>
+                <th scope="col">Outcome</th>
+                <th scope="col">Attempt</th>
+                <th scope="col">Suppression Reason</th>
+                <th scope="col">Recipient User</th>
+                <th scope="col">Trigger Key</th>
+                <th scope="col">Attempted At</th>
+                <th scope="col">Error</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (d of rows(); track d.uid) {
+                <tr [class.table-danger]="d.outcome === 'FAILED'">
+                  <td class="small font-monospace">{{ d.typeKey }}</td>
+                  <td class="small font-monospace">{{ d.channel }}</td>
+                  <td>
+                    <span class="badge" [class]="outcomeBadgeClass(d.outcome)">{{ d.outcome }}</span>
+                  </td>
+                  <td class="small text-center">{{ d.attemptNo }}</td>
+                  <td class="small text-muted">{{ d.suppressionReason ?? '—' }}</td>
+                  <td class="small text-muted font-monospace">{{ d.recipientUserId ?? '—' }}</td>
+                  <td class="small text-muted font-monospace">{{ d.triggerKey }}</td>
+                  <td class="small text-muted">{{ d.attemptedAt | slice:0:16 }}</td>
+                  <td class="small" [class.text-danger]="d.error">
+                    {{ d.error ?? '—' }}
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination -->
+        @if (meta().totalPages > 1) {
+          <nav aria-label="Delivery log pagination" class="d-flex align-items-center gap-3 mt-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary"
+                    [disabled]="currentPage() === 0"
+                    (click)="prevPage()">
+              <i class="bi bi-chevron-left" aria-hidden="true"></i>
+              <span class="visually-hidden">Previous page</span>
+            </button>
+            <span class="small text-muted">
+              Page {{ meta().page + 1 }} of {{ meta().totalPages }}
+              ({{ meta().totalElements }} total)
+            </span>
+            <button type="button" class="btn btn-sm btn-outline-secondary"
+                    [disabled]="!meta().hasNext"
+                    (click)="nextPage()">
+              <i class="bi bi-chevron-right" aria-hidden="true"></i>
+              <span class="visually-hidden">Next page</span>
+            </button>
+          </nav>
+        }
+      }
+    }
+  }
+</section>

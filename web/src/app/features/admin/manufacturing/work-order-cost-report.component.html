@@ -1,0 +1,206 @@
+<section class="admin-page">
+  <header class="page-head">
+    <nav aria-label="Breadcrumb">
+      <a [routerLink]="['/admin/work-orders/uid', uid()]" class="text-muted small">
+        <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Work Order
+      </a>
+    </nav>
+    <h1 class="h4 mb-1">Cost Report</h1>
+    @if (report(); as r) {
+      <p class="text-muted mb-0 small">
+        {{ r.woNumber }} — {{ r.finishedProductCode }} {{ r.finishedProductName }}
+      </p>
+    }
+  </header>
+
+  @switch (state()) {
+    @case ('loading') {
+      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading cost report…
+      </p>
+    }
+    @case ('error') {
+      <p class="state text-danger" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load cost report. Please try again.
+      </p>
+    }
+    @default {
+      @if (report(); as r) {
+
+        <!-- ── Header summary ─────────────────────────────────────────── -->
+        <div class="card mb-4">
+          <div class="card-header fw-semibold">Summary</div>
+          <div class="card-body">
+            @if (r.incompleteCost) {
+              <div class="alert alert-warning d-flex align-items-center gap-2 mb-3" role="alert">
+                <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+                <strong>Incomplete cost:</strong> one or more components were issued with no established
+                moving-average cost. The computed unit cost may be understated.
+              </div>
+            }
+            <div class="row g-3">
+              <div class="col-sm-2">
+                <div class="small text-muted">Planned Qty</div>
+                <div class="font-monospace">{{ +r.plannedQty | number:'1.2-6' }}</div>
+              </div>
+              <div class="col-sm-2">
+                <div class="small text-muted">Good Qty</div>
+                <div class="font-monospace">{{ +r.goodQty | number:'1.2-6' }}</div>
+              </div>
+              <div class="col-sm-2">
+                <div class="small text-muted">Scrap Qty</div>
+                <div class="font-monospace">{{ +r.scrapQty | number:'1.2-6' }}</div>
+              </div>
+              <div class="col-sm-3">
+                <div class="small text-muted">WIP Debit (1320 DR)</div>
+                <div class="font-monospace">{{ +r.wipDebitTotal | number:'1.2-4' }}</div>
+              </div>
+              <div class="col-sm-3">
+                <div class="small text-muted">WIP Credit (1320 CR)</div>
+                <div class="font-monospace">{{ +r.wipCreditTotal | number:'1.2-4' }}</div>
+              </div>
+              <div class="col-sm-3">
+                <div class="small text-muted">Net WIP Balance</div>
+                <div class="font-monospace"
+                     [class.text-danger]="netWip() > 0.00005"
+                     [class.text-success]="netWip() < -0.00005">
+                  {{ netWip() | number:'1.2-4' }}
+                </div>
+              </div>
+              <div class="col-sm-3">
+                <div class="small text-muted">Labour Applied (2350)</div>
+                <div class="font-monospace">{{ +r.labourAppliedTotal | number:'1.2-4' }}</div>
+              </div>
+              <div class="col-sm-3">
+                <div class="small text-muted">Overhead Applied (2360)</div>
+                <div class="font-monospace">{{ +r.overheadAppliedTotal | number:'1.2-4' }}</div>
+              </div>
+              <div class="col-sm-3">
+                <div class="small text-muted">Computed Unit Cost</div>
+                <div class="font-monospace fw-semibold">
+                  {{ r.computedUnitCost ? (+r.computedUnitCost | number:'1.2-4') : '—' }}
+                </div>
+              </div>
+              <div class="col-sm-3">
+                <div class="small text-muted">Variance (5180)</div>
+                <div class="font-monospace fw-semibold"
+                     [class.text-danger]="+r.varianceAmount > 0"
+                     [class.text-success]="+r.varianceAmount < 0">
+                  {{ r.varianceAmount ? (+r.varianceAmount | number:'1.2-4') : '—' }}
+                </div>
+                @if (+r.varianceAmount > 0) {
+                  <div class="small text-danger">Under-relieved (DR Variance)</div>
+                } @else if (+r.varianceAmount < 0) {
+                  <div class="small text-success">Over-relieved (CR Variance)</div>
+                }
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Components ──────────────────────────────────────────────── -->
+        <div class="card mb-4">
+          <div class="card-header fw-semibold">Components</div>
+          <div class="card-body p-0">
+            @if (r.components.length === 0) {
+              <p class="text-muted p-3 mb-0">No component lines.</p>
+            } @else {
+              <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                  <caption class="visually-hidden">Components for {{ r.woNumber }}</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">#</th>
+                      <th scope="col">Product</th>
+                      <th scope="col" class="text-end">Planned Qty</th>
+                      <th scope="col" class="text-end">Issued Qty</th>
+                      <th scope="col" class="text-end">Issued Value</th>
+                      <th scope="col" class="text-end">Unit Cost @ Issue</th>
+                      <th scope="col">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (comp of r.components; track comp.uid) {
+                      <tr>
+                        <td class="small text-muted">{{ comp.lineNo }}</td>
+                        <td class="small">
+                          <div class="fw-semibold">{{ comp.componentProductCode }}</div>
+                          <div class="text-muted" style="font-size:0.8rem">{{ comp.componentProductName }}</div>
+                        </td>
+                        <td class="font-monospace small text-end">{{ +comp.plannedQty | number:'1.2-6' }}</td>
+                        <td class="font-monospace small text-end">{{ +comp.issuedQty | number:'1.2-6' }}</td>
+                        <td class="font-monospace small text-end">{{ +comp.issuedValue | number:'1.2-4' }}</td>
+                        <td class="font-monospace small text-end"
+                            [class.text-danger]="comp.costSkipped">
+                          @if (comp.costSkipped) {
+                            <span title="No moving-average cost at time of issue">no cost</span>
+                          } @else {
+                            {{ +comp.unitCostAtIssue | number:'1.2-4' }}
+                          }
+                        </td>
+                        <td>
+                          <span class="badge"
+                                [class.text-bg-success]="comp.status === 'ISSUED'"
+                                [class.text-bg-warning]="comp.status === 'PARTIAL'"
+                                [class.text-bg-secondary]="comp.status === 'PLANNED'">
+                            {{ comp.status }}
+                          </span>
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          </div>
+        </div>
+
+        <!-- ── Operations ─────────────────────────────────────────────── -->
+        <div class="card mb-4">
+          <div class="card-header fw-semibold">Operations</div>
+          <div class="card-body p-0">
+            @if (r.operations.length === 0) {
+              <p class="text-muted p-3 mb-0">No operations.</p>
+            } @else {
+              <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                  <caption class="visually-hidden">Operations for {{ r.woNumber }}</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Seq</th>
+                      <th scope="col">Description</th>
+                      <th scope="col">Work Centre</th>
+                      <th scope="col" class="text-end">Labour</th>
+                      <th scope="col" class="text-end">Overhead</th>
+                      <th scope="col">Applied</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (op of r.operations; track op.uid) {
+                      <tr>
+                        <td class="small text-muted">{{ op.seqNo }}</td>
+                        <td class="small">{{ op.description }}</td>
+                        <td class="small text-muted">{{ op.workCentre || '—' }}</td>
+                        <td class="font-monospace small text-end">{{ +op.labourAmount | number:'1.2-4' }}</td>
+                        <td class="font-monospace small text-end">{{ +op.overheadAmount | number:'1.2-4' }}</td>
+                        <td>
+                          @if (op.applied) {
+                            <span class="badge text-bg-success">Applied</span>
+                          } @else {
+                            <span class="badge text-bg-secondary">Pending</span>
+                          }
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          </div>
+        </div>
+
+      }
+    }
+  }
+</section>

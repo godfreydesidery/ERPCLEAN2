@@ -1,0 +1,102 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Approval Inbox</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-inbox me-1" aria-hidden="true"></i>
+      Pending requests awaiting your decision.
+    </p>
+  </header>
+
+  @switch (state()) {
+    @case ('loading') {
+      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading inbox…
+      </p>
+    }
+    @case ('error') {
+      <p class="state text-danger" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load the inbox. Please try again.
+      </p>
+    }
+    @case ('forbidden') {
+      <p class="state text-muted d-flex align-items-center gap-2">
+        <i class="bi bi-shield-lock" aria-hidden="true"></i>
+        You don't have permission to view the approval inbox.
+      </p>
+    }
+    @default {
+      @if (isEmpty()) {
+        <div class="state text-center py-5">
+          <i class="bi bi-check-circle text-success" style="font-size:2.5rem;" aria-hidden="true"></i>
+          <p class="text-muted mt-2">Your inbox is empty — no pending requests require your decision.</p>
+        </div>
+      } @else {
+        <div class="table-responsive">
+          <table class="table table-hover align-middle bg-white grid">
+            <caption class="visually-hidden">Approval Inbox — Pending Requests</caption>
+            <thead>
+              <tr>
+                <th scope="col">Request #</th>
+                <th scope="col">Document Type</th>
+                <th scope="col">Amount</th>
+                <th scope="col">Status</th>
+                <th scope="col">Submitted</th>
+                <th scope="col">Current Step Role</th>
+                <th scope="col"><span class="visually-hidden">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (r of rows(); track r.uid) {
+                <tr>
+                  <td class="font-monospace small">{{ r.requestNumber }}</td>
+                  <td class="small font-monospace">{{ r.documentType }}</td>
+                  <td class="text-end font-monospace small">{{ r.currency }} {{ +r.amount | number:'1.2-2' }}</td>
+                  <td>
+                    <span class="badge" [class]="statusBadgeClass(r.status)">{{ r.status }}</span>
+                  </td>
+                  <td class="small text-muted">{{ r.submittedAt | slice:0:10 }}</td>
+                  <td class="small font-monospace">
+                    @for (step of r.steps; track step.uid) {
+                      @if (step.status === 'PENDING') {
+                        <span>{{ step.approverRoleCode }}</span>
+                      }
+                    }
+                  </td>
+                  <td>
+                    <a class="btn btn-sm btn-success"
+                       [routerLink]="['/admin/approvals/requests/uid', r.uid]"
+                       [attr.aria-label]="'Decide on request ' + r.requestNumber">
+                      <i class="bi bi-check2-circle me-1" aria-hidden="true"></i>Decide
+                    </a>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        @if (meta().totalPages > 1) {
+          <nav aria-label="Inbox pagination" class="d-flex align-items-center gap-3 mt-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary"
+                    [disabled]="currentPage() === 0"
+                    (click)="prevPage()">
+              <i class="bi bi-chevron-left" aria-hidden="true"></i>
+              <span class="visually-hidden">Previous page</span>
+            </button>
+            <span class="small text-muted">
+              Page {{ meta().page + 1 }} of {{ meta().totalPages }}
+              ({{ meta().totalElements }} total)
+            </span>
+            <button type="button" class="btn btn-sm btn-outline-secondary"
+                    [disabled]="!meta().hasNext"
+                    (click)="nextPage()">
+              <i class="bi bi-chevron-right" aria-hidden="true"></i>
+              <span class="visually-hidden">Next page</span>
+            </button>
+          </nav>
+        }
+      }
+    }
+  }
+</section>

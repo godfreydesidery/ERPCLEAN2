@@ -1,0 +1,142 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Opportunities</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-graph-up-arrow me-1" aria-hidden="true"></i>
+      Track sales opportunities through your pipeline.
+    </p>
+  </header>
+
+  <!-- Company selector -->
+  @switch (companyState()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mb-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load companies. Is the API running?
+      </p>
+    }
+    @default {
+      @if (companies().length > 1) {
+        <div class="mb-3" style="max-width:320px">
+          <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+          <select id="companyPicker" name="companyPicker" class="form-select"
+                  [ngModel]="selectedCompanyId()"
+                  (ngModelChange)="onCompanyChange($event)">
+            @for (c of companies(); track c.uid) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+          </select>
+        </div>
+      }
+    }
+  }
+
+  @if (selectedCompanyId()) {
+    <!-- Toolbar -->
+    <div class="d-flex flex-wrap gap-2 mb-3 align-items-end">
+      @if (canManage()) {
+        <div class="ms-auto">
+          <a [routerLink]="['/admin/crm/opportunities/create']"
+             [queryParams]="{ companyId: selectedCompanyId() }"
+             class="btn btn-primary">
+            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+            New Opportunity
+          </a>
+        </div>
+      }
+    </div>
+
+    <!-- List states -->
+    @switch (state()) {
+      @case ('loading') {
+        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading opportunities…
+        </p>
+      }
+      @case ('error') {
+        <p class="state text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load opportunities. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="state text-muted d-flex align-items-center gap-2">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view opportunities.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <p class="state text-muted">No opportunities yet. Create one above.</p>
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-hover align-middle bg-white grid">
+              <caption class="visually-hidden">Opportunities</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Opp #</th>
+                  <th scope="col">Title</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Stage</th>
+                  <th scope="col">Probability</th>
+                  <th scope="col" class="text-end">Est. Value</th>
+                  <th scope="col">Close Date</th>
+                  <th scope="col"><span class="visually-hidden">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of rows(); track row.uid) {
+                  <tr>
+                    <td class="font-monospace">{{ row.opportunityNumber }}</td>
+                    <td>{{ row.title }}</td>
+                    <td>
+                      <span class="badge" [class]="statusBadgeClass(row.opportunityStatus)">{{ row.opportunityStatus }}</span>
+                    </td>
+                    <td class="small text-muted">{{ stageName(row.pipelineStageId) }}</td>
+                    <td class="small text-end">{{ +row.winProbability | number:'1.0-0' }}%</td>
+                    <td class="text-end font-monospace">{{ row.currency }} {{ +row.estimatedValueAmount | number:'1.2-2' }}</td>
+                    <td class="small text-muted">{{ row.expectedCloseDate ?? '—' }}</td>
+                    <td>
+                      <a class="btn btn-sm btn-outline-primary"
+                         [routerLink]="['/admin/crm/opportunities/uid', row.uid]"
+                         [attr.aria-label]="'Open opportunity ' + row.opportunityNumber">
+                        <i class="bi bi-eye me-1" aria-hidden="true"></i>Open
+                      </a>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Pagination -->
+          @if (meta().totalPages > 1) {
+            <nav aria-label="Opportunity list pagination" class="d-flex align-items-center gap-3 mt-2">
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      [disabled]="currentPage() === 0"
+                      (click)="prevPage()">
+                <i class="bi bi-chevron-left" aria-hidden="true"></i>
+                <span class="visually-hidden">Previous page</span>
+              </button>
+              <span class="small text-muted">
+                Page {{ meta().page + 1 }} of {{ meta().totalPages }}
+                ({{ meta().totalElements }} total)
+              </span>
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      [disabled]="!meta().hasNext"
+                      (click)="nextPage()">
+                <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                <span class="visually-hidden">Next page</span>
+              </button>
+            </nav>
+          }
+        }
+      }
+    }
+  }
+</section>

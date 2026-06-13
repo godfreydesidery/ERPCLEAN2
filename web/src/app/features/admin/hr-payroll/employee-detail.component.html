@@ -1,0 +1,175 @@
+<section class="admin-page">
+  <header class="page-head">
+    <nav aria-label="breadcrumb">
+      <ol class="breadcrumb small mb-1">
+        <li class="breadcrumb-item"><a routerLink="/admin/hr/employees">Employees</a></li>
+        <li class="breadcrumb-item active" aria-current="page">
+          @if (employee(); as e) { {{ e.firstName }} {{ e.lastName }} } @else { Loading… }
+        </li>
+      </ol>
+    </nav>
+    <div class="d-flex align-items-center gap-3">
+      <h1 class="h4 mb-0">
+        @if (employee(); as e) { {{ e.firstName }} {{ e.lastName }} } @else { Employee Detail }
+      </h1>
+      @if (employee(); as e) {
+        <span class="badge" [class]="statusBadgeClass(e.status)">{{ e.status }}</span>
+      }
+    </div>
+  </header>
+
+  @switch (state()) {
+    @case ('loading') {
+      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+      </p>
+    }
+    @case ('error') {
+      <p class="state text-danger" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load employee. Please try again.
+      </p>
+    }
+    @default {
+      @if (employee(); as e) {
+        <!-- Metadata row -->
+        <dl class="row small text-muted mb-3">
+          <dt class="col-sm-2">Employee #</dt>
+          <dd class="col-sm-4 font-monospace">{{ e.employeeNumber }}</dd>
+          <dt class="col-sm-2">Department</dt>
+          <dd class="col-sm-4">{{ e.departmentName || '—' }}</dd>
+        </dl>
+
+        @if (canManage()) {
+          <form (ngSubmit)="save()" aria-label="Edit employee">
+            <div class="row g-3 mb-3">
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="dFirstName">
+                  First Name <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="dFirstName" name="dFirstName" type="text" class="form-control"
+                       [ngModel]="fFirstName()" (ngModelChange)="fFirstName.set($event)"
+                       [disabled]="saving()" />
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="dLastName">
+                  Last Name <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="dLastName" name="dLastName" type="text" class="form-control"
+                       [ngModel]="fLastName()" (ngModelChange)="fLastName.set($event)"
+                       [disabled]="saving()" />
+              </div>
+              <div class="col-sm-2">
+                <label class="form-label small text-muted mb-1" for="dHireDate">
+                  Hire Date <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="dHireDate" name="dHireDate" type="date" class="form-control"
+                       [ngModel]="fHireDate()" (ngModelChange)="fHireDate.set($event)"
+                       [disabled]="saving()" />
+              </div>
+              <div class="col-sm-2">
+                <label class="form-label small text-muted mb-1" for="dDob">Date of Birth</label>
+                <input id="dDob" name="dDob" type="date" class="form-control"
+                       [ngModel]="fDateOfBirth()" (ngModelChange)="fDateOfBirth.set($event)"
+                       [disabled]="saving()" />
+              </div>
+              <div class="col-sm-2">
+                <label class="form-label small text-muted mb-1" for="dGender">Gender</label>
+                <select id="dGender" name="dGender" class="form-select"
+                        [ngModel]="fGender()" (ngModelChange)="fGender.set($event)"
+                        [disabled]="saving()">
+                  <option value="">— select —</option>
+                  <option value="MALE">Male</option>
+                  <option value="FEMALE">Female</option>
+                </select>
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="dJobTitle">Job Title</label>
+                <input id="dJobTitle" name="dJobTitle" type="text" class="form-control"
+                       [ngModel]="fJobTitle()" (ngModelChange)="fJobTitle.set($event)"
+                       [disabled]="saving()" />
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="dNationalId">National ID</label>
+                <input id="dNationalId" name="dNationalId" type="text" class="form-control"
+                       [ngModel]="fNationalId()" (ngModelChange)="fNationalId.set($event)"
+                       [disabled]="saving()" />
+              </div>
+              <div class="col-sm-2">
+                <label class="form-label small text-muted mb-1" for="dTin">TIN</label>
+                <input id="dTin" name="dTin" type="text" class="form-control"
+                       [ngModel]="fTin()" (ngModelChange)="fTin.set($event)"
+                       [disabled]="saving()" />
+              </div>
+              <div class="col-sm-2">
+                <label class="form-label small text-muted mb-1" for="dNssf">NSSF No.</label>
+                <input id="dNssf" name="dNssf" type="text" class="form-control"
+                       [ngModel]="fNssfNumber()" (ngModelChange)="fNssfNumber.set($event)"
+                       [disabled]="saving()" />
+              </div>
+              <div class="col-sm-2">
+                <label class="form-label small text-muted mb-1" for="dHeslb">HESLB No.</label>
+                <input id="dHeslb" name="dHeslb" type="text" class="form-control"
+                       [ngModel]="fHeslbNumber()" (ngModelChange)="fHeslbNumber.set($event)"
+                       [disabled]="saving()" />
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="dDeptId">Department ID</label>
+                <input id="dDeptId" name="dDeptId" type="text" class="form-control"
+                       placeholder="Numeric id"
+                       [ngModel]="fDepartmentId()" (ngModelChange)="fDepartmentId.set($event)"
+                       [disabled]="saving()" />
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="dBranchId">Branch ID</label>
+                <input id="dBranchId" name="dBranchId" type="text" class="form-control"
+                       placeholder="Numeric id"
+                       [ngModel]="fBranchId()" (ngModelChange)="fBranchId.set($event)"
+                       [disabled]="saving()" />
+              </div>
+            </div>
+
+            @if (saveError(); as msg) {
+              <p class="form-error text-danger small mb-2" role="alert">{{ msg }}</p>
+            }
+
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-primary" [disabled]="saving()">
+                @if (saving()) {
+                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  Saving…
+                } @else {
+                  Save Changes
+                }
+              </button>
+
+              @if (e.status !== 'TERMINATED') {
+                <button type="button" class="btn btn-outline-danger ms-auto"
+                        (click)="archive()"
+                        [disabled]="archiving()">
+                  @if (archiving()) {
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  }
+                  Archive Employee
+                </button>
+              }
+            </div>
+          </form>
+        } @else {
+          <!-- Read-only view -->
+          <dl class="row small mb-3">
+            <dt class="col-sm-2">First Name</dt><dd class="col-sm-4">{{ e.firstName }}</dd>
+            <dt class="col-sm-2">Last Name</dt><dd class="col-sm-4">{{ e.lastName }}</dd>
+            <dt class="col-sm-2">Hire Date</dt><dd class="col-sm-4">{{ e.hireDate }}</dd>
+            <dt class="col-sm-2">Job Title</dt><dd class="col-sm-4">{{ e.jobTitle || '—' }}</dd>
+            <dt class="col-sm-2">Gender</dt><dd class="col-sm-4">{{ e.gender || '—' }}</dd>
+            <dt class="col-sm-2">National ID</dt><dd class="col-sm-4">{{ e.nationalId || '—' }}</dd>
+            <dt class="col-sm-2">TIN</dt><dd class="col-sm-4">{{ e.tin || '—' }}</dd>
+            <dt class="col-sm-2">NSSF No.</dt><dd class="col-sm-4">{{ e.nssfNumber || '—' }}</dd>
+            <dt class="col-sm-2">HESLB No.</dt><dd class="col-sm-4">{{ e.heslbNumber || '—' }}</dd>
+          </dl>
+        }
+      }
+    }
+  }
+</section>

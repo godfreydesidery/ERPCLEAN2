@@ -1,0 +1,107 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Notification Preferences</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-sliders me-1" aria-hidden="true"></i>
+      Manage your per-type notification preferences (mute / channel overrides).
+    </p>
+  </header>
+
+  @switch (state()) {
+    @case ('loading') {
+      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading preferences…
+      </p>
+    }
+    @case ('error') {
+      <p class="state text-danger" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load preferences. Please try again.
+      </p>
+    }
+    @case ('forbidden') {
+      <p class="state text-muted d-flex align-items-center gap-2">
+        <i class="bi bi-shield-lock" aria-hidden="true"></i>
+        You don't have permission to manage notification preferences.
+      </p>
+    }
+    @default {
+      @if (isEmpty()) {
+        <p class="state text-muted">No notification preferences configured yet.</p>
+      } @else {
+        <div class="table-responsive">
+          <table class="table table-hover align-middle bg-white grid">
+            <caption class="visually-hidden">Notification preferences</caption>
+            <thead>
+              <tr>
+                <th scope="col">Type Key</th>
+                <th scope="col">Muted</th>
+                <th scope="col">Channels Enabled</th>
+                <th scope="col"><span class="visually-hidden">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (r of rows(); track r.typeKey) {
+                <tr>
+                  <td class="small font-monospace">{{ r.typeKey }}</td>
+                  <td>
+                    @if (canManage()) {
+                      <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" role="switch"
+                               [id]="'muted-' + r.typeKey"
+                               [ngModel]="getMuted(r.typeKey)"
+                               (ngModelChange)="setMuted(r.typeKey, $event)"
+                               [disabled]="busyKey() === r.typeKey" />
+                        <label class="form-check-label visually-hidden" [attr.for]="'muted-' + r.typeKey">
+                          Mute {{ r.typeKey }}
+                        </label>
+                      </div>
+                    } @else {
+                      <span class="badge" [class]="r.muted ? 'text-bg-secondary' : 'text-bg-success'">
+                        {{ r.muted ? 'Muted' : 'Active' }}
+                      </span>
+                    }
+                  </td>
+                  <td>
+                    @if (canManage()) {
+                      <input type="text" class="form-control form-control-sm"
+                             style="min-width:180px"
+                             [id]="'channels-' + r.typeKey"
+                             [attr.aria-label]="'Channels enabled for ' + r.typeKey"
+                             placeholder="e.g. IN_APP,EMAIL"
+                             [ngModel]="getChannels(r.typeKey)"
+                             (ngModelChange)="setChannels(r.typeKey, $event)"
+                             [disabled]="busyKey() === r.typeKey" />
+                    } @else {
+                      <span class="small text-muted">{{ r.channelsEnabled ?? '(default)' }}</span>
+                    }
+                  </td>
+                  <td>
+                    @if (canManage()) {
+                      <button type="button" class="btn btn-sm btn-primary"
+                              [disabled]="busyKey() === r.typeKey"
+                              (click)="save(r.typeKey)"
+                              [attr.aria-label]="'Save preference for ' + r.typeKey">
+                        @if (busyKey() === r.typeKey) {
+                          <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                          Saving…
+                        } @else {
+                          <i class="bi bi-floppy me-1" aria-hidden="true"></i>Save
+                        }
+                      </button>
+                      @if (rowError()[r.typeKey]) {
+                        <p class="form-error text-danger small mt-1 mb-0" role="alert">
+                          {{ rowError()[r.typeKey] }}
+                        </p>
+                      }
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    }
+  }
+</section>

@@ -1,0 +1,201 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Dimension-Sliced Trial Balance</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-bar-chart-steps me-1" aria-hidden="true"></i>
+      View debits, credits, and net per account broken down by cost centre or department dimension.
+      Requires COSTING.VIEW + GL.VIEW. Note: dimension slices do not net to zero.
+    </p>
+  </header>
+
+  @if (!canView()) {
+    <p class="state text-muted d-flex align-items-center gap-2">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You need both COSTING.VIEW and GL.VIEW permissions to access this report.
+    </p>
+  } @else {
+    <!-- Company selector -->
+    @switch (companyState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-3" role="alert">Could not load companies.</p>
+      }
+      @default {
+        @if (companies().length > 1) {
+          <div class="mb-3" style="max-width:320px">
+            <label class="form-label small text-muted mb-1" for="rptCompanyPicker">Company</label>
+            <select id="rptCompanyPicker" name="rptCompanyPicker" class="form-select"
+                    [ngModel]="selectedCompanyId()"
+                    (ngModelChange)="onCompanyChange($event)">
+              @for (c of companies(); track c.uid) {
+                <option [value]="c.id">{{ c.name }}</option>
+              }
+            </select>
+          </div>
+        }
+      }
+    }
+
+    @if (selectedCompanyId()) {
+      <!-- Filters -->
+      <form class="card card-body mb-3" (ngSubmit)="loadReport()" aria-label="Report filters">
+        <div class="row g-3 align-items-end">
+          <!-- Slot -->
+          <div class="col-sm-3">
+            <label class="form-label small text-muted mb-1" for="slotPicker">
+              Dimension slot <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <select id="slotPicker" name="slotPicker" class="form-select"
+                    [ngModel]="selectedSlot()"
+                    (ngModelChange)="onSlotChange($event)">
+              @for (opt of slotOptions; track opt.value) {
+                <option [value]="opt.value">{{ opt.label }}</option>
+              }
+            </select>
+          </div>
+
+          <!-- Period (optional) -->
+          <div class="col-sm-3">
+            <label class="form-label small text-muted mb-1" for="periodPicker">
+              Period (optional — all-time if blank)
+            </label>
+            @switch (periodsState()) {
+              @case ('loading') {
+                <p class="text-muted small" aria-live="polite">Loading…</p>
+              }
+              @default {
+                <select id="periodPicker" name="periodPicker" class="form-select"
+                        [ngModel]="selectedPeriodId()"
+                        (ngModelChange)="selectedPeriodId.set($event)">
+                  <option value="">All periods</option>
+                  @for (p of periods(); track p.uid) {
+                    <option [value]="p.id">Period {{ p.periodNo }} ({{ p.startDate }} – {{ p.endDate }})</option>
+                  }
+                </select>
+              }
+            }
+          </div>
+
+          <!-- Roll-up -->
+          <div class="col-sm-3">
+            <div class="form-check mt-4">
+              <input class="form-check-input" type="checkbox" id="rollUpCheck" name="rollUpCheck"
+                     [ngModel]="rollUp()" (ngModelChange)="rollUp.set($event)" />
+              <label class="form-check-label" for="rollUpCheck">
+                Roll up (include descendant values)
+              </label>
+            </div>
+          </div>
+
+          <!-- Run button -->
+          <div class="col-sm-3">
+            <button type="submit" class="btn btn-primary w-100"
+                    [disabled]="state() === 'loading'">
+              @if (state() === 'loading') {
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                Running…
+              } @else {
+                <i class="bi bi-play-circle me-1" aria-hidden="true"></i>
+                Run Report
+              }
+            </button>
+          </div>
+        </div>
+      </form>
+
+      <!-- Report states -->
+      @switch (state()) {
+        @case ('loading') {
+          <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading report…
+          </p>
+        }
+        @case ('error') {
+          <p class="state text-danger" role="alert">
+            <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+            Could not load the report. Please try again.
+          </p>
+        }
+        @case ('forbidden') {
+          <p class="state text-muted d-flex align-items-center gap-2">
+            <i class="bi bi-shield-lock" aria-hidden="true"></i>
+            You don't have permission to run this report.
+          </p>
+        }
+        @default {
+          @if (isEmpty()) {
+            <p class="state text-muted">Set filters and click Run Report.</p>
+          } @else if (report(); as rpt) {
+            <div class="mb-2 d-flex gap-2 align-items-center flex-wrap">
+              <span class="badge text-bg-info">{{ rpt.dimensionSlot }}</span>
+              @if (rpt.rollUp) {
+                <span class="badge text-bg-secondary">Roll-up on</span>
+              }
+              <span class="text-muted small ms-auto">{{ rows().length }} rows</span>
+            </div>
+
+            @if (rows().length === 0) {
+              <p class="state text-muted">No postings found for these filters.</p>
+            } @else {
+              <div class="table-responsive">
+                <table class="table table-hover align-middle bg-white grid table-sm">
+                  <caption class="visually-hidden">Dimension-sliced trial balance</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Value</th>
+                      <th scope="col">Account</th>
+                      <th scope="col">Type</th>
+                      <th scope="col" class="text-end">Debit</th>
+                      <th scope="col" class="text-end">Credit</th>
+                      <th scope="col" class="text-end">Net (Dr − Cr)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (row of rows(); track row.accountUid + '-' + row.valueUid) {
+                      <tr>
+                        <td class="small">
+                          <span class="font-monospace text-muted">{{ row.valueCode }}</span>
+                          {{ row.valueName }}
+                        </td>
+                        <td class="small">
+                          <span class="font-monospace text-muted">{{ row.accountCode }}</span>
+                          {{ row.accountName }}
+                        </td>
+                        <td>
+                          <span class="badge" [class]="accountTypeBadge(row.accountType)">{{ row.accountType }}</span>
+                        </td>
+                        <td class="text-end font-monospace">{{ +row.totalDebit | number:'1.2-2' }}</td>
+                        <td class="text-end font-monospace">{{ +row.totalCredit | number:'1.2-2' }}</td>
+                        <td class="text-end font-monospace fw-semibold" [class]="netClass(row.net)">
+                          {{ +row.net | number:'1.2-2' }}
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                  <tfoot>
+                    <tr class="table-light fw-semibold">
+                      <td colspan="3">Total</td>
+                      <td class="text-end font-monospace">{{ totalDebit() | number:'1.2-2' }}</td>
+                      <td class="text-end font-monospace">{{ totalCredit() | number:'1.2-2' }}</td>
+                      <td class="text-end font-monospace" [class]="netClass(totalNet().toString())">
+                        {{ totalNet() | number:'1.2-2' }}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+              <p class="small text-muted mt-2">
+                <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
+                A dimension slice does not net to zero — this is expected.
+              </p>
+            }
+          }
+        }
+      }
+    }
+  }
+</section>

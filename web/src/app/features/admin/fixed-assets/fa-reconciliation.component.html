@@ -1,0 +1,144 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">FA-to-GL Reconciliation</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-bar-chart-steps me-1" aria-hidden="true"></i>
+      Compare the fixed asset register totals against GL balances.
+      Flags discrepancies in red.
+    </p>
+  </header>
+
+  @if (!canView()) {
+    <p class="state text-muted">
+      <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>You don't have permission to view this report.
+    </p>
+  } @else {
+
+    <!-- Company selector -->
+    @switch (companyState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-3" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load companies.
+        </p>
+      }
+      @default {
+        @if (companies().length > 1) {
+          <div class="mb-3" style="max-width:320px">
+            <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+            <select id="companyPicker" name="companyPicker" class="form-select"
+                    [ngModel]="selectedCompanyId()"
+                    (ngModelChange)="onCompanyChange($event)">
+              @for (c of companies(); track c.uid) {
+                <option [value]="c.id">{{ c.name }}</option>
+              }
+            </select>
+          </div>
+        }
+      }
+    }
+
+    @if (selectedCompanyId()) {
+      <div class="mb-3">
+        <button type="button" class="btn btn-outline-primary btn-sm" (click)="load()"
+                [disabled]="state() === 'loading'">
+          <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Refresh
+        </button>
+      </div>
+
+      @switch (state()) {
+        @case ('loading') {
+          <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading reconciliation…
+          </p>
+        }
+        @case ('error') {
+          <p class="state text-danger" role="alert">
+            <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load reconciliation data.
+          </p>
+        }
+        @default {
+          @if (report(); as r) {
+            <!-- Cost bar -->
+            <div class="card mb-3" [class.border-danger]="!r.costTies" [class.border-success]="r.costTies">
+              <div class="card-header d-flex align-items-center gap-2">
+                <strong>Asset Cost</strong>
+                @if (r.costTies) {
+                  <span class="badge text-bg-success ms-auto">
+                    <i class="bi bi-check-circle me-1" aria-hidden="true"></i>TIED
+                  </span>
+                } @else {
+                  <span class="badge text-bg-danger ms-auto" role="alert">
+                    <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>MISMATCH
+                  </span>
+                }
+              </div>
+              <div class="card-body">
+                <dl class="row small mb-0">
+                  <dt class="col-sm-4">Register: Σ carrying_cost (IN_SERVICE)</dt>
+                  <dd class="col-sm-8 font-monospace fw-semibold">{{ +r.registerCostSum | number:'1.2-2' }}</dd>
+                  <dt class="col-sm-4">GL: Fixed Assets debit balance</dt>
+                  <dd class="col-sm-8 font-monospace fw-semibold"
+                      [class.text-danger]="!r.costTies">{{ +r.glCostBalance | number:'1.2-2' }}</dd>
+                  <dt class="col-sm-4">Difference</dt>
+                  <dd class="col-sm-8 font-monospace"
+                      [class.text-danger]="!r.costTies">
+                    {{ +(+r.registerCostSum - +r.glCostBalance) | number:'1.2-2' }}
+                  </dd>
+                </dl>
+              </div>
+            </div>
+
+            <!-- Accumulated depreciation bar -->
+            <div class="card mb-3" [class.border-danger]="!r.accumDepTies" [class.border-success]="r.accumDepTies">
+              <div class="card-header d-flex align-items-center gap-2">
+                <strong>Accumulated Depreciation</strong>
+                @if (r.accumDepTies) {
+                  <span class="badge text-bg-success ms-auto">
+                    <i class="bi bi-check-circle me-1" aria-hidden="true"></i>TIED
+                  </span>
+                } @else {
+                  <span class="badge text-bg-danger ms-auto" role="alert">
+                    <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>MISMATCH
+                  </span>
+                }
+              </div>
+              <div class="card-body">
+                <dl class="row small mb-0">
+                  <dt class="col-sm-4">Register: Σ accumulated_depreciation (IN_SERVICE)</dt>
+                  <dd class="col-sm-8 font-monospace fw-semibold">{{ +r.registerAccumDepSum | number:'1.2-2' }}</dd>
+                  <dt class="col-sm-4">GL: Accum Dep balance (negated for positive presentation)</dt>
+                  <dd class="col-sm-8 font-monospace fw-semibold"
+                      [class.text-danger]="!r.accumDepTies">{{ +r.glAccumDepBalance | number:'1.2-2' }}</dd>
+                  <dt class="col-sm-4">Difference</dt>
+                  <dd class="col-sm-8 font-monospace"
+                      [class.text-danger]="!r.accumDepTies">
+                    {{ +(+r.registerAccumDepSum - +r.glAccumDepBalance) | number:'1.2-2' }}
+                  </dd>
+                </dl>
+              </div>
+            </div>
+
+            @if (!r.costTies || !r.accumDepTies) {
+              <div class="alert alert-danger" role="alert">
+                <i class="bi bi-exclamation-triangle-fill me-2" aria-hidden="true"></i>
+                <strong>Reconciliation defects detected.</strong>
+                One or more balances do not agree between the register and the GL.
+                Investigate unposted journals or manual GL adjustments.
+              </div>
+            } @else {
+              <div class="alert alert-success" role="status">
+                <i class="bi bi-check-circle-fill me-2" aria-hidden="true"></i>
+                All balances reconcile.
+              </div>
+            }
+          }
+        }
+      }
+    }
+  }
+</section>

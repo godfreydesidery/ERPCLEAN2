@@ -189,6 +189,119 @@ export class ShellComponent {
         { label: 'Account Ledger', route: '/admin/reporting/account-ledger', icon: 'bi-journal-text', available: true, permission: 'REPORT.LEDGER.VIEW' },
       ],
     },
+    // ── Approvals ─────────────────────────────────────────────────────────────
+    {
+      label: 'Approvals',
+      items: [
+        { label: 'My Inbox', route: '/admin/approvals/inbox', icon: 'bi-inbox', available: true, permission: 'APPROVALS.DECIDE' },
+        { label: 'All Requests', route: '/admin/approvals/requests', icon: 'bi-clipboard-check', available: true, permission: 'APPROVALS.REQUEST.VIEW' },
+        { label: 'Approval Policies', route: '/admin/approvals/policies', icon: 'bi-shield-check', available: true, permission: 'APPROVALS.POLICY.VIEW' },
+      ],
+    },
+    // ── Documents & PDF ────────────────────────────────────────────────────────
+    {
+      label: 'Documents & PDF',
+      items: [
+        { label: 'Generated Documents', route: '/admin/documents', icon: 'bi-file-earmark-pdf', available: true, permission: 'DOCUMENT.VIEW' },
+        { label: 'Document Templates', route: '/admin/document-templates', icon: 'bi-layout-text-sidebar', available: true, permission: 'DOCUMENT.TEMPLATE.MANAGE' },
+        { label: 'Document Branding', route: '/admin/document-branding', icon: 'bi-palette', available: true, permission: 'DOCUMENT.BRANDING.MANAGE' },
+      ],
+    },
+    // ── Notifications ──────────────────────────────────────────────────────────
+    {
+      label: 'Notifications',
+      items: [
+        { label: 'Inbox', route: '/admin/notifications', icon: 'bi-bell', available: true, permission: 'NOTIFICATION.VIEW' },
+        { label: 'Preferences', route: '/admin/notification-preferences', icon: 'bi-sliders', available: true, permission: 'NOTIFICATION.PREFERENCE.MANAGE' },
+        { label: 'Type Catalogue', route: '/admin/notification-types', icon: 'bi-toggles', available: true, permission: 'NOTIFICATION.ADMIN' },
+        { label: 'Delivery Log', route: '/admin/notification-deliveries', icon: 'bi-journal-text', available: true, permission: 'NOTIFICATION.ADMIN' },
+      ],
+    },
+    // ── Costing ──────────────────────────────────────────────────────────────
+    {
+      label: 'Costing',
+      items: [
+        {
+          label: 'Dimension Types',
+          route: '/admin/cost-centre/dimensions',
+          icon: 'bi-diagram-3',
+          available: true,
+          permission: 'COSTING.VIEW',
+        },
+        {
+          label: 'Dimension Values',
+          route: '/admin/cost-centre/values',
+          icon: 'bi-tags',
+          available: true,
+          permission: 'COSTING.VIEW',
+        },
+        {
+          label: 'Sliced Trial Balance',
+          route: '/admin/cost-centre/report',
+          icon: 'bi-bar-chart-steps',
+          available: true,
+          permission: 'COSTING.VIEW',
+        },
+      ],
+    },
+    // ── Finance / Fixed Assets ────────────────────────────────────────────────
+    {
+      label: 'Finance / Fixed Assets',
+      items: [
+        { label: 'Asset Categories', route: '/admin/asset-categories', icon: 'bi-folder2-open', available: true, permission: 'FA.CATEGORY.VIEW' },
+        { label: 'Fixed Assets', route: '/admin/fixed-assets', icon: 'bi-building-gear', available: true, permission: 'FA.VIEW' },
+        { label: 'Register Asset', route: '/admin/fixed-assets/create', icon: 'bi-plus-circle', available: true, permission: 'FA.REGISTER.MANAGE' },
+        { label: 'FA Reconciliation', route: '/admin/fixed-assets/reconciliation', icon: 'bi-bar-chart-steps', available: true, permission: 'FA.VIEW' },
+        { label: 'Depreciation Runs', route: '/admin/depreciation-runs', icon: 'bi-calendar3', available: true, permission: 'FA.VIEW' },
+        { label: 'Run Depreciation', route: '/admin/depreciation-runs/post', icon: 'bi-play-circle', available: true, permission: 'FA.DEPRECIATE' },
+      ],
+    },
+    // ── CRM ──────────────────────────────────────────────────────────────────
+    {
+      label: 'CRM',
+      items: [
+        { label: 'Leads', route: '/admin/crm/leads', icon: 'bi-person-lines-fill', available: true, permission: 'CRM.LEAD.VIEW' },
+        { label: 'Opportunities', route: '/admin/crm/opportunities', icon: 'bi-graph-up-arrow', available: true, permission: 'CRM.OPPORTUNITY.VIEW' },
+        { label: 'Pipeline Dashboard', route: '/admin/crm/pipeline', icon: 'bi-bar-chart-line', available: true, permission: 'CRM.PIPELINE.VIEW' },
+        { label: 'Pipeline Stages', route: '/admin/crm/settings/pipeline-stages', icon: 'bi-kanban', available: true, permission: 'CRM.STAGE.MANAGE' },
+      ],
+    },
+    // ── HR & Payroll ─────────────────────────────────────────────────────────────
+    {
+      label: 'HR & Payroll',
+      items: [
+        { label: 'Employees', route: '/admin/hr/employees', icon: 'bi-people', available: true, permission: 'HR.EMPLOYEE.VIEW' },
+        { label: 'Pay Components', route: '/admin/hr/pay-components', icon: 'bi-sliders', available: true, permission: 'HR.PAYCOMPONENT.MANAGE' },
+        { label: 'Payroll Runs', route: '/admin/hr/payroll-runs', icon: 'bi-cash-stack', available: true, permission: 'HR.PAYROLL.VIEW' },
+        { label: 'Leave Requests', route: '/admin/hr/leave-requests', icon: 'bi-calendar-check', available: true, permission: 'HR.LEAVE.VIEW' },
+        { label: 'Employee Loans', route: '/admin/hr/loans', icon: 'bi-bank', available: true, permission: 'HR.LOAN.MANAGE' },
+      ],
+    },
+    // ── Projects ──────────────────────────────────────────────────────────────
+    {
+      label: 'Projects',
+      items: [
+        { label: 'Projects', route: '/admin/projects', icon: 'bi-kanban', available: true, permission: 'PROJECTS.PROJECT.VIEW' },
+        { label: 'WIP Report', route: '/admin/projects/wip-report', icon: 'bi-graph-up-arrow', available: true, permission: 'PROJECTS.COSTING.VIEW' },
+      ],
+    },
+    // ── Budgeting & Management Accounting ────────────────────────────────────
+    {
+      label: 'Budgeting',
+      items: [
+        { label: 'Budgets', route: '/admin/budgets', icon: 'bi-calculator', available: true, permission: 'BUDGETING.BUDGET.VIEW' },
+        { label: 'Budget Variance Report', route: '/admin/budgeting/variance', icon: 'bi-bar-chart', available: true, permission: 'BUDGETING.REPORT.VIEW' },
+        { label: 'Departmental Actuals', route: '/admin/budgeting/departmental-actuals', icon: 'bi-table', available: true, permission: 'BUDGETING.REPORT.VIEW' },
+      ],
+    },
+    // ── Manufacturing ─────────────────────────────────────────────────────────
+    {
+      label: 'Manufacturing',
+      items: [
+        { label: 'Work Orders', route: '/admin/work-orders', icon: 'bi-gear-wide-connected', available: true, permission: 'MANUFACTURING.VIEW' },
+        { label: 'WIP Reconciliation', route: '/admin/manufacturing/wip-reconciliation', icon: 'bi-bank', available: true, permission: 'MANUFACTURING.VIEW' },
+      ],
+    },
   ];
 
   /** Nav groups with permission-filtered items. Reactive: recomputes when permissions change. */

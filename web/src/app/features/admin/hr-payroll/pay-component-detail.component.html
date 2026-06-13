@@ -1,0 +1,137 @@
+<section class="admin-page">
+  <header class="page-head">
+    <nav aria-label="breadcrumb">
+      <ol class="breadcrumb small mb-1">
+        <li class="breadcrumb-item"><a routerLink="/admin/hr/pay-components">Pay Components</a></li>
+        <li class="breadcrumb-item active" aria-current="page">
+          @if (comp(); as c) { {{ c.name }} } @else { Loading… }
+        </li>
+      </ol>
+    </nav>
+    <div class="d-flex align-items-center gap-3">
+      <h1 class="h4 mb-0">
+        @if (comp(); as c) { {{ c.name }} } @else { Pay Component Detail }
+      </h1>
+      @if (comp(); as c) {
+        <span class="badge" [class]="c.active ? 'text-bg-success' : 'text-bg-secondary'">
+          {{ c.active ? 'Active' : 'Inactive' }}
+        </span>
+      }
+    </div>
+  </header>
+
+  @switch (state()) {
+    @case ('loading') {
+      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+      </p>
+    }
+    @case ('error') {
+      <p class="state text-danger" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load pay component. Please try again.
+      </p>
+    }
+    @default {
+      @if (comp(); as c) {
+        @if (canManage()) {
+          <form (ngSubmit)="save()" aria-label="Edit pay component">
+            <div class="row g-3 mb-3">
+              <div class="col-sm-2">
+                <label class="form-label small text-muted mb-1" for="dPcCode">
+                  Code <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="dPcCode" name="dPcCode" type="text" class="form-control"
+                       [ngModel]="fCode()" (ngModelChange)="fCode.set($event)"
+                       [disabled]="saving()" />
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label small text-muted mb-1" for="dPcName">
+                  Name <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="dPcName" name="dPcName" type="text" class="form-control"
+                       [ngModel]="fName()" (ngModelChange)="fName.set($event)"
+                       [disabled]="saving()" />
+              </div>
+              <div class="col-sm-2">
+                <label class="form-label small text-muted mb-1" for="dPcKind">Kind</label>
+                <select id="dPcKind" name="dPcKind" class="form-select"
+                        [ngModel]="fKind()" (ngModelChange)="fKind.set($event)"
+                        [disabled]="saving()">
+                  <option value="EARNING">Earning</option>
+                  <option value="DEDUCTION">Deduction</option>
+                </select>
+              </div>
+              <div class="col-sm-2">
+                <label class="form-label small text-muted mb-1" for="dPcBasis">Basis</label>
+                <select id="dPcBasis" name="dPcBasis" class="form-select"
+                        [ngModel]="fBasis()" (ngModelChange)="fBasis.set($event)"
+                        [disabled]="saving()">
+                  <option value="FIXED">Fixed</option>
+                  <option value="PERCENT_OF_BASIC">% of Basic</option>
+                </select>
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label small text-muted mb-1" for="dPcGl">
+                  GL Account ID <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="dPcGl" name="dPcGl" type="text" class="form-control"
+                       [ngModel]="fGlAccountId()" (ngModelChange)="fGlAccountId.set($event)"
+                       [disabled]="saving()" />
+              </div>
+              <div class="col-sm-2 d-flex align-items-center gap-3 pt-4">
+                <div class="form-check mb-0">
+                  <input class="form-check-input" type="checkbox" id="dPcTaxable"
+                         [ngModel]="fTaxable()" (ngModelChange)="fTaxable.set($event)"
+                         [disabled]="saving()" />
+                  <label class="form-check-label small" for="dPcTaxable">Taxable</label>
+                </div>
+                <div class="form-check mb-0">
+                  <input class="form-check-input" type="checkbox" id="dPcPens"
+                         [ngModel]="fPensionable()" (ngModelChange)="fPensionable.set($event)"
+                         [disabled]="saving()" />
+                  <label class="form-check-label small" for="dPcPens">Pensionable</label>
+                </div>
+              </div>
+            </div>
+
+            @if (saveError(); as msg) {
+              <p class="form-error text-danger small mb-2" role="alert">{{ msg }}</p>
+            }
+
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-primary" [disabled]="saving()">
+                @if (saving()) {
+                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  Saving…
+                } @else {
+                  Save Changes
+                }
+              </button>
+
+              @if (c.active) {
+                <button type="button" class="btn btn-outline-danger ms-auto"
+                        (click)="deactivate()"
+                        [disabled]="deactivating()">
+                  @if (deactivating()) {
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  }
+                  Deactivate
+                </button>
+              }
+            </div>
+          </form>
+        } @else {
+          <dl class="row small mb-3">
+            <dt class="col-sm-2">Code</dt><dd class="col-sm-4 font-monospace">{{ c.code }}</dd>
+            <dt class="col-sm-2">Kind</dt><dd class="col-sm-4">{{ c.kind }}</dd>
+            <dt class="col-sm-2">Basis</dt><dd class="col-sm-4">{{ c.basis }}</dd>
+            <dt class="col-sm-2">GL Account ID</dt><dd class="col-sm-4">{{ c.glAccountId }}</dd>
+            <dt class="col-sm-2">Taxable</dt><dd class="col-sm-4">{{ c.taxable ? 'Yes' : 'No' }}</dd>
+            <dt class="col-sm-2">Pensionable</dt><dd class="col-sm-4">{{ c.pensionable ? 'Yes' : 'No' }}</dd>
+          </dl>
+        }
+      }
+    }
+  }
+</section>

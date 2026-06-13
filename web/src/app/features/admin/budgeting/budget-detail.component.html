@@ -1,0 +1,254 @@
+<section class="admin-page">
+  <header class="page-head">
+    <a [routerLink]="['/admin/budgets']" class="btn btn-sm btn-outline-secondary me-2">
+      <i class="bi bi-arrow-left" aria-hidden="true"></i>
+      <span class="visually-hidden">Back to budgets</span>
+    </a>
+    <h1 class="h4 mb-1 d-inline">
+      @if (budget(); as b) { {{ b.name }} } @else { Budget }
+    </h1>
+  </header>
+
+  @switch (budgetState()) {
+    @case ('loading') {
+      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading budget…
+      </p>
+    }
+    @case ('error') {
+      <p class="state text-danger" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load budget.
+      </p>
+    }
+    @default {
+      @if (budget(); as b) {
+        <!-- Budget header card -->
+        <div class="card mb-3">
+          <div class="card-body">
+            <dl class="row mb-0">
+              <dt class="col-sm-3 text-muted small">Budget #</dt>
+              <dd class="col-sm-9 font-monospace">{{ b.budgetNumber }}</dd>
+              <dt class="col-sm-3 text-muted small">Name</dt>
+              <dd class="col-sm-9">{{ b.name }}</dd>
+              <dt class="col-sm-3 text-muted small">Fiscal Year</dt>
+              <dd class="col-sm-9">{{ b.fiscalYearCode }} <span class="text-muted small">({{ b.fiscalYearUid }})</span></dd>
+              <dt class="col-sm-3 text-muted small">Cost Centre</dt>
+              <dd class="col-sm-9">{{ b.costCentreValueName ?? '— Company-wide —' }}</dd>
+              @if (b.notes) {
+                <dt class="col-sm-3 text-muted small">Notes</dt>
+                <dd class="col-sm-9">{{ b.notes }}</dd>
+              }
+            </dl>
+          </div>
+        </div>
+
+        <!-- Global action error -->
+        @if (actionError(); as err) {
+          <p class="text-danger small mb-2" role="alert">
+            <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ err }}
+          </p>
+        }
+
+        <!-- Versions section -->
+        <div class="d-flex align-items-center mb-2 gap-2">
+          <h2 class="h5 mb-0">Budget Versions</h2>
+          @if (canManage()) {
+            <button type="button" class="btn btn-sm btn-outline-primary ms-auto"
+                    (click)="toggleNewVersionForm()"
+                    [attr.aria-expanded]="showNewVersionForm()"
+                    aria-controls="newVersionForm">
+              <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>New Version / Re-plan
+            </button>
+          }
+        </div>
+
+        <!-- New version form -->
+        @if (showNewVersionForm()) {
+          <form id="newVersionForm" class="create-form card card-body mb-3"
+                (ngSubmit)="createVersion()" aria-label="Create new budget version">
+            <h3 class="h6 mb-2">New Draft Version</h3>
+            <div class="row g-2">
+              <div class="col-sm-5">
+                <label class="form-label small text-muted mb-1" for="fVersionLabel">Version label (optional)</label>
+                <input id="fVersionLabel" name="fVersionLabel" type="text" class="form-control"
+                       placeholder="e.g. Revised Q3"
+                       [ngModel]="fVersionLabel()" (ngModelChange)="fVersionLabel.set($event)"
+                       [disabled]="creatingVersion()" autocomplete="off" maxlength="120" />
+              </div>
+              <div class="col-sm-5">
+                <label class="form-label small text-muted mb-1" for="fSeedFromUid">Seed from version UID (optional)</label>
+                <input id="fSeedFromUid" name="fSeedFromUid" type="text" class="form-control"
+                       placeholder="Leave blank for empty version"
+                       [ngModel]="fSeedFromUid()" (ngModelChange)="fSeedFromUid.set($event)"
+                       [disabled]="creatingVersion()" autocomplete="off" />
+              </div>
+              <div class="col-sm-2 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100" [disabled]="creatingVersion()">
+                  @if (creatingVersion()) {
+                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                  }
+                  Create
+                </button>
+              </div>
+            </div>
+            @if (newVersionError(); as msg) {
+              <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+            }
+          </form>
+        }
+
+        @if (!b.versions || b.versions.length === 0) {
+          <p class="text-muted small">No versions yet.</p>
+        } @else {
+          @for (v of b.versions; track v.uid) {
+            <div class="card mb-3">
+              <div class="card-header d-flex align-items-center gap-2 flex-wrap">
+                <span class="fw-semibold">Version {{ v.versionNo }}</span>
+                @if (v.label) { <span class="text-muted small">— {{ v.label }}</span> }
+                <span class="badge ms-1" [class]="statusBadgeClass(v.status)">{{ v.status }}</span>
+                <span class="ms-auto small text-muted">{{ totalLines(v) }} line(s)</span>
+              </div>
+              <div class="card-body">
+
+                <!-- Version metadata -->
+                <dl class="row mb-2 small">
+                  @if (v.submittedAt) {
+                    <dt class="col-sm-3 text-muted">Submitted</dt>
+                    <dd class="col-sm-9">{{ v.submittedAt | slice:0:10 }} by {{ v.submittedBy }}</dd>
+                  }
+                  @if (v.approvedAt) {
+                    <dt class="col-sm-3 text-muted">Approved</dt>
+                    <dd class="col-sm-9">{{ v.approvedAt | slice:0:10 }} by {{ v.approvedBy }}</dd>
+                  }
+                  @if (v.rejectedAt) {
+                    <dt class="col-sm-3 text-muted">Rejected</dt>
+                    <dd class="col-sm-9">{{ v.rejectedAt | slice:0:10 }} by {{ v.rejectedBy }}</dd>
+                  }
+                  @if (v.decisionReason) {
+                    <dt class="col-sm-3 text-muted">Reason</dt>
+                    <dd class="col-sm-9">{{ v.decisionReason }}</dd>
+                  }
+                </dl>
+
+                <!-- Action buttons -->
+                <div class="d-flex flex-wrap gap-2 align-items-center">
+                  <!-- View / edit lines -->
+                  <a class="btn btn-sm btn-outline-secondary"
+                     [routerLink]="['/admin/budget-versions/uid', v.uid]"
+                     [attr.aria-label]="'View lines for version ' + v.versionNo">
+                    <i class="bi bi-list-ul me-1" aria-hidden="true"></i>
+                    View Lines
+                  </a>
+
+                  <!-- Submit: DRAFT + >=1 line + canSubmit -->
+                  @if (canSubmit() && v.status === 'DRAFT' && totalLines(v) > 0) {
+                    <button type="button" class="btn btn-sm btn-primary"
+                            [disabled]="actionBusyUid() === v.uid"
+                            (click)="submitVersion(v.uid)"
+                            [attr.aria-label]="'Submit version ' + v.versionNo + ' for approval'">
+                      @if (actionBusyUid() === v.uid) {
+                        <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                      }
+                      Submit for Approval
+                    </button>
+                  }
+
+                  <!-- Recall: SUBMITTED + canSubmit -->
+                  @if (canSubmit() && v.status === 'SUBMITTED') {
+                    <button type="button" class="btn btn-sm btn-outline-warning"
+                            [disabled]="actionBusyUid() === v.uid"
+                            (click)="recallVersion(v.uid)"
+                            [attr.aria-label]="'Recall version ' + v.versionNo + ' to Draft'">
+                      @if (actionBusyUid() === v.uid) {
+                        <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                      }
+                      Recall to Draft
+                    </button>
+                  }
+
+                  <!-- Approve / Reject: SUBMITTED + canApprove -->
+                  @if (canApprove() && v.status === 'SUBMITTED') {
+                    @if (approvingUid() !== v.uid) {
+                      <button type="button" class="btn btn-sm btn-success"
+                              [disabled]="actionBusyUid() === v.uid"
+                              (click)="startApprove(v.uid)"
+                              [attr.aria-label]="'Approve version ' + v.versionNo">
+                        Approve
+                      </button>
+                    }
+                    @if (rejectingUid() !== v.uid) {
+                      <button type="button" class="btn btn-sm btn-danger"
+                              [disabled]="actionBusyUid() === v.uid"
+                              (click)="startReject(v.uid)"
+                              [attr.aria-label]="'Reject version ' + v.versionNo">
+                        Reject
+                      </button>
+                    }
+                  }
+                </div>
+
+                <!-- Approve confirmation inline -->
+                @if (approvingUid() === v.uid) {
+                  <div class="mt-2 p-2 border rounded bg-light">
+                    <p class="mb-1 small fw-semibold">Confirm approval</p>
+                    <div class="d-flex gap-2 align-items-end">
+                      <div class="flex-grow-1">
+                        <label class="form-label small text-muted mb-1" for="fApproveNote">Note (optional)</label>
+                        <input id="fApproveNote" name="fApproveNote" type="text" class="form-control form-control-sm"
+                               [ngModel]="fApproveNote()" (ngModelChange)="fApproveNote.set($event)"
+                               [disabled]="actionBusyUid() === v.uid" maxlength="500" autocomplete="off" />
+                      </div>
+                      <button type="button" class="btn btn-sm btn-success"
+                              [disabled]="actionBusyUid() === v.uid"
+                              (click)="confirmApprove()">
+                        @if (actionBusyUid() === v.uid) {
+                          <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                        }
+                        Confirm Approve
+                      </button>
+                      <button type="button" class="btn btn-sm btn-outline-secondary"
+                              (click)="cancelApprove()">Cancel</button>
+                    </div>
+                  </div>
+                }
+
+                <!-- Reject form inline -->
+                @if (rejectingUid() === v.uid) {
+                  <div class="mt-2 p-2 border border-danger rounded bg-light">
+                    <p class="mb-1 small fw-semibold text-danger">Reject version {{ v.versionNo }}</p>
+                    <div class="d-flex gap-2 align-items-end">
+                      <div class="flex-grow-1">
+                        <label class="form-label small text-muted mb-1" for="fRejectReason">
+                          Reason <span class="text-danger" aria-hidden="true">*</span>
+                        </label>
+                        <input id="fRejectReason" name="fRejectReason" type="text" class="form-control form-control-sm"
+                               [ngModel]="fRejectReason()" (ngModelChange)="fRejectReason.set($event)"
+                               [disabled]="actionBusyUid() === v.uid" maxlength="500" autocomplete="off"
+                               aria-describedby="rejectReasonError" />
+                        @if (rejectError(); as rerr) {
+                          <p id="rejectReasonError" class="text-danger small mt-1 mb-0" role="alert">{{ rerr }}</p>
+                        }
+                      </div>
+                      <button type="button" class="btn btn-sm btn-danger"
+                              [disabled]="actionBusyUid() === v.uid"
+                              (click)="confirmReject()">
+                        @if (actionBusyUid() === v.uid) {
+                          <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                        }
+                        Confirm Reject
+                      </button>
+                      <button type="button" class="btn btn-sm btn-outline-secondary"
+                              (click)="cancelReject()">Cancel</button>
+                    </div>
+                  </div>
+                }
+
+              </div>
+            </div>
+          }
+        }
+      }
+    }
+  }
+</section>
