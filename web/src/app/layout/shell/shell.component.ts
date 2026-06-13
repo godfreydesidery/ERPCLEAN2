@@ -198,6 +198,12 @@ export class ShellComponent {
         { label: 'Payroll Runs', route: '/admin/hr/payroll-runs', icon: 'bi-cash-stack', available: true, permission: 'HR.PAYROLL.VIEW' },
         { label: 'Leave Requests', route: '/admin/hr/leave-requests', icon: 'bi-calendar-check', available: true, permission: 'HR.LEAVE.VIEW' },
         { label: 'Employee Loans', route: '/admin/hr/loans', icon: 'bi-bank', available: true, permission: 'HR.LOAN.MANAGE' },
+    // ── Projects ──────────────────────────────────────────────────────────────
+    {
+      label: 'Projects',
+      items: [
+        { label: 'Projects', route: '/admin/projects', icon: 'bi-kanban', available: true, permission: 'PROJECTS.PROJECT.VIEW' },
+        { label: 'WIP Report', route: '/admin/projects/wip-report', icon: 'bi-graph-up-arrow', available: true, permission: 'PROJECTS.COSTING.VIEW' },
       ],
     },
     {
