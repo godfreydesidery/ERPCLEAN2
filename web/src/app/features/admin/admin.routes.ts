@@ -497,5 +497,30 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./approvals/approval-request-detail.component').then((m) => m.ApprovalRequestDetailComponent),
   },
+  // ── Documents & PDF ───────────────────────────────────────────────────────
+  {
+    path: 'documents',
+    canActivate: [requirePermission('DOCUMENT.VIEW')],
+    loadComponent: () =>
+      import('./documents/document-list.component').then((m) => m.DocumentListComponent),
+  },
+  {
+    path: 'documents/uid/:uid',
+    canActivate: [requirePermission('DOCUMENT.VIEW')],
+    loadComponent: () =>
+      import('./documents/document-detail.component').then((m) => m.DocumentDetailComponent),
+  },
+  {
+    path: 'document-templates',
+    canActivate: [requirePermission('DOCUMENT.TEMPLATE.MANAGE')],
+    loadComponent: () =>
+      import('./documents/document-template-list.component').then((m) => m.DocumentTemplateListComponent),
+  },
+  {
+    path: 'document-branding',
+    canActivate: [requirePermission('DOCUMENT.BRANDING.MANAGE')],
+    loadComponent: () =>
+      import('./documents/document-branding.component').then((m) => m.DocumentBrandingComponent),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];

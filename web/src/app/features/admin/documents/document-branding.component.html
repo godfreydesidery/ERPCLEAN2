@@ -1,0 +1,185 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Document Branding</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-palette me-1" aria-hidden="true"></i>
+      Company branding profile used in generated PDFs — singleton per company.
+    </p>
+  </header>
+
+  @switch (state()) {
+    @case ('loading') {
+      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading branding…
+      </p>
+    }
+    @case ('error') {
+      <p class="state text-danger" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load branding profile. Please try again.
+      </p>
+    }
+    @case ('forbidden') {
+      <p class="state text-muted d-flex align-items-center gap-2">
+        <i class="bi bi-shield-lock" aria-hidden="true"></i>
+        You don't have permission to manage document branding.
+      </p>
+    }
+    @default {
+      @if (entity(); as b) {
+        <div class="card mb-3">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span class="fw-semibold">Branding Profile</span>
+            <small class="text-muted">Last updated: {{ b.updatedAt | slice:0:10 }}</small>
+          </div>
+          <div class="card-body">
+            <form (ngSubmit)="save()" aria-label="Edit document branding">
+              <fieldset [disabled]="saving() || !canManage()">
+                <legend class="visually-hidden">Branding fields</legend>
+
+                <div class="row g-3 mb-3">
+                  <!-- Display Name -->
+                  <div class="col-sm-6">
+                    <label class="form-label" for="fDisplayName">
+                      Display Name <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <input id="fDisplayName" name="fDisplayName" type="text" class="form-control"
+                           [ngModel]="fDisplayName()" (ngModelChange)="fDisplayName.set($event)"
+                           autocomplete="organization" />
+                  </div>
+
+                  <!-- Legal Name -->
+                  <div class="col-sm-6">
+                    <label class="form-label" for="fLegalName">Legal Name</label>
+                    <input id="fLegalName" name="fLegalName" type="text" class="form-control"
+                           [ngModel]="fLegalName()" (ngModelChange)="fLegalName.set($event)"
+                           autocomplete="off" />
+                  </div>
+
+                  <!-- TIN / Tax ID -->
+                  <div class="col-sm-4">
+                    <label class="form-label" for="fTaxId">Tax ID (TIN)</label>
+                    <input id="fTaxId" name="fTaxId" type="text" class="form-control"
+                           [ngModel]="fTaxId()" (ngModelChange)="fTaxId.set($event)"
+                           autocomplete="off" />
+                  </div>
+
+                  <!-- Contact Phone -->
+                  <div class="col-sm-4">
+                    <label class="form-label" for="fContactPhone">Contact Phone</label>
+                    <input id="fContactPhone" name="fContactPhone" type="tel" class="form-control"
+                           [ngModel]="fContactPhone()" (ngModelChange)="fContactPhone.set($event)"
+                           autocomplete="tel" />
+                  </div>
+
+                  <!-- Contact Email -->
+                  <div class="col-sm-4">
+                    <label class="form-label" for="fContactEmail">Contact Email</label>
+                    <input id="fContactEmail" name="fContactEmail" type="email" class="form-control"
+                           [ngModel]="fContactEmail()" (ngModelChange)="fContactEmail.set($event)"
+                           autocomplete="email" />
+                  </div>
+
+                  <!-- Address Line 1 -->
+                  <div class="col-sm-6">
+                    <label class="form-label" for="fAddressLine1">Address Line 1</label>
+                    <input id="fAddressLine1" name="fAddressLine1" type="text" class="form-control"
+                           [ngModel]="fAddressLine1()" (ngModelChange)="fAddressLine1.set($event)"
+                           autocomplete="address-line1" />
+                  </div>
+
+                  <!-- Address Line 2 -->
+                  <div class="col-sm-6">
+                    <label class="form-label" for="fAddressLine2">Address Line 2</label>
+                    <input id="fAddressLine2" name="fAddressLine2" type="text" class="form-control"
+                           [ngModel]="fAddressLine2()" (ngModelChange)="fAddressLine2.set($event)"
+                           autocomplete="address-line2" />
+                  </div>
+
+                  <!-- City -->
+                  <div class="col-sm-3">
+                    <label class="form-label" for="fCity">City</label>
+                    <input id="fCity" name="fCity" type="text" class="form-control"
+                           [ngModel]="fCity()" (ngModelChange)="fCity.set($event)"
+                           autocomplete="address-level2" />
+                  </div>
+
+                  <!-- Region -->
+                  <div class="col-sm-3">
+                    <label class="form-label" for="fRegion">Region</label>
+                    <input id="fRegion" name="fRegion" type="text" class="form-control"
+                           [ngModel]="fRegion()" (ngModelChange)="fRegion.set($event)"
+                           autocomplete="address-level1" />
+                  </div>
+
+                  <!-- Country -->
+                  <div class="col-sm-3">
+                    <label class="form-label" for="fCountry">Country</label>
+                    <input id="fCountry" name="fCountry" type="text" class="form-control"
+                           [ngModel]="fCountry()" (ngModelChange)="fCountry.set($event)"
+                           autocomplete="country-name" />
+                  </div>
+
+                  <!-- Postal Code -->
+                  <div class="col-sm-3">
+                    <label class="form-label" for="fPostalCode">Postal Code</label>
+                    <input id="fPostalCode" name="fPostalCode" type="text" class="form-control"
+                           [ngModel]="fPostalCode()" (ngModelChange)="fPostalCode.set($event)"
+                           autocomplete="postal-code" />
+                  </div>
+
+                  <!-- Website -->
+                  <div class="col-sm-6">
+                    <label class="form-label" for="fWebsite">Website</label>
+                    <input id="fWebsite" name="fWebsite" type="url" class="form-control"
+                           placeholder="https://"
+                           [ngModel]="fWebsite()" (ngModelChange)="fWebsite.set($event)"
+                           autocomplete="url" />
+                  </div>
+
+                  <!-- Logo Reference -->
+                  <div class="col-sm-6">
+                    <label class="form-label" for="fLogoRef">Logo Reference</label>
+                    <input id="fLogoRef" name="fLogoRef" type="text" class="form-control"
+                           placeholder="Storage key or URL for the company logo"
+                           [ngModel]="fLogoRef()" (ngModelChange)="fLogoRef.set($event)"
+                           autocomplete="off" />
+                  </div>
+
+                  <!-- Footer Terms -->
+                  <div class="col-12">
+                    <label class="form-label" for="fFooterTerms">Footer Terms</label>
+                    <textarea id="fFooterTerms" name="fFooterTerms" class="form-control" rows="3"
+                              [ngModel]="fFooterTerms()" (ngModelChange)="fFooterTerms.set($event)"></textarea>
+                  </div>
+
+                  <!-- Bank Details -->
+                  <div class="col-12">
+                    <label class="form-label" for="fBankDetails">Bank Details</label>
+                    <textarea id="fBankDetails" name="fBankDetails" class="form-control" rows="3"
+                              [ngModel]="fBankDetails()" (ngModelChange)="fBankDetails.set($event)"></textarea>
+                  </div>
+                </div>
+
+                @if (saveError(); as msg) {
+                  <p class="form-error text-danger small mb-2" role="alert">{{ msg }}</p>
+                }
+
+                @if (canManage()) {
+                  <button type="submit" class="btn btn-primary" [disabled]="saving()">
+                    @if (saving()) {
+                      <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                      Saving…
+                    } @else {
+                      <i class="bi bi-check-lg me-1" aria-hidden="true"></i>Save Branding
+                    }
+                  </button>
+                }
+              </fieldset>
+            </form>
+          </div>
+        </div>
+      }
+    }
+  }
+</section>

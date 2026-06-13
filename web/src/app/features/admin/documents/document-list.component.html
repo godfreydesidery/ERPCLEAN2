@@ -1,0 +1,229 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Generated Documents</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>
+      Render log — all generated PDFs across the company.
+    </p>
+  </header>
+
+  <!-- Company selector -->
+  @switch (companyState()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mb-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load companies. Is the API running?
+      </p>
+    }
+    @default {
+      @if (companies().length > 1) {
+        <div class="mb-3" style="max-width:320px">
+          <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+          <select id="companyPicker" name="companyPicker" class="form-select"
+                  [ngModel]="selectedCompanyId()"
+                  (ngModelChange)="onCompanyChange($event)">
+            @for (c of companies(); track c.uid) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+          </select>
+        </div>
+      }
+    }
+  }
+
+  @if (selectedCompanyId()) {
+    <!-- Filters + toolbar -->
+    <div class="d-flex flex-wrap gap-2 mb-3 align-items-end">
+      <div>
+        <label class="form-label small text-muted mb-1" for="filterType">Type</label>
+        <select id="filterType" name="filterType" class="form-select form-select-sm" style="min-width:160px"
+                [ngModel]="filterType()" (ngModelChange)="filterType.set($event); applyFilters()">
+          @for (opt of filterTypeOptions; track opt.value) {
+            <option [value]="opt.value">{{ opt.label }}</option>
+          }
+        </select>
+      </div>
+      <div>
+        <label class="form-label small text-muted mb-1" for="filterSourceUid">Source UID</label>
+        <input id="filterSourceUid" name="filterSourceUid" type="search" class="form-control form-control-sm"
+               style="min-width:220px" placeholder="Filter by source UID…"
+               [ngModel]="filterSourceUid()" (ngModelChange)="filterSourceUid.set($event)"
+               (keydown.enter)="applyFilters()" autocomplete="off" />
+      </div>
+      <button type="button" class="btn btn-sm btn-outline-secondary align-self-end"
+              (click)="applyFilters()">
+        <i class="bi bi-search me-1" aria-hidden="true"></i>Search
+      </button>
+      @if (canRender()) {
+        <div class="ms-auto align-self-end">
+          <button type="button" class="btn btn-primary"
+                  (click)="toggleRenderForm()"
+                  [attr.aria-expanded]="showRenderForm()"
+                  aria-controls="renderDocForm">
+            <i class="bi bi-file-earmark-plus me-1" aria-hidden="true"></i>
+            Render Document
+          </button>
+        </div>
+      }
+    </div>
+
+    <!-- Render form -->
+    @if (showRenderForm()) {
+      <form id="renderDocForm" class="create-form card card-body mb-3"
+            (ngSubmit)="submitRender()" aria-label="Render document">
+        <h2 class="h6 mb-3">Render New Document</h2>
+        <div class="row g-2 mb-2">
+          <div class="col-sm-3">
+            <label class="form-label small text-muted mb-1" for="newDocType">
+              Document Type <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <select id="newDocType" name="newDocType" class="form-select"
+                    [ngModel]="newDocType()" (ngModelChange)="newDocType.set($event)"
+                    [disabled]="rendering()">
+              @for (opt of documentTypes; track opt.value) {
+                <option [value]="opt.value">{{ opt.label }}</option>
+              }
+            </select>
+          </div>
+
+          @if (!isStatementType()) {
+            <div class="col-sm-5">
+              <label class="form-label small text-muted mb-1" for="newSourceUid">
+                Source UID <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="newSourceUid" name="newSourceUid" type="text" class="form-control"
+                     placeholder="UID of the source document…"
+                     [ngModel]="newSourceUid()" (ngModelChange)="newSourceUid.set($event)"
+                     [disabled]="rendering()" autocomplete="off" />
+            </div>
+          } @else {
+            <div class="col-sm-7">
+              <label class="form-label small text-muted mb-1" for="newSourceParams">
+                Source Params (JSON) <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="newSourceParams" name="newSourceParams" type="text" class="form-control"
+                     placeholder='{"customerUid":"...","fromDate":"YYYY-MM-DD","toDate":"YYYY-MM-DD"}'
+                     [ngModel]="newSourceParams()" (ngModelChange)="newSourceParams.set($event)"
+                     [disabled]="rendering()" autocomplete="off" />
+              <div class="form-text">JSON string with customerUid, fromDate, toDate for AR Statement.</div>
+            </div>
+          }
+
+          <div class="col-sm-2 d-flex align-items-end">
+            <button type="submit" class="btn btn-primary w-100" [disabled]="rendering()">
+              @if (rendering()) {
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                Rendering…
+              } @else {
+                Render
+              }
+            </button>
+          </div>
+        </div>
+
+        @if (formError(); as msg) {
+          <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+        }
+      </form>
+    }
+
+    <!-- List states -->
+    @switch (state()) {
+      @case ('loading') {
+        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading documents…
+        </p>
+      }
+      @case ('error') {
+        <p class="state text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load documents. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="state text-muted d-flex align-items-center gap-2">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view generated documents.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <p class="state text-muted">No documents found. Render one above.</p>
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-hover align-middle bg-white grid">
+              <caption class="visually-hidden">Generated Documents</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Document #</th>
+                  <th scope="col">Type</th>
+                  <th scope="col">Source UID</th>
+                  <th scope="col">Generated At</th>
+                  <th scope="col">Generated By</th>
+                  <th scope="col">Size (bytes)</th>
+                  <th scope="col"><span class="visually-hidden">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (doc of rows(); track doc.uid) {
+                  <tr>
+                    <td class="font-monospace">{{ doc.documentNumber }}</td>
+                    <td>
+                      <span class="badge" [class]="typeBadgeClass(doc.documentType)">{{ doc.documentType }}</span>
+                    </td>
+                    <td class="small text-muted font-monospace">{{ doc.sourceUid }}</td>
+                    <td class="small text-muted">{{ doc.generatedAt | slice:0:10 }}</td>
+                    <td class="small text-muted">{{ doc.generatedBy }}</td>
+                    <td class="text-end font-monospace small">{{ doc.byteSize }}</td>
+                    <td class="d-flex gap-1">
+                      <a class="btn btn-sm btn-outline-primary"
+                         [routerLink]="['/admin/documents/uid', doc.uid]"
+                         [attr.aria-label]="'View document ' + doc.documentNumber">
+                        <i class="bi bi-eye me-1" aria-hidden="true"></i>View
+                      </a>
+                      @if (canRender()) {
+                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                (click)="download(doc)"
+                                [attr.aria-label]="'Download PDF for ' + doc.documentNumber">
+                          <i class="bi bi-download" aria-hidden="true"></i>
+                          <span class="visually-hidden">Download</span>
+                        </button>
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Pagination -->
+          @if (meta().totalPages > 1) {
+            <nav aria-label="Documents list pagination" class="d-flex align-items-center gap-3 mt-2">
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      [disabled]="currentPage() === 0"
+                      (click)="prevPage()">
+                <i class="bi bi-chevron-left" aria-hidden="true"></i>
+                <span class="visually-hidden">Previous page</span>
+              </button>
+              <span class="small text-muted">
+                Page {{ meta().page + 1 }} of {{ meta().totalPages }}
+                ({{ meta().totalElements }} total)
+              </span>
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      [disabled]="!meta().hasNext"
+                      (click)="nextPage()">
+                <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                <span class="visually-hidden">Next page</span>
+              </button>
+            </nav>
+          }
+        }
+      }
+    }
+  }
+</section>

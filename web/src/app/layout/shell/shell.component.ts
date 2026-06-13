@@ -157,6 +157,15 @@ export class ShellComponent {
         { label: 'Goods Receipts', route: '/admin/goods-receipts', icon: 'bi-box-arrow-in-down', available: true, permission: 'PURCHASE.ORDER.VIEW' },
       ],
     },
+    // ── Documents & PDF ────────────────────────────────────────────────────────
+    {
+      label: 'Documents & PDF',
+      items: [
+        { label: 'Generated Documents', route: '/admin/documents', icon: 'bi-file-earmark-pdf', available: true, permission: 'DOCUMENT.VIEW' },
+        { label: 'Document Templates', route: '/admin/document-templates', icon: 'bi-layout-text-sidebar', available: true, permission: 'DOCUMENT.TEMPLATE.MANAGE' },
+        { label: 'Document Branding', route: '/admin/document-branding', icon: 'bi-palette', available: true, permission: 'DOCUMENT.BRANDING.MANAGE' },
+      ],
+    },
     {
       label: 'Accounting',
       items: [
