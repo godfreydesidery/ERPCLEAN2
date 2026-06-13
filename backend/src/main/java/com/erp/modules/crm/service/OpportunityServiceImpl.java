@@ -121,9 +121,11 @@ public class OpportunityServiceImpl implements OpportunityService {
             lead.setUpdatedBy(actorId());
         }
 
-        Opportunity saved = opportunities.save(opp);
+        // Assign the opportunity number BEFORE save — opportunity_number is NOT NULL, and an autoflush
+        // (e.g. the audit query below) would otherwise attempt the INSERT with a null number first.
         String number = numberGen.nextOpportunity(companyId);
-        saved.setOpportunityNumber(number);
+        opp.setOpportunityNumber(number);
+        Opportunity saved = opportunities.save(opp);
 
         audit.record(AuditEvent.of(AuditActions.CRM_OPPORTUNITY_CREATE, "opportunities",
                 saved.getId(), saved.getUid())
