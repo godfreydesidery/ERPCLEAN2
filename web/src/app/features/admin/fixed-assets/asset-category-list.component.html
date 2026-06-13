@@ -1,0 +1,189 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Asset Categories</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-folder2-open me-1" aria-hidden="true"></i>
+      Manage fixed asset categories, depreciation methods, and GL accounts.
+    </p>
+  </header>
+
+  <!-- Company selector -->
+  @switch (companyState()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mb-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load companies.
+      </p>
+    }
+    @default {
+      @if (companies().length > 1) {
+        <div class="mb-3" style="max-width:320px">
+          <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+          <select id="companyPicker" name="companyPicker" class="form-select"
+                  [ngModel]="selectedCompanyId()"
+                  (ngModelChange)="onCompanyChange($event)">
+            @for (c of companies(); track c.uid) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+          </select>
+        </div>
+      }
+    }
+  }
+
+  @if (selectedCompanyId()) {
+    <!-- Toolbar -->
+    @if (canManage()) {
+      <div class="d-flex mb-3">
+        <button type="button" class="btn btn-primary ms-auto"
+                (click)="toggleCreateForm()"
+                [attr.aria-expanded]="showCreateForm()"
+                aria-controls="createCategoryForm">
+          <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>New Category
+        </button>
+      </div>
+    }
+
+    <!-- Create form -->
+    @if (showCreateForm()) {
+      <form id="createCategoryForm" class="create-form card card-body mb-3"
+            (ngSubmit)="create()" aria-label="Create asset category">
+        <h2 class="h6 mb-3">New Asset Category</h2>
+        <div class="row g-2 mb-2">
+          <div class="col-sm-2">
+            <label class="form-label small text-muted mb-1" for="newCode">Code <span class="text-danger" aria-hidden="true">*</span></label>
+            <input id="newCode" name="newCode" type="text" class="form-control"
+                   [ngModel]="newCode()" (ngModelChange)="newCode.set($event)"
+                   [disabled]="saving()" autocomplete="off" />
+          </div>
+          <div class="col-sm-4">
+            <label class="form-label small text-muted mb-1" for="newName">Name <span class="text-danger" aria-hidden="true">*</span></label>
+            <input id="newName" name="newName" type="text" class="form-control"
+                   [ngModel]="newName()" (ngModelChange)="newName.set($event)"
+                   [disabled]="saving()" autocomplete="off" />
+          </div>
+          <div class="col-sm-3">
+            <label class="form-label small text-muted mb-1" for="newMethod">Method <span class="text-danger" aria-hidden="true">*</span></label>
+            <select id="newMethod" name="newMethod" class="form-select"
+                    [ngModel]="newMethod()" (ngModelChange)="newMethod.set($event)"
+                    [disabled]="saving()">
+              @for (m of methodOptions; track m) {
+                <option [value]="m">{{ m === 'STRAIGHT_LINE' ? 'Straight Line' : 'Reducing Balance' }}</option>
+              }
+            </select>
+          </div>
+          <div class="col-sm-2">
+            <label class="form-label small text-muted mb-1" for="newLifePeriods">Life (periods) <span class="text-danger" aria-hidden="true">*</span></label>
+            <input id="newLifePeriods" name="newLifePeriods" type="number" min="1" class="form-control"
+                   [ngModel]="newLifePeriods()" (ngModelChange)="newLifePeriods.set($event)"
+                   [disabled]="saving()" />
+          </div>
+          @if (newMethod() === 'REDUCING_BALANCE') {
+            <div class="col-sm-2">
+              <label class="form-label small text-muted mb-1" for="newReducingRate">Rate % <span class="text-danger" aria-hidden="true">*</span></label>
+              <input id="newReducingRate" name="newReducingRate" type="number" step="0.01" class="form-control"
+                     [ngModel]="newReducingRate()" (ngModelChange)="newReducingRate.set($event)"
+                     [disabled]="saving()" />
+            </div>
+          }
+        </div>
+        <div class="row g-2 mb-2">
+          <div class="col-sm-4">
+            <label class="form-label small text-muted mb-1" for="newAssetAccountId">Asset Account ID <span class="text-danger" aria-hidden="true">*</span></label>
+            <input id="newAssetAccountId" name="newAssetAccountId" type="text" class="form-control"
+                   [ngModel]="newAssetAccountId()" (ngModelChange)="newAssetAccountId.set($event)"
+                   [disabled]="saving()" autocomplete="off" />
+          </div>
+          <div class="col-sm-4">
+            <label class="form-label small text-muted mb-1" for="newAccumDepAccountId">Accum Dep Account ID <span class="text-danger" aria-hidden="true">*</span></label>
+            <input id="newAccumDepAccountId" name="newAccumDepAccountId" type="text" class="form-control"
+                   [ngModel]="newAccumDepAccountId()" (ngModelChange)="newAccumDepAccountId.set($event)"
+                   [disabled]="saving()" autocomplete="off" />
+          </div>
+          <div class="col-sm-4">
+            <label class="form-label small text-muted mb-1" for="newDepExpenseAccountId">Dep Expense Account ID <span class="text-danger" aria-hidden="true">*</span></label>
+            <input id="newDepExpenseAccountId" name="newDepExpenseAccountId" type="text" class="form-control"
+                   [ngModel]="newDepExpenseAccountId()" (ngModelChange)="newDepExpenseAccountId.set($event)"
+                   [disabled]="saving()" autocomplete="off" />
+          </div>
+        </div>
+        <div class="d-flex gap-2 mt-1">
+          <button type="submit" class="btn btn-primary" [disabled]="saving()">
+            @if (saving()) {
+              <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Saving…
+            } @else {
+              Create Category
+            }
+          </button>
+          <button type="button" class="btn btn-outline-secondary" (click)="toggleCreateForm()">Cancel</button>
+        </div>
+        @if (formError(); as msg) {
+          <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+        }
+      </form>
+    }
+
+    <!-- List states -->
+    @switch (state()) {
+      @case ('loading') {
+        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading categories…
+        </p>
+      }
+      @case ('error') {
+        <p class="state text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load categories.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="state text-muted">
+          <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>You don't have permission to view asset categories.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <p class="state text-muted">No categories yet. Create one above.</p>
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-hover align-middle bg-white grid">
+              <caption class="visually-hidden">Asset Categories</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Code</th>
+                  <th scope="col">Name</th>
+                  <th scope="col">Method</th>
+                  <th scope="col">Life (periods)</th>
+                  <th scope="col">Status</th>
+                  <th scope="col"><span class="visually-hidden">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (cat of rows(); track cat.uid) {
+                  <tr>
+                    <td class="font-monospace">{{ cat.code }}</td>
+                    <td>{{ cat.name }}</td>
+                    <td class="small">{{ cat.defaultMethod === 'STRAIGHT_LINE' ? 'Straight Line' : 'Reducing Balance' }}</td>
+                    <td class="text-end">{{ cat.defaultLifePeriods }}</td>
+                    <td><span class="badge" [class]="statusBadgeClass(cat.status)">{{ cat.status }}</span></td>
+                    <td>
+                      <a class="btn btn-sm btn-outline-primary"
+                         [routerLink]="['/admin/asset-categories/uid', cat.uid]"
+                         [attr.aria-label]="'Open category ' + cat.name">
+                        <i class="bi bi-eye me-1" aria-hidden="true"></i>Open
+                      </a>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      }
+    }
+  }
+</section>

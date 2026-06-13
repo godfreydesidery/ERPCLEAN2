@@ -466,5 +466,60 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./reporting/account-ledger.component').then((m) => m.AccountLedgerComponent),
   },
+  // ── Fixed Assets ─────────────────────────────────────────────────────────────
+  {
+    path: 'asset-categories',
+    canActivate: [requirePermission('FA.CATEGORY.VIEW')],
+    loadComponent: () =>
+      import('./fixed-assets/asset-category-list.component').then((m) => m.AssetCategoryListComponent),
+  },
+  {
+    path: 'asset-categories/uid/:uid',
+    canActivate: [requirePermission('FA.CATEGORY.VIEW')],
+    loadComponent: () =>
+      import('./fixed-assets/asset-category-detail.component').then((m) => m.AssetCategoryDetailComponent),
+  },
+  {
+    path: 'fixed-assets',
+    canActivate: [requirePermission('FA.VIEW')],
+    loadComponent: () =>
+      import('./fixed-assets/fixed-asset-list.component').then((m) => m.FixedAssetListComponent),
+  },
+  {
+    path: 'fixed-assets/create',
+    canActivate: [requirePermission('FA.REGISTER.MANAGE')],
+    loadComponent: () =>
+      import('./fixed-assets/fixed-asset-create.component').then((m) => m.FixedAssetCreateComponent),
+  },
+  {
+    path: 'fixed-assets/uid/:uid',
+    canActivate: [requirePermission('FA.VIEW')],
+    loadComponent: () =>
+      import('./fixed-assets/fixed-asset-detail.component').then((m) => m.FixedAssetDetailComponent),
+  },
+  {
+    path: 'fixed-assets/reconciliation',
+    canActivate: [requirePermission('FA.VIEW')],
+    loadComponent: () =>
+      import('./fixed-assets/fa-reconciliation.component').then((m) => m.FaReconciliationComponent),
+  },
+  {
+    path: 'depreciation-runs',
+    canActivate: [requirePermission('FA.VIEW')],
+    loadComponent: () =>
+      import('./fixed-assets/depreciation-run-list.component').then((m) => m.DepreciationRunListComponent),
+  },
+  {
+    path: 'depreciation-runs/post',
+    canActivate: [requirePermission('FA.DEPRECIATE')],
+    loadComponent: () =>
+      import('./fixed-assets/depreciation-post.component').then((m) => m.DepreciationPostComponent),
+  },
+  {
+    path: 'depreciation-runs/uid/:uid',
+    canActivate: [requirePermission('FA.VIEW')],
+    loadComponent: () =>
+      import('./fixed-assets/depreciation-run-detail.component').then((m) => m.DepreciationRunDetailComponent),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];

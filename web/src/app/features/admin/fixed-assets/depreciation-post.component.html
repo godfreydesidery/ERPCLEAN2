@@ -1,0 +1,145 @@
+<section class="admin-page">
+  <header class="page-head">
+    <a class="btn btn-sm btn-outline-secondary me-2" routerLink="/admin/depreciation-runs"
+       aria-label="Back to Depreciation Runs">
+      <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Runs
+    </a>
+    <h1 class="h4 mb-1">Run Depreciation</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      Preview the planned charges for a fiscal period, then post the run.
+      Posting is idempotent — re-posting an already-run period returns the existing run.
+    </p>
+  </header>
+
+  @if (!canDepreciate()) {
+    <p class="state text-muted">
+      <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>You don't have permission to run depreciation.
+    </p>
+  } @else {
+
+    <!-- Company selector -->
+    @switch (companyState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-3" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load companies.
+        </p>
+      }
+      @default {
+        @if (companies().length > 1) {
+          <div class="mb-3" style="max-width:320px">
+            <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+            <select id="companyPicker" name="companyPicker" class="form-select"
+                    [ngModel]="selectedCompanyId()"
+                    (ngModelChange)="onCompanyChange($event)">
+              @for (c of companies(); track c.uid) {
+                <option [value]="c.id">{{ c.name }}</option>
+              }
+            </select>
+          </div>
+        }
+      }
+    }
+
+    <!-- Preview + post form -->
+    <div class="card card-body mb-4">
+      <h2 class="h6 mb-3">Fiscal Period</h2>
+      <div class="row g-2 mb-2">
+        <div class="col-sm-4">
+          <label class="form-label small text-muted mb-1" for="fFiscalPeriodUid">
+            Fiscal Period UID <span class="text-danger" aria-hidden="true">*</span>
+          </label>
+          <input id="fFiscalPeriodUid" name="fFiscalPeriodUid" type="text" class="form-control"
+                 placeholder="e.g. abc123"
+                 [ngModel]="fFiscalPeriodUid()" (ngModelChange)="fFiscalPeriodUid.set($event)"
+                 [disabled]="previewing() || posting()" autocomplete="off" />
+        </div>
+        <div class="col-sm-3">
+          <label class="form-label small text-muted mb-1" for="fPostingDate">
+            Posting Date <span class="text-danger" aria-hidden="true">*</span>
+            <span class="text-muted">(for posting only)</span>
+          </label>
+          <input id="fPostingDate" name="fPostingDate" type="date" class="form-control"
+                 [ngModel]="fPostingDate()" (ngModelChange)="fPostingDate.set($event)"
+                 [disabled]="previewing() || posting()" />
+        </div>
+      </div>
+      <div class="d-flex gap-2">
+        <button type="button" class="btn btn-outline-primary" (click)="runPreview()"
+                [disabled]="previewing() || posting()">
+          @if (previewing()) {
+            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Previewing…
+          } @else {
+            <i class="bi bi-eye me-1" aria-hidden="true"></i>Preview
+          }
+        </button>
+        <button type="button" class="btn btn-primary" (click)="postRun()"
+                [disabled]="previewing() || posting()">
+          @if (posting()) {
+            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Posting…
+          } @else {
+            <i class="bi bi-play-circle me-1" aria-hidden="true"></i>Post Run
+          }
+        </button>
+      </div>
+      @if (previewError(); as msg) {
+        <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+      }
+      @if (postError(); as msg) {
+        <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+      }
+    </div>
+
+    <!-- Posted run result -->
+    @if (postedRun(); as run) {
+      <div class="alert alert-success mb-4" role="status">
+        <strong>Run posted:</strong> {{ run.runNumber }} | Period: {{ run.fiscalPeriodId }} |
+        Total: {{ run.currency }} {{ +run.totalChargeAmount | number:'1.2-2' }} | Assets: {{ run.assetCount }}
+        <button type="button" class="btn btn-sm btn-outline-success ms-3" (click)="goToRun()">
+          View Run
+        </button>
+      </div>
+    }
+
+    <!-- Preview result -->
+    @if (preview(); as p) {
+      <section aria-labelledby="previewHeading">
+        <h2 id="previewHeading" class="h6 mb-2">
+          Preview — {{ p.assetCount }} assets — Total planned charge:
+          <span class="font-monospace">{{ +p.totalChargeAmount | number:'1.2-2' }}</span>
+        </h2>
+        @if (p.lines.length === 0) {
+          <p class="text-muted small">No assets with pending charges in this period.</p>
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle bg-white grid">
+              <caption class="visually-hidden">Depreciation preview lines</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Asset #</th>
+                  <th scope="col">Asset Name</th>
+                  <th scope="col">Period Seq</th>
+                  <th scope="col" class="text-end">Planned Charge</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (line of p.lines; track line.fixedAssetUid) {
+                  <tr>
+                    <td class="font-monospace small">{{ line.assetNumber }}</td>
+                    <td class="small">{{ line.assetName }}</td>
+                    <td class="text-end small">{{ line.periodSeq }}</td>
+                    <td class="text-end font-monospace small">{{ +line.plannedCharge | number:'1.2-2' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </section>
+    }
+  }
+</section>

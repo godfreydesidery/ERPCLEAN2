@@ -189,6 +189,18 @@ export class ShellComponent {
         { label: 'Account Ledger', route: '/admin/reporting/account-ledger', icon: 'bi-journal-text', available: true, permission: 'REPORT.LEDGER.VIEW' },
       ],
     },
+    // ── Finance / Fixed Assets ────────────────────────────────────────────────
+    {
+      label: 'Finance / Fixed Assets',
+      items: [
+        { label: 'Asset Categories', route: '/admin/asset-categories', icon: 'bi-folder2-open', available: true, permission: 'FA.CATEGORY.VIEW' },
+        { label: 'Fixed Assets', route: '/admin/fixed-assets', icon: 'bi-building-gear', available: true, permission: 'FA.VIEW' },
+        { label: 'Register Asset', route: '/admin/fixed-assets/create', icon: 'bi-plus-circle', available: true, permission: 'FA.REGISTER.MANAGE' },
+        { label: 'FA Reconciliation', route: '/admin/fixed-assets/reconciliation', icon: 'bi-bar-chart-steps', available: true, permission: 'FA.VIEW' },
+        { label: 'Depreciation Runs', route: '/admin/depreciation-runs', icon: 'bi-calendar3', available: true, permission: 'FA.VIEW' },
+        { label: 'Run Depreciation', route: '/admin/depreciation-runs/post', icon: 'bi-play-circle', available: true, permission: 'FA.DEPRECIATE' },
+      ],
+    },
   ];
 
   /** Nav groups with permission-filtered items. Reactive: recomputes when permissions change. */
