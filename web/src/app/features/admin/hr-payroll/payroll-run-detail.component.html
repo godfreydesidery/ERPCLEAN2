@@ -1,0 +1,257 @@
+<section class="admin-page">
+  <header class="page-head">
+    <nav aria-label="breadcrumb">
+      <ol class="breadcrumb small mb-1">
+        <li class="breadcrumb-item"><a routerLink="/admin/hr/payroll-runs">Payroll Runs</a></li>
+        <li class="breadcrumb-item active" aria-current="page">
+          @if (run(); as r) { {{ r.runNumber }} } @else { Loading… }
+        </li>
+      </ol>
+    </nav>
+    <div class="d-flex align-items-center gap-3 flex-wrap">
+      <h1 class="h4 mb-0">
+        @if (run(); as r) { {{ r.runNumber }} } @else { Payroll Run Detail }
+      </h1>
+      @if (run(); as r) {
+        <span class="badge" [class]="statusBadgeClass(r.status)">{{ r.status }}</span>
+      }
+    </div>
+  </header>
+
+  @switch (state()) {
+    @case ('loading') {
+      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+      </p>
+    }
+    @case ('error') {
+      <p class="state text-danger" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load payroll run. Please try again.
+      </p>
+    }
+    @default {
+      @if (run(); as r) {
+        <!-- Summary card -->
+        <div class="card mb-3">
+          <div class="card-body">
+            <div class="row g-3 small">
+              <div class="col-sm-3">
+                <span class="text-muted">Period</span><br>
+                <strong>{{ r.periodYear }}-{{ r.periodMonth | number:'2.0-0' }}</strong>
+              </div>
+              <div class="col-sm-3">
+                <span class="text-muted">Pay Date</span><br>
+                <strong>{{ r.payDate }}</strong>
+              </div>
+              <div class="col-sm-3">
+                <span class="text-muted">Gross Total</span><br>
+                <strong class="font-monospace">TZS {{ +r.grossTotal | number:'1.2-2' }}</strong>
+              </div>
+              <div class="col-sm-3">
+                <span class="text-muted">Net Total</span><br>
+                <strong class="font-monospace">TZS {{ +r.netTotal | number:'1.2-2' }}</strong>
+              </div>
+              <div class="col-sm-3">
+                <span class="text-muted">Deduction Total</span><br>
+                <strong class="font-monospace">TZS {{ +r.deductionTotal | number:'1.2-2' }}</strong>
+              </div>
+              <div class="col-sm-3">
+                <span class="text-muted">Employer Cost</span><br>
+                <strong class="font-monospace">TZS {{ +r.employerCostTotal | number:'1.2-2' }}</strong>
+              </div>
+              @if (r.approvedBy) {
+                <div class="col-sm-3">
+                  <span class="text-muted">Approved By</span><br>
+                  <strong>{{ r.approvedBy }}</strong>
+                </div>
+              }
+              @if (r.glEntryUid) {
+                <div class="col-sm-3">
+                  <span class="text-muted">GL Entry</span><br>
+                  <strong class="font-monospace small">{{ r.glEntryUid }}</strong>
+                </div>
+              }
+            </div>
+          </div>
+        </div>
+
+        <!-- Action error -->
+        @if (actionError(); as msg) {
+          <p class="text-danger small mb-3" role="alert">
+            <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ msg }}
+          </p>
+        }
+
+        <!-- Lifecycle actions -->
+        <div class="d-flex flex-wrap gap-2 mb-3">
+          @if (canRun() && canCalculate()) {
+            <button type="button" class="btn btn-outline-info"
+                    (click)="calculate()"
+                    [disabled]="calculating()">
+              @if (calculating()) {
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+              } @else {
+                <i class="bi bi-calculator me-1" aria-hidden="true"></i>
+              }
+              Calculate
+            </button>
+          }
+
+          @if (canApprove() && canApproveAction()) {
+            @if (hasFlaggedLines()) {
+              <span class="badge text-bg-warning align-self-center">
+                <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
+                Flagged lines — resolve before approving
+              </span>
+            } @else {
+              <button type="button" class="btn btn-outline-primary"
+                      (click)="approve()"
+                      [disabled]="approving()">
+                @if (approving()) {
+                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                } @else {
+                  <i class="bi bi-check2 me-1" aria-hidden="true"></i>
+                }
+                Approve
+              </button>
+            }
+          }
+
+          @if (canPost() && canPostAction()) {
+            <button type="button" class="btn btn-outline-warning"
+                    (click)="post()"
+                    [disabled]="posting()">
+              @if (posting()) {
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+              } @else {
+                <i class="bi bi-journal-check me-1" aria-hidden="true"></i>
+              }
+              Post to GL
+            </button>
+          }
+
+          @if (canDisburse() && canDisburseAction()) {
+            <button type="button" class="btn btn-success"
+                    (click)="toggleDisburseForm()"
+                    [attr.aria-expanded]="showDisburseForm()"
+                    aria-controls="disburseForm">
+              <i class="bi bi-cash me-1" aria-hidden="true"></i>
+              Disburse
+            </button>
+          }
+
+          @if (canReverse() && canReverseAction()) {
+            <button type="button" class="btn btn-outline-danger ms-auto"
+                    (click)="reverse()"
+                    [disabled]="reversing()">
+              @if (reversing()) {
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+              } @else {
+                <i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i>
+              }
+              Reverse
+            </button>
+          }
+        </div>
+
+        <!-- Disburse form -->
+        @if (showDisburseForm()) {
+          <form id="disburseForm" class="create-form card card-body mb-3"
+                (ngSubmit)="disburse()" aria-label="Disburse payroll">
+            <h2 class="h6 mb-3">Disburse Payroll</h2>
+            <div class="row g-2">
+              <div class="col-sm-5">
+                <label class="form-label small text-muted mb-1" for="dCashAcct">
+                  Cash / Bank Account UID <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="dCashAcct" name="dCashAcct" type="text" class="form-control"
+                       placeholder="Account uid"
+                       [ngModel]="fCashBankAccountUid()" (ngModelChange)="fCashBankAccountUid.set($event)"
+                       [disabled]="disbursing()" autocomplete="off" />
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="dTxnDate">
+                  Transaction Date <span class="text-muted small">(defaults to pay date)</span>
+                </label>
+                <input id="dTxnDate" name="dTxnDate" type="date" class="form-control"
+                       [ngModel]="fTxnDate()" (ngModelChange)="fTxnDate.set($event)"
+                       [disabled]="disbursing()" />
+              </div>
+              <div class="col-sm-2 d-flex align-items-end">
+                <button type="submit" class="btn btn-success w-100" [disabled]="disbursing()">
+                  @if (disbursing()) {
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    Disbursing…
+                  } @else {
+                    Disburse
+                  }
+                </button>
+              </div>
+            </div>
+            @if (disburseError(); as msg) {
+              <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+            }
+          </form>
+        }
+
+        <!-- Payroll Lines -->
+        <h2 class="h5 mt-4 mb-2">Payroll Lines</h2>
+
+        @switch (linesState()) {
+          @case ('loading') {
+            <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+              <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading lines…
+            </p>
+          }
+          @case ('error') {
+            <p class="text-danger small" role="alert">Could not load payroll lines.</p>
+          }
+          @default {
+            @if (lines().length === 0) {
+              <p class="text-muted small">No lines yet — run Calculate to generate them.</p>
+            } @else {
+              <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle bg-white">
+                  <caption class="visually-hidden">Payroll Lines</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Employee #</th>
+                      <th scope="col">Name</th>
+                      <th scope="col">Department</th>
+                      <th scope="col" class="text-end">Gross</th>
+                      <th scope="col" class="text-end">Net</th>
+                      <th scope="col" class="text-end">PAYE</th>
+                      <th scope="col" class="text-end">NSSF (Emp.)</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Flag Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (l of lines(); track l.uid) {
+                      <tr [class.table-danger]="l.status === 'FLAGGED'">
+                        <td class="font-monospace small">{{ l.employeeNumber }}</td>
+                        <td class="small">{{ l.employeeName }}</td>
+                        <td class="small text-muted">{{ l.departmentName }}</td>
+                        <td class="text-end font-monospace small">{{ l.currency }} {{ +l.grossAmount | number:'1.2-2' }}</td>
+                        <td class="text-end font-monospace small">{{ l.currency }} {{ +l.netAmount | number:'1.2-2' }}</td>
+                        <td class="text-end font-monospace small">{{ l.currency }} {{ +l.payeAmount | number:'1.2-2' }}</td>
+                        <td class="text-end font-monospace small">{{ l.currency }} {{ +l.nssfEmployeeAmount | number:'1.2-2' }}</td>
+                        <td>
+                          <span class="badge" [class]="l.status === 'FLAGGED' ? 'text-bg-danger' : 'text-bg-success'">
+                            {{ l.status }}
+                          </span>
+                        </td>
+                        <td class="small text-danger">{{ l.flagReason }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          }
+        }
+      }
+    }
+  }
+</section>

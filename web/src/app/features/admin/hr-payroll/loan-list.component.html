@@ -1,0 +1,223 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Employee Loans</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-bank me-1" aria-hidden="true"></i>
+      Manage employee salary advance loans and repayments.
+    </p>
+  </header>
+
+  <!-- Company selector -->
+  @switch (companyState()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mb-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load companies.
+      </p>
+    }
+    @default {
+      @if (companies().length > 1) {
+        <div class="mb-3" style="max-width:320px">
+          <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+          <select id="companyPicker" name="companyPicker" class="form-select"
+                  [ngModel]="selectedCompanyId()"
+                  (ngModelChange)="onCompanyChange($event)">
+            @for (c of companies(); track c.uid) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+          </select>
+        </div>
+      }
+    }
+  }
+
+  @if (selectedCompanyId()) {
+    @if (canManage()) {
+      <div class="d-flex mb-3">
+        <button type="button" class="btn btn-primary ms-auto"
+                (click)="toggleCreateForm()"
+                [attr.aria-expanded]="showCreateForm()"
+                aria-controls="createLoanForm">
+          <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+          New Loan
+        </button>
+      </div>
+    }
+
+    @if (showCreateForm()) {
+      <form id="createLoanForm" class="create-form card card-body mb-3"
+            (ngSubmit)="create()" aria-label="Create loan">
+        <h2 class="h6 mb-3">New Employee Loan</h2>
+        <p class="text-muted small mb-2">
+          <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
+          Employee UID is the path identifier; Employee ID (numeric) is the body field — both are required.
+        </p>
+        <div class="row g-2 mb-2">
+          <div class="col-sm-3">
+            <label class="form-label small text-muted mb-1" for="lnEmpUid">
+              Employee UID <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="lnEmpUid" name="lnEmpUid" type="text" class="form-control"
+                   placeholder="uid"
+                   [ngModel]="fEmployeeUid()" (ngModelChange)="fEmployeeUid.set($event)"
+                   [disabled]="saving()" autocomplete="off" />
+          </div>
+          <div class="col-sm-2">
+            <label class="form-label small text-muted mb-1" for="lnEmpId">
+              Employee ID <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="lnEmpId" name="lnEmpId" type="text" class="form-control"
+                   placeholder="numeric id"
+                   [ngModel]="fEmployeeId()" (ngModelChange)="fEmployeeId.set($event)"
+                   [disabled]="saving()" autocomplete="off" />
+          </div>
+          <div class="col-sm-2">
+            <label class="form-label small text-muted mb-1" for="lnPrincipal">
+              Principal <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="lnPrincipal" name="lnPrincipal" type="number" step="0.01" class="form-control"
+                   [ngModel]="fPrincipalAmount()" (ngModelChange)="fPrincipalAmount.set($event)"
+                   [disabled]="saving()" />
+          </div>
+          <div class="col-sm-2">
+            <label class="form-label small text-muted mb-1" for="lnInstalment">
+              Installment <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="lnInstalment" name="lnInstalment" type="number" step="0.01" class="form-control"
+                   [ngModel]="fInstallmentAmount()" (ngModelChange)="fInstallmentAmount.set($event)"
+                   [disabled]="saving()" />
+          </div>
+          <div class="col-sm-1">
+            <label class="form-label small text-muted mb-1" for="lnCurrency">Currency</label>
+            <input id="lnCurrency" name="lnCurrency" type="text" class="form-control"
+                   [ngModel]="fCurrency()" (ngModelChange)="fCurrency.set($event)"
+                   [disabled]="saving()" />
+          </div>
+        </div>
+        <div class="row g-2 mb-2">
+          <div class="col-sm-3">
+            <label class="form-label small text-muted mb-1" for="lnGl">
+              GL Account ID <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="lnGl" name="lnGl" type="text" class="form-control"
+                   placeholder="Numeric id"
+                   [ngModel]="fGlAccountId()" (ngModelChange)="fGlAccountId.set($event)"
+                   [disabled]="saving()" autocomplete="off" />
+          </div>
+          <div class="col-sm-2">
+            <label class="form-label small text-muted mb-1" for="lnStart">
+              Start Date <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="lnStart" name="lnStart" type="date" class="form-control"
+                   [ngModel]="fStartDate()" (ngModelChange)="fStartDate.set($event)"
+                   [disabled]="saving()" />
+          </div>
+          <div class="col-sm-2 d-flex align-items-end">
+            <button type="submit" class="btn btn-primary w-100" [disabled]="saving()">
+              @if (saving()) {
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                Saving…
+              } @else {
+                Create
+              }
+            </button>
+          </div>
+        </div>
+        @if (formError(); as msg) {
+          <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+        }
+      </form>
+    }
+
+    @switch (state()) {
+      @case ('loading') {
+        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading loans…
+        </p>
+      }
+      @case ('error') {
+        <p class="state text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load loans. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="state text-muted d-flex align-items-center gap-2">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view loans.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <p class="state text-muted">No loans yet. Create one above.</p>
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-hover align-middle bg-white grid">
+              <caption class="visually-hidden">Employee Loans</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Loan #</th>
+                  <th scope="col">Employee</th>
+                  <th scope="col" class="text-end">Principal</th>
+                  <th scope="col" class="text-end">Installment</th>
+                  <th scope="col" class="text-end">Outstanding</th>
+                  <th scope="col">Start Date</th>
+                  <th scope="col">Status</th>
+                  <th scope="col"><span class="visually-hidden">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (l of rows(); track l.uid) {
+                  <tr>
+                    <td class="font-monospace small">{{ l.loanNumber }}</td>
+                    <td class="small">{{ l.employeeName }}</td>
+                    <td class="text-end font-monospace small">{{ l.currency }} {{ +l.principalAmount | number:'1.2-2' }}</td>
+                    <td class="text-end font-monospace small">{{ l.currency }} {{ +l.installmentAmount | number:'1.2-2' }}</td>
+                    <td class="text-end font-monospace small">{{ l.currency }} {{ +l.outstandingAmount | number:'1.2-2' }}</td>
+                    <td class="small text-muted">{{ l.startDate }}</td>
+                    <td>
+                      <span class="badge" [class]="statusBadgeClass(l.status)">{{ l.status }}</span>
+                    </td>
+                    <td>
+                      <a class="btn btn-sm btn-outline-primary"
+                         [routerLink]="['/admin/hr/loans/uid', l.uid]"
+                         [attr.aria-label]="'Open loan ' + l.loanNumber">
+                        <i class="bi bi-eye me-1" aria-hidden="true"></i>Open
+                      </a>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          @if (meta().totalPages > 1) {
+            <nav aria-label="Loan list pagination" class="d-flex align-items-center gap-3 mt-2">
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      [disabled]="currentPage() === 0"
+                      (click)="prevPage()">
+                <i class="bi bi-chevron-left" aria-hidden="true"></i>
+                <span class="visually-hidden">Previous page</span>
+              </button>
+              <span class="small text-muted">
+                Page {{ meta().page + 1 }} of {{ meta().totalPages }}
+                ({{ meta().totalElements }} total)
+              </span>
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      [disabled]="!meta().hasNext"
+                      (click)="nextPage()">
+                <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                <span class="visually-hidden">Next page</span>
+              </button>
+            </nav>
+          }
+        }
+      }
+    }
+  }
+</section>

@@ -665,6 +665,66 @@ export const ADMIN_ROUTES: Routes = [
     canActivate: [requirePermission('CRM.STAGE.MANAGE')],
     loadComponent: () =>
       import('./crm/pipeline-stage-list.component').then((m) => m.PipelineStageListComponent),
+  // ── HR & Payroll ──────────────────────────────────────────────────────────────
+  {
+    path: 'hr/employees',
+    canActivate: [requirePermission('HR.EMPLOYEE.VIEW')],
+    loadComponent: () =>
+      import('./hr-payroll/employee-list.component').then((m) => m.EmployeeListComponent),
+  },
+  {
+    path: 'hr/employees/uid/:uid',
+    canActivate: [requirePermission('HR.EMPLOYEE.VIEW')],
+    loadComponent: () =>
+      import('./hr-payroll/employee-detail.component').then((m) => m.EmployeeDetailComponent),
+  },
+  {
+    path: 'hr/pay-components',
+    canActivate: [requirePermission('HR.PAYCOMPONENT.MANAGE')],
+    loadComponent: () =>
+      import('./hr-payroll/pay-component-list.component').then((m) => m.PayComponentListComponent),
+  },
+  {
+    path: 'hr/pay-components/uid/:uid',
+    canActivate: [requirePermission('HR.PAYCOMPONENT.MANAGE')],
+    loadComponent: () =>
+      import('./hr-payroll/pay-component-detail.component').then((m) => m.PayComponentDetailComponent),
+  },
+  {
+    path: 'hr/payroll-runs',
+    canActivate: [requirePermission('HR.PAYROLL.VIEW')],
+    loadComponent: () =>
+      import('./hr-payroll/payroll-run-list.component').then((m) => m.PayrollRunListComponent),
+  },
+  {
+    path: 'hr/payroll-runs/uid/:uid',
+    canActivate: [requirePermission('HR.PAYROLL.VIEW')],
+    loadComponent: () =>
+      import('./hr-payroll/payroll-run-detail.component').then((m) => m.PayrollRunDetailComponent),
+  },
+  {
+    path: 'hr/leave-requests',
+    canActivate: [requirePermission('HR.LEAVE.VIEW')],
+    loadComponent: () =>
+      import('./hr-payroll/leave-request-list.component').then((m) => m.LeaveRequestListComponent),
+  },
+  {
+    path: 'hr/leave-requests/uid/:uid',
+    canActivate: [requirePermission('HR.LEAVE.VIEW')],
+    loadComponent: () =>
+      import('./hr-payroll/leave-request-detail.component').then((m) => m.LeaveRequestDetailComponent),
+  },
+  {
+    path: 'hr/loans',
+    canActivate: [requirePermission('HR.LOAN.MANAGE')],
+    loadComponent: () =>
+      import('./hr-payroll/loan-list.component').then((m) => m.LoanListComponent),
+  },
+  {
+    path: 'hr/loans/uid/:uid',
+    canActivate: [requirePermission('HR.LOAN.MANAGE')],
+    loadComponent: () =>
+      import('./hr-payroll/loan-detail.component').then((m) => m.LoanDetailComponent),
   },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];

@@ -1,0 +1,74 @@
+<section class="admin-page">
+  <header class="page-head">
+    <nav aria-label="breadcrumb">
+      <ol class="breadcrumb small mb-1">
+        <li class="breadcrumb-item"><a routerLink="/admin/hr/loans">Loans</a></li>
+        <li class="breadcrumb-item active" aria-current="page">
+          @if (loan(); as l) { {{ l.loanNumber }} } @else { Loading… }
+        </li>
+      </ol>
+    </nav>
+    <div class="d-flex align-items-center gap-3">
+      <h1 class="h4 mb-0">
+        @if (loan(); as l) { {{ l.loanNumber }} — {{ l.employeeName }} } @else { Loan Detail }
+      </h1>
+      @if (loan(); as l) {
+        <span class="badge" [class]="statusBadgeClass(l.status)">{{ l.status }}</span>
+      }
+    </div>
+  </header>
+
+  @switch (state()) {
+    @case ('loading') {
+      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+      </p>
+    }
+    @case ('error') {
+      <p class="state text-danger" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load loan. Please try again.
+      </p>
+    }
+    @default {
+      @if (loan(); as l) {
+        <div class="card mb-3">
+          <div class="card-body">
+            <dl class="row small mb-0">
+              <dt class="col-sm-3">Employee</dt><dd class="col-sm-3">{{ l.employeeName }}</dd>
+              <dt class="col-sm-3">Start Date</dt><dd class="col-sm-3">{{ l.startDate }}</dd>
+              <dt class="col-sm-3">Principal</dt>
+              <dd class="col-sm-3 font-monospace">{{ l.currency }} {{ +l.principalAmount | number:'1.2-2' }}</dd>
+              <dt class="col-sm-3">Installment / Month</dt>
+              <dd class="col-sm-3 font-monospace">{{ l.currency }} {{ +l.installmentAmount | number:'1.2-2' }}</dd>
+              <dt class="col-sm-3">Outstanding</dt>
+              <dd class="col-sm-3 font-monospace">{{ l.currency }} {{ +l.outstandingAmount | number:'1.2-2' }}</dd>
+              <dt class="col-sm-3">GL Account ID</dt><dd class="col-sm-3">{{ l.glAccountId }}</dd>
+            </dl>
+          </div>
+        </div>
+
+        @if (actionError(); as msg) {
+          <p class="text-danger small mb-3" role="alert">
+            <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ msg }}
+          </p>
+        }
+
+        <!-- Approve action — status is PENDING (anything not yet ACTIVE) and user has MANAGE perm -->
+        @if (canManage() && canApproveAction()) {
+          <button type="button" class="btn btn-success"
+                  (click)="approve()"
+                  [disabled]="approving()">
+            @if (approving()) {
+              <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+              Approving…
+            } @else {
+              <i class="bi bi-check2 me-1" aria-hidden="true"></i>
+              Approve Loan
+            }
+          </button>
+        }
+      }
+    }
+  }
+</section>

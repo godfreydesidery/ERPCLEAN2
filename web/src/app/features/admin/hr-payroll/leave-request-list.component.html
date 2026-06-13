@@ -1,0 +1,206 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Leave Requests</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-calendar-check me-1" aria-hidden="true"></i>
+      Manage and approve employee leave requests.
+    </p>
+  </header>
+
+  <!-- Company selector -->
+  @switch (companyState()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mb-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load companies.
+      </p>
+    }
+    @default {
+      @if (companies().length > 1) {
+        <div class="mb-3" style="max-width:320px">
+          <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+          <select id="companyPicker" name="companyPicker" class="form-select"
+                  [ngModel]="selectedCompanyId()"
+                  (ngModelChange)="onCompanyChange($event)">
+            @for (c of companies(); track c.uid) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+          </select>
+        </div>
+      }
+    }
+  }
+
+  @if (selectedCompanyId()) {
+    @if (canManage()) {
+      <div class="d-flex mb-3">
+        <button type="button" class="btn btn-primary ms-auto"
+                (click)="toggleCreateForm()"
+                [attr.aria-expanded]="showCreateForm()"
+                aria-controls="submitLeaveForm">
+          <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+          Submit Leave Request
+        </button>
+      </div>
+    }
+
+    @if (showCreateForm()) {
+      <form id="submitLeaveForm" class="create-form card card-body mb-3"
+            (ngSubmit)="submit()" aria-label="Submit leave request">
+        <h2 class="h6 mb-3">Submit Leave Request</h2>
+        <div class="row g-2 mb-2">
+          <div class="col-sm-3">
+            <label class="form-label small text-muted mb-1" for="lrEmpUid">
+              Employee UID <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="lrEmpUid" name="lrEmpUid" type="text" class="form-control"
+                   placeholder="Employee uid"
+                   [ngModel]="fEmployeeUid()" (ngModelChange)="fEmployeeUid.set($event)"
+                   [disabled]="saving()" autocomplete="off" />
+          </div>
+          <div class="col-sm-3">
+            <label class="form-label small text-muted mb-1" for="lrLeaveTypeId">
+              Leave Type ID <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="lrLeaveTypeId" name="lrLeaveTypeId" type="text" class="form-control"
+                   placeholder="Numeric id"
+                   [ngModel]="fLeaveTypeId()" (ngModelChange)="fLeaveTypeId.set($event)"
+                   [disabled]="saving()" autocomplete="off" />
+          </div>
+          <div class="col-sm-2">
+            <label class="form-label small text-muted mb-1" for="lrFrom">
+              From <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="lrFrom" name="lrFrom" type="date" class="form-control"
+                   [ngModel]="fFromDate()" (ngModelChange)="fFromDate.set($event)"
+                   [disabled]="saving()" />
+          </div>
+          <div class="col-sm-2">
+            <label class="form-label small text-muted mb-1" for="lrTo">
+              To <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="lrTo" name="lrTo" type="date" class="form-control"
+                   [ngModel]="fToDate()" (ngModelChange)="fToDate.set($event)"
+                   [disabled]="saving()" />
+          </div>
+          <div class="col-sm-2">
+            <label class="form-label small text-muted mb-1" for="lrDays">
+              Days <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="lrDays" name="lrDays" type="number" step="0.5" class="form-control"
+                   [ngModel]="fDays()" (ngModelChange)="fDays.set($event)"
+                   [disabled]="saving()" />
+          </div>
+          <div class="col-sm-4">
+            <label class="form-label small text-muted mb-1" for="lrReason">Reason</label>
+            <input id="lrReason" name="lrReason" type="text" class="form-control"
+                   [ngModel]="fReason()" (ngModelChange)="fReason.set($event)"
+                   [disabled]="saving()" autocomplete="off" />
+          </div>
+          <div class="col-sm-2 d-flex align-items-end">
+            <button type="submit" class="btn btn-primary w-100" [disabled]="saving()">
+              @if (saving()) {
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                Saving…
+              } @else {
+                Submit
+              }
+            </button>
+          </div>
+        </div>
+        @if (formError(); as msg) {
+          <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+        }
+      </form>
+    }
+
+    @switch (state()) {
+      @case ('loading') {
+        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading leave requests…
+        </p>
+      }
+      @case ('error') {
+        <p class="state text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load leave requests. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="state text-muted d-flex align-items-center gap-2">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view leave requests.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <p class="state text-muted">No leave requests yet.</p>
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-hover align-middle bg-white grid">
+              <caption class="visually-hidden">Leave Requests</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Employee</th>
+                  <th scope="col">Leave Type</th>
+                  <th scope="col">From</th>
+                  <th scope="col">To</th>
+                  <th scope="col" class="text-end">Days</th>
+                  <th scope="col">Status</th>
+                  <th scope="col"><span class="visually-hidden">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (r of rows(); track r.uid) {
+                  <tr>
+                    <td class="small">{{ r.employeeName }}</td>
+                    <td class="small">{{ r.leaveTypeName }}</td>
+                    <td class="small text-muted">{{ r.fromDate }}</td>
+                    <td class="small text-muted">{{ r.toDate }}</td>
+                    <td class="text-end small font-monospace">{{ r.days }}</td>
+                    <td>
+                      <span class="badge" [class]="statusBadgeClass(r.status)">{{ r.status }}</span>
+                    </td>
+                    <td>
+                      <a class="btn btn-sm btn-outline-primary"
+                         [routerLink]="['/admin/hr/leave-requests/uid', r.uid]"
+                         [attr.aria-label]="'Open leave request for ' + r.employeeName">
+                        <i class="bi bi-eye me-1" aria-hidden="true"></i>Open
+                      </a>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          @if (meta().totalPages > 1) {
+            <nav aria-label="Leave request list pagination" class="d-flex align-items-center gap-3 mt-2">
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      [disabled]="currentPage() === 0"
+                      (click)="prevPage()">
+                <i class="bi bi-chevron-left" aria-hidden="true"></i>
+                <span class="visually-hidden">Previous page</span>
+              </button>
+              <span class="small text-muted">
+                Page {{ meta().page + 1 }} of {{ meta().totalPages }}
+                ({{ meta().totalElements }} total)
+              </span>
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      [disabled]="!meta().hasNext"
+                      (click)="nextPage()">
+                <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                <span class="visually-hidden">Next page</span>
+              </button>
+            </nav>
+          }
+        }
+      }
+    }
+  }
+</section>
