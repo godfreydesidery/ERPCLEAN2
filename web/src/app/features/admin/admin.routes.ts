@@ -1092,5 +1092,26 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./crm/activity/activity-tasks.component').then((m) => m.ActivityTasksComponent),
   },
+  // ── HR Departments ────────────────────────────────────────────────────────
+  {
+    path: 'hr/departments',
+    canActivate: [requirePermission('HR.EMPLOYEE.VIEW')],
+    loadComponent: () =>
+      import('./hr-payroll/departments/department-list.component').then((m) => m.DepartmentListComponent),
+  },
+  // ── HR Contracts ─────────────────────────────────────────────────────────
+  {
+    path: 'hr/contracts',
+    canActivate: [requirePermission('HR.EMPLOYEE.VIEW')],
+    loadComponent: () =>
+      import('./hr-payroll/contracts/contract-list.component').then((m) => m.ContractListComponent),
+  },
+  // ── HR Statutory Setup ────────────────────────────────────────────────────
+  {
+    path: 'hr/statutory',
+    canActivate: [requirePermission('HR.STATUTORY.MANAGE')],
+    loadComponent: () =>
+      import('./hr-payroll/statutory/statutory.component').then((m) => m.StatutoryComponent),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];
