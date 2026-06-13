@@ -466,5 +466,36 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./reporting/account-ledger.component').then((m) => m.AccountLedgerComponent),
   },
+  // ── Approvals ─────────────────────────────────────────────────────────────
+  {
+    path: 'approvals/inbox',
+    canActivate: [requirePermission('APPROVALS.DECIDE')],
+    loadComponent: () =>
+      import('./approvals/approval-inbox.component').then((m) => m.ApprovalInboxComponent),
+  },
+  {
+    path: 'approvals/policies',
+    canActivate: [requirePermission('APPROVALS.POLICY.VIEW')],
+    loadComponent: () =>
+      import('./approvals/approval-policy-list.component').then((m) => m.ApprovalPolicyListComponent),
+  },
+  {
+    path: 'approvals/policies/uid/:uid',
+    canActivate: [requirePermission('APPROVALS.POLICY.VIEW')],
+    loadComponent: () =>
+      import('./approvals/approval-policy-detail.component').then((m) => m.ApprovalPolicyDetailComponent),
+  },
+  {
+    path: 'approvals/requests',
+    canActivate: [requirePermission('APPROVALS.REQUEST.VIEW')],
+    loadComponent: () =>
+      import('./approvals/approval-request-list.component').then((m) => m.ApprovalRequestListComponent),
+  },
+  {
+    path: 'approvals/requests/uid/:uid',
+    canActivate: [requirePermission('APPROVALS.REQUEST.VIEW')],
+    loadComponent: () =>
+      import('./approvals/approval-request-detail.component').then((m) => m.ApprovalRequestDetailComponent),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];
