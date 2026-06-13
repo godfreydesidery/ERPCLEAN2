@@ -136,6 +136,15 @@ public final class DomainEventType {
 
     public static final String AGG_WORK_ORDER = "WORK_ORDER";
 
+    // --- FX / Multi-currency (ADR-0036 D-6/D-10) ---
+
+    /**
+     * FX revaluation run posted — GL journal committed; reversal scheduled (ADR-0036 D-6).
+     * Audit/downstream consumers subscribe to this for notifications or reporting.
+     */
+    public static final String FX_REVALUATION_EXECUTED = "FX.REVALUATION.EXECUTED";
+    public static final String AGG_FX_REVALUATION_RUN   = "FX_REVALUATION_RUN";
+
     private DomainEventType() {
     }
 }

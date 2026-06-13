@@ -98,4 +98,21 @@ public interface SupplierBillRepository extends JpaRepository<SupplierBill, Long
     /** Check duplicate supplier invoice (done at service layer too, but useful for tests). */
     boolean existsByCompanyIdAndSupplierIdAndSupplierInvoiceNo(Long companyId, Long supplierId,
                                                                String supplierInvoiceNo);
+
+    // --- FX revaluation aggregate (ADR-0036 D-6) ---
+
+    /**
+     * Returns all open AP bills in a foreign currency (currency != baseCurrency) for the
+     * given company — used by the period-end FX revaluation run to compute the unrealized
+     * adjustment per currency. Caller groups by currency in-service.
+     */
+    @Query("""
+            SELECT b FROM SupplierBill b
+            WHERE b.companyId = :companyId
+              AND b.status IN ('MATCHED','APPROVED','PARTIALLY_PAID')
+              AND b.currency <> :baseCurrency
+            """)
+    java.util.List<SupplierBill> findOpenForeignForRevaluation(
+            @Param("companyId") Long companyId,
+            @Param("baseCurrency") String baseCurrency);
 }
