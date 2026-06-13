@@ -26,6 +26,14 @@ import type { TimesheetPage } from './projects.service';
 import { Company } from '../models/company.model';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
+import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
+import { CustomerService } from '../parties/customer.service';
+import { CustomerModel } from '../models/party.model';
+import { UserService } from '../user/user.service';
+import { User } from '../models/user.model';
+import { ProductService } from '../products/product.service';
+import { ProductModel } from '../models/product.model';
+import { UidPickerComponent, UidOption } from '../../../shared/uid-picker/uid-picker.component';
 
 type LoadState = 'loading' | 'idle' | 'error';
 
@@ -45,7 +53,7 @@ const DEFAULT_TS_SIZE = 20;
  */
 @Component({
   selector: 'app-project-detail',
-  imports: [FormsModule, RouterLink, DecimalPipe],
+  imports: [FormsModule, RouterLink, DecimalPipe, PaginatorComponent, UidPickerComponent],
   templateUrl: './project-detail.component.html',
   styleUrl: './project-detail.component.scss',
 })
@@ -53,6 +61,9 @@ export class ProjectDetailComponent {
   private readonly projectsService = inject(ProjectsService);
   private readonly companyService = inject(CompanyService);
   private readonly organisationService = inject(OrganisationService);
+  private readonly customerService = inject(CustomerService);
+  private readonly userService = inject(UserService);
+  private readonly productService = inject(ProductService);
   private readonly alerts = inject(AlertService);
   protected readonly session = inject(SessionStore);
 
@@ -121,8 +132,26 @@ export class ProjectDetailComponent {
   readonly pnl = signal<ProjectPnlDto | null>(null);
   readonly pnlState = signal<'idle' | 'loading' | 'error'>('idle');
 
-  // ── Company context (for issue form) ───────────────────────────────────────
+  // ── Company context (for issue form + pickers) ────────────────────────────
   readonly companies = signal<Company[]>([]);
+
+  // ── Picker option lists ────────────────────────────────────────────────────
+  readonly pickerCustomers = signal<CustomerModel[]>([]);
+  readonly pickerUsers = signal<User[]>([]);
+  readonly pickerProducts = signal<ProductModel[]>([]);
+
+  readonly customerOptions = computed<UidOption[]>(() =>
+    this.pickerCustomers().map((c) => ({ uid: c.uid, label: c.displayName })),
+  );
+  readonly userOptions = computed<UidOption[]>(() =>
+    this.pickerUsers().map((u) => ({ uid: u.uid, label: u.displayName, hint: u.username })),
+  );
+  readonly taskOptions = computed<UidOption[]>(() =>
+    this.tasks().map((t) => ({ uid: t.uid, label: t.name, hint: t.taskCode })),
+  );
+  readonly productOptions = computed<UidOption[]>(() =>
+    this.pickerProducts().map((p) => ({ uid: p.uid, label: p.name, hint: p.code })),
+  );
 
   // ── Permissions ────────────────────────────────────────────────────────────
   readonly canManage = computed(() => this.session.hasPermission('PROJECTS.PROJECT.MANAGE'));
@@ -207,10 +236,31 @@ export class ProjectDetailComponent {
     this.organisationService.current().subscribe({
       next: (org) => {
         this.companyService.list(org.uid).subscribe({
-          next: (list) => this.companies.set(list),
+          next: (list) => {
+            this.companies.set(list);
+            if (list.length > 0) {
+              this.loadPickerOptions(list[0].id);
+            }
+          },
           error: () => undefined,
         });
       },
+      error: () => undefined,
+    });
+    // Users are not scoped to company
+    this.userService.list().subscribe({
+      next: (rows) => this.pickerUsers.set(rows),
+      error: () => undefined,
+    });
+  }
+
+  private loadPickerOptions(companyId: string): void {
+    this.customerService.list(companyId, undefined, 0, 200).subscribe({
+      next: ({ rows }) => this.pickerCustomers.set(rows),
+      error: () => undefined,
+    });
+    this.productService.list(companyId, undefined, 0, 200).subscribe({
+      next: ({ rows }) => this.pickerProducts.set(rows),
       error: () => undefined,
     });
   }
@@ -358,6 +408,7 @@ export class ProjectDetailComponent {
 
   // ── Timesheets ─────────────────────────────────────────────────────────────
 
+  goToTsPage(page: number): void { this.loadTimesheets(page); }
   tsPrevPage(): void { if (this.tsPage() > 0) this.loadTimesheets(this.tsPage() - 1); }
   tsNextPage(): void { if (this.tsMeta().hasNext) this.loadTimesheets(this.tsPage() + 1); }
 

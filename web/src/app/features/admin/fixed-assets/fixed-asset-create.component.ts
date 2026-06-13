@@ -7,12 +7,14 @@ import { SessionStore } from '../../../core/auth/session.store';
 import { Company } from '../models/company.model';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
+import { BranchService } from '../branch/branch.service';
 import { FixedAssetsService } from './fixed-assets.service';
 import {
   AssetCategoryDto,
   DepreciationMethod,
   RegisterAssetRequest,
 } from './models/fixed-assets.model';
+import { UidOption, UidPickerComponent } from '../../../shared/uid-picker/uid-picker.component';
 
 /**
  * Register a new fixed asset (DRAFT). Route: /admin/fixed-assets/create
@@ -20,7 +22,7 @@ import {
  */
 @Component({
   selector: 'app-fixed-asset-create',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, UidPickerComponent],
   templateUrl: './fixed-asset-create.component.html',
   styleUrl: './fixed-asset-create.component.scss',
 })
@@ -28,6 +30,7 @@ export class FixedAssetCreateComponent {
   private readonly faService = inject(FixedAssetsService);
   private readonly companyService = inject(CompanyService);
   private readonly organisationService = inject(OrganisationService);
+  private readonly branchService = inject(BranchService);
   private readonly alerts = inject(AlertService);
   private readonly router = inject(Router);
   protected readonly session = inject(SessionStore);
@@ -40,9 +43,16 @@ export class FixedAssetCreateComponent {
   readonly categories = signal<AssetCategoryDto[]>([]);
   readonly categoriesState = signal<'idle' | 'loading' | 'error'>('idle');
 
+  // ── Branch picker ─────────────────────────────────────────────────────────────
+  readonly branchOptions = signal<UidOption[]>([]);
+  /** Map from branch uid → branch id (numeric string), for RegisterAssetRequest.branchId. */
+  private readonly branchIdByUid = new Map<string, string>();
+  /** The picker model is bound to branch UID; the request uses branchId derived from it. */
+  readonly fBranchUid = signal('');
+
   // ── Form fields ───────────────────────────────────────────────────────────────
   readonly fCategoryId = signal('');
-  readonly fBranchId = signal('');
+  // fBranchId removed — derived from fBranchUid via branchIdByUid map
   readonly fName = signal('');
   readonly fAcquisitionCost = signal('');
   readonly fSalvageValue = signal('');
@@ -77,6 +87,7 @@ export class FixedAssetCreateComponent {
             if (list.length > 0) {
               this.selectedCompanyId.set(list[0].id);
               this.loadCategories(list[0].id);
+              this.loadBranchOptions(list[0].uid);
             }
           },
           error: () => this.companyState.set('error'),
@@ -86,10 +97,28 @@ export class FixedAssetCreateComponent {
     });
   }
 
+  private loadBranchOptions(companyUid: string): void {
+    this.branchService.list(companyUid).subscribe({
+      next: (branches) => {
+        this.branchIdByUid.clear();
+        branches.forEach((b) => this.branchIdByUid.set(b.uid, b.id));
+        this.branchOptions.set(
+          branches.filter((b) => b.status === 'ACTIVE').map((b) => ({ uid: b.uid, label: b.name, hint: b.code })),
+        );
+      },
+      error: () => {},
+    });
+  }
+
   onCompanyChange(id: string): void {
     this.selectedCompanyId.set(id);
     this.fCategoryId.set('');
-    if (id) this.loadCategories(id);
+    this.fBranchUid.set('');
+    if (id) {
+      this.loadCategories(id);
+      const company = this.companies().find((c) => c.id === id);
+      if (company) this.loadBranchOptions(company.uid);
+    }
   }
 
   private loadCategories(companyId: string): void {
@@ -105,7 +134,8 @@ export class FixedAssetCreateComponent {
 
   create(): void {
     const categoryId = this.fCategoryId().trim();
-    const branchId = this.fBranchId().trim();
+    const branchUid = this.fBranchUid().trim();
+    const branchId = this.branchIdByUid.get(branchUid) ?? '';
     const name = this.fName().trim();
     const acquisitionCost = this.fAcquisitionCost().trim();
     const lifePeriods = parseInt(this.fLifePeriods().trim(), 10);
@@ -113,7 +143,8 @@ export class FixedAssetCreateComponent {
     const depStartDate = this.fDepStartDate().trim();
 
     if (!categoryId) { this.formError.set('Category is required.'); return; }
-    if (!branchId) { this.formError.set('Branch ID is required.'); return; }
+    if (!branchUid) { this.formError.set('Branch is required.'); return; }
+    if (!branchId) { this.formError.set('Could not resolve branch ID — please re-select the branch.'); return; }
     if (!name) { this.formError.set('Asset name is required.'); return; }
     if (!acquisitionCost || isNaN(Number(acquisitionCost))) { this.formError.set('Acquisition cost is required.'); return; }
     if (!lifePeriods || lifePeriods < 1) { this.formError.set('Life periods must be at least 1.'); return; }

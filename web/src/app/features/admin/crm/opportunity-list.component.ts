@@ -17,6 +17,7 @@ import {
   OpportunityStatus,
   PipelineStageDto,
 } from './models/crm.model';
+import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -28,7 +29,7 @@ interface LoadTrigger { page: number }
  */
 @Component({
   selector: 'app-opportunity-list',
-  imports: [FormsModule, RouterLink, DecimalPipe],
+  imports: [FormsModule, RouterLink, DecimalPipe, PaginatorComponent],
   templateUrl: './opportunity-list.component.html',
   styleUrl: './opportunity-list.component.scss',
 })
@@ -131,6 +132,8 @@ export class OpportunityListComponent {
     if (!companyId) return;
     this.immediateTrigger$.next({ page });
   }
+
+  goToPage(page: number): void { this.load(page); }
 
   prevPage(): void { if (this.currentPage() > 0) this.load(this.currentPage() - 1); }
   nextPage(): void { if (this.meta().hasNext) this.load(this.currentPage() + 1); }

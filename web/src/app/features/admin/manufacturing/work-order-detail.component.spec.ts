@@ -12,6 +12,9 @@ import { of, throwError } from 'rxjs';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
+import { BranchService } from '../branch/branch.service';
+import { CompanyService } from '../company/company.service';
+import { OrganisationService } from '../organisation/organisation.service';
 import { ManufacturingService } from './manufacturing.service';
 import { WorkOrderDetailComponent } from './work-order-detail.component';
 import type { WorkOrderDto } from './models/manufacturing.model';
@@ -74,6 +77,10 @@ function makeBed(
       provideRouter([]),
       { provide: ManufacturingService, useValue: svc },
       { provide: AlertService, useValue: { success: vi.fn(), error: vi.fn() } },
+      // Stubs for services added by loadBranchOptions (resolves org→company→branches)
+      { provide: OrganisationService, useValue: { current: vi.fn(() => of({ uid: 'org-1' })) } },
+      { provide: CompanyService, useValue: { list: vi.fn(() => of([])) } },
+      { provide: BranchService, useValue: { list: vi.fn(() => of([])) } },
       {
         provide: SessionStore,
         useValue: {

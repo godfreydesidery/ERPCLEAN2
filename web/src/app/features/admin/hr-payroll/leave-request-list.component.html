@@ -55,13 +55,12 @@
         <h2 class="h6 mb-3">Submit Leave Request</h2>
         <div class="row g-2 mb-2">
           <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="lrEmpUid">
-              Employee UID <span class="text-danger" aria-hidden="true">*</span>
+            <label class="form-label small text-muted mb-1">
+              Employee <span class="text-danger" aria-hidden="true">*</span>
             </label>
-            <input id="lrEmpUid" name="lrEmpUid" type="text" class="form-control"
-                   placeholder="Employee uid"
-                   [ngModel]="fEmployeeUid()" (ngModelChange)="fEmployeeUid.set($event)"
-                   [disabled]="saving()" autocomplete="off" />
+            <app-uid-picker [(ngModel)]="fEmployeeUid" [options]="employeeOptions()"
+                            placeholder="Select employee" [required]="true"
+                            name="lrEmpUid" />
           </div>
           <div class="col-sm-3">
             <label class="form-label small text-muted mb-1" for="lrLeaveTypeId">
@@ -179,26 +178,7 @@
             </table>
           </div>
 
-          @if (meta().totalPages > 1) {
-            <nav aria-label="Leave request list pagination" class="d-flex align-items-center gap-3 mt-2">
-              <button type="button" class="btn btn-sm btn-outline-secondary"
-                      [disabled]="currentPage() === 0"
-                      (click)="prevPage()">
-                <i class="bi bi-chevron-left" aria-hidden="true"></i>
-                <span class="visually-hidden">Previous page</span>
-              </button>
-              <span class="small text-muted">
-                Page {{ meta().page + 1 }} of {{ meta().totalPages }}
-                ({{ meta().totalElements }} total)
-              </span>
-              <button type="button" class="btn btn-sm btn-outline-secondary"
-                      [disabled]="!meta().hasNext"
-                      (click)="nextPage()">
-                <i class="bi bi-chevron-right" aria-hidden="true"></i>
-                <span class="visually-hidden">Next page</span>
-              </button>
-            </nav>
-          }
+          <app-paginator [meta]="meta()" [label]="'Leave requests'" (pageChange)="goToPage($event)" />
         }
       }
     }

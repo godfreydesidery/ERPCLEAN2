@@ -5,6 +5,9 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
+import { BranchService } from '../branch/branch.service';
+import { CompanyService } from '../company/company.service';
+import { OrganisationService } from '../organisation/organisation.service';
 import {
   AddOperationRequest,
   ApplyCostRequest,
@@ -19,6 +22,7 @@ import {
   WorkOrderStatus,
 } from './models/manufacturing.model';
 import { ManufacturingService } from './manufacturing.service';
+import { UidOption, UidPickerComponent } from '../../../shared/uid-picker/uid-picker.component';
 
 type LoadState = 'loading' | 'idle' | 'error';
 
@@ -36,14 +40,25 @@ type LoadState = 'loading' | 'idle' | 'error';
  */
 @Component({
   selector: 'app-work-order-detail',
-  imports: [FormsModule, RouterLink, DecimalPipe],
+  imports: [FormsModule, RouterLink, DecimalPipe, UidPickerComponent],
   templateUrl: './work-order-detail.component.html',
   styleUrl: './work-order-detail.component.scss',
 })
 export class WorkOrderDetailComponent {
   private readonly mfgService = inject(ManufacturingService);
+  private readonly branchService = inject(BranchService);
+  private readonly companyService = inject(CompanyService);
+  private readonly organisationService = inject(OrganisationService);
   private readonly alerts = inject(AlertService);
   protected readonly session = inject(SessionStore);
+
+  // ── Picker options ────────────────────────────────────────────────────────
+  readonly branchOptions = signal<UidOption[]>([]);
+  /** Operation options for the "Apply Cost" action (derived from the loaded WO). */
+  readonly operationOptions = computed<UidOption[]>(() => {
+    const ops = this.wo()?.operations ?? [];
+    return ops.map((op) => ({ uid: op.uid, label: op.description, hint: `Seq ${op.seqNo}` }));
+  });
 
   /** Route input bound via withComponentInputBinding. */
   readonly uid = input.required<string>();
@@ -162,8 +177,34 @@ export class WorkOrderDetailComponent {
         this.wo.set(w);
         this.woState.set('idle');
         this.patchForm(w);
+        this.loadBranchOptions(w);
       },
       error: () => this.woState.set('error'),
+    });
+  }
+
+  private loadBranchOptions(w: WorkOrderDto): void {
+    // WorkOrderDto.companyId is the numeric id. BranchService.list needs companyUid.
+    // Resolve: load all companies for the current org and match by id.
+    this.organisationService.current().subscribe({
+      next: (org) => {
+        this.companyService.list(org.uid).subscribe({
+          next: (companies) => {
+            const company = companies.find((c) => c.id === w.companyId);
+            if (!company) return;
+            this.branchService.list(company.uid).subscribe({
+              next: (branches) => {
+                this.branchOptions.set(
+                  branches.filter((b) => b.status === 'ACTIVE').map((b) => ({ uid: b.uid, label: b.name, hint: b.code })),
+                );
+              },
+              error: () => {},
+            });
+          },
+          error: () => {},
+        });
+      },
+      error: () => {},
     });
   }
 

@@ -5,6 +5,9 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
+import { BranchService } from '../branch/branch.service';
+import { CompanyService } from '../company/company.service';
+import { OrganisationService } from '../organisation/organisation.service';
 import {
   ApprovalPolicyDto,
   MasterStatus,
@@ -13,6 +16,7 @@ import {
   UpdateApprovalPolicyRequest,
 } from './models/approvals.model';
 import { ApprovalsService } from './approvals.service';
+import { UidOption, UidPickerComponent } from '../../../shared/uid-picker/uid-picker.component';
 
 type LoadState = 'loading' | 'idle' | 'error';
 
@@ -23,14 +27,20 @@ type LoadState = 'loading' | 'idle' | 'error';
  */
 @Component({
   selector: 'app-approval-policy-detail',
-  imports: [FormsModule, RouterLink, DecimalPipe],
+  imports: [FormsModule, RouterLink, DecimalPipe, UidPickerComponent],
   templateUrl: './approval-policy-detail.component.html',
   styleUrl: './approval-policy-detail.component.scss',
 })
 export class ApprovalPolicyDetailComponent {
   private readonly approvalsService = inject(ApprovalsService);
+  private readonly branchService = inject(BranchService);
+  private readonly companyService = inject(CompanyService);
+  private readonly organisationService = inject(OrganisationService);
   private readonly alerts = inject(AlertService);
   protected readonly session = inject(SessionStore);
+
+  // ── Picker options ────────────────────────────────────────────────────────
+  readonly branchOptions = signal<UidOption[]>([]);
 
   /** Route input bound via withComponentInputBinding. */
   readonly uid = input.required<string>();
@@ -79,8 +89,32 @@ export class ApprovalPolicyDetailComponent {
         this.policy.set(p);
         this.policyState.set('idle');
         this.patchForm(p);
+        this.loadBranchOptions(p.companyId);
       },
       error: () => this.policyState.set('error'),
+    });
+  }
+
+  private loadBranchOptions(companyId: string): void {
+    this.organisationService.current().subscribe({
+      next: (org) => {
+        this.companyService.list(org.uid).subscribe({
+          next: (companies) => {
+            const company = companies.find((c) => c.id === companyId);
+            if (!company) return;
+            this.branchService.list(company.uid).subscribe({
+              next: (branches) => {
+                this.branchOptions.set(
+                  branches.filter((b) => b.status === 'ACTIVE').map((b) => ({ uid: b.uid, label: b.name, hint: b.code })),
+                );
+              },
+              error: () => {},
+            });
+          },
+          error: () => {},
+        });
+      },
+      error: () => {},
     });
   }
 

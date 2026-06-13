@@ -14,6 +14,7 @@ import { OrganisationService } from '../organisation/organisation.service';
 import { FixedAssetsService } from './fixed-assets.service';
 import type { DepreciationRunPage } from './fixed-assets.service';
 import { DepreciationRunDto } from './models/fixed-assets.model';
+import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
 interface LoadTrigger { page: number }
@@ -25,7 +26,7 @@ interface LoadTrigger { page: number }
  */
 @Component({
   selector: 'app-depreciation-run-list',
-  imports: [FormsModule, RouterLink, DecimalPipe],
+  imports: [FormsModule, RouterLink, DecimalPipe, PaginatorComponent],
   templateUrl: './depreciation-run-list.component.html',
   styleUrl: './depreciation-run-list.component.scss',
 })
@@ -113,6 +114,8 @@ export class DepreciationRunListComponent {
     if (!this.selectedCompanyId()) return;
     this.immediateTrigger$.next({ page });
   }
+
+  goToPage(page: number): void { this.load(page); }
 
   prevPage(): void { if (this.currentPage() > 0) this.load(this.currentPage() - 1); }
   nextPage(): void { if (this.meta().hasNext) this.load(this.currentPage() + 1); }

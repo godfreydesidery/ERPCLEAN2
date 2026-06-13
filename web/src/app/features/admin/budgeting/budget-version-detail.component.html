@@ -84,24 +84,22 @@
               @for (line of directLines(); track $index) {
                 <div class="row g-2 align-items-end mb-1 border-bottom pb-1">
                   <div class="col-sm-3">
-                    <label class="form-label small text-muted mb-1" [for]="'accUid' + $index">
-                      Account UID <span class="text-danger" aria-hidden="true">*</span>
+                    <label class="form-label small text-muted mb-1">
+                      Account <span class="text-danger" aria-hidden="true">*</span>
                     </label>
-                    <input [id]="'accUid' + $index" [name]="'accUid' + $index" type="text"
-                           class="form-control form-control-sm"
-                           [ngModel]="line.accountUid"
-                           (ngModelChange)="updateDirectLine($index, 'accountUid', $event)"
-                           [disabled]="upserting()" autocomplete="off" />
+                    <app-uid-picker [ngModel]="line.accountUid"
+                                    (ngModelChange)="updateDirectLine($index, 'accountUid', $event)"
+                                    [options]="accountOptions()" placeholder="Select account"
+                                    [required]="true" [name]="'accUid' + $index" />
                   </div>
                   <div class="col-sm-3">
-                    <label class="form-label small text-muted mb-1" [for]="'perUid' + $index">
-                      Period UID <span class="text-danger" aria-hidden="true">*</span>
+                    <label class="form-label small text-muted mb-1">
+                      Fiscal Period <span class="text-danger" aria-hidden="true">*</span>
                     </label>
-                    <input [id]="'perUid' + $index" [name]="'perUid' + $index" type="text"
-                           class="form-control form-control-sm"
-                           [ngModel]="line.fiscalPeriodUid"
-                           (ngModelChange)="updateDirectLine($index, 'fiscalPeriodUid', $event)"
-                           [disabled]="upserting()" autocomplete="off" />
+                    <app-uid-picker [ngModel]="line.fiscalPeriodUid"
+                                    (ngModelChange)="updateDirectLine($index, 'fiscalPeriodUid', $event)"
+                                    [options]="fiscalPeriodOptions()" placeholder="Select period"
+                                    [required]="true" [name]="'perUid' + $index" />
                   </div>
                   <div class="col-sm-2">
                     <label class="form-label small text-muted mb-1" [for]="'amt' + $index">
@@ -141,12 +139,12 @@
             @if (upsertMode() === 'ANNUAL_SPREAD') {
               <div class="row g-2 mb-2">
                 <div class="col-sm-5">
-                  <label class="form-label small text-muted mb-1" for="fSpreadAccUid">
-                    Account UID <span class="text-danger" aria-hidden="true">*</span>
+                  <label class="form-label small text-muted mb-1">
+                    Account <span class="text-danger" aria-hidden="true">*</span>
                   </label>
-                  <input id="fSpreadAccUid" name="fSpreadAccUid" type="text" class="form-control"
-                         [ngModel]="fSpreadAccountUid()" (ngModelChange)="fSpreadAccountUid.set($event)"
-                         [disabled]="upserting()" autocomplete="off" />
+                  <app-uid-picker [(ngModel)]="fSpreadAccountUid" [options]="accountOptions()"
+                                  placeholder="Select account" [required]="true"
+                                  name="fSpreadAccUid" />
                 </div>
                 <div class="col-sm-3">
                   <label class="form-label small text-muted mb-1" for="fAnnualAmt">
@@ -163,12 +161,12 @@
             <!-- SEED mode -->
             @if (upsertMode() === 'SEED') {
               <div class="col-sm-6 mb-2">
-                <label class="form-label small text-muted mb-1" for="fSeedUid">
-                  Seed from Version UID <span class="text-danger" aria-hidden="true">*</span>
+                <label class="form-label small text-muted mb-1">
+                  Seed from Version <span class="text-danger" aria-hidden="true">*</span>
                 </label>
-                <input id="fSeedUid" name="fSeedUid" type="text" class="form-control"
-                       [ngModel]="fSeedVersionUid()" (ngModelChange)="fSeedVersionUid.set($event)"
-                       [disabled]="upserting()" autocomplete="off" />
+                <app-uid-picker [(ngModel)]="fSeedVersionUid" [options]="budgetVersionOptions()"
+                                placeholder="Select version" [required]="true"
+                                name="fSeedUid" />
               </div>
               <p class="text-muted small">Lines will be copied wholesale from the specified version.</p>
             }

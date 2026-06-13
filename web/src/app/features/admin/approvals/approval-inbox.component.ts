@@ -9,6 +9,7 @@ import { SessionStore } from '../../../core/auth/session.store';
 import { ApprovalsService } from './approvals.service';
 import type { ApprovalRequestPage } from './approvals.service';
 import { ApprovalRequestDto, ApprovalRequestStatus } from './models/approvals.model';
+import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -21,7 +22,7 @@ interface LoadTrigger { page: number }
  */
 @Component({
   selector: 'app-approval-inbox',
-  imports: [RouterLink, DecimalPipe, SlicePipe],
+  imports: [RouterLink, DecimalPipe, SlicePipe, PaginatorComponent],
   templateUrl: './approval-inbox.component.html',
   styleUrl: './approval-inbox.component.scss',
 })
@@ -64,6 +65,8 @@ export class ApprovalInboxComponent {
   load(page: number): void {
     this.trigger$.next({ page });
   }
+
+  goToPage(page: number): void { this.load(page); }
 
   prevPage(): void { if (this.currentPage() > 0) this.load(this.currentPage() - 1); }
   nextPage(): void { if (this.meta().hasNext) this.load(this.currentPage() + 1); }

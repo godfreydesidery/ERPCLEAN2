@@ -136,14 +136,14 @@ public class StockController {
     }
 
     /**
-     * GET /api/v1/stock/on-hand/by-product/{productId}?companyId= — all locations holding the product.
-     * Requires STOCK.VIEW.
+     * GET /api/v1/stock/on-hand/by-product/uid/{productUid}?companyId= — all locations holding the
+     * product identified by uid. Requires STOCK.VIEW.
      */
-    @GetMapping("/on-hand/by-product/{productId}")
+    @GetMapping("/on-hand/by-product/uid/{productUid}")
     @PreAuthorize("@perm.has('STOCK.VIEW')")
     public List<LocationOnHandRowDto> listOnHandByProduct(
-            @PathVariable Long productId,
+            @PathVariable String productUid,
             @RequestParam Long companyId) {
-        return locationOnHandQuery.queryForProduct(companyId, productId);
+        return locationOnHandQuery.queryForProductByUid(companyId, productUid);
     }
 }

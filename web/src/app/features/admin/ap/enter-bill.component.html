@@ -267,16 +267,16 @@
                        [disabled]="submitting()" autocomplete="off" required />
               </div>
 
-              <!-- Purchase Order UID (optional) -->
+              <!-- Purchase Order (optional) -->
               <div class="col-md-5">
-                <label class="form-label" for="purchaseOrderUid">
-                  Purchase Order UID <span class="text-muted small">(optional — for 3-way match)</span>
+                <label class="form-label">
+                  Purchase Order <span class="text-muted small">(optional — for 3-way match)</span>
                 </label>
-                <input id="purchaseOrderUid" name="purchaseOrderUid" type="text"
-                       class="form-control" placeholder="Leave blank for manual bill"
-                       [ngModel]="purchaseOrderUid()"
-                       (ngModelChange)="purchaseOrderUid.set($event)"
-                       [disabled]="submitting()" autocomplete="off" />
+                <app-uid-picker [ngModel]="purchaseOrderUid()"
+                                (ngModelChange)="onPoUidChange($event)"
+                                [options]="poOptions()"
+                                placeholder="Select PO or leave blank"
+                                name="purchaseOrderUid" />
               </div>
 
             </div>
@@ -305,7 +305,7 @@
                     <th scope="col" style="min-width:110px" class="text-end">Billed Qty</th>
                     <th scope="col" style="min-width:130px" class="text-end">Unit Cost</th>
                     <th scope="col" style="min-width:130px" class="text-end">Line Net</th>
-                    <th scope="col" style="min-width:160px">PO Line UID <span class="text-muted small">(opt.)</span></th>
+                    <th scope="col" style="min-width:180px">PO Line <span class="text-muted small">(opt.)</span></th>
                     <th scope="col"></th>
                   </tr>
                 </thead>
@@ -340,12 +340,12 @@
                         {{ fmtMoney(lineNetAmount(line)) }}
                       </td>
                       <td>
-                        <label [for]="'poline_' + i" class="visually-hidden">PO line UID for line {{ i + 1 }}</label>
-                        <input [id]="'poline_' + i" [name]="'poline_' + i" type="text"
-                               class="form-control form-control-sm" placeholder="optional"
-                               [ngModel]="line.poLineUid"
-                               (ngModelChange)="updateLine(i, 'poLineUid', $event)"
-                               [disabled]="submitting()" autocomplete="off" />
+                        <label class="visually-hidden">PO line for line {{ i + 1 }}</label>
+                        <app-uid-picker [ngModel]="line.poLineUid"
+                                        (ngModelChange)="updateLine(i, 'poLineUid', $event)"
+                                        [options]="poLineOptions()"
+                                        placeholder="Select PO line"
+                                        [name]="'poline_' + i" />
                       </td>
                       <td>
                         @if (lines().length > 1) {

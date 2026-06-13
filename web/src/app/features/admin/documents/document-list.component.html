@@ -94,12 +94,13 @@
           @if (!isStatementType()) {
             <div class="col-sm-5">
               <label class="form-label small text-muted mb-1" for="newSourceUid">
-                Source UID <span class="text-danger" aria-hidden="true">*</span>
+                Source Document <span class="text-danger" aria-hidden="true">*</span>
               </label>
-              <input id="newSourceUid" name="newSourceUid" type="text" class="form-control"
-                     placeholder="UID of the source document…"
-                     [ngModel]="newSourceUid()" (ngModelChange)="newSourceUid.set($event)"
-                     [disabled]="rendering()" autocomplete="off" />
+              <app-uid-picker id="newSourceUid" name="newSourceUid"
+                              [(ngModel)]="newSourceUid"
+                              [options]="sourceOptions()"
+                              placeholder="Select source document"
+                              [required]="true" />
             </div>
           } @else {
             <div class="col-sm-7">
@@ -202,26 +203,7 @@
           </div>
 
           <!-- Pagination -->
-          @if (meta().totalPages > 1) {
-            <nav aria-label="Documents list pagination" class="d-flex align-items-center gap-3 mt-2">
-              <button type="button" class="btn btn-sm btn-outline-secondary"
-                      [disabled]="currentPage() === 0"
-                      (click)="prevPage()">
-                <i class="bi bi-chevron-left" aria-hidden="true"></i>
-                <span class="visually-hidden">Previous page</span>
-              </button>
-              <span class="small text-muted">
-                Page {{ meta().page + 1 }} of {{ meta().totalPages }}
-                ({{ meta().totalElements }} total)
-              </span>
-              <button type="button" class="btn btn-sm btn-outline-secondary"
-                      [disabled]="!meta().hasNext"
-                      (click)="nextPage()">
-                <i class="bi bi-chevron-right" aria-hidden="true"></i>
-                <span class="visually-hidden">Next page</span>
-              </button>
-            </nav>
-          }
+          <app-paginator [meta]="meta()" [label]="'Documents'" (pageChange)="goToPage($event)" />
         }
       }
     }

@@ -104,13 +104,12 @@
         <div class="row g-2 mb-2">
           @if (newBranchScope() === 'BRANCH') {
             <div class="col-sm-4">
-              <label class="form-label small text-muted mb-1" for="newBranchUid">
-                Branch UID <span class="text-danger" aria-hidden="true">*</span>
+              <label class="form-label small text-muted mb-1">
+                Branch <span class="text-danger" aria-hidden="true">*</span>
               </label>
-              <input id="newBranchUid" name="newBranchUid" type="text" class="form-control"
-                     placeholder="Branch UID"
-                     [ngModel]="newBranchUid()" (ngModelChange)="newBranchUid.set($event)"
-                     [disabled]="saving()" autocomplete="off" />
+              <app-uid-picker [(ngModel)]="newBranchUid" [options]="branchOptions()"
+                              placeholder="Select branch" [required]="true"
+                              name="newBranchUid" />
             </div>
           }
           <div class="col-sm-3">
@@ -255,26 +254,7 @@
             </table>
           </div>
 
-          @if (meta().totalPages > 1) {
-            <nav aria-label="Approval policies pagination" class="d-flex align-items-center gap-3 mt-2">
-              <button type="button" class="btn btn-sm btn-outline-secondary"
-                      [disabled]="currentPage() === 0"
-                      (click)="prevPage()">
-                <i class="bi bi-chevron-left" aria-hidden="true"></i>
-                <span class="visually-hidden">Previous page</span>
-              </button>
-              <span class="small text-muted">
-                Page {{ meta().page + 1 }} of {{ meta().totalPages }}
-                ({{ meta().totalElements }} total)
-              </span>
-              <button type="button" class="btn btn-sm btn-outline-secondary"
-                      [disabled]="!meta().hasNext"
-                      (click)="nextPage()">
-                <i class="bi bi-chevron-right" aria-hidden="true"></i>
-                <span class="visually-hidden">Next page</span>
-              </button>
-            </nav>
-          }
+          <app-paginator [meta]="meta()" [label]="'Approval policies'" (pageChange)="goToPage($event)" />
         }
       }
     }

@@ -51,12 +51,13 @@
 
       <div class="col-sm-4">
         <label class="form-label small text-muted mb-1" for="fCustomerUid">
-          Customer UID <span class="text-danger" aria-hidden="true">*</span>
+          Customer <span class="text-danger" aria-hidden="true">*</span>
         </label>
-        <input id="fCustomerUid" name="fCustomerUid" type="text" class="form-control"
-               placeholder="Paste the customer UID"
-               [ngModel]="fCustomerUid()" (ngModelChange)="fCustomerUid.set($event)"
-               [disabled]="saving()" autocomplete="off" />
+        <app-uid-picker id="fCustomerUid" name="fCustomerUid"
+                        [(ngModel)]="fCustomerUid"
+                        [options]="customerOptions()"
+                        placeholder="Select customer"
+                        [required]="true" />
       </div>
 
       <div class="col-sm-4">
@@ -109,11 +110,11 @@
       </div>
 
       <div class="col-sm-4">
-        <label class="form-label small text-muted mb-1" for="fSourceLeadUid">Source Lead UID (optional)</label>
-        <input id="fSourceLeadUid" name="fSourceLeadUid" type="text" class="form-control"
-               placeholder="UID of a QUALIFIED lead"
-               [ngModel]="fSourceLeadUid()" (ngModelChange)="fSourceLeadUid.set($event)"
-               [disabled]="saving()" autocomplete="off" />
+        <label class="form-label small text-muted mb-1" for="fSourceLeadUid">Source Lead (optional)</label>
+        <app-uid-picker id="fSourceLeadUid" name="fSourceLeadUid"
+                        [(ngModel)]="fSourceLeadUid"
+                        [options]="sourceLeadOptions()"
+                        placeholder="Select qualified lead" />
       </div>
 
       <div class="col-sm-6">

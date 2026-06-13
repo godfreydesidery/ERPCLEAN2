@@ -14,6 +14,7 @@ import { CustomerService } from '../parties/customer.service';
 import { ArInvoiceDto, ArInvoiceStatus, WriteOffRequest, RaiseCreditNoteRequest } from './models/ar.model';
 import { ArService } from './ar.service';
 import { debounceTime, distinctUntilChanged, Subject as RxSubject } from 'rxjs';
+import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -31,7 +32,7 @@ interface LoadTrigger {
  */
 @Component({
   selector: 'app-ar-invoices-list',
-  imports: [FormsModule],
+  imports: [FormsModule, PaginatorComponent],
   templateUrl: './ar-invoices-list.component.html',
   styleUrl: './ar-invoices-list.component.scss',
 })
@@ -183,6 +184,8 @@ export class ArInvoicesListComponent {
       page,
     });
   }
+
+  goToPage(page: number): void { this.load(page); }
 
   prevPage(): void {
     const p = this.currentPage();

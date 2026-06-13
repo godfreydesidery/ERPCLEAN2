@@ -125,6 +125,7 @@
                            [ngModel]="fPlannedQty()" (ngModelChange)="fPlannedQty.set($event)"
                            [disabled]="saving()" />
                   </div>
+                  <!-- BOM UID — no BOM list endpoint yet; deferred pending BOM list service -->
                   <div class="col-sm-3">
                     <label class="form-label small text-muted mb-1" for="fBomUid">BOM UID (override)</label>
                     <input id="fBomUid" name="fBomUid" type="text" class="form-control"
@@ -132,10 +133,9 @@
                            [disabled]="saving()" autocomplete="off" />
                   </div>
                   <div class="col-sm-3">
-                    <label class="form-label small text-muted mb-1" for="fBranchUid">Branch UID</label>
-                    <input id="fBranchUid" name="fBranchUid" type="text" class="form-control"
-                           [ngModel]="fBranchUid()" (ngModelChange)="fBranchUid.set($event)"
-                           [disabled]="saving()" autocomplete="off" />
+                    <label class="form-label small text-muted mb-1">Branch</label>
+                    <app-uid-picker [(ngModel)]="fBranchUid" [options]="branchOptions()"
+                                    placeholder="Select branch" name="fBranchUid" />
                   </div>
                   <div class="col-sm-2">
                     <label class="form-label small text-muted mb-1" for="fPlannedDate">Planned Date</label>
@@ -182,6 +182,7 @@
                   Optionally pin a specific BOM UID.
                 </p>
                 <div class="d-flex gap-2 align-items-end flex-wrap">
+                  <!-- BOM UID for release — no BOM list endpoint yet; deferred pending BOM list service -->
                   <div style="max-width:280px">
                     <label class="form-label small text-muted mb-1" for="releaseBomUid">
                       BOM UID (optional override)
@@ -259,11 +260,10 @@
                            [ngModel]="costOverheadAmount()" (ngModelChange)="costOverheadAmount.set($event)"
                            [disabled]="applyingCost()" />
                   </div>
-                  <div style="max-width:220px">
-                    <label class="form-label small text-muted mb-1" for="costOperationUid">Operation UID (optional)</label>
-                    <input id="costOperationUid" name="costOperationUid" type="text" class="form-control form-control-sm"
-                           [ngModel]="costOperationUid()" (ngModelChange)="costOperationUid.set($event)"
-                           [disabled]="applyingCost()" autocomplete="off" />
+                  <div style="max-width:240px">
+                    <label class="form-label small text-muted mb-1">Operation (optional)</label>
+                    <app-uid-picker [(ngModel)]="costOperationUid" [options]="operationOptions()"
+                                    placeholder="Select operation" name="costOperationUid" />
                   </div>
                   <div style="max-width:200px">
                     <label class="form-label small text-muted mb-1" for="costPostingDate">

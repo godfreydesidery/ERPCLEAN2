@@ -70,15 +70,14 @@
             (ngSubmit)="create()" aria-label="Create work order">
         <h2 class="h6 mb-3">New Work Order</h2>
         <div class="row g-2 align-items-start mb-2">
-          <!-- Finished product UID -->
+          <!-- Finished product -->
           <div class="col-sm-4">
-            <label class="form-label small text-muted mb-1" for="newProductUid">
-              Finished Product UID <span class="text-danger" aria-hidden="true">*</span>
+            <label class="form-label small text-muted mb-1">
+              Finished Product <span class="text-danger" aria-hidden="true">*</span>
             </label>
-            <input id="newProductUid" name="newProductUid" type="text" class="form-control"
-                   placeholder="product uid…"
-                   [ngModel]="newProductUid()" (ngModelChange)="newProductUid.set($event)"
-                   [disabled]="saving()" autocomplete="off" />
+            <app-uid-picker [(ngModel)]="newProductUid" [options]="productOptions()"
+                            placeholder="Select finished product" [required]="true"
+                            name="newProductUid" />
           </div>
 
           <!-- Planned qty -->
@@ -92,18 +91,17 @@
                    [disabled]="saving()" />
           </div>
 
-          <!-- Branch UID -->
+          <!-- Branch -->
           <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="newBranchUid">
-              Branch UID <span class="text-danger" aria-hidden="true">*</span>
+            <label class="form-label small text-muted mb-1">
+              Branch <span class="text-danger" aria-hidden="true">*</span>
             </label>
-            <input id="newBranchUid" name="newBranchUid" type="text" class="form-control"
-                   placeholder="branch uid…"
-                   [ngModel]="newBranchUid()" (ngModelChange)="newBranchUid.set($event)"
-                   [disabled]="saving()" autocomplete="off" />
+            <app-uid-picker [(ngModel)]="newBranchUid" [options]="branchOptions()"
+                            placeholder="Select branch" [required]="true"
+                            name="newBranchUid" />
           </div>
 
-          <!-- BOM UID (optional) -->
+          <!-- BOM UID — no BOM list endpoint yet; leave as text pending BOM list service -->
           <div class="col-sm-3">
             <label class="form-label small text-muted mb-1" for="newBomUid">BOM UID (optional)</label>
             <input id="newBomUid" name="newBomUid" type="text" class="form-control"
@@ -223,26 +221,7 @@
           </div>
 
           <!-- Pagination -->
-          @if (meta().totalPages > 1) {
-            <nav aria-label="Work order list pagination" class="d-flex align-items-center gap-3 mt-2">
-              <button type="button" class="btn btn-sm btn-outline-secondary"
-                      [disabled]="currentPage() === 0"
-                      (click)="prevPage()">
-                <i class="bi bi-chevron-left" aria-hidden="true"></i>
-                <span class="visually-hidden">Previous page</span>
-              </button>
-              <span class="small text-muted">
-                Page {{ meta().page + 1 }} of {{ meta().totalPages }}
-                ({{ meta().totalElements }} total)
-              </span>
-              <button type="button" class="btn btn-sm btn-outline-secondary"
-                      [disabled]="!meta().hasNext"
-                      (click)="nextPage()">
-                <i class="bi bi-chevron-right" aria-hidden="true"></i>
-                <span class="visually-hidden">Next page</span>
-              </button>
-            </nav>
-          }
+          <app-paginator [meta]="meta()" [label]="'Work orders'" (pageChange)="goToPage($event)" />
         }
       }
     }

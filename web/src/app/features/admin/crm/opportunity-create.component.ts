@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AlertService } from '../../../core/feedback/alert.service';
@@ -7,8 +7,11 @@ import { SessionStore } from '../../../core/auth/session.store';
 import { Company } from '../models/company.model';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
+import { CustomerService } from '../parties/customer.service';
+import { CustomerModel } from '../models/party.model';
 import { CrmService } from './crm.service';
-import { CreateOpportunityRequest, PipelineStageDto } from './models/crm.model';
+import { CreateOpportunityRequest, LeadDto, PipelineStageDto } from './models/crm.model';
+import { UidPickerComponent, UidOption } from '../../../shared/uid-picker/uid-picker.component';
 
 /**
  * Opportunity create screen. Route: /admin/crm/opportunities/create
@@ -16,7 +19,7 @@ import { CreateOpportunityRequest, PipelineStageDto } from './models/crm.model';
  */
 @Component({
   selector: 'app-opportunity-create',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, UidPickerComponent],
   templateUrl: './opportunity-create.component.html',
   styleUrl: './opportunity-create.component.scss',
 })
@@ -24,6 +27,7 @@ export class OpportunityCreateComponent {
   private readonly crmService = inject(CrmService);
   private readonly companyService = inject(CompanyService);
   private readonly organisationService = inject(OrganisationService);
+  private readonly customerService = inject(CustomerService);
   private readonly alerts = inject(AlertService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
@@ -33,6 +37,17 @@ export class OpportunityCreateComponent {
   readonly companies = signal<Company[]>([]);
   readonly selectedCompanyId = signal('');
   readonly companyState = signal<'loading' | 'idle' | 'error'>('loading');
+
+  // ── Picker option lists ────────────────────────────────────────────────────
+  readonly customers = signal<CustomerModel[]>([]);
+  readonly leads = signal<LeadDto[]>([]);
+
+  readonly customerOptions = computed<UidOption[]>(() =>
+    this.customers().map((c) => ({ uid: c.uid, label: c.displayName })),
+  );
+  readonly sourceLeadOptions = computed<UidOption[]>(() =>
+    this.leads().map((l) => ({ uid: l.uid, label: l.displayName, hint: l.leadNumber })),
+  );
 
   // ── Pipeline stages ────────────────────────────────────────────────────────
   readonly stages = signal<PipelineStageDto[]>([]);
@@ -72,6 +87,7 @@ export class OpportunityCreateComponent {
             if (first) {
               this.selectedCompanyId.set(first.id);
               this.loadStages(first.id);
+              this.loadPickerOptions(first.id);
             }
           },
           error: () => this.companyState.set('error'),
@@ -98,7 +114,21 @@ export class OpportunityCreateComponent {
 
   onCompanyChange(id: string): void {
     this.selectedCompanyId.set(id);
-    if (id) this.loadStages(id);
+    if (id) {
+      this.loadStages(id);
+      this.loadPickerOptions(id);
+    }
+  }
+
+  private loadPickerOptions(companyId: string): void {
+    this.customerService.list(companyId, undefined, 0, 200).subscribe({
+      next: ({ rows }) => this.customers.set(rows),
+      error: () => undefined,
+    });
+    this.crmService.listLeads(companyId, 0, 200).subscribe({
+      next: ({ rows }) => this.leads.set(rows.filter((l) => l.leadStatus === 'QUALIFIED')),
+      error: () => undefined,
+    });
   }
 
   create(): void {

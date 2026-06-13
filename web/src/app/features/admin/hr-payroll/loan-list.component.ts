@@ -13,6 +13,8 @@ import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { HrPayrollService, LoanPage } from './hr-payroll.service';
 import { CreateLoanRequest, EmployeeLoanDto, LoanStatus } from './models/hr-payroll.model';
+import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
+import { UidOption, UidPickerComponent } from '../../../shared/uid-picker/uid-picker.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -24,7 +26,7 @@ interface LoadTrigger { page: number }
  */
 @Component({
   selector: 'app-loan-list',
-  imports: [FormsModule, RouterLink, DecimalPipe],
+  imports: [FormsModule, RouterLink, DecimalPipe, PaginatorComponent, UidPickerComponent],
   templateUrl: './loan-list.component.html',
   styleUrl: './loan-list.component.scss',
 })
@@ -44,10 +46,15 @@ export class LoanListComponent {
   readonly state = signal<'loading' | 'idle' | 'error' | 'forbidden'>('idle');
   readonly currentPage = signal(0);
 
+  // ── Employee picker options ────────────────────────────────────────────────
+  readonly employeeOptions = signal<UidOption[]>([]);
+  /** Map from employee uid → employee id (numeric string), for request building. */
+  private readonly employeeIdByUid = new Map<string, string>();
+
   // ── Create form (nested under employee uid) ──────────────────────────────────
   readonly showCreateForm = signal(false);
   readonly fEmployeeUid = signal('');
-  readonly fEmployeeId = signal('');
+  // fEmployeeId removed — derived from fEmployeeUid via employeeIdByUid map
   readonly fPrincipalAmount = signal('');
   readonly fInstallmentAmount = signal('');
   readonly fGlAccountId = signal('');
@@ -104,6 +111,7 @@ export class LoanListComponent {
             if (list.length > 0) {
               this.selectedCompanyId.set(list[0].id);
               this.load(0);
+              this.loadEmployeeOptions(list[0].id);
             }
           },
           error: () => this.companyState.set('error'),
@@ -113,15 +121,39 @@ export class LoanListComponent {
     });
   }
 
+  private loadEmployeeOptions(companyId: string): void {
+    this.hrService.listEmployees(companyId, 0, 500).subscribe({
+      next: ({ rows }) => {
+        this.employeeIdByUid.clear();
+        rows.forEach((e) => this.employeeIdByUid.set(e.uid, e.id));
+        this.employeeOptions.set(
+          rows
+            .filter((e) => e.status === 'ACTIVE')
+            .map((e) => ({
+              uid: e.uid,
+              label: `${e.firstName} ${e.lastName}`,
+              hint: e.employeeNumber,
+            })),
+        );
+      },
+      error: () => {},
+    });
+  }
+
   onCompanyChange(id: string): void {
     this.selectedCompanyId.set(id);
-    if (id) this.load(0);
+    if (id) {
+      this.load(0);
+      this.loadEmployeeOptions(id);
+    }
   }
 
   load(page: number): void {
     if (!this.selectedCompanyId()) return;
     this.immediateTrigger$.next({ page });
   }
+
+  goToPage(page: number): void { this.load(page); }
 
   prevPage(): void { if (this.currentPage() > 0) this.load(this.currentPage() - 1); }
   nextPage(): void { if (this.meta().hasNext) this.load(this.currentPage() + 1); }
@@ -134,7 +166,6 @@ export class LoanListComponent {
 
   private resetCreateForm(): void {
     this.fEmployeeUid.set('');
-    this.fEmployeeId.set('');
     this.fPrincipalAmount.set('');
     this.fInstallmentAmount.set('');
     this.fGlAccountId.set('');
@@ -144,14 +175,14 @@ export class LoanListComponent {
 
   create(): void {
     const employeeUid = this.fEmployeeUid().trim();
-    const employeeId = this.fEmployeeId().trim();
+    const employeeId = this.employeeIdByUid.get(employeeUid) ?? '';
     const principalAmount = this.fPrincipalAmount().trim();
     const installmentAmount = this.fInstallmentAmount().trim();
     const glAccountId = this.fGlAccountId().trim();
     const startDate = this.fStartDate().trim();
 
-    if (!employeeUid) { this.formError.set('Employee UID is required.'); return; }
-    if (!employeeId) { this.formError.set('Employee ID (numeric) is required.'); return; }
+    if (!employeeUid) { this.formError.set('Employee is required.'); return; }
+    if (!employeeId) { this.formError.set('Could not resolve employee ID — please re-select the employee.'); return; }
     if (!principalAmount || parseFloat(principalAmount) <= 0) { this.formError.set('Principal amount must be positive.'); return; }
     if (!installmentAmount || parseFloat(installmentAmount) <= 0) { this.formError.set('Installment amount must be positive.'); return; }
     if (!glAccountId) { this.formError.set('GL Account ID is required.'); return; }

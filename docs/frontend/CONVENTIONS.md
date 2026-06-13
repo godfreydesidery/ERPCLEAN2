@@ -30,9 +30,14 @@
 - **Auth:** `authHeaderInterceptor` adds `Authorization: Bearer` + `X-Branch-Uid` automatically.
 - **Services:** one per feature folder, `@Injectable({ providedIn: 'root' })`,
   `private readonly base = \`${environment.apiBaseUrl}/<resource>\``. No central wrapper.
-- **uid-in-URL / id-in-body:** URL paths always use `uid` → `/<resource>/uid/${uid}`. Request bodies
-  use `id` for FK refs (`companyId: string`) and `uid` for lookups (`companyUid`). Mirror the backend
-  DTO exactly. ALL Long/BigDecimal fields are typed `string` on the wire.
+- **uid-in-URL / id-in-body (INVARIANT #3):** URL paths always use `uid` → `/<resource>/uid/${uid}`.
+  A numeric `id` is NEVER placed in a URL path — not in a service call, not in a `routerLink`. Request
+  bodies use `id` for FK refs (`companyId: string`) and `uid` for lookups (`companyUid`). Mirror the
+  backend DTO exactly. ALL Long/BigDecimal fields are typed `string` on the wire.
+- **A uid is a machine identifier — NEVER hand-typed by a user.** A free-text `<input [(ngModel)]="xUid">`
+  is a violation. To capture a resource reference, use the shared `<app-uid-picker>` (§7): the user
+  chooses by human name/code, the bound value is the uid. The same rule applies to raw numeric `id`
+  inputs (e.g. a "Branch ID" text box) — replace with a picker.
 
 Exemplars: `parties/customer.service.ts`, `sales/sales-orders.service.ts`, `products/product.service.ts`.
 
@@ -50,7 +55,11 @@ Exemplar: `sales/quotation-list.component.{ts,html,scss}`, `parties/customer-lis
 - Table: `<table class="table table-hover align-middle bg-white grid">`, `<caption class="visually-hidden">`,
   `scope="col"` on every `<th>`, actions header is visually-hidden, action links use `x.uid` in path +
   `aria-label`, icons `aria-hidden="true"`.
-- Pagination nav only `@if (meta().totalPages > 1)` with prev/next buttons gated on `currentPage`/`hasNext`.
+- **Pagination: use the shared `<app-paginator>` (§7) — never a bespoke prev/next nav.** Every paginated
+  list MUST offer first / previous / page-numbers / next / last. Render
+  `<app-paginator [meta]="meta()" [label]="'<Resource>'" (pageChange)="goToPage($event)" />` and add a
+  `goToPage(page: number)` that sets `currentPage` and re-loads through the existing `immediateTrigger$`/
+  `load` path. The component self-hides when `totalPages <= 1`. Do NOT roll your own prev/next buttons.
 - Simple creates: inline form toggled by `showCreateForm = signal(false)`. Complex: link to a create route.
 - Success → `alerts.success('X created', name)` then reload. Error → `formError.set(messageFrom(err))`.
 
@@ -96,6 +105,17 @@ nested `'<parent>/uid/:uid/<child>'`. Guard: `requirePermission(code)` from `cor
 by `session.hasPermission(item.permission)`. **High-conflict file — APPEND ONLY, never reorder.**
 
 ## 7. Shared UI Primitives (no ui-kit folder — use core/ services + Bootstrap)
+- **`<app-paginator>`** (`shared/paginator/paginator.component.ts`): the ONLY pagination control. Inputs
+  `[meta]` (`PageMeta|null`), `[label]`, `[windowSize]` (default 2); output `(pageChange)` emits the
+  0-based target page. Renders first/prev/page-numbers/next/last + a11y (`<nav>`, `aria-current`,
+  live status); renders nothing when `totalPages <= 1`. Import `PaginatorComponent` into the list's
+  `imports[]`. See §3.
+- **`<app-uid-picker>`** (`shared/uid-picker/uid-picker.component.ts`): the ONLY way to capture a resource
+  reference. A `ControlValueAccessor`, so it drops into `[(ngModel)]="xUid"` exactly where a free-text uid
+  input was. Inputs `[options]` (`UidOption[] = {uid,label,hint?}`), `placeholder`, `[required]`,
+  `[searchThreshold]` (default 12 → shows a name-filter box above that). The parent loads the options from
+  the referenced resource's existing list service (label = human name/code, value = uid) and exposes them
+  as a signal. The bound model + request-building logic stay unchanged. See §2 (no hand-typed uids).
 - `AlertService` (`core/feedback/alert.service.ts`): `alerts.success('Title','detail')` (auto-dismiss),
   `alerts.error('Title','msg')` (blocking).
 - `ToastService` (`core/feedback/toast.service.ts`): `toasts.success/error`.
@@ -126,7 +146,9 @@ backend controller `@PreAuthorize`/`@perm` — never invent codes** (per-module 
 2. `models/<feature>.model.ts` — mirror backend DTOs (both `id` + `uid` as `string`; numbers as `string`).
 3. `<feature>.service.ts` — `providedIn:'root'`; `list()` (SKIP_UNWRAP→`{rows,meta}`), `getByUid`,
    `create`, `update`, action methods.
-4. `<feature>-list.component.{ts,html,scss}` — section 3 pattern.
+4. `<feature>-list.component.{ts,html,scss}` — section 3 pattern. Pagination via `<app-paginator>`
+   (§7) — never bespoke prev/next. Any resource reference is captured with `<app-uid-picker>` (§7),
+   never a free-text uid/id input.
 5. `<feature>-detail.component.*` — section 4 pattern.
 6. `<feature>-create.component.*` if create is non-trivial (else inline on list).
 7. `<feature>-list.component.spec.ts` — Vitest; `vi.useFakeTimers()`; cover load-once, isEmpty,

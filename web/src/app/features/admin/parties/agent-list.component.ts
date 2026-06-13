@@ -14,6 +14,7 @@ import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { UserService } from '../user/user.service';
 import { AgentService } from './agent.service';
+import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -21,7 +22,7 @@ interface LoadTrigger { q: string; page: number }
 
 @Component({
   selector: 'app-agent-list',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, PaginatorComponent],
   templateUrl: './agent-list.component.html',
   styleUrl: './agent-list.component.scss',
 })
@@ -131,6 +132,8 @@ export class AgentListComponent {
     this.searchQ.set('');
     this.load(0);
   }
+
+  goToPage(page: number): void { this.load(page); }
 
   prevPage(): void {
     const p = this.currentPage();

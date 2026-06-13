@@ -94,6 +94,7 @@ export interface GoodsReceiptDto {
   companyId: string;
   branchId: string;
   purchaseOrderId: string;
+  purchaseOrderUid: string | null;
   receiptNumber: string;
   status: GoodsReceiptStatus;
   supplierId: string;

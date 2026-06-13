@@ -330,24 +330,7 @@
         </div>
 
         <!-- Pagination -->
-        @if (meta().totalPages > 1) {
-          <nav aria-label="Revaluation runs pagination" class="d-flex align-items-center gap-2 mt-2">
-            <button type="button" class="btn btn-outline-secondary btn-sm"
-                    (click)="prevPage()" [disabled]="currentPage() === 0"
-                    aria-label="Previous page">
-              <i class="bi bi-chevron-left" aria-hidden="true"></i>
-            </button>
-            <span class="small text-muted">
-              Page {{ currentPage() + 1 }} of {{ meta().totalPages }}
-              ({{ meta().totalElements }} runs)
-            </span>
-            <button type="button" class="btn btn-outline-secondary btn-sm"
-                    (click)="nextPage()" [disabled]="!meta().hasNext"
-                    aria-label="Next page">
-              <i class="bi bi-chevron-right" aria-hidden="true"></i>
-            </button>
-          </nav>
-        }
+          <app-paginator [meta]="meta()" [label]="'FX revaluations'" (pageChange)="goToPage($event)" />
       }
     }
   }

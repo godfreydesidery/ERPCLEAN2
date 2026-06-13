@@ -13,6 +13,7 @@ import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { SalesOrdersService } from './sales-orders.service';
 import type { SalesReturnPage } from './sales-orders.service';
+import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -25,7 +26,7 @@ interface LoadTrigger { page: number }
  */
 @Component({
   selector: 'app-sales-return-list',
-  imports: [FormsModule, RouterLink, SlicePipe],
+  imports: [FormsModule, RouterLink, SlicePipe, PaginatorComponent],
   templateUrl: './sales-return-list.component.html',
   styleUrl: './sales-return-list.component.scss',
 })
@@ -126,6 +127,8 @@ export class SalesReturnListComponent {
     if (!companyId) return;
     this.immediateTrigger$.next({ page });
   }
+
+  goToPage(page: number): void { this.load(page); }
 
   prevPage(): void { if (this.currentPage() > 0) this.load(this.currentPage() - 1); }
   nextPage(): void { if (this.meta().hasNext) this.load(this.currentPage() + 1); }

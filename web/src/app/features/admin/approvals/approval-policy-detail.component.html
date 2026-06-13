@@ -143,13 +143,12 @@
               <div class="row g-2 mb-2">
                 @if (fBranchScope() === 'BRANCH') {
                   <div class="col-sm-4">
-                    <label class="form-label small text-muted mb-1" for="fBranchUid">
-                      Branch UID <span class="text-danger" aria-hidden="true">*</span>
+                    <label class="form-label small text-muted mb-1">
+                      Branch <span class="text-danger" aria-hidden="true">*</span>
                     </label>
-                    <input id="fBranchUid" name="fBranchUid" type="text" class="form-control"
-                           placeholder="Enter branch UID"
-                           [ngModel]="fBranchUid()" (ngModelChange)="fBranchUid.set($event)"
-                           [disabled]="saving()" autocomplete="off" />
+                    <app-uid-picker [(ngModel)]="fBranchUid" [options]="branchOptions()"
+                                    placeholder="Select branch" [required]="true"
+                                    name="fBranchUid" />
                   </div>
                 }
                 <div class="col-sm-3">

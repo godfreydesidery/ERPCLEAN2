@@ -1,10 +1,18 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Role } from '../models/role.model';
 import { UserRole } from '../models/user-role.model';
+import { User } from '../models/user.model';
+import { Company } from '../models/company.model';
+import { Branch } from '../models/branch.model';
 import { RoleService } from '../role/role.service';
 import { UserRoleService } from './user-role.service';
+import { UserService } from '../user/user.service';
+import { CompanyService } from '../company/company.service';
+import { BranchService } from '../branch/branch.service';
+import { OrganisationService } from '../organisation/organisation.service';
 import { AlertService } from '../../../core/feedback/alert.service';
+import { UidPickerComponent, UidOption } from '../../../shared/uid-picker/uid-picker.component';
 
 /**
  * Minimal grant-role screen for v1: a form to assign a role to a user (by uid) for a given
@@ -13,18 +21,37 @@ import { AlertService } from '../../../core/feedback/alert.service';
  */
 @Component({
   selector: 'app-grant-role',
-  imports: [FormsModule],
+  imports: [FormsModule, UidPickerComponent],
   templateUrl: './grant-role.component.html',
   styleUrl: './grant-role.component.scss',
 })
 export class GrantRoleComponent {
   private readonly userRoleService = inject(UserRoleService);
   private readonly roleService = inject(RoleService);
+  private readonly userService = inject(UserService);
+  private readonly companyService = inject(CompanyService);
+  private readonly branchService = inject(BranchService);
+  private readonly organisationService = inject(OrganisationService);
   private readonly alerts = inject(AlertService);
 
   // Available roles for the dropdown
   readonly roles = signal<Role[]>([]);
   readonly rolesState = signal<'loading' | 'idle' | 'error'>('loading');
+
+  // Picker option lists
+  readonly users = signal<User[]>([]);
+  readonly companies = signal<Company[]>([]);
+  readonly branches = signal<Branch[]>([]);
+
+  readonly userOptions = computed<UidOption[]>(() =>
+    this.users().map((u) => ({ uid: u.uid, label: u.displayName, hint: u.username })),
+  );
+  readonly companyOptions = computed<UidOption[]>(() =>
+    this.companies().map((c) => ({ uid: c.uid, label: c.name, hint: c.code })),
+  );
+  readonly branchOptions = computed<UidOption[]>(() =>
+    this.branches().map((b) => ({ uid: b.uid, label: b.name, hint: b.code })),
+  );
 
   // Form fields
   readonly userUid = signal('');
@@ -51,6 +78,37 @@ export class GrantRoleComponent {
         this.rolesState.set('idle');
       },
       error: () => this.rolesState.set('error'),
+    });
+    this.userService.list().subscribe({
+      next: (rows) => this.users.set(rows),
+      error: () => undefined,
+    });
+    this.organisationService.current().subscribe({
+      next: (org) => {
+        this.companyService.list(org.uid).subscribe({
+          next: (list) => {
+            this.companies.set(list);
+            // Load branches for the first company so the picker is pre-populated
+            if (list.length > 0) this.loadBranches(list[0].uid);
+          },
+          error: () => undefined,
+        });
+      },
+      error: () => undefined,
+    });
+  }
+
+  /** Called when companyUid changes to reload the branch picker. */
+  onCompanyUidChange(uid: string): void {
+    this.companyUid.set(uid);
+    this.branchUid.set('');
+    if (uid) this.loadBranches(uid);
+  }
+
+  private loadBranches(companyUid: string): void {
+    this.branchService.list(companyUid).subscribe({
+      next: (list) => this.branches.set(list),
+      error: () => undefined,
     });
   }
 
