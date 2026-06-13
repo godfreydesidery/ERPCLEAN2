@@ -57,8 +57,13 @@ public class CurrencyController {
      * Add a new effective-dated rate row for a company.
      * No edit-in-place — a correction is always a new row.
      */
+    // @perm.has (not @perm.scoped): @perm.scoped expects a company UID String, but UpsertRateRequest
+    // carries the numeric companyId (Long) — passing it bricked the endpoint (403) for every non-root
+    // CURRENCY.MANAGE holder. FxRateServiceImpl.addRate independently enforces the company scope via
+    // ScopeGuard.assertCanActIn(req.companyId()) (the correct numeric-id check), so the gate here is
+    // the role/permission check only. (FX adversarial-review HIGH.)
     @PostMapping("/rates")
-    @PreAuthorize("@perm.scoped(#req.companyId(),'company','CURRENCY.MANAGE')")
+    @PreAuthorize("@perm.has('CURRENCY.MANAGE')")
     public CurrencyRateDto addRate(@Valid @RequestBody UpsertRateRequest req) {
         return fxRateService.addRate(req);
     }

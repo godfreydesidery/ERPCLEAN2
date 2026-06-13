@@ -114,6 +114,6 @@ INSERT INTO role_permission (role_id, permission_id)
 SELECT r.id, p.id
 FROM   roles r
 CROSS  JOIN permissions p
-WHERE  r.name = 'ORG_ADMIN'
+WHERE  r.code = 'ORG_ADMIN'
   AND  p.code IN ('FX.REVALUE', 'FX.EXPOSURE.VIEW')
 ON CONFLICT DO NOTHING;
