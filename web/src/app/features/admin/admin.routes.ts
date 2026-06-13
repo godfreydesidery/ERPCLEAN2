@@ -881,6 +881,24 @@ export const ADMIN_ROUTES: Routes = [
       import('./stock/transfer/stock-transfer-detail.component').then(
         (m) => m.StockTransferDetailComponent,
       ),
+  // ── Stock Counts (Physical / Cycle Count) ────────────────────────────────
+  {
+    path: 'stock-counts',
+    canActivate: [requirePermission('STOCK.COUNT.VIEW')],
+    loadComponent: () =>
+      import('./stock/count/stock-count-list.component').then((m) => m.StockCountListComponent),
+  },
+  {
+    path: 'stock-counts/create',
+    canActivate: [requirePermission('STOCK.COUNT.CREATE')],
+    loadComponent: () =>
+      import('./stock/count/stock-count-create.component').then((m) => m.StockCountCreateComponent),
+  },
+  {
+    path: 'stock-counts/uid/:uid',
+    canActivate: [requirePermission('STOCK.COUNT.VIEW')],
+    loadComponent: () =>
+      import('./stock/count/stock-count-detail.component').then((m) => m.StockCountDetailComponent),
   },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];
