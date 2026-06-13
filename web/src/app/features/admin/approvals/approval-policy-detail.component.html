@@ -189,8 +189,8 @@
                   <div class="d-flex gap-2 align-items-center mb-1">
                     <span class="badge text-bg-secondary" style="min-width:2rem;">{{ step.sequence }}</span>
                     <input type="text" class="form-control form-control-sm"
-                           [attr.id]="'fStepRole_' + i"
-                           [attr.name]="'fStepRole_' + i"
+                           [id]="'fStepRole_' + i"
+                           [name]="'fStepRole_' + i"
                            [attr.aria-label]="'Step ' + step.sequence + ' approver role code'"
                            placeholder="Approver role code"
                            [ngModel]="step.approverRoleCode"
