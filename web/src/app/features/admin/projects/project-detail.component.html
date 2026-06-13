@@ -151,16 +151,18 @@
                    [disabled]="saving() || !canManage()" autocomplete="off" />
           </div>
           <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="fCustomerUid">Customer UID (optional)</label>
-            <input id="fCustomerUid" name="fCustomerUid" type="text" class="form-control"
-                   [ngModel]="fCustomerUid()" (ngModelChange)="fCustomerUid.set($event)"
-                   [disabled]="saving() || !canManage()" autocomplete="off" />
+            <label class="form-label small text-muted mb-1" for="fCustomerUid">Customer (optional)</label>
+            <app-uid-picker id="fCustomerUid" name="fCustomerUid"
+                            [(ngModel)]="fCustomerUid"
+                            [options]="customerOptions()"
+                            placeholder="Select customer" />
           </div>
           <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="fManagerUid">Manager UID (optional)</label>
-            <input id="fManagerUid" name="fManagerUid" type="text" class="form-control"
-                   [ngModel]="fManagerUid()" (ngModelChange)="fManagerUid.set($event)"
-                   [disabled]="saving() || !canManage()" autocomplete="off" />
+            <label class="form-label small text-muted mb-1" for="fManagerUid">Manager (optional)</label>
+            <app-uid-picker id="fManagerUid" name="fManagerUid"
+                            [(ngModel)]="fManagerUid"
+                            [options]="userOptions()"
+                            placeholder="Select user" />
           </div>
         </div>
 
@@ -378,10 +380,11 @@
                        [disabled]="savingTs()" autocomplete="off" />
               </div>
               <div class="col-sm-3">
-                <label class="form-label small text-muted mb-1" for="tsTaskUid">Task UID (optional)</label>
-                <input id="tsTaskUid" name="tsTaskUid" type="text" class="form-control form-control-sm"
-                       [ngModel]="tsTaskUid()" (ngModelChange)="tsTaskUid.set($event)"
-                       [disabled]="savingTs()" autocomplete="off" />
+                <label class="form-label small text-muted mb-1" for="tsTaskUid">Task (optional)</label>
+                <app-uid-picker id="tsTaskUid" name="tsTaskUid"
+                                [(ngModel)]="tsTaskUid"
+                                [options]="taskOptions()"
+                                placeholder="Select task" />
               </div>
               <div class="col-sm-4">
                 <label class="form-label small text-muted mb-1" for="tsNotes">Notes</label>
@@ -517,13 +520,14 @@
               <div class="row g-2 mb-2 align-items-end">
                 <div class="col-sm-5">
                   <label class="form-label small text-muted mb-1" [for]="'lineProduct' + i">
-                    Product UID <span class="text-danger" aria-hidden="true">*</span>
+                    Product <span class="text-danger" aria-hidden="true">*</span>
                   </label>
-                  <input [id]="'lineProduct' + i" [name]="'lineProduct' + i" type="text"
-                         class="form-control form-control-sm"
-                         [ngModel]="line.productUid"
-                         (ngModelChange)="updateIssueLine(i, 'productUid', $event)"
-                         [disabled]="issuingToJob()" autocomplete="off" />
+                  <app-uid-picker [id]="'lineProduct' + i" [name]="'lineProduct' + i"
+                                  [ngModel]="line.productUid"
+                                  (ngModelChange)="updateIssueLine(i, 'productUid', $event)"
+                                  [options]="productOptions()"
+                                  placeholder="Select product"
+                                  [required]="true" />
                 </div>
                 <div class="col-sm-3">
                   <label class="form-label small text-muted mb-1" [for]="'lineQty' + i">

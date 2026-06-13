@@ -30,10 +30,11 @@
                [(ngModel)]="filterTargetType" />
       </div>
       <div class="col-sm-6 col-md-2">
-        <label class="form-label small text-muted mb-1" for="filterActorUid">Actor UID</label>
-        <input id="filterActorUid" name="filterActorUid" type="text"
-               class="form-control form-control-sm" placeholder="Actor UID"
-               [(ngModel)]="filterActorUid" />
+        <label class="form-label small text-muted mb-1" for="filterActorUid">Actor</label>
+        <app-uid-picker id="filterActorUid" name="filterActorUid"
+                        [(ngModel)]="filterActorUid"
+                        [options]="userOptions()"
+                        placeholder="Any actor" />
       </div>
       <div class="col-sm-6 col-md-2">
         <label class="form-label small text-muted mb-1" for="filterFrom">From</label>

@@ -18,6 +18,10 @@ import {
   GeneratedDocumentDto,
   RenderDocumentRequest,
 } from './models/documents.model';
+import { SalesService } from '../sales/sales.service';
+import { SalesOrdersService } from '../sales/sales-orders.service';
+import { PurchasesService } from '../purchases/purchases.service';
+import { UidPickerComponent, UidOption } from '../../../shared/uid-picker/uid-picker.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -30,7 +34,7 @@ interface LoadTrigger { page: number }
  */
 @Component({
   selector: 'app-document-list',
-  imports: [FormsModule, RouterLink, SlicePipe],
+  imports: [FormsModule, RouterLink, SlicePipe, UidPickerComponent],
   templateUrl: './document-list.component.html',
   styleUrl: './document-list.component.scss',
 })
@@ -38,6 +42,9 @@ export class DocumentListComponent {
   private readonly docService = inject(DocumentsService);
   private readonly companyService = inject(CompanyService);
   private readonly organisationService = inject(OrganisationService);
+  private readonly salesService = inject(SalesService);
+  private readonly soService = inject(SalesOrdersService);
+  private readonly purchasesService = inject(PurchasesService);
   private readonly alerts = inject(AlertService);
   protected readonly session = inject(SessionStore);
 
@@ -70,6 +77,16 @@ export class DocumentListComponent {
   readonly newSourceParams = signal('');
   readonly rendering = signal(false);
   readonly formError = signal<string | null>(null);
+
+  // ── Source pickers (render form) ──────────────────────────────────────────────
+  /** Raw option arrays per document type, loaded once company is known. */
+  private readonly sourceOptionsByType = signal<Partial<Record<DocumentType, UidOption[]>>>({});
+
+  /** Options for the newSourceUid picker — scoped to the selected document type. */
+  readonly sourceOptions = computed<UidOption[]>(() => {
+    const t = this.newDocType();
+    return this.sourceOptionsByType()[t] ?? [];
+  });
 
   readonly canRender = computed(() => this.session.hasPermission('DOCUMENT.RENDER'));
   readonly canView = computed(() => this.session.hasPermission('DOCUMENT.VIEW'));
@@ -141,6 +158,7 @@ export class DocumentListComponent {
             if (list.length > 0) {
               this.selectedCompanyId.set(list[0].id);
               this.load(0);
+              this.loadSourceOptions(list[0].id);
             }
           },
           error: () => this.companyState.set('error'),
@@ -152,7 +170,47 @@ export class DocumentListComponent {
 
   onCompanyChange(id: string): void {
     this.selectedCompanyId.set(id);
-    if (id) this.load(0);
+    if (id) {
+      this.load(0);
+      this.loadSourceOptions(id);
+    }
+  }
+
+  private loadSourceOptions(companyId: string): void {
+    // INVOICE — sales invoices
+    this.salesService.list(companyId, undefined, undefined, 0, 200).subscribe({
+      next: ({ rows }) => this.mergeSourceOptions('INVOICE',
+        rows.map((r) => ({ uid: r.uid, label: r.invoiceNumber ?? r.uid, hint: r.status }))),
+      error: () => undefined,
+    });
+    // DELIVERY_NOTE — deliveries
+    this.soService.listDeliveries(companyId, 0, 200).subscribe({
+      next: ({ rows }) => this.mergeSourceOptions('DELIVERY_NOTE',
+        rows.map((r) => ({ uid: r.uid, label: r.deliveryNumber ?? r.uid, hint: r.status }))),
+      error: () => undefined,
+    });
+    // PURCHASE_ORDER — purchase orders
+    this.purchasesService.listOrders(companyId, undefined, undefined, 0, 200).subscribe({
+      next: ({ rows }) => this.mergeSourceOptions('PURCHASE_ORDER',
+        rows.map((r) => ({ uid: r.uid, label: r.orderNumber ?? r.uid, hint: r.status }))),
+      error: () => undefined,
+    });
+    // GOODS_RECEIPT — goods receipts
+    this.purchasesService.listReceipts(companyId, undefined, 0, 200).subscribe({
+      next: ({ rows }) => this.mergeSourceOptions('GOODS_RECEIPT',
+        rows.map((r) => ({ uid: r.uid, label: r.receiptNumber ?? r.uid, hint: r.status }))),
+      error: () => undefined,
+    });
+    // CREDIT_NOTE — sales returns (source of credit notes)
+    this.soService.listReturns(companyId, 0, 200).subscribe({
+      next: ({ rows }) => this.mergeSourceOptions('CREDIT_NOTE',
+        rows.map((r) => ({ uid: r.uid, label: r.returnNumber ?? r.uid, hint: r.status }))),
+      error: () => undefined,
+    });
+  }
+
+  private mergeSourceOptions(type: DocumentType, options: UidOption[]): void {
+    this.sourceOptionsByType.update((map) => ({ ...map, [type]: options }));
   }
 
   load(page: number): void {

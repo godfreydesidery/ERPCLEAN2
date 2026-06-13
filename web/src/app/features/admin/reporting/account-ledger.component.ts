@@ -9,6 +9,9 @@ import { OrganisationService } from '../organisation/organisation.service';
 import { AccountLedgerDto, ExportFormat } from './models/reporting.model';
 import { ReportingService } from './reporting.service';
 import { downloadBlob } from './reporting.utils';
+import { GlService } from '../gl/gl.service';
+import { AccountDto } from '../gl/models/gl.model';
+import { UidPickerComponent, UidOption } from '../../../shared/uid-picker/uid-picker.component';
 
 type LoadState = 'idle' | 'loading' | 'error' | 'forbidden';
 
@@ -20,7 +23,7 @@ type LoadState = 'idle' | 'loading' | 'error' | 'forbidden';
  */
 @Component({
   selector: 'app-account-ledger',
-  imports: [FormsModule],
+  imports: [FormsModule, UidPickerComponent],
   templateUrl: './account-ledger.component.html',
   styleUrl: './account-ledger.component.scss',
 })
@@ -28,6 +31,7 @@ export class AccountLedgerComponent implements OnInit {
   private readonly reportingService = inject(ReportingService);
   private readonly companyService = inject(CompanyService);
   private readonly organisationService = inject(OrganisationService);
+  private readonly glService = inject(GlService);
   private readonly route = inject(ActivatedRoute);
   protected readonly session = inject(SessionStore);
 
@@ -35,6 +39,12 @@ export class AccountLedgerComponent implements OnInit {
   readonly companies = signal<Company[]>([]);
   readonly selectedCompanyId = signal('');
   readonly companyState = signal<'loading' | 'idle' | 'error'>('loading');
+
+  // ── Account picker ─────────────────────────────────────────────────────────
+  readonly accounts = signal<AccountDto[]>([]);
+  readonly accountOptions = computed<UidOption[]>(() =>
+    this.accounts().map((a) => ({ uid: a.uid, label: a.name, hint: a.accountCode })),
+  );
 
   // ── Account + period selector ──────────────────────────────────────────────
   readonly accountUid = signal('');
@@ -94,6 +104,10 @@ export class AccountLedgerComponent implements OnInit {
             } else if (list.length > 0) {
               this.selectedCompanyId.set(list[0].id);
             }
+            // Load accounts for the picker
+            if (this.selectedCompanyId()) {
+              this.loadAccounts(this.selectedCompanyId());
+            }
             // Auto-run if all params are pre-filled from the drill-in
             if (this.accountUid() && this.fromDate() && this.toDate() && this.selectedCompanyId()) {
               this.run();
@@ -109,6 +123,14 @@ export class AccountLedgerComponent implements OnInit {
   onCompanyChange(id: string): void {
     this.selectedCompanyId.set(id);
     this.ledger.set(null);
+    if (id) this.loadAccounts(id);
+  }
+
+  private loadAccounts(companyId: string): void {
+    this.glService.listAccounts(companyId, undefined, 0, 500).subscribe({
+      next: ({ rows }) => this.accounts.set(rows),
+      error: () => undefined,
+    });
   }
 
   run(): void {

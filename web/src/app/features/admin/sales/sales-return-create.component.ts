@@ -14,6 +14,9 @@ import {
   SalesReturnDto,
 } from '../models/sales-orders.model';
 import { SalesOrdersService } from './sales-orders.service';
+import { CompanyService } from '../company/company.service';
+import { OrganisationService } from '../organisation/organisation.service';
+import { UidPickerComponent, UidOption } from '../../../shared/uid-picker/uid-picker.component';
 
 /** Per-line entry state for the return form. */
 interface ReturnLineEntry {
@@ -37,18 +40,30 @@ type LoadState = 'idle' | 'loading' | 'error';
  */
 @Component({
   selector: 'app-sales-return-create',
-  imports: [FormsModule, RouterLink, DecimalPipe],
+  imports: [FormsModule, RouterLink, DecimalPipe, UidPickerComponent],
   templateUrl: './sales-return-create.component.html',
   styleUrl: './sales-return-create.component.scss',
 })
 export class SalesReturnCreateComponent implements OnInit {
   private readonly soService = inject(SalesOrdersService);
+  private readonly companyService = inject(CompanyService);
+  private readonly organisationService = inject(OrganisationService);
   private readonly alerts = inject(AlertService);
   private readonly router = inject(Router);
   protected readonly session = inject(SessionStore);
 
   /** Bound from query param ?deliveryUid= via withComponentInputBinding. */
   readonly deliveryUid = input<string>();
+
+  // ── Delivery picker ────────────────────────────────────────────────────────
+  readonly deliveries = signal<DeliveryDto[]>([]);
+  readonly deliveryOptions = computed<UidOption[]>(() =>
+    this.deliveries().map((d) => ({
+      uid: d.uid,
+      label: d.deliveryNumber ?? d.uid,
+      hint: d.status,
+    })),
+  );
 
   // ── Delivery lookup ────────────────────────────────────────────────────────
   readonly deliveryUidInput = signal('');
@@ -78,6 +93,26 @@ export class SalesReturnCreateComponent implements OnInit {
       this.deliveryUidInput.set(uid);
       this.lookupTrigger$.next(uid);
     }
+    this.loadDeliveries();
+  }
+
+  private loadDeliveries(): void {
+    this.organisationService.current().subscribe({
+      next: (org) => {
+        this.companyService.list(org.uid).subscribe({
+          next: (companies) => {
+            if (companies.length > 0) {
+              this.soService.listDeliveries(companies[0].id, 0, 200).subscribe({
+                next: ({ rows }) => this.deliveries.set(rows),
+                error: () => undefined,
+              });
+            }
+          },
+          error: () => undefined,
+        });
+      },
+      error: () => undefined,
+    });
   }
 
   constructor() {

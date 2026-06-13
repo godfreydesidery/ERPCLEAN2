@@ -15,15 +15,13 @@
     <div class="d-flex gap-2 align-items-end">
       <div class="flex-grow-1">
         <label class="form-label small text-muted mb-1" for="deliveryUidInput">
-          Delivery UID <span class="text-danger" aria-hidden="true">*</span>
+          Delivery <span class="text-danger" aria-hidden="true">*</span>
         </label>
-        <input id="deliveryUidInput" name="deliveryUidInput" type="text"
-               class="form-control font-monospace"
-               placeholder="Paste delivery UID…"
-               [ngModel]="deliveryUidInput()"
-               (ngModelChange)="deliveryUidInput.set($event)"
-               [disabled]="deliveryState() === 'loading'"
-               autocomplete="off" />
+        <app-uid-picker id="deliveryUidInput" name="deliveryUidInput"
+                        [(ngModel)]="deliveryUidInput"
+                        [options]="deliveryOptions()"
+                        placeholder="Select delivery"
+                        [required]="true" />
       </div>
       <button type="button" class="btn btn-outline-primary"
               style="white-space:nowrap"

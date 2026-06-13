@@ -23,10 +23,12 @@
       @default {
         <div class="row g-2 align-items-end">
           <div class="col-sm-4">
-            <label class="form-label small text-muted mb-1" for="grantUserUid">User UID</label>
-            <input id="grantUserUid" name="grantUserUid" type="text" class="form-control"
-                   [(ngModel)]="userUid" required [disabled]="saving()"
-                   placeholder="e.g. abc-123-def" />
+            <label class="form-label small text-muted mb-1" for="grantUserUid">User</label>
+            <app-uid-picker id="grantUserUid" name="grantUserUid"
+                            [(ngModel)]="userUid"
+                            [options]="userOptions()"
+                            placeholder="Select user"
+                            [required]="true" />
           </div>
           <div class="col-sm-3">
             <label class="form-label small text-muted mb-1" for="grantRole">Role</label>
@@ -39,10 +41,13 @@
             </select>
           </div>
           <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="grantCompanyUid">Company UID</label>
-            <input id="grantCompanyUid" name="grantCompanyUid" type="text" class="form-control"
-                   [(ngModel)]="companyUid" required [disabled]="saving()"
-                   placeholder="e.g. xyz-456-uvw" />
+            <label class="form-label small text-muted mb-1" for="grantCompanyUid">Company</label>
+            <app-uid-picker id="grantCompanyUid" name="grantCompanyUid"
+                            [ngModel]="companyUid()"
+                            (ngModelChange)="onCompanyUidChange($event)"
+                            [options]="companyOptions()"
+                            placeholder="Select company"
+                            [required]="true" />
           </div>
           <div class="col-sm-2">
             <button type="submit" class="btn btn-primary w-100" [disabled]="saving()">
@@ -58,11 +63,12 @@
         <div class="row g-2 mt-0">
           <div class="col-sm-4">
             <label class="form-label small text-muted mb-1" for="grantBranchUid">
-              Branch UID <span class="text-muted">(optional)</span>
+              Branch <span class="text-muted">(optional)</span>
             </label>
-            <input id="grantBranchUid" name="grantBranchUid" type="text" class="form-control"
-                   [(ngModel)]="branchUid" [disabled]="saving()"
-                   placeholder="leave blank for company-level" />
+            <app-uid-picker id="grantBranchUid" name="grantBranchUid"
+                            [(ngModel)]="branchUid"
+                            [options]="branchOptions()"
+                            placeholder="Leave blank for company-level" />
           </div>
         </div>
       }
@@ -79,9 +85,12 @@
     <form class="d-flex gap-2 align-items-end mb-3"
           (ngSubmit)="searchGrants()" aria-label="Look up grants for user">
       <div class="flex-grow-1" style="max-width:340px">
-        <label class="form-label small text-muted mb-1" for="lookupUid">User UID</label>
-        <input id="lookupUid" name="lookupUid" type="text" class="form-control"
-               [(ngModel)]="lookupUid" required placeholder="Enter user UID" />
+        <label class="form-label small text-muted mb-1" for="lookupUid">User</label>
+        <app-uid-picker id="lookupUid" name="lookupUid"
+                        [(ngModel)]="lookupUid"
+                        [options]="userOptions()"
+                        placeholder="Select user"
+                        [required]="true" />
       </div>
       <button type="submit" class="btn btn-outline-secondary">
         <i class="bi bi-search me-1" aria-hidden="true"></i>Search
