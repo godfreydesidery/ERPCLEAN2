@@ -12,6 +12,8 @@ import org.springframework.data.repository.query.Param;
 
 import jakarta.persistence.LockModeType;
 import java.math.BigDecimal;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.transaction.annotation.Transactional;
 
 public interface ArInvoiceRepository extends JpaRepository<ArInvoice, Long> {
 
@@ -96,6 +98,30 @@ public interface ArInvoiceRepository extends JpaRepository<ArInvoice, Long> {
 
     /** Status check only. */
     boolean existsByCompanyIdAndUid(Long companyId, String uid);
+
+    /**
+     * Native patch used by FX integration tests to stamp a foreign currency on an open item
+     * whose currency column is {@code updatable=false} in JPA.
+     * Test-support only — not called from production code.
+     */
+    @Modifying(clearAutomatically = true)
+    @Transactional
+    @Query(value = """
+            UPDATE ar_invoices
+            SET currency = :currency,
+                outstanding_amount = :outstanding,
+                fx_rate = :fxRate,
+                base_original_amount = :baseOriginal,
+                base_outstanding_amount = :baseOutstanding
+            WHERE id = :id
+            """,
+           nativeQuery = true)
+    void patchForFxTest(@Param("id") Long id,
+                        @Param("currency") String currency,
+                        @Param("outstanding") BigDecimal outstanding,
+                        @Param("fxRate") BigDecimal fxRate,
+                        @Param("baseOriginal") BigDecimal baseOriginal,
+                        @Param("baseOutstanding") BigDecimal baseOutstanding);
 
     // --- notifications scanner (ADR-0024 D-7): invoice-overdue scan ---
 
