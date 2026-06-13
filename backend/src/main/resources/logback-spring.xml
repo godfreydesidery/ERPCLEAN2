@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  logback-spring.xml — ADR-0038 D-3
+  Two profile branches:
+    prod   → LogstashEncoder (JSON to stdout): structured, MDC fields as first-class JSON keys.
+    !prod  → PatternLayoutEncoder (plain text): preserves current dev/test behaviour exactly.
+
+  IMPORTANT: the default (!prod) branch MUST be an explicit root appender — do NOT put it inside
+  a springProfile block that could be absent. If logback finds no matching appender it fails the
+  context load, which would red the ~100 Testcontainers ITs (they boot Spring with no active profile).
+-->
+<configuration>
+
+    <!-- ================================================================
+         DEFAULT / DEV / TEST profile — plain text to stdout.
+         Active whenever SPRING_PROFILES_ACTIVE does NOT include "prod".
+         Preserves the existing dev/test log appearance; adds MDC fields
+         (requestId/userId/companyId/branchId) populated by D-2.
+         ================================================================ -->
+    <springProfile name="!prod">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %5level [%X{requestId:-}] [uid:%X{userId:-}] [co:%X{companyId:-}] [br:%X{branchId:-}] --- %logger{36} : %msg%n</pattern>
+            </encoder>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <!-- ================================================================
+         PROD profile — JSON to stdout via LogstashEncoder.
+         Active only when SPRING_PROFILES_ACTIVE=prod (or includes "prod").
+         Each log event is a JSON object; MDC fields (requestId, userId,
+         companyId, branchId) appear as first-class JSON keys, making
+         log aggregation (ELK, Datadog, CloudWatch Logs, Loki) trivial.
+         The aggregation backend is a live-ops decision (ADR-0038 D-Fenced #7).
+         ================================================================ -->
+    <springProfile name="prod">
+        <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <!-- Include MDC map as first-class fields in the JSON output. -->
+                <includeMdcKeyName>requestId</includeMdcKeyName>
+                <includeMdcKeyName>userId</includeMdcKeyName>
+                <includeMdcKeyName>username</includeMdcKeyName>
+                <includeMdcKeyName>companyId</includeMdcKeyName>
+                <includeMdcKeyName>branchId</includeMdcKeyName>
+            </encoder>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="JSON_CONSOLE"/>
+        </root>
+    </springProfile>
+
+</configuration>
