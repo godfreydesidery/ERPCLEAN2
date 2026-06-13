@@ -1,0 +1,220 @@
+<section class="container-fluid py-3" aria-label="Currency Rates">
+  <div class="d-flex align-items-center mb-3 gap-2 flex-wrap">
+    <h1 class="h4 mb-0 me-auto">Currency Exchange Rates</h1>
+
+    @if (companyState() === 'loading') {
+      <span class="spinner-border spinner-border-sm text-secondary" aria-label="Loading companies"></span>
+    }
+    @if (companies().length > 1) {
+      <label class="visually-hidden" for="fxRateCompany">Company</label>
+      <select id="fxRateCompany" class="form-select form-select-sm w-auto"
+              [ngModel]="selectedCompanyId()"
+              (ngModelChange)="onCompanyChange($event)">
+        @for (c of companies(); track c.id) {
+          <option [value]="c.id">{{ c.name }}</option>
+        }
+      </select>
+    }
+
+    @if (canManage()) {
+      <button type="button" class="btn btn-primary btn-sm"
+              (click)="openCreate()"
+              [disabled]="showCreateForm()">
+        <i class="bi bi-plus-lg" aria-hidden="true"></i> New Rate
+      </button>
+    }
+  </div>
+
+  <!-- Create form -->
+  @if (showCreateForm()) {
+    <div class="card mb-3 border-primary" role="form" aria-label="Add exchange rate">
+      <div class="card-header fw-semibold">New Exchange Rate</div>
+      <div class="card-body">
+        @if (createError()) {
+          <div class="alert alert-danger py-2" role="alert">{{ createError() }}</div>
+        }
+        <div class="row g-3">
+          <div class="col-12 col-md-2">
+            <label class="form-label" for="fxNewFrom">
+              From Currency <span aria-hidden="true">*</span>
+            </label>
+            @if (currencies().length > 0) {
+              <select id="fxNewFrom" class="form-select form-select-sm"
+                      [ngModel]="newFromCurrency()"
+                      (ngModelChange)="newFromCurrency.set($event)"
+                      required>
+                <option value="">— select —</option>
+                @for (c of currencies(); track c.uid) {
+                  <option [value]="c.code">{{ c.code }} — {{ c.name }}</option>
+                }
+              </select>
+            } @else {
+              <input id="fxNewFrom" type="text" class="form-control form-control-sm"
+                     [ngModel]="newFromCurrency()" (ngModelChange)="newFromCurrency.set($event)"
+                     placeholder="USD" maxlength="3" required />
+            }
+          </div>
+          <div class="col-12 col-md-2">
+            <label class="form-label" for="fxNewTo">
+              To Currency <span aria-hidden="true">*</span>
+            </label>
+            @if (currencies().length > 0) {
+              <select id="fxNewTo" class="form-select form-select-sm"
+                      [ngModel]="newToCurrency()"
+                      (ngModelChange)="newToCurrency.set($event)"
+                      required>
+                <option value="">— select —</option>
+                @for (c of currencies(); track c.uid) {
+                  <option [value]="c.code">{{ c.code }} — {{ c.name }}</option>
+                }
+              </select>
+            } @else {
+              <input id="fxNewTo" type="text" class="form-control form-control-sm"
+                     [ngModel]="newToCurrency()" (ngModelChange)="newToCurrency.set($event)"
+                     placeholder="TZS" maxlength="3" required />
+            }
+          </div>
+          <div class="col-12 col-md-2">
+            <label class="form-label" for="fxNewRate">
+              Rate <span aria-hidden="true">*</span>
+            </label>
+            <input id="fxNewRate" type="number" class="form-control form-control-sm"
+                   [ngModel]="newRate()" (ngModelChange)="newRate.set($event)"
+                   min="0.000001" step="0.000001" placeholder="1.000000" required />
+            <div class="form-text">Units of To-currency per 1 unit of From-currency.</div>
+          </div>
+          <div class="col-12 col-md-2">
+            <label class="form-label" for="fxNewDate">
+              Effective Date <span aria-hidden="true">*</span>
+            </label>
+            <input id="fxNewDate" type="date" class="form-control form-control-sm"
+                   [ngModel]="newEffectiveDate()" (ngModelChange)="newEffectiveDate.set($event)"
+                   required />
+          </div>
+          <div class="col-12 col-md-2">
+            <label class="form-label" for="fxNewType">Rate Type</label>
+            <select id="fxNewType" class="form-select form-select-sm"
+                    [ngModel]="newRateType()"
+                    (ngModelChange)="newRateType.set($event)">
+              <option value="">— none —</option>
+              <option value="SPOT">Spot</option>
+              <option value="FORWARD">Forward</option>
+              <option value="OFFICIAL">Official</option>
+            </select>
+          </div>
+          <div class="col-12 col-md-2">
+            <label class="form-label" for="fxNewSource">Source</label>
+            <input id="fxNewSource" type="text" class="form-control form-control-sm"
+                   [ngModel]="newSource()" (ngModelChange)="newSource.set($event)"
+                   placeholder="e.g. Central Bank" maxlength="40" />
+          </div>
+        </div>
+      </div>
+      <div class="card-footer d-flex gap-2">
+        <button type="button" class="btn btn-primary btn-sm"
+                (click)="submitCreate()" [disabled]="creating()">
+          @if (creating()) {
+            <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+          }
+          Save Rate
+        </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm"
+                (click)="cancelCreate()">Cancel</button>
+      </div>
+    </div>
+  }
+
+  <!-- Four-state switch -->
+  @switch (state()) {
+    @case ('loading') {
+      <div class="text-center py-5" aria-busy="true" aria-label="Loading exchange rates">
+        <span class="spinner-border text-primary" role="status"></span>
+      </div>
+    }
+    @case ('forbidden') {
+      <div class="alert alert-warning" role="alert">
+        You do not have permission to view exchange rates (CURRENCY.VIEW).
+      </div>
+    }
+    @case ('error') {
+      <div class="alert alert-danger d-flex align-items-center gap-2" role="alert">
+        <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+        Failed to load exchange rates.
+        <button type="button" class="btn btn-sm btn-outline-danger ms-auto" (click)="load()">
+          Retry
+        </button>
+      </div>
+    }
+    @default {
+      @if (isEmpty()) {
+        <div class="alert alert-info" role="status">
+          No exchange rates found for this company. Add the first rate to get started.
+        </div>
+      } @else {
+        <div class="table-responsive">
+          <table class="table table-sm table-hover align-middle bg-white">
+            <caption class="visually-hidden">Exchange rates — newest effective date first</caption>
+            <thead class="table-light">
+              <tr>
+                <th scope="col">From</th>
+                <th scope="col">To</th>
+                <th scope="col" class="text-end">Rate</th>
+                <th scope="col">Effective Date</th>
+                <th scope="col">Type</th>
+                <th scope="col">Source</th>
+                <th scope="col">Active</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of rows(); track row.uid) {
+                <tr>
+                  <td class="font-monospace fw-semibold">{{ row.fromCurrency }}</td>
+                  <td class="font-monospace fw-semibold">{{ row.toCurrency }}</td>
+                  <td class="text-end font-monospace">{{ fmtRate(row.rate) }}</td>
+                  <td>{{ row.effectiveDate }}</td>
+                  <td>
+                    @if (row.rateType) {
+                      <span class="badge" [class]="rateTypeBadgeClass(row.rateType)">
+                        {{ row.rateType }}
+                      </span>
+                    } @else {
+                      <span class="text-muted">—</span>
+                    }
+                  </td>
+                  <td>{{ row.source || '—' }}</td>
+                  <td>
+                    @if (row.active) {
+                      <i class="bi bi-check-circle-fill text-success" aria-label="Active"></i>
+                    } @else {
+                      <span class="badge text-bg-secondary">Inactive</span>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination -->
+        @if (meta().totalPages > 1) {
+          <nav aria-label="Exchange rates pagination" class="d-flex align-items-center gap-2 mt-2">
+            <button type="button" class="btn btn-outline-secondary btn-sm"
+                    (click)="prevPage()" [disabled]="currentPage() === 0"
+                    aria-label="Previous page">
+              <i class="bi bi-chevron-left" aria-hidden="true"></i>
+            </button>
+            <span class="small text-muted">
+              Page {{ currentPage() + 1 }} of {{ meta().totalPages }}
+              ({{ meta().totalElements }} rows)
+            </span>
+            <button type="button" class="btn btn-outline-secondary btn-sm"
+                    (click)="nextPage()" [disabled]="!meta().hasNext"
+                    aria-label="Next page">
+              <i class="bi bi-chevron-right" aria-hidden="true"></i>
+            </button>
+          </nav>
+        }
+      }
+    }
+  }
+</section>

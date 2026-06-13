@@ -302,6 +302,14 @@ export class ShellComponent {
         { label: 'WIP Reconciliation', route: '/admin/manufacturing/wip-reconciliation', icon: 'bi-bank', available: true, permission: 'MANUFACTURING.VIEW' },
       ],
     },
+    // ── FX / Currency ─────────────────────────────────────────────────────────
+    {
+      label: 'FX / Currency',
+      items: [
+        { label: 'Exchange Rates', route: '/admin/fx/rates', icon: 'bi-currency-exchange', available: true, permission: 'CURRENCY.VIEW' },
+        { label: 'Revaluation Runs', route: '/admin/fx/revaluation-runs', icon: 'bi-arrow-repeat', available: true, permission: 'FX.EXPOSURE.VIEW' },
+      ],
+    },
   ];
 
   /** Nav groups with permission-filtered items. Reactive: recomputes when permissions change. */
