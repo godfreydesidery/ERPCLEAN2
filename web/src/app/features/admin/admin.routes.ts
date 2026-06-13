@@ -1046,6 +1046,7 @@ export const ADMIN_ROUTES: Routes = [
     canActivate: [requirePermission('BOM.VIEW')],
     loadComponent: () =>
       import('./manufacturing/bom/bom-detail.component').then((m) => m.BomDetailComponent),
+  },
   // ── Standing Orders (Recurring Sales) ────────────────────────────────────────
   {
     path: 'standing-orders',
@@ -1064,12 +1065,14 @@ export const ADMIN_ROUTES: Routes = [
     canActivate: [requirePermission('SALES.STANDING.VIEW')],
     loadComponent: () =>
       import('./sales/standing/standing-order-detail.component').then((m) => m.StandingOrderDetailComponent),
+  },
   // ── Pricing Rules ──────────────────────────────────────────────────────────
   {
     path: 'pricing-rules',
     canActivate: [requirePermission('SALES.PRICING.RULE.VIEW')],
     loadComponent: () =>
       import('./sales/pricing/pricing-rules.component').then((m) => m.PricingRulesComponent),
+  },
   // ── Other Parties ─────────────────────────────────────────────────────────
   {
     path: 'other-parties',
