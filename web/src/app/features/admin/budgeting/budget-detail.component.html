@@ -77,11 +77,10 @@
                        [disabled]="creatingVersion()" autocomplete="off" maxlength="120" />
               </div>
               <div class="col-sm-5">
-                <label class="form-label small text-muted mb-1" for="fSeedFromUid">Seed from version UID (optional)</label>
-                <input id="fSeedFromUid" name="fSeedFromUid" type="text" class="form-control"
-                       placeholder="Leave blank for empty version"
-                       [ngModel]="fSeedFromUid()" (ngModelChange)="fSeedFromUid.set($event)"
-                       [disabled]="creatingVersion()" autocomplete="off" />
+                <label class="form-label small text-muted mb-1">Seed from version (optional)</label>
+                <app-uid-picker [(ngModel)]="fSeedFromUid" [options]="budgetVersionOptions()"
+                                placeholder="Leave blank for empty version"
+                                name="fSeedFromUid" />
               </div>
               <div class="col-sm-2 d-flex align-items-end">
                 <button type="submit" class="btn btn-primary w-100" [disabled]="creatingVersion()">

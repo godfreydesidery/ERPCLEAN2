@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PageMeta } from '../../../core/api/api-response.model';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
+import { BranchService } from '../branch/branch.service';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { ApprovalsService } from './approvals.service';
@@ -55,6 +56,8 @@ describe('ApprovalPolicyListComponent', () => {
         { provide: ApprovalsService, useValue: approvalsService },
         { provide: OrganisationService, useValue: organisationService },
         { provide: CompanyService, useValue: companyService },
+        // BranchService added by uid-picker sweep (loadBranchOptions)
+        { provide: BranchService, useValue: { list: vi.fn(() => of([])) } },
         { provide: SessionStore, useValue: sessionStore },
         { provide: AlertService, useValue: { success: vi.fn(), error: vi.fn() } },
       ],

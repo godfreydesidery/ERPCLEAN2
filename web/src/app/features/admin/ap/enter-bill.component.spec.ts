@@ -8,6 +8,7 @@ import { signal } from '@angular/core';
 
 import { EnterBillComponent } from './enter-bill.component';
 import { ApService } from './ap.service';
+import { PurchasesService } from '../purchases/purchases.service';
 import { SupplierService } from '../parties/supplier.service';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
@@ -100,6 +101,8 @@ function makeBed() {
       { provide: SupplierService, useValue: { list: vi.fn(() => of({ rows: [], meta: {} })) } },
       { provide: OrganisationService, useValue: { current: vi.fn(() => of({ uid: 'ORG1', id: '1', name: 'Acme' })) } },
       { provide: CompanyService, useValue: { list: vi.fn(() => of([{ uid: 'CO1', id: '10', name: 'Main Co' }])) } },
+      // PurchasesService added by uid-picker sweep (loadPoOptions)
+      { provide: PurchasesService, useValue: { listOrders: vi.fn(() => of({ rows: [], meta: {} })), listOrderLines: vi.fn(() => of([])) } },
       { provide: AlertService, useValue: { success: vi.fn(), error: vi.fn() } },
       { provide: SessionStore, useValue: makeSession() },
     ],

@@ -12,6 +12,7 @@ import {
   CreateBudgetVersionRequest,
 } from './models/budgeting.model';
 import { BudgetingService } from './budgeting.service';
+import { UidOption, UidPickerComponent } from '../../../shared/uid-picker/uid-picker.component';
 
 type LoadState = 'loading' | 'idle' | 'error';
 
@@ -24,7 +25,7 @@ type LoadState = 'loading' | 'idle' | 'error';
  */
 @Component({
   selector: 'app-budget-detail',
-  imports: [FormsModule, RouterLink, SlicePipe],
+  imports: [FormsModule, RouterLink, SlicePipe, UidPickerComponent],
   templateUrl: './budget-detail.component.html',
   styleUrl: './budget-detail.component.scss',
 })
@@ -64,6 +65,17 @@ export class BudgetDetailComponent {
   readonly canManage = computed(() => this.session.hasPermission('BUDGETING.BUDGET.MANAGE'));
   readonly canSubmit = computed(() => this.session.hasPermission('BUDGETING.BUDGET.SUBMIT'));
   readonly canApprove = computed(() => this.session.hasPermission('BUDGETING.BUDGET.APPROVE'));
+
+  /** Picker options for "Seed from version" — all versions of this budget. */
+  readonly budgetVersionOptions = computed<UidOption[]>(() => {
+    const b = this.budget();
+    if (!b?.versions) return [];
+    return b.versions.map((v) => ({
+      uid: v.uid,
+      label: `V${v.versionNo}${v.label ? ' — ' + v.label : ''}`,
+      hint: v.status,
+    }));
+  });
 
   constructor() {
     queueMicrotask(() => this.init());

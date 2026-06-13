@@ -11,6 +11,8 @@ import { SessionStore } from '../../../core/auth/session.store';
 import { Company } from '../models/company.model';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
+import { BranchService } from '../branch/branch.service';
+import { ProductService } from '../products/product.service';
 import { ManufacturingService } from './manufacturing.service';
 import type { WorkOrderPage } from './manufacturing.service';
 import {
@@ -18,6 +20,7 @@ import {
   WorkOrderDto,
   WorkOrderStatus,
 } from './models/manufacturing.model';
+import { UidOption, UidPickerComponent } from '../../../shared/uid-picker/uid-picker.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -31,7 +34,7 @@ interface LoadTrigger {
  */
 @Component({
   selector: 'app-work-order-list',
-  imports: [FormsModule, RouterLink, DecimalPipe],
+  imports: [FormsModule, RouterLink, DecimalPipe, UidPickerComponent],
   templateUrl: './work-order-list.component.html',
   styleUrl: './work-order-list.component.scss',
 })
@@ -39,8 +42,14 @@ export class WorkOrderListComponent {
   private readonly mfgService = inject(ManufacturingService);
   private readonly companyService = inject(CompanyService);
   private readonly organisationService = inject(OrganisationService);
+  private readonly branchService = inject(BranchService);
+  private readonly productService = inject(ProductService);
   private readonly alerts = inject(AlertService);
   protected readonly session = inject(SessionStore);
+
+  // ── Picker options ────────────────────────────────────────────────────────
+  readonly branchOptions = signal<UidOption[]>([]);
+  readonly productOptions = signal<UidOption[]>([]);
 
   // ── Company context ───────────────────────────────────────────────────────
   readonly companies = signal<Company[]>([]);
@@ -132,6 +141,7 @@ export class WorkOrderListComponent {
             if (list.length > 0) {
               this.selectedCompanyId.set(list[0].id);
               this.load(0);
+              this.loadPickerOptions(list[0].uid, list[0].id);
             }
           },
           error: () => this.companyState.set('error'),
@@ -141,9 +151,32 @@ export class WorkOrderListComponent {
     });
   }
 
+  private loadPickerOptions(companyUid: string, companyId: string): void {
+    this.branchService.list(companyUid).subscribe({
+      next: (branches) => {
+        this.branchOptions.set(
+          branches.filter((b) => b.status === 'ACTIVE').map((b) => ({ uid: b.uid, label: b.name, hint: b.code })),
+        );
+      },
+      error: () => {},
+    });
+    this.productService.list(companyId, undefined, 0, 500).subscribe({
+      next: ({ rows }) => {
+        this.productOptions.set(
+          rows.filter((p) => p.status === 'ACTIVE').map((p) => ({ uid: p.uid, label: p.name, hint: p.code })),
+        );
+      },
+      error: () => {},
+    });
+  }
+
   onCompanyChange(id: string): void {
     this.selectedCompanyId.set(id);
-    if (id) this.load(0);
+    if (id) {
+      const company = this.companies().find((c) => c.id === id);
+      if (company) this.loadPickerOptions(company.uid, company.id);
+      this.load(0);
+    }
   }
 
   onStatusChange(s: string): void {
