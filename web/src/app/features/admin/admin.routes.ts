@@ -1085,6 +1085,7 @@ export const ADMIN_ROUTES: Routes = [
     canActivate: [requirePermission('OTHERPARTY.VIEW')],
     loadComponent: () =>
       import('./parties/other/other-party-detail.component').then((m) => m.OtherPartyDetailComponent),
+  },
   // ── CRM Activities ────────────────────────────────────────────────────────
   {
     path: 'crm/activities',
