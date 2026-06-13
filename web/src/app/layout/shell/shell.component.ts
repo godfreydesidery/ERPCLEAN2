@@ -205,6 +205,14 @@ export class ShellComponent {
         { label: 'My Inbox', route: '/admin/approvals/inbox', icon: 'bi-inbox', available: true, permission: 'APPROVALS.DECIDE' },
         { label: 'All Requests', route: '/admin/approvals/requests', icon: 'bi-clipboard-check', available: true, permission: 'APPROVALS.REQUEST.VIEW' },
         { label: 'Approval Policies', route: '/admin/approvals/policies', icon: 'bi-shield-check', available: true, permission: 'APPROVALS.POLICY.VIEW' },
+    // ── Notifications ──────────────────────────────────────────────────────────
+    {
+      label: 'Notifications',
+      items: [
+        { label: 'Inbox', route: '/admin/notifications', icon: 'bi-bell', available: true, permission: 'NOTIFICATION.VIEW' },
+        { label: 'Preferences', route: '/admin/notification-preferences', icon: 'bi-sliders', available: true, permission: 'NOTIFICATION.PREFERENCE.MANAGE' },
+        { label: 'Type Catalogue', route: '/admin/notification-types', icon: 'bi-toggles', available: true, permission: 'NOTIFICATION.ADMIN' },
+        { label: 'Delivery Log', route: '/admin/notification-deliveries', icon: 'bi-journal-text', available: true, permission: 'NOTIFICATION.ADMIN' },
       ],
     },
   ];

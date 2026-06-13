@@ -521,6 +521,30 @@ export const ADMIN_ROUTES: Routes = [
     canActivate: [requirePermission('DOCUMENT.BRANDING.MANAGE')],
     loadComponent: () =>
       import('./documents/document-branding.component').then((m) => m.DocumentBrandingComponent),
+  // ── Notifications ─────────────────────────────────────────────────────────
+  {
+    path: 'notifications',
+    canActivate: [requirePermission('NOTIFICATION.VIEW')],
+    loadComponent: () =>
+      import('./notifications/notification-inbox.component').then((m) => m.NotificationInboxComponent),
+  },
+  {
+    path: 'notification-preferences',
+    canActivate: [requirePermission('NOTIFICATION.PREFERENCE.MANAGE')],
+    loadComponent: () =>
+      import('./notifications/notification-preferences.component').then((m) => m.NotificationPreferencesComponent),
+  },
+  {
+    path: 'notification-types',
+    canActivate: [requirePermission('NOTIFICATION.ADMIN')],
+    loadComponent: () =>
+      import('./notifications/notification-types.component').then((m) => m.NotificationTypesComponent),
+  },
+  {
+    path: 'notification-deliveries',
+    canActivate: [requirePermission('NOTIFICATION.ADMIN')],
+    loadComponent: () =>
+      import('./notifications/notification-delivery-log.component').then((m) => m.NotificationDeliveryLogComponent),
   },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];
