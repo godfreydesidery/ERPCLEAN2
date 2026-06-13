@@ -264,6 +264,7 @@ export class ShellComponent {
         { label: 'Opportunities', route: '/admin/crm/opportunities', icon: 'bi-graph-up-arrow', available: true, permission: 'CRM.OPPORTUNITY.VIEW' },
         { label: 'Pipeline Dashboard', route: '/admin/crm/pipeline', icon: 'bi-bar-chart-line', available: true, permission: 'CRM.PIPELINE.VIEW' },
         { label: 'Pipeline Stages', route: '/admin/crm/settings/pipeline-stages', icon: 'bi-kanban', available: true, permission: 'CRM.STAGE.MANAGE' },
+        { label: 'CRM Activities', route: '/admin/crm/activities', icon: 'bi-calendar2-check', available: true, permission: 'CRM.ACTIVITY.VIEW' },
       ],
     },
     // ── HR & Payroll ─────────────────────────────────────────────────────────────

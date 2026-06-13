@@ -288,6 +288,13 @@
           Created: {{ l.createdAt | slice:0:10 }}
           @if (l.updatedAt) { · Updated: {{ l.updatedAt | slice:0:10 }} }
         </p>
+
+        <!-- Activities panel -->
+        @if (lead(); as lc) {
+          <app-activity-panel
+            [companyId]="lc.companyId"
+            [leadUid]="lc.uid" />
+        }
       }
     }
   }

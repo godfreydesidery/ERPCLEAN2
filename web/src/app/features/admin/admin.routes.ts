@@ -832,5 +832,12 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./dashboard/dashboard.component').then((m) => m.DashboardComponent),
   },
+  // ── CRM Activities ────────────────────────────────────────────────────────
+  {
+    path: 'crm/activities',
+    canActivate: [requirePermission('CRM.ACTIVITY.VIEW')],
+    loadComponent: () =>
+      import('./crm/activity/activity-tasks.component').then((m) => m.ActivityTasksComponent),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];
