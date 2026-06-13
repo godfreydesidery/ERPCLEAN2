@@ -109,7 +109,13 @@ public class GLPostingServiceImpl implements GLPostingService {
         //     Step 2: for each non-null dimension value id, assert active + correct slot + same company.
         //     Step 3: for each mandatory dimension slot, assert every line carries a value.
         //     Both checks are no-ops when no dimension is configured (NFR-CC-01 zero-regression guard).
-        validateDimensions(draft.companyId(), draftLines);
+        //     ADR-0025 amendment (ISSUES-REGISTER #20d): Step-3 MANDATORY enforcement applies ONLY to
+        //     user-entered MANUAL journals. Event-driven/system posters (sales, AP/AR settlement,
+        //     inventory, payroll, depreciation, FX, year-end close) do not carry operator dimension
+        //     context, so enforcing mandatory slots on them turned automated postings (e.g. a
+        //     STOCK.RECEIVED goods-receipt) into poison events. Step 2 (validity of any tag present)
+        //     still applies to ALL postings.
+        validateDimensions(draft.companyId(), draftLines, draft.sourceType());
 
         // 3. Σ debit == Σ credit (BR-GL-01, NFR-GL-02 — BigDecimal exact comparison)
         BigDecimal totalDebit  = draftLines.stream()
@@ -252,8 +258,10 @@ public class GLPostingServiceImpl implements GLPostingService {
      * DimensionResolver service) — the approved table-level read edge (D-7).
      */
     private void validateDimensions(Long companyId,
-                                    List<JournalEntryDraft.LineDraft> draftLines) {
-        // Step 2: validate each non-null dimension value id
+                                    List<JournalEntryDraft.LineDraft> draftLines,
+                                    JournalSourceType sourceType) {
+        // Step 2: validate each non-null dimension value id (ALL postings — a tag that IS present
+        // must be active, correct-slot, same-company regardless of who posted it).
         for (JournalEntryDraft.LineDraft ld : draftLines) {
             assertDimensionValueValid(companyId, DimensionSlot.COST_CENTRE, ld.costCentreValueId());
             assertDimensionValueValid(companyId, DimensionSlot.DEPARTMENT,  ld.departmentValueId());
@@ -261,7 +269,16 @@ public class GLPostingServiceImpl implements GLPostingService {
             assertDimensionValueValid(companyId, DimensionSlot.DIMENSION_4, ld.dimension4ValueId());
         }
 
-        // Step 3: mandatory-slot enforcement — skip entirely if no mandatory dimension exists
+        // Step 3: mandatory-slot enforcement (ADR-0025 amendment, ISSUES-REGISTER #20d) — applies ONLY
+        // to user-entered MANUAL journals. Automated/system posters do not carry operator dimension
+        // context; enforcing mandatory slots on them poisons event-driven postings. The operator who
+        // enters a manual journal CAN supply the dimension, so the BR-CC-03/FR-CC-08 control is kept
+        // exactly where it is actionable.
+        if (sourceType != JournalSourceType.MANUAL) {
+            return;
+        }
+
+        // Skip entirely if no mandatory dimension exists (NFR-CC-01 zero-regression guard).
         List<DimensionSlot> mandatory = dimensionTypes.findMandatorySlots(companyId);
         if (mandatory.isEmpty()) {
             return;

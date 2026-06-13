@@ -19,6 +19,8 @@ import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.money.ConvertedAmount;
+import com.erp.platform.common.money.CurrencyConversionService;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -40,6 +42,7 @@ public class ArOpeningBalanceServiceImpl implements ArOpeningBalanceService {
     private final CompanyRepository companies;
     private final GLPostingService glPosting;
     private final GLConfigResolver glConfig;
+    private final CurrencyConversionService fxConverter;
     private final ScopeGuard scopeGuard;
     private final AuditService audit;
 
@@ -48,15 +51,17 @@ public class ArOpeningBalanceServiceImpl implements ArOpeningBalanceService {
                                         CompanyRepository companies,
                                         GLPostingService glPosting,
                                         GLConfigResolver glConfig,
+                                        CurrencyConversionService fxConverter,
                                         ScopeGuard scopeGuard,
                                         AuditService audit) {
-        this.invoices   = invoices;
-        this.customers  = customers;
-        this.companies  = companies;
-        this.glPosting  = glPosting;
-        this.glConfig   = glConfig;
-        this.scopeGuard = scopeGuard;
-        this.audit      = audit;
+        this.invoices     = invoices;
+        this.customers    = customers;
+        this.companies    = companies;
+        this.glPosting    = glPosting;
+        this.glConfig     = glConfig;
+        this.fxConverter  = fxConverter;
+        this.scopeGuard   = scopeGuard;
+        this.audit        = audit;
     }
 
     @Override
@@ -71,7 +76,8 @@ public class ArOpeningBalanceServiceImpl implements ArOpeningBalanceService {
                 .orElseThrow(() -> new NotFoundException("Customer not found: " + req.customerUid()));
 
         String currency = req.currency() != null ? req.currency()
-                : companies.findById(companyId).map(c -> c.getBaseCurrency()).orElse("TZS");
+                : companies.findById(companyId).map(c -> c.getBaseCurrency())
+                        .orElseThrow(() -> new NotFoundException("Company not found: " + companyId));
 
         // Post DR AR control / CR Opening Balance Equity synchronously (D-4/D-6)
         ChartOfAccount arAcct     = glConfig.resolve(companyId, GlConfigKey.ACCOUNTS_RECEIVABLE);
@@ -100,6 +106,16 @@ public class ArOpeningBalanceServiceImpl implements ArOpeningBalanceService {
                 companyId, null, customerId,
                 ArInvoiceSource.OPENING_BALANCE, null, req.documentNo(),
                 req.amount(), currency, req.invoiceDate(), req.dueDate(), actorId());
+
+        // ADR-0036 D-4 FX triple stamp (fix for I-3/I-4 violations on opening-balance path).
+        // CurrencyConversionService short-circuits for base-currency (rate=1, base=face) → no-op (I-5).
+        // For a foreign currency: resolves the effective rate on invoiceDate, stamps triple.
+        ConvertedAmount fxConv = fxConverter.toBase(req.amount(), currency, companyId, req.invoiceDate());
+        inv.setFxRate(fxConv.rate());
+        inv.setBaseOriginalAmount(fxConv.baseAmount());
+        inv.setBaseOutstandingAmount(fxConv.baseAmount());
+        inv.setRateAt(fxConv.rateAt());
+
         inv = invoices.save(inv);
 
         audit.record(AuditEvent.of(AuditActions.AR_OPENING_SET, "ar_invoices",

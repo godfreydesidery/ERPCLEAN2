@@ -22,6 +22,8 @@ import com.erp.modules.gl.repository.JournalEntryRepository;
 import com.erp.modules.gl.service.GLConfigResolver;
 import com.erp.modules.gl.service.GLPostingService;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.money.ConvertedAmount;
+import com.erp.platform.common.money.FxDocumentConverter;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -65,12 +67,22 @@ class BillMatchProjectTagTest {
         audit          = mock(AuditService.class);
         jdbc           = mock(JdbcTemplate.class);
 
+        // FX identity pass-through: this test's bill is foreign (USD) but with no rate machinery the
+        // converter returns base==face (rate=1), so the per-line PURCHASES base amounts == face and
+        // the per-line project-tag assertions exercise the same LineDraft amounts as pre-FX.
+        FxDocumentConverter fxConverter = mock(FxDocumentConverter.class);
+        when(fxConverter.toBase(any(), any(), any(), any()))
+                .thenAnswer(inv -> ConvertedAmount.identity(inv.getArgument(0)));
+        when(fxConverter.balancingPlug(any(), org.mockito.ArgumentMatchers.anyInt()))
+                .thenAnswer(inv -> ((List<BigDecimal>) inv.getArgument(0)).stream()
+                        .reduce(BigDecimal.ZERO, BigDecimal::add).negate());
+
         service = new BillMatchServiceImpl(
                 billRepo, lineRepo, matchRepo,
                 mock(PurchaseMatchReader.class),
                 glPosting, glConfig, journalEntries,
                 mock(ApBillNumberGenerator.class),
-                scopeGuard, audit, jdbc);
+                scopeGuard, audit, jdbc, fxConverter);
     }
 
     /**

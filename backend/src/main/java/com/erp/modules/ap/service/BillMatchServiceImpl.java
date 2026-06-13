@@ -26,6 +26,8 @@ import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.money.ConvertedAmount;
+import com.erp.platform.common.money.FxDocumentConverter;
 import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
@@ -71,6 +73,8 @@ public class BillMatchServiceImpl implements BillMatchService {
     private final ScopeGuard                 scopeGuard;
     private final AuditService               audit;
     private final JdbcTemplate               jdbc;
+    /** ADR-0036 D-3: converts face amounts to base before LineDraft construction. */
+    private final FxDocumentConverter        fxConverter;
 
     public BillMatchServiceImpl(SupplierBillRepository bills,
                                  SupplierBillLineRepository lines,
@@ -82,7 +86,8 @@ public class BillMatchServiceImpl implements BillMatchService {
                                  ApBillNumberGenerator numbers,
                                  ScopeGuard scopeGuard,
                                  AuditService audit,
-                                 JdbcTemplate jdbc) {
+                                 JdbcTemplate jdbc,
+                                 FxDocumentConverter fxConverter) {
         this.bills          = bills;
         this.lines          = lines;
         this.matches        = matches;
@@ -94,6 +99,7 @@ public class BillMatchServiceImpl implements BillMatchService {
         this.scopeGuard     = scopeGuard;
         this.audit          = audit;
         this.jdbc           = jdbc;
+        this.fxConverter    = fxConverter;
     }
 
     @Override
@@ -314,60 +320,91 @@ public class BillMatchServiceImpl implements BillMatchService {
         List<SupplierBillLine> billLines =
                 lines.findBySupplierBillIdOrderByLineNo(bill.getId());
 
-        ChartOfAccount apAcct = glConfig.resolve(bill.getCompanyId(), GlConfigKey.ACCOUNTS_PAYABLE);
+        // ADR-0036 D-3: convert face amounts to BASE before LineDraft construction.
+        // GL engine (GLPostingServiceImpl) is BYTE-UNTOUCHED; only base-currency lines reach it.
+        // AP control leg (CR AP) is the BALANCING PLUG to absorb HALF_UP rounding residual. (D-3/D-8)
+        String    docCurrency = bill.getCurrency();
+        Long      companyId   = bill.getCompanyId();
+
+        // Convert gross once — used for the D-4 triple stamp and plugScale below.
+        ConvertedAmount grossConv = fxConverter.toBase(
+                bill.getGrossAmount(), docCurrency, companyId, bill.getBillDate());
+
+        // Resolve base currency code for LineDraft.currency (D-3: every line = base currency).
+        // BillMatchServiceImpl injects JdbcTemplate; read once rather than adding CompanyRepository.
+        String resolvedBaseCurrency = jdbc.queryForObject(
+                "SELECT base_currency FROM companies WHERE id = ?", String.class, companyId);
+        final String postCurrency = (resolvedBaseCurrency != null) ? resolvedBaseCurrency : "TZS";
+
+        ChartOfAccount apAcct = glConfig.resolve(companyId, GlConfigKey.ACCOUNTS_PAYABLE);
         List<LineDraft> glLines = new ArrayList<>();
 
         // ADR-0025 D-6: only P&L-relevant legs carry the dimension tag. AP control leg untagged.
         Long ccId   = bill.getCostCentreValueId();
         Long deptId = bill.getDepartmentValueId();
 
-        // Goods lines: DR GRNI per line (clears the GRNI accrual from goods receipt).
-        // GRNI is balance-sheet; posted untagged in v1 (D-6 sub-decision).
-        // Service lines: DR Purchases per line — P&L leg, carry per-line project tag (ADR-0033 D-4b).
-        // Threading each line's project_id onto its own LineDraft ensures multi-project bills
-        // correctly attribute cost to each project in the GL roll-up (BR-PROJ-03/05).
-        BigDecimal goodsNet   = BigDecimal.ZERO;
-        BigDecimal serviceNet = BigDecimal.ZERO;
+        // Build debit legs: DR GRNI (goods) + DR Purchases (service) in BASE currency.
+        // Accumulate converted base amounts; AP plug = sum of all debit base amounts.
+        BigDecimal baseGoodsNet     = BigDecimal.ZERO;
+        BigDecimal baseServiceTotal = BigDecimal.ZERO;
+
         for (SupplierBillLine l : billLines) {
             BigDecimal lineNet = l.getLineNetAmount() != null ? l.getLineNetAmount() : BigDecimal.ZERO;
-            if (lineNet.compareTo(BigDecimal.ZERO) <= 0) continue;
+            if (lineNet.compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+            BigDecimal baseLineNet = fxConverter.toBase(
+                    lineNet, docCurrency, companyId, bill.getBillDate()).baseAmount();
 
             if (l.getGrLineUid() != null) {
-                // Goods line: aggregated into a single GRNI clear (balance-sheet, untagged)
-                goodsNet = goodsNet.add(lineNet);
+                // Goods line: accumulate into single GRNI DR leg
+                baseGoodsNet = baseGoodsNet.add(baseLineNet);
             } else {
-                // Service line: one LineDraft per line with the line's own project tag
-                ChartOfAccount purchasesAcct = glConfig.resolve(bill.getCompanyId(), GlConfigKey.PURCHASES);
+                // Service line: one LineDraft per line with project tag (ADR-0033 D-4b)
+                ChartOfAccount purchasesAcct = glConfig.resolve(companyId, GlConfigKey.PURCHASES);
                 glLines.add(new LineDraft(purchasesAcct.getId(),
-                        lineNet, BigDecimal.ZERO,
-                        bill.getCurrency(), "Purchases — " + bill.getSupplierInvoiceNo(),
+                        baseLineNet, BigDecimal.ZERO,
+                        postCurrency, "Purchases — " + bill.getSupplierInvoiceNo(),
                         ccId, deptId, null, null,
                         l.getProjectId(), l.getProjectTaskId(), null));
-                serviceNet = serviceNet.add(lineNet);
+                baseServiceTotal = baseServiceTotal.add(baseLineNet);
             }
         }
-        if (goodsNet.compareTo(BigDecimal.ZERO) > 0) {
-            ChartOfAccount grniAcct = glConfig.resolve(bill.getCompanyId(), GlConfigKey.GRNI);
+
+        if (baseGoodsNet.compareTo(BigDecimal.ZERO) > 0) {
+            ChartOfAccount grniAcct = glConfig.resolve(companyId, GlConfigKey.GRNI);
             glLines.add(new LineDraft(grniAcct.getId(),
-                    goodsNet, BigDecimal.ZERO,
-                    bill.getCurrency(), "GRNI clear — " + bill.getSupplierInvoiceNo()));
+                    baseGoodsNet, BigDecimal.ZERO,
+                    postCurrency, "GRNI clear — " + bill.getSupplierInvoiceNo()));
         }
 
-        // Input VAT (ADR-0017 D-7): debit VAT_INPUT — balance-sheet, untagged in v1
+        // Input VAT (ADR-0017 D-7): DR VAT_INPUT in base — convert face VAT independently
+        BigDecimal baseVat = BigDecimal.ZERO;
         if (bill.getVatAmount().compareTo(BigDecimal.ZERO) > 0) {
-            ChartOfAccount vatAcct = glConfig.resolve(bill.getCompanyId(), GlConfigKey.VAT_INPUT);
+            baseVat = fxConverter.toBase(
+                    bill.getVatAmount(), docCurrency, companyId, bill.getBillDate()).baseAmount();
+            ChartOfAccount vatAcct = glConfig.resolve(companyId, GlConfigKey.VAT_INPUT);
             glLines.add(new LineDraft(vatAcct.getId(),
-                    bill.getVatAmount(), BigDecimal.ZERO,
-                    bill.getCurrency(), "Input VAT — " + bill.getSupplierInvoiceNo()));
+                    baseVat, BigDecimal.ZERO,
+                    postCurrency, "Input VAT — " + bill.getSupplierInvoiceNo()));
         }
 
-        // CR Accounts Payable — full gross amount; balance-sheet control leg, untagged
+        // CR Accounts Payable — BALANCING PLUG: exact complement of all DR legs (D-3/D-8).
+        // Absorbs any HALF_UP rounding residual; the unchanged GL Σ-check passes by construction.
+        List<BigDecimal> drLegs = new ArrayList<>();
+        drLegs.add(baseGoodsNet);
+        drLegs.add(baseServiceTotal);
+        drLegs.add(baseVat);
+        int plugScale = grossConv.baseAmount().scale();
+        BigDecimal baseAp = fxConverter.balancingPlug(
+                drLegs.stream().map(BigDecimal::negate).toList(), plugScale);
+
         glLines.add(new LineDraft(apAcct.getId(),
-                BigDecimal.ZERO, bill.getGrossAmount(),
-                bill.getCurrency(), "AP control — " + bill.getSupplierInvoiceNo()));
+                BigDecimal.ZERO, baseAp,
+                postCurrency, "AP control — " + bill.getSupplierInvoiceNo()));
 
         JournalEntryDraft draft = new JournalEntryDraft(
-                bill.getCompanyId(),
+                companyId,
                 bill.getBranchId(),
                 bill.getBillDate(),
                 "AP Bill " + bill.getSupplierInvoiceNo(),
@@ -384,12 +421,18 @@ public class BillMatchServiceImpl implements BillMatchService {
         bill.setMatchedBy(actorId());
         bill.setOutstandingAmount(bill.getGrossAmount());
 
+        // Stamp FX triple on the bill (D-4): base_gross_amount + fx_rate + rate_at
+        bill.setBaseGrossAmount(grossConv.baseAmount());
+        bill.setBaseOutstandingAmount(grossConv.baseAmount());
+        bill.setFxRate(grossConv.rate());
+        bill.setRateAt(grossConv.rateAt());
+
         audit.record(AuditEvent.of(AuditActions.AP_BILL_POST, "supplier_bills",
                         bill.getId(), bill.getUid())
-                .detail(Map.of("glEntryUid", posted.uid(),
-                        "grossAmount", bill.getGrossAmount().toPlainString(),
-                        "goodsNet",    goodsNet.toPlainString(),
-                        "serviceNet",  serviceNet.toPlainString())));
+                .detail(Map.of("glEntryUid",  posted.uid(),
+                        "grossAmount",  bill.getGrossAmount().toPlainString(),
+                        "baseGrossAmount", grossConv.baseAmount().toPlainString(),
+                        "fxRate",       grossConv.rate().toPlainString())));
     }
 
     // -------------------------------------------------------------------------

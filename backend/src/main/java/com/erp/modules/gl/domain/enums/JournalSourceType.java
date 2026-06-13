@@ -52,5 +52,8 @@ public enum JournalSourceType {
     PRODUCTION_ISSUE,
     PRODUCTION_RECEIPT,
     PRODUCTION_LABOUR,
-    PRODUCTION_VARIANCE
+    PRODUCTION_VARIANCE,
+    // --- FX / Multi-currency increment (ADR-0036 D-6/D-10) — admitted by V79 DB CHECK widen ---
+    // Realized FX reuses AR_RECEIPT/AP_PAYMENT — no separate token (D-5).
+    FX_REVALUATION
 }

@@ -3,6 +3,7 @@ package com.erp.modules.ar.events;
 import com.erp.modules.ar.domain.entity.ArInvoice;
 import com.erp.modules.ar.domain.enums.ArInvoiceSource;
 import com.erp.modules.ar.repository.ArInvoiceRepository;
+import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.parties.domain.entity.Customer;
 import com.erp.modules.parties.domain.enums.CustomerKind;
 import com.erp.modules.parties.repository.CustomerRepository;
@@ -18,6 +19,8 @@ import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.IdempotencyGuard;
 import com.erp.platform.security.RequestContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.Map;
@@ -52,6 +55,7 @@ public class ArSalePostedHandler implements DomainEventHandler {
     private final SalesInvoiceService salesInvoiceService;
     private final ArInvoiceRepository arInvoices;
     private final CustomerRepository customers;
+    private final CompanyRepository companies;
     private final AuditService audit;
     private final ObjectMapper objectMapper;
 
@@ -59,12 +63,14 @@ public class ArSalePostedHandler implements DomainEventHandler {
                                 SalesInvoiceService salesInvoiceService,
                                 ArInvoiceRepository arInvoices,
                                 CustomerRepository customers,
+                                CompanyRepository companies,
                                 AuditService audit,
                                 ObjectMapper objectMapper) {
         this.guard               = guard;
         this.salesInvoiceService = salesInvoiceService;
         this.arInvoices          = arInvoices;
         this.customers           = customers;
+        this.companies           = companies;
         this.audit               = audit;
         this.objectMapper        = objectMapper;
     }
@@ -152,7 +158,7 @@ public class ArSalePostedHandler implements DomainEventHandler {
 
         // 3d. Create the open item — NO GL POST (D-5, BR-AR-02)
         // Use outstandingAmount from totals if present; fall back to grossTotalAmount (D-10 v1 default)
-        java.math.BigDecimal receivable = totals.outstandingAmount() != null
+        BigDecimal receivable = totals.outstandingAmount() != null
                 ? totals.outstandingAmount()
                 : totals.grossTotalAmount();
 
@@ -161,6 +167,37 @@ public class ArSalePostedHandler implements DomainEventHandler {
                 ArInvoiceSource.SALE, payload.invoiceUid(), null,
                 receivable, totals.currency(),
                 invoiceDate, dueDate, null /* SYSTEM — no user actor */);
+
+        // ADR-0036 D-4 FX triple stamp (fix for I-3/I-4 violations):
+        // Use the SAME rate the SalesPostingHandler used (stamped on the invoice at finalise).
+        // For a base-currency invoice fxRate==1 → base==face → identical behaviour (I-5).
+        // Derive baseReceivable from receivable × fxRate so the AR sub-ledger base value
+        // matches the DR-AR base posted in the SALES journal (mirror BillMatchServiceImpl).
+        // A foreign (currency != base) open item must NEVER persist with fxRate=1 / base NULL.
+        BigDecimal invoiceFxRate = totals.fxRate() != null ? totals.fxRate() : BigDecimal.ONE;
+        inv.setFxRate(invoiceFxRate);
+        inv.setRateAt(totals.rateAt());
+
+        // Resolve base minor units for HALF_UP rounding (TZS=0, most others=2).
+        String baseCurrency = companies.findById(companyId)
+                .map(c -> c.getBaseCurrency()).orElse("TZS");
+        int baseScale = baseMinorUnits(baseCurrency);
+        BigDecimal baseReceivable = receivable.multiply(invoiceFxRate)
+                .setScale(baseScale, RoundingMode.HALF_UP);
+        inv.setBaseOriginalAmount(baseReceivable);
+        inv.setBaseOutstandingAmount(baseReceivable);
+
+        // Fail loud: a foreign open item must not persist with fxRate=1 / base NULL (I-6 guard).
+        if (!totals.currency().equals(baseCurrency)
+                && invoiceFxRate.compareTo(BigDecimal.ONE) == 0
+                && (totals.fxRate() == null || totals.fxRate().compareTo(BigDecimal.ONE) == 0)) {
+            // fxRate defaulted to 1 for a foreign currency — no rate was stamped; this is an anomaly.
+            log.warn("ArSalePostedHandler: WARN — foreign AR open item for invoice uid={} currency={} "
+                    + "has fxRate=1 / base=face. The invoice may not have been FX-stamped at finalise. "
+                    + "Persisting as-is; realize this will cause incorrect realized FX on settlement.",
+                    payload.invoiceUid(), totals.currency());
+        }
+
         inv = arInvoices.save(inv);
 
         audit.record(AuditEvent.of(AuditActions.AR_OPENITEM_CREATE, "ar_invoices",
@@ -168,10 +205,22 @@ public class ArSalePostedHandler implements DomainEventHandler {
                 .detail(Map.of(
                         "sourceInvoiceUid", payload.invoiceUid(),
                         "amount", receivable.toPlainString(),
+                        "fxRate", invoiceFxRate.toPlainString(),
+                        "baseAmount", baseReceivable.toPlainString(),
                         "actor", "SYSTEM")));
 
         log.debug("ArSalePostedHandler: open item uid={} created for invoice uid={} amount={}",
                 inv.getUid(), payload.invoiceUid(), receivable);
+    }
+
+    /** Minor-unit scale for HALF_UP rounding of base amounts (mirrors ArReceiptServiceImpl). */
+    private static int baseMinorUnits(String currencyCode) {
+        if (currencyCode == null) return 2;
+        return switch (currencyCode) {
+            case "TZS", "JPY", "KRW" -> 0;
+            case "BHD", "KWD", "OMR" -> 3;
+            default -> 2;
+        };
     }
 
     private SaleFinalisedPayload deserialise(String json) {

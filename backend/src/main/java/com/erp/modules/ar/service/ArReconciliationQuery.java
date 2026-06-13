@@ -7,6 +7,7 @@ import com.erp.modules.gl.domain.dto.TrialBalanceDto;
 import com.erp.modules.gl.domain.dto.TrialBalanceRowDto;
 import com.erp.modules.gl.service.TrialBalanceQuery;
 import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -45,7 +46,8 @@ public class ArReconciliationQuery {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
 
         String currency = companies.findById(companyId)
-                .map(c -> c.getBaseCurrency()).orElse("TZS");
+                .map(c -> c.getBaseCurrency())
+                .orElseThrow(() -> new NotFoundException("Company not found: " + companyId));
 
         BigDecimal outstanding  = invoices.sumOutstandingByCompany(companyId);
         BigDecimal unallocated  = receipts.sumUnallocatedByCompany(companyId);

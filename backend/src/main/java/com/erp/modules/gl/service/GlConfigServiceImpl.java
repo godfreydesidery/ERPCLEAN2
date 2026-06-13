@@ -69,7 +69,12 @@ public class GlConfigServiceImpl implements GlConfigService {
             Map.entry(GlConfigKey.FINISHED_GOODS,          "1300"),
             Map.entry(GlConfigKey.LABOUR_APPLIED,          "2350"),
             Map.entry(GlConfigKey.OVERHEAD_APPLIED,        "2360"),
-            Map.entry(GlConfigKey.MANUFACTURING_VARIANCE,  "5180")
+            Map.entry(GlConfigKey.MANUFACTURING_VARIANCE,  "5180"),
+            // FX / Multi-currency increment (ADR-0036 D-5/D-10, V79)
+            Map.entry(GlConfigKey.UNREALIZED_FX_GAIN,      "4910"),
+            Map.entry(GlConfigKey.REALIZED_FX_GAIN,        "4920"),
+            Map.entry(GlConfigKey.REALIZED_FX_LOSS,        "5190"),
+            Map.entry(GlConfigKey.UNREALIZED_FX_LOSS,      "5191")
     );
 
     private final GlConfigRepository configs;

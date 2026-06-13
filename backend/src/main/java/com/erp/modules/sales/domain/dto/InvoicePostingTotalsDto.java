@@ -17,6 +17,11 @@ import java.time.Instant;
  * <p>ADR-0025 D-6: {@code costCentreValueId} and {@code departmentValueId} are the invoice's
  * header-level dimension defaults (scalar ids, nullable — null = untagged). SalesPostingHandler
  * stamps the revenue LineDrafts with these ids.
+ *
+ * <p>ADR-0036 D-4 (fix): {@code fxRate}, {@code baseGrossTotalAmount}, {@code rateAt} carry the
+ * immutable FX triple stamped at finalise on {@code sales_invoices}. ArSalePostedHandler uses
+ * them to stamp the AR open item so realized FX (I-3) and revaluation (I-4) are computed at the
+ * ORIGINAL invoice rate, not the default rate=1.
  */
 public record InvoicePostingTotalsDto(
         String invoiceUid,
@@ -39,5 +44,20 @@ public record InvoicePostingTotalsDto(
         /** Project id (nullable — untagged when null). Threaded onto the revenue GL leg. */
         Long projectId,
         /** Project task id (nullable). */
-        Long projectTaskId
+        Long projectTaskId,
+        // --- ADR-0036 D-4 FX triple (fix: was missing, causing I-3/I-4 violations) ---
+        /**
+         * The rate at which this invoice was stamped at finalise (sales_invoices.fx_rate).
+         * ONE for base-currency invoices (identity path). Null-safe: treat null as ONE.
+         */
+        BigDecimal fxRate,
+        /**
+         * Gross total in company base currency (sales_invoices.base_gross_total_amount).
+         * Null for legacy pre-FX rows where the column was not yet populated.
+         */
+        BigDecimal baseGrossTotalAmount,
+        /**
+         * Instant when rate was stamped (sales_invoices.rate_at). Null for legacy rows.
+         */
+        Instant rateAt
 ) {}

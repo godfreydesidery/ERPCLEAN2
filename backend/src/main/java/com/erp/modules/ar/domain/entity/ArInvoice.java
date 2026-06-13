@@ -83,6 +83,32 @@ public class ArInvoice extends UidEntity {
     @Setter
     private Long updatedBy;
 
+    // -------------------------------------------------------------------------
+    // ADR-0036 D-4 — FX base triple (V78). Stamped when the AR open item is created.
+    // fx_rate + base_original_amount are immutable (BR-CUR-05).
+    // base_outstanding_amount tracks the base value of the unpaid remainder (moves with outstanding).
+    // -------------------------------------------------------------------------
+
+    /** Rate at which this open item was originally booked (immutable; DEFAULT 1). */
+    @Column(name = "fx_rate", nullable = false, precision = 19, scale = 8, updatable = false)
+    @Setter
+    private BigDecimal fxRate = BigDecimal.ONE;
+
+    /** Original amount in base currency (immutable). NULL until the open item is stamped. */
+    @Column(name = "base_original_amount", precision = 19, scale = 4, updatable = false)
+    @Setter
+    private BigDecimal baseOriginalAmount;
+
+    /** Outstanding amount in base currency. Decremented when receipts / CN / write-offs reduce it. */
+    @Column(name = "base_outstanding_amount", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal baseOutstandingAmount;
+
+    /** Timestamp when rate was stamped (immutable). */
+    @Column(name = "rate_at", updatable = false)
+    @Setter
+    private Instant rateAt;
+
     protected ArInvoice() {
         // JPA
     }
