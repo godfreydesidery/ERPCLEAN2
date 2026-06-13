@@ -466,5 +466,48 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./reporting/account-ledger.component').then((m) => m.AccountLedgerComponent),
   },
+  // ── CRM ───────────────────────────────────────────────────────────────────
+  {
+    path: 'crm/leads',
+    canActivate: [requirePermission('CRM.LEAD.VIEW')],
+    loadComponent: () =>
+      import('./crm/lead-list.component').then((m) => m.LeadListComponent),
+  },
+  {
+    path: 'crm/leads/uid/:uid',
+    canActivate: [requirePermission('CRM.LEAD.VIEW')],
+    loadComponent: () =>
+      import('./crm/lead-detail.component').then((m) => m.LeadDetailComponent),
+  },
+  {
+    path: 'crm/opportunities',
+    canActivate: [requirePermission('CRM.OPPORTUNITY.VIEW')],
+    loadComponent: () =>
+      import('./crm/opportunity-list.component').then((m) => m.OpportunityListComponent),
+  },
+  {
+    path: 'crm/opportunities/create',
+    canActivate: [requirePermission('CRM.OPPORTUNITY.MANAGE')],
+    loadComponent: () =>
+      import('./crm/opportunity-create.component').then((m) => m.OpportunityCreateComponent),
+  },
+  {
+    path: 'crm/opportunities/uid/:uid',
+    canActivate: [requirePermission('CRM.OPPORTUNITY.VIEW')],
+    loadComponent: () =>
+      import('./crm/opportunity-detail.component').then((m) => m.OpportunityDetailComponent),
+  },
+  {
+    path: 'crm/pipeline',
+    canActivate: [requirePermission('CRM.PIPELINE.VIEW')],
+    loadComponent: () =>
+      import('./crm/pipeline-dashboard.component').then((m) => m.PipelineDashboardComponent),
+  },
+  {
+    path: 'crm/settings/pipeline-stages',
+    canActivate: [requirePermission('CRM.STAGE.MANAGE')],
+    loadComponent: () =>
+      import('./crm/pipeline-stage-list.component').then((m) => m.PipelineStageListComponent),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];

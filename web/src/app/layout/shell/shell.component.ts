@@ -189,6 +189,16 @@ export class ShellComponent {
         { label: 'Account Ledger', route: '/admin/reporting/account-ledger', icon: 'bi-journal-text', available: true, permission: 'REPORT.LEDGER.VIEW' },
       ],
     },
+    // ── CRM ──────────────────────────────────────────────────────────────────
+    {
+      label: 'CRM',
+      items: [
+        { label: 'Leads', route: '/admin/crm/leads', icon: 'bi-person-lines-fill', available: true, permission: 'CRM.LEAD.VIEW' },
+        { label: 'Opportunities', route: '/admin/crm/opportunities', icon: 'bi-graph-up-arrow', available: true, permission: 'CRM.OPPORTUNITY.VIEW' },
+        { label: 'Pipeline Dashboard', route: '/admin/crm/pipeline', icon: 'bi-bar-chart-line', available: true, permission: 'CRM.PIPELINE.VIEW' },
+        { label: 'Pipeline Stages', route: '/admin/crm/settings/pipeline-stages', icon: 'bi-kanban', available: true, permission: 'CRM.STAGE.MANAGE' },
+      ],
+    },
   ];
 
   /** Nav groups with permission-filtered items. Reactive: recomputes when permissions change. */

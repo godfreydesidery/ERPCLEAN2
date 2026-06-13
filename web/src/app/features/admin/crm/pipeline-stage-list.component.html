@@ -1,0 +1,246 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Pipeline Stages</h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      <i class="bi bi-kanban me-1" aria-hidden="true"></i>
+      Configure pipeline stages and their default win probabilities.
+    </p>
+  </header>
+
+  <!-- Company selector -->
+  @switch (companyState()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mb-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load companies. Is the API running?
+      </p>
+    }
+    @default {
+      @if (companies().length > 1) {
+        <div class="mb-3" style="max-width:320px">
+          <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+          <select id="companyPicker" name="companyPicker" class="form-select"
+                  [ngModel]="selectedCompanyId()"
+                  (ngModelChange)="onCompanyChange($event)">
+            @for (c of companies(); track c.uid) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+          </select>
+        </div>
+      }
+    }
+  }
+
+  @if (selectedCompanyId()) {
+    <!-- Toolbar -->
+    @if (canManage()) {
+      <div class="d-flex flex-wrap gap-2 mb-3 align-items-end">
+        <div class="ms-auto">
+          <button type="button" class="btn btn-primary"
+                  (click)="toggleCreateForm()"
+                  [attr.aria-expanded]="showCreateForm()"
+                  aria-controls="createStageForm">
+            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+            New Stage
+          </button>
+        </div>
+      </div>
+    }
+
+    <!-- Create form -->
+    @if (showCreateForm()) {
+      <form id="createStageForm" class="create-form card card-body mb-3"
+            (ngSubmit)="create()" aria-label="Create pipeline stage">
+        <h2 class="h6 mb-3">New Pipeline Stage</h2>
+        <div class="row g-2 mb-2">
+          <div class="col-sm-4">
+            <label class="form-label small text-muted mb-1" for="newName">
+              Stage Name <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="newName" name="newName" type="text" class="form-control"
+                   placeholder="e.g. Qualification"
+                   [ngModel]="newName()" (ngModelChange)="newName.set($event)"
+                   [disabled]="saving()" autocomplete="off" />
+          </div>
+          <div class="col-sm-2">
+            <label class="form-label small text-muted mb-1" for="newDisplayOrder">
+              Order <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="newDisplayOrder" name="newDisplayOrder" type="number" class="form-control"
+                   placeholder="10" min="1" step="1"
+                   [ngModel]="newDisplayOrder()" (ngModelChange)="newDisplayOrder.set($event)"
+                   [disabled]="saving()" />
+          </div>
+          <div class="col-sm-2">
+            <label class="form-label small text-muted mb-1" for="newDefaultProbability">
+              Default Win % <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="newDefaultProbability" name="newDefaultProbability" type="number" class="form-control"
+                   placeholder="50" min="0" max="100" step="1"
+                   [ngModel]="newDefaultProbability()" (ngModelChange)="newDefaultProbability.set($event)"
+                   [disabled]="saving()" />
+          </div>
+          <div class="col-sm-3 d-flex align-items-end">
+            <button type="submit" class="btn btn-primary w-100" [disabled]="saving()">
+              @if (saving()) {
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                Saving…
+              } @else {
+                Create Stage
+              }
+            </button>
+          </div>
+        </div>
+        @if (formError(); as msg) {
+          <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+        }
+      </form>
+    }
+
+    <!-- List states -->
+    @switch (state()) {
+      @case ('loading') {
+        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading stages…
+        </p>
+      }
+      @case ('error') {
+        <p class="state text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load pipeline stages. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="state text-muted d-flex align-items-center gap-2">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view pipeline stages.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <p class="state text-muted">No pipeline stages yet. Create one above.</p>
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-hover align-middle bg-white grid">
+              <caption class="visually-hidden">Pipeline stages</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Order</th>
+                  <th scope="col">Stage Name</th>
+                  <th scope="col" class="text-end">Default Win %</th>
+                  <th scope="col">Active</th>
+                  <th scope="col">Status</th>
+                  @if (canManage()) {
+                    <th scope="col"><span class="visually-hidden">Actions</span></th>
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                @for (stage of rows(); track stage.uid) {
+                  @if (editingUid() === stage.uid) {
+                    <!-- Inline edit row -->
+                    <tr>
+                      <td>
+                        <input type="number" class="form-control form-control-sm" style="width:70px"
+                               aria-label="Display order"
+                               [ngModel]="editDisplayOrder()" (ngModelChange)="editDisplayOrder.set($event)"
+                               [disabled]="editSaving()" min="1" step="1" />
+                      </td>
+                      <td>
+                        <input type="text" class="form-control form-control-sm"
+                               aria-label="Stage name"
+                               [ngModel]="editName()" (ngModelChange)="editName.set($event)"
+                               [disabled]="editSaving()" autocomplete="off" />
+                      </td>
+                      <td>
+                        <input type="number" class="form-control form-control-sm text-end" style="width:80px"
+                               aria-label="Default win probability"
+                               [ngModel]="editDefaultProbability()" (ngModelChange)="editDefaultProbability.set($event)"
+                               [disabled]="editSaving()" min="0" max="100" step="1" />
+                      </td>
+                      <td>
+                        <div class="form-check">
+                          <input class="form-check-input" type="checkbox" id="editActive_{{ stage.uid }}"
+                                 [ngModel]="editActive()" (ngModelChange)="editActive.set($event)"
+                                 [disabled]="editSaving()" />
+                          <label class="form-check-label" [for]="'editActive_' + stage.uid">Active</label>
+                        </div>
+                      </td>
+                      <td>
+                        @if (editError(); as msg) {
+                          <span class="text-danger small">{{ msg }}</span>
+                        }
+                      </td>
+                      <td>
+                        <div class="d-flex gap-1">
+                          <button type="button" class="btn btn-sm btn-primary"
+                                  [disabled]="editSaving()" (click)="saveEdit(stage)">
+                            @if (editSaving()) {
+                              <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                            } @else {
+                              <i class="bi bi-check2" aria-hidden="true"></i>
+                            }
+                          </button>
+                          <button type="button" class="btn btn-sm btn-outline-secondary"
+                                  [disabled]="editSaving()" (click)="cancelEdit()"
+                                  aria-label="Cancel edit">
+                            <i class="bi bi-x" aria-hidden="true"></i>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  } @else {
+                    <!-- Normal row -->
+                    <tr>
+                      <td class="font-monospace small">{{ stage.displayOrder }}</td>
+                      <td>{{ stage.name }}</td>
+                      <td class="text-end font-monospace small">{{ +stage.defaultProbability | number:'1.0-0' }}%</td>
+                      <td>
+                        @if (stage.active) {
+                          <i class="bi bi-check-circle-fill text-success" aria-label="Active" aria-hidden="false"></i>
+                        } @else {
+                          <i class="bi bi-dash-circle text-secondary" aria-label="Inactive" aria-hidden="false"></i>
+                        }
+                      </td>
+                      <td>
+                        <span class="badge" [class]="statusBadgeClass(stage.status)">{{ stage.status }}</span>
+                      </td>
+                      @if (canManage()) {
+                        <td>
+                          <div class="d-flex gap-1">
+                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                                    (click)="startEdit(stage)"
+                                    [attr.aria-label]="'Edit stage ' + stage.name">
+                              <i class="bi bi-pencil" aria-hidden="true"></i>
+                            </button>
+                            @if (stage.active) {
+                              <button type="button" class="btn btn-sm btn-outline-warning"
+                                      [disabled]="rowBusyUid() === stage.uid"
+                                      (click)="deactivate(stage)"
+                                      [attr.aria-label]="'Deactivate stage ' + stage.name">
+                                @if (rowBusyUid() === stage.uid) {
+                                  <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                } @else {
+                                  <i class="bi bi-toggle-on" aria-hidden="true"></i>
+                                }
+                              </button>
+                            }
+                          </div>
+                        </td>
+                      }
+                    </tr>
+                  }
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      }
+    }
+  }
+</section>
