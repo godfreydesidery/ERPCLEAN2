@@ -6,6 +6,7 @@ import { SKIP_UNWRAP } from '../../../core/api/http-context.tokens';
 import { environment } from '../../../../environments/environment';
 import {
   AdjustStockRequest,
+  LocationOnHandRowDto,
   OpeningBalanceRequest,
   SetReorderLevelRequest,
   StockMovementDto,
@@ -19,6 +20,11 @@ export interface StockOnHandPage {
 
 export interface StockMovementPage {
   rows: StockMovementDto[];
+  meta: PageMeta;
+}
+
+export interface LocationOnHandPage {
+  rows: LocationOnHandRowDto[];
   meta: PageMeta;
 }
 
@@ -103,5 +109,46 @@ export class StockService {
 
   setReorderLevel(uid: string, request: SetReorderLevelRequest): Observable<StockOnHandDto> {
     return this.http.put<StockOnHandDto>(`${this.base}/on-hand/uid/${uid}/reorder-level`, request);
+  }
+
+  // ── Per-location on-hand (ADR-0028 D-8, FR-INVD-05/06) ───────────────────────
+
+  /**
+   * GET /api/v1/stock/on-hand/by-location — paged on-hand rows per location.
+   * Requires companyId + branchId (Long ids on wire). Gated STOCK.VIEW.
+   */
+  listOnHandByLocation(
+    companyId: string,
+    branchId: string,
+    page = 0,
+    size = 20,
+  ): Observable<LocationOnHandPage> {
+    const params = new HttpParams()
+      .set('companyId', companyId)
+      .set('branchId', branchId)
+      .set('page', String(page))
+      .set('size', String(size));
+
+    const context = new HttpContext().set(SKIP_UNWRAP, true);
+    return this.http
+      .get<ApiResponse<LocationOnHandRowDto[]>>(`${this.base}/on-hand/by-location`, { params, context })
+      .pipe(
+        map((env) => ({
+          rows: env.data ?? [],
+          meta: env.meta ?? { page, size, totalElements: env.data?.length ?? 0, totalPages: 1, hasNext: false },
+        })),
+      );
+  }
+
+  /**
+   * GET /api/v1/stock/on-hand/by-product/uid/{productUid} — all locations holding the product.
+   * Returns plain list (no pagination). Gated STOCK.VIEW.
+   */
+  listOnHandByProduct(productUid: string, companyId: string): Observable<LocationOnHandRowDto[]> {
+    const params = new HttpParams().set('companyId', companyId);
+    return this.http.get<LocationOnHandRowDto[]>(
+      `${this.base}/on-hand/by-product/uid/${productUid}`,
+      { params },
+    );
   }
 }

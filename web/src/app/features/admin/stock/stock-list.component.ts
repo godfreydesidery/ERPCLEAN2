@@ -13,6 +13,7 @@ import { ProductModel } from '../models/product.model';
 import {
   AdjustmentReason,
   AdjustStockRequest,
+  LocationOnHandRowDto,
   OpeningBalanceRequest,
   SetReorderLevelRequest,
   StockMovementDto,
@@ -22,7 +23,7 @@ import { CompanyService } from '../company/company.service';
 import { BranchService } from '../branch/branch.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { ProductService } from '../products/product.service';
-import { StockService, StockMovementPage } from './stock.service';
+import { StockService, StockMovementPage, LocationOnHandPage } from './stock.service';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
@@ -184,6 +185,7 @@ export class StockListComponent {
         error: () => this.openingProductResults.set([]),
       });
 
+    this.wireByProductSearch();
     this.loadCompanies();
   }
 
@@ -526,6 +528,107 @@ export class StockListComponent {
       const row = this.rows().find((r) => r.uid === uid);
       if (row) this.loadMovements(row.productId, this.movementsPage() + 1);
     }
+  }
+
+  // ── View mode (on-hand / by-location / by-product) ────────────────────────────
+
+  readonly viewMode = signal<'on-hand' | 'by-location' | 'by-product'>('on-hand');
+
+  // by-location state
+  readonly byLocationRows = signal<LocationOnHandRowDto[]>([]);
+  private readonly _emptyLocationPage: LocationOnHandPage = { rows: [], meta: { page: 0, size: 20, totalElements: 0, totalPages: 0, hasNext: false } };
+  readonly byLocationMeta = signal(this._emptyLocationPage.meta);
+  readonly byLocationState = signal<'idle' | 'loading' | 'error'>('idle');
+  readonly byLocationCurrentPage = signal(0);
+
+  // by-product state
+  readonly byProductRows = signal<LocationOnHandRowDto[]>([]);
+  readonly byProductState = signal<'idle' | 'loading' | 'error'>('idle');
+  readonly byProductQ = signal('');
+  readonly byProductResults = signal<ProductModel[]>([]);
+  readonly selectedByProductProduct = signal<{ uid: string; label: string } | null>(null);
+  private readonly byProductSearch$ = new Subject<string>();
+
+  readonly byLocationEmpty = computed(() => this.byLocationState() === 'idle' && this.byLocationRows().length === 0);
+  readonly byProductEmpty = computed(
+    () => this.byProductState() === 'idle' && this.byProductRows().length === 0 && this.selectedByProductProduct() !== null,
+  );
+
+  // Called from constructor to wire the by-product search stream
+  private wireByProductSearch(): void {
+    this.byProductSearch$
+      .pipe(
+        debounceTime(300),
+        distinctUntilChanged(),
+        switchMap((q) => {
+          const companyId = this.selectedCompanyId();
+          if (!companyId || !q.trim()) { this.byProductResults.set([]); return []; }
+          return this.productService.list(companyId, q.trim(), 0, 10);
+        }),
+        takeUntilDestroyed(),
+      )
+      .subscribe({
+        next: ({ rows }) => this.byProductResults.set(rows.filter((r) => r.status !== 'ARCHIVED')),
+        error: () => this.byProductResults.set([]),
+      });
+  }
+
+  setViewMode(mode: 'on-hand' | 'by-location' | 'by-product'): void {
+    this.viewMode.set(mode);
+    if (mode === 'by-location') this.loadByLocation(0);
+  }
+
+  loadByLocation(page: number): void {
+    const companyId = this.selectedCompanyId();
+    const branchId = this.selectedBranchId();
+    if (!companyId || !branchId) return;
+    this.byLocationState.set('loading');
+    this.byLocationCurrentPage.set(page);
+    this.stockService.listOnHandByLocation(companyId, branchId, page, 20).subscribe({
+      next: ({ rows, meta }) => {
+        this.byLocationRows.set(rows);
+        this.byLocationMeta.set(meta);
+        this.byLocationState.set('idle');
+      },
+      error: () => this.byLocationState.set('error'),
+    });
+  }
+
+  goToByLocationPage(page: number): void { this.loadByLocation(page); }
+
+  onByProductSearchChange(q: string): void {
+    this.byProductQ.set(q);
+    this.selectedByProductProduct.set(null);
+    this.byProductRows.set([]);
+    this.byProductSearch$.next(q);
+  }
+
+  selectByProductProduct(p: ProductModel): void {
+    this.selectedByProductProduct.set({ uid: p.uid, label: `${p.code} — ${p.name}` });
+    this.byProductQ.set(`${p.code} — ${p.name}`);
+    this.byProductResults.set([]);
+    this.loadByProduct(p.uid);
+  }
+
+  private loadByProduct(productUid: string): void {
+    const companyId = this.selectedCompanyId();
+    if (!companyId) return;
+    this.byProductState.set('loading');
+    this.byProductRows.set([]);
+    this.stockService.listOnHandByProduct(productUid, companyId).subscribe({
+      next: (rows) => { this.byProductRows.set(rows); this.byProductState.set('idle'); },
+      error: () => this.byProductState.set('error'),
+    });
+  }
+
+  fmtQty(v: number | string | null | undefined): string {
+    const n = +(v ?? 0);
+    return Number.isFinite(n) ? n.toFixed(3) : '0.000';
+  }
+
+  fmtMoney(v: number | string | null | undefined): string {
+    const n = +(v ?? 0);
+    return Number.isFinite(n) ? n.toFixed(2) : '0.00';
   }
 
   // ── Display helpers ───────────────────────────────────────────────────────────

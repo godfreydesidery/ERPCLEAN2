@@ -1,0 +1,146 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">
+      <i class="bi bi-bar-chart-steps me-2" aria-hidden="true"></i>AR Ageing
+    </h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">
+      Company-wide customer ageing buckets and per-customer balance lookup.
+    </p>
+  </header>
+
+  @if (!canView()) {
+    <p class="text-muted d-flex align-items-center gap-2 mt-3" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to view AR ageing.
+    </p>
+  } @else {
+
+    <!-- Company selector -->
+    @switch (companyState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-3" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load companies.
+        </p>
+      }
+      @default {
+        @if (companies().length > 1) {
+          <div class="mb-3" style="max-width:320px">
+            <label for="companySelect" class="form-label fw-semibold">Company</label>
+            <select id="companySelect" class="form-select form-select-sm"
+                    [ngModel]="selectedCompanyId()"
+                    (ngModelChange)="onCompanyChange($event)">
+              @for (c of companies(); track c.id) {
+                <option [value]="c.id">{{ c.name }}</option>
+              }
+            </select>
+          </div>
+        }
+      }
+    }
+
+    <!-- Ageing table -->
+    <h2 class="h6 mt-2">Customer Ageing Buckets</h2>
+    @switch (state()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading ageing…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load ageing data.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="text-muted" role="alert">
+          <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>No permission.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <p class="text-muted fst-italic">No ageing data found.</p>
+        } @else {
+          <div class="table-responsive mb-4">
+            <table class="table table-hover align-middle bg-white grid table-sm">
+              <caption class="visually-hidden">AR ageing by customer</caption>
+              <thead class="table-light">
+                <tr>
+                  <th scope="col">Customer</th>
+                  <th scope="col" class="text-end">Current</th>
+                  <th scope="col" class="text-end">1–30 days</th>
+                  <th scope="col" class="text-end">31–60 days</th>
+                  <th scope="col" class="text-end">61–90 days</th>
+                  <th scope="col" class="text-end">90+ days</th>
+                  <th scope="col" class="text-end">Total</th>
+                  <th scope="col">Ccy</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of ageingRows(); track row.customerId) {
+                  <tr>
+                    <td>
+                      <span class="fw-semibold">{{ row.customerCode }}</span><br>
+                      <span class="text-muted" style="font-size:0.85em">{{ row.customerName }}</span>
+                    </td>
+                    <td class="text-end font-monospace">{{ fmtMoney(row.current) }}</td>
+                    <td class="text-end font-monospace">{{ fmtMoney(row.days1to30) }}</td>
+                    <td class="text-end font-monospace">{{ fmtMoney(row.days31to60) }}</td>
+                    <td class="text-end font-monospace">{{ fmtMoney(row.days61to90) }}</td>
+                    <td class="text-end font-monospace">{{ fmtMoney(row.days91Plus) }}</td>
+                    <td class="text-end font-monospace fw-semibold">{{ fmtMoney(row.total) }}</td>
+                    <td>{{ row.currency }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      }
+    }
+
+    <!-- Per-customer balance lookup -->
+    <h2 class="h6 mt-2">Per-Customer Balance Lookup</h2>
+    <div class="mb-3" style="max-width:400px;position:relative">
+      <label for="balanceCustomer" class="form-label">Customer</label>
+      <input id="balanceCustomer" type="text" class="form-control form-control-sm"
+             placeholder="Search customer…"
+             [ngModel]="balanceCustomerQ()"
+             (ngModelChange)="onBalanceCustomerChange($event)"
+             autocomplete="off" />
+      @if (balanceCustomerResults().length > 0) {
+        <ul class="list-group position-absolute w-100 z-3 shadow-sm" role="listbox"
+            aria-label="Customer suggestions">
+          @for (c of balanceCustomerResults(); track c.uid) {
+            <li class="list-group-item list-group-item-action py-1" role="option"
+                aria-selected="false" tabindex="0"
+                (click)="selectBalanceCustomer(c)"
+                (keydown.enter)="selectBalanceCustomer(c)"
+                style="cursor:pointer">
+              <span class="fw-semibold">{{ c.code }}</span> — {{ c.displayName }}
+            </li>
+          }
+        </ul>
+      }
+    </div>
+
+    @if (balanceState() === 'loading') {
+      <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading balance…
+      </p>
+    } @else if (balance(); as b) {
+      <div class="alert alert-info d-inline-flex align-items-center gap-2 mb-3">
+        <i class="bi bi-wallet2" aria-hidden="true"></i>
+        <span>Outstanding balance for
+          <strong>{{ selectedBalanceCustomer()?.label }}</strong>:
+          <span class="font-monospace">{{ b.currency }} {{ fmtMoney(b.balance) }}</span>
+        </span>
+      </div>
+    }
+
+  }
+</section>

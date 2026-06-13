@@ -1,0 +1,65 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">
+      <i class="bi bi-receipt me-2" aria-hidden="true"></i>
+      AR Receipt
+      @if (entity(); as r) { — {{ r.receiptNumber }} }
+    </h1>
+    <a routerLink="/admin/ar/receipts" class="btn btn-outline-secondary btn-sm mt-2">
+      <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Receipts
+    </a>
+  </header>
+
+  @switch (state()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mt-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading receipt…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mt-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load receipt.
+      </p>
+    }
+    @case ('forbidden') {
+      <p class="text-muted mt-3" role="alert">
+        <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>
+        You don't have permission to view this receipt.
+      </p>
+    }
+    @default {
+      @if (entity(); as r) {
+        <dl class="row mt-3">
+          <dt class="col-sm-3">Receipt Number</dt><dd class="col-sm-9">{{ r.receiptNumber }}</dd>
+          <dt class="col-sm-3">Date</dt><dd class="col-sm-9">{{ r.receiptDate }}</dd>
+          <dt class="col-sm-3">Amount</dt>
+          <dd class="col-sm-9 font-monospace">{{ r.currency }} {{ fmtMoney(r.amount) }}</dd>
+          <dt class="col-sm-3">Unallocated</dt>
+          <dd class="col-sm-9 font-monospace">{{ fmtMoney(r.unallocatedAmount) }}</dd>
+          <dt class="col-sm-3">Tender Type</dt><dd class="col-sm-9">{{ r.tenderType }}</dd>
+        </dl>
+
+        @if (r.allocations.length > 0) {
+          <h2 class="h6 mt-3">Allocations</h2>
+          <table class="table table-sm table-bordered align-middle">
+            <caption class="visually-hidden">Receipt allocations</caption>
+            <thead class="table-light">
+              <tr>
+                <th scope="col">Invoice UID</th>
+                <th scope="col" class="text-end">Allocated Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (a of r.allocations; track a.arInvoiceUid) {
+                <tr>
+                  <td class="font-monospace text-break" style="font-size:0.8em">{{ a.arInvoiceUid }}</td>
+                  <td class="text-end font-monospace">{{ fmtMoney(a.allocatedAmount) }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
+      }
+    }
+  }
+</section>

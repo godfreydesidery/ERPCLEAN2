@@ -1121,5 +1121,51 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./gl/year-end/year-end-close.component').then((m) => m.YearEndCloseComponent),
   },
+  // ── AR Receipts list + detail ─────────────────────────────────────────────
+  {
+    path: 'ar/receipts',
+    canActivate: [requirePermission('AR.VIEW')],
+    loadComponent: () =>
+      import('./ar/ar-receipts-list.component').then((m) => m.ArReceiptsListComponent),
+  },
+  {
+    path: 'ar/receipts/uid/:uid',
+    canActivate: [requirePermission('AR.VIEW')],
+    loadComponent: () =>
+      import('./ar/ar-receipt-detail.component').then((m) => m.ArReceiptDetailComponent),
+  },
+  // ── AR Ageing + Balance ───────────────────────────────────────────────────
+  {
+    path: 'ar/ageing',
+    canActivate: [requirePermission('AR.STATEMENT.VIEW')],
+    loadComponent: () =>
+      import('./ar/ar-ageing.component').then((m) => m.ArAgeingComponent),
+  },
+  // ── AP Payments list + detail ─────────────────────────────────────────────
+  {
+    path: 'ap/payments',
+    canActivate: [requirePermission('AP.VIEW')],
+    loadComponent: () =>
+      import('./ap/ap-payments-list.component').then((m) => m.ApPaymentsListComponent),
+  },
+  {
+    path: 'ap/payments/uid/:uid',
+    canActivate: [requirePermission('AP.VIEW')],
+    loadComponent: () =>
+      import('./ap/ap-payment-detail.component').then((m) => m.ApPaymentDetailComponent),
+  },
+  // ── Cash Transfers list + detail ──────────────────────────────────────────
+  {
+    path: 'cash/transfers',
+    canActivate: [requirePermission('CASH.VIEW')],
+    loadComponent: () =>
+      import('./cashbank/cash-transfers-list.component').then((m) => m.CashTransfersListComponent),
+  },
+  {
+    path: 'cash/transfers/uid/:uid',
+    canActivate: [requirePermission('CASH.VIEW')],
+    loadComponent: () =>
+      import('./cashbank/cash-transfer-detail.component').then((m) => m.CashTransferDetailComponent),
+  },
   { path: '', redirectTo: 'home', pathMatch: 'full' },
 ];

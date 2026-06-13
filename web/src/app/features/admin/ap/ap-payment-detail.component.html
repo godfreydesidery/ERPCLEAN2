@@ -1,0 +1,77 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">
+      <i class="bi bi-cash-stack me-2" aria-hidden="true"></i>
+      AP Payment
+      @if (entity(); as p) { — {{ p.paymentNumber }} }
+    </h1>
+    <a routerLink="/admin/ap/payments" class="btn btn-outline-secondary btn-sm mt-2">
+      <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Payments
+    </a>
+  </header>
+
+  @switch (state()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mt-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading payment…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mt-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load payment.
+      </p>
+    }
+    @case ('forbidden') {
+      <p class="text-muted mt-3" role="alert">
+        <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>No permission.
+      </p>
+    }
+    @default {
+      @if (entity(); as p) {
+        <dl class="row mt-3">
+          <dt class="col-sm-3">Payment Number</dt><dd class="col-sm-9">{{ p.paymentNumber }}</dd>
+          <dt class="col-sm-3">Date</dt><dd class="col-sm-9">{{ p.paymentDate }}</dd>
+          <dt class="col-sm-3">Kind</dt><dd class="col-sm-9">
+            <span class="badge" [class]="p.kind === 'SINGLE' ? 'text-bg-info' : 'text-bg-primary'">
+              {{ p.kind }}
+            </span>
+          </dd>
+          <dt class="col-sm-3">Amount</dt>
+          <dd class="col-sm-9 font-monospace">{{ p.currency }} {{ fmtMoney(p.amount) }}</dd>
+          <dt class="col-sm-3">Tender</dt><dd class="col-sm-9">{{ p.tenderType }}</dd>
+          @if (p.bankReference) {
+            <dt class="col-sm-3">Reference</dt><dd class="col-sm-9">{{ p.bankReference }}</dd>
+          }
+          @if (p.glEntryUid) {
+            <dt class="col-sm-3">GL Entry</dt><dd class="col-sm-9 font-monospace text-break">{{ p.glEntryUid }}</dd>
+          }
+        </dl>
+
+        @if (p.allocations.length > 0) {
+          <h2 class="h6 mt-3">Bill Allocations</h2>
+          <table class="table table-sm table-bordered align-middle">
+            <caption class="visually-hidden">Payment allocations</caption>
+            <thead class="table-light">
+              <tr>
+                <th scope="col">Bill UID</th>
+                <th scope="col" class="text-end">Allocated</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (a of p.allocations; track a.supplierBillUid) {
+                <tr>
+                  <td class="font-monospace text-break" style="font-size:0.8em">
+                    <a [routerLink]="['/admin/ap/supplier-bills/uid', a.supplierBillUid]">
+                      {{ a.supplierBillUid }}
+                    </a>
+                  </td>
+                  <td class="text-end font-monospace">{{ fmtMoney(a.allocatedAmount) }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
+      }
+    }
+  }
+</section>

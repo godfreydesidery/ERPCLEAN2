@@ -1,0 +1,51 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">
+      <i class="bi bi-arrow-left-right me-2" aria-hidden="true"></i>
+      Cash Transfer
+      @if (entity(); as t) { — {{ t.transferNumber }} }
+    </h1>
+    <a routerLink="/admin/cash/transfers" class="btn btn-outline-secondary btn-sm mt-2">
+      <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Transfers
+    </a>
+  </header>
+
+  @switch (state()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mt-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading transfer…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mt-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load transfer.
+      </p>
+    }
+    @case ('forbidden') {
+      <p class="text-muted mt-3" role="alert">
+        <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>No permission.
+      </p>
+    }
+    @default {
+      @if (entity(); as t) {
+        <dl class="row mt-3">
+          <dt class="col-sm-3">Transfer Number</dt><dd class="col-sm-9">{{ t.transferNumber }}</dd>
+          <dt class="col-sm-3">Date</dt><dd class="col-sm-9">{{ t.transferDate }}</dd>
+          <dt class="col-sm-3">Amount</dt>
+          <dd class="col-sm-9 font-monospace">{{ t.currency }} {{ fmtMoney(t.amount) }}</dd>
+          <dt class="col-sm-3">From Account</dt>
+          <dd class="col-sm-9 font-monospace text-break">{{ t.sourceAccountUid }}</dd>
+          <dt class="col-sm-3">To Account</dt>
+          <dd class="col-sm-9 font-monospace text-break">{{ t.destinationAccountUid }}</dd>
+          @if (t.reference) {
+            <dt class="col-sm-3">Reference</dt><dd class="col-sm-9">{{ t.reference }}</dd>
+          }
+          @if (t.journalEntryRef) {
+            <dt class="col-sm-3">GL Entry</dt>
+            <dd class="col-sm-9 font-monospace">{{ t.journalEntryRef }}</dd>
+          }
+        </dl>
+      }
+    }
+  }
+</section>

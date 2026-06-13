@@ -1,0 +1,141 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">
+      <i class="bi bi-receipt me-2" aria-hidden="true"></i>AR Receipts
+    </h1>
+    <p class="text-muted mb-0" style="font-size:0.9rem">Recorded cash receipts from customers.</p>
+    @if (session.hasPermission('AR.RECEIPT.RECORD')) {
+      <a routerLink="/admin/ar/receipts/record" class="btn btn-primary btn-sm mt-2">
+        <i class="bi bi-plus-circle me-1" aria-hidden="true"></i>Record Receipt
+      </a>
+    }
+  </header>
+
+  @if (!canView()) {
+    <p class="text-muted d-flex align-items-center gap-2 mt-3" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to view receipts.
+    </p>
+  } @else {
+
+    <!-- Company selector -->
+    @switch (companyState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-3" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load companies.
+        </p>
+      }
+      @default {
+        @if (companies().length > 1) {
+          <div class="mb-3" style="max-width:320px">
+            <label for="companySelect" class="form-label fw-semibold">Company</label>
+            <select id="companySelect" class="form-select form-select-sm"
+                    [ngModel]="selectedCompanyId()"
+                    (ngModelChange)="onCompanyChange($event)">
+              @for (c of companies(); track c.id) {
+                <option [value]="c.id">{{ c.name }}</option>
+              }
+            </select>
+          </div>
+        }
+      }
+    }
+
+    <!-- Customer filter -->
+    <div class="mb-3" style="max-width:400px;position:relative">
+      <label for="customerFilter" class="form-label fw-semibold">Filter by Customer</label>
+      <div class="input-group input-group-sm">
+        <input id="customerFilter" type="text" class="form-control" placeholder="Search customer…"
+               [ngModel]="customerFilterQ()"
+               (ngModelChange)="onCustomerFilterChange($event)"
+               autocomplete="off" />
+        @if (selectedFilterCustomer()) {
+          <button class="btn btn-outline-secondary" type="button" (click)="clearCustomerFilter()"
+                  aria-label="Clear customer filter">
+            <i class="bi bi-x" aria-hidden="true"></i>
+          </button>
+        }
+      </div>
+      @if (customerFilterResults().length > 0) {
+        <ul class="list-group position-absolute w-100 z-3 shadow-sm" role="listbox"
+            aria-label="Customer suggestions">
+          @for (c of customerFilterResults(); track c.uid) {
+            <li class="list-group-item list-group-item-action py-1" role="option"
+                aria-selected="false" tabindex="0"
+                (click)="selectFilterCustomer(c)"
+                (keydown.enter)="selectFilterCustomer(c)"
+                style="cursor:pointer">
+              <span class="fw-semibold">{{ c.code }}</span> — {{ c.displayName }}
+            </li>
+          }
+        </ul>
+      }
+    </div>
+
+    <!-- Four-state list -->
+    @switch (state()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading receipts…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load receipts. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="text-muted" role="alert">
+          <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>
+          You don't have permission to view receipts.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <p class="text-muted fst-italic">No receipts found for the selected filters.</p>
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-hover align-middle bg-white grid">
+              <caption class="visually-hidden">AR Receipts</caption>
+              <thead class="table-light">
+                <tr>
+                  <th scope="col">Receipt #</th>
+                  <th scope="col">Date</th>
+                  <th scope="col">Amount</th>
+                  <th scope="col">Unallocated</th>
+                  <th scope="col">Tender</th>
+                  <th scope="col"><span class="visually-hidden">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of rows(); track row.uid) {
+                  <tr>
+                    <td>{{ row.receiptNumber }}</td>
+                    <td>{{ row.receiptDate }}</td>
+                    <td class="text-end font-monospace">{{ row.currency }} {{ fmtMoney(row.amount) }}</td>
+                    <td class="text-end font-monospace">{{ fmtMoney(row.unallocatedAmount) }}</td>
+                    <td>{{ row.tenderType }}</td>
+                    <td class="text-end">
+                      <a [routerLink]="['/admin/ar/receipts/uid', row.uid]"
+                         class="btn btn-outline-secondary btn-sm"
+                         [attr.aria-label]="'View receipt ' + row.receiptNumber">
+                        <i class="bi bi-eye" aria-hidden="true"></i>
+                      </a>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <app-paginator [meta]="meta()" label="Receipts" (pageChange)="goToPage($event)" />
+        }
+      }
+    }
+  }
+</section>
