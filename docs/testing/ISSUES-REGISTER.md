@@ -385,3 +385,41 @@ the 2 HIGH. Full suite green after fixes: BI ITs 10/10, web ng test 438/438 (3×
 **LOW / quality (recorded, not all changed):** BI imports gl `FiscalPeriod` + iam `Company` entities (ADR-0037 D-3 forbids foreign entities, but these are the two documented read-allowance repos' return types — reconcile the ADR wording, OQ-BI-01); no ArchUnit rule yet enforces BI's no-repository purity (should-add rule logged); the V81 grant + perm-catalogue isn't exercised by an HTTP-layer IT (the service guard is); `netProfitPeriod` vs `netProfit` duplicate field; a11y helper also disables scrollable-region-focusable (acceptable for jsdom). These are deferred quality hardening, none a correctness/security break.
 
 **The lesson (recorded):** even a read-only aggregator needs the review — the 2 HIGH were a least-privilege gap (composite endpoint under-gated vs its own per-panel endpoints) and a KPI-correctness divergence (fabricated COGS) that the green tests sailed past. And the a11y gate's own flakiness (axe-in-jsdom hangs) had to be engineered into a reliable skip-on-hang rather than a CI-reddening flake — a flaky gate is worse than a narrower reliable one.
+
+## Finding #23 — Production Hardening (ADR-0038) build batch (2026-06-13)
+
+Wave 3 (the final-15% closer). NOT a defect batch — a hardening increment. Key context: recon found the
+codebase ALREADY security-mature (build-time RBAC gate via EndpointAuthorizationTest, fail-closed bootstrap
+password, BCrypt-12, SHA-256 refresh-token rotation + reuse detection, account lockout, constant-time
+unknown-user path, 12-factor env secrets with no hardcoded values). So Wave 3 = operational plumbing, 4
+tranches, all GREEN (mvn clean verify 844 tests + prod-image build + ng build), merged to develop (9c92905).
+
+**Delivered repo artifacts (11):** backend CI workflow (the ~100 Testcontainers ITs + ArchUnit/auth gates
+now run in CI — previously dev-machine-only); Dependabot (maven/npm/actions); **the long-open ISSUES-REGISTER
+#4 fix** — GlobalExceptionHandler now logs the stack at ERROR before the safe 500 (unexpected 500s were
+invisible, which had hampered diagnosing #15/#20a); actuator readiness/liveness probes + container HEALTHCHECK;
+**a real build-blocker caught in design review** — backend/Dockerfile EXPOSEd 8080 while the app listens on
+8081 (every healthcheck would have restart-looped the container) → fixed to 8081 everywhere; correlation-id
++ MDC enrichment in JwtRequestContextFilter (user/company/branch/requestId now on every log line); JSON
+structured logging (logstash-encoder) behind the prod profile; Micrometer + /actuator/prometheus on a
+separate management port (9090) + outbox dispatch timer + poison-event counter (the #20d loop would now be
+visible); a PROD Dockerfile (API + baked Angular, NO in-container Postgres — unlike the QA single-container
+image) + a reference split docker-compose (API + separate Postgres) + pg_dump backup/restore + JWT file-mode
+key-gen + ops docs; springdoc OpenAPI (/v3/api-docs + swagger-ui, JWT bearer scheme, env-gated); OWASP
+dependency-check (security-scan profile) + npm audit + a security-sweep runbook.
+
+**Profile discipline:** every prod-only behaviour (JSON logging, prod log levels, probes) is gated behind
+`SPRING_PROFILES_ACTIVE=prod` so dev/test is byte-unchanged — the 844 suite runs the default branches.
+
+**Integration notes:** application-prod.yml was an add/add conflict (B+C) — merged, and the committed Hikari
+pool numbers C had added were DROPPED per the ADR review (a committed maximum-pool-size is a footgun vs the
+managed-DB connection limit; wire via env at deploy). pom.xml dependency-block conflict (B+D) resolved as a
+union (logstash + micrometer-prometheus + springdoc all kept). No regression (clean verify, 0 context-load
+failures with the new classpath deps).
+
+**FENCED — 13 owner ops-decisions (NOT built; documented as a runbook in ADR-0038 §D-Fenced):** prod
+host/orchestrator; managed-vs-self-hosted Postgres; container registry + creds; secrets backend
+(env/Vault/SSM/K8s); TLS termination/reverse proxy; the live prod deploy pipeline (QA is manual SSH today);
+log-aggregation backend; metrics scraping + dashboards; distributed tracing collector; HTTP security
+headers + CSP (needs the TLS edge); CI-automated OWASP weekly scan (needs an NVD_API_KEY); PAT/credential
+rotation; a pre-commit secret-scan hook. Each is additive on top of what shipped; none is precluded.
