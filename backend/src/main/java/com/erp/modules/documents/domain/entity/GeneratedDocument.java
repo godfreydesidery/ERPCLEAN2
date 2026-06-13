@@ -9,6 +9,8 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import lombok.Getter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * Append-only render log — one row per committed render (ADR-0023 D-4 / BR-DOC-08).
@@ -41,6 +43,7 @@ public class GeneratedDocument extends UidEntity {
     private String sourceUid;
 
     /** JSONB — parameters for a parameterised render (e.g. {customerUid, fromDate, toDate}). */
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "source_params", columnDefinition = "JSONB")
     private String sourceParams;
 

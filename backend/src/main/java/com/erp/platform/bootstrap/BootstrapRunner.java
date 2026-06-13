@@ -11,6 +11,7 @@ import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.repository.OrganisationRepository;
 import com.erp.modules.iam.repository.UserBranchRepository;
 import com.erp.modules.ap.service.ApGlSeeder;
+import com.erp.modules.costing.service.DimensionSeeder;
 import com.erp.modules.crm.service.CrmStageSeeder;
 import com.erp.modules.documents.service.DocumentBrandingSeeder;
 import com.erp.modules.notifications.service.NotificationTypeSeeder;
@@ -81,6 +82,8 @@ public class BootstrapRunner implements ApplicationRunner {
     private final DocumentBrandingSeeder documentBrandingSeeder;
     // Fixed Assets GL seeder (ADR-0030 D-7)
     private final FixedAssetGlSeeder fixedAssetGlSeeder;
+    // Costing built-in dimensions seeder (ADR-0025 D-9)
+    private final DimensionSeeder dimensionSeeder;
     // CRM pipeline stage defaults seeder (ADR-0031 D-5)
     private final CrmStageSeeder crmStageSeeder;
     // HR & Payroll GL + statutory seeders (ADR-0032 D-8/D-9)
@@ -110,6 +113,7 @@ public class BootstrapRunner implements ApplicationRunner {
                            InventoryGlSeeder inventoryGlSeeder,
                            DocumentBrandingSeeder documentBrandingSeeder,
                            FixedAssetGlSeeder fixedAssetGlSeeder,
+                           DimensionSeeder dimensionSeeder,
                            CrmStageSeeder crmStageSeeder,
                            HrGlSeeder hrGlSeeder,
                            HrStatutorySeeder hrStatutorySeeder,
@@ -134,6 +138,7 @@ public class BootstrapRunner implements ApplicationRunner {
         this.inventoryGlSeeder      = inventoryGlSeeder;
         this.documentBrandingSeeder = documentBrandingSeeder;
         this.fixedAssetGlSeeder     = fixedAssetGlSeeder;
+        this.dimensionSeeder        = dimensionSeeder;
         this.crmStageSeeder         = crmStageSeeder;
         this.hrGlSeeder             = hrGlSeeder;
         this.hrStatutorySeeder      = hrStatutorySeeder;
@@ -183,6 +188,8 @@ public class BootstrapRunner implements ApplicationRunner {
         documentBrandingSeeder.seedDefaults(company.getId());
         // Seed Fixed Assets GL accounts + gl_configs (ADR-0030 D-7).
         fixedAssetGlSeeder.seedDefaults(company.getId());
+        // Seed built-in costing dimensions COST_CENTRE + DEPARTMENT (ADR-0025 D-9).
+        dimensionSeeder.seedBuiltIns(company.getId());
         // Seed default CRM pipeline stages (ADR-0031 D-5).
         crmStageSeeder.seedDefaults(company.getId());
         // Seed HR GL accounts + gl_configs + TZ statutory defaults (ADR-0032 D-8/D-9).
