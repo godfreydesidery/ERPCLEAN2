@@ -1,0 +1,210 @@
+<div class="admin-page">
+  <div class="page-head">
+    <h1>Stock Locations</h1>
+    @if (canManage()) {
+      <button class="btn btn-sm btn-primary" type="button" (click)="toggleCreateForm()"
+              [attr.aria-expanded]="showCreateForm()">
+        <i class="bi bi-plus-lg" aria-hidden="true"></i>
+        @if (showCreateForm()) { Cancel } @else { New Location }
+      </button>
+    }
+  </div>
+
+  <!-- Company selector (hidden when single company) -->
+  @if (companies().length > 1) {
+    <div class="mb-3">
+      <label for="companySelect" class="form-label">Company</label>
+      <select id="companySelect" class="form-select form-select-sm w-auto"
+              [ngModel]="selectedCompanyId()"
+              (ngModelChange)="onCompanyChange($event)">
+        @for (c of companies(); track c.id) {
+          <option [value]="c.id">{{ c.name }}</option>
+        }
+      </select>
+    </div>
+  }
+
+  <!-- Create form -->
+  @if (showCreateForm() && canManage()) {
+    <div class="create-form card mb-4">
+      <div class="card-body">
+        <h2 class="h6 mb-3">New Stock Location</h2>
+        <div class="row g-3">
+          <div class="col-md-3">
+            <label for="fCode" class="form-label">Code <span aria-hidden="true">*</span></label>
+            <input id="fCode" type="text" class="form-control form-control-sm"
+                   [ngModel]="fCode()" (ngModelChange)="fCode.set($event)"
+                   maxlength="30" required autocomplete="off" />
+          </div>
+          <div class="col-md-4">
+            <label for="fName" class="form-label">Name <span aria-hidden="true">*</span></label>
+            <input id="fName" type="text" class="form-control form-control-sm"
+                   [ngModel]="fName()" (ngModelChange)="fName.set($event)"
+                   maxlength="120" required autocomplete="off" />
+          </div>
+          <div class="col-md-3">
+            <label for="fLocationType" class="form-label">Type <span aria-hidden="true">*</span></label>
+            <select id="fLocationType" class="form-select form-select-sm"
+                    [ngModel]="fLocationType()" (ngModelChange)="fLocationType.set($event)">
+              @for (t of locationTypes; track t) {
+                <option [value]="t">{{ t }}</option>
+              }
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" for="fBranchPicker">Branch <span aria-hidden="true">*</span></label>
+            <app-uid-picker id="fBranchPicker"
+                            [(ngModel)]="fBranchUid"
+                            [options]="branchOptions()"
+                            placeholder="Select branch"
+                            [required]="true" />
+          </div>
+          <div class="col-md-3 d-flex align-items-end">
+            <div class="form-check">
+              <input id="fMakeDefault" class="form-check-input" type="checkbox"
+                     [ngModel]="fMakeDefault()" (ngModelChange)="fMakeDefault.set($event)" />
+              <label class="form-check-label" for="fMakeDefault">Set as default</label>
+            </div>
+          </div>
+        </div>
+        @if (formError()) {
+          <p class="form-error" role="alert">{{ formError() }}</p>
+        }
+        <div class="mt-3 d-flex gap-2">
+          <button type="button" class="btn btn-sm btn-primary" (click)="submitCreate()" [disabled]="saving()">
+            @if (saving()) { Saving… } @else { Create Location }
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" (click)="toggleCreateForm()">Cancel</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Four-state switch -->
+  @switch (state()) {
+    @case ('loading') {
+      <div class="state" aria-live="polite" aria-busy="true">
+        <div class="spinner-border spinner-border-sm text-secondary" role="status">
+          <span class="visually-hidden">Loading stock locations…</span>
+        </div>
+        <span class="ms-2 text-muted">Loading…</span>
+      </div>
+    }
+    @case ('forbidden') {
+      <div class="state" role="alert">
+        <i class="bi bi-shield-x text-danger" aria-hidden="true"></i>
+        You do not have permission to view stock locations.
+      </div>
+    }
+    @case ('error') {
+      <div class="state" role="alert">
+        <i class="bi bi-exclamation-triangle text-danger" aria-hidden="true"></i>
+        Could not load stock locations. <button class="btn btn-sm btn-link" (click)="load(currentPage())">Retry</button>
+      </div>
+    }
+    @default {
+      @if (isEmpty()) {
+        <div class="state text-muted">No stock locations found.</div>
+      } @else {
+        <div class="table-responsive">
+          <table class="table table-hover align-middle bg-white grid">
+            <caption class="visually-hidden">Stock locations</caption>
+            <thead>
+              <tr>
+                <th scope="col">Code</th>
+                <th scope="col">Name</th>
+                <th scope="col">Type</th>
+                <th scope="col">Status</th>
+                <th scope="col">Default</th>
+                <th scope="col"><span class="visually-hidden">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of rows(); track row.uid) {
+                <tr>
+                  <td class="fw-semibold">{{ row.code }}</td>
+                  <td>
+                    @if (editingUid() === row.uid) {
+                      <input type="text" class="form-control form-control-sm"
+                             [ngModel]="eName()" (ngModelChange)="eName.set($event)"
+                             maxlength="120"
+                             [attr.aria-label]="'Edit name for ' + row.code" />
+                    } @else {
+                      {{ row.name }}
+                    }
+                  </td>
+                  <td>
+                    @if (editingUid() === row.uid) {
+                      <select class="form-select form-select-sm"
+                              [ngModel]="eLocationType()" (ngModelChange)="eLocationType.set($event)"
+                              [attr.aria-label]="'Edit type for ' + row.code">
+                        @for (t of locationTypes; track t) {
+                          <option [value]="t">{{ t }}</option>
+                        }
+                      </select>
+                    } @else {
+                      {{ row.locationType }}
+                    }
+                  </td>
+                  <td>
+                    <span class="badge" [class]="statusBadgeClass(row.status)">{{ row.status }}</span>
+                  </td>
+                  <td>
+                    @if (row.isDefault) {
+                      <span class="badge text-bg-primary">Default</span>
+                    }
+                  </td>
+                  <td class="text-end text-nowrap">
+                    @if (editingUid() === row.uid) {
+                      <button type="button" class="btn btn-sm btn-success me-1"
+                              (click)="submitEdit(row)" [disabled]="editSaving()"
+                              [attr.aria-label]="'Save changes for ' + row.code">
+                        @if (editSaving()) { Saving… } @else { Save }
+                      </button>
+                      <button type="button" class="btn btn-sm btn-outline-secondary"
+                              (click)="cancelEdit()"
+                              [attr.aria-label]="'Cancel edit for ' + row.code">Cancel</button>
+                      @if (editError()) {
+                        <p class="form-error mt-1" role="alert">{{ editError() }}</p>
+                      }
+                    } @else if (canManage()) {
+                      <button type="button" class="btn btn-sm btn-outline-secondary me-1"
+                              (click)="startEdit(row)"
+                              [attr.aria-label]="'Edit ' + row.code">
+                        <i class="bi bi-pencil" aria-hidden="true"></i>
+                      </button>
+                      @if (!row.isDefault && row.status === 'ACTIVE') {
+                        <button type="button" class="btn btn-sm btn-outline-primary me-1"
+                                (click)="setDefault(row)"
+                                [disabled]="actionBusyUid() === row.uid"
+                                [attr.aria-label]="'Set ' + row.code + ' as default'">
+                          <i class="bi bi-star" aria-hidden="true"></i>
+                        </button>
+                      }
+                      @if (row.status === 'ACTIVE') {
+                        <button type="button" class="btn btn-sm btn-outline-danger"
+                                (click)="deactivate(row)"
+                                [disabled]="actionBusyUid() === row.uid"
+                                [attr.aria-label]="'Deactivate ' + row.code">
+                          <i class="bi bi-pause-circle" aria-hidden="true"></i>
+                        </button>
+                      } @else if (row.status === 'INACTIVE') {
+                        <button type="button" class="btn btn-sm btn-outline-success"
+                                (click)="reactivate(row)"
+                                [disabled]="actionBusyUid() === row.uid"
+                                [attr.aria-label]="'Reactivate ' + row.code">
+                          <i class="bi bi-play-circle" aria-hidden="true"></i>
+                        </button>
+                      }
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <app-paginator [meta]="meta()" [label]="'Stock Locations'" (pageChange)="goToPage($event)" />
+      }
+    }
+  }
+</div>

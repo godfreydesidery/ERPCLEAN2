@@ -226,6 +226,31 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./stock/stock-list.component').then((m) => m.StockListComponent),
   },
+  // ── Stock Locations / Batches / Serials ──────────────────────────────────
+  {
+    path: 'stock/locations',
+    canActivate: [requirePermission('STOCK.LOCATION.VIEW')],
+    loadComponent: () =>
+      import('./stock/locations/stock-location-list.component').then(
+        (m) => m.StockLocationListComponent,
+      ),
+  },
+  {
+    path: 'stock/batches',
+    canActivate: [requirePermission('STOCK.BATCH.VIEW')],
+    loadComponent: () =>
+      import('./stock/batches/stock-batch-list.component').then(
+        (m) => m.StockBatchListComponent,
+      ),
+  },
+  {
+    path: 'stock/serials',
+    canActivate: [requirePermission('STOCK.SERIAL.VIEW')],
+    loadComponent: () =>
+      import('./stock/serials/stock-serial-list.component').then(
+        (m) => m.StockSerialListComponent,
+      ),
+  },
   // ── Inventory Valuation ───────────────────────────────────────────────────
   {
     path: 'stock/valuation',

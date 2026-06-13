@@ -147,6 +147,9 @@ export class ShellComponent {
       items: [
         { label: 'Stock On-Hand', route: '/admin/stock', icon: 'bi-boxes', available: true, permission: 'STOCK.VIEW' },
         { label: 'Stock Transfers', route: '/admin/stock-transfers', icon: 'bi-arrow-left-right', available: true, permission: 'STOCK.TRANSFER.VIEW' },
+        { label: 'Stock Locations', route: '/admin/stock/locations', icon: 'bi-geo-alt', available: true, permission: 'STOCK.LOCATION.VIEW' },
+        { label: 'Stock Batches', route: '/admin/stock/batches', icon: 'bi-layers', available: true, permission: 'STOCK.BATCH.VIEW' },
+        { label: 'Serial Numbers', route: '/admin/stock/serials', icon: 'bi-upc-scan', available: true, permission: 'STOCK.SERIAL.VIEW' },
         { label: 'Stock Valuation', route: '/admin/stock/valuation', icon: 'bi-clipboard-data', available: true, permission: 'INVENTORY.VALUATION.VIEW' },
         { label: 'Opening Valuation', route: '/admin/stock/valuation/opening', icon: 'bi-pencil-square', available: true, permission: 'INVENTORY.OPENING.SET' },
         { label: 'Stock Counts', route: '/admin/stock-counts', icon: 'bi-clipboard2-check', available: true, permission: 'STOCK.COUNT.VIEW' },
