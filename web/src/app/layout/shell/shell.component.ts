@@ -160,6 +160,9 @@ export class ShellComponent {
       items: [
         { label: 'Purchase Orders', route: '/admin/purchase-orders', icon: 'bi-cart', available: true, permission: 'PURCHASE.ORDER.VIEW' },
         { label: 'Goods Receipts', route: '/admin/goods-receipts', icon: 'bi-box-arrow-in-down', available: true, permission: 'PURCHASE.ORDER.VIEW' },
+        { label: 'Purchase Returns', route: '/admin/purchase-returns', icon: 'bi-arrow-return-left', available: true, permission: 'PURCHASE.RETURN.VIEW' },
+        { label: 'Landed Costs', route: '/admin/landed-costs', icon: 'bi-box-arrow-in-right', available: true, permission: 'PURCHASE.LANDED_COST.VIEW' },
+        { label: 'Purchase Settings', route: '/admin/purchase-settings', icon: 'bi-gear', available: true, permission: 'PURCHASE.SETTINGS.VIEW' },
       ],
     },
     {

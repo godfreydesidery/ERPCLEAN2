@@ -148,3 +148,127 @@ export interface CreateGoodsReceiptRequest {
 export interface VoidGoodsReceiptRequest {
   reason: string;
 }
+
+// ── Purchase Return enums / DTOs / requests ─────────────────────────────────
+
+export type PurchaseReturnStatus = 'DRAFT' | 'CONFIRMED';
+
+export interface PurchaseReturnLineDto {
+  id: string;
+  uid: string;
+  lineNo: number;
+  goodsReceiptLineId: string;
+  goodsReceiptLineUid: string;
+  productId: string;
+  productCode: string;
+  productName: string;
+  unitId: string;
+  unitName: string;
+  returnedQty: string;
+  returnedQtyInBase: string;
+  unitCostAmount: string;
+  lineValueAmount: string;
+  currency: string;
+}
+
+export interface PurchaseReturnDto {
+  id: string;
+  uid: string;
+  companyId: string;
+  branchId: string;
+  returnNumber: string;
+  status: PurchaseReturnStatus;
+  goodsReceiptId: string;
+  goodsReceiptUid: string;
+  supplierId: string;
+  supplierCode: string;
+  supplierName: string;
+  reason: string;
+  netAmount: string;
+  vatAmount: string;
+  grossAmount: string;
+  currency: string;
+  debitNoteUid: string | null;
+  glEntryUid: string | null;
+  confirmedAt: string | null;
+  createdAt: string | null;
+  lines: PurchaseReturnLineDto[] | null;
+}
+
+export interface CreatePurchaseReturnLineRequest {
+  goodsReceiptLineUid: string;
+  returnedQty: string;
+}
+
+export interface CreatePurchaseReturnRequest {
+  companyUid: string;
+  goodsReceiptUid: string;
+  reason: string;
+  lines: CreatePurchaseReturnLineRequest[];
+}
+
+// ── Landed Cost enums / DTOs / requests ──────────────────────────────────────
+
+export type LandedCostStatus = 'DRAFT' | 'CONFIRMED';
+export type LandedCostBasis = 'BY_VALUE' | 'BY_QUANTITY';
+export type LandedCostChargeType = 'FREIGHT' | 'DUTY' | 'CLEARING' | 'INSURANCE' | 'OTHER';
+
+export interface LandedCostChargeDto {
+  id: string;
+  uid: string;
+  lineNo: number;
+  chargeType: LandedCostChargeType;
+  amount: string;
+  billed: boolean;
+  supplierBillUid: string | null;
+  currency: string;
+}
+
+export interface LandedCostDto {
+  id: string;
+  uid: string;
+  companyId: string;
+  branchId: string;
+  landedCostNumber: string;
+  status: LandedCostStatus;
+  basis: LandedCostBasis;
+  totalChargeAmount: string;
+  currency: string;
+  glEntryUid: string | null;
+  notes: string | null;
+  confirmedAt: string | null;
+  createdAt: string | null;
+  receiptUids: string[];
+  charges: LandedCostChargeDto[];
+}
+
+export interface CreateLandedCostChargeRequest {
+  chargeType: LandedCostChargeType;
+  amount: string;
+}
+
+export interface CreateLandedCostRequest {
+  companyUid: string;
+  basis: LandedCostBasis;
+  notes?: string;
+  receiptUids: string[];
+  charges: CreateLandedCostChargeRequest[];
+}
+
+// ── Purchase Settings DTOs / requests ────────────────────────────────────────
+
+export interface PurchaseSettingsDto {
+  id: string;
+  uid: string;
+  companyId: string;
+  poApprovalEnabled: boolean;
+  poApprovalThresholdAmount: string;
+  currency: string;
+}
+
+export interface UpdatePurchaseSettingsRequest {
+  companyUid: string;
+  poApprovalEnabled: boolean;
+  poApprovalThresholdAmount: string;
+  currency: string;
+}
