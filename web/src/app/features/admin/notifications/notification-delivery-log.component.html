@@ -84,7 +84,7 @@
                   </td>
                   <td class="small text-center">{{ d.attemptNo }}</td>
                   <td class="small text-muted">{{ d.suppressionReason ?? '—' }}</td>
-                  <td class="small text-muted font-monospace">{{ d.recipientUserId ?? '—' }}</td>
+                  <td class="small text-muted">{{ d.recipientUserId ? 'User #' + d.recipientUserId : '—' }}</td>
                   <td class="small text-muted font-monospace">{{ shortTriggerKey(d.triggerKey) }}</td>
                   <td class="small text-muted">{{ d.attemptedAt | slice:0:16 }}</td>
                   <td class="small" [class.text-danger]="d.error">

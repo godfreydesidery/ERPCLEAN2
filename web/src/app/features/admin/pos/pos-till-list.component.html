@@ -149,7 +149,7 @@
                 @for (t of rows(); track t.uid) {
                   <tr>
                     <td>{{ t.name }}</td>
-                    <td class="small text-muted font-monospace">{{ t.branchId }}</td>
+                    <td class="small text-muted">{{ branchName(t.branchId) }}</td>
                     <td>
                       <span class="badge" [class]="statusBadgeClass(t.status)">{{ t.status }}</span>
                     </td>

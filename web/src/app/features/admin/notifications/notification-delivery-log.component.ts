@@ -97,7 +97,9 @@ export class NotificationDeliveryLogComponent {
    */
   shortTriggerKey(key: string): string {
     if (!key) return '—';
-    return key.replace(/:[0-9A-HJKMNP-TV-Z]{26}$/i, '');
+    // Strip any embedded ULID (with optional leading separator) anywhere in the key (C1).
+    const stripped = key.replace(/[:_-]?[0-9A-HJKMNP-TV-Z]{26}/gi, '').replace(/[:_-]$/, '');
+    return stripped || '—';
   }
 
   outcomeBadgeClass(outcome: string): string {

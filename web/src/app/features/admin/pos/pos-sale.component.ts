@@ -279,34 +279,48 @@ export class PosSaleComponent {
 
   // ── Submit ─────────────────────────────────────────────────────────────────
 
+  /** Returns an error message for a single sale line, or null if valid. */
+  private validateSaleLine(l: SaleLine): string | null {
+    if (!l.productId) return 'Select a product for every line.';
+    if (!l.unitId) return 'Select a unit for every line.';
+    if (!l.quantity || +l.quantity <= 0) return 'Quantity must be positive for every line.';
+    if (!l.unitPrice || +l.unitPrice < 0) return 'Unit price must be non-negative for every line.';
+    return null;
+  }
+
+  /** Returns a validation error message, or null if the form is valid. */
+  private validateSaleForm(sessionUid: string, customerUid: string, agentUid: string, curr: string, tendered: string): string | null {
+    if (!sessionUid) return 'Session is required.';
+    if (!customerUid) return 'Customer is required.';
+    if (!agentUid) return 'Agent is required.';
+    if (!curr) return 'Currency is required.';
+    if (this.lines().length === 0) return 'Add at least one line item.';
+    for (const l of this.lines()) {
+      const lineErr = this.validateSaleLine(l);
+      if (lineErr) return lineErr;
+    }
+    if (!tendered || Number.isNaN(+tendered) || +tendered < 0) return 'Tendered amount must be a valid non-negative number.';
+    if (+tendered < this.subtotal()) return 'Tendered amount is less than the total.';
+    return null;
+  }
+
   submit(): void {
     const sessionUid = this.selectedSessionUid().trim();
     const customerUid = this.selectedCustomerUid().trim();
+    const agentUid = this.selectedAgentUid().trim();
     const curr = this.currency().trim();
     const tendered = this.tenderedAmount().trim();
 
-    if (!sessionUid) { this.formError.set('Session is required.'); return; }
-    if (!customerUid) { this.formError.set('Customer is required.'); return; }
-    if (!curr) { this.formError.set('Currency is required.'); return; }
-    if (this.lines().length === 0) { this.formError.set('Add at least one line item.'); return; }
-
-    for (const l of this.lines()) {
-      if (!l.productId) { this.formError.set('Select a product for every line.'); return; }
-      if (!l.unitId) { this.formError.set('Select a unit for every line.'); return; }
-      if (!l.quantity || +l.quantity <= 0) { this.formError.set('Quantity must be positive for every line.'); return; }
-      if (!l.unitPrice || +l.unitPrice < 0) { this.formError.set('Unit price must be non-negative for every line.'); return; }
-    }
-
-    if (!tendered || isNaN(+tendered) || +tendered < 0) { this.formError.set('Tendered amount must be a valid non-negative number.'); return; }
-    if (+tendered < this.subtotal()) { this.formError.set('Tendered amount is less than the total.'); return; }
+    const validationError = this.validateSaleForm(sessionUid, customerUid, agentUid, curr, tendered);
+    if (validationError) { this.formError.set(validationError); return; }
 
     // Resolve customerId from uid
     const customer = this.customers().find((c) => c.uid === customerUid);
     if (!customer) { this.formError.set('Could not resolve customer. Re-select from the list.'); return; }
 
-    // Resolve agentId from uid (optional)
-    const agentUid = this.selectedAgentUid().trim();
-    const agent = agentUid ? this.agents().find((a) => a.uid === agentUid) : null;
+    // Resolve agentId from uid (required)
+    const agent = this.agents().find((a) => a.uid === agentUid);
+    if (!agent) { this.formError.set('Could not resolve agent. Re-select from the list.'); return; }
 
     const saleLines: PosSaleLineRequest[] = this.lines().map((l) => ({
       productId: l.productId,
@@ -319,7 +333,7 @@ export class PosSaleComponent {
     const request: PosSaleRequest = {
       sessionUid,
       customerId: customer.id,
-      agentId: agent?.id,
+      agentId: agent.id,
       currency: curr,
       lines: saleLines,
       tenderedAmount: tendered,

@@ -260,7 +260,7 @@ public class PosSessionServiceImpl implements PosSessionService {
         }
         var draft = new JournalEntryDraft(
                 session.getCompanyId(), session.getBranchId(), postingDate,
-                "POS session variance " + session.getUid(),
+                "POS session variance " + session.getSessionNumber(),
                 JournalSourceType.POS_VARIANCE, session.getUid(),
                 null, actorId(), List.of(debitLine, creditLine));
         return glInvoker.postInNewTx(draft);

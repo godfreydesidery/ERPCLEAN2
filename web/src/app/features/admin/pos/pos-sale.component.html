@@ -95,7 +95,9 @@
                                 [disabled]="submitting()" />
               </div>
               <div class="col-sm-4">
-                <label class="form-label small text-muted mb-1" for="saleAgent">Agent (optional)</label>
+                <label class="form-label small text-muted mb-1" for="saleAgent">
+                  Agent <span class="text-danger" aria-hidden="true">*</span>
+                </label>
                 <input type="search" class="form-control form-control-sm mb-1"
                        placeholder="Type to search agents…"
                        aria-label="Search agents"
@@ -105,7 +107,8 @@
                                 [ngModel]="selectedAgentUid()"
                                 (ngModelChange)="selectedAgentUid.set($event)"
                                 [options]="agentOptions()"
-                                placeholder="Select agent (optional)"
+                                placeholder="Select agent"
+                                [required]="true"
                                 name="saleAgent"
                                 [disabled]="submitting()" />
               </div>

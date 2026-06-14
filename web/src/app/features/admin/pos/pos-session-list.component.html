@@ -122,7 +122,7 @@
               <caption class="visually-hidden">POS sessions</caption>
               <thead>
                 <tr>
-                  <th scope="col">Session UID</th>
+                  <th scope="col">Session #</th>
                   <th scope="col">Status</th>
                   <th scope="col">Opened At</th>
                   <th scope="col" class="text-end">Opening Float</th>
@@ -133,7 +133,7 @@
               <tbody>
                 @for (s of rows(); track s.uid) {
                   <tr>
-                    <td class="font-monospace small">{{ s.uid }}</td>
+                    <td class="font-monospace small">{{ s.sessionNumber ?? ('…' + s.uid.slice(-6)) }}</td>
                     <td>
                       <span class="badge" [class]="statusBadgeClass(s.status)">{{ s.status }}</span>
                     </td>
@@ -149,7 +149,7 @@
                     <td class="d-flex flex-wrap gap-1">
                       <a class="btn btn-sm btn-outline-primary"
                          [routerLink]="['/admin/pos/sessions/uid', s.uid]"
-                         [attr.aria-label]="'View session ' + s.uid">
+                         [attr.aria-label]="'View session ' + (s.sessionNumber ?? s.uid.slice(-6))">
                         <i class="bi bi-eye me-1" aria-hidden="true"></i>View
                       </a>
                     </td>

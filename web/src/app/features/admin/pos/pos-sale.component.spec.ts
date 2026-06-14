@@ -41,6 +41,11 @@ const stubCustomer = {
   version: null, createdAt: null, createdBy: null, updatedAt: null, updatedBy: null,
 };
 
+// POS sale now requires an agent (BR-SALES-06 / DEFECT-POS-AGENT fix).
+const stubAgent = {
+  id: '7', uid: 'AGENT1', displayName: 'Sales Rep', code: 'AG1', status: 'ACTIVE' as const,
+} as any;
+
 const stubInvoice = {
   id: '99', uid: 'INV1', companyId: '10', branchId: '2', documentType: 'INVOICE' as const,
   invoiceNumber: 'INV-0001', status: 'FINALISED' as const, customerId: '5',
@@ -166,6 +171,8 @@ describe('PosSaleComponent — submit validation', () => {
 
     comp.selectedSessionUid.set('SESS1');
     comp.selectedCustomerUid.set('CUST1');
+    comp.agents.set([stubAgent]);
+    comp.selectedAgentUid.set('AGENT1');
     comp.currency.set('');
     comp.submit();
     expect(comp.formError()).toMatch(/currency/i);
@@ -179,6 +186,8 @@ describe('PosSaleComponent — submit validation', () => {
 
     comp.selectedSessionUid.set('SESS1');
     comp.selectedCustomerUid.set('CUST1');
+    comp.agents.set([stubAgent]);
+    comp.selectedAgentUid.set('AGENT1');
     comp.currency.set('TZS');
     comp.lines.set([]);
     comp.submit();
@@ -193,6 +202,8 @@ describe('PosSaleComponent — submit validation', () => {
 
     comp.selectedSessionUid.set('SESS1');
     comp.selectedCustomerUid.set('CUST1');
+    comp.agents.set([stubAgent]);
+    comp.selectedAgentUid.set('AGENT1');
     comp.currency.set('TZS');
     // seed customers so resolve works
     comp.customers.set([stubCustomer]);
@@ -219,6 +230,8 @@ describe('PosSaleComponent — submit success', () => {
     await vi.runAllTimersAsync();
 
     comp.customers.set([stubCustomer]);
+    comp.agents.set([stubAgent]);
+    comp.selectedAgentUid.set('AGENT1');
     comp.selectedSessionUid.set('SESS1');
     comp.selectedCustomerUid.set('CUST1'); // uid
     comp.currency.set('TZS');
