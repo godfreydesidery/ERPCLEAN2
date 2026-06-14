@@ -14,6 +14,8 @@ Quotation → Sales Order → Delivery → Sales Invoice → Payment
 
 Walk-in cash sales skip the first three steps and begin directly with a Sales Invoice or a POS sale.
 
+**What "order-to-cash" means.** Order-to-cash is the end-to-end business process that starts the moment a customer expresses intent to buy and ends when the business has received and accounted for the money. Each step in the chain creates a document that serves as a control point: stock is only committed when an order is confirmed, goods only leave the warehouse when a delivery is recorded, and revenue is only recognised when an invoice is finalised. Without this chain, businesses would have no audit trail, no way to match what was promised to what was shipped, and no reliable basis for the accounts receivable ledger.
+
 **Required permissions** — the navigation menu only shows items your role includes. Key permission groups:
 
 | Activity | Permission codes required |
@@ -38,7 +40,13 @@ Contact your administrator if an expected menu item is missing.
 
 Navigate to **Sales › Quotations** (`/admin/quotations`).
 
-A quotation is an offer sent to a customer. When accepted it becomes a Sales Order automatically.
+**What a quotation is.** A quotation (also called a quote or a sales proposal) is a formal written offer that the business sends to a customer. It states the products, quantities, unit prices, any discounts, and a validity period — that is, the date by which the customer must respond if the offered price is to be honoured.
+
+**Why quotations exist.** Without a quotation, pricing agreements between a salesperson and a customer exist only verbally. A quotation creates a timestamped, auditable record of what was offered at what price, protects the business from disputes, and gives management visibility of the sales pipeline (how many offers are outstanding, what value, and when they expire). It also means that once a customer accepts, the system can convert the offer into a Sales Order automatically, carrying the agreed prices across without any re-entry.
+
+**When a quotation is used.** A quotation is raised when a customer asks "what will it cost me?" before committing to buy — typically by a salesperson or sales assistant. It sits at the very beginning of the O2C chain: nothing is reserved from stock and no financial entry is made; the quotation is a promise, not a transaction.
+
+**How a quotation flows.** A quotation begins as a `DRAFT` (editable, no number yet). When it is sent to the customer the status moves to `SENT` and a `QUOTE-####` number is assigned. If the customer accepts, the quotation moves to `ACCEPTED` and a Sales Order is created automatically with the same lines and agreed prices. If the customer declines it is `REJECTED`; if the validity date passes without a response the system marks it `EXPIRED` and acceptance is blocked.
 
 ### 1.1 Create a quotation
 
@@ -110,7 +118,15 @@ Karibu calls back and accepts. Ali clicks **Accept**. The system creates **Sales
 
 Navigate to **Sales › Sales Orders** (`/admin/sales-orders`).
 
-A Sales Order (SO) can be created in two ways: automatically when a quotation is accepted, or directly from **Sales › Sales Orders → New Order**.
+**What a Sales Order is.** A Sales Order (SO) is the internal document that records a customer's confirmed purchase intent. It lists the products, quantities, agreed prices, and any discounts. Unlike a quotation (which is an offer), a Sales Order is a commitment: the business has agreed to supply, and the customer has agreed to buy.
+
+**Why Sales Orders exist.** The Sales Order is the control centre of the fulfilment process. Two things happen that do not happen at the quotation stage: first, confirming the order **reserves stock** so those goods cannot be sold to someone else; second, the order creates the traceability link between the customer's request, the delivery that ships the goods, and the invoice that bills them. Without Sales Orders, a warehouse would not know what to pick, finance would have no basis for revenue recognition, and there would be no way to track partial deliveries or backorders systematically.
+
+**When a Sales Order is used.** A Sales Order is created either automatically (when a customer accepts a quotation) or directly (when a salesperson or order-desk clerk enters it fresh — for example, a telephone order that was never quoted). It is used any time a customer is buying goods that need to be fulfilled from stock and billed after delivery, as opposed to a walk-in cash purchase which goes straight to an invoice.
+
+**How a Sales Order flows.** An SO begins as `DRAFT` (a `SO-####` number is assigned immediately at creation, even in draft). When the user confirms it, the status moves to `CONFIRMED` and stock is soft-reserved. As deliveries are made against the order the status tracks fulfilment progress (`PARTIALLY_FULFILLED` → `FULFILLED`). As invoices are raised from those deliveries it tracks invoicing progress (`PARTIALLY_INVOICED` → `CLOSED`). Cancellation at any point releases the reservations.
+
+**Stock reservation explained.** When you confirm a Sales Order, the system writes a "soft reservation" against each product in the warehouse. The reserved quantity is not physically moved — the goods stay on the shelf — but they are marked as committed. This means the available-to-promise figure (what can still be sold to other customers) is reduced immediately. A reservation prevents double-selling: two salespeople cannot independently confirm orders for the same last 10 units. When a delivery is made, the reservation for the delivered quantity is released (because the goods have actually left) and the on-hand balance is reduced instead.
 
 ### 2.1 Create a standalone Sales Order
 
@@ -162,7 +178,15 @@ Cancellation is allowed from any status except **CANCELLED** and **CLOSED**.
 
 Navigate to **Sales › Deliveries** (`/admin/deliveries`).
 
-A delivery records that goods have physically left the warehouse. Deliveries can only be created against a **CONFIRMED** or **PARTIALLY_FULFILLED** order.
+**What a Delivery is.** A Delivery is the document that records goods physically leaving the warehouse and being shipped or handed to the customer. It references the Sales Order it fulfils and specifies the exact quantities dispatched on that date. It is also sometimes called a "dispatch note" or "delivery note."
+
+**Why Deliveries exist.** Without a delivery document there is no system record of when goods actually left — only what was ordered. The Delivery is the trigger for two critical events: it reduces the physical stock balance (goods have left), and it becomes the source document for the customer's invoice (you invoice what you delivered, not what was ordered — because partial deliveries are common). The delivery is also the moment that the cost of those goods is posted to the Profit and Loss account as Cost of Goods Sold (COGS), matching the cost to the revenue period in which the goods are billed.
+
+**When a Delivery is used.** A delivery is created by a warehouse or logistics clerk once goods are ready to ship, always against a confirmed Sales Order. Multiple deliveries can be made against a single order (backorders), and each delivery generates its own invoice.
+
+**How a Delivery flows.** A delivery can only be created against a `CONFIRMED` or `PARTIALLY_FULFILLED` Sales Order. When created it is immediately `CONFIRMED` (there is no separate pick/confirm step in the current version). The delivery is immutable — once confirmed it cannot be edited; corrections are handled through a Sales Return. Stock is reduced at the branch and the SO line counters are updated. An invoice is generated from the delivery as a separate action.
+
+**Full delivery vs partial delivery (backorder).** If you deliver less than the full ordered quantity on any line, the system creates a partial delivery and the order moves to `PARTIALLY_FULFILLED`. The remaining undelivered quantity is the **backorder**. You create a second delivery later for the remaining quantity. Each delivery is independent and can be invoiced separately.
 
 ### 3.1 Create a delivery
 
@@ -194,10 +218,22 @@ Proceed to section 4 to finalise the invoice.
 
 Navigate to **Sales › Invoices** (`/admin/sales-invoices`).
 
-An invoice is the formal billing document. There are two origins:
+**What a Sales Invoice is.** A Sales Invoice is the formal billing document sent to the customer. It is the legal record of the sale: it states what was sold, at what price, the VAT due, and the amount the customer owes. Once finalised, a sales invoice is immutable — it cannot be edited, only voided (which raises a reversing credit note).
 
-- **From a delivery** (origin: SALES_ORDER) — created via section 3.3 above.
-- **Direct walk-in** (origin: DIRECT) — created manually for cash customers without a prior order.
+**Why Sales Invoices exist.** The invoice is the document that creates the customer's obligation to pay. In accounting terms, finalising an invoice posts the revenue to the General Ledger (DR Accounts Receivable or Cash / CR Sales Revenue and VAT Payable). For credit customers it opens an AR (Accounts Receivable) item — a record of the amount owed — which is then tracked and aged until payment is received. Without invoices, the business has no formal claim on the customer and no basis for its revenue figures or tax filings.
+
+**Direct invoices vs SO-sourced invoices.** There are two origins for a sales invoice:
+
+- **`DIRECT` (walk-in):** created manually for a cash customer who is buying on the spot with no prior order. Stock is issued and revenue posted at the moment of finalisation.
+- **`SALES_ORDER`-sourced:** created from a Delivery (section 3.3). These invoices post revenue only — stock was already issued when the delivery was confirmed. This distinction prevents the same goods from being costed twice.
+
+**Why the origin matters.** If a `SALES_ORDER`-sourced invoice also issued stock, the Cost of Goods Sold would be posted twice: once at delivery and once at invoicing. The system prevents this by tracking the origin on every invoice and skipping the stock-issue step for SO-sourced invoices. A walk-in invoice (DIRECT) has no prior delivery, so it must issue stock at finalisation — that is the only point at which goods leave.
+
+**The VAT calculation.** All prices are entered tax-exclusive (net). The system calculates VAT per line using each product's VAT status (Standard 18%, Zero-Rated 0%, or Exempt 0%). The VAT rate is snapshotted onto the line at sale time so a later rate change cannot silently alter a historical invoice. The invoice prints a VAT analysis breaking down the tax by rate band.
+
+**Price snapshots.** When you add a product line to an invoice (or any sales document), the system reads the current price from the price list and records it permanently on that line. If the price list is updated tomorrow, the historical invoice is unaffected — it retains the price that applied at sale time. This is called a "price snapshot" and is mandatory for any document that is legally an audit record.
+
+An invoice is an offer sent to a customer. When accepted it becomes a Sales Order automatically.
 
 ### 4.1 Create a direct (walk-in) invoice
 
@@ -240,6 +276,8 @@ After finalisation:
 
 ### 4.5 Void an invoice
 
+**What voiding means.** Voiding a finalised invoice reverses its financial effect: the revenue is reversed, the AR item is cancelled, and VAT is adjusted. The original invoice number is retained on the record (voiding is not deletion — the document remains as evidence that the transaction happened and was corrected). A reversing credit note is raised automatically. Use voiding only when an invoice was issued in error; for goods returned by the customer use a Sales Return (section 5) instead.
+
 A finalised invoice can be voided if it was issued in error:
 
 1. Open the finalised invoice (navigate to **Sales › Invoices**, click the row, or go to `/admin/sales-invoices/uid/{uid}`).
@@ -278,7 +316,15 @@ Cashier Fatuma opens **Sales › Invoices** (`/admin/sales-invoices`) and clicks
 
 Navigate to **Sales › Sales Returns** (`/admin/sales-returns`).
 
-A sales return records goods coming back from the customer. Returns are always against a specific delivery and immediately generate a credit note.
+**What a Sales Return is.** A Sales Return (also called an RMA — Return Merchandise Authorisation) is the document that records goods coming back from the customer. It is always tied to a specific delivery so the system knows exactly which shipment is being reversed.
+
+**Why Sales Returns exist.** When a customer returns goods — because they are damaged, wrong, or surplus — several things need to happen simultaneously: the stock must come back into the warehouse, the customer's account must be credited (so they do not owe money for goods they no longer have), the revenue must be reversed, and the cost of those goods must be put back. Doing these four things as separate manual steps would be error-prone and would leave the accounts temporarily out of balance. A Sales Return handles all four atomically: on creation, stock is returned to the branch, a credit note is raised automatically, revenue and VAT are reversed, and (for a credit customer) the AR open item is reduced.
+
+**When a Sales Return is used.** A Sales Return is created by a warehouse clerk or sales supervisor when goods arrive back from the customer. It can only reference a previous delivery — you cannot return more than was delivered on that delivery, and returns against the same delivery can be processed in multiple batches up to the full delivered quantity.
+
+**How a Sales Return flows.** A Sales Return is created and immediately `CONFIRMED` in a single step. There is no draft stage. The return number (`RET-####`) is assigned at creation. A credit note is raised in the same transaction.
+
+**What a credit note is.** A credit note is the financial document that reduces what the customer owes. If an invoice says "you owe us TZS 100,000," a credit note for TZS 20,000 on the same account means the customer's balance is reduced to TZS 80,000. Credit notes are raised automatically by the system on a Sales Return (for the returned goods) and on a void (for a fully reversed invoice); they cannot be raised manually through the sales return screen.
 
 ### 5.1 Create a return
 
@@ -306,7 +352,13 @@ Two days after delivery, Karibu reports 5 cartons of Mafuta ya Kupikia arrived l
 
 Navigate to **Sales › Blanket Orders** (`/admin/blanket-orders`).
 
-A blanket order is a framework agreement with a customer that commits to supplying a total quantity at a fixed unit price over a validity window. Actual deliveries are created as **releases** (draw-downs) against the blanket.
+**What a Blanket Order is.** A Blanket Order is a framework supply agreement with a customer that fixes the unit price for a product and commits to a total quantity over a defined validity window. Instead of raising a new Sales Order with price negotiations each time the customer buys, both parties agree upfront: "you will buy up to 1,000 bags at TZS 6,500 each over the next six months." Each actual purchase draws down against this agreement — these draws are called **releases** or **call-offs**.
+
+**Why Blanket Orders exist.** Regular customers who buy in predictable volumes benefit from negotiated prices locked in for a period, while the business gains revenue predictability and avoids repeated pricing discussions. Without a blanket order, each purchase is independent — a busy sales desk might accidentally apply inconsistent prices to the same customer, or forget what was agreed. The blanket order is the single source of truth for the agreed terms. It also automatically prevents over-delivery: the system tracks how much has been called off against the committed quantity and refuses to draw more than the total commitment.
+
+**When a Blanket Order is used.** A blanket order is created by a sales manager when a long-term supply contract is signed with a customer. Once active, the sales team creates call-off Sales Orders against it whenever the customer exercises part of their commitment.
+
+**How a Blanket Order flows.** A blanket order is `ACTIVE` from creation. Call-offs (draw-downs) produce ordinary Sales Orders that flow through the normal O2C chain (confirm → deliver → invoice). The blanket itself tracks the remaining committed quantity on each product line. When all quantities are fully drawn, the validity window expires, or a manager closes it manually, the blanket becomes `CANCELLED` (no further releases). The blanket document itself posts no stock and no GL entries — only the resulting Sales Orders do.
 
 ### 6.1 Create a blanket order
 
@@ -358,7 +410,13 @@ In July, Duka Kuu calls off 200 bags. The sales manager opens the blanket, click
 
 Navigate to **Sales › Standing Orders** (`/admin/standing-orders`).
 
-A standing order is a recurring template that generates a new Sales Order automatically on a schedule (daily, weekly, bi-weekly, or monthly). It is useful for regular supply contracts.
+**What a Standing Order is.** A Standing Order (also called a recurring order or repeat order) is a template that tells the system to generate a new Sales Order automatically on a regular schedule — weekly, bi-weekly, or monthly. It holds the customer, the products, the quantities, and the prices for a typical delivery cycle.
+
+**Why Standing Orders exist.** Some customers receive the same goods on the same schedule every week or month — a hotel that takes 50 loaves of bread every Monday, or a distributor that replenishes the same five products on the first of each month. Without standing orders, the sales desk must manually create the same Sales Order repeatedly, risking forgetting, using the wrong quantities, or applying the wrong prices. A standing order removes the repetitive work and ensures consistent, timely order creation without manual intervention.
+
+**When a Standing Order is used.** Standing orders are set up by a sales manager or sales administrator for customers with regular, predictable buying patterns. Once active, the cashier or sales desk does not need to do anything — orders appear automatically. The standing order can be paused if supply is interrupted and resumed when normal service resumes.
+
+**How a Standing Order flows.** A standing order is `ACTIVE` from creation. The system runs a nightly check and generates a new Sales Order (in `DRAFT` status — a human must confirm it deliberately) for every active standing order whose next run date is today or earlier. After generation, the next run date advances by one period. A standing order can be `PAUSED` (no generation while paused) and `RESUMED`, or permanently `CANCELLED`. The generated Sales Orders flow through the normal O2C chain.
 
 ### 7.1 Create a standing order
 
@@ -408,9 +466,25 @@ Hoteli ya Pwani orders 50 loaves of bread every Monday. The sales rep opens **Sa
 
 Navigate to **Sales › Pricing Rules** (`/admin/pricing-rules`).
 
-Pricing rules let you set volume-break discounts and customer-specific contract prices.
+**What pricing rules are.** Pricing rules are pre-configured exceptions to the standard price list. Without any rules, every customer is charged the standard list price for a product. Rules let the business offer lower prices automatically under specific conditions — for example, a lower price per bag when a customer orders more than 100 bags at once (a quantity break), or a privately negotiated price that applies only to one specific customer.
+
+**Why pricing rules exist.** Manual price overrides by sales staff are error-prone and untraceable. A salesperson might give a loyal customer a discount one day and forget it the next, or apply the wrong discount tier. Pricing rules encode the business's commercial agreements in the system so that the correct price is applied automatically and consistently every time, without needing the salesperson to remember or calculate. They also create an audit trail: when a line is priced, the system records which rule was applied (standard list, a tier, or a customer-specific price) as a diagnostic field on the line.
+
+**How pricing rules resolve.** When a product line is added to any sales document (quotation, order, invoice, or POS sale), the system runs a single price-resolution check in the following priority order, applying the first rule that matches:
+
+1. **Customer price** (highest priority) — a contract price for this exact customer and product
+2. **Active promotion** — a time-limited offer matching the product or product category
+3. **Price tier** — a volume-break price if the ordered quantity meets the tier's minimum
+4. **Standard list price** — the product's price on the customer's assigned price list
+5. **No price found** — the line is rejected; the product cannot be sold without a price
+
+Once the price is resolved, the standard totals calculation (net, VAT, gross) runs unchanged — pricing rules only affect the unit price input.
 
 ### 8.1 Price tiers (quantity breaks)
+
+**What a price tier is.** A price tier is a volume-break discount: if a customer orders at least a minimum quantity of a specific product, they receive a lower unit price than the standard list price. For example, the standard price for a 50 kg bag of cement is TZS 15,200, but any order of 100 or more bags is priced at TZS 14,500 per bag.
+
+**Why tiers exist.** Volume pricing rewards large orders and encourages customers to consolidate purchases. Without tiers, a salesperson would have to manually override the price and justify the discount each time — an inconsistent and unaudited process. Tiers make the volume price automatic, consistent, and visible on the price list.
 
 A price tier gives a lower unit price when a customer orders at least a minimum quantity of a product on a given price list.
 
@@ -427,6 +501,10 @@ The tier status is **ACTIVE**. To deactivate a tier, click the **Deactivate** bu
 You cannot have two active tiers for the same product, price list, and minimum quantity combination.
 
 ### 8.2 Customer prices (contract prices)
+
+**What a customer price is.** A customer price (also called a contract price or a customer-specific price) is a fixed unit price agreed between the business and one specific customer for one specific product. It overrides every other pricing rule — including tiers and promotions — and applies regardless of quantity, as long as it is active and within its effective date window.
+
+**Why customer prices exist.** Key accounts and long-term customers often negotiate individualised prices as part of a supply agreement — prices that are lower than the standard list but not published generally. Storing these as customer prices means the correct price is applied automatically on every transaction for that customer, with no risk of the wrong price being used by a different salesperson who does not know the agreement.
 
 A customer price sets a fixed unit price for a specific product for a specific customer, overriding the standard price list.
 
@@ -467,6 +545,16 @@ Under the **Customer Prices** tab the manager creates: Customer **Karibu Superma
 
 Navigate to the **Point of Sale** group in the sidebar.
 
+**What the Point of Sale module is.** Point of Sale (POS) is the in-store face-to-face retail workflow. It provides a cashier-facing checkout screen to ring up products, accept cash, and issue receipts. Everything processed through POS is ultimately a sales invoice — POS wraps the invoice channel with till management and session-level drawer accountability.
+
+**Why POS exists as a distinct module.** A back-office sales invoice is fine for credit-account customers who receive goods on account and pay later. Counter retail is different: a cashier is processing many small transactions rapidly, cash is flowing in and out of a physical drawer, and at end of day the business needs to verify that the cash in the drawer matches what the system says was collected. The POS module adds the `till` and `session` layer on top of the invoice to manage this accountability — without it, cash sales would have no way to reconcile the physical drawer to the books.
+
+**What a till is.** A till is a physical cash register position at a branch (for example, "Counter 1" or "Counter 2"). In the system a till is a named record tied to a branch and to a bank/cash account that represents the drawer. Multiple tills can operate at the same branch simultaneously. A till must be `ACTIVE` before a session can be opened on it.
+
+**What a session is.** A session is the till's working period — typically one business day or one shift. Before a cashier can ring sales, they open a session by declaring the opening float (the cash placed in the drawer to make change). During the session every POS sale, refund, and payout is tracked against that session. At end of day the cashier or manager closes the session by counting the cash in the drawer, and then a manager reconciles the session to post any variance to the General Ledger.
+
+**What a POS sale is.** A POS sale is a cash counter transaction. It produces a finalised `DIRECT`-origin sales invoice: stock is issued from the branch and revenue is posted in the same step. The invoice number (`INV-####`) is assigned on the spot. No quotation, sales order, or delivery step is involved — POS is designed for speed at the counter.
+
 POS is used for face-to-face retail transactions. A **till** is a physical cash register position. Each till must be opened in a **session** before sales can be processed. The session is closed and reconciled at end of day.
 
 ### 9.1 Roles
@@ -492,6 +580,8 @@ The till is created with status **ACTIVE**. To deactivate a till, click **Deacti
 
 ### 9.3 Open a session (start of day)
 
+**What opening a session means.** Opening a session declares the start of a cashier's working period on a specific till. The opening float is the starting cash in the drawer (coins and notes placed there before the first sale so the cashier can make change). The system records this amount and uses it as the baseline for the end-of-day cash reconciliation. Only one session can be open on a till at a time — you cannot accidentally open a second session on the same counter without closing the first.
+
 1. Navigate to **Point of Sale › POS Sessions** (`/admin/pos/sessions`).
 2. Click **Open Session**.
 3. Pick the **Till** by name (only ACTIVE tills are listed).
@@ -501,6 +591,10 @@ The till is created with status **ACTIVE**. To deactivate a till, click **Deacti
 A new session is created with status **OPEN**. Only one session can be open on a till at a time.
 
 ### 9.4 Ring a sale
+
+**What "ringing a sale" means.** This is the cashier's checkout step: entering the products and quantities the customer is buying, taking the cash the customer hands over, and completing the transaction. The system calculates the total, computes the change due, and — on completion — finalises the sales invoice, issues the stock, posts the revenue, and issues the receipt.
+
+**What the tendered amount is.** The tendered amount is the cash the customer physically hands to the cashier — often a round number larger than the total. If the total is TZS 13,000 and the customer hands over TZS 20,000, the tendered amount is TZS 20,000 and the change is TZS 7,000. The system calculates the change and the cashier returns it. A sale cannot be submitted if the tendered amount is less than the total.
 
 1. Navigate to **Point of Sale › Point of Sale** (`/admin/pos/sell`) — this is the checkout screen.
 2. If your organisation has more than one company, select the correct company.
@@ -521,6 +615,12 @@ A success receipt is displayed showing the invoice number and total. Click **Vie
 
 ### 9.5 Record a payout
 
+**What a payout is.** A payout is any cash that leaves the drawer during the session that is not change given to a customer. The two types are:
+- **Paid Out:** a safe drop (moving excess cash from the drawer to the safe mid-shift) or a petty-cash payment made from the drawer.
+- **Refund:** cash paid back to a customer as a refund.
+
+Both types reduce the expected closing cash and are recorded so the end-of-day reconciliation remains accurate. Without recording payouts, the drawer would appear short at close-of-day even though the cash was accounted for.
+
 A payout records cash leaving the drawer during the session — for example, a drop to the safe or a petty-cash refund.
 
 1. Open the session detail (**Point of Sale › POS Sessions** (`/admin/pos/sessions`), click **View** on the OPEN session, or navigate to `/admin/pos/sessions/uid/{uid}`).
@@ -532,6 +632,8 @@ A payout records cash leaving the drawer during the session — for example, a d
 Both payout types reduce the expected closing cash. The live X-read total updates automatically.
 
 ### 9.6 X-Read (live totals during the day)
+
+**What an X-Read is.** An X-Read (from the retail term "X-reading the register") is a snapshot of running totals for the current session without closing or resetting it. Cashiers and managers use it to verify the session is on track during the day — for example, after a safe drop, to confirm the expected cash figure has decreased correctly. Unlike a Z-Read (see section 9.8), an X-Read does not close anything.
 
 The **X-Read** card on the session detail page shows running totals without closing the session:
 
@@ -545,6 +647,8 @@ The **X-Read** card on the session detail page shows running totals without clos
 Click the refresh icon to reload the X-read at any time.
 
 ### 9.7 Close a session (end of day)
+
+**What closing a session means.** Closing a session is the end-of-shift step where the cashier physically counts the cash in the drawer and enters the counted amount. The system compares this to the expected cash (computed from the opening float plus all sales minus all payouts) and calculates the variance. A zero variance means the drawer balances perfectly. A positive variance (more cash than expected) is a till surplus. A negative variance (less cash than expected) is a till shortage. The session moves to `CLOSED` but the variance is not yet posted to the General Ledger — that happens at reconciliation.
 
 Closing records the physical cash count.
 
@@ -566,6 +670,10 @@ Variance = Counted Cash − Expected Cash
 
 ### 9.8 Reconcile a session (Z-Read)
 
+**What reconciliation is.** Reconciliation is the final accounting step for a session. A manager reviews the closed session, confirms the figures are correct, and posts the cash variance — if any — to the General Ledger. After reconciliation the session is permanently locked and no further changes are possible. The result is called the **Z-Read** (again from retail terminology: the Z-read "zeroes" the register for the next session).
+
+**What the GL posting means.** If the drawer is over (more cash than expected), the excess is income — the business has more cash than it should, which is a gain. The system debits the Cash account and credits a Till Surplus income account. If the drawer is short, the shortfall is an expense — the business is missing cash. The system debits a Till Shortage expense account and credits Cash. A zero variance produces no journal entry.
+
 Reconciliation posts the variance to the general ledger and produces the final Z-Read report.
 
 1. Open a **CLOSED** session (navigate to `/admin/pos/sessions/uid/{uid}`).
@@ -581,7 +689,20 @@ The session status changes to **RECONCILED**. The **Z-Read** card shows all sess
 
 After reconciliation the session is read-only and no further sales or payouts can be recorded.
 
-### 9.9 Session lifecycle
+### 9.9 Cash variance explained
+
+**What cash variance is.** Cash variance is the difference between the cash that should be in the drawer (the expected cash, calculated by the system) and the cash that is actually in the drawer (the counted cash, declared by the cashier). Every business aims for zero variance — a perfectly balanced drawer — but small discrepancies occur in practice due to rounding on change, counting errors, or occasional till errors.
+
+The formula is:
+
+```
+Expected Cash = Opening Float + Sum of all cash sales in the session − Sum of all payouts
+Variance = Counted Cash − Expected Cash
+```
+
+A variance greater than zero means there is more cash in the drawer than the sales records account for (a surplus — perhaps the cashier made change errors that favoured the business). A variance less than zero means there is less cash than expected (a shortage — perhaps an error or a discrepancy). Both are posted to the GL at reconciliation so the books always reflect the actual cash held.
+
+### 9.10 Session lifecycle
 
 | Status | Meaning |
 |---|---|
@@ -591,7 +712,7 @@ After reconciliation the session is read-only and no further sales or payouts ca
 
 Transitions are one-way: OPEN → CLOSED → RECONCILED. A session cannot be re-opened.
 
-### 9.10 Daily workflow summary
+### 9.11 Daily workflow summary
 
 1. **Open** a session on your till with the day's opening float.
 2. **Ring sales** as customers arrive.

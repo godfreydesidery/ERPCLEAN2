@@ -6,6 +6,9 @@ This chapter covers three cross-cutting domains: the Human Resources and Payroll
 
 ## Part 1 — Human Resources and Payroll
 
+**What is the HR & Payroll module, and why does it exist?**
+The HR & Payroll module is "Accounts Payable for staff". Just as AP manages what the business owes to suppliers, payroll manages what it owes to employees. It brings together the employee master (who works here, on what terms), the statutory framework (what the government requires to be deducted and remitted — PAYE income tax, NSSF pension, HESLB loan repayments, WCF worker-compensation fund, SDL skills-development levy), voluntary deductions (loans, savings schemes), and the periodic calculation that produces a payslip and a balanced GL journal. Without a formal payroll system, salary payments are unstructured (prone to error and duplication), statutory obligations are hard to track (creating tax and compliance risk), and the cost of labour does not appear correctly in the profit and loss account. The module uses a run lifecycle (DRAFT → CALCULATED → APPROVED → POSTED → PAID) that enforces separation of duties: the person who calculates payroll is not the same person who approves or posts it (ADR-0032).
+
 The HR & Payroll module is accessible from the **HR & Payroll** navigation group. What appears in that group depends on your permissions.
 
 ### Permission requirements
@@ -27,6 +30,9 @@ A user holding none of the HR permissions will not see the **HR & Payroll** nav 
 
 ### Departments
 
+**What is a department, and why is it needed?**
+A department is a logical grouping of employees within the company — for example Finance, Operations, or Sales. Departments serve two purposes. First, they appear on payroll reports and payslips, making it easy to see the cost of each part of the business. Second, they act as a cost-centre anchor: when payroll is posted to the General Ledger, the salary expense can be tagged with a department so that management accounts show the labour cost by business unit, not just as one undifferentiated total. Departments are company-level reference data that must be set up before employees can be registered.
+
 Navigate to **HR & Payroll > Departments** (`/admin/hr/departments`).
 
 Departments are company-level reference data. They are assigned to employees and appear on payroll reports.
@@ -44,6 +50,9 @@ Departments are company-level reference data. They are assigned to employees and
 ---
 
 ### Employees
+
+**What is an employee record, and what is it used for?**
+An employee record is the master data entry for a person employed by the company. It holds the information needed to calculate their pay (hire date, department, job title), satisfy statutory reporting requirements (national ID, TIN, NSSF number, HESLB number), and produce payslips. The system assigns an employee number automatically (`EMP-000001` format) that is used throughout HR and payroll screens. The employee record is created when the person joins and is archived (not deleted) when they leave, so that historical payroll records remain intact. Only one status is set at creation (ACTIVE); the only change available through the UI is archiving to TERMINATED.
 
 Navigate to **HR & Payroll > Employees** (`/admin/hr/employees`).
 
@@ -68,6 +77,9 @@ The system assigns an **employee number** automatically (format `EMP-000001`). T
 ---
 
 ### Employment Contracts
+
+**What is an employment contract, and why are contract types important?**
+An employment contract records the formal terms under which a person is employed: their type of engagement, base salary, start date, and — for fixed-term arrangements — end date. The contract type (PERMANENT, FIXED_TERM, CASUAL, or PROBATION) matters for statutory compliance: permanent and confirmed employees are typically subject to full PAYE and NSSF deductions, while casual workers may be treated differently. The statutory flags on the contract (PAYE resident, NSSF member, HESLB member) directly control which deductions are calculated during the payroll run. An employee can have at most one active contract at a time; when terms change (a salary review, a change from probation to permanent), the current contract is terminated and a new one is created — preserving the full history of contractual changes.
 
 Navigate to **HR & Payroll > Employee Contracts** (`/admin/hr/contracts`).
 
@@ -97,6 +109,9 @@ The pay frequency is fixed at MONTHLY (v1). Currency is fixed at TZS.
 ---
 
 ### Leave Requests
+
+**What is a leave request, and how does it affect payroll?**
+A leave request is the formal record of an employee's application for time off — annual leave, sick leave, maternity leave, or any other type configured by the administrator. The approval workflow (PENDING → APPROVED or REJECTED) ensures that time off is authorised before it is recorded as taken. For **unpaid leave** (where the leave type is flagged as unpaid), the approval has a direct financial consequence: approved unpaid leave days that overlap a payroll period automatically reduce the employee's basic salary pro-rata when the payroll run is calculated (the system uses 22 working days per month as the standard period). This ensures the payroll accurately reflects the actual days worked. Without a formal leave system, unpaid leave deductions would have to be applied manually, risking errors, disputes, and payroll miscalculations.
 
 Navigate to **HR & Payroll > Leave Requests** (`/admin/hr/leave-requests`).
 
@@ -137,6 +152,9 @@ The only valid decisions are **APPROVED** or **REJECTED**. PENDING and CANCELLED
 
 ### Employee Loans
 
+**What is an employee loan, and how does repayment work?**
+An employee loan is a cash advance made by the company to an employee, to be repaid through regular deductions from their net pay. Examples include salary advances, housing loans, or emergency personal loans. The loan record tracks the original principal, the agreed monthly instalment, and the outstanding balance. Once the loan is approved and becomes ACTIVE, the payroll calculation engine automatically includes the instalment as a deduction in each payroll run until the balance reaches zero — at which point only the remaining balance is deducted rather than the full instalment. This prevents payroll errors caused by forgetting to stop a deduction. The GL account linked to the loan records the outstanding balance on the balance sheet as an asset (money owed to the company by the employee).
+
 Navigate to **HR & Payroll > Employee Loans** (`/admin/hr/loans`).
 
 The list shows employee name, loan number, principal, installment amount, outstanding balance, and status. Viewing and managing loans both require `HR.LOAN.MANAGE`.
@@ -162,6 +180,9 @@ Once ACTIVE, the loan installment is automatically deducted from the employee's 
 
 ### Pay Components
 
+**What is a pay component, and why is it needed?**
+A pay component is a named earning or deduction that is applied to employees during payroll calculation — for example "Housing Allowance" (an earning), "Medical Scheme Contribution" (a deduction), or "Transport Allowance" (an earning calculated as a percentage of basic salary). Pay components allow the payroll engine to handle the variety of terms in employment contracts without hard-coding allowances or deductions into the system. Each component is configured once (with its GL account, its basis — fixed amount or percentage of basic salary — and its tax/pension flags) and then assigned to specific employees as recurring items. This ensures that every employee's payslip is built from a consistent, auditable set of named items rather than ad-hoc adjustments.
+
 Navigate to **HR & Payroll > Pay Components** (`/admin/hr/pay-components`).
 
 Pay components define the earnings and deductions applied to employees during payroll calculation. They are company-level reference data. The list is not paginated. Viewing and managing pay components both require `HR.PAYCOMPONENT.MANAGE`.
@@ -184,6 +205,9 @@ Pay components define the earnings and deductions applied to employees during pa
 ---
 
 ### Payroll Runs
+
+**What is a payroll run, and what does it produce?**
+A payroll run is the process of computing every employee's pay for a given month and producing the payslips, the GL journal, and the cash disbursement that physically pays the employees. The run gathers all relevant inputs — base salaries from contracts, deductions from approved unpaid leave, loan instalments, voluntary pay-component items — and applies the current statutory rates (PAYE bands, NSSF rates, HESLB rates, WCF, SDL) to produce a balanced journal entry and a payslip for every employee. The lifecycle (DRAFT → CALCULATED → APPROVED → POSTED → PAID) enforces a four-eyes check: one person prepares and calculates, a second person approves, a third posts to the books, and a fourth authorises the actual payment. A POSTED run can be reversed if an error is found after posting. Only one run can be active per period — you cannot accidentally pay the same month twice.
 
 Navigate to **HR & Payroll > Payroll Runs** (`/admin/hr/payroll-runs`).
 
@@ -260,11 +284,16 @@ A POSTED or PAID run can be reversed if needed (for example, a posting error). C
 
 ### Statutory Setup
 
+**What is the Statutory Setup, and why are the rates held in updatable tables?**
+Statutory setup holds the tax bands and levy rates mandated by Tanzanian law: PAYE (Pay As You Earn income tax), NSSF (National Social Security Fund pension contributions), HESLB (Higher Education Students' Loans Board repayments), WCF (Workers' Compensation Fund), and SDL (Skills and Development Levy). These rates are set by the government and change periodically with each budget announcement. Because they are stored as **effective-dated data** in the system — not hard-coded in software — the administrator can add a new rate set with a future effective date when a budget announcement is made, and the payroll engine will automatically apply the correct rates when the pay date falls in the new period. This means a payroll run always reproduces exactly what the law required on that pay date, regardless of subsequent rate changes. Without effective-dated rate tables, every budget announcement would require a software update to change hard-coded constants.
+
 Navigate to **HR & Payroll > Statutory Setup** (`/admin/hr/statutory`). Requires `HR.STATUTORY.MANAGE`.
 
 The statutory setup screen shows two sections: **PAYE band sets** and **Statutory rate sets**. These sets determine how income tax and levies are calculated during payroll calculation.
 
 **Creating a PAYE band set:**
+
+**What is a PAYE band set?** A PAYE band set is a schedule of income tax rates that applies a progressive rate to different slices of monthly income. For example, the first TZS 270,000 per month might be tax-free, the next slice taxed at 9%, the next at 20%, and so on. Each band defines the lower income threshold at which the rate starts and the cumulative tax already payable on income up to that threshold (to avoid re-computing all lower bands for every employee). The system selects the most recently effective band set whose effective date is on or before the payroll run's pay date, ensuring the correct bands apply to each period.
 
 1. Click **New PAYE band set**.
 2. Enter an **Effective from** date, a **Tax-free threshold** (the monthly income amount below which no PAYE applies), and an optional description.
@@ -274,6 +303,8 @@ The statutory setup screen shows two sections: **PAYE band sets** and **Statutor
 The system uses the **most recently effective** band set whose effective date is on or before the payroll run's pay date.
 
 **Creating a statutory rate set:**
+
+**What is a statutory rate set?** A statutory rate set holds the percentage rates for one of the non-PAYE levies: NSSF, WCF, SDL, or HESLB. Each set records the employee rate, the employer rate (where applicable), the basis for the calculation (gross salary or basic salary), and — for SDL — a headcount threshold (SDL only applies to companies above a minimum employee count). Like PAYE band sets, rate sets are effective-dated so that rate changes can be scheduled in advance without software updates.
 
 1. Click **New rate set**.
 2. Choose the **Rate type**: NSSF, WCF, SDL, or HESLB.
@@ -291,6 +322,9 @@ Contract statutory flags control which rate sets apply to each employee:
 ---
 
 ## Part 2 — Budgeting
+
+**What is a budget, and how does the module work?**
+A budget is a forward-looking financial plan: it states how much the business expects to earn and spend in a future period, account by account. It exists to give management a target to work towards, a benchmark to compare against actual results, and a tool for anticipating cash needs. Budgets in this system are **planning records only** — they never post to the General Ledger. Instead, the approved budget lines are held separately and compared at report time against actual GL postings, producing the **Budget Variance Report** (how far actuals diverged from plan). The system supports multiple **versions** of a budget so that the business can revise the plan during the year without losing the original, and each version goes through an approval lifecycle (DRAFT → SUBMITTED → APPROVED) to ensure the plan is authorised before it is used as a benchmark (ADR-0034).
 
 The Budgeting module is accessible from the **Budgeting** navigation group. Budgets are planning tools only — they do not post to the General Ledger. GL actuals are read at report time for comparison purposes.
 
@@ -310,6 +344,8 @@ The Budgeting module is accessible from the **Budgeting** navigation group. Budg
 
 Navigate to **Budgeting > Budgets** (`/admin/budgets`). Requires `BUDGETING.BUDGET.MANAGE`.
 
+**What is a budget header?** The budget header is the container for all the planning work. It identifies the fiscal year being budgeted and the scope — either the whole company, or a specific cost centre (a department or business unit). You create one budget per fiscal year per scope, and within it you manage one or more versions as the plan evolves. A company-wide budget covers all income and expense accounts; a cost-centre-scoped budget covers only the activity attributed to that centre.
+
 A budget covers a specific fiscal year and may be scoped to a specific cost centre (dimension value) or set as company-wide.
 
 1. Click **New budget**.
@@ -325,6 +361,9 @@ The budget list shows each budget's name, fiscal year, latest version number, an
 ---
 
 ### Budget Versions and the Version Lifecycle
+
+**What is a budget version, and why are multiple versions needed?**
+A budget version is a specific iteration of the plan. The first version (V1) is the original budget prepared at the start of the year. If actual events require the plan to be revised — a new product launch, an unexpected cost increase, a change in strategy — a new version (V2, V3, etc.) is created. The version lifecycle ensures that each revision is authorised before it replaces the previous plan: the preparer submits the version for approval, the approver reviews and approves or rejects it, and only one version is APPROVED (active) at any time. All prior approved versions are moved to SUPERSEDED (kept for reference) when a new one is approved. Rejected versions are kept but cannot be used as a benchmark; a new version must be created to revise after a rejection. Lines can only be edited on DRAFT versions — once submitted, the plan is locked.
 
 Each budget can have multiple versions representing revisions to the plan. Versions go through an approval cycle before becoming the active plan.
 
@@ -364,6 +403,9 @@ Click a budget row in the list to open its detail (`/admin/budgets/uid/:uid`). T
 
 ### Entering Budget Lines
 
+**What is a budget line?**
+A budget line is the atomic planning unit: it links one GL account to one fiscal period and states the planned amount for that account in that period. For example, a line might say "Account: 5400 Fuel & Transport, Period: March 2026, Amount: TZS 3,200,000". The sum of all lines for an account across all periods is that account's annual budget. Lines are stored at the period grain (month by month) so that the variance report can show monthly deviations, not just annual totals. Lines can only be added, changed, or deleted when the version is in DRAFT status.
+
 Open the version detail by clicking a version row (`/admin/budget-versions/uid/:uid`). The lines table shows account, period, amount (TZS), and memo. Lines are editable only when the version is in DRAFT status.
 
 Click **Edit Lines (Replace All)** to open the line editor. Choose one of three entry modes:
@@ -380,6 +422,8 @@ Click **Edit Lines (Replace All)** to open the line editor. Choose one of three 
 
 **ANNUAL\_SPREAD — enter an annual total and spread it evenly across 12 periods:**
 
+**When is this useful?** When the budget planner knows the full-year target for an account but does not want to apportion it manually month by month. The system splits the annual amount into 12 equal monthly lines, using HALF_UP rounding and adding any cent-level residual to the last period so that the 12 lines sum exactly to the annual total.
+
 1. In the **Account** picker, choose the GL account by name.
 2. Enter the **Annual amount** in TZS.
 3. Click **Replace Lines**. The system creates 12 lines (one per period), spreading the annual amount as evenly as possible (HALF_UP rounding; any remainder is added to the last period so the sum equals the annual total exactly).
@@ -387,6 +431,8 @@ Click **Edit Lines (Replace All)** to open the line editor. Choose one of three 
 The fiscal year must have exactly 12 periods to use ANNUAL\_SPREAD mode.
 
 **SEED — copy lines from another version:**
+
+**When is this useful?** When creating a revised budget version that starts from the same lines as a prior version. Rather than re-entering all lines from scratch, you seed from V1 and then edit only the accounts that have changed. This also works across fiscal years: you can seed V1 of the FY2027 budget from the approved V2 of FY2026 as a starting point.
 
 1. In the **Seed from version** picker, choose the source version by its label and status.
 2. Click **Replace Lines**. All lines from the source version are copied to this version, replacing any existing lines.
@@ -458,11 +504,17 @@ A null cost centre (transactions posted without a cost-centre dimension) appears
 
 ## Part 3 — Platform Services
 
+**What are Platform Services?**
+Platform services are cross-cutting capabilities that every other module uses — they are not specific to Finance, HR, or Operations. Document generation produces the printable PDFs from data that already exists in the system. Notifications tells users what has happened that they need to act on. The approval engine intercepts high-value actions and routes them through a human authorisation chain. The audit trail records every state-changing action so that nothing can be silently altered. These services are the governance and communication spine of the ERP.
+
 Platform services provide cross-cutting functionality used by all modules: document generation and management, notifications, the approval engine, and the audit trail.
 
 ---
 
 ### Documents
+
+**What is the Document Generation module, and what does it produce?**
+The Document Generation module renders formally formatted, branded PDF documents from transactions that already exist in the system. A sales invoice stored in the AR module, a purchase order in the Procurement module, or a goods receipt in the Inventory module all contain the data for a printable document, but that data is not yet in the layout a customer or supplier expects to receive. This module reads the source transaction as a read-only snapshot, merges it with the company's branding (logo, address, bank details, footer text), applies the chosen template, and produces a download-ready PDF. The generated document is stored in a log for audit purposes — you can re-download a document issued months ago without regenerating it. Every render is append-only: the log is never edited, and rendering a document never changes the source transaction. The six supported types in v1 are: Invoice, AR Statement, Purchase Order, Goods Receipt, Delivery Note, and Credit Note (ADR-0023).
 
 #### Generated Documents Log
 
@@ -497,11 +549,17 @@ To download a rendered document, click the **Download** button on the log row or
 
 #### Document Templates
 
+**What is a document template?**
+A document template controls the layout and structure of a rendered document type. The system ships with a default template for each of the six renderable types. The template can be activated or deactivated — deactivating it prevents new renders of that type. Template content (the actual layout formatting) is maintained by the system administrator; the UI allows you to toggle the template's status and update its display title.
+
 Navigate to **Documents > Document Templates** (`/admin/document-templates`). Requires `DOCUMENT.TEMPLATE.MANAGE`.
 
 The template registry lists one row per renderable document type. You can change the template's **title** and toggle its **status** (ACTIVE or INACTIVE) by clicking the row and saving. Deactivating a template does not delete it.
 
 #### Document Branding
+
+**What is Document Branding?**
+Document branding is the per-company configuration that controls what appears in the header and footer of every rendered PDF. Without branding, a PDF would carry no company name, address, tax ID, or bank details — it would be unacceptable as a formal document. The branding profile is a single set of settings per company (a "singleton"): there is no list to navigate, just one form that you edit and save. Changes take effect immediately on all subsequent renders; previously generated documents are not retroactively changed (the log is append-only).
 
 Navigate to **Documents > Document Branding** (`/admin/document-branding`). Requires `DOCUMENT.BRANDING.MANAGE`.
 
@@ -516,6 +574,9 @@ Changes take effect on all subsequent document renders. Previously generated doc
 ---
 
 ### Notifications
+
+**What is the Notifications module, and how does it work?**
+The Notifications module is the system's alerting spine. It listens for events that other modules emit — a payment received, an approval submitted, a payroll posted — and delivers an in-app message (and optionally an email) to the users who need to know. It also runs a scheduled background scanner for time-based conditions that have no single event trigger (such as an invoice becoming overdue overnight, or stock falling below its reorder level). Without notifications, users must actively poll every module to find out what has happened; notifications inverts this by pushing relevant information to the right person at the right time. Each notification type has an audience defined by permission (for example, an approval-submitted notification goes to all users who hold the approver role), and each user can customise their preferences — muting types they do not need, or disabling email delivery for types they prefer to see only in-app (ADR-0024).
 
 #### Notification Inbox
 
@@ -566,11 +627,15 @@ The delivery log shows every notification delivery attempt with its outcome and,
 
 ### Approvals
 
-The approval engine intercepts specific actions in other modules (purchase order confirmation, payroll posting, budget submission, etc.) and routes them through a human-approval chain if a matching policy exists. If no policy matches, the action is auto-approved immediately.
+**What is the Approval Engine, and why is it a shared platform service rather than module-specific?**
+The approval engine is a generic governance layer that intercepts certain high-value actions across the system and requires one or more human sign-offs before the action proceeds. Examples include confirming a large purchase order, posting a payroll run, or approving a budget version. Rather than each module building its own approval screen (which would lead to inconsistent behaviour and duplicate maintenance), the approval engine is a single shared service that any module can delegate to. A policy defines when approval is needed (which document type, above what monetary threshold, at which branch) and who must approve (which role). When a matching action is submitted, the engine creates an approval request, routes it to the appropriate approvers in sequence, and releases the action only when all steps are completed. If no policy matches, the action is auto-approved instantly. The engine posts nothing to the books; its sole purpose is to gate other modules' actions (ADR-0022).
 
 Approval requests are created automatically by the relevant modules — there is no "create approval request" screen.
 
 #### Approval Policies
+
+**What is an approval policy?**
+An approval policy defines the rule that triggers human approval: it says "for documents of type X, in the amount band [min, max), at scope Y, require approval from role Z". A policy can be company-wide (applies to all branches) or scoped to a specific branch (a branch-scoped policy takes priority when both match). The amount bands within a policy type must not overlap, and there can only be one active policy per (type, scope, band) combination — this ensures that every submission matches exactly one policy, making the outcome deterministic.
 
 Navigate to **Approvals > Approval Policies** (`/admin/approvals/policies`). Requires `APPROVALS.POLICY.VIEW`.
 
@@ -592,6 +657,9 @@ Policy changes only affect future submissions. In-flight PENDING requests contin
 **Deactivating a policy:** open the policy detail (`/admin/approvals/policies/uid/:uid`), click **Deactivate**. Status moves to INACTIVE. Inactive policies are not matched on new submissions.
 
 #### Approval Inbox (My Inbox)
+
+**What is the Approval Inbox?**
+The inbox shows every approval request that is currently waiting for your decision — specifically, requests where the current open step is routed to one of your permission roles. It is the daily working screen for managers, finance directors, and senior staff who hold approver roles. You see only the requests assigned to your role; you do not see requests routed to other roles. Approving moves the request to its next step (or resolves it if it was the final step); rejecting ends the entire request immediately and marks all remaining steps as skipped.
 
 Navigate to **Approvals > My Inbox** (`/admin/approvals/inbox`). Requires `APPROVALS.DECIDE`.
 
@@ -637,6 +705,9 @@ An administrator can cancel any non-terminal PENDING request. Open the request d
 ---
 
 ### Audit Trail
+
+**What is the Audit Trail, and why is it append-only?**
+The audit trail is the system's immutable record of every state-changing action — who did what, to which record, when, and from where. It is the primary tool for investigating a suspicious change, resolving a dispute ("who approved this payment?"), and satisfying auditor and regulatory requirements for a documented chain of custody. The audit trail is append-only: no record can be deleted or edited, not even by a system administrator. This property is fundamental to its integrity — an editable audit trail is no audit trail at all. Every module writes to the same audit trail so that you can search across the entire system in one place.
 
 Navigate to **Audit** (`/admin/audit`). Requires `AUDIT.VIEW`.
 
