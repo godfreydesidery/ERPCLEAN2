@@ -239,6 +239,17 @@ export class BomListComponent {
 
   // ── Display helpers ───────────────────────────────────────────────────────
 
+  /**
+   * Resolve a product uid to its human-readable label (name + code hint).
+   * Falls back to the first 8 chars of the uid + "…" rather than showing the full uid (C1).
+   */
+  productLabel(uid: string): string {
+    const opt = this.productOptions().find((o) => o.uid === uid);
+    if (opt) return opt.hint ? `${opt.label} (${opt.hint})` : opt.label;
+    // uid not yet in options (e.g. inactive product) — show a short code only
+    return uid ? uid.slice(0, 8) + '…' : '—';
+  }
+
   statusBadgeClass(status: BomStatus): string {
     switch (status) {
       case 'DRAFT':

@@ -96,7 +96,7 @@
                         {{ e.sourceType }}
                       </span>
                     </td>
-                    <td class="small text-muted">{{ e.sourceRef ?? '—' }}</td>
+                    <td class="small text-muted">{{ e.sourceRef ? (e.sourceRef.length > 12 ? (e.sourceRef.slice(0, 12) + '…') : e.sourceRef) : '—' }}</td>
                     <td class="text-end font-monospace small">{{ entryTotal(e) }}</td>
                     <td>
                       <a class="btn btn-sm btn-outline-primary"

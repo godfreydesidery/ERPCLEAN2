@@ -90,6 +90,16 @@ export class NotificationDeliveryLogComponent {
   prevPage(): void { if (this.currentPage() > 0) this.load(this.currentPage() - 1); }
   nextPage(): void { if (this.meta().hasNext) this.load(this.currentPage() + 1); }
 
+  /**
+   * Strip any embedded ULID from the triggerKey (C1 — no raw uid in visible text).
+   * Scan-based keys have the form "scan:TYPE_KEY:<26-char-uid>" — return only
+   * "scan:TYPE_KEY".  Plain keys ("TYPE_KEY") are returned as-is.
+   */
+  shortTriggerKey(key: string): string {
+    if (!key) return '—';
+    return key.replace(/:[0-9A-HJKMNP-TV-Z]{26}$/i, '');
+  }
+
   outcomeBadgeClass(outcome: string): string {
     switch (outcome?.toUpperCase()) {
       case 'SENT': return 'text-bg-success';
