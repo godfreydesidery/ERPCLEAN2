@@ -23,6 +23,13 @@ public interface ProductService {
 
     ProductDto getByUid(String uid);
 
+    /**
+     * Internal lookup by numeric id — for cross-module callers (e.g. stock-count snapshot)
+     * that hold a productId and need code/name for denormalisation.
+     * No scope check; caller is responsible for asserting company scope.
+     */
+    ProductDto getById(Long id);
+
     Page<ProductDto> list(Long companyId, String q, Pageable pageable);
 
     ProductDto updateByUid(String uid, UpdateProductRequest req);

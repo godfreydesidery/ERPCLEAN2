@@ -39,6 +39,11 @@ public class PosTill extends UidEntity {
     @Setter
     private String name;
 
+    /** FK → cash_bank_accounts(id); the drawer account for this till (NOT NULL). */
+    @Column(name = "cash_bank_account_id", nullable = false)
+    @Setter
+    private Long cashBankAccountId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     @Setter
@@ -60,10 +65,12 @@ public class PosTill extends UidEntity {
 
     protected PosTill() {}
 
-    public PosTill(Long companyId, Long branchId, String name, Long createdBy) {
-        this.companyId = companyId;
-        this.branchId  = branchId;
-        this.name      = name;
-        this.createdBy = createdBy;
+    public PosTill(Long companyId, Long branchId, String name,
+                   Long cashBankAccountId, Long createdBy) {
+        this.companyId          = companyId;
+        this.branchId           = branchId;
+        this.name               = name;
+        this.cashBankAccountId  = cashBankAccountId;
+        this.createdBy          = createdBy;
     }
 }

@@ -22,6 +22,7 @@ import com.erp.modules.fixedassets.service.FixedAssetGlSeeder;
 import com.erp.modules.hr.service.HrGlSeeder;
 import com.erp.modules.hr.service.HrStatutorySeeder;
 import com.erp.modules.manufacturing.service.ManufacturingGlSeeder;
+import com.erp.modules.stock.service.StockLocationSeeder;
 import com.erp.modules.gl.service.ChartOfAccountService;
 import com.erp.modules.gl.service.FiscalCalendarService;
 import com.erp.modules.gl.service.GlConfigService;
@@ -93,6 +94,8 @@ public class BootstrapRunner implements ApplicationRunner {
     private final NotificationTypeSeeder notificationTypeSeeder;
     // Manufacturing GL seeder (ADR-0035 D-7)
     private final ManufacturingGlSeeder manufacturingGlSeeder;
+    // Stock location seeder — seeds WAREHOUSE + in-transit per branch (ADR-0028 D-4/D-5)
+    private final StockLocationSeeder stockLocationSeeder;
 
     public BootstrapRunner(BootstrapProperties props,
                            OrganisationRepository organisations,
@@ -118,7 +121,8 @@ public class BootstrapRunner implements ApplicationRunner {
                            HrGlSeeder hrGlSeeder,
                            HrStatutorySeeder hrStatutorySeeder,
                            NotificationTypeSeeder notificationTypeSeeder,
-                           ManufacturingGlSeeder manufacturingGlSeeder) {
+                           ManufacturingGlSeeder manufacturingGlSeeder,
+                           StockLocationSeeder stockLocationSeeder) {
         this.props = props;
         this.organisations = organisations;
         this.companies = companies;
@@ -144,6 +148,7 @@ public class BootstrapRunner implements ApplicationRunner {
         this.hrStatutorySeeder      = hrStatutorySeeder;
         this.notificationTypeSeeder = notificationTypeSeeder;
         this.manufacturingGlSeeder  = manufacturingGlSeeder;
+        this.stockLocationSeeder    = stockLocationSeeder;
     }
 
     @Override
@@ -204,6 +209,9 @@ public class BootstrapRunner implements ApplicationRunner {
         branch.setTimeZone(props.timeZone());
         branch.setDefault(true);
         branches.save(branch);
+
+        // Seed WAREHOUSE default + in-transit OTHER locations for the bootstrap branch (ADR-0028 D-4/D-5).
+        stockLocationSeeder.seedDefaults(company.getId(), branch.getId(), branch.getCode());
 
         AppUser root = new AppUser(
                 props.adminUsername().toLowerCase(),
