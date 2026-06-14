@@ -8,6 +8,17 @@ This chapter is for administrators — typically users who hold the **ORG_ADMIN*
 
 ## Organisation, Companies, and Branches
 
+**What the three-level hierarchy is.** The system is structured in three nested levels. An **organisation** is the top-level entity representing your entire business group — think of it as the holding entity that owns everything else. A **company** is a distinct legal entity under the organisation (for example, a registered limited company or a subsidiary with its own tax ID). A **branch** is a physical or logical operating unit under a company — a shop, warehouse, regional office, or cost centre.
+
+**Why this structure exists.** Different businesses have different legal and operational structures. A retail chain might operate a single registered company with many store branches. A group of businesses might operate several legally distinct companies sharing one ERP platform. Separating these levels allows each company to have its own data, its own base currency, and its own set of branches, while all of them are administered through one system.
+
+**When each level matters.**
+- The organisation is set up once during deployment and is resolved automatically — you never need to type an organisation identifier.
+- Companies are created by an administrator with `COMPANY.MANAGE` permission, typically during the initial rollout or when a new legal entity is formed.
+- Branches are created whenever a new location or operating unit is needed.
+
+**How the levels connect.** Every transaction in the system is tagged with the branch it was performed in. A branch belongs to exactly one company, and from there the company's base currency, fiscal calendar, and legal details apply. A user's session is always scoped to an active branch; switching branches changes the company context as well (the active company is always the company that owns the active branch).
+
 The system is structured in three levels:
 
 - **Organisation** — the top-level entity representing your business group. It is configured by IT during deployment and is resolved automatically; you never type an organisation ID.
@@ -23,6 +34,10 @@ Navigate to **Administration › Companies** (`/admin/companies`) in the sidebar
 The list shows each company's code, name, and status (Active or Archived). Your view is limited to companies within your active organisation and, for non-admin users, to companies you are scoped to act in.
 
 ### Creating a company
+
+**What a company record is.** A company record represents one legal entity — a separately registered business with its own identity, tax registration, and (optionally) its own functional currency. Creating a company in the system establishes the container under which that entity's branches, users, and transactions will live.
+
+**Why you would create one.** You create a new company when a new legal entity joins your group, or when you first deploy the system and need to register your existing companies. Without at least one company, no branches can exist and no users can be assigned a working context.
 
 **Required permission:** `COMPANY.MANAGE`
 
@@ -43,6 +58,10 @@ The new company appears in the list with status **Active**. The organisation is 
 
 ### Archiving a company
 
+**What archiving means.** Archiving a company marks its status as `ARCHIVED`. The record and all its data are preserved — nothing is deleted. An archived company cannot be used for new transactions, and its branches are removed from users' branch-switching lists.
+
+**When to archive.** Archive a company when a legal entity is wound down, dissolved, or otherwise ceases operations. Do not archive a company simply because it is inactive for a period — use this as a permanent marker.
+
 Click **Archive** on the company detail screen. The company's status changes to **Archived** (the record is not deleted). Archived companies cannot be used for new transactions, and their branches become unavailable for user sessions.
 
 > Archiving a company affects all users whose default branch belongs to that company — they will have no active branch on their next login.
@@ -57,6 +76,14 @@ Navigate to **Administration › Companies** (`/admin/companies`), click a compa
 
 ### Creating a branch
 
+**What a branch record is.** A branch is the smallest organisational unit in the system. It represents one operating location or logical division — a physical store, a warehouse, a regional sales office, or an accounting department. Every transaction (a sales invoice, a goods receipt, a payment) is tagged to the branch that was active when it was created.
+
+**Why branches exist.** Without branches, all transactions for a company would be lumped together with no way to separate one location's performance from another's. Branches let management analyse stock levels by store, compare revenue by region, control what each staff member can see and do (a storekeeper at one branch cannot access another branch's data), and ensure that GL postings land in the right cost centre.
+
+**When to create one.** Create a branch when a new physical location opens, when a new department or cost centre is established, or during initial setup to represent your existing offices and stores.
+
+**How a branch interacts with users.** A user must be assigned to at least one branch to have an active session. One of their assigned branches is marked as their **default branch** — this is the branch that activates automatically on login. A user can be assigned to many branches and can switch between them during a session without logging out.
+
 **Required permission:** `BRANCH.MANAGE`
 
 1. From the branch list of a company, click **Create Branch**.
@@ -68,6 +95,10 @@ Navigate to **Administration › Companies** (`/admin/companies`), click a compa
 3. Click **Save**.
 
 ### Setting the company default branch
+
+**What the company default branch is.** Each company has exactly one branch flagged as its default. This default is the branch that new users in this company start in when they have no personal default of their own, and it is used by the system in contexts where a company-level default is needed (for example, documents that auto-populate a branch).
+
+**Why only one default per company.** Having more than one "default" is ambiguous — the system would not know which one to apply. The uniqueness rule (enforced at the database level) ensures there is always one unambiguous answer.
 
 Only one branch per company can be the default. The default branch is the one users are taken to on login when no other preference is active.
 
@@ -86,6 +117,14 @@ The previously default branch is cleared automatically.
 ---
 
 ## Users
+
+**What a user account is.** A user account is a named login identity in the system. It consists of a username (the login name), a display name (shown in the interface and in audit logs), a password, and optional contact details (email, phone). A user is an organisation-wide record — the same account can be active in multiple companies, though its permissions depend on which company and branch it is working in at any given moment.
+
+**Why user accounts exist.** Shared logins (for example, a single "accountant" password passed around the team) make audit trails meaningless — the log shows "accountant did X" and you cannot know who actually did it. Named individual accounts mean every action is attributable to a real person, accounts can be individually disabled without disrupting others, and each person can be given exactly the permissions their job requires.
+
+**When to create a user.** Create a user when a new employee joins, when a contractor needs access, or when a role needs an automated service account. After creating the account you must also assign the user to at least one branch and grant them at least one role; a user with no branches and no roles can log in but will see no menu and have no active branch.
+
+**How the user lifecycle works.** A user starts `ACTIVE`. An administrator can `DISABLE` the account (status becomes `INACTIVE`) to prevent login while preserving the account and its history — for example, during a leave of absence or pending investigation. `ENABLE` restores it to `ACTIVE`. The `rootadmin` account cannot be disabled. If too many wrong-password attempts are made, the account is automatically locked for 15 minutes; an administrator can clear this with **Unlock**. User accounts are never hard-deleted.
 
 **Required permission to view:** `USER.VIEW`
 **Required permission to create/edit/disable/unlock/reset password:** `USER.MANAGE`
@@ -119,9 +158,15 @@ The **rootadmin** account cannot be disabled.
 
 ### Unlocking a locked account
 
+**What account locking is.** After 5 consecutive wrong-password attempts, the system locks the account for 15 minutes — a security measure to slow down automated guessing attacks. While locked, even the correct password is rejected and the user sees a specific message.
+
+**When to unlock manually.** If a user cannot wait 15 minutes (for example, during a time-sensitive business operation), an administrator with `USER.MANAGE` can clear the lockout immediately. The failed-attempt counter resets on unlock.
+
 If a user has been locked out after too many failed sign-in attempts, a locked indicator appears on their row. Click **Unlock** to clear the lockout. The user can then sign in again with the correct password.
 
 ### Resetting a user's password
+
+**When to reset.** Reset a password when a user forgets theirs, when you suspect a password has been compromised, or when a new user needs to change the temporary password set on account creation.
 
 1. On the Users list, expand the row's **Set Password** form.
 2. Enter a new password that meets the policy (at least 8 characters, at least one letter and one number, not a common password).
@@ -136,6 +181,16 @@ Navigate to the user's detail page (`/admin/users/uid/<uid>`) by clicking **Mana
 ---
 
 ## Roles
+
+**What a role is.** A role is a named, reusable bundle of permissions. For example, an `ACCOUNTANT` role might include permissions such as `GL.POST`, `AR.VIEW`, `AP.BILL.ENTER`, and `CASH.RECONCILE`. Once defined, the role can be granted to any number of users. If the business needs to change what accountants can do, the administrator updates the role once and the change takes effect for every holder immediately.
+
+**Why roles exist — RBAC.** This design is called Role-Based Access Control (RBAC). It exists because managing permissions per-user does not scale: a company with 50 staff and 185 permission codes would require thousands of individual permission grants, each needing manual maintenance. With roles you manage a small set of job functions, not a large matrix of individual grants. RBAC also makes compliance simpler: you can demonstrate to an auditor exactly which capabilities any given role confers.
+
+**When roles are created.** Roles are created during initial setup (to match the job functions in your organisation) and updated whenever those functions evolve. A small set of **system roles** (such as `ORG_ADMIN`) are seeded during deployment and cannot be archived; custom roles can be freely created and modified.
+
+**How a role's permissions take effect.** When a role's permission set is saved, the system invalidates its permission cache. Users who hold the role see the change on their very next request — there is no need to log out and back in.
+
+**The effective permission set.** A user may hold multiple roles. Their effective permissions at any moment are the **union** of all permissions from all their active role grants in the current company and branch context. If Role A grants `GL.VIEW` and Role B grants `GL.POST`, a user with both roles has both.
 
 **Required permission to view:** `ROLE.VIEW`
 **Required permission to create/edit/set permissions/archive:** `ROLE.MANAGE`
@@ -165,6 +220,10 @@ Open the role's edit page (`/admin/roles/uid/<uid>`) and update the name or desc
 
 ### Setting a role's permissions
 
+**What the permission catalogue is.** A permission is the finest-grained unit of access control in the system — a named capability that says "the holder may perform this specific action." Permissions are grouped by module (for example, all `GL.*` permissions belong to the General Ledger module). The full catalogue contains over 185 codes covering every module.
+
+**How the "replace" save works.** When you click **Save permissions**, the system replaces the role's entire permission set with exactly the codes you have checked. Unchecking a box removes that permission. This means saving an empty selection leaves the role with no permissions — which is valid and means the role grants no access.
+
 On the role edit page, the permissions panel lists every available permission grouped by module (for example, **iam**, **sales**, **accounting**).
 
 1. Check the boxes for the permissions this role should have.
@@ -182,6 +241,14 @@ Click **Archive** on the role edit page. The role status changes to **Archived**
 ---
 
 ## Assigning Roles to Users
+
+**What a role grant is.** A role grant is a record that links a specific user to a specific role, scoped to a company and optionally to a single branch. It is not a permanent property of the user; it is an explicit, revocable assignment. A user can hold many grants, and each grant has its own scope.
+
+**Why grants are scoped to a company (and optionally a branch).** A user might be an accountant in the Head Office branch and a read-only viewer in the Mwanza branch. Scoping the grant to a company-and-branch means the right permissions apply in the right context. A company-wide grant (no branch restriction) gives the role's permissions in every branch of that company. A branch-scoped grant gives those permissions only when the user is active in that specific branch.
+
+**When to grant a role.** After creating a new user, before they can do meaningful work. Also when an existing user takes on new responsibilities. Role grants take effect immediately on the user's next request — no re-login required.
+
+**How revocation works.** Revoking a grant marks it as revoked (the record is kept for audit purposes) and removes its permissions from the user's effective set immediately. The user's currently open session will lose those permissions on their next request.
 
 **Required permission:** `ROLE.MANAGE`
 
@@ -212,6 +279,14 @@ The grant is revoked immediately. The user loses those permissions on their next
 ---
 
 ## Assigning Branches to Users
+
+**What a branch assignment is.** A branch assignment is a record that links a user to a specific branch, granting them the ability to switch to that branch and operate within it. Without at least one branch assignment, a user has no active branch after login and can only view limited screens.
+
+**Why branch assignments are separate from role grants.** Branch access (which branches you can switch to) and permission access (what you can do in each branch) are two different concerns that can be managed independently. You might assign a user to a branch for data-visibility reasons without granting them any elevated permissions there, or you might grant a company-wide role that applies to all branches simultaneously while still controlling which branches the user can physically switch to.
+
+**The default branch rule.** Each user has exactly one default branch — the branch that becomes active on login. The system enforces this at the database level: you cannot have two defaults for the same user simultaneously. If you set a new default, the previous one is cleared automatically. If a user's default branch is removed or archived, the system automatically promotes the earliest-assigned remaining branch as the new default. If no branches remain, the user has no active branch (read-only session) until an administrator assigns one.
+
+**When to use "Make default".** Tick **Make default** when assigning the branch that should be this user's primary working location — typically their home branch or the branch they will use most often. You can change the default at any time.
 
 **Required permission to view branch assignments:** `USER.VIEW`
 **Required permission to assign / change default / remove:** `BRANCH.ASSIGN`
@@ -287,6 +362,14 @@ This example walks through the complete new-staff onboarding flow for Amina Juma
 
 ## Audit Trail
 
+**What the audit trail is.** The audit trail is a chronological, append-only log of every significant action performed in the system. Each record captures who did it (the actor), what they did (the action code), which record was affected (the target), in which company and branch, and when. It cannot be edited, backdated, or deleted — not even by `rootadmin`.
+
+**Why it exists.** The audit trail serves several business and legal purposes. It creates accountability: every change to a user account, every permission grant, every password reset has a named, timestamped owner. It supports security investigations: if an account is suspected of misuse, the audit log shows exactly what actions it took and when. It satisfies compliance requirements: many financial regulations require evidence that access controls were applied and that privilege changes were authorised.
+
+**When audit records are written.** Every create, update, status change (such as enabling or disabling a user), role grant, and role revocation generates an audit record. Login successes, failures, and lockout events are also recorded. Actions by `rootadmin` that cross company boundaries produce an additional `ROOT.BYPASS` record. Audit records are written in the same database transaction as the action they record — if the action rolls back, the audit record rolls back with it.
+
+**What is and is not recorded.** Action codes and target identifiers are always recorded. For profile-field edits (email, phone, display name) only the fact of the change is recorded — not the old or new values — to minimise personal data in the audit store. Passwords and token values are never recorded.
+
 **Required permission:** `AUDIT.VIEW`
 
 Navigate to **Administration › Audit** (`/admin/audit`) in the sidebar.
@@ -310,3 +393,23 @@ Every create, update, state change (such as enabling or disabling a user), grant
 3. The list shows the most recent events first. Use the pager to browse older records.
 
 Audit records show usernames and action codes — not raw internal identifiers. Sensitive data (such as password hashes) is never included in audit details.
+
+---
+
+## Key Concepts Reference
+
+### uid vs id — why records have two identifiers
+
+**What they are.** Every record in the system carries two numeric identifiers. The `id` is an internal database sequence number used only for database-level joins between tables — you never see it in the interface or in URLs. The `uid` is a ULID (Universally Unique Lexicographically Sortable Identifier) — a 26-character string such as `01HY7FKMQ5T3V6NP8A2X4BQERD` — used in every URL and in every place where a record is referenced outside the database.
+
+**Why two identifiers.** Sequential numeric IDs in URLs expose information about record counts (a competitor could learn how many orders you have by looking at the URL of the latest one). ULIDs are opaque and reveal nothing about volume or sequence. They are also time-sortable, collision-resistant, and URL-safe without encoding. The internal `id` remains for efficient database foreign-key joins, which are performance-sensitive. This duality is a deliberate design choice throughout the system.
+
+**What this means for you.** You never need to know or type a uid. The system passes uids between pages in URLs automatically. When you pick a user, a branch, or a role by name in a form, the picker stores the uid in the background — the interface always works by name.
+
+### Fiscal period
+
+**What a fiscal period is.** A fiscal period is a defined accounting time window — typically a calendar month — within a financial year. Transactions (invoices, payments, journal entries) are posted to an open period; once a period is closed, historical records in it cannot be altered.
+
+**Why fiscal periods matter.** They are the foundation of financial reporting: a profit-and-loss statement, a balance sheet, and a cash-flow report all aggregate transactions by period. Closing a period locks the numbers so that prior-period reports are stable and comparable. Without fiscal periods, a transaction entered late could silently change a figure that was already reported.
+
+**When you interact with periods.** Accountants and finance managers interact with fiscal periods when posting journal entries, running period-end reports, and performing the year-end close. Transactions in operational modules (sales, purchases, inventory) automatically post to the current open period of the active branch's company.
