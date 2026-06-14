@@ -179,7 +179,7 @@ The system is structured in three levels:
 
 **Required permission:** `COMPANY.VIEW`
 
-Navigate to **Administration > Companies** in the sidebar.
+Navigate to **Administration › Companies** (`/admin/companies`) in the sidebar.
 
 The list shows each company's code, name, and status (Active or Archived). Your view is limited to companies within your active organisation and, for non-admin users, to companies you are scoped to act in.
 
@@ -214,7 +214,7 @@ Click **Archive** on the company detail screen. The company's status changes to 
 
 **Required permission:** `BRANCH.VIEW`
 
-From the Companies list, click a company to open its detail, then click **Branches** to see the list of branches under that company.
+Navigate to **Administration › Companies** (`/admin/companies`), click a company to open its detail, then click **Branches** to open the branch list at `/admin/companies/<companyUid>/branches`.
 
 ### Creating a branch
 
@@ -251,11 +251,11 @@ The previously default branch is cleared automatically.
 **Required permission to view:** `USER.VIEW`
 **Required permission to create/edit/disable/unlock/reset password:** `USER.MANAGE`
 
-Navigate to **Administration > Users**.
+Navigate to **Administration › Users** (`/admin/users`) in the sidebar.
 
 ### The users list
 
-The list shows each user's username, display name, and status. Use the search bar to filter by name. Click **Manage branches** on any row to open the user's detail page.
+The list shows each user's username, display name, and status. Use the search bar to filter by name. Click **Manage branches** on any row to open the user's detail page at `/admin/users/uid/<uid>`.
 
 ### Creating a user
 
@@ -292,7 +292,7 @@ The user can sign in immediately with the new password. Passwords are never stor
 
 ### Editing user contact details
 
-Navigate to the user's detail page (click **Manage branches** from the list). You can update the display name, email, and phone number. The username and status are changed via their dedicated actions, not here.
+Navigate to the user's detail page (`/admin/users/uid/<uid>`) by clicking **Manage branches** from the list. You can update the display name, email, and phone number. The username and status are changed via their dedicated actions, not here.
 
 ---
 
@@ -301,13 +301,13 @@ Navigate to the user's detail page (click **Manage branches** from the list). Yo
 **Required permission to view:** `ROLE.VIEW`
 **Required permission to create/edit/set permissions/archive:** `ROLE.MANAGE`
 
-Navigate to **Administration > Roles**.
+Navigate to **Administration › Roles** (`/admin/roles`) in the sidebar.
 
 Roles are named bundles of permissions. A user can be granted one or more roles; the effective permissions are the union of all granted roles in the active branch context.
 
 ### The roles list
 
-The list shows each role's code, name, and whether it is a **System** role (pre-defined and cannot be archived) or a custom role. Click a role's code or name to open its edit page.
+The list shows each role's code, name, and whether it is a **System** role (pre-defined and cannot be archived) or a custom role. Click a role's code or name to open its edit page at `/admin/roles/uid/<uid>`.
 
 ### Creating a role
 
@@ -322,7 +322,7 @@ The new role is created with no permissions. Assign permissions next.
 
 ### Editing a role's name or description
 
-Open the role's edit page and update the name or description fields, then click **Save details**. The code cannot be changed.
+Open the role's edit page (`/admin/roles/uid/<uid>`) and update the name or description fields, then click **Save details**. The code cannot be changed.
 
 ### Setting a role's permissions
 
@@ -346,13 +346,13 @@ Click **Archive** on the role edit page. The role status changes to **Archived**
 
 **Required permission:** `ROLE.MANAGE`
 
-Navigate to **Administration > Role Grants**.
+Navigate to **Administration › Role Grants** (`/admin/role-grants`) in the sidebar.
 
 This screen lets you grant a role to a user for a specific company, optionally restricted to a single branch.
 
 ### Granting a role
 
-1. On the Role Grants screen, choose the **User** by typing their name in the picker.
+1. On the Role Grants screen (`/admin/role-grants`), choose the **User** by typing their name in the picker.
 2. Choose the **Role** by name.
 3. Choose the **Company** by name (the system resolves this to your active company by default).
 4. Optionally choose a **Branch** to restrict the grant to one branch. Leave blank to grant the role across all branches of that company.
@@ -377,7 +377,7 @@ The grant is revoked immediately. The user loses those permissions on their next
 **Required permission to view branch assignments:** `USER.VIEW`
 **Required permission to assign / change default / remove:** `BRANCH.ASSIGN`
 
-Branch assignments control which branches a user can switch to and which data they can access. Open a user's detail page by clicking **Manage branches** from the Users list.
+Branch assignments control which branches a user can switch to and which data they can access. Open a user's detail page (`/admin/users/uid/<uid>`) by clicking **Manage branches** from the **Administration › Users** (`/admin/users`) list.
 
 ### Assigning a user to a branch
 
@@ -404,11 +404,53 @@ Click **Remove** on the assignment row. If you remove the user's current default
 
 ---
 
+**Example — Create the ACCOUNTANT role and assign it to a new user scoped to the Head Office branch**
+
+This example walks through the complete new-staff onboarding flow for Amina Juma, who joins as an accountant at the Head Office branch of Orbix Trading Co.
+
+**Step 1 — Create the role (if it does not already exist)**
+
+1. Navigate to **Administration › Roles** (`/admin/roles`).
+2. Click **Create Role**.
+3. Enter Code `ACCOUNTANT`, Name `Accountant`, Description `GL posting, AR, AP, Cash & Bank, Tax`.
+4. Click **Save**. The role is created with no permissions.
+5. Click the `ACCOUNTANT` row to open `/admin/roles/uid/<uid>`.
+6. In the permissions panel, check the following codes: `GL.VIEW`, `GL.POST`, `AR.VIEW`, `AR.RECEIPT.RECORD`, `AR.STATEMENT.VIEW`, `AP.VIEW`, `AP.BILL.ENTER`, `AP.PAYMENT.RUN`, `CASH.VIEW`, `CASH.ENTRY.RECORD`, `CASH.TRANSFER`, `CASH.RECONCILE`, `VAT.VIEW`, `TAXRATE.VIEW`, `REPORT.PL.VIEW`, `REPORT.BS.VIEW`, `REPORT.CASHFLOW.VIEW`, `REPORT.LEDGER.VIEW`.
+7. Click **Save permissions**. The panel refreshes showing 18 codes saved.
+
+**Step 2 — Create the user account**
+
+1. Navigate to **Administration › Users** (`/admin/users`).
+2. Click **Create User**.
+3. Enter Username `amina.juma`, Display Name `Amina Juma`, Password `Amina2024#`, Email `amina.juma@orbixtrading.co.tz`.
+4. Click **Save**. The row appears with status **Active**.
+
+**Step 3 — Assign the Head Office branch**
+
+1. Click **Manage branches** on Amina Juma's row to open `/admin/users/uid/<uid>`.
+2. In the **Branch Assignments** panel, select Company `Orbix Trading Co.`, Branch `HO — Head Office`.
+3. Check **Make default**.
+4. Click **Assign**. The branch appears in the list marked as default.
+
+**Step 4 — Grant the ACCOUNTANT role**
+
+1. Navigate to **Administration › Role Grants** (`/admin/role-grants`).
+2. Select User `Amina Juma`, Role `ACCOUNTANT`, Company `Orbix Trading Co.`, Branch `HO — Head Office`.
+3. Click **Grant**. The grant row appears immediately.
+
+**Step 5 — Verify**
+
+1. Navigate to **Administration › Audit** (`/admin/audit`).
+2. Filter by Actor `rootadmin` (or whichever admin performed these steps). Confirm four audit entries: `ROLE.CREATE`, `ROLE.PERMISSIONS.SET`, `USER.CREATE`, `ROLE.GRANT`.
+3. Sign in as `amina.juma` / `Amina2024#`. Confirm the **Accounting** sidebar group is visible and items such as **Chart of Accounts** (`/admin/gl/accounts`) and **Payables** (`/admin/ap/supplier-bills`) are accessible.
+
+---
+
 ## Audit Trail
 
 **Required permission:** `AUDIT.VIEW`
 
-Navigate to **Administration > Audit**.
+Navigate to **Administration › Audit** (`/admin/audit`) in the sidebar.
 
 The audit trail is an append-only log of every significant action performed in the system — who did it, what they did, and when. It cannot be edited or deleted.
 
@@ -424,7 +466,7 @@ Every create, update, state change (such as enabling or disabling a user), grant
 
 ### Reviewing the audit log
 
-1. Navigate to **Administration > Audit**.
+1. Navigate to **Administration › Audit** (`/admin/audit`).
 2. Use the filters at the top to narrow by action type, actor, date range, or target type.
 3. The list shows the most recent events first. Use the pager to browse older records.
 
@@ -442,7 +484,7 @@ All master data screens are under the **Admin** section of the navigation. Your 
 
 ## Customers
 
-**Navigation:** Admin > Customers | **Permission to view:** `CUSTOMER.VIEW` | **Permission to create / edit:** `CUSTOMER.MANAGE`
+**Navigation:** **Parties › Customers** (`/admin/customers`) | **Permission to view:** `CUSTOMER.VIEW` | **Permission to create / edit:** `CUSTOMER.MANAGE`
 
 Customers are the parties you sell to. Each customer belongs to one company and carries a system-generated code (`CUST-0001`, `CUST-0002`, …). You never enter or see the internal uid — the system uses that behind the scenes.
 
@@ -459,7 +501,7 @@ Once saved, Party Type and Customer Kind can be changed on the detail edit form.
 
 ### How to create a customer
 
-1. Navigate to **Admin > Customers**.
+1. Navigate to **Parties › Customers** (`/admin/customers`).
 2. Click **New Customer**. An inline form appears below the toolbar.
 3. Enter the **Display Name** (required).
 4. Select **Party Type** (Individual or Business).
@@ -474,7 +516,7 @@ The system assigns a unique code and sets the status to **Active**. The new row 
 
 ### How to search for a customer
 
-On the Customers list:
+On the **Parties › Customers** (`/admin/customers`) list:
 
 - Type in the **Search** box. Name search is case-insensitive and matches any part of the name.
 - Searching by **TIN**, **Phone**, or **Code** requires an exact match.
@@ -483,8 +525,8 @@ On the Customers list:
 
 ### How to view and edit a customer
 
-1. Click on any row in the customer list to open the detail page.
-2. The URL contains the customer's uid (`/admin/customers/uid/…`) — you do not need to read or type this.
+1. Click on any row in the customer list to open the detail page (`/admin/customers/uid/<uid>`).
+2. The URL contains the customer's uid — you do not need to read or type this.
 3. Edit any field in the form. The **Code** and **Company** fields are read-only (they are set at creation and cannot change).
 4. If Customer Kind is **Cash / Walk-in**, the Credit Limit and Payment Terms fields are hidden. Switch to Credit Account to reveal them.
 5. Click **Save** to apply changes.
@@ -493,7 +535,7 @@ On the Customers list:
 
 An archived customer remains in the database for historical reporting but is not available for new transactions.
 
-1. Open the customer detail page.
+1. Open the customer detail page (`/admin/customers/uid/<uid>`).
 2. Click **Archive**. The status badge changes to **Archived**.
 3. To reverse, click **Restore**. The status returns to **Active**.
 
@@ -503,7 +545,7 @@ Archiving and restoring are both immediate and do not require a reason.
 
 A customer can be associated with specific branches of your company. This determines which branches can see the customer in their scoped views.
 
-1. Open the customer detail page.
+1. Open the customer detail page (`/admin/customers/uid/<uid>`).
 2. Scroll to the **Branch Associations** panel.
 3. Select the **Company** from the first dropdown, then select the **Branch** (shown as `code — name`) from the second.
 4. Click **Assign**. The branch appears in the association list with the date it was assigned.
@@ -513,9 +555,26 @@ You need the `PARTY.BRANCH.ASSIGN` permission to assign or remove branches. You 
 
 ---
 
+**Example — Register a new credit-account business customer**
+
+Scenario: Sales admin Fatuma Msongo is on-boarding Karibu Wholesale Ltd, a new B2B buyer on 30-day credit terms.
+
+1. Navigate to **Parties › Customers** (`/admin/customers`). Click **New Customer**.
+2. Enter Display Name `Karibu Wholesale Ltd`, Party Type `Business`, TIN `100-456-789`.
+3. Select Customer Kind `Credit Account`. Enter Credit Limit `TZS 5,000,000`, Payment Terms `30` days.
+4. Enter Phone `+255 22 211 0099`, Email `orders@karibuwholesale.co.tz`, Region `Dar es Salaam`.
+5. Tick **VAT Registered**, enter VRN `40-045678-H`.
+6. Click **Submit**. The system assigns code `CUST-0012` and status **Active**.
+7. Click the `CUST-0012` row to open `/admin/customers/uid/<uid>`.
+8. In the **Branch Associations** panel, select Company `Orbix Trading Co.`, Branch `DSM — Dar es Salaam Branch`. Click **Assign**. The branch association is saved.
+
+Karibu Wholesale Ltd is now available as a customer on all sales flows for the DSM branch.
+
+---
+
 ## Suppliers
 
-**Navigation:** Admin > Suppliers | **Permission to view:** `SUPPLIER.VIEW` | **Permission to create / edit:** `SUPPLIER.MANAGE`
+**Navigation:** **Parties › Suppliers** (`/admin/suppliers`) | **Permission to view:** `SUPPLIER.VIEW` | **Permission to create / edit:** `SUPPLIER.MANAGE`
 
 Suppliers are the parties you purchase from. The data structure mirrors customers, with one difference: the kind field distinguishes **Goods** suppliers from **Service** suppliers (there are no credit limit or payment terms fields on a supplier record).
 
@@ -523,7 +582,7 @@ Supplier codes are prefixed `SUPP-` (for example, `SUPP-0001`).
 
 ### How to create a supplier
 
-1. Navigate to **Admin > Suppliers**.
+1. Navigate to **Parties › Suppliers** (`/admin/suppliers`).
 2. Click **New Supplier**.
 3. Enter **Display Name** (required), **Party Type**, and **Supplier Kind** (Goods or Service).
 4. If Party Type is Business, enter the **TIN**.
@@ -534,25 +593,37 @@ The same rules apply: TIN required for Business parties, VRN only when VAT Regis
 
 ### Search, edit, archive, restore, and branch associations
 
-These work exactly as described for Customers above, substituting the Suppliers screen and the `SUPPLIER.MANAGE` / `PARTY.BRANCH.ASSIGN` permissions.
+These work exactly as described for Customers above, substituting the **Parties › Suppliers** (`/admin/suppliers`) screen and the detail page at `/admin/suppliers/uid/<uid>`, using the `SUPPLIER.MANAGE` / `PARTY.BRANCH.ASSIGN` permissions.
+
+---
+
+**Example — Register a goods supplier**
+
+Scenario: Procurement officer Hassan Kamau adds Tembo Industries Ltd as a VAT-registered goods supplier.
+
+1. Navigate to **Parties › Suppliers** (`/admin/suppliers`). Click **New Supplier**.
+2. Enter Display Name `Tembo Industries Ltd`, Party Type `Business`, TIN `100-789-321`, Supplier Kind `Goods`.
+3. Tick **VAT Registered**, enter VRN `40-078901-T`.
+4. Enter Phone `+255 27 254 4400`, Region `Arusha`.
+5. Click **Submit**. System assigns code `SUPP-0008` and status **Active**.
 
 ---
 
 ## Other Parties
 
-**Navigation:** Admin > Other Parties | **Permission to view:** `OTHERPARTY.VIEW` | **Permission to create / edit:** `OTHERPARTY.MANAGE`
+**Navigation:** **Parties › Other Parties** (`/admin/other-parties`) | **Permission to view:** `OTHERPARTY.VIEW` | **Permission to create / edit:** `OTHERPARTY.MANAGE`
 
 Other Parties covers any third party that is not a customer, supplier, or agent — for example, landlords, regulatory bodies, utility providers, or freight companies. Other Party codes are prefixed `OTHR-`.
 
 The key difference from customers and suppliers is the **Other Kind** field, which is free text (not a fixed list). You can type any label, such as "Landlord", "Utility", or "Freight Forwarder". The field is optional.
 
-All other behaviour — TIN rule for Business parties, VAT/VRN pairing, archive/restore lifecycle, and branch associations — is identical to Customers and Suppliers.
+All other behaviour — TIN rule for Business parties, VAT/VRN pairing, archive/restore lifecycle, and branch associations — is identical to Customers and Suppliers. The detail page for an other party is at `/admin/other-parties/uid/<uid>`.
 
 ---
 
 ## Sales Agents
 
-**Navigation:** Admin > Sales Agents | **Permission to view:** `AGENT.VIEW` | **Permission to create / edit:** `AGENT.MANAGE`
+**Navigation:** **Parties › Sales Agents** (`/admin/agents`) | **Permission to view:** `AGENT.VIEW` | **Permission to create / edit:** `AGENT.MANAGE`
 
 Sales agents represent the people or organisations that sell on your behalf. Agent codes are prefixed `AGNT-`.
 
@@ -565,7 +636,7 @@ Sales agents represent the people or organisations that sell on your behalf. Age
 
 ### How to create an agent
 
-1. Navigate to **Admin > Sales Agents**.
+1. Navigate to **Parties › Sales Agents** (`/admin/agents`).
 2. Click **New Agent**.
 3. Enter **Display Name**, **Party Type**, and **Agent Kind** (Internal or External).
 4. If Kind is **Internal**, a **User** selector appears. Choose the user by name from the list. The system stores the link internally — you do not type a user id.
@@ -574,17 +645,29 @@ Sales agents represent the people or organisations that sell on your behalf. Age
 
 ### Switching an agent between Internal and External
 
-On the agent detail page, changing Kind from Internal to External clears the user link automatically on save. Changing from External to Internal requires you to select a user before saving.
+On the agent detail page (`/admin/agents/uid/<uid>`), changing Kind from Internal to External clears the user link automatically on save. Changing from External to Internal requires you to select a user before saving.
 
 ### Search, edit, archive, restore, and branch associations
 
-These work as described for Customers, using the `AGENT.MANAGE` and `PARTY.BRANCH.ASSIGN` permissions.
+These work as described for Customers, using the **Parties › Sales Agents** (`/admin/agents`) screen and the `AGENT.MANAGE` and `PARTY.BRANCH.ASSIGN` permissions.
+
+---
+
+**Example — Create an external field agent and assign them to a route**
+
+Scenario: Operations manager registers Juma Rashidi as a freelance distribution agent for the Coast route.
+
+1. Navigate to **Parties › Sales Agents** (`/admin/agents`). Click **New Agent**.
+2. Enter Display Name `Juma Rashidi`, Party Type `Individual`, Agent Kind `External`.
+3. Click **Submit**. System assigns code `AGNT-0004`.
+4. Open the route at **Parties › Routes** (`/admin/routes`), click the **Coast Distribution Route** row.
+5. In the **Agents** panel, type `Juma` and select `AGNT-0004 — Juma Rashidi`. Tick **Primary**. Click **Assign**.
 
 ---
 
 ## Products
 
-**Navigation:** Admin > Products | **Permission to view:** `PRODUCT.VIEW` | **Permission to create / edit:** `PRODUCT.MANAGE`
+**Navigation:** **Products › Products** (`/admin/products`) | **Permission to view:** `PRODUCT.VIEW` | **Permission to create / edit:** `PRODUCT.MANAGE`
 
 Products are the items you sell, buy, or manufacture. Each product belongs to one company and carries a system-generated code (for example, `PROD-0001`) unless you supply your own code at creation time.
 
@@ -599,7 +682,7 @@ Products are the items you sell, buy, or manufacture. Each product belongs to on
 
 ### How to create a product
 
-1. Navigate to **Admin > Products**.
+1. Navigate to **Products › Products** (`/admin/products`).
 2. Click **New Product**.
 3. Optionally enter a **Code**. If you leave it blank the system assigns `PROD-####`. If you type a code it is trimmed of spaces and converted to upper case.
 4. Enter the **Name** (required).
@@ -615,7 +698,7 @@ Type the code in the **Code** field. The system converts it to upper case (so `s
 
 ### How to edit a product
 
-1. Click a product row to open the detail page.
+1. Click a product row to open the detail page (`/admin/products/uid/<uid>`).
 2. Modify fields as needed. The **Code** field is read-only on the detail page.
 3. Click **Save**.
 
@@ -623,7 +706,7 @@ If you change Type from Goods to Service, the Stockable checkbox is forced off a
 
 ### How to archive and restore a product
 
-Open the product detail page and click **Archive** (to make it unavailable) or **Restore** (to make it active again). Archived products are excluded from order lines and component pickers.
+Open the product detail page (`/admin/products/uid/<uid>`) and click **Archive** (to make it unavailable) or **Restore** (to make it active again). Archived products are excluded from order lines and component pickers.
 
 ### Branch associations
 
@@ -669,15 +752,31 @@ Components define the ingredients or sub-products that make up this product — 
 
 ---
 
+**Example — Set up Sugar (1 kg) with a retail price, a carton bulk pack, and a barcode**
+
+Scenario: Catalogue manager sets up a new FMCG line before the first purchase order.
+
+1. Navigate to **Products › Products** (`/admin/products`). Click **New Product**.
+2. Leave Code blank. Enter Name `Sugar 1kg`, Type `Goods`, Base Unit `KG — Kilogram`, Cost `TZS 1,800`, VAT Status `Standard`. Click **Submit**. System assigns `PROD-0034`.
+3. Click `PROD-0034` to open `/admin/products/uid/<uid>`.
+4. **Barcodes panel:** Enter `6009876543210`, tick **Primary**, click **Add Barcode**.
+5. **Bulk Packs panel:** Select Unit `CTN — Carton`, Factor `50`. Click **Add**. (50 kg bags per carton.)
+6. **Prices panel:** Select Price List `RETAIL — Retail Price List`, Amount `TZS 2,500`, Currency `TZS`. Click **Set Price**.
+7. **Prices panel:** Select Price List `WHOLESALE — Wholesale Price List`, Amount `TZS 2,200`, Currency `TZS`. Click **Set Price**.
+
+The product `PROD-0034 — Sugar 1kg` is now available for sale at the correct retail price and will appear in stock movements tracked in kilograms.
+
+---
+
 ## Units of Measure
 
-**Navigation:** Admin > Units of Measure | **Permission to view:** `UOM.VIEW` | **Permission to create / edit:** `UOM.MANAGE`
+**Navigation:** **Products › Units of Measure** (`/admin/units`) | **Permission to view:** `UOM.VIEW` | **Permission to create / edit:** `UOM.MANAGE`
 
 Units of measure (UoM) are the quantity labels used on products, bulk packs, and order lines — for example, `EA` (Each), `KG` (Kilogram), `CTN` (Carton).
 
 ### How to create a unit
 
-1. Navigate to **Admin > Units of Measure**.
+1. Navigate to **Products › Units of Measure** (`/admin/units`).
 2. Click **New Unit**.
 3. Enter the **Code** (for example, `CTN`) and the **Name** (for example, `Carton`). Both are required and the code must be unique within the company.
 4. Click **Submit**.
@@ -694,13 +793,13 @@ Click **Archive** to deactivate a unit. Archived units are removed from product 
 
 ## Price Lists
 
-**Navigation:** Admin > Price Lists | **Permission to view:** `PRICELIST.VIEW` | **Permission to create / edit:** `PRICELIST.MANAGE`
+**Navigation:** **Products › Price Lists** (`/admin/price-lists`) | **Permission to view:** `PRICELIST.VIEW` | **Permission to create / edit:** `PRICELIST.MANAGE`
 
 Price lists group selling prices. You might have a Retail list (`RETAIL`), a Wholesale list (`WHOLESALE`), and a Distributor list. Customers and orders are assigned a price list, and the system looks up the price from there.
 
 ### How to create a price list
 
-1. Navigate to **Admin > Price Lists**.
+1. Navigate to **Products › Price Lists** (`/admin/price-lists`).
 2. Click **New Price List**.
 3. Enter a **Code** (for example, `RETAIL`) and a **Name** (for example, `Retail Price List`). Both are required and the code must be unique within the company.
 4. Click **Submit**.
@@ -713,7 +812,7 @@ Click **Edit** on a row to change the name (code is read-only after creation). A
 
 ## Currencies and FX Rates
 
-**Navigation:** Admin > FX Rates | **Permission to view:** `CURRENCY.VIEW` | **Permission to add rates:** `CURRENCY.MANAGE`
+**Navigation:** **FX / Currency › Exchange Rates** (`/admin/fx/rates`) | **Permission to view:** `CURRENCY.VIEW` | **Permission to add rates:** `CURRENCY.MANAGE`
 
 The system's base currency is **TZS**. You can record foreign exchange rates to support transactions in other currencies (USD, EUR, KES, and others).
 
@@ -723,7 +822,7 @@ Currencies are global reference data — you cannot create or delete them. The a
 
 ### How to add an FX rate
 
-1. Navigate to **Admin > FX Rates**.
+1. Navigate to **FX / Currency › Exchange Rates** (`/admin/fx/rates`).
 2. Click **New Rate**.
 3. Select the **From** currency and the **To** currency. They must be different.
 4. Enter the **Rate** (must be greater than zero).
@@ -737,9 +836,21 @@ The rates list is sorted newest-first and is paginated.
 
 ---
 
+**Example — Record today's USD buying rate**
+
+Scenario: Finance officer records the Bank of Tanzania mid-rate on 14 June 2026 for USD invoices received from an overseas supplier.
+
+1. Navigate to **FX / Currency › Exchange Rates** (`/admin/fx/rates`). Click **New Rate**.
+2. From `USD`, To `TZS`, Rate `2542.50`, Effective Date `2026-06-14`, Rate Type `SPOT`, Source `MANUAL`.
+3. Click **Submit**. The row `USD → TZS @ 2,542.50 (2026-06-14)` appears at the top of the list.
+
+Tomorrow, if the rate changes to `2,548.00`, simply click **New Rate** again and submit the new row — the old record is preserved for historical reporting.
+
+---
+
 ## Tax Rates
 
-**Navigation:** Admin > Tax Rates | **Permission to view:** `TAXRATE.VIEW` | **Permission to edit:** `TAXRATE.MANAGE`
+**Navigation:** **Sales › Tax Rates** (`/admin/tax-rates`) | **Permission to view:** `TAXRATE.VIEW` | **Permission to edit:** `TAXRATE.MANAGE`
 
 Three VAT bands are seeded per company:
 
@@ -753,7 +864,7 @@ You can edit the rate for each band. There is no create or archive on tax rates 
 
 ### How to edit a tax rate
 
-1. Navigate to **Admin > Tax Rates**.
+1. Navigate to **Sales › Tax Rates** (`/admin/tax-rates`).
 2. Click **Edit** on the relevant band row.
 3. Enter the new rate as a decimal between 0 and 0.9999 (for example, `0.18` for 18%).
 4. Click **Save**.
@@ -764,13 +875,13 @@ The rate applies to all future transactions that reference this VAT band on a pr
 
 ## Distribution Routes
 
-**Navigation:** Admin > Routes | **Permission to view:** `ROUTE.VIEW` | **Permission to create / edit / assign branches:** `ROUTE.MANAGE` | **Permission to assign customers and agents:** `ROUTE.ASSIGN`
+**Navigation:** **Parties › Routes** (`/admin/routes`) | **Permission to view:** `ROUTE.VIEW` | **Permission to create / edit / assign branches:** `ROUTE.MANAGE` | **Permission to assign customers and agents:** `ROUTE.ASSIGN`
 
 Routes represent geographic or logical delivery areas used to group customers and assign agents. Each route has a system-generated code, a name, and an optional location identifier.
 
 ### How to create a route
 
-1. Navigate to **Admin > Routes**.
+1. Navigate to **Parties › Routes** (`/admin/routes`).
 2. Click **New Route**.
 3. Enter the **Name** (required) and optionally a **Location Identifier**.
 4. Click **Submit**.
@@ -779,17 +890,17 @@ The system assigns a code. Status defaults to Active.
 
 ### How to edit a route
 
-1. Click a route row to open the detail page.
+1. Click a route row to open the detail page (`/admin/routes/uid/<uid>`).
 2. Change the name or location identifier (code and company are read-only).
 3. Click **Save**.
 
 ### Archive and restore
 
-Click **Archive** on the route detail page to deactivate it. Click **Restore** to reactivate.
+Click **Archive** on the route detail page (`/admin/routes/uid/<uid>`) to deactivate it. Click **Restore** to reactivate.
 
 ### Assigning customers to a route
 
-1. Open the route detail page.
+1. Open the route detail page (`/admin/routes/uid/<uid>`).
 2. In the **Customers** panel, start typing a customer name in the search box.
 3. Select the customer from the results (shown as `code — displayName`).
 4. Click **Assign**.
@@ -814,6 +925,21 @@ You need the `ROUTE.ASSIGN` permission.
 3. To remove a branch, click **Remove**.
 
 You need the `ROUTE.MANAGE` permission (not `ROUTE.ASSIGN`) to manage branch assignments on a route.
+
+---
+
+**Example — Set up the Northern Route with customers and an agent**
+
+Scenario: Operations manager creates the Arusha / Moshi distribution route before the first delivery run.
+
+1. Navigate to **Parties › Routes** (`/admin/routes`). Click **New Route**.
+2. Enter Name `Northern Route`, Location Identifier `Arusha–Moshi Corridor`. Click **Submit**. System assigns code `RTE-0003`.
+3. Click `RTE-0003` to open `/admin/routes/uid/<uid>`.
+4. **Branches panel:** Company `Orbix Trading Co.`, Branch `ARU — Arusha Branch`. Click **Assign**.
+5. **Customers panel:** type `Kilimanjaro`, select `CUST-0007 — Kilimanjaro Stores Ltd`. Click **Assign**. Repeat for `CUST-0011 — Moshi Distributors`.
+6. **Agents panel:** type `Baraka`, select `AGNT-0004 — Baraka Hamisi` (External). Tick **Primary**. Click **Assign**.
+
+The Northern Route is now ready. The delivery team can filter orders and customers by route, and the agent Baraka Hamisi appears as the primary contact on route-based reports.
 
 ---
 
@@ -855,11 +981,13 @@ Contact your administrator if an expected menu item is missing.
 
 ## 1. Quotations
 
+Navigate to **Sales › Quotations** (`/admin/quotations`).
+
 A quotation is an offer sent to a customer. When accepted it becomes a Sales Order automatically.
 
 ### 1.1 Create a quotation
 
-1. Navigate to **Sales → Quotations**.
+1. Navigate to **Sales › Quotations** (`/admin/quotations`).
 2. Click **New Quotation**.
 3. In the **Customer** field, type part of the customer name or code and select the correct entry from the list. Do not type or paste a raw ID.
 4. Set **Quote Date** (today by default) and **Valid Until** (the date the offer expires).
@@ -869,7 +997,7 @@ A quotation is an offer sent to a customer. When accepted it becomes a Sales Ord
 
 ### 1.2 Add lines to a quotation
 
-1. Open the draft quotation.
+1. Open the draft quotation (navigate to **Sales › Quotations** then click the quotation row, or go to `/admin/quotations/uid/{uid}`).
 2. In the **Lines** section, search for the product by name or code and select it.
 3. Choose a **Unit**, enter **Quantity**, and optionally enter a **Line Discount** (either a percentage or a fixed amount — not both).
 4. Click **Add Line**. The system calculates net amount, VAT, and gross from the configured price list.
@@ -909,13 +1037,29 @@ Both actions require the `SALES.QUOTE.ACCEPT` permission. If the Valid Until dat
 
 ---
 
+**Example — Quotation for Karibu Supermarkets:**
+
+Salesperson Ali opens **Sales › Quotations** (`/admin/quotations`) and clicks **New Quotation**. He types "Karibu" in the Customer field and selects **Karibu Supermarkets Ltd**. He sets Quote Date to **2026-06-14** and Valid Until to **2026-07-14**, then saves. The quotation is created in DRAFT with no number yet.
+
+Ali adds two lines:
+- Product **Unga wa Ngano 2kg**, Unit **CARTON (12 pcs)**, Qty **50**, Line Discount **0%** — system prices at TZS 18,000 per carton = TZS 900,000 net.
+- Product **Mafuta ya Kupikia 1L**, Unit **CARTON (12 pcs)**, Qty **30**, Line Discount **5%** — list price TZS 22,000; after 5% = TZS 20,900 per carton = TZS 627,000 net.
+
+VAT at 18% is added by the system: total gross = TZS 1,535,400 + VAT. Ali clicks **Send** — status becomes SENT and the number **QUOTE-0047** is assigned.
+
+Karibu calls back and accepts. Ali clicks **Accept**. The system creates **Sales Order SO-0112** from the same lines and shows a link. Quotation status is now ACCEPTED.
+
+---
+
 ## 2. Sales Orders
 
-A Sales Order (SO) can be created in two ways: automatically when a quotation is accepted, or directly from **Sales → Sales Orders → New Order**.
+Navigate to **Sales › Sales Orders** (`/admin/sales-orders`).
+
+A Sales Order (SO) can be created in two ways: automatically when a quotation is accepted, or directly from **Sales › Sales Orders → New Order**.
 
 ### 2.1 Create a standalone Sales Order
 
-1. Navigate to **Sales → Sales Orders**.
+1. Navigate to **Sales › Sales Orders** (`/admin/sales-orders`).
 2. Click **New Order**.
 3. Pick the **Customer** by name.
 4. Set **Order Date**. Optionally set a **Document Discount** (percentage or amount — not both).
@@ -929,9 +1073,10 @@ The same process as adding quotation lines. Lines can only be added, edited, or 
 
 Confirming an order reserves stock for every GOODS line.
 
-1. Open the draft order (which must have at least one line).
-2. Click **Confirm**.
-3. The status changes to **CONFIRMED** and each line shows its reserved quantity.
+1. Open the draft order at **Sales › Sales Orders** then click the order row (or navigate to `/admin/sales-orders/uid/{uid}`).
+2. The order must have at least one line.
+3. Click **Confirm**.
+4. The status changes to **CONFIRMED** and each line shows its reserved quantity.
 
 This requires the `SALES.ORDER.CONFIRM` permission. A user who can create orders but not confirm them will not see this button.
 
@@ -960,12 +1105,14 @@ Cancellation is allowed from any status except **CANCELLED** and **CLOSED**.
 
 ## 3. Deliveries
 
+Navigate to **Sales › Deliveries** (`/admin/deliveries`).
+
 A delivery records that goods have physically left the warehouse. Deliveries can only be created against a **CONFIRMED** or **PARTIALLY_FULFILLED** order.
 
 ### 3.1 Create a delivery
 
-1. Navigate to **Sales → Deliveries** and click **New Delivery**, or open a confirmed Sales Order and use the **Create Delivery** action.
-2. Pick the **Sales Order** by order number.
+1. Navigate to **Sales › Deliveries** (`/admin/deliveries`) and click **New Delivery**, or open a confirmed Sales Order and use the **Create Delivery** action.
+2. The delivery create form is at `/admin/deliveries/create`. Pick the **Sales Order** by order number.
 3. The form shows all open (undelivered) lines with the remaining quantity pre-filled.
 4. Adjust individual line quantities if you are making a **partial delivery** (backorder). The quantity you enter cannot exceed the open balance.
 5. Set **Delivery Date** and click **Submit**.
@@ -980,7 +1127,7 @@ Enter a quantity less than the open balance on any line to create a partial deli
 
 Once goods are delivered, you can invoice the customer for that delivery:
 
-1. Open the delivery.
+1. Open the delivery (navigate to **Sales › Deliveries**, click the row, or go to `/admin/deliveries/uid/{uid}`).
 2. Click **Create Invoice from Delivery**.
 3. A draft **Sales Invoice** is created automatically with the delivered lines. The doc discount from the source order is pro-rated to the delivered quantity.
 
@@ -990,6 +1137,8 @@ Proceed to section 4 to finalise the invoice.
 
 ## 4. Sales Invoices
 
+Navigate to **Sales › Invoices** (`/admin/sales-invoices`).
+
 An invoice is the formal billing document. There are two origins:
 
 - **From a delivery** (origin: SALES_ORDER) — created via section 3.3 above.
@@ -997,7 +1146,7 @@ An invoice is the formal billing document. There are two origins:
 
 ### 4.1 Create a direct (walk-in) invoice
 
-1. Navigate to **Sales → Invoices**.
+1. Navigate to **Sales › Invoices** (`/admin/sales-invoices`).
 2. Click **New Invoice**.
 3. Pick the **Customer** by name. Optionally pick an **Agent** and a **Route**; if omitted the system uses the logged-in user's linked agent and that agent's primary route.
 4. Click **Save**. A draft invoice is created.
@@ -1038,7 +1187,7 @@ After finalisation:
 
 A finalised invoice can be voided if it was issued in error:
 
-1. Open the finalised invoice.
+1. Open the finalised invoice (navigate to **Sales › Invoices**, click the row, or go to `/admin/sales-invoices/uid/{uid}`).
 2. Click **Void**, enter a mandatory reason, and confirm.
 3. The invoice status changes to **VOID** and a reversing credit note is posted.
 
@@ -1054,13 +1203,31 @@ The original invoice number is retained on the voided record. Voiding is not the
 
 ---
 
+**Example — Full O2C: Karibu Supermarkets (credit account):**
+
+Continuing from section 1's example, Sales Order **SO-0112** was created from the accepted quotation. The warehouse confirms goods are ready.
+
+1. **Confirm SO:** Ali opens **Sales › Sales Orders** (`/admin/sales-orders`), clicks SO-0112, and clicks **Confirm**. Status becomes CONFIRMED; stock reserved — 50 cartons Unga + 30 cartons Mafuta.
+
+2. **Deliver:** Ali navigates to **Sales › Deliveries** (`/admin/deliveries`), clicks **New Delivery**, picks **SO-0112**. He delivers the full quantity (50 + 30 cartons) on 2026-06-15 and submits. Delivery **DELIVERY-0089** is created; SO status → FULFILLED.
+
+3. **Invoice from delivery:** Ali opens DELIVERY-0089 at `/admin/deliveries/uid/{uid}` and clicks **Create Invoice from Delivery**. A DRAFT invoice is created. Since Karibu is a CREDIT_ACCOUNT customer, Ali clicks **Finalise** without adding a payment — the unpaid balance of TZS 1,535,400 (plus 18% VAT = TZS 1,811,772 gross) becomes an open AR item. Invoice number **INV-0203** is assigned.
+
+**Example — Walk-in direct invoice (cash customer):**
+
+Cashier Fatuma opens **Sales › Invoices** (`/admin/sales-invoices`) and clicks **New Invoice**. She picks customer **Amina Hassan (walk-in)**. She adds one line: **Sukari 1kg**, Unit **KG**, Qty **5**, price TZS 2,200/kg = TZS 11,000 net; VAT 18% = TZS 1,980; gross = TZS 12,980. In the Payments panel she adds **Cash, Amount TZS 12,980**. She clicks **Finalise** — status becomes FINALISED, invoice number **INV-0204** is assigned, stock is issued, and the cash is recorded.
+
+---
+
 ## 5. Sales Returns (RMA)
+
+Navigate to **Sales › Sales Returns** (`/admin/sales-returns`).
 
 A sales return records goods coming back from the customer. Returns are always against a specific delivery and immediately generate a credit note.
 
 ### 5.1 Create a return
 
-1. Navigate to **Sales → Sales Returns** and click **New Return**.
+1. Navigate to **Sales › Sales Returns** (`/admin/sales-returns`) and click **New Return**, or go directly to `/admin/sales-returns/create`.
 2. Pick the **Delivery** by its delivery number.
 3. The form shows the delivered lines. Enter the **Quantity Returned** for each line being returned (cannot exceed the quantity delivered minus what has already been returned).
 4. Set the **Return Date** and enter a **Reason**.
@@ -1074,13 +1241,21 @@ Each return reduces the returnable balance for that delivery line. You can proce
 
 ---
 
+**Example — Partial sales return (Karibu Supermarkets):**
+
+Two days after delivery, Karibu reports 5 cartons of Mafuta ya Kupikia arrived leaking. The stock controller opens **Sales › Sales Returns** (`/admin/sales-returns`), clicks **New Return**, and picks delivery **DELIVERY-0089**. She enters **Qty Returned = 5** on the Mafuta line, sets return date **2026-06-17**, reason **"Damaged packaging — leaking oil"**, and submits. Return **RET-0031** is created in CONFIRMED status. Five cartons of Mafuta stock are returned to the warehouse and a credit note for TZS 104,500 (5 × TZS 20,900) plus VAT is automatically raised against INV-0203.
+
+---
+
 ## 6. Blanket Orders
+
+Navigate to **Sales › Blanket Orders** (`/admin/blanket-orders`).
 
 A blanket order is a framework agreement with a customer that commits to supplying a total quantity at a fixed unit price over a validity window. Actual deliveries are created as **releases** (draw-downs) against the blanket.
 
 ### 6.1 Create a blanket order
 
-1. Navigate to **Sales → Blanket Orders** and click **New Blanket Order**.
+1. Navigate to **Sales › Blanket Orders** (`/admin/blanket-orders`) and click **New Blanket Order**, or go directly to `/admin/blanket-orders/create`.
 2. Select the **Company** and **Branch**.
 3. Pick the **Customer** by name.
 4. Set **Currency**, **Valid From**, and **Valid To** dates.
@@ -1094,7 +1269,7 @@ The blanket order is created with status **ACTIVE** and assigned an order number
 
 When the customer calls off part of their commitment:
 
-1. Open the blanket order.
+1. Open the blanket order (navigate to `/admin/blanket-orders/uid/{uid}`).
 2. Click **Draw Release** (visible only when the blanket is ACTIVE and you hold the manage permission).
 3. Enter the **Branch ID** for the delivery branch.
 4. Pick the **Agent** by name.
@@ -1116,13 +1291,23 @@ Open the blanket order and click **Cancel** then confirm. The status changes to 
 
 ---
 
+**Example — Blanket supply agreement:**
+
+Duka Kuu Ltd signs a 6-month supply deal for 1,000 bags of Mchele wa Zambia at TZS 6,500/bag. The sales manager opens **Sales › Blanket Orders** (`/admin/blanket-orders`), creates a new blanket for **Duka Kuu Ltd**, Valid From **2026-07-01** to **2026-12-31**, adds one line: **Mchele wa Zambia 10kg**, Unit **BAG**, Qty **1,000**, Unit Price **6,500**. Order is saved as ACTIVE.
+
+In July, Duka Kuu calls off 200 bags. The sales manager opens the blanket, clicks **Draw Release**, draws 200 bags → Sales Order **SO-0145** is created. Remaining committed quantity on the blanket is now 800 bags.
+
+---
+
 ## 7. Standing Orders (Recurring)
+
+Navigate to **Sales › Standing Orders** (`/admin/standing-orders`).
 
 A standing order is a recurring template that generates a new Sales Order automatically on a schedule (daily, weekly, bi-weekly, or monthly). It is useful for regular supply contracts.
 
 ### 7.1 Create a standing order
 
-1. Navigate to **Sales → Standing Orders** and click **New Standing Order**.
+1. Navigate to **Sales › Standing Orders** (`/admin/standing-orders`) and click **New Standing Order**, or go directly to `/admin/standing-orders/create`.
 2. Pick the **Branch**, **Customer**, and set **Currency**.
 3. Choose a **Frequency**: Daily, Weekly, Bi-Weekly, or Monthly.
 4. Set a **Start Date**. Optionally set an **End Date**; leave it blank for open-ended.
@@ -1133,7 +1318,7 @@ The standing order is created with status **ACTIVE** and the first `Next Run Dat
 
 ### 7.2 Pause and resume
 
-- **Pause** — open the standing order and click **Pause**. No Sales Orders are generated while the order is paused.
+- **Pause** — open the standing order (navigate to `/admin/standing-orders/uid/{uid}`) and click **Pause**. No Sales Orders are generated while the order is paused.
 - **Resume** — click **Resume** to make it active again.
 
 ### 7.3 Trigger a run manually
@@ -1158,9 +1343,17 @@ The system checks every night at midnight and generates Sales Orders for all ACT
 
 ---
 
+**Example — Weekly bread delivery for Hoteli ya Pwani:**
+
+Hoteli ya Pwani orders 50 loaves of bread every Monday. The sales rep opens **Sales › Standing Orders** (`/admin/standing-orders`), creates a new standing order for **Hoteli ya Pwani**, Frequency **Weekly**, Start Date **2026-06-16**, no end date. Line: **Mkate Mzima**, Unit **PCS**, Qty **50**, Unit Price **TZS 800**. The system auto-generates **Sales Order SO-0151** on Monday 16 June, then **SO-0158** on 23 June, and so on every week without manual action.
+
+---
+
 ## 8. Pricing Rules
 
-Pricing rules let you set volume-break discounts and customer-specific contract prices. They are configured under **Sales → Pricing Rules**.
+Navigate to **Sales › Pricing Rules** (`/admin/pricing-rules`).
+
+Pricing rules let you set volume-break discounts and customer-specific contract prices.
 
 ### 8.1 Price tiers (quantity breaks)
 
@@ -1168,7 +1361,7 @@ A price tier gives a lower unit price when a customer orders at least a minimum 
 
 **To create a tier:**
 
-1. Open **Pricing Rules** and go to the **Price Tiers** tab.
+1. Open **Sales › Pricing Rules** (`/admin/pricing-rules`) and go to the **Price Tiers** tab.
 2. Click **New Tier**.
 3. Pick the **Product** and **Price List** by name.
 4. Enter **Min Quantity**, **Unit Price**, and **Currency**.
@@ -1184,7 +1377,7 @@ A customer price sets a fixed unit price for a specific product for a specific c
 
 **To create a customer price:**
 
-1. Open **Pricing Rules** and go to the **Customer Prices** tab.
+1. Open **Sales › Pricing Rules** (`/admin/pricing-rules`) and go to the **Customer Prices** tab.
 2. Click **New Customer Price**.
 3. Pick the **Customer** and **Product** by name.
 4. Enter the **Unit Price** and **Currency**.
@@ -1205,7 +1398,19 @@ When a sale line is priced the system applies the first matching rule in this pr
 
 ---
 
+**Example — Volume tier for cement:**
+
+The sales manager opens **Sales › Pricing Rules** (`/admin/pricing-rules`), goes to **Price Tiers**, and clicks **New Tier**. He picks product **Saruji 50kg**, Price List **Wholesale TZS**, Min Quantity **100**, Unit Price **TZS 14,500**, Currency **TZS**. Any order for 100+ bags on the Wholesale price list will now use TZS 14,500 instead of the standard TZS 15,200.
+
+**Example — Contract price for Karibu Supermarkets:**
+
+Under the **Customer Prices** tab the manager creates: Customer **Karibu Supermarkets Ltd**, Product **Unga wa Ngano 2kg**, Unit Price **TZS 17,500** (negotiated). From the next sale, whenever a sales line is added for this customer and product, TZS 17,500 is applied — regardless of the price list.
+
+---
+
 ## 9. Point of Sale
+
+Navigate to the **Point of Sale** group in the sidebar.
 
 POS is used for face-to-face retail transactions. A **till** is a physical cash register position. Each till must be opened in a **session** before sales can be processed. The session is closed and reconciled at end of day.
 
@@ -1222,7 +1427,7 @@ Your administrator assigns the appropriate POS permissions to your role. Contact
 
 This is a one-time setup task done by a manager.
 
-1. Navigate to **Point of Sale → POS Tills**.
+1. Navigate to **Point of Sale › POS Tills** (`/admin/pos/tills`).
 2. Click **New Till**.
 3. Enter a **Till Name** (e.g. "Counter 1").
 4. Pick the **Branch** by name.
@@ -1232,7 +1437,7 @@ The till is created with status **ACTIVE**. To deactivate a till, click **Deacti
 
 ### 9.3 Open a session (start of day)
 
-1. Navigate to **Point of Sale → POS Sessions**.
+1. Navigate to **Point of Sale › POS Sessions** (`/admin/pos/sessions`).
 2. Click **Open Session**.
 3. Pick the **Till** by name (only ACTIVE tills are listed).
 4. Enter the **Opening Float** — the cash amount placed in the drawer at the start of the day.
@@ -1242,11 +1447,11 @@ A new session is created with status **OPEN**. Only one session can be open on a
 
 ### 9.4 Ring a sale
 
-1. Navigate to **Point of Sale → Point of Sale** (the checkout screen).
+1. Navigate to **Point of Sale › Point of Sale** (`/admin/pos/sell`) — this is the checkout screen.
 2. If your organisation has more than one company, select the correct company.
 3. Pick the **Session** — only OPEN sessions are listed.
 4. Pick the **Customer** by name.
-5. Pick the **Agent** by name (required).
+5. Pick the **Agent** by name (required — leaving Agent blank will cause the sale to be rejected).
 6. Set the **Currency**.
 7. Click **Add Line**. Pick the **Product** by name; confirm or adjust the **Unit**, enter **Quantity** and **Unit Price**, and optionally a line **Discount**.
 8. Add further lines as needed. The **Total** updates in the footer.
@@ -1263,7 +1468,7 @@ A success receipt is displayed showing the invoice number and total. Click **Vie
 
 A payout records cash leaving the drawer during the session — for example, a drop to the safe or a petty-cash refund.
 
-1. Open the session detail (**Point of Sale → POS Sessions**, click **View** on the OPEN session).
+1. Open the session detail (**Point of Sale › POS Sessions** (`/admin/pos/sessions`), click **View** on the OPEN session, or navigate to `/admin/pos/sessions/uid/{uid}`).
 2. Click **Record Payout**.
 3. Select the **Type**: Paid Out (cash removed from the drawer) or Refund (customer cash refund).
 4. Enter the **Amount** and a **Reason**.
@@ -1288,7 +1493,7 @@ Click the refresh icon to reload the X-read at any time.
 
 Closing records the physical cash count.
 
-1. Open the session detail.
+1. Open the session detail (navigate to `/admin/pos/sessions/uid/{uid}`).
 2. Click **Close Session**.
 3. Enter the **Counted Cash** — the amount physically in the drawer.
 4. Optionally add closing notes.
@@ -1308,7 +1513,7 @@ Variance = Counted Cash − Expected Cash
 
 Reconciliation posts the variance to the general ledger and produces the final Z-Read report.
 
-1. Open a **CLOSED** session.
+1. Open a **CLOSED** session (navigate to `/admin/pos/sessions/uid/{uid}`).
 2. Click **Reconcile**.
 3. Optionally add notes.
 4. Click **Reconcile**.
@@ -1340,6 +1545,28 @@ Transitions are one-way: OPEN → CLOSED → RECONCILED. A session cannot be re-
 5. At end of day, **count** the cash in the drawer.
 6. **Close** the session by entering the counted amount.
 7. A manager **reconciles** the closed session; the system posts any variance to the GL.
+
+---
+
+**Example — Walk-in cash sale (full POS day):**
+
+Cashier Jane starts her shift at Duka Moja. She navigates to **Point of Sale › POS Sessions** (`/admin/pos/sessions`) and clicks **Open Session**. She picks till **Counter 1** (Branch: Dar es Salaam Main) and enters Opening Float **TZS 100,000**. Session **SES-0041** opens with status OPEN.
+
+During the morning Jane processes three customers at **Point of Sale › Point of Sale** (`/admin/pos/sell`):
+
+1. She picks session **SES-0041**, customer **Mteja wa Kawaida**, agent **Omar Salim**, currency TZS. She adds: **Sukari 1kg** × 2 @ TZS 2,500 = TZS 5,000; **Mafuta ya Kupikia 1L** × 1 @ TZS 8,000 = TZS 8,000. Total TZS 13,000. Customer hands over TZS 20,000 — Change shown as TZS 7,000. Jane clicks **Complete Sale** — Invoice **INV-0211** issued.
+
+2. Second sale: **Unga wa Ngano 2kg** × 3 @ TZS 3,200 = TZS 9,600. Tendered TZS 10,000, change TZS 400. Invoice INV-0212 issued.
+
+3. Third sale: **Chumvi 500g** × 5 @ TZS 500 = TZS 2,500. Tendered exact. Invoice INV-0213 issued.
+
+At midday Jane does a safe drop: she opens session detail (`/admin/pos/sessions/uid/{uid}`), clicks **Record Payout**, Type **Paid Out**, Amount **TZS 20,000**, Reason "Midday safe drop". Expected cash now: TZS 100,000 + TZS 25,100 − TZS 20,000 = **TZS 105,100**.
+
+Jane checks the X-Read: Sales Total TZS 25,100, Payouts TZS 20,000, Expected Cash TZS 105,100, Invoice Count 3. Correct.
+
+At end of day Jane counts the drawer: TZS 105,200 (TZS 100 over). She clicks **Close Session**, enters Counted Cash **TZS 105,200** — Variance is **+TZS 100.00** (over).
+
+Manager Rehema opens the session detail, clicks **Reconcile**. Status → RECONCILED. Z-Read confirms the +TZS 100 variance and shows Journal **JNL-0519**: DR Cash 100 / CR Till Surplus (4900) 100.
 
 ---
 
@@ -1380,12 +1607,14 @@ Contact your administrator if an expected menu item is missing.
 
 ## 1. Purchase Requisitions
 
+Navigate to **Purchasing › Purchase Requisitions** (`/admin/purchase-requisitions`).
+
 A purchase requisition is an internal request for goods or services. It must be approved before a purchase order or RFQ can be raised.
 
 ### 1.1 Create a requisition
 
-1. Navigate to **Procurement → Purchase Requisitions**.
-2. Click **New Requisition**.
+1. Navigate to **Purchasing › Purchase Requisitions** (`/admin/purchase-requisitions`).
+2. Click **New Requisition**, or go directly to `/admin/purchase-requisitions/create`.
 3. Set the **Required By** date and optionally a cost centre and notes.
 4. Add lines: for each item, pick the **Product** by name, choose a **Unit**, and enter the **Requested Quantity** and an **Estimated Unit Cost**.
 5. Click **Save**. The requisition is saved in **DRAFT**.
@@ -1394,22 +1623,22 @@ A purchase requisition is an internal request for goods or services. It must be 
 
 When the requisition is complete and ready for approval:
 
-1. Open the draft requisition.
+1. Open the draft requisition (navigate to `/admin/purchase-requisitions/uid/{uid}`).
 2. Click **Submit**.
 3. The status changes to **SUBMITTED** and the requisition is routed for approval.
 
 ### 1.3 Approve or reject a requisition
 
-An approver (a user with `PURCHASE.REQUISITION.APPROVE`) reviews submitted requisitions.
+An approver (a user with `PURCHASE.REQUISITION.APPROVE`) reviews submitted requisitions at **Purchasing › Purchase Requisitions** (`/admin/purchase-requisitions`).
 
-- **Approve** — click **Approve**. Status → **APPROVED**. The Convert action becomes available.
+- **Approve** — open the submitted requisition and click **Approve**. Status → **APPROVED**. The Convert action becomes available.
 - **Reject** — click **Reject**, enter a mandatory reason, and confirm. Status → **REJECTED**. The requisitioner is notified via the audit trail.
 
 ### 1.4 Convert a requisition
 
 An approved requisition can be converted into either a Purchase Order or an RFQ:
 
-1. Open the approved requisition.
+1. Open the approved requisition (navigate to `/admin/purchase-requisitions/uid/{uid}`).
 2. Click **Convert**.
 3. Choose the target type:
    - **Purchase Order** — a DRAFT PO is created immediately from the requisition lines.
@@ -1436,7 +1665,22 @@ A requisition can be cancelled from any non-final status (DRAFT, SUBMITTED, APPR
 
 ---
 
+**Example — Requisition for office stationery:**
+
+Store clerk Amani opens **Purchasing › Purchase Requisitions** (`/admin/purchase-requisitions`) and clicks **New Requisition**. He sets Required By **2026-06-20**, notes "Monthly stationery re-order", and adds two lines:
+
+- Product **Karatasi A4 (Ream)**, Unit **REAM**, Qty **20**, Estimated Cost **TZS 8,500** each.
+- Product **Kalamu Nyeusi**, Unit **BOX**, Qty **5**, Estimated Cost **TZS 3,200** each.
+
+He saves — requisition **REQ-0072** is created in DRAFT. He clicks **Submit** — status → SUBMITTED.
+
+Purchasing manager Neema opens the requisition and clicks **Approve** — status → APPROVED, estimated total TZS 186,000. She clicks **Convert** and picks **RFQ** — RFQ **RFQ-0031** is created in DRAFT.
+
+---
+
 ## 2. RFQ (Request for Quotation)
+
+Navigate to **Purchasing › RFQs / Sourcing** (`/admin/rfqs`).
 
 An RFQ invites one or more suppliers to submit prices for a defined list of items.
 
@@ -1446,7 +1690,7 @@ An RFQ can be created directly or by converting an approved requisition (see sec
 
 **To create directly:**
 
-1. Navigate to **Procurement → RFQs** and click **New RFQ**.
+1. Navigate to **Purchasing › RFQs / Sourcing** (`/admin/rfqs`) and click **New RFQ**, or go to `/admin/rfqs/create`.
 2. Set the **Response Due Date** and optionally add notes.
 3. In the **Invited Suppliers** section, pick each supplier by name. Invite at least one supplier.
 4. Add lines: pick each product by name, choose a unit, and enter the required quantity.
@@ -1454,14 +1698,14 @@ An RFQ can be created directly or by converting an approved requisition (see sec
 
 ### 2.2 Send an RFQ to suppliers
 
-1. Open the DRAFT RFQ.
+1. Open the DRAFT RFQ (navigate to `/admin/rfqs/uid/{uid}`).
 2. Click **Send**. Status → **SENT**. Suppliers are notified that they should submit a quote.
 
 ### 2.3 Capture supplier quotes
 
 When a supplier responds with a price:
 
-1. Open the SENT RFQ.
+1. Open the SENT RFQ (navigate to `/admin/rfqs/uid/{uid}`).
 2. Click **Capture Quote**.
 3. Pick the **Supplier** by name (only invited suppliers are listed).
 4. Optionally set a valid-until date, lead time in days, and notes.
@@ -1474,14 +1718,14 @@ Repeat for each responding supplier. You can compare their prices side-by-side i
 
 To select the winning supplier and create a Purchase Order:
 
-1. In the quotes panel, identify the preferred quote (usually the lowest compliant price).
+1. In the quotes panel on the RFQ detail page (`/admin/rfqs/uid/{uid}`), identify the preferred quote (usually the lowest compliant price).
 2. Click **Award** on that quote row.
 3. The winning quote status changes to **AWARDED** and all other quotes become **NOT_AWARDED**. The RFQ status changes to **AWARDED**.
 4. A **Purchase Order** is created in DRAFT from the awarded quote lines and prices. A link to the PO is shown.
 
 ### 2.5 Cancel an RFQ
 
-Open the RFQ and click **Cancel**. Status → **CANCELLED**. An awarded RFQ cannot be cancelled.
+Open the RFQ (navigate to `/admin/rfqs/uid/{uid}`) and click **Cancel**. Status → **CANCELLED**. An awarded RFQ cannot be cancelled.
 
 ### 2.6 RFQ status reference
 
@@ -1495,14 +1739,28 @@ Open the RFQ and click **Cancel**. Status → **CANCELLED**. An awarded RFQ cann
 
 ---
 
+**Example — RFQ for cement (continuing from requisition example, fresh scenario):**
+
+A warehouse requisition for 500 bags of **Saruji 50kg** has been approved and converted to RFQ **RFQ-0031**. Purchasing officer Zawadi opens **Purchasing › RFQs / Sourcing** (`/admin/rfqs`), opens RFQ-0031, and adds two invited suppliers: **Tanzania Cement Distributors** and **Simba Cement Ltd**. Response Due Date is set to **2026-06-17**. She clicks **Send** — RFQ goes to SENT.
+
+Both suppliers respond. Zawadi captures two quotes:
+- **Tanzania Cement Distributors**: 500 bags @ TZS 14,800 each = TZS 7,400,000 (lead time 3 days).
+- **Simba Cement Ltd**: 500 bags @ TZS 14,500 each = TZS 7,250,000 (lead time 5 days).
+
+After review, Zawadi awards the RFQ to **Simba Cement Ltd** (cheaper price, acceptable lead time). Purchase Order **PO-0088** is created in DRAFT at TZS 14,500/bag.
+
+---
+
 ## 3. Purchase Orders
+
+Navigate to **Purchasing › Purchase Orders** (`/admin/purchase-orders`).
 
 A Purchase Order (PO) is the formal commitment to buy from a supplier. POs are created from a converted requisition or from an awarded RFQ. There is no standalone "New PO" form in the UI.
 
 ### 3.1 View and manage a DRAFT Purchase Order
 
-1. Navigate to **Procurement → Purchase Orders**.
-2. Open the DRAFT PO.
+1. Navigate to **Purchasing › Purchase Orders** (`/admin/purchase-orders`).
+2. Open the DRAFT PO (navigate to `/admin/purchase-orders/uid/{uid}`).
 3. While the PO is in DRAFT you can:
    - **Add a line** — pick the product by name, choose a unit, enter the ordered quantity and unit cost.
    - **Edit a line** — change quantity or cost on an existing line.
@@ -1520,7 +1778,7 @@ Placing the PO sends it to the supplier and locks the lines.
 
 Closing finalises the PO without receiving all goods (for example, if a partial shipment is accepted as complete).
 
-1. Open the PO (status ORDERED, PARTIALLY_RECEIVED, or RECEIVED).
+1. Open the PO (navigate to `/admin/purchase-orders/uid/{uid}`) — status ORDERED, PARTIALLY_RECEIVED, or RECEIVED.
 2. Click **Close**.
 3. Status → **CLOSED**. The PO is read-only.
 
@@ -1551,13 +1809,21 @@ PO approval actions are currently only available via the API; contact your admin
 
 ---
 
+**Example — Placing the cement PO:**
+
+Zawadi opens **Purchasing › Purchase Orders** (`/admin/purchase-orders`), finds PO-0088 (DRAFT, 500 bags @ TZS 14,500), reviews the line, and clicks **Place**. Status → ORDERED. The formal PO number is confirmed and the document is locked for editing. A PDF can be generated and sent to Simba Cement Ltd.
+
+---
+
 ## 4. Goods Receipt
+
+Navigate to **Purchasing › Goods Receipts** (`/admin/goods-receipts`).
 
 A goods receipt (GR) records the physical arrival of goods from the supplier. Creating a GR increases stock and updates the PO outstanding quantities.
 
 ### 4.1 Receive goods
 
-1. Navigate to **Procurement → Goods Receipts** and click **New Goods Receipt**.
+1. Navigate to **Purchasing › Goods Receipts** (`/admin/goods-receipts`) and click **New Goods Receipt**, or go directly to `/admin/goods-receipts/create`.
 2. Pick the **Purchase Order** by its PO number.
 3. The form lists all open (unreceived) lines with the outstanding quantity pre-filled.
 4. Adjust individual quantities if you are receiving a **partial shipment**. The quantity cannot exceed the outstanding balance on each line.
@@ -1582,13 +1848,23 @@ If the supplier delivers in stages, create a separate goods receipt for each del
 
 ---
 
+**Example — Receiving cement:**
+
+Simba Cement delivers 500 bags on 2026-06-22. Storekeeper John opens **Purchasing › Goods Receipts** (`/admin/goods-receipts`), clicks **New Goods Receipt**, and picks PO **PO-0088**. The form shows 500 bags Saruji 50kg outstanding. John enters Receipt Date **2026-06-22** and keeps all 500 bags. He submits — GRN **GRN-0061** is created (status RECEIVED), 500 bags added to stock at the branch, PO-0088 status → RECEIVED.
+
+**Partial receipt scenario:** If Simba had delivered only 300 bags on day 1, John would receive 300 bags (GRN-0061), PO → PARTIALLY_RECEIVED, outstanding = 200 bags. When the remaining 200 arrive, John creates GRN-0062 for 200 bags, PO → RECEIVED.
+
+---
+
 ## 5. Landed Costs
+
+Navigate to **Purchasing › Landed Costs** (`/admin/landed-costs`).
 
 Landed costs allocate incidental import charges (freight, duty, insurance, clearing fees, and other charges) to the items received. Landed costs are applied to one or more goods receipts and allocated to individual GR lines.
 
 ### 5.1 Create a landed cost
 
-1. Navigate to **Procurement → Landed Costs** and click **New Landed Cost**.
+1. Navigate to **Purchasing › Landed Costs** (`/admin/landed-costs`) and click **New Landed Cost**, or go directly to `/admin/landed-costs/create`.
 2. Select the **Allocation Basis**:
    - **By Value** — charges are spread proportionally to the value of each GR line.
    - **By Quantity** — charges are spread proportionally to the quantity received on each GR line.
@@ -1600,7 +1876,7 @@ Landed costs allocate incidental import charges (freight, duty, insurance, clear
 
 Confirming allocates the charges to the GR lines and posts the cost adjustment to the GL.
 
-1. Open the DRAFT landed cost.
+1. Open the DRAFT landed cost (navigate to `/admin/landed-costs/uid/{uid}`).
 2. Click **Confirm**.
 3. Status → **CONFIRMED**. The allocation per GR line is shown in the detail.
 
@@ -1615,13 +1891,26 @@ A confirmed landed cost cannot be edited. If there is an error, contact your adm
 
 ---
 
+**Example — Landed cost for imported cement:**
+
+The cement shipment also incurred TZS 850,000 in port clearing fees and TZS 600,000 in freight. Accountant Sarah opens **Purchasing › Landed Costs** (`/admin/landed-costs`), clicks **New Landed Cost**, selects Allocation Basis **By Quantity**, and picks GRN **GRN-0061** (500 bags). She adds two charges:
+
+- Type **Clearing**, Amount TZS 850,000.
+- Type **Freight**, Amount TZS 600,000.
+
+Total landed cost TZS 1,450,000. She saves (DRAFT), reviews the per-bag allocation (TZS 2,900/bag), and clicks **Confirm**. Status → CONFIRMED. The moving-average cost for Saruji 50kg increases by TZS 2,900/bag, and the GL is posted accordingly.
+
+---
+
 ## 6. Supplier Bills and 3-Way Bill Match
+
+Navigate to **Accounting › Payables** (`/admin/ap/supplier-bills`).
 
 A supplier bill is the invoice received from the supplier. It is entered into the system and then matched against the Purchase Order and Goods Receipt to verify quantities and prices before payment is approved.
 
 ### 6.1 Enter a supplier bill
 
-1. Navigate to **Procurement → Supplier Bills** and click **Enter Bill**.
+1. Navigate to **Accounting › Enter Bill** (`/admin/ap/supplier-bills/enter`).
 2. Pick the **Supplier** by name.
 3. Enter the supplier's own **Invoice Number**, **Bill Date**, and **Due Date**.
 4. Set the **Currency**.
@@ -1658,7 +1947,7 @@ The overall bill status depends on its lines:
 
 If a bill line is HELD due to a price or quantity variance:
 
-1. Open the bill (or use the **Match** action on the bills list).
+1. Open the bill (navigate to `/admin/ap/supplier-bills/uid/{uid}`) or use the **Match** action on the bills list at **Accounting › Payables** (`/admin/ap/supplier-bills`).
 2. Review the variance amount and percentage shown on the held line.
 3. If the variance is acceptable, click **Accept Variance** on that line.
 4. When all held lines are resolved, the bill status moves to **MATCHED**.
@@ -1669,7 +1958,7 @@ Accepting variances requires the `AP.BILL.MATCH` permission.
 
 For a bill that was entered without running a match (or needs re-matching after a correction):
 
-1. Navigate to **Procurement → Supplier Bills**.
+1. Navigate to **Accounting › Payables** (`/admin/ap/supplier-bills`).
 2. Click **Match** on the bill row.
 3. The match result is displayed inline.
 
@@ -1694,17 +1983,38 @@ For invoices from service suppliers where there is no corresponding PO or GR:
 
 ### 6.7 Record an AP payment
 
-Payments against supplier bills are managed in the Accounts Payable module. See the Finance chapter for details on recording and reconciling AP payments.
+Payments against supplier bills are managed in the Accounts Payable module. Navigate to **Accounting › Record Payment** (`/admin/ap/payments/record`) to record a payment. See the Finance chapter for details on recording and reconciling AP payments.
+
+---
+
+**Example — Supplier bill for Simba Cement (clean 3-way match):**
+
+Simba Cement sends Invoice **SIM/2026/1041**, Bill Date 2026-06-22, Due Date 2026-07-22, for 500 bags @ TZS 14,500 each = TZS 7,250,000 net.
+
+Sarah opens **Accounting › Enter Bill** (`/admin/ap/supplier-bills/enter`), picks supplier **Simba Cement Ltd**, enters Invoice No **SIM/2026/1041**, Bill Date 2026-06-22, Due Date 2026-07-22. She links PO **PO-0088** and adds one bill line: **Saruji 50kg**, Qty 500, Unit Price TZS 14,500. She clicks **Enter Bill & Match**.
+
+The system runs the 3-way match:
+- Bill line: 500 bags @ 14,500
+- PO line: 500 bags @ 14,500 ✓
+- GRN line: 500 bags received ✓
+
+All lines → **MATCHED**. Bill status → MATCHED. Bill **BILL-0051** is ready for payment.
+
+**Example — Bill with price variance (held):**
+
+A different shipment arrives and the supplier bills at TZS 14,900/bag (TZS 400 over the PO price). After 3-way match, the bill line shows **HELD_PRICE_VARIANCE** with variance TZS 200,000. The AP manager opens the bill, reviews the variance, decides it is within business tolerance, and clicks **Accept Variance**. Line moves to VARIANCE_ACCEPTED; bill → MATCHED.
 
 ---
 
 ## 7. Purchase Returns
 
+Navigate to **Purchasing › Purchase Returns** (`/admin/purchase-returns`).
+
 A purchase return records goods being sent back to the supplier (for example, damaged or incorrect items received). Creating a confirmed return decreases stock and notifies the AP module to expect a supplier credit.
 
 ### 7.1 Create a purchase return
 
-1. Navigate to **Procurement → Purchase Returns** and click **New Purchase Return**.
+1. Navigate to **Purchasing › Purchase Returns** (`/admin/purchase-returns`) and click **New Purchase Return**, or go directly to `/admin/purchase-returns/create`.
 2. Pick the **Goods Receipt** by GRN number (the GR must have status RECEIVED).
 3. Enter a mandatory **Reason**.
 4. For each line being returned, enter the **Returned Quantity** (cannot exceed the quantity originally received on that GR line).
@@ -1714,7 +2024,7 @@ A purchase return records goods being sent back to the supplier (for example, da
 
 Confirming the return physically ships the goods back and adjusts stock.
 
-1. Open the DRAFT purchase return.
+1. Open the DRAFT purchase return (navigate to `/admin/purchase-returns/uid/{uid}`).
 2. Click **Confirm**.
 3. Status → **CONFIRMED**. Stock is removed from the branch and a purchase return event is posted.
 
@@ -1727,9 +2037,19 @@ Confirming the return physically ships the goods back and adjusts stock.
 
 ---
 
+**Example — Purchase return for damaged cement:**
+
+After receiving GRN-0061, the storekeeper discovers 20 bags of cement arrived wet and unusable. He opens **Purchasing › Purchase Returns** (`/admin/purchase-returns`), clicks **New Purchase Return**, picks GRN **GRN-0061**, enters Reason **"20 bags arrived wet — product damaged"**, and sets Returned Quantity **20** on the Saruji 50kg line. He saves — return **PRET-0018** is created in DRAFT.
+
+The purchasing manager reviews and clicks **Confirm** — status → CONFIRMED. Stock decreases by 20 bags (480 bags remain). The AP module is notified to expect a supplier credit note for 20 × TZS 14,500 = TZS 290,000 from Simba Cement.
+
+---
+
 ## 8. Purchase Settings
 
-Purchase settings control the PO approval workflow. Navigate to **Procurement → Purchase Settings** to view or edit them.
+Navigate to **Purchasing › Purchase Settings** (`/admin/purchase-settings`).
+
+Purchase settings control the PO approval workflow.
 
 ### 8.1 PO approval threshold
 
@@ -1739,28 +2059,77 @@ Purchase settings control the PO approval workflow. Navigate to **Procurement �
 | PO Approval Threshold | The minimum order total that triggers the approval requirement |
 | Currency | The currency of the threshold amount |
 
-To change these settings, click **Edit**, update the values, and click **Save**.
+To change these settings, navigate to **Purchasing › Purchase Settings** (`/admin/purchase-settings`), click **Edit**, update the values, and click **Save**.
 
 When PO approval is enabled, a user with `PURCHASE.ORDER.APPROVE` must approve or reject POs that exceed the threshold.
 
 ---
 
+**Example — Enabling PO approval:**
+
+The CFO wants all purchase orders above TZS 5,000,000 to require a second-level approval. She opens **Purchasing › Purchase Settings** (`/admin/purchase-settings`), clicks **Edit**, sets **PO Approval Enabled** to ON, **PO Approval Threshold** to **5,000,000**, **Currency** to **TZS**, and saves. From now on any placed PO with a total above TZS 5,000,000 enters PENDING approval status and cannot proceed to goods receipt until an authorised approver acts on it.
+
+---
+
 ## 9. End-to-end procure-to-pay example
 
-The following steps illustrate a complete P2P cycle for a stock purchase:
+The following steps illustrate a complete P2P cycle for a stock purchase with real sample values.
 
-1. **Requisition** — a department raises a purchase requisition for 100 bags of cement.
-2. **Submit and Approve** — the requisition is submitted and approved by the purchasing manager.
-3. **Convert to RFQ** — the approved requisition is converted to an RFQ.
-4. **Send RFQ** — the RFQ is sent to two shortlisted suppliers.
-5. **Capture quotes** — prices are received from both suppliers and entered as supplier quotes.
-6. **Award** — the cheaper supplier is awarded the RFQ; a Draft PO is created automatically.
-7. **Place PO** — the PO is placed (status: ORDERED; PO number assigned).
-8. **Receive goods** — when the cement arrives at the warehouse, a goods receipt is created for the delivered quantity. The PO status updates to RECEIVED.
-9. **Landed cost** — freight and duty charges for the shipment are entered as a landed cost against the GR and confirmed.
-10. **Enter supplier bill** — the supplier's invoice is entered against the PO. The 3-way match confirms quantities and prices match.
-11. **AP payment** — the matched and approved bill is paid through the Accounts Payable module.
-12. **Purchase return** (if needed) — any damaged bags are returned to the supplier by creating and confirming a purchase return against the GR.
+**Scenario: Warehouse restocking — 500 bags of Saruji 50kg from Simba Cement Ltd**
+
+---
+
+**Step 1 — Raise a Requisition**
+
+Storekeeper John opens **Purchasing › Purchase Requisitions** (`/admin/purchase-requisitions`), clicks **New Requisition**, sets Required By **2026-06-18**, notes "Stock replenishment — cement for construction projects". He adds one line: **Saruji 50kg**, Unit **BAG**, Qty **500**, Estimated Cost **TZS 14,800**. He saves (REQ-0080 = DRAFT) and clicks **Submit** (status → SUBMITTED).
+
+**Step 2 — Approve**
+
+Purchasing manager Neema opens REQ-0080 and clicks **Approve** (status → APPROVED).
+
+**Step 3 — Convert to RFQ**
+
+Neema clicks **Convert**, selects **RFQ** — RFQ-0031 is created in DRAFT.
+
+**Step 4 — Invite suppliers and send**
+
+Neema opens **Purchasing › RFQs / Sourcing** (`/admin/rfqs`), opens RFQ-0031, adds invited suppliers **Tanzania Cement Distributors** and **Simba Cement Ltd**, sets Response Due Date **2026-06-17**, and clicks **Send** (status → SENT).
+
+**Step 5 — Capture supplier quotes**
+
+Two suppliers respond:
+- Tanzania Cement Distributors: 500 bags @ TZS 14,800 = TZS 7,400,000.
+- Simba Cement Ltd: 500 bags @ TZS 14,500 = TZS 7,250,000 (lead time 5 days).
+
+Purchasing officer Zawadi captures both quotes on RFQ-0031. RFQ status → QUOTES_RECEIVED.
+
+**Step 6 — Award the RFQ**
+
+Zawadi clicks **Award** on the Simba Cement quote (lower price). RFQ status → AWARDED. Purchase Order **PO-0088** (DRAFT, 500 bags @ TZS 14,500) is created automatically.
+
+**Step 7 — Place the PO**
+
+Zawadi opens **Purchasing › Purchase Orders** (`/admin/purchase-orders`), finds PO-0088, reviews the line, and clicks **Place** (status → ORDERED, total TZS 7,250,000).
+
+**Step 8 — Receive goods**
+
+On 2026-06-22, 500 bags arrive. Storekeeper John opens **Purchasing › Goods Receipts** (`/admin/goods-receipts`), clicks **New Goods Receipt**, picks PO-0088, enters Receipt Date 2026-06-22, keeps 500 bags, and submits. GRN-0061 created (RECEIVED); PO-0088 status → RECEIVED; 500 bags added to stock.
+
+**Step 9 — Allocate landed costs**
+
+Port clearing TZS 850,000 + freight TZS 600,000 are entered as a landed cost against GRN-0061 (Basis: By Quantity). Accountant Sarah opens **Purchasing › Landed Costs** (`/admin/landed-costs`), creates the landed cost, and clicks **Confirm** — TZS 2,900/bag added to the moving-average cost.
+
+**Step 10 — Enter the supplier bill and run 3-way match**
+
+Simba Cement's invoice arrives: SIM/2026/1041, 500 bags @ TZS 14,500. Sarah opens **Accounting › Enter Bill** (`/admin/ap/supplier-bills/enter`), links PO-0088, enters the bill, and clicks **Enter Bill & Match**. All lines → MATCHED. BILL-0051 is ready for payment.
+
+**Step 11 — Record AP payment**
+
+Finance officer David opens **Accounting › Record Payment** (`/admin/ap/payments/record`), picks BILL-0051 (TZS 7,250,000 due 2026-07-22), records a bank transfer payment on 2026-07-20. The bill status moves to PAID and the AP balance for Simba Cement is cleared.
+
+**Step 12 — Purchase return (if needed)**
+
+If 20 bags arrived damaged, John opens **Purchasing › Purchase Returns** (`/admin/purchase-returns`), creates a return against GRN-0061 for 20 bags, and the manager confirms it — stock decreases by 20 bags and the AP module notes a TZS 290,000 credit note expected from Simba Cement.
 
 ---
 
@@ -1979,6 +2348,25 @@ The list shows transfer number, source and destination, transfer date, mode, and
 
 ---
 
+**Example — In-transit dispatch from Arusha Warehouse to DSM Store:**
+
+Storekeeper Grace Mwenda at Arusha branch needs to send 200 bags of Pembe Flour and 50 cartons of Cooking Oil to the Dar es Salaam main store.
+
+1. Navigate to **Inventory › Stock Transfers › Create** (`/admin/stock-transfers/create`).
+2. Source Branch: `Arusha Branch`; Source Location: `Arusha Warehouse`.
+3. Destination Branch: `DSM Branch`; Destination Location: `DSM Main Store`.
+4. Transfer Date: `2026-06-10`; Transfer Mode: **In-transit**.
+5. Add lines:
+   - Product: `Pembe Flour 2kg (FLR-002)`, Qty: `200`.
+   - Product: `Cooking Oil 3L (OIL-003)`, Qty: `50`.
+6. Click **Submit**. Transfer `TRF-0042` is created with status **Draft**.
+7. Grace reviews the lines and clicks **Dispatch**. Status becomes **Dispatched**. The Arusha Warehouse stock for both items decreases immediately (200 bags and 50 cartons deducted).
+8. The following day, DSM storekeeper Omari Njau opens **Inventory › Stock Transfers** (`/admin/stock-transfers`), finds `TRF-0042` with status Dispatched, and clicks the row to open the detail.
+9. Omari counts the physical delivery — both lines match — and clicks **Receive**. Status becomes **Received**. DSM Main Store stock increases by 200 bags and 50 cartons.
+10. Both storekeepers can now see `TRF-0042` with status **Received** in the transfer list. No cancellation is possible at this stage.
+
+---
+
 ## 5. Stock counts
 
 Navigate to **Inventory > Stock Counts** (`/admin/stock-counts`).
@@ -2033,6 +2421,28 @@ Posting requires the `STOCK.COUNT.POST` permission (typically held by an account
 ### 5.4 Cancelling a count
 
 Open a Counting count and click **Cancel**. No stock movements or GL entries are created. A Posted count cannot be cancelled. If corrections are needed after posting, create a new count.
+
+---
+
+**Example — Cycle count of sugar and rice with a variance posted:**
+
+Accountant supervisor Boniface Kessy schedules a cycle count of two fast-moving products at the DSM Main Store.
+
+1. Navigate to **Inventory › Stock Counts › Create** (`/admin/stock-counts/create`).
+2. Company: `Kijenge Trading Ltd`; Branch: `DSM Branch`; Location: `DSM Main Store`; Count Date: `2026-06-12`; Count Type: **Cycle**.
+3. Add products to count: `Sembe Sugar 1kg (SGR-001)` and `Jasmine Rice 5kg (RCE-005)`. Click **Submit**.
+4. Count `CNT-0009` is created with status **Counting**. The system records the snapshot quantities: Sugar = 850 bags, Rice = 240 bags.
+5. Storekeeper Omari Njau physically counts the shelves. He opens `CNT-0009` and enters:
+   - Sugar counted: `843` (variance: −7 bags).
+   - Rice counted: `245` (variance: +5 bags).
+   - For Sugar he selects Reason: `SHRINKAGE`. For Rice no reason is needed (positive variance — unrecorded receipt correction).
+   Click **Enter / Save**.
+6. Boniface reviews the variances and clicks **Post**. Posting Date: `2026-06-12`. Confirms.
+7. The system posts two stock adjustment movements:
+   - Sugar: −7 bags (ADJUSTMENT, reason SHRINKAGE).
+   - Rice: +5 bags (ADJUSTMENT).
+   A single GL variance journal posts: DR Inventory Variance / CR Inventory for the sugar loss (valued at moving-average cost); the rice surplus reverses this direction.
+8. The count document is now read-only with status **Posted**. On-hand quantities at DSM Main Store are now: Sugar = 843, Rice = 245.
 
 ---
 
@@ -2787,6 +3197,24 @@ For each line, the system:
 
 ---
 
+**Example — Issue materials to a construction job and verify stock deduction:**
+
+Project manager Salma Abdallah is running project `PRJ-0007` (Kariakoo Office Fit-Out), status **Active**. The site team needs electrical cables and paint for the first week.
+
+1. Navigate to **Projects › Projects** (`/admin/projects`), click on `PRJ-0007` to open the detail at `/admin/projects/uid/:uid`.
+2. Scroll to the **Issue to Job** panel. Click **Issue Materials**.
+3. Add lines:
+   - Product: `Electrical Cable 2.5mm (ELC-025)`, Qty: `150` (metres).
+   - Product: `Interior Paint 20L (PNT-INT)`, Qty: `8` (tins).
+4. Issue Date: `2026-06-10`; Reason: `Week 1 site works`. Click **Submit**.
+5. System generates issue `PJI-0014`. For each line:
+   - 150 metres of cable deducted from stock at DSM Branch at the cable's current moving-average cost (TZS 4,200/m = TZS 630,000).
+   - 8 tins of paint deducted at TZS 38,500/tin = TZS 308,000.
+   - GL entries posted: DR Cost of Sales / CR Inventory, each tagged to project `PRJ-0007`.
+6. Total materials issued: TZS 938,000. The project's P&L now reflects this cost under the **Material** cost type.
+
+---
+
 ## 8. Project P&L
 
 From the project detail screen, click **View P&L** (requires `PROJECTS.COSTING.VIEW`). The P&L report loads as a panel showing:
@@ -2804,6 +3232,30 @@ From the project detail screen, click **View P&L** (requires `PROJECTS.COSTING.V
 | Reconciliation | Computed cost from the project ledger vs GL account totals |
 
 The reconciliation bar shows **Balanced** when the two totals agree. A mismatch here indicates a data integrity issue requiring finance review.
+
+---
+
+**Example — View the project P&L mid-project and check the WIP balance:**
+
+Three weeks into project `PRJ-0007` (Kariakoo Office Fit-Out), Salma Abdallah wants to check profitability before the final billing.
+
+1. Open the project detail at `/admin/projects/uid/:uid` for `PRJ-0007`.
+2. Click **View P&L** (requires `PROJECTS.COSTING.VIEW`). The P&L panel loads:
+
+| Section | Amount (TZS) |
+|---|---|
+| Revenue | 3,500,000 |
+| Cost — Material | 2,175,000 |
+| Cost — Labour | 840,000 |
+| Cost — Overhead | 120,000 |
+| Total Cost | 3,135,000 |
+| Gross Margin | 365,000 |
+| Margin % | 10.4% |
+| Budget | 4,200,000 |
+| Budget Variance | +1,065,000 (cost below budget) |
+| WIP | 0 (Revenue > Cost) |
+
+The Reconciliation bar shows **Balanced** — the project ledger ties to the GL account totals. Revenue of TZS 3.5M was posted via a sales invoice tagged to this project; costs include the two material issues (TZS 938,000 from week 1 + TZS 1,237,000 from week 2) plus labour timesheets. Since revenue exceeds total cost, WIP is zero. Salma notes the healthy margin and continues to the next billing milestone.
 
 ---
 
@@ -3544,7 +3996,7 @@ The CRM module helps your sales team track every potential customer from first c
 
 The CRM section also provides a **Pipeline Dashboard** showing deal value across stages, a **Forecast** for a chosen date range, and **Pipeline Stages** settings where an administrator can customise the stage list.
 
-**Navigation:** Shell > CRM group — Leads, Opportunities, Pipeline Dashboard, Pipeline Stages, CRM Activities.
+**Navigation:** Sidebar **CRM** group — **Leads**, **Opportunities**, **Pipeline Dashboard**, **Pipeline Stages**, **CRM Activities**.
 
 Each item in the CRM nav group is hidden if you do not have the required permission. The sections below state the required permission for each action.
 
@@ -3552,7 +4004,9 @@ Each item in the CRM nav group is hidden if you do not have the required permiss
 
 ## Leads
 
-**Navigation:** CRM > Leads | **View:** `CRM.LEAD.VIEW` | **Create / edit / contact / disqualify:** `CRM.LEAD.MANAGE` | **Qualify:** `CRM.LEAD.QUALIFY`
+Navigate to **CRM › Leads** (`/admin/crm/leads`).
+
+**View:** `CRM.LEAD.VIEW` | **Create / edit / contact / disqualify:** `CRM.LEAD.MANAGE` | **Qualify:** `CRM.LEAD.QUALIFY`
 
 ### Lead status lifecycle
 
@@ -3576,7 +4030,7 @@ Once a lead reaches **Converted** or **Disqualified** it is locked: you cannot e
 
 ### How to capture a lead
 
-1. Navigate to **CRM > Leads**.
+1. Navigate to **CRM › Leads** (`/admin/crm/leads`).
 2. Click **New Lead**. An inline form appears.
 3. Enter the **Display Name** (required).
 4. Select the **Lead Source** from the dropdown (Website, Referral, Walk-in, Campaign, Cold Call, Existing Customer, or Other).
@@ -3587,7 +4041,7 @@ The system assigns a **Lead Number** (for example, `LEAD-0001`) and sets the sta
 
 ### How to mark a lead as contacted
 
-1. Open the lead from the list.
+1. Open the lead from the list (`/admin/crm/leads/uid/:uid`).
 2. Click **Mark as Contacted** (only available when status is New).
 3. The status changes to **Contacted**.
 
@@ -3595,7 +4049,7 @@ The system assigns a **Lead Number** (for example, `LEAD-0001`) and sets the sta
 
 Qualifying a lead links it to a customer record and moves it to **Qualified** status. You need the `CRM.LEAD.QUALIFY` permission.
 
-1. Open a New or Contacted lead.
+1. Open a New or Contacted lead (`/admin/crm/leads/uid/:uid`).
 2. Click **Qualify**.
 3. Choose one of the two modes:
 
@@ -3614,7 +4068,7 @@ After qualifying, the status badge changes to **Qualified** and the linked custo
 
 ### How to disqualify a lead
 
-1. Open any non-terminal lead (New, Contacted, or Qualified).
+1. Open any non-terminal lead (New, Contacted, or Qualified) at `/admin/crm/leads/uid/:uid`.
 2. Click **Disqualify**.
 3. Enter a **Reason** (required — for example, "Budget too low" or "Not the right fit").
 4. Click **Submit**.
@@ -3631,9 +4085,25 @@ On the Leads list, the search box filters by name. Pagination controls appear wh
 
 ---
 
+**Example — Capture a referral lead and qualify it to a new customer:**
+
+Sales executive Amina Msangi at Kijenge branch receives a phone call from Juma Banda, who was referred by an existing client and wants to discuss buying office furniture in bulk.
+
+1. Navigate to **CRM › Leads** (`/admin/crm/leads`). Click **New Lead**.
+2. Display Name: `Juma Banda`; Lead Source: `Referral`; Phone: `+255754001122`; Notes: `Referred by Baraka Supplies — bulk office furniture interest`.
+3. Click **Submit**. System creates `LEAD-0005`, status **New**.
+4. Next day, Amina calls Juma. She opens `LEAD-0005` and clicks **Mark as Contacted**. Status becomes **Contacted**.
+5. After the call confirms he runs a legitimate business, Amina clicks **Qualify**. She selects **Create new customer**, enters Name: `Banda Office Solutions`, Customer Kind: `Credit Account`, Phone: `+255754001122`. Clicks **Submit**.
+6. A new customer record "Banda Office Solutions" is created. Lead status flips to **Qualified**. The linked customer name appears on the detail page.
+7. Amina can now create an opportunity from this lead (see Opportunities section).
+
+---
+
 ## Opportunities
 
-**Navigation:** CRM > Opportunities | **View:** `CRM.OPPORTUNITY.VIEW` | **Create / edit / stage / win / lose:** `CRM.OPPORTUNITY.MANAGE` | **Convert to document:** `CRM.OPPORTUNITY.CONVERT`
+Navigate to **CRM › Opportunities** (`/admin/crm/opportunities`).
+
+**View:** `CRM.OPPORTUNITY.VIEW` | **Create / edit / stage / win / lose:** `CRM.OPPORTUNITY.MANAGE` | **Convert to document:** `CRM.OPPORTUNITY.CONVERT`
 
 ### Opportunity status lifecycle
 
@@ -3646,8 +4116,8 @@ Once an opportunity is Won or Lost it is closed. Closed opportunities cannot be 
 
 ### How to create an opportunity
 
-1. Navigate to **CRM > Opportunities**.
-2. Click **New Opportunity** (or navigate to **CRM > Opportunities > Create**).
+1. Navigate to **CRM › Opportunities** (`/admin/crm/opportunities`).
+2. Click **New Opportunity** (or navigate to **CRM › Opportunities › Create** at `/admin/crm/opportunities/create`).
 3. Select the **Customer** using the picker. Type part of the customer name to search; select from the results.
 4. Select the **Pipeline Stage** from the dropdown. Only active stages are offered. The stage's default win probability is applied automatically unless you override it.
 5. Enter the **Title** (required).
@@ -3656,7 +4126,7 @@ Once an opportunity is Won or Lost it is closed. Closed opportunities cannot be 
 8. Optionally select a **Source Lead** using the picker — only Qualified leads appear in this list. Selecting a source lead converts that lead to **Converted** status.
 9. Click **Submit**.
 
-The opportunity is created with status **Open** and an automatically assigned number (for example, `OPP-0001`). You land on the opportunity detail page.
+The opportunity is created with status **Open** and an automatically assigned number (for example, `OPP-0001`). You land on the opportunity detail page (`/admin/crm/opportunities/uid/:uid`).
 
 ### How to add lines to an opportunity
 
@@ -3725,9 +4195,26 @@ Open the detail page (must be Open). Change title, estimated value, expected clo
 
 ---
 
+**Example — Full pipeline journey: lead → opportunity through stages → won → convert to sales order:**
+
+Sales manager Benson Kileo at Dar es Salaam branch handles a qualified lead for Banda Office Solutions (created in the lead example above).
+
+1. Navigate to **CRM › Opportunities › Create** (`/admin/crm/opportunities/create`).
+2. Customer: `Banda Office Solutions`; Pipeline Stage: `Qualification`; Title: `Bulk Office Furniture — Q3 2026`; Currency: `TZS`; Estimated Value: `4,500,000`; Expected Close Date: `2026-09-30`; Source Lead: `LEAD-0005 — Juma Banda` (auto-converts that lead to Converted).
+3. Click **Submit**. Opportunity `OPP-0012` created, status **Open**.
+4. Add lines to `OPP-0012`:
+   - Executive Desk EXD-01, Unit: EA, Qty: 5, Unit Price: 480,000 = TZS 2,400,000.
+   - Ergonomic Chair CHR-02, Unit: EA, Qty: 20, Unit Price: 105,000 = TZS 2,100,000.
+5. After a needs-analysis call, Benson clicks **Advance Stage**, selects `Needs Analysis` (default probability 25%). Clicks **Submit**.
+6. After sending a detailed proposal, Benson advances to `Proposal` (50%). After negotiation the stage moves to `Negotiation` (75%).
+7. Juma accepts the quote. Benson opens the opportunity, clicks **Won**, sets Won Date: `2026-08-15`. Status becomes **Won**.
+8. Click **Convert**, Target: `Sales Order`. System creates `SO-0034` with all lines pre-filled. Benson clicks the link to open the new Sales Order and proceeds with delivery.
+
+---
+
 ## Pipeline Dashboard
 
-**Navigation:** CRM > Pipeline Dashboard | **Permission:** `CRM.PIPELINE.VIEW`
+Navigate to **CRM › Pipeline Dashboard** (`/admin/crm/pipeline`). **Permission:** `CRM.PIPELINE.VIEW`.
 
 The pipeline dashboard shows the current state of all open opportunities across your sales pipeline. It is scoped to a company and branch — select both to load the data.
 
@@ -3749,15 +4236,31 @@ Set the date range and click **Apply** to recalculate.
 
 ---
 
+**Example — Reading the pipeline board and setting a forecast:**
+
+Branch manager Zawadi Ngowi opens the **CRM › Pipeline Dashboard** (`/admin/crm/pipeline`), selects company `Kijenge Trading Ltd` and branch `DSM Main`. The board shows:
+
+| Stage | Open deals | Combined value |
+|---|---|---|
+| Qualification | 3 | TZS 8,200,000 |
+| Needs Analysis | 5 | TZS 21,500,000 |
+| Proposal | 4 | TZS 18,750,000 |
+| Negotiation | 2 | TZS 9,600,000 |
+| Closing | 1 | TZS 4,500,000 |
+
+Zawadi sets From: `2026-07-01`, To: `2026-09-30` and clicks **Apply** on the Forecast panel. The weighted forecast shows TZS 29,340,000 (each deal's estimated value × its win probability). The KPI panel shows Win Rate: 62% and Average Cycle Time: 34 days for deals closed in Q2 2026.
+
+---
+
 ## Pipeline Stages (Settings)
 
-**Navigation:** CRM > Pipeline Stages | **Permission to view the settings screen:** `CRM.STAGE.MANAGE` | **Permission to read stages via API:** `CRM.OPPORTUNITY.VIEW`
+Navigate to **CRM › Pipeline Stages** (`/admin/crm/settings/pipeline-stages`). **Permission to view the settings screen:** `CRM.STAGE.MANAGE` | **Permission to read stages via API:** `CRM.OPPORTUNITY.VIEW`
 
 Pipeline stages define the steps in your sales process. Five stages are seeded per company: Qualification, Needs Analysis, Proposal, Negotiation, and Closing. You can add, rename, reorder, change probabilities, and deactivate stages.
 
 ### How to create a stage
 
-1. Navigate to **CRM > Pipeline Stages**.
+1. Navigate to **CRM › Pipeline Stages** (`/admin/crm/settings/pipeline-stages`).
 2. Click **New Stage**.
 3. Enter the **Name** (must be unique within the company).
 4. Enter the **Display Order** (a number; must be unique within the company).
@@ -3787,7 +4290,7 @@ Deactivation is not permanent — you can reactivate a stage by editing it and s
 
 ## Activities
 
-**Navigation:** CRM > CRM Activities (open-task inbox) | Activities are also embedded on Lead and Opportunity detail pages.
+Navigate to **CRM › CRM Activities** (`/admin/crm/activities`) for the open-task inbox. Activities are also embedded on Lead and Opportunity detail pages.
 
 **View activities:** `CRM.ACTIVITY.VIEW` | **Log / complete activities:** `CRM.ACTIVITY.MANAGE`
 
@@ -3807,7 +4310,7 @@ Only **Task** activities appear in the open-task inbox. Only Tasks can be comple
 
 ### How to log an activity on a lead or opportunity
 
-1. Open the lead or opportunity detail page.
+1. Open the lead (`/admin/crm/leads/uid/:uid`) or opportunity (`/admin/crm/opportunities/uid/:uid`) detail page.
 2. Scroll to the **Activity** panel.
 3. Click **Log Activity**.
 4. Select the **Type** (Call, Email, Meeting, Note, or Task).
@@ -3826,18 +4329,30 @@ The activity panel on a lead or opportunity detail page shows 10 activities per 
 
 A task can be completed from the open-task inbox or from the activity panel on the parent lead or opportunity.
 
-1. Find the task (either on the detail page or in **CRM > CRM Activities**).
+1. Find the task (either on the detail page or in **CRM › CRM Activities** at `/admin/crm/activities`).
 2. Click **Complete** on the task row.
 
 The task is marked done and disappears from the open-task inbox. You cannot complete an activity that is not a Task, and you cannot complete a Task that is already done.
 
 ### Open-task inbox
 
-**Navigation:** CRM > CRM Activities | **Permission:** `CRM.ACTIVITY.VIEW` (view) / `CRM.ACTIVITY.MANAGE` (complete)
+Navigate to **CRM › CRM Activities** (`/admin/crm/activities`). **Permission:** `CRM.ACTIVITY.VIEW` (view) / `CRM.ACTIVITY.MANAGE` (complete).
 
 The CRM Activities screen lists all open (not-yet-done) Tasks for the selected company, across all leads and opportunities. It is scoped to the company you select; you can optionally filter by assignee.
 
 The list is paginated (20 per page). Use the paginator controls to browse. When you complete a task, it is removed from the inbox and the list refreshes.
+
+---
+
+**Example — Log activities across the sales journey and manage the task inbox:**
+
+Sales rep Farida Hassan is managing opportunity `OPP-0012` (Banda Office Solutions). She logs activities at each step.
+
+1. After the initial qualification call, she opens `OPP-0012` at `/admin/crm/opportunities/uid/:uid`, scrolls to the Activity panel, clicks **Log Activity**: Type `Call`, Subject `Initial qualification call — confirmed budget TZS 4.5M`, Occurred At `2026-07-03`. Clicks **Submit**. Activity `ACT-0018` appears.
+2. She sends a proposal by email: Type `Email`, Subject `Proposal email sent — 5 desks + 20 chairs`, Occurred At `2026-07-10`.
+3. After the proposal, she needs a follow-up. She creates a task: Type `Task`, Subject `Follow up on proposal — confirm decision`, Due Date `2026-07-17`. Activity `ACT-0021` created.
+4. On 2026-07-17, Farida opens **CRM › CRM Activities** (`/admin/crm/activities`). She sees `ACT-0021` in the open-task inbox. After a productive call, she clicks **Complete**. The task disappears from the inbox.
+5. A meeting is later held: back on `OPP-0012`, Type `Meeting`, Subject `Site visit — DSM Main showroom`, Occurred At `2026-07-22`. The activity panel shows all four interactions, newest first.
 
 ---
 
@@ -3849,7 +4364,7 @@ This chapter describes the financial statements, the GL account-ledger drill-dow
 
 ## Financial Statement Reports
 
-The four financial statements are available from the **Reporting** navigation group. Each report requires the relevant permission and a company and period selection before it can be run.
+The four financial statements are available from the **Accounting** navigation group. Each report requires the relevant permission and a company and period selection before it can be run.
 
 **Common controls on every statement screen:**
 
@@ -3864,7 +4379,7 @@ The four financial statements are available from the **Reporting** navigation gr
 
 ### Profit & Loss (Income Statement)
 
-Navigate to **Reporting > Income Statement** (`/admin/reporting/income-statement`). Permission required: `REPORT.PL.VIEW`.
+Navigate to **Accounting › Income Statement** (`/admin/reporting/income-statement`). Permission required: `REPORT.PL.VIEW`.
 
 1. Select the company by name.
 2. Set **Period from** and **Period to** (date inputs).
@@ -3885,9 +4400,35 @@ The statement shows:
 
 ---
 
+**Example — Run a comparative P&L for two quarters and export to Excel:**
+
+Chief accountant Rehema Mwangi needs to compare Q1 2026 performance against Q1 2025 for the board report.
+
+1. Navigate to **Accounting › Income Statement** (`/admin/reporting/income-statement`).
+2. Company: `Kijenge Trading Ltd`.
+3. Period from: `2026-01-01`; Period to: `2026-03-31`.
+4. Comparative from: `2025-01-01`; Comparative to: `2025-03-31`.
+5. Click **Run**.
+
+The statement loads. The green **Reconciled** bar confirms net profit ties to the INCOME − EXPENSE GL movement. Results:
+
+| Section | Q1 2026 | Q1 2025 |
+|---|---|---|
+| Revenue | TZS 48,250,000 | TZS 39,100,000 |
+| Cost of Sales | TZS 29,340,000 | TZS 24,600,000 |
+| Gross Profit | TZS 18,910,000 | TZS 14,500,000 |
+| Operating Expenses | TZS 9,720,000 | TZS 8,850,000 |
+| Net Profit | TZS 9,190,000 | TZS 5,650,000 |
+
+Rehema clicks **Excel** in the export toolbar. The file `income-statement_2026-01-01_2026-03-31.xlsx` downloads with both columns. She forwards it to the board.
+
+To drill into "Sales Revenue", she clicks the account name link — the Account Ledger opens pre-filled with that account and the Q1 2026 period, showing every posted journal line and a running balance.
+
+---
+
 ### Balance Sheet
 
-Navigate to **Reporting > Balance Sheet** (`/admin/reporting/balance-sheet`). Permission required: `REPORT.BS.VIEW`.
+Navigate to **Accounting › Balance Sheet** (`/admin/reporting/balance-sheet`). Permission required: `REPORT.BS.VIEW`.
 
 1. Select the company by name.
 2. Set the **As-at date**.
@@ -3902,9 +4443,21 @@ The statement shows sections for Current Assets, Non-Current Assets, Current Lia
 
 ---
 
+**Example — Run a comparative balance sheet at year-end:**
+
+Rehema Mwangi needs the balance sheet as at 30 June 2026 compared with 30 June 2025.
+
+1. Navigate to **Accounting › Balance Sheet** (`/admin/reporting/balance-sheet`).
+2. Company: `Kijenge Trading Ltd`; As-at date: `2026-06-30`; Compare as-at: `2025-06-30`.
+3. Click **Run**.
+
+The green Reconciled bar appears ("total assets == total liabilities + total equity"). Rehema spots that "Trade Receivables" has grown from TZS 12.4M to TZS 19.7M year-on-year. She clicks the "Trade Receivables" account name to open its ledger for the full fiscal year and reviews each transaction. She then exports to PDF for the audit file.
+
+---
+
 ### Cash-Flow Statement
 
-Navigate to **Reporting > Cash-Flow Statement** (`/admin/reporting/cash-flow`). Permission required: `REPORT.CASHFLOW.VIEW`.
+Navigate to **Accounting › Cash-Flow Statement** (`/admin/reporting/cash-flow`). Permission required: `REPORT.CASHFLOW.VIEW`.
 
 1. Select the company by name.
 2. Set **Period from** and **Period to**.
@@ -3923,9 +4476,19 @@ The footer shows **Opening Cash**, **Net Change in Cash**, and **Closing Cash**.
 
 ---
 
+**Example — Cash-flow analysis for H1 2026:**
+
+1. Navigate to **Accounting › Cash-Flow Statement** (`/admin/reporting/cash-flow`).
+2. Company: `Kijenge Trading Ltd`; Period from: `2026-01-01`; Period to: `2026-06-30`.
+3. Click **Run**.
+
+Results show Opening Cash: TZS 6,800,000; Operating inflow: TZS 11,250,000; Investing outflow: TZS −4,200,000 (purchase of delivery van); Financing outflow: TZS −1,500,000 (loan repayment); Net Change: TZS 5,550,000; Closing Cash: TZS 12,350,000. The green Reconciled bar confirms the net change ties to the actual movement in the bank account GL balances.
+
+---
+
 ### Account-Ledger Drill-Down
 
-Navigate to **Reporting > Account Ledger** (`/admin/reporting/account-ledger`). Permission required: `REPORT.LEDGER.VIEW`.
+Navigate to **Accounting › Account Ledger** (`/admin/reporting/account-ledger`). Permission required: `REPORT.LEDGER.VIEW`.
 
 The account ledger shows every posted journal line for a single GL account within a date range, with a running balance.
 
@@ -3946,15 +4509,27 @@ The report shows:
 
 ---
 
+**Example — Investigate the bank account movements for April 2026:**
+
+1. Navigate to **Accounting › Account Ledger** (`/admin/reporting/account-ledger`).
+2. Company: `Kijenge Trading Ltd`.
+3. Account picker: type `Bank` — select **Bank — Main Current (1100)**.
+4. Period from: `2026-04-01`; Period to: `2026-04-30`.
+5. Click **Run**.
+
+Opening balance: TZS 12,350,000. The ledger shows 28 lines — 15 customer receipts credited and 13 payments debited, with a closing balance of TZS 14,890,000. The paginator is hidden (fewer than 50 lines). Rehema exports to CSV for the bank reconciliation working paper.
+
+---
+
 ### Trial Balance
 
-The Trial Balance is covered fully in the Finance chapter (Accounting > Trial Balance, `/admin/gl/trial-balance`). It can also be reached from the Reporting navigation group. Permission required: `GL.VIEW`. See the General Ledger section for full usage.
+The Trial Balance is covered fully in the Finance chapter (Accounting › Trial Balance, `/admin/gl/trial-balance`). It can also be reached from the Accounting navigation group. Permission required: `GL.VIEW`. See the General Ledger section for full usage.
 
 ---
 
 ## Business Intelligence Dashboard
 
-Navigate to **Dashboard** (`/admin/dashboard`). Permission required: `BI.VIEW`.
+Navigate to **Analytics › Dashboard** (`/admin/dashboard`). Permission required: `BI.VIEW`.
 
 The dashboard is a composite view of key performance indicators drawn from Finance, Operations, and CRM data. Each panel loads independently and has its own permission. If you hold `BI.VIEW` but lack a panel-specific permission, that panel shows a calm "no permission" message rather than blocking the whole page.
 
@@ -3963,6 +4538,28 @@ The dashboard is a composite view of key performance indicators drawn from Finan
 - **Company** — the active company (determined by your login context).
 - **Branch** — optionally filter data to a specific branch (chosen by code — name).
 - **From / To dates** — the reporting date range (defaults to the current month). Change dates and click the **Refresh** button to re-fetch all panels.
+
+---
+
+**Example — Read the dashboard KPIs and drill through to source screens:**
+
+Finance director Gideon Moshi logs in, navigates to **Analytics › Dashboard** (`/admin/dashboard`). The company `Kijenge Trading Ltd` and branch `DSM Main` auto-select; dates default to the current month (2026-06-01 to 2026-06-14).
+
+1. **Health strip** — all five badges (AR, AP, Cash, Stock, TB) show green `[OK]`. No reconciliation issues.
+
+2. **Finance panel** — Revenue: TZS 9,850,000; OpEx: TZS 4,200,000; Net Profit: TZS 3,480,000. Trial Balance status: Balanced. Gideon clicks **Income Statement** in the Finance panel — this drills through to `/admin/reporting/income-statement` where he can run a full P&L.
+
+3. **Cash Position panel** — Cash balance across all accounts: TZS 14,890,000. He clicks **Cash Accounts** to open the cash & bank accounts list.
+
+4. **Working Capital panel** — Outstanding AR: TZS 19,700,000 (AR sub-ledger reconciles to GL). Outstanding AP: TZS 6,450,000. He clicks **View Receivables** to drill into the AR invoices list.
+
+5. **Inventory panel** — Total stock value: TZS 38,250,000 (stock sub-ledger ties to GL inventory account). Clicking **Inventory** opens the stock valuation screen.
+
+6. **CRM pipeline panel** — 15 open deals across five stages; Win Rate: 62%; Weighted Forecast for the period: TZS 29,340,000. He clicks **CRM** to open the pipeline dashboard.
+
+7. Gideon changes the **Branch** to `Arusha Branch` and clicks **Refresh**. All panels re-fetch and show Arusha-scoped figures.
+
+8. He selects format **Excel** in the export dropdown and clicks **Download**. File `dashboard.xlsx` downloads with the currently visible panel data. (Requires `BI.EXPORT`.)
 
 ---
 
@@ -4026,11 +4623,11 @@ The file is named `dashboard.<ext>` and includes the currently visible panel dat
 
 ## Analytical Reports
 
-The following specialised reports sit under the **Budgeting** and **Cost Centre** navigation groups but are described here because they are reporting outputs, not data-entry screens.
+The following specialised reports sit under the **Budgeting** and **Costing** navigation groups but are described here because they are reporting outputs, not data-entry screens.
 
 ### Budget Variance Report
 
-Navigate to **Budgeting > Budget Variance** (`/admin/budgeting/variance`). Permission required: `BUDGETING.REPORT.VIEW`.
+Navigate to **Budgeting › Budget Variance Report** (`/admin/budgeting/variance`). Permission required: `BUDGETING.REPORT.VIEW`.
 
 The report compares GL actuals against an approved budget version.
 
@@ -4042,15 +4639,31 @@ The report compares GL actuals against an approved budget version.
 
 The report shows account-level rows with budget amount, actual amount, variance, and a **Favourable** or **Adverse** label. For income accounts, actual > budget is favourable. For expense accounts, actual < budget is favourable.
 
+---
+
+**Example — Run a budget variance report for the first half of the fiscal year:**
+
+Management accountant Yasmin Juma navigates to **Budgeting › Budget Variance Report** (`/admin/budgeting/variance`).
+
+1. Company: `Kijenge Trading Ltd`.
+2. Fiscal Year UID: copied from the approved budget at **Budgeting › Budgets**.
+3. Period from: `1`; Period to: `6` (January through June).
+4. Account Type: `Expense` (to focus the board on cost discipline).
+5. Click **Run**.
+
+Results show that "Fuel & Transport" (actual TZS 3,850,000 vs budget TZS 3,200,000) is marked **Adverse** by TZS 650,000, while "Office Supplies" (actual TZS 480,000 vs budget TZS 600,000) is **Favourable** by TZS 120,000. Yasmin notes the fuel over-run for discussion in the monthly management meeting.
+
+---
+
 ### Departmental Actuals Report
 
-Navigate to **Budgeting > Departmental Actuals** (`/admin/budgeting/departmental-actuals`). Permission required: `BUDGETING.REPORT.VIEW`.
+Navigate to **Budgeting › Departmental Actuals** (`/admin/budgeting/departmental-actuals`). Permission required: `BUDGETING.REPORT.VIEW`.
 
 Shows actual GL postings broken down by cost centre and account for the chosen fiscal year and period range. The inputs are the same as the variance report. This report has no budget comparison — it shows actuals only, useful for analysing spending by department or cost centre.
 
 ### Dimension-Sliced Trial Balance
 
-Navigate to **Accounting > Cost Centre > Report** (`/admin/cost-centre/report`). Requires both `COSTING.VIEW` and `GL.VIEW`.
+Navigate to **Costing › Sliced Trial Balance** (`/admin/cost-centre/report`). Requires both `COSTING.VIEW` and `GL.VIEW`.
 
 See the General Ledger section (Cost-Centre Dimensions) in the Finance chapter for full usage instructions.
 
