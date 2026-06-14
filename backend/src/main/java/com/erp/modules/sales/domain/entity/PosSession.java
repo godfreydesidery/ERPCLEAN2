@@ -36,6 +36,10 @@ public class PosSession extends UidEntity {
     @Column(name = "cashier_id", nullable = false, updatable = false)
     private Long cashierId;
 
+    /** Human-readable session reference, e.g. POS-0001. Generated at open. */
+    @Column(name = "session_number", nullable = false, updatable = false, length = 30)
+    private String sessionNumber;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     @Setter
@@ -94,11 +98,12 @@ public class PosSession extends UidEntity {
     protected PosSession() {}
 
     public PosSession(Long companyId, Long branchId, Long posTillId, Long cashierId,
-                      BigDecimal openingFloatAmount, Long createdBy) {
+                      String sessionNumber, BigDecimal openingFloatAmount, Long createdBy) {
         this.companyId           = companyId;
         this.branchId            = branchId;
         this.posTillId           = posTillId;
         this.cashierId           = cashierId;
+        this.sessionNumber       = sessionNumber;
         this.openingFloatAmount  = openingFloatAmount;
         this.createdBy           = createdBy;
     }

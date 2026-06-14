@@ -3,6 +3,7 @@ package com.erp.modules.sales.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -58,6 +59,7 @@ class PosSessionServiceImplTest {
     private CompanyRepository          companies;
     private ScopeGuard                 scopeGuard;
     private AuditService               audit;
+    private SalesDepthNumberGenerator  numberGen;
     private PosSessionServiceImpl      service;
 
     @BeforeEach
@@ -71,8 +73,10 @@ class PosSessionServiceImplTest {
         companies  = mock(CompanyRepository.class);
         scopeGuard = mock(ScopeGuard.class);
         audit      = mock(AuditService.class);
+        numberGen  = mock(SalesDepthNumberGenerator.class);
+        when(numberGen.nextPosSession(anyLong())).thenReturn("POS-0001");
         service = new PosSessionServiceImpl(sessions, tills, payouts, invoices,
-                glInvoker, glConfig, companies, scopeGuard, audit);
+                glInvoker, glConfig, companies, scopeGuard, audit, numberGen);
 
         // default: no request context
         RequestContext.set(new RequestContext.Principal(99L, "cashier", false, 1L, 1L, null));
@@ -278,13 +282,13 @@ class PosSessionServiceImplTest {
     // -------------------------------------------------------------------------
 
     private PosSession openSession(Long companyId, BigDecimal openingFloat) {
-        PosSession s = new PosSession(companyId, 1L, 5L, 99L, openingFloat, 99L);
+        PosSession s = new PosSession(companyId, 1L, 5L, 99L, "POS-0001", openingFloat, 99L);
         s.setStatus(PosSessionStatus.OPEN);
         return s;
     }
 
     private PosSession closedSession(Long companyId, BigDecimal variance, Instant closedAt) {
-        PosSession s = new PosSession(companyId, 1L, 5L, 99L, new BigDecimal("500.00"), 99L);
+        PosSession s = new PosSession(companyId, 1L, 5L, 99L, "POS-0001", new BigDecimal("500.00"), 99L);
         s.setStatus(PosSessionStatus.CLOSED);
         s.setClosedAt(closedAt);
         s.setVarianceAmount(variance);

@@ -16,6 +16,7 @@ public class SalesDepthNumberGenerator {
 
     private static final String KIND_BLANKET  = "BLANKET_ORDER";
     private static final String KIND_STANDING = "STANDING_ORDER";
+    private static final String KIND_POS_SESSION = "POS_SESSION";
 
     private final CodeSequenceRepository sequences;
 
@@ -33,6 +34,12 @@ public class SalesDepthNumberGenerator {
     @Transactional(propagation = Propagation.REQUIRED)
     public String nextStanding(Long companyId) {
         return format("STD", allocate(companyId, KIND_STANDING));
+    }
+
+    /** Allocates the next POS session number: {@code POS-0001}. */
+    @Transactional(propagation = Propagation.REQUIRED)
+    public String nextPosSession(Long companyId) {
+        return format("POS", allocate(companyId, KIND_POS_SESSION));
     }
 
     private long allocate(Long companyId, String kind) {
