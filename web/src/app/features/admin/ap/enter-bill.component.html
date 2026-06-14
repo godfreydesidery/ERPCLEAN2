@@ -94,7 +94,7 @@
               <tbody>
                 @for (line of result.lineResults; track line.billLineUid; let lineIdx = $index) {
                   <tr [class]="isHeld(line) ? 'table-danger' : line.matchStatus === 'MATCHED' ? 'table-success' : ''">
-                    <td class="small text-muted">{{ lineIdx + 1 }}</td>
+                    <td class="small text-center">{{ lineIdx + 1 }}</td>
                     <td>
                       <span class="badge" [class]="matchLineBadgeClass(line)">
                         {{ line.matchStatus }}

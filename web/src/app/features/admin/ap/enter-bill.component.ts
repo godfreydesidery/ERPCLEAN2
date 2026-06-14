@@ -159,7 +159,7 @@ export class EnterBillComponent {
         this.poOptions.set(
           rows.map((po) => ({
             uid: po.uid,
-            label: po.orderNumber ?? po.uid,
+            label: po.orderNumber ?? '(draft PO)',
             hint: po.supplierName,
           })),
         );
