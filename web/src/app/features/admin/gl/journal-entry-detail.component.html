@@ -56,7 +56,11 @@
               }
               @if (e.reversalOfId) {
                 <dt class="col-sm-2 text-muted">Reversal of</dt>
-                <dd class="col-sm-4 font-monospace text-warning">{{ e.reversalOfId }}</dd>
+                <dd class="col-sm-4">
+                  <span class="badge text-bg-warning">
+                    <i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i>Reversal entry
+                  </span>
+                </dd>
               }
             </dl>
 

@@ -88,8 +88,14 @@
                   <tr>
                     <td class="font-monospace small">{{ row.transferNumber }}</td>
                     <td>{{ row.transferDate }}</td>
-                    <td class="small text-muted font-monospace">{{ row.sourceAccountUid }}</td>
-                    <td class="small text-muted font-monospace">{{ row.destinationAccountUid }}</td>
+                    <td class="small">
+                      <a [routerLink]="['/admin/cash/accounts/uid', row.sourceAccountUid]"
+                         class="text-decoration-none">{{ accountName(row.sourceAccountUid) }}</a>
+                    </td>
+                    <td class="small">
+                      <a [routerLink]="['/admin/cash/accounts/uid', row.destinationAccountUid]"
+                         class="text-decoration-none">{{ accountName(row.destinationAccountUid) }}</a>
+                    </td>
                     <td class="text-end font-monospace">{{ row.currency }} {{ fmtMoney(row.amount) }}</td>
                     <td class="small">{{ row.reference ?? '—' }}</td>
                     <td class="text-end">

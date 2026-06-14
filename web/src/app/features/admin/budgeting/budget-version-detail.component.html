@@ -3,9 +3,9 @@
     <h1 class="h4 mb-1">Budget Version Detail</h1>
     @if (version(); as v) {
       <p class="text-muted mb-0 small">
-        Budget UID: {{ v.budgetUid }}
-        &mdash;
-        <a [routerLink]="['/admin/budgets/uid', v.budgetUid]">Back to budget</a>
+        <a [routerLink]="['/admin/budgets/uid', v.budgetUid]">
+          <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to budget
+        </a>
       </p>
     }
   </header>

@@ -34,9 +34,19 @@
           <dt class="col-sm-3">Amount</dt>
           <dd class="col-sm-9 font-monospace">{{ t.currency }} {{ fmtMoney(t.amount) }}</dd>
           <dt class="col-sm-3">From Account</dt>
-          <dd class="col-sm-9 font-monospace text-break">{{ t.sourceAccountUid }}</dd>
+          <dd class="col-sm-9">
+            <a [routerLink]="['/admin/cash/accounts/uid', t.sourceAccountUid]"
+               class="text-decoration-none">
+              {{ accountName(t.sourceAccountUid) }}
+            </a>
+          </dd>
           <dt class="col-sm-3">To Account</dt>
-          <dd class="col-sm-9 font-monospace text-break">{{ t.destinationAccountUid }}</dd>
+          <dd class="col-sm-9">
+            <a [routerLink]="['/admin/cash/accounts/uid', t.destinationAccountUid]"
+               class="text-decoration-none">
+              {{ accountName(t.destinationAccountUid) }}
+            </a>
+          </dd>
           @if (t.reference) {
             <dt class="col-sm-3">Reference</dt><dd class="col-sm-9">{{ t.reference }}</dd>
           }

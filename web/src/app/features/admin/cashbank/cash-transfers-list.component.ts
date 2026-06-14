@@ -6,7 +6,7 @@ import { SessionStore } from '../../../core/auth/session.store';
 import { Company } from '../models/company.model';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
-import { CashTransferDto } from './models/cashbank.model';
+import { CashBankAccountDto, CashTransferDto } from './models/cashbank.model';
 import { CashbankService } from './cashbank.service';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 import { PageMeta } from '../../../core/api/api-response.model';
@@ -48,6 +48,9 @@ export class CashTransfersListComponent {
   readonly meta = signal<PageMeta>({ page: 0, size: DEFAULT_SIZE, totalElements: 0, totalPages: 0, hasNext: false });
   readonly state = signal<'loading' | 'idle' | 'error' | 'forbidden'>('idle');
   readonly currentPage = signal(0);
+
+  // ── Account name lookup (uid → account) ──────────────────────────────────
+  private readonly accountsByUid = signal<Map<string, CashBankAccountDto>>(new Map());
 
   // ── Permissions ────────────────────────────────────────────────────────────
   readonly canView = computed(() => this.session.hasPermission('CASH.VIEW'));
@@ -91,6 +94,7 @@ export class CashTransfersListComponent {
             if (list.length > 0) {
               this.selectedCompanyId.set(list[0].id);
               this.load(0);
+              this.loadAccountMap(list[0].id);
             }
           },
           error: () => this.companyState.set('error'),
@@ -100,9 +104,23 @@ export class CashTransfersListComponent {
     });
   }
 
+  private loadAccountMap(companyId: string): void {
+    this.cashbankService.listAllAccounts(companyId).subscribe({
+      next: (accounts) => {
+        const m = new Map<string, CashBankAccountDto>();
+        accounts.forEach((a) => m.set(a.uid, a));
+        this.accountsByUid.set(m);
+      },
+      error: () => {},
+    });
+  }
+
   onCompanyChange(id: string): void {
     this.selectedCompanyId.set(id);
-    if (id) this.load(0);
+    if (id) {
+      this.load(0);
+      this.loadAccountMap(id);
+    }
   }
 
   load(page: number): void {
@@ -114,6 +132,12 @@ export class CashTransfersListComponent {
   goToPage(page: number): void { this.load(page); }
 
   // ── Display helpers ────────────────────────────────────────────────────────
+
+  accountName(uid: string | null | undefined): string {
+    if (!uid) return '—';
+    const acc = this.accountsByUid().get(uid);
+    return acc ? `${acc.code} — ${acc.name}` : uid;
+  }
 
   fmtMoney(v: number | string | null | undefined): string {
     const n = +(v ?? 0);

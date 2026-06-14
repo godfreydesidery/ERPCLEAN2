@@ -64,6 +64,9 @@ export class SupplierBillsListComponent {
   // ── Filters ────────────────────────────────────────────────────────────────
   readonly statusFilter = signal('');
 
+  // ── Supplier lookup map (id → "code — displayName") ──────────────────────
+  readonly supplierMap = signal<Map<string, string>>(new Map());
+
   // ── Supplier picker (filter) ───────────────────────────────────────────────
   readonly supplierFilterQ = signal('');
   readonly supplierFilterResults = signal<SupplierModel[]>([]);
@@ -151,6 +154,7 @@ export class SupplierBillsListComponent {
             if (list.length > 0) {
               this.selectedCompanyId.set(list[0].id);
               this.load(0);
+              this.loadSupplierMap(list[0].id);
             }
           },
           error: () => this.companyState.set('error'),
@@ -160,10 +164,24 @@ export class SupplierBillsListComponent {
     });
   }
 
+  private loadSupplierMap(companyId: string): void {
+    this.supplierService.list(companyId, undefined, 0, 200).subscribe({
+      next: ({ rows }) => {
+        const m = new Map<string, string>();
+        rows.forEach((s) => m.set(String(s.id), `${s.code} — ${s.displayName}`));
+        this.supplierMap.set(m);
+      },
+      error: () => {},
+    });
+  }
+
   onCompanyChange(id: string): void {
     this.selectedCompanyId.set(id);
     this.clearSupplierFilter();
-    if (id) this.load(0);
+    if (id) {
+      this.load(0);
+      this.loadSupplierMap(id);
+    }
   }
 
   onStatusChange(status: string): void {
@@ -289,6 +307,10 @@ export class SupplierBillsListComponent {
       case 'PAID':          return 'text-bg-success';
       default:              return 'text-bg-light border';
     }
+  }
+
+  supplierDisplay(supplierId: string): string {
+    return this.supplierMap().get(String(supplierId)) ?? String(supplierId);
   }
 
   canPayBill(bill: SupplierBillDto): boolean {

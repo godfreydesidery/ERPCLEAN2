@@ -58,6 +58,9 @@ export class ArInvoicesListComponent {
   // ── Filters ────────────────────────────────────────────────────────────────
   readonly statusFilter = signal('');
 
+  // ── Customer lookup map (id → "code — displayName") ─────────────────────
+  readonly customerMap = signal<Map<string, string>>(new Map());
+
   // ── Customer picker (filter) ───────────────────────────────────────────────
   readonly customerFilterQ = signal('');
   readonly customerFilterResults = signal<CustomerModel[]>([]);
@@ -154,6 +157,7 @@ export class ArInvoicesListComponent {
             if (list.length > 0) {
               this.selectedCompanyId.set(list[0].id);
               this.load(0);
+              this.loadCustomerMap(list[0].id);
             }
           },
           error: () => this.companyState.set('error'),
@@ -163,10 +167,24 @@ export class ArInvoicesListComponent {
     });
   }
 
+  private loadCustomerMap(companyId: string): void {
+    this.customerService.list(companyId, undefined, 0, 200).subscribe({
+      next: ({ rows }) => {
+        const m = new Map<string, string>();
+        rows.forEach((c) => m.set(String(c.id), `${c.code} — ${c.displayName}`));
+        this.customerMap.set(m);
+      },
+      error: () => {},
+    });
+  }
+
   onCompanyChange(id: string): void {
     this.selectedCompanyId.set(id);
     this.clearCustomerFilter();
-    if (id) this.load(0);
+    if (id) {
+      this.load(0);
+      this.loadCustomerMap(id);
+    }
   }
 
   onStatusChange(status: string): void {
@@ -329,6 +347,10 @@ export class ArInvoicesListComponent {
   }
 
   // ── Display helpers ────────────────────────────────────────────────────────
+
+  customerDisplay(customerId: string): string {
+    return this.customerMap().get(String(customerId)) ?? String(customerId);
+  }
 
   statusBadgeClass(status: ArInvoiceStatus): string {
     switch (status) {
