@@ -148,6 +148,14 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     @Transactional(readOnly = true)
+    public ProductDto getById(Long id) {
+        return products.findById(id)
+                .map(ProductDto::from)
+                .orElseThrow(() -> new NotFoundException("Product not found: " + id));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Page<ProductDto> list(Long companyId, String q, Pageable pageable) {
         // Security fix (finding 1): guard before querying
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);

@@ -100,6 +100,7 @@
                       [options]="productOptions()"
                       placeholder="Select product"
                       [required]="true"
+                      [name]="'product_' + i"
                       [attr.aria-label]="'Product for line ' + (i + 1)"
                       [disabled]="saving()" />
                   </td>
@@ -110,11 +111,14 @@
                       [options]="unitOptions()"
                       placeholder="Select unit"
                       [required]="true"
+                      [name]="'unit_' + i"
                       [attr.aria-label]="'Unit for line ' + (i + 1)"
                       [disabled]="saving()" />
                   </td>
                   <td>
                     <input type="number" class="form-control form-control-sm"
+                           [id]="'reqQty_' + i"
+                           [name]="'reqQty_' + i"
                            [ngModel]="line.requestedQty"
                            (ngModelChange)="updateLine(i, { requestedQty: $event != null ? ('' + $event) : '' })"
                            min="0.001" step="any"
@@ -123,6 +127,8 @@
                   </td>
                   <td>
                     <input type="number" class="form-control form-control-sm"
+                           [id]="'reqCost_' + i"
+                           [name]="'reqCost_' + i"
                            [ngModel]="line.estimatedUnitCost"
                            (ngModelChange)="updateLine(i, { estimatedUnitCost: $event != null ? ('' + $event) : '' })"
                            min="0" step="any"
@@ -131,6 +137,8 @@
                   </td>
                   <td>
                     <input type="text" class="form-control form-control-sm"
+                           [id]="'reqNote_' + i"
+                           [name]="'reqNote_' + i"
                            [ngModel]="line.note"
                            (ngModelChange)="updateLine(i, { note: $event })"
                            [attr.aria-label]="'Note for line ' + (i + 1)"

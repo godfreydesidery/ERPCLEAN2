@@ -25,6 +25,8 @@ export interface PosTillDto {
 export interface PosSessionDto {
   id: string;
   uid: string;
+  /** Human-readable session number, e.g. POS-0001 (added in backend v2). */
+  sessionNumber: string | null;
   companyId: string;
   branchId: string;
   posTillId: string;

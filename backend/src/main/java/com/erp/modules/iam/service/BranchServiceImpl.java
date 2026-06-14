@@ -9,6 +9,7 @@ import com.erp.modules.iam.domain.entity.UserBranch;
 import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.repository.UserBranchRepository;
+import com.erp.modules.stock.service.StockLocationSeeder;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.repository.Lookups;
@@ -21,15 +22,18 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class BranchServiceImpl implements BranchService {
 
-    private final BranchRepository branches;
-    private final CompanyRepository companies;
-    private final UserBranchRepository userBranches;
+    private final BranchRepository      branches;
+    private final CompanyRepository     companies;
+    private final UserBranchRepository  userBranches;
+    private final StockLocationSeeder   stockLocationSeeder;
 
     public BranchServiceImpl(BranchRepository branches, CompanyRepository companies,
-                             UserBranchRepository userBranches) {
-        this.branches = branches;
-        this.companies = companies;
-        this.userBranches = userBranches;
+                             UserBranchRepository userBranches,
+                             StockLocationSeeder stockLocationSeeder) {
+        this.branches            = branches;
+        this.companies           = companies;
+        this.userBranches        = userBranches;
+        this.stockLocationSeeder = stockLocationSeeder;
     }
 
     @Override
@@ -47,6 +51,10 @@ public class BranchServiceImpl implements BranchService {
                         ? request.timeZone()
                         : company.getTimeZone());
         Branch saved = branches.save(branch);
+
+        // Seed WAREHOUSE default + in-transit OTHER locations for every new branch (ADR-0028 D-4/D-5).
+        // V37 only backfills branches existing at migration time; this covers post-migration branches.
+        stockLocationSeeder.seedDefaults(company.getId(), saved.getId(), saved.getCode());
 
         if (request.makeDefault()) {
             applyDefault(saved);

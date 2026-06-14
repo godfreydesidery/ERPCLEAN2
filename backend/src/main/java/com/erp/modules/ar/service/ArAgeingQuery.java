@@ -54,14 +54,20 @@ public class ArAgeingQuery {
         this.scopeGuard  = scopeGuard;
     }
 
-    /** Ageing breakdown for a customer as at a given date. */
+    /**
+     * Ageing breakdown for a customer (or company-wide when {@code customerId} is null) as at a
+     * given date.  Passing {@code customerId=null} returns the aggregate across all customers for
+     * the company — used by the AR Ageing screen when no specific customer is selected (bug #5 fix).
+     */
     public List<ArAgeingRowDto> ageing(Long companyId, Long customerId, LocalDate asAt) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
         String currency = companies.findById(companyId)
                 .map(c -> c.getBaseCurrency())
                 .orElseThrow(() -> NotFoundException.of("Company", String.valueOf(companyId)));
 
-        List<ArInvoice> openItems = invoices.findOpenForStatement(companyId, customerId);
+        List<ArInvoice> openItems = (customerId != null)
+                ? invoices.findOpenForStatement(companyId, customerId)
+                : invoices.findOpenForCompany(companyId);
 
         Map<AgeingBucket, BigDecimal> buckets = new EnumMap<>(AgeingBucket.class);
         for (AgeingBucket b : AgeingBucket.values()) buckets.put(b, BigDecimal.ZERO);

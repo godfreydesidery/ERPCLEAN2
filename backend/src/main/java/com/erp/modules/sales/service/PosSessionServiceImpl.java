@@ -52,6 +52,7 @@ public class PosSessionServiceImpl implements PosSessionService {
     private final CompanyRepository          companies;
     private final ScopeGuard                 scopeGuard;
     private final AuditService               audit;
+    private final SalesDepthNumberGenerator  numberGen;
 
     public PosSessionServiceImpl(PosSessionRepository sessions,
                                   PosTillRepository tills,
@@ -61,7 +62,8 @@ public class PosSessionServiceImpl implements PosSessionService {
                                   GLConfigResolver glConfig,
                                   CompanyRepository companies,
                                   ScopeGuard scopeGuard,
-                                  AuditService audit) {
+                                  AuditService audit,
+                                  SalesDepthNumberGenerator numberGen) {
         this.sessions   = sessions;
         this.tills      = tills;
         this.payouts    = payouts;
@@ -71,6 +73,7 @@ public class PosSessionServiceImpl implements PosSessionService {
         this.companies  = companies;
         this.scopeGuard = scopeGuard;
         this.audit      = audit;
+        this.numberGen  = numberGen;
     }
 
     @Override
@@ -85,7 +88,8 @@ public class PosSessionServiceImpl implements PosSessionService {
         }
 
         var session = new PosSession(till.getCompanyId(), till.getBranchId(), till.getId(),
-                actorId(), req.openingFloatAmount(), actorId());
+                actorId(), numberGen.nextPosSession(till.getCompanyId()),
+                req.openingFloatAmount(), actorId());
         session = sessions.save(session);
 
         audit.record(AuditEvent.of(AuditActions.POS_SESSION_OPEN, "pos_sessions",
@@ -256,7 +260,7 @@ public class PosSessionServiceImpl implements PosSessionService {
         }
         var draft = new JournalEntryDraft(
                 session.getCompanyId(), session.getBranchId(), postingDate,
-                "POS session variance " + session.getUid(),
+                "POS session variance " + session.getSessionNumber(),
                 JournalSourceType.POS_VARIANCE, session.getUid(),
                 null, actorId(), List.of(debitLine, creditLine));
         return glInvoker.postInNewTx(draft);
@@ -287,7 +291,7 @@ public class PosSessionServiceImpl implements PosSessionService {
 
     private PosSessionDto toDto(PosSession s) {
         return new PosSessionDto(s.getId(), s.getUid(), s.getCompanyId(), s.getBranchId(),
-                s.getPosTillId(), s.getCashierId(), s.getStatus(),
+                s.getPosTillId(), s.getCashierId(), s.getSessionNumber(), s.getStatus(),
                 s.getOpenedAt() == null ? null : s.getOpenedAt().toString(),
                 s.getClosedAt() == null ? null : s.getClosedAt().toString(),
                 s.getReconciledAt() == null ? null : s.getReconciledAt().toString(),

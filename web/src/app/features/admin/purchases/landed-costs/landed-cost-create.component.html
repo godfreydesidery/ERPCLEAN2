@@ -116,6 +116,7 @@
                     <td>
                       <select class="form-select form-select-sm"
                               [id]="'chargeType-' + i"
+                              [name]="'chargeType-' + i"
                               [attr.aria-label]="'Charge type for line ' + (i + 1)"
                               [ngModel]="charge.chargeType"
                               (ngModelChange)="updateChargeType(i, $event)"
@@ -129,6 +130,7 @@
                       <input type="number" class="form-control form-control-sm text-end"
                              style="max-width:140px"
                              [id]="'chargeAmt-' + i"
+                             [name]="'chargeAmt-' + i"
                              [attr.aria-label]="'Amount for charge ' + (i + 1)"
                              [ngModel]="charge.amount"
                              (ngModelChange)="updateChargeAmount(i, $event)"

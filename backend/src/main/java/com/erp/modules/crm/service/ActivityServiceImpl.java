@@ -95,9 +95,12 @@ public class ActivityServiceImpl implements ActivityService {
             activity.setAssigneeUserId(req.assigneeUserId());
         }
 
-        Activity saved = activities.save(activity);
+        // Generate the number BEFORE save — the autoflush triggered by the sequence query
+        // would attempt to INSERT with activity_number NULL (NOT NULL constraint) if reversed.
+        // Same ordering fix as OpportunityServiceImpl (Finding #20a).
         String number = numberGen.nextActivity(companyId);
-        saved.setActivityNumber(number);
+        activity.setActivityNumber(number);
+        Activity saved = activities.save(activity);
 
         audit.record(AuditEvent.of(AuditActions.CRM_ACTIVITY_CREATE, "activities",
                 saved.getId(), saved.getUid())

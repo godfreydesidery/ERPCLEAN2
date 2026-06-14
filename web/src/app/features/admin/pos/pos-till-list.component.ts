@@ -197,6 +197,10 @@ export class PosTillListComponent {
 
   // ── Display helpers ────────────────────────────────────────────────────────
 
+  branchName(branchId: string): string {
+    return this.branches().find((b) => b.id === branchId)?.name ?? branchId;
+  }
+
   statusBadgeClass(status: string): string {
     switch (status) {
       case 'ACTIVE': return 'text-bg-success';

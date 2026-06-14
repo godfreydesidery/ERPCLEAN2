@@ -48,12 +48,14 @@ public class ArStatementController {
 
     /**
      * Ageing breakdown by bucket (CURRENT / 1-30 / 31-60 / 61-90 / 90+) as at a given date.
+     * When {@code customerId} is omitted the report covers ALL customers for the company
+     * (company-wide ageing — required by the AR Ageing screen, bug #5 fix).
      */
     @GetMapping("/ageing")
     @PreAuthorize("@perm.has('AR.STATEMENT.VIEW')")
     public List<ArAgeingRowDto> ageing(
             @RequestParam Long companyId,
-            @RequestParam Long customerId,
+            @RequestParam(required = false) Long customerId,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asAt) {
         return ageingQuery.ageing(companyId, customerId,

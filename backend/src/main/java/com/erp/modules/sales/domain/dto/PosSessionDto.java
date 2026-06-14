@@ -13,6 +13,7 @@ public record PosSessionDto(
         Long branchId,
         Long posTillId,
         Long cashierId,
+        String sessionNumber,
         PosSessionStatus status,
         String openedAt,
         String closedAt,

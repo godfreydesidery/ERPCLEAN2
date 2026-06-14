@@ -80,7 +80,7 @@
             <table class="table table-sm align-middle mb-0" aria-label="3-way match line results">
               <thead class="table-light">
                 <tr>
-                  <th scope="col">Line UID</th>
+                  <th scope="col">#</th>
                   <th scope="col">Status</th>
                   <th scope="col" class="text-end">PO Cost</th>
                   <th scope="col" class="text-end">Price Var.</th>
@@ -92,9 +92,9 @@
                 </tr>
               </thead>
               <tbody>
-                @for (line of result.lineResults; track line.billLineUid) {
+                @for (line of result.lineResults; track line.billLineUid; let lineIdx = $index) {
                   <tr [class]="isHeld(line) ? 'table-danger' : line.matchStatus === 'MATCHED' ? 'table-success' : ''">
-                    <td class="font-monospace small">{{ line.billLineUid }}</td>
+                    <td class="small text-muted">{{ lineIdx + 1 }}</td>
                     <td>
                       <span class="badge" [class]="matchLineBadgeClass(line)">
                         {{ line.matchStatus }}
@@ -120,7 +120,7 @@
                         <button type="button" class="btn btn-sm btn-outline-warning"
                                 [disabled]="acceptingLine() === line.billLineUid"
                                 (click)="acceptVariance(line.billLineUid)"
-                                title="Accept this variance and release the line">
+                                [attr.title]="'Accept variance for line ' + (lineIdx + 1)">
                           @if (acceptingLine() === line.billLineUid) {
                             <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
                           } @else {

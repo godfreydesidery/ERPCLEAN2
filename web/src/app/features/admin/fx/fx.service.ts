@@ -45,8 +45,11 @@ export class FxService {
 
   /**
    * List rates for a company, paginated (newest-first).
-   * Endpoint returns Spring Page<T> wrapped in ApiResponse → SKIP_UNWRAP required.
-   * CURRENCY.VIEW.
+   * CurrencyController.listRates returns a raw Spring Page<CurrencyRateDto> (not the
+   * ApiResponse.ok(page.getContent(), PageMeta.from(page)) pattern used by other controllers).
+   * ApiResponseAdvice wraps the Page object itself as `data`, so data is a Spring Page JSON object
+   * with `content`, `totalElements`, `number`, `size`, `totalPages` — NOT a plain array.
+   * We extract content + derive PageMeta from the Page fields. CURRENCY.VIEW.
    */
   listRates(companyId: string, page = 0, size = 50): Observable<CurrencyRatePage> {
     const params = new HttpParams()
@@ -54,19 +57,28 @@ export class FxService {
       .set('page', String(page))
       .set('size', String(size));
     const context = new HttpContext().set(SKIP_UNWRAP, true);
+    // data is the Spring Page object: { content: T[], totalElements, number, size, totalPages }
     return this.http
-      .get<ApiResponse<CurrencyRateDto[]>>(`${this.base}/rates`, { params, context })
+      .get<ApiResponse<{ content?: CurrencyRateDto[]; totalElements?: number; number?: number; size?: number; totalPages?: number }>>(`${this.base}/rates`, { params, context })
       .pipe(
-        map((env) => ({
-          rows: env.data ?? [],
-          meta: env.meta ?? ({
-            page,
-            size,
-            totalElements: env.data?.length ?? 0,
-            totalPages: 1,
-            hasNext: false,
-          } satisfies PageMeta),
-        })),
+        map((env) => {
+          const springPage = env.data;
+          const rows: CurrencyRateDto[] = springPage?.content ?? [];
+          const totalElements = springPage?.totalElements ?? rows.length;
+          const totalPages = springPage?.totalPages ?? 1;
+          const pageNum = springPage?.number ?? page;
+          const pageSize = springPage?.size ?? size;
+          return {
+            rows,
+            meta: {
+              page: pageNum,
+              size: pageSize,
+              totalElements,
+              totalPages,
+              hasNext: pageNum < totalPages - 1,
+            } satisfies PageMeta,
+          };
+        }),
       );
   }
 

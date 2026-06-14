@@ -124,13 +124,17 @@ public class StockCountServiceImpl implements StockCountService {
         short lineNo = 0;
         for (StockOnHand soh : onHandRows) {
             lineNo++;
-            // Denormalise product code/name on the line for immutability (ADR-0028 D-6)
+            // Denormalise product code/name on the line for immutability (ADR-0028 D-6).
+            // Use getById(Long) — passing the numeric id to getByUid caused NotFoundException
+            // inside a nested @Transactional(readOnly=true), marking the outer TX rollback-only
+            // (UnexpectedRollbackException). getById does a plain findById — no scope check,
+            // no exception on miss — so it never poisons the outer transaction.
             String code = String.valueOf(soh.getProductId());
             String name = code;
             try {
-                var p = productService.getByUid(String.valueOf(soh.getProductId()));
+                var p = productService.getById(soh.getProductId());
                 if (p != null) { code = p.code(); name = p.name(); }
-            } catch (Exception ignored) { /* product uid lookup by id fails: keep defaults */ }
+            } catch (Exception ignored) { /* product not found: keep numeric defaults */ }
 
             StockCountLine line = new StockCountLine(
                     count.getId(), principal.companyId(), loc.getBranchId(), lineNo,

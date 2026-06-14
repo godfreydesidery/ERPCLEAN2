@@ -304,16 +304,16 @@
                     <td class="small text-muted">{{ p.baseUnitCode }}</td>
                     <td>
                       @if (p.sellable) {
-                        <i class="bi bi-check-circle-fill text-success" aria-label="Yes"></i>
+                        <span role="img" aria-label="Yes"><i class="bi bi-check-circle-fill text-success" aria-hidden="true"></i></span>
                       } @else {
-                        <i class="bi bi-dash-circle text-muted" aria-label="No"></i>
+                        <span role="img" aria-label="No"><i class="bi bi-dash-circle text-muted" aria-hidden="true"></i></span>
                       }
                     </td>
                     <td>
                       @if (p.stockable) {
-                        <i class="bi bi-check-circle-fill text-success" aria-label="Yes"></i>
+                        <span role="img" aria-label="Yes"><i class="bi bi-check-circle-fill text-success" aria-hidden="true"></i></span>
                       } @else {
-                        <i class="bi bi-dash-circle text-muted" aria-label="No"></i>
+                        <span role="img" aria-label="No"><i class="bi bi-dash-circle text-muted" aria-hidden="true"></i></span>
                       }
                     </td>
                     <td>
