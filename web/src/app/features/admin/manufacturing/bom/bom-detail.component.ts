@@ -379,6 +379,16 @@ export class BomDetailComponent {
 
   // ── Display helpers ───────────────────────────────────────────────────────
 
+  /**
+   * Resolve a product uid to its human-readable label (name + code hint).
+   * Falls back to a short truncation if the product is not yet loaded.
+   */
+  productLabel(uid: string): string {
+    const opt = this.productOptions().find((o) => o.uid === uid);
+    if (opt) return opt.hint ? `${opt.label} (${opt.hint})` : opt.label;
+    return uid ? uid.slice(0, 8) + '…' : '—';
+  }
+
   statusBadgeClass(status: string): string {
     switch (status) {
       case 'DRAFT':

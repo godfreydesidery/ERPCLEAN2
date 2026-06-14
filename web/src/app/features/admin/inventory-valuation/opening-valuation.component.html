@@ -94,7 +94,7 @@
           @if (lastResult(); as r) {
             <div class="alert alert-success d-flex align-items-center gap-2 mb-3" role="status">
               <i class="bi bi-check-circle-fill fs-5" aria-hidden="true"></i>
-              Opening valuation posted — GL entry <strong>{{ r.glEntryUid }}</strong>.
+              Opening valuation posted — GL journal entry recorded.
               Value: <span class="font-monospace">{{ fmtMoney(r.openingValue) }} {{ r.currency }}</span>
               (cost <span class="font-monospace">{{ fmtMoney(r.openingCost) }}</span>
               × qty <span class="font-monospace">{{ fmtMoney(r.quantity) }}</span>).

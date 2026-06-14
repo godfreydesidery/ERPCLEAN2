@@ -24,11 +24,11 @@
           <div class="d-flex align-items-center gap-3 flex-wrap">
             <div>
               <h1 class="h4 mb-1">
-                BOM — {{ b.parentProductUid }}
+                BOM — {{ productLabel(b.parentProductUid) }}
                 <span class="badge ms-2" [class]="statusBadgeClass(b.status)">{{ b.status }}</span>
               </h1>
               <p class="text-muted mb-0 small">
-                Version {{ b.versionNo }} &nbsp;·&nbsp; UID: <code>{{ b.uid }}</code>
+                Version {{ b.versionNo }}
                 @if (b.effectiveFrom) {
                   &nbsp;·&nbsp; Effective: {{ b.effectiveFrom }}
                 }
@@ -109,7 +109,7 @@
                 <label class="form-label small text-muted mb-1">Parent Product</label>
                 <p class="form-control-plaintext small pt-0">
                   <a [routerLink]="['/admin/products/uid', b.parentProductUid]">
-                    {{ b.parentProductUid }}
+                    {{ productLabel(b.parentProductUid) }}
                   </a>
                 </p>
               </div>
