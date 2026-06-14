@@ -86,6 +86,21 @@ public class StockPostingServiceImpl implements StockPostingService {
                        Long costCentreValueId, Long departmentValueId,
                        Long projectId, Long projectTaskId) {
 
+        // FOLLOW-003: idempotency backstop — if a movement already exists for this
+        // (source_event_uid, product_id) pair the outbox event was already applied.
+        // Skip the insert AND the on-hand delta so the redelivered event is a no-op.
+        // This prevents hitting the unique constraint uq_stock_movement_source_event on redelivery.
+        // Only guard when sourceEventUid is non-null (manual ops have no event uid).
+        if (sourceEventUid != null
+                && movements.existsBySourceEventUidAndProductId(sourceEventUid, productId)) {
+            // Return the uid of the existing movement (caller may log it but doesn't need to re-process).
+            return movements.findBySourceEventUid(sourceEventUid).stream()
+                    .filter(m -> productId.equals(m.getProductId()))
+                    .map(StockMovement::getUid)
+                    .findFirst()
+                    .orElse(null);
+        }
+
         // ADR-0028 D-3: legacy callers pass null; resolve the branch default transparently.
         if (locationId == null) {
             locationId = locationResolver.defaultLocationId(companyId, branchId);

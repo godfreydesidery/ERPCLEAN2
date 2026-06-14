@@ -263,7 +263,9 @@ public class StockCountServiceImpl implements StockCountService {
                     companyId, branchId, locationId, line.getProductId())
                     .orElse(sohOpt.orElse(null));
             if (freshSoh != null) {
-                valuation.revalueAdjustment(movementUid, freshSoh, varianceQty, postingDate, null, null);
+                // FOLLOW-001: pass productCode + reasonCode so per-line GL memo avoids raw ULID.
+                valuation.revalueAdjustment(movementUid, freshSoh, varianceQty, postingDate,
+                        null, null, line.getProductCode(), reasonCode);
             }
 
             netVarianceValue = netVarianceValue.add(varianceSignedVal);
@@ -279,10 +281,14 @@ public class StockCountServiceImpl implements StockCountService {
             boolean    netDecrease = netVarianceValue.compareTo(BigDecimal.ZERO) < 0;
             BigDecimal absNet      = netVarianceValue.abs();
             // This may throw on missing GL config — intentional (BR-INV-12)
+            // FOLLOW-001: use countNumber as sourceRef-label and as memo descriptor; pass
+            //             reasonCode "COUNT_CORRECTION" so memo never embeds a raw ULID.
             var glResult = glPoster.postAdjustmentDirect(
                     companyId, branchId, postingDate,
                     new InventoryGlPoster.AdjustmentPostCmd(
-                            count.getUid(), BASE_CURRENCY, absNet, netDecrease, principal.userId()));
+                            count.getUid(), BASE_CURRENCY, absNet, netDecrease, principal.userId(),
+                            null, null,
+                            count.getCountNumber(), "COUNT_CORRECTION"));
             if (glResult != null) glEntryUid = glResult.uid();
         }
 

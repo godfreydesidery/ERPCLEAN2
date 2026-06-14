@@ -105,7 +105,7 @@ public class DeliveryReturnStockHandler implements DomainEventHandler {
                         : LocalDate.now();
                 String glEntryUid = glPoster.postSaleReversalInNewTx(
                         event.getCompanyId(), event.getBranchId(), postingDate,
-                        payload.returnUid(), "TZS", totalOriginalValue);
+                        payload.returnUid(), payload.returnNumber(), "TZS", totalOriginalValue);
                 if (glEntryUid == null) {
                     log.warn("DeliveryReturnStockHandler: COGS-reversal GL post returned null " +
                                      "for return uid={} — GL not configured (qty still reversed)",

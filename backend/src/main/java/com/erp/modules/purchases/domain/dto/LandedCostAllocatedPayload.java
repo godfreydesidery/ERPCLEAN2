@@ -15,8 +15,16 @@ public record LandedCostAllocatedPayload(
         Long branchId,
         BigDecimal totalAmount,
         String currency,
-        List<AllocationLine> lines
+        List<AllocationLine> lines,
+        /** Human-readable landed cost number (e.g. LC-0001) — used in GL journal memos (FOLLOW-001). */
+        String landedCostNumber
 ) {
+    /** Back-compat: pre-FOLLOW-001 callers that do not supply landedCostNumber. */
+    public LandedCostAllocatedPayload(String landedCostUid, Long companyId, Long branchId,
+                                      BigDecimal totalAmount, String currency,
+                                      List<AllocationLine> lines) {
+        this(landedCostUid, companyId, branchId, totalAmount, currency, lines, null);
+    }
 
     public record AllocationLine(
             Long goodsReceiptLineId,

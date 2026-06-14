@@ -58,4 +58,15 @@ public interface StockMovementRepository extends JpaRepository<StockMovement, Lo
      * (source_event_uid, product_id) idempotency backstop query.
      */
     List<StockMovement> findBySourceEventUid(String sourceEventUid);
+
+    /**
+     * Idempotency backstop check (FOLLOW-003): returns true when a movement already exists for
+     * the given (source_event_uid, product_id) pair. Used by StockPostingServiceImpl before
+     * inserting a new movement, so that redelivered events skip double-application instead of
+     * hitting the unique constraint {@code uq_stock_movement_source_event}.
+     *
+     * <p>The source_event_uid may be null for manual adjustments; null never matches here
+     * (Spring Data does not generate an {@code IS NULL} predicate with a non-null parameter).
+     */
+    boolean existsBySourceEventUidAndProductId(String sourceEventUid, Long productId);
 }

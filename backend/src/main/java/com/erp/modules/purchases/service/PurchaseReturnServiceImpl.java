@@ -236,7 +236,8 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         // below reduces the payable regardless.
         PurchaseReturnedPayload payload = new PurchaseReturnedPayload(
                 ret.getUid(), ret.getCompanyId(), ret.getBranchId(),
-                totalReturnValue, DEFAULT_CURRENCY, false, payloadLines);
+                totalReturnValue, DEFAULT_CURRENCY, false, payloadLines,
+                ret.getReturnNumber());
         outbox.publish(DomainEventType.PURCHASE_RETURNED,
                 DomainEventType.AGG_PURCHASE_RETURN,
                 ret.getId(), ret.getUid(),

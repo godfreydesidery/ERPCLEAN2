@@ -21,6 +21,8 @@ evidence. Real product defects only — Playwright spec flaws are fixed in the s
 | **Local Playwright (after fixes)** | 2026-06-14 | L2+L3 re-run | 384 | **380** | 4 | **2 P3** (+2 flake) |
 | **Backend mvn clean verify (after fixes)** | 2026-06-14 | unit + IT | 748 | **748** | 0 | 0 |
 | **Frontend ng test (after fixes)** | 2026-06-14 | vitest | 677 | **677** | 0 | 0 |
+| **Final (after P3 follow-ups)** | 2026-06-14 | Playwright workers=4 (storageState) | 385 | **385** | 0 | **0** |
+| **Final (after P3 follow-ups)** | 2026-06-14 | backend mvn clean verify | 748 | **748** | 0 | 0 |
 
 **Totals: 15 documented defects** (5×P1, 7×P2, 3×P3) + 1 test-flake. P1s block POS, requisition-create,
 CRM activity, supplier-quote, purchase-return. See entries below.
@@ -56,20 +58,21 @@ Fixed across branch `feat/e2e-playwright` (`f2684e2`) in 4 passes. **Verificatio
 | + pos.session 500 (cascade) | ✅ FIXED | generate `session_number` (new field + generator) |
 | + stock-transfer in-transit 409 (cascade) | ✅ FIXED | seed in-transit location per company/branch (`StockLocationSeeder`) |
 
-### Remaining (P3, deliberately deferred — non-blocking, documented for a focused follow-up)
-- **FOLLOW-001 (P3, C1) — GL journal memos embed source uids.** Auto-posted inventory/procurement journals
-  set descriptions like "Goods receipt `<uid>`" / "Stock adjustment — `<uid>`" (`InventoryGlPoster.java`
-  lines 98/358/372/379/141/196). Visible on `/admin/gl/journals`. Systemic: the GL posters are decoupled
-  and receive only the source uid, so showing the document NUMBER needs extra lookup plumbing — a bounded
-  cross-cutting change, scoped separately. Cosmetic (audit narration), no functional impact.
-- **FOLLOW-002 (P3, C1) — AP enter-bill PO option shows uid.** On `/admin/ap/supplier-bills/enter` a PO with
-  no number falls back to rendering its uid in the picker option label; show the PO number/a placeholder.
-- **FOLLOW-003 (P3) — outbox redelivery idempotency.** The stock-movement handler's idempotency guard
-  (`uq_stock_movement_source_event`) throws on event REDELIVERY instead of treating it as already-applied,
-  causing noisy dispatcher retries (stock stays correct — the guard prevents double-application).
-- **TEST-FLAKE (test-only) — login race under parallel workers.** A few specs intermittently time out on
-  login when workers hit `/login` concurrently. Not a product defect (121+ routes auth fine). Fix the
-  harness with a shared `storageState` global-setup (log in once, reuse) to make runs deterministic.
+### Follow-ups — ✅ ALL RESOLVED (2026-06-14, branch `feat/test-followups`)
+Confirmed by a clean final Playwright run: **385 pass / 0 fail** (C1 uid-visible: none · axe serious: none ·
+login-flake: none) + backend `mvn clean verify` **748 / 0 failures** + API re-seed green.
+- **FOLLOW-001 (P3, C1) — GL journal memos embed source uids.** ✅ FIXED. Added document-number fields to
+  all 8 outbox payloads (with backward-compat constructors for in-flight events), populated them in the 6
+  publishers, and threaded a `docNumber` through every `InventoryGlPoster` method — memos now read e.g.
+  "Goods receipt GRN-0001" (no ULID). The machine `sourceRef`/source-uid linkage is unchanged.
+- **FOLLOW-002 (P3, C1) — AP enter-bill PO option shows uid.** ✅ FIXED. Option label = `orderNumber ??
+  '(draft PO)'` (never the uid); also dropped the raw "Line UID" column from the 3-way-match table.
+- **FOLLOW-003 (P3) — outbox redelivery idempotency.** ✅ FIXED. The stock-movement posting now checks for
+  an existing movement by `source_event_uid` and treats a redelivery as an already-applied no-op success
+  (no exception, no double-apply) so the event marks dispatched.
+- **TEST-FLAKE (test-only) — login race.** ✅ FIXED. Added a Playwright `auth.setup.ts` + `storageState`
+  project dependency (one login, reused by all specs); routes-smoke/conventions no longer log in per test.
+  Result: 128/129-failing-under-workers=4 → **129/129 passing**, zero `/login` redirects.
 
 Environment: backend dev profile :8081 (bootstrapped `rootadmin`), Postgres :5434, `ng serve` :4200,
 seeded via `e2e/full-coverage-drive.js`. Evidence: `web/test-results/`, `web/pw-routes.json`,

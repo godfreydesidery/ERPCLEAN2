@@ -210,7 +210,8 @@ public class LandedCostServiceImpl implements LandedCostService {
         // Publish outbox event — stock handler will update avg_cost + post GL
         LandedCostAllocatedPayload payload = new LandedCostAllocatedPayload(
                 lc.getUid(), lc.getCompanyId(), lc.getBranchId(),
-                totalCharge, DEFAULT_CURRENCY, payloadLines);
+                totalCharge, DEFAULT_CURRENCY, payloadLines,
+                lc.getLandedCostNumber());
         outbox.publish(DomainEventType.LANDED_COST_ALLOCATED,
                 DomainEventType.AGG_LANDED_COST,
                 lc.getId(), lc.getUid(),

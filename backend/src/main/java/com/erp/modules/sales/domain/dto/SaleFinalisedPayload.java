@@ -21,7 +21,9 @@ public record SaleFinalisedPayload(
         Long branchId,
         Instant finalisedAt,
         List<LineItem> lines,
-        boolean issuesStock
+        boolean issuesStock,
+        /** Human-readable invoice number (e.g. INV-0001) — used in GL journal memos (FOLLOW-001). */
+        String invoiceNumber
 ) {
     /**
      * Backward-compatible factory for code that does not supply {@code issuesStock}.
@@ -29,7 +31,15 @@ public record SaleFinalisedPayload(
      */
     public SaleFinalisedPayload(String invoiceUid, Long companyId, Long branchId,
                                 Instant finalisedAt, List<LineItem> lines) {
-        this(invoiceUid, companyId, branchId, finalisedAt, lines, true);
+        this(invoiceUid, companyId, branchId, finalisedAt, lines, true, null);
+    }
+
+    /**
+     * Backward-compatible factory for code that supplies issuesStock but not invoiceNumber.
+     */
+    public SaleFinalisedPayload(String invoiceUid, Long companyId, Long branchId,
+                                Instant finalisedAt, List<LineItem> lines, boolean issuesStock) {
+        this(invoiceUid, companyId, branchId, finalisedAt, lines, issuesStock, null);
     }
 
     /**

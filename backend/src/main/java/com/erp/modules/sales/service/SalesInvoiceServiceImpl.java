@@ -331,7 +331,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                         inv.getBranchId(),
                         inv.getFinalisedAt(),
                         payloadLines,
-                        issuesStock));
+                        issuesStock,
+                        number));
 
         audit.record(AuditEvent.of(AuditActions.SALES_INVOICE_FINALISE, "sales_invoices",
                         inv.getId(), inv.getUid())
@@ -366,7 +367,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                 inv.getUid(),
                 inv.getCompanyId(),
                 inv.getBranchId(),
-                new SaleVoidedPayload(inv.getUid(), inv.getCompanyId(), inv.getBranchId()));
+                new SaleVoidedPayload(inv.getUid(), inv.getCompanyId(), inv.getBranchId(),
+                        inv.getInvoiceNumber()));
 
         audit.record(AuditEvent.of(AuditActions.SALES_INVOICE_VOID, "sales_invoices",
                         inv.getId(), inv.getUid())

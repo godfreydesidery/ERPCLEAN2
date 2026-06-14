@@ -51,7 +51,8 @@ class LandedCostStockHandlerTest {
         handler = new LandedCostStockHandler(guard, valuation, glPoster, objectMapper);
 
         when(guard.alreadyProcessed(anyString(), anyString())).thenReturn(false);
-        when(glPoster.postLandedCostInNewTx(anyLong(), anyLong(), any(), anyString(), anyString(), any()))
+        // postLandedCostInNewTx signature (FOLLOW-001): companyId, branchId, date, uid, number, currency, amount
+        when(glPoster.postLandedCostInNewTx(anyLong(), anyLong(), any(), anyString(), any(), anyString(), any()))
                 .thenReturn("GL-ENTRY-1");
     }
 
@@ -80,9 +81,10 @@ class LandedCostStockHandlerTest {
 
         // assert: GL posted with 33.33 + 33.33 + 33.34 = 100.00, NOT the 999.99 totalAmount
         ArgumentCaptor<BigDecimal> amountCaptor = ArgumentCaptor.forClass(BigDecimal.class);
+        // FOLLOW-001: signature is (companyId, branchId, date, landedCostUid, landedCostNumber, currency, amount)
         verify(glPoster).postLandedCostInNewTx(
                 eq(10L), eq(20L), any(LocalDate.class),
-                eq("LC-UID-1"), eq("TZS"), amountCaptor.capture());
+                eq("LC-UID-1"), any(), eq("TZS"), amountCaptor.capture());
 
         BigDecimal postedAmount = amountCaptor.getValue();
         assertThat(postedAmount).isEqualByComparingTo(new BigDecimal("100.00"));
@@ -109,7 +111,7 @@ class LandedCostStockHandlerTest {
         ArgumentCaptor<BigDecimal> amountCaptor = ArgumentCaptor.forClass(BigDecimal.class);
         verify(glPoster).postLandedCostInNewTx(
                 eq(10L), eq(20L), any(LocalDate.class),
-                eq("LC-UID-2"), eq("TZS"), amountCaptor.capture());
+                eq("LC-UID-2"), any(), eq("TZS"), amountCaptor.capture());
         assertThat(amountCaptor.getValue()).isEqualByComparingTo(new BigDecimal("100.00"));
     }
 
@@ -129,7 +131,7 @@ class LandedCostStockHandlerTest {
         handler.handle(event);
 
         // assert: GL NOT posted — nothing to capitalise
-        verify(glPoster, never()).postLandedCostInNewTx(anyLong(), anyLong(), any(), anyString(), anyString(), any());
+        verify(glPoster, never()).postLandedCostInNewTx(anyLong(), anyLong(), any(), anyString(), any(), anyString(), any());
     }
 
     @Test
@@ -168,7 +170,7 @@ class LandedCostStockHandlerTest {
 
         // assert: valuation and GL skipped for duplicate event
         verify(valuation, never()).applyLandedCost(anyLong(), anyLong(), anyLong(), any());
-        verify(glPoster, never()).postLandedCostInNewTx(anyLong(), anyLong(), any(), anyString(), anyString(), any());
+        verify(glPoster, never()).postLandedCostInNewTx(anyLong(), anyLong(), any(), anyString(), any(), anyString(), any());
     }
 
     // -------------------------------------------------------------------------

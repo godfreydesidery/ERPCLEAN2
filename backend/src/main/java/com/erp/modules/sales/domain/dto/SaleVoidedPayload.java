@@ -11,5 +11,12 @@ package com.erp.modules.sales.domain.dto;
 public record SaleVoidedPayload(
         String invoiceUid,
         Long companyId,
-        Long branchId
-) {}
+        Long branchId,
+        /** Human-readable invoice number — used in GL journal memos (FOLLOW-001). */
+        String invoiceNumber
+) {
+    /** Back-compat: pre-FOLLOW-001 callers that do not supply invoiceNumber. */
+    public SaleVoidedPayload(String invoiceUid, Long companyId, Long branchId) {
+        this(invoiceUid, companyId, branchId, null);
+    }
+}

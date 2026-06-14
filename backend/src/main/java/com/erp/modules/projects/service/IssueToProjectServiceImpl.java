@@ -154,7 +154,7 @@ public class IssueToProjectServiceImpl implements IssueToProjectService {
         String glEntryUid = null;
         if (!cogsLegs.isEmpty()) {
             glEntryUid = glPoster.postCogsForProjectInNewTx(
-                    company.getId(), branch.getId(), issueDate, issueUid,
+                    company.getId(), branch.getId(), issueDate, issueUid, issueNumber,
                     currency, tag.projectId(), tag.projectTaskId(), cogsLegs);
         }
 

@@ -130,7 +130,7 @@ public class SaleReversalStockHandler implements DomainEventHandler {
             if (totalOriginalValue.compareTo(BigDecimal.ZERO) > 0) {
                 String glEntryUid = glPoster.postSaleReversalInNewTx(
                         event.getCompanyId(), event.getBranchId(), LocalDate.now(),
-                        payload.invoiceUid(), "TZS", totalOriginalValue);
+                        payload.invoiceUid(), payload.invoiceNumber(), "TZS", totalOriginalValue);
                 if (glEntryUid == null) {
                     log.warn("SaleReversalStockHandler: sale reversal GL post returned null " +
                                      "for invoice uid={} — GL not configured (qty still reversed)",

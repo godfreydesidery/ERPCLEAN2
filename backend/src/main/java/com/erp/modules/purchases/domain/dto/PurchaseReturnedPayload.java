@@ -27,8 +27,16 @@ public record PurchaseReturnedPayload(
          * False (conservative default) means the standard DR GRNI / CR INVENTORY path applies.
          */
         boolean billed,
-        List<ReturnLine> lines
+        List<ReturnLine> lines,
+        /** Human-readable return number (e.g. PRN-0001) — used in GL journal memos (FOLLOW-001). */
+        String returnNumber
 ) {
+    /** Back-compat: pre-FOLLOW-001 callers that do not supply returnNumber. */
+    public PurchaseReturnedPayload(String purchaseReturnUid, Long companyId, Long branchId,
+                                   BigDecimal totalReturnValue, String currency, boolean billed,
+                                   List<ReturnLine> lines) {
+        this(purchaseReturnUid, companyId, branchId, totalReturnValue, currency, billed, lines, null);
+    }
 
     public record ReturnLine(
             Long goodsReceiptLineId,

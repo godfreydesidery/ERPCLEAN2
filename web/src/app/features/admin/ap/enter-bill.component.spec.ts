@@ -206,4 +206,44 @@ describe('EnterBillComponent', () => {
     expect(comp.matchResult()).not.toBeNull();
     expect(comp.matchResult().lineResults.length).toBe(2);
   });
+
+  // FOLLOW-002 C1 regression: PO option label must never be the raw uid
+  it('PO option label falls back to (draft PO) when orderNumber is null — never the uid', () => {
+    vi.useFakeTimers();
+    const draftPo = {
+      uid: '01KV2E27BG084Q4831F8Q8Q8F1',
+      id: '99',
+      orderNumber: null,
+      supplierName: 'Acme Supplies',
+      status: 'DRAFT',
+    };
+    TestBed.configureTestingModule({
+      imports: [EnterBillComponent],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([{ path: '**', redirectTo: '' }]),
+        { provide: ApService, useValue: { enterBill: vi.fn(), runMatch: vi.fn(), acceptVariance: vi.fn() } },
+        { provide: SupplierService, useValue: { list: vi.fn(() => of({ rows: [], meta: {} })) } },
+        { provide: OrganisationService, useValue: { current: vi.fn(() => of({ uid: 'ORG1', id: '1', name: 'Acme' })) } },
+        { provide: CompanyService, useValue: { list: vi.fn(() => of([{ uid: 'CO1', id: '10', name: 'Main Co' }])) } },
+        {
+          provide: PurchasesService,
+          useValue: {
+            listOrders: vi.fn(() => of({ rows: [draftPo], meta: {} })),
+            listOrderLines: vi.fn(() => of([])),
+          },
+        },
+        { provide: AlertService, useValue: { success: vi.fn(), error: vi.fn() } },
+        { provide: SessionStore, useValue: makeSession() },
+      ],
+    });
+    const comp = TestBed.createComponent(EnterBillComponent).componentInstance as any;
+    const options: { uid: string; label: string }[] = comp.poOptions();
+    expect(options.length).toBe(1);
+    // Label must NOT be the uid
+    expect(options[0].label).not.toBe(draftPo.uid);
+    // Label must be the human placeholder
+    expect(options[0].label).toBe('(draft PO)');
+  });
 });

@@ -121,7 +121,7 @@ public class PurchaseReturnStockHandler implements DomainEventHandler {
                 }
                 String glEntryUid = glPoster.postPurchaseReturnInNewTx(
                         payload.companyId(), payload.branchId(), LocalDate.now(),
-                        payload.purchaseReturnUid(), currency, totalReturnValue);
+                        payload.purchaseReturnUid(), payload.returnNumber(), currency, totalReturnValue);
                 if (glEntryUid == null) {
                     log.warn("PurchaseReturnStockHandler: GL post returned null for return={} " +
                                      "— GRNI/INVENTORY not configured (qty still reversed)",

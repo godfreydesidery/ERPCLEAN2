@@ -132,7 +132,7 @@ public class GoodsReceiptStockHandler implements DomainEventHandler {
                         : LocalDate.now();
                 String glEntryUid = glPoster.postReceiptInNewTx(
                         event.getCompanyId(), event.getBranchId(), postingDate,
-                        payload.receiptUid(), "TZS", glLegs);
+                        payload.receiptUid(), payload.receiptNumber(), "TZS", glLegs);
                 if (glEntryUid == null) {
                     log.warn("GoodsReceiptStockHandler: GL post returned null for receipt uid={} " +
                                      "— GL not configured or period closed (anomaly, qty still posted)",

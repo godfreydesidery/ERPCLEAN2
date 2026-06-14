@@ -24,8 +24,16 @@ public record DeliveryReturnedPayload(
         Long companyId,
         Long branchId,
         Instant returnedAt,
-        List<ReturnLineItem> lines
+        List<ReturnLineItem> lines,
+        /** Human-readable sales return number for GL memo text (FOLLOW-001). */
+        String returnNumber
 ) {
+    /** Back-compat: pre-FOLLOW-001 callers that do not supply returnNumber. */
+    public DeliveryReturnedPayload(String returnUid, String deliveryUid,
+                                   Long companyId, Long branchId,
+                                   Instant returnedAt, List<ReturnLineItem> lines) {
+        this(returnUid, deliveryUid, companyId, branchId, returnedAt, lines, null);
+    }
     /**
      * Per-line item for the DELIVERY.RETURNED payload.
      *

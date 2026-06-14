@@ -8,8 +8,24 @@
  *
  * The proxy.conf.json already forwards /api → :8081; Playwright's webServer
  * relies on that so no extra proxy config is needed here.
+ *
+ * Auth reuse strategy:
+ *   The app stores session tokens in sessionStorage (erp.*). Playwright's storageState only
+ *   captures cookies + localStorage, so a two-step bridge is used:
+ *     1. auth.setup.ts logs in once, copies erp.* into localStorage, saves state to
+ *        e2e/.auth/root.json (gitignored).
+ *     2. The 'chromium' project loads the saved state (localStorage snapshot) and relies on
+ *        _test-authenticated.ts, which registers a per-context addInitScript that copies the
+ *        localStorage entries back into sessionStorage before Angular boots.
+ *     3. Result: every parallel worker page starts with a valid session — no /login calls,
+ *        no concurrent login races, no toHaveURL(/admin) flakes.
+ *   The 'chromium-unauthenticated' project (smoke.spec.ts) has no storageState so its explicit
+ *   login-form and redirect tests run from a cold unauthenticated session.
  */
 import { defineConfig, devices } from '@playwright/test';
+import path from 'path';
+
+const AUTH_FILE = path.join(__dirname, 'e2e', '.auth', 'root.json');
 
 export default defineConfig({
   testDir: './e2e',
@@ -24,9 +40,43 @@ export default defineConfig({
   },
 
   projects: [
+    /**
+     * Setup project: logs in once, copies erp.* from sessionStorage → localStorage,
+     * then writes state to e2e/.auth/root.json.
+     * Runs before any authenticated project.
+     */
+    {
+      name: 'setup',
+      testMatch: /auth\.setup\.ts/,
+    },
+
+    /**
+     * Authenticated project for routes-smoke.spec.ts and conventions.spec.ts.
+     * Starts each context with the saved localStorage snapshot (storageState).
+     * The _test-authenticated fixture copies those entries into sessionStorage on every
+     * page load → Angular's SessionStore sees a live session from frame 0.
+     * No per-test login() calls; parallel workers all reuse the single saved token.
+     */
     {
       name: 'chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: AUTH_FILE,
+      },
+      dependencies: ['setup'],
+      testMatch: /\/(routes-smoke|conventions)\.spec\.ts/,
+    },
+
+    /**
+     * Unauthenticated project for smoke.spec.ts.
+     * smoke.spec.ts tests the login form explicitly (redirect to /login, form submit,
+     * axe scan of the login page) — it requires a cold unauthenticated session.
+     * No storageState, no initScript.
+     */
+    {
+      name: 'chromium-unauthenticated',
       use: { ...devices['Desktop Chrome'] },
+      testMatch: /\/smoke\.spec\.ts/,
     },
   ],
 
