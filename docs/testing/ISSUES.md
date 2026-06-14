@@ -29,7 +29,11 @@ CRM activity, supplier-quote, purchase-return. See entries below.
 
 ---
 
-## ✅ RESOLUTION (2026-06-14) — all 15 fixed + verified
+## RESOLUTION (2026-06-14) — 14 of 15 fixed + verified; **ISSUE-014 (C1) re-opened as systemic**
+
+> 14 functional defects (001–012, 015 + cascades) are FIXED + verified. **ISSUE-014 (C1 uid/id visibility)
+> was prematurely closed** — the automated C1 gate is blind to detail screens + numeric ids, so it reported
+> a false "none". C1 is a codebase-wide pattern (~32 raw-uid + ~33 raw-id renders) and is **re-opened** below.
 
 Fixed across branch `feat/e2e-playwright` (`f2684e2`) in 4 passes. **Verification gates green:**
 - Backend `mvn clean verify` — **748 tests, 0 failures** (incl. new regression tests).
@@ -53,14 +57,19 @@ Fixed across branch `feat/e2e-playwright` (`f2684e2`) in 4 passes. **Verificatio
 | 010 supplier-quote 400 | ✅ FIXED | `companyUid` accessor on the DTO |
 | 011 purchase-return confirm 500 | ✅ FIXED | AP debit-note GL post |
 | 012 stock-location create | ✅ FIXED | default-location flush ordering |
-| 014 C1 uid-visible | ✅ MOSTLY | pos/sessions (sessionNumber), notification-deliveries (strip ULID), pos-tills, POS-variance memo. **2 P3 residuals below.** |
+| 014 C1 uid-visible | 🔶 **PARTIAL — RE-OPENED** | Only the targeted *list-screen ULID* cases fixed (pos/sessions, notification-deliveries, pos-tills, POS-variance memo, gl/journals, ap-supplier-bills, boms list). The C1 gate gave a false "none" — it skips detail routes + can't see numeric ids. **~32 templates still render raw uids + ~33 raw numeric ids. See re-opened ISSUE-014 below.** |
 | 015 axe a11y (7 screens) | ✅ FIXED | removed prohibited aria / added labels — axe now 0 serious/critical |
 | + pos.session 500 (cascade) | ✅ FIXED | generate `session_number` (new field + generator) |
 | + stock-transfer in-transit 409 (cascade) | ✅ FIXED | seed in-transit location per company/branch (`StockLocationSeeder`) |
 
 ### Follow-ups — ✅ ALL RESOLVED (2026-06-14, branch `feat/test-followups`)
-Confirmed by a clean final Playwright run: **385 pass / 0 fail** (C1 uid-visible: none · axe serious: none ·
-login-flake: none) + backend `mvn clean verify` **748 / 0 failures** + API re-seed green.
+Confirmed by a clean final Playwright run: **385 pass / 0 fail** (axe serious: none · login-flake: none) +
+backend `mvn clean verify` **748 / 0 failures** + API re-seed green.
+
+> ⚠️ **Caveat on "C1 uid-visible: none" (corrected 2026-06-14):** that result means *none detected by the
+> automated C1 gate* — but the gate is **blind** to most C1 violations (it skips all `/uid/:uid` detail
+> routes and only matches 26-char ULIDs, not numeric ids). FOLLOW-001/002 (below) genuinely fixed their
+> specific list screens, but the broad C1 convention is **NOT** resolved — see the re-opened **ISSUE-014**.
 - **FOLLOW-001 (P3, C1) — GL journal memos embed source uids.** ✅ FIXED. Added document-number fields to
   all 8 outbox payloads (with backward-compat constructors for in-flight events), populated them in the 6
   publishers, and threaded a `docNumber` through every `InventoryGlPoster` method — memos now read e.g.
@@ -184,13 +193,44 @@ seeded via `e2e/full-coverage-drive.js`. Evidence: `web/test-results/`, `web/pw-
 - **Found by:** `smoke.spec.ts::login and reach the admin home page`
 - **Observed:** the single login assertion timed out once while 128 route tests logged in concurrently. **Not a product defect** — 121 route tests + the API seeder all authenticated fine. Mitigation: raise the login timeout / reduce workers for that spec.
 
-### ISSUE-014 — C1 violation: raw uid visible in the UI on 3 screens
-- **Severity:** P3 · **Status:** OPEN · **Layer:** L3 (convention C1)
-- **Screens:** `/admin/gl/journals`, `/admin/notification-deliveries`, `/admin/boms`
-- **Found by:** `conventions.spec.ts::C1 no uid visible on ...`
-- **Observed:** a 26-char ULID uid is rendered in visible page text (a table column/label) on each of these screens. A uid is a machine id — it must appear only in the URL path; show a human name/number instead.
-- **Expected:** no raw uid in any visible cell/label (per C1; see the shared pattern — show name/code, keep uid in the row's routerLink only).
-- **Suspected cause:** a `{{ row.uid }}` (or a uid used as visible text) in `gl/journals`, `notification-deliveries`, and `boms` list templates. (POS sessions/tills also flagged during authoring — DEFECT in `07-pos.md`; not re-triggered here because the lists were empty of the relevant rows.)
+### ISSUE-014 — C1: raw machine identifiers (uid + numeric id) shown in the UI — **RE-OPENED (systemic)**
+- **Severity:** P2 (was filed P3) · **Status:** 🔶 **OPEN (re-opened 2026-06-14)** · **Layer:** L3 (convention C1)
+- **Originally filed** as 3 list screens; **investigation 2026-06-14 found C1 is a codebase-wide pattern that the
+  automated gate could not see** — so it was prematurely marked resolved. The list-screen ULID cases that were
+  targeted ARE fixed; the broad convention is not.
+
+**Why the C1 gate gave a false "none" (3 blind spots in `web/e2e/conventions.spec.ts`):**
+1. **Skips every detail screen.** Line 19 `.filter(([p]) => p && !p.includes(':'))` drops all `/uid/:uid`
+   routes — so no detail page is ever scanned, and detail pages are where raw uids are dumped into fields.
+2. **ULID-only regex.** `ULID_RE = /\b[0-9A-HJKMNP-TV-Z]{26}\b/` (`_helpers.ts`) matches 26-char ULIDs only,
+   so raw **numeric** FK ids shown as text are invisible to it (the rule covers ids too).
+3. **First-paint, seed-dependent, top-level only.** Scans `body.innerText()` once after `networkidle+500ms`;
+   an empty list, content behind a tab/modal, or a late async load passes vacuously.
+
+**Actual scope (grep over `web/src/app/features/admin`, 2026-06-14):**
+- **~32 templates render a raw `…Uid` as visible text** (22 of them detail screens). Examples:
+  `ap-payment-detail` ({{p.glEntryUid}}, {{a.supplierBillUid}}), `bill-detail` (purchaseOrderUid, postedGlEntryUid),
+  `ar-receipt-detail` (arInvoiceUid), `cash-transfer-detail` (source/destinationAccountUid),
+  `approval-request-detail` (documentUid, sourcePolicyUid), `document-detail` (uid, sourceUid),
+  `dimension-value-detail` (uid, dimensionUid, parentUid), `budget-detail`/`budget-version-detail`
+  (fiscalYearUid, budgetUid), `depreciation-run-detail`/`payroll-run-detail`/`fixed-asset-detail` (glEntryUid,
+  sourceBillUid), `bom-detail` (parentProductUid ×2, uid).
+- **~33 raw numeric `…Id` renders** (not name-resolved). Examples: `supplier-bills-list` (supplierId),
+  `ar-invoices-list` (customerId), `fixed-asset-detail` (Category/Branch/Cost-Centre ID), `loan-detail` &
+  `pay-component-detail` (GL Account ID), `journal-entry-detail` (reversalOfId), `depreciation-run`
+  (fiscalPeriodId, fixedAssetId), `document-detail`/`document-template-list` (brandingId).
+  *(Renders that go through a name resolver — `branchDisplay()`, `glAccountLabel()`, `stageName()` — are
+  CORRECT and excluded from this count.)*
+- **Genuinely fixed (keep):** the list-screen ULID cases — gl/journals (memo→doc number), notification-deliveries,
+  pos/sessions (sessionNumber), pos-tills, ap-supplier-bills (FOLLOW-002), boms list. These are real and stay fixed.
+
+**Expected:** no raw uid OR raw numeric id in any visible cell/label/field — show a human name/number/code; keep
+the machine identifier only in the row's `routerLink`/URL path.
+
+**Fix scope (not yet done):** (a) broaden the C1 gate — include `/uid/:uid` detail routes (seed a known entity,
+visit its detail), and flag raw numeric ids, not just ULIDs; (b) sweep the ~32 uid + ~33 id renders to use a
+name/number/resolver (mirror the existing `branchDisplay()`/`glAccountLabel()` pattern); (c) re-run to confirm.
+Estimated: a focused multi-agent sweep similar to the original rules-compliance pass.
 
 ### ISSUE-015 — Accessibility (C6): axe serious/critical violations on 7 screens
 - **Severity:** P2 · **Status:** OPEN · **Layer:** L3 (convention C6 / WCAG 2.1 AA)
