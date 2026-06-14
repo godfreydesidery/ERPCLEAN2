@@ -6,7 +6,7 @@ This chapter describes the financial statements, the GL account-ledger drill-dow
 
 ## Financial Statement Reports
 
-The four financial statements are available from the **Reporting** navigation group. Each report requires the relevant permission and a company and period selection before it can be run.
+The four financial statements are available from the **Accounting** navigation group. Each report requires the relevant permission and a company and period selection before it can be run.
 
 **Common controls on every statement screen:**
 
@@ -21,7 +21,7 @@ The four financial statements are available from the **Reporting** navigation gr
 
 ### Profit & Loss (Income Statement)
 
-Navigate to **Reporting > Income Statement** (`/admin/reporting/income-statement`). Permission required: `REPORT.PL.VIEW`.
+Navigate to **Accounting › Income Statement** (`/admin/reporting/income-statement`). Permission required: `REPORT.PL.VIEW`.
 
 1. Select the company by name.
 2. Set **Period from** and **Period to** (date inputs).
@@ -42,9 +42,35 @@ The statement shows:
 
 ---
 
+**Example — Run a comparative P&L for two quarters and export to Excel:**
+
+Chief accountant Rehema Mwangi needs to compare Q1 2026 performance against Q1 2025 for the board report.
+
+1. Navigate to **Accounting › Income Statement** (`/admin/reporting/income-statement`).
+2. Company: `Kijenge Trading Ltd`.
+3. Period from: `2026-01-01`; Period to: `2026-03-31`.
+4. Comparative from: `2025-01-01`; Comparative to: `2025-03-31`.
+5. Click **Run**.
+
+The statement loads. The green **Reconciled** bar confirms net profit ties to the INCOME − EXPENSE GL movement. Results:
+
+| Section | Q1 2026 | Q1 2025 |
+|---|---|---|
+| Revenue | TZS 48,250,000 | TZS 39,100,000 |
+| Cost of Sales | TZS 29,340,000 | TZS 24,600,000 |
+| Gross Profit | TZS 18,910,000 | TZS 14,500,000 |
+| Operating Expenses | TZS 9,720,000 | TZS 8,850,000 |
+| Net Profit | TZS 9,190,000 | TZS 5,650,000 |
+
+Rehema clicks **Excel** in the export toolbar. The file `income-statement_2026-01-01_2026-03-31.xlsx` downloads with both columns. She forwards it to the board.
+
+To drill into "Sales Revenue", she clicks the account name link — the Account Ledger opens pre-filled with that account and the Q1 2026 period, showing every posted journal line and a running balance.
+
+---
+
 ### Balance Sheet
 
-Navigate to **Reporting > Balance Sheet** (`/admin/reporting/balance-sheet`). Permission required: `REPORT.BS.VIEW`.
+Navigate to **Accounting › Balance Sheet** (`/admin/reporting/balance-sheet`). Permission required: `REPORT.BS.VIEW`.
 
 1. Select the company by name.
 2. Set the **As-at date**.
@@ -59,9 +85,21 @@ The statement shows sections for Current Assets, Non-Current Assets, Current Lia
 
 ---
 
+**Example — Run a comparative balance sheet at year-end:**
+
+Rehema Mwangi needs the balance sheet as at 30 June 2026 compared with 30 June 2025.
+
+1. Navigate to **Accounting › Balance Sheet** (`/admin/reporting/balance-sheet`).
+2. Company: `Kijenge Trading Ltd`; As-at date: `2026-06-30`; Compare as-at: `2025-06-30`.
+3. Click **Run**.
+
+The green Reconciled bar appears ("total assets == total liabilities + total equity"). Rehema spots that "Trade Receivables" has grown from TZS 12.4M to TZS 19.7M year-on-year. She clicks the "Trade Receivables" account name to open its ledger for the full fiscal year and reviews each transaction. She then exports to PDF for the audit file.
+
+---
+
 ### Cash-Flow Statement
 
-Navigate to **Reporting > Cash-Flow Statement** (`/admin/reporting/cash-flow`). Permission required: `REPORT.CASHFLOW.VIEW`.
+Navigate to **Accounting › Cash-Flow Statement** (`/admin/reporting/cash-flow`). Permission required: `REPORT.CASHFLOW.VIEW`.
 
 1. Select the company by name.
 2. Set **Period from** and **Period to**.
@@ -80,9 +118,19 @@ The footer shows **Opening Cash**, **Net Change in Cash**, and **Closing Cash**.
 
 ---
 
+**Example — Cash-flow analysis for H1 2026:**
+
+1. Navigate to **Accounting › Cash-Flow Statement** (`/admin/reporting/cash-flow`).
+2. Company: `Kijenge Trading Ltd`; Period from: `2026-01-01`; Period to: `2026-06-30`.
+3. Click **Run**.
+
+Results show Opening Cash: TZS 6,800,000; Operating inflow: TZS 11,250,000; Investing outflow: TZS −4,200,000 (purchase of delivery van); Financing outflow: TZS −1,500,000 (loan repayment); Net Change: TZS 5,550,000; Closing Cash: TZS 12,350,000. The green Reconciled bar confirms the net change ties to the actual movement in the bank account GL balances.
+
+---
+
 ### Account-Ledger Drill-Down
 
-Navigate to **Reporting > Account Ledger** (`/admin/reporting/account-ledger`). Permission required: `REPORT.LEDGER.VIEW`.
+Navigate to **Accounting › Account Ledger** (`/admin/reporting/account-ledger`). Permission required: `REPORT.LEDGER.VIEW`.
 
 The account ledger shows every posted journal line for a single GL account within a date range, with a running balance.
 
@@ -103,15 +151,27 @@ The report shows:
 
 ---
 
+**Example — Investigate the bank account movements for April 2026:**
+
+1. Navigate to **Accounting › Account Ledger** (`/admin/reporting/account-ledger`).
+2. Company: `Kijenge Trading Ltd`.
+3. Account picker: type `Bank` — select **Bank — Main Current (1100)**.
+4. Period from: `2026-04-01`; Period to: `2026-04-30`.
+5. Click **Run**.
+
+Opening balance: TZS 12,350,000. The ledger shows 28 lines — 15 customer receipts credited and 13 payments debited, with a closing balance of TZS 14,890,000. The paginator is hidden (fewer than 50 lines). Rehema exports to CSV for the bank reconciliation working paper.
+
+---
+
 ### Trial Balance
 
-The Trial Balance is covered fully in the Finance chapter (Accounting > Trial Balance, `/admin/gl/trial-balance`). It can also be reached from the Reporting navigation group. Permission required: `GL.VIEW`. See the General Ledger section for full usage.
+The Trial Balance is covered fully in the Finance chapter (Accounting › Trial Balance, `/admin/gl/trial-balance`). It can also be reached from the Accounting navigation group. Permission required: `GL.VIEW`. See the General Ledger section for full usage.
 
 ---
 
 ## Business Intelligence Dashboard
 
-Navigate to **Dashboard** (`/admin/dashboard`). Permission required: `BI.VIEW`.
+Navigate to **Analytics › Dashboard** (`/admin/dashboard`). Permission required: `BI.VIEW`.
 
 The dashboard is a composite view of key performance indicators drawn from Finance, Operations, and CRM data. Each panel loads independently and has its own permission. If you hold `BI.VIEW` but lack a panel-specific permission, that panel shows a calm "no permission" message rather than blocking the whole page.
 
@@ -120,6 +180,28 @@ The dashboard is a composite view of key performance indicators drawn from Finan
 - **Company** — the active company (determined by your login context).
 - **Branch** — optionally filter data to a specific branch (chosen by code — name).
 - **From / To dates** — the reporting date range (defaults to the current month). Change dates and click the **Refresh** button to re-fetch all panels.
+
+---
+
+**Example — Read the dashboard KPIs and drill through to source screens:**
+
+Finance director Gideon Moshi logs in, navigates to **Analytics › Dashboard** (`/admin/dashboard`). The company `Kijenge Trading Ltd` and branch `DSM Main` auto-select; dates default to the current month (2026-06-01 to 2026-06-14).
+
+1. **Health strip** — all five badges (AR, AP, Cash, Stock, TB) show green `[OK]`. No reconciliation issues.
+
+2. **Finance panel** — Revenue: TZS 9,850,000; OpEx: TZS 4,200,000; Net Profit: TZS 3,480,000. Trial Balance status: Balanced. Gideon clicks **Income Statement** in the Finance panel — this drills through to `/admin/reporting/income-statement` where he can run a full P&L.
+
+3. **Cash Position panel** — Cash balance across all accounts: TZS 14,890,000. He clicks **Cash Accounts** to open the cash & bank accounts list.
+
+4. **Working Capital panel** — Outstanding AR: TZS 19,700,000 (AR sub-ledger reconciles to GL). Outstanding AP: TZS 6,450,000. He clicks **View Receivables** to drill into the AR invoices list.
+
+5. **Inventory panel** — Total stock value: TZS 38,250,000 (stock sub-ledger ties to GL inventory account). Clicking **Inventory** opens the stock valuation screen.
+
+6. **CRM pipeline panel** — 15 open deals across five stages; Win Rate: 62%; Weighted Forecast for the period: TZS 29,340,000. He clicks **CRM** to open the pipeline dashboard.
+
+7. Gideon changes the **Branch** to `Arusha Branch` and clicks **Refresh**. All panels re-fetch and show Arusha-scoped figures.
+
+8. He selects format **Excel** in the export dropdown and clicks **Download**. File `dashboard.xlsx` downloads with the currently visible panel data. (Requires `BI.EXPORT`.)
 
 ---
 
@@ -183,11 +265,11 @@ The file is named `dashboard.<ext>` and includes the currently visible panel dat
 
 ## Analytical Reports
 
-The following specialised reports sit under the **Budgeting** and **Cost Centre** navigation groups but are described here because they are reporting outputs, not data-entry screens.
+The following specialised reports sit under the **Budgeting** and **Costing** navigation groups but are described here because they are reporting outputs, not data-entry screens.
 
 ### Budget Variance Report
 
-Navigate to **Budgeting > Budget Variance** (`/admin/budgeting/variance`). Permission required: `BUDGETING.REPORT.VIEW`.
+Navigate to **Budgeting › Budget Variance Report** (`/admin/budgeting/variance`). Permission required: `BUDGETING.REPORT.VIEW`.
 
 The report compares GL actuals against an approved budget version.
 
@@ -199,14 +281,30 @@ The report compares GL actuals against an approved budget version.
 
 The report shows account-level rows with budget amount, actual amount, variance, and a **Favourable** or **Adverse** label. For income accounts, actual > budget is favourable. For expense accounts, actual < budget is favourable.
 
+---
+
+**Example — Run a budget variance report for the first half of the fiscal year:**
+
+Management accountant Yasmin Juma navigates to **Budgeting › Budget Variance Report** (`/admin/budgeting/variance`).
+
+1. Company: `Kijenge Trading Ltd`.
+2. Fiscal Year UID: copied from the approved budget at **Budgeting › Budgets**.
+3. Period from: `1`; Period to: `6` (January through June).
+4. Account Type: `Expense` (to focus the board on cost discipline).
+5. Click **Run**.
+
+Results show that "Fuel & Transport" (actual TZS 3,850,000 vs budget TZS 3,200,000) is marked **Adverse** by TZS 650,000, while "Office Supplies" (actual TZS 480,000 vs budget TZS 600,000) is **Favourable** by TZS 120,000. Yasmin notes the fuel over-run for discussion in the monthly management meeting.
+
+---
+
 ### Departmental Actuals Report
 
-Navigate to **Budgeting > Departmental Actuals** (`/admin/budgeting/departmental-actuals`). Permission required: `BUDGETING.REPORT.VIEW`.
+Navigate to **Budgeting › Departmental Actuals** (`/admin/budgeting/departmental-actuals`). Permission required: `BUDGETING.REPORT.VIEW`.
 
 Shows actual GL postings broken down by cost centre and account for the chosen fiscal year and period range. The inputs are the same as the variance report. This report has no budget comparison — it shows actuals only, useful for analysing spending by department or cost centre.
 
 ### Dimension-Sliced Trial Balance
 
-Navigate to **Accounting > Cost Centre > Report** (`/admin/cost-centre/report`). Requires both `COSTING.VIEW` and `GL.VIEW`.
+Navigate to **Costing › Sliced Trial Balance** (`/admin/cost-centre/report`). Requires both `COSTING.VIEW` and `GL.VIEW`.
 
 See the General Ledger section (Cost-Centre Dimensions) in the Finance chapter for full usage instructions.

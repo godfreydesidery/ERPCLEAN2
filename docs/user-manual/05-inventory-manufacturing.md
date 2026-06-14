@@ -213,6 +213,25 @@ The list shows transfer number, source and destination, transfer date, mode, and
 
 ---
 
+**Example — In-transit dispatch from Arusha Warehouse to DSM Store:**
+
+Storekeeper Grace Mwenda at Arusha branch needs to send 200 bags of Pembe Flour and 50 cartons of Cooking Oil to the Dar es Salaam main store.
+
+1. Navigate to **Inventory › Stock Transfers › Create** (`/admin/stock-transfers/create`).
+2. Source Branch: `Arusha Branch`; Source Location: `Arusha Warehouse`.
+3. Destination Branch: `DSM Branch`; Destination Location: `DSM Main Store`.
+4. Transfer Date: `2026-06-10`; Transfer Mode: **In-transit**.
+5. Add lines:
+   - Product: `Pembe Flour 2kg (FLR-002)`, Qty: `200`.
+   - Product: `Cooking Oil 3L (OIL-003)`, Qty: `50`.
+6. Click **Submit**. Transfer `TRF-0042` is created with status **Draft**.
+7. Grace reviews the lines and clicks **Dispatch**. Status becomes **Dispatched**. The Arusha Warehouse stock for both items decreases immediately (200 bags and 50 cartons deducted).
+8. The following day, DSM storekeeper Omari Njau opens **Inventory › Stock Transfers** (`/admin/stock-transfers`), finds `TRF-0042` with status Dispatched, and clicks the row to open the detail.
+9. Omari counts the physical delivery — both lines match — and clicks **Receive**. Status becomes **Received**. DSM Main Store stock increases by 200 bags and 50 cartons.
+10. Both storekeepers can now see `TRF-0042` with status **Received** in the transfer list. No cancellation is possible at this stage.
+
+---
+
 ## 5. Stock counts
 
 Navigate to **Inventory > Stock Counts** (`/admin/stock-counts`).
@@ -267,6 +286,28 @@ Posting requires the `STOCK.COUNT.POST` permission (typically held by an account
 ### 5.4 Cancelling a count
 
 Open a Counting count and click **Cancel**. No stock movements or GL entries are created. A Posted count cannot be cancelled. If corrections are needed after posting, create a new count.
+
+---
+
+**Example — Cycle count of sugar and rice with a variance posted:**
+
+Accountant supervisor Boniface Kessy schedules a cycle count of two fast-moving products at the DSM Main Store.
+
+1. Navigate to **Inventory › Stock Counts › Create** (`/admin/stock-counts/create`).
+2. Company: `Kijenge Trading Ltd`; Branch: `DSM Branch`; Location: `DSM Main Store`; Count Date: `2026-06-12`; Count Type: **Cycle**.
+3. Add products to count: `Sembe Sugar 1kg (SGR-001)` and `Jasmine Rice 5kg (RCE-005)`. Click **Submit**.
+4. Count `CNT-0009` is created with status **Counting**. The system records the snapshot quantities: Sugar = 850 bags, Rice = 240 bags.
+5. Storekeeper Omari Njau physically counts the shelves. He opens `CNT-0009` and enters:
+   - Sugar counted: `843` (variance: −7 bags).
+   - Rice counted: `245` (variance: +5 bags).
+   - For Sugar he selects Reason: `SHRINKAGE`. For Rice no reason is needed (positive variance — unrecorded receipt correction).
+   Click **Enter / Save**.
+6. Boniface reviews the variances and clicks **Post**. Posting Date: `2026-06-12`. Confirms.
+7. The system posts two stock adjustment movements:
+   - Sugar: −7 bags (ADJUSTMENT, reason SHRINKAGE).
+   - Rice: +5 bags (ADJUSTMENT).
+   A single GL variance journal posts: DR Inventory Variance / CR Inventory for the sugar loss (valued at moving-average cost); the rice surplus reverses this direction.
+8. The count document is now read-only with status **Posted**. On-hand quantities at DSM Main Store are now: Sugar = 843, Rice = 245.
 
 ---
 
