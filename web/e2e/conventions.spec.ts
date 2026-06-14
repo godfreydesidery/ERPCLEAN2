@@ -5,11 +5,14 @@
  *      (it belongs only in the URL path). Scans each screen's visible body text.
  *  C6: WCAG 2.1 AA — axe scan, fail on serious/critical violations.
  *
+ * Auth: uses the pre-saved storageState from auth.setup.ts (no per-test login).
+ * Workers share the authenticated token, eliminating concurrent /login race timeouts.
+ *
  * Each route is its own test → per-route issues in docs/testing/ISSUES.md.
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from './_test-authenticated';
 import AxeBuilder from '@axe-core/playwright';
-import { login, ULID_RE } from './_helpers';
+import { ULID_RE } from './_helpers';
 import routesRaw from './_routes.json';
 
 const ROUTES: [string, string][] = (routesRaw as [string, string][])
@@ -19,7 +22,6 @@ const ROUTES: [string, string][] = (routesRaw as [string, string][])
 test.describe('L3 conventions', () => {
   for (const [route] of ROUTES) {
     test(`C1 no uid visible on /admin/${route}`, async ({ page }) => {
-      await login(page);
       await page.goto(`/admin/${route}`, { waitUntil: 'networkidle' });
       await page.waitForTimeout(500);
       const text = await page.locator('body').innerText().catch(() => '');
@@ -31,7 +33,6 @@ test.describe('L3 conventions', () => {
     });
 
     test(`C6 axe a11y on /admin/${route}`, async ({ page }) => {
-      await login(page);
       await page.goto(`/admin/${route}`, { waitUntil: 'networkidle' });
       await page.waitForTimeout(400);
       const results = await new AxeBuilder({ page })
