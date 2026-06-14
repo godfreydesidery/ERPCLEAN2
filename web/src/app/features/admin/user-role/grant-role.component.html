@@ -117,8 +117,8 @@
                 <thead>
                   <tr>
                     <th scope="col">Role</th>
-                    <th scope="col">Company UID</th>
-                    <th scope="col">Branch UID</th>
+                    <th scope="col">Company</th>
+                    <th scope="col">Branch</th>
                     <th scope="col">Granted at</th>
                     <th scope="col"><span class="sr-only">Actions</span></th>
                   </tr>
@@ -127,8 +127,8 @@
                   @for (g of grants(); track g.uid) {
                     <tr>
                       <td class="font-monospace">{{ g.roleCode }}</td>
-                      <td class="font-monospace small">{{ g.companyUid }}</td>
-                      <td class="font-monospace small">{{ g.branchUid ?? '—' }}</td>
+                      <td class="small">{{ companyName()(g.companyUid) }}</td>
+                      <td class="small text-muted">{{ g.branchUid ? branchName()(g.branchUid) : '—' }}</td>
                       <td class="small">{{ g.grantedAt }}</td>
                       <td>
                         <button type="button" class="btn btn-sm btn-outline-danger"

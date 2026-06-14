@@ -92,7 +92,7 @@
                              (ngModelChange)="updateEditField(t.uid, 'brandingId', $event)"
                              [disabled]="edit.saving" />
                     } @else {
-                      <span class="small font-monospace">{{ t.brandingId }}</span>
+                      <span class="small text-muted">{{ t.brandingId ? 'Set' : '—' }}</span>
                     }
                   </td>
                   @if (canManage() && edit) {

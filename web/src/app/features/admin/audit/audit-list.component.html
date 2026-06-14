@@ -113,23 +113,20 @@
                       {{ entry.action }}
                     </span>
                   </td>
-                  <td class="small font-monospace">
+                  <td class="small">
                     @if (entry.targetType) {
                       <span class="text-muted">{{ entry.targetType }}</span>
-                      @if (entry.targetUid) {
-                        <br /><span title="{{ entry.targetUid }}">{{ shortUid(entry.targetUid) }}</span>
-                      }
                     } @else {
                       <span class="text-muted">—</span>
                     }
                   </td>
-                  <td class="small font-monospace">
+                  <td class="small text-muted">
                     @if (entry.branchUid) {
-                      <span title="{{ entry.branchUid }}">{{ shortUid(entry.branchUid) }}</span>
+                      Branch
                     } @else if (entry.companyUid) {
-                      <span title="{{ entry.companyUid }}">{{ shortUid(entry.companyUid) }}</span>
+                      Company
                     } @else {
-                      <span class="text-muted">—</span>
+                      —
                     }
                   </td>
                   <td class="small text-muted">{{ entry.ip ?? '—' }}</td>
