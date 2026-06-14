@@ -1,5 +1,8 @@
 # Fixed Assets
 
+**What is the Fixed Assets module?**
+A fixed asset is a tangible item a business buys and uses over multiple years — machinery, vehicles, computers, office furniture. Unlike stock, which is sold and replaced constantly, a fixed asset sits on the company's balance sheet as long as it is in use. Because the asset is consumed gradually over its useful life, its cost is spread across accounting periods as **depreciation**: a periodic charge that reduces the asset's book value and recognises the consumption on the profit and loss account. Without a formal asset register, capital purchases get mis-coded as expenses (overstating costs and understating the balance sheet), depreciation goes unrecorded, and the financial statements do not reflect the real value of the business. The Fixed Assets module (ADR-0030) provides the register, the depreciation engine, and the GL integration that keeps the balance sheet and the profit and loss account accurate.
+
 This chapter covers registering and managing fixed assets, running depreciation, transferring assets between branches, and disposing of or writing off assets. All screens are available from the **Fixed Assets** navigation group.
 
 ---
@@ -22,6 +25,9 @@ Navigation items are hidden when the corresponding permission is absent.
 ## 2. Asset categories
 
 Navigate to **Fixed Assets > Asset Categories** (`/admin/asset-categories`).
+
+**What is an asset category, and why does it exist?**
+An asset category is a classification template that groups assets of the same type together — for example "Motor Vehicles", "Machinery", or "Office Furniture". It is used because assets of the same type typically depreciate at the same rate, have the same useful life, and should post to the same General Ledger (GL) accounts. Rather than setting the depreciation method, useful life, and three GL account codes on every individual asset, you set them once on the category and every asset in that category inherits them. This ensures consistency, reduces data-entry errors, and means a change in accounting policy (such as adjusting the useful life for a class of machinery) can be applied at the category level without re-editing each asset. Before any asset can be registered the relevant category must exist.
 
 An asset category defines the depreciation method, useful life, and GL accounts used for assets of a particular type (e.g. Machinery, Vehicles, Furniture). Categories must be set up before any asset can be registered.
 
@@ -56,6 +62,9 @@ Open the category detail and click **Archive**. The status changes to **Archived
 ## 3. Asset register
 
 Navigate to **Fixed Assets > Fixed Assets** (`/admin/fixed-assets`).
+
+**What is the asset register?**
+The asset register is the master list of every fixed asset the company owns. It is the single source of truth for capital investment: it records the original cost of each asset, the depreciation accumulated against it so far, and the resulting **net book value (NBV)** — the carrying value shown on the balance sheet. Every purchase of a capital item must be entered here (not coded to expense) so that the balance sheet correctly shows the asset, the profit and loss account receives only the proportionate depreciation charge each period, and the year-end accounts accurately reflect the company's capital base. The register is used by the finance team and reviewed by auditors to verify that assets exist, are in service, and are depreciated appropriately. The system keeps the register in step with the GL: every capitalisation, depreciation run, revaluation, and disposal posts a matching GL entry, and the FA-to-GL reconciliation screen (section 9) confirms the two agree.
 
 The register lists all fixed assets for the selected company. Use the status filter to show assets by state: Draft, In Service, Disposed, or Written Off.
 
@@ -111,6 +120,9 @@ The asset number is the human identifier shown throughout the UI. The internal i
 
 ## 4. Placing an asset in service
 
+**What does "placing in service" mean?**
+A Draft asset has been registered but not yet capitalised: it exists in the register but has no effect on the books. Placing an asset in service is the act of formally recognising it on the balance sheet — the moment the business acknowledges it owns an asset with an economic value. When you place an asset in service, two things happen simultaneously: (1) a GL journal entry is posted that moves the cost onto the Fixed Assets account (the balance-sheet impact), and (2) the full depreciation schedule is generated for the asset's entire useful life, so the system knows exactly how much to charge in each future period. The posting date must fall within an open fiscal period because it is a real accounting event. Until an asset is placed in service, it produces no depreciation and appears nowhere on the financial statements.
+
 Placing an asset in service capitalises it: the system posts a GL entry and generates the depreciation schedule.
 
 1. Open a **Draft** asset.
@@ -125,6 +137,9 @@ Status changes to **In Service**. A capitalisation GL entry is posted (DR Asset 
 ---
 
 ## 5. Transferring an asset
+
+**What is an asset transfer?**
+A transfer is a purely administrative change that moves an asset from one branch or cost centre to another — for example, when a vehicle is reassigned from the Dar es Salaam branch to the Arusha branch. It has no accounting effect: the asset's cost, accumulated depreciation, and NBV remain unchanged, and no GL entry is posted. The purpose is to keep the register accurate so that each branch's asset list reflects what is physically present there, which matters for insurance, physical verification, and cost-centre reporting.
 
 A transfer changes the branch or cost centre of an asset without affecting its financial values. No GL entry is posted.
 
@@ -141,6 +156,9 @@ The asset's branch and location are updated immediately. Disposed and Written-Of
 
 ## 6. Depreciation
 
+**What is depreciation, and why is it run periodically?**
+Depreciation is the systematic allocation of an asset's cost over its useful life. A delivery van costing TZS 24,000,000 that is expected to last 4 years does not cost the business TZS 24,000,000 in year one — it costs roughly TZS 6,000,000 per year (on the straight-line method). Recording that annual charge on the profit and loss account gives a realistic view of operating costs and ensures the balance sheet shows the asset at its current economic value, not its original price. Without running depreciation, the P&L understates costs, profits are overstated, and the balance sheet carries assets at inflated values. The system enforces one depreciation run per fiscal period per company: once a period's charges are posted, they cannot be doubled-up.
+
 ### 6.1 Supported methods
 
 | Method | Behaviour |
@@ -148,7 +166,12 @@ The asset's branch and location are updated immediately. Disposed and Written-Of
 | **Straight Line** | Equal charge each period: (Acquisition Cost − Salvage Value) / Life Periods |
 | **Reducing Balance** | Percentage of the closing book value each period: NBV × Reducing Rate |
 
+**Straight Line** is simpler and produces equal charges — appropriate for assets that provide roughly equal benefit in each period (office furniture, computers). **Reducing Balance** produces a higher charge early and a lower charge later — appropriate for assets that lose value quickly in the first years of use (vehicles, plant). In both cases the final period's charge is a residual plug that ensures the asset reaches exactly its salvage value: there is no rounding drift over the asset's life.
+
 ### 6.2 Previewing a depreciation run
+
+**What is a depreciation run preview?**
+A preview is a read-only simulation: it shows you exactly which assets would be charged and what amount each would attract if you were to post the run right now. No journal is posted and no data is changed. This is the recommended step before posting, because once a run is posted for a period it cannot be reversed or re-run. Reviewing the preview lets you catch anomalies — an unexpected zero charge, a newly capitalised asset you forgot to check — before they reach the books.
 
 Before posting, preview the run to see what charges will be created.
 
@@ -160,6 +183,9 @@ Before posting, preview the run to see what charges will be created.
 The preview table lists each eligible asset with its planned charge for the period, plus a total. Nothing is posted.
 
 ### 6.3 Posting a depreciation run
+
+**What happens when you post a depreciation run?**
+Posting a depreciation run does four things at once: (1) it creates a `DEPR-####` run record that acts as the audit trail for the period; (2) it posts a single consolidated GL journal — one Debit to Depreciation Expense and one Credit to Accumulated Depreciation per asset category — covering every eligible asset; (3) it marks each asset's schedule line for the period as posted and increases each asset's accumulated depreciation balance; and (4) it makes the run idempotent: re-running the same period is a safe no-op (the system returns the existing run without posting twice). This idempotency guarantee means you can safely retry a run if a network error occurs during posting, with no risk of double-charging.
 
 After reviewing the preview:
 
@@ -177,6 +203,9 @@ Navigate to **Fixed Assets > Depreciation Runs** (`/admin/depreciation-runs`). T
 ---
 
 ## 7. Revaluing an asset
+
+**What is an asset revaluation, and when is it needed?**
+An asset revaluation adjusts the carrying value of an asset to reflect its current fair market value, typically when an independent appraisal shows that the asset is worth significantly more or less than its book value. An upward revaluation increases the asset's carrying value on the balance sheet and creates a credit to a **Revaluation Reserve** (an equity account): the company is wealthier on paper, but the gain is deferred in equity rather than taken to income. A downward revaluation reduces the carrying value and is charged to the profit and loss account (a loss). In both cases the remaining depreciation schedule is regenerated from the new carrying value over the remaining useful life, so future depreciation charges reflect the revised base. Revaluation is done by the finance team when an appraisal indicates the book value is materially different from market value — typically at year-end or when preparing the accounts for a transaction such as a disposal or a valuation exercise.
 
 Revaluation adjusts the carrying cost of an In Service asset to its current fair value. The depreciation schedule is regenerated after a revaluation.
 
@@ -198,6 +227,9 @@ The revaluation is recorded in the Revaluations tab. The depreciation schedule i
 
 ## 8. Disposing of an asset
 
+**What is an asset disposal?**
+A disposal is the formal removal of an asset from the register when it is sold or scrapped. When an asset leaves the business, its gross cost must be removed from the Fixed Assets account, its accumulated depreciation must be cleared from the contra account, and any difference between the proceeds received and the asset's net book value at that date is recognised as a **gain or loss on disposal** on the profit and loss account. Failing to record a disposal leaves "ghost" assets on the balance sheet — assets the company no longer owns, overstating the balance sheet and inflating accumulated depreciation. The disposal also posts any outstanding scheduled depreciation up to the disposal date, ensuring the NBV used to calculate the gain or loss is accurate.
+
 ### 8.1 Disposal by sale
 
 Use this option when the asset is sold.
@@ -217,6 +249,9 @@ Status changes to **Disposed**. A disposal GL entry is posted. An asset can only
 
 ### 8.2 Write-off
 
+**What is a write-off?**
+A write-off is used when an asset is scrapped, lost, stolen, or so impaired that it has no recoverable value — so no sale proceeds are received. It is identical to a disposal by sale except the proceeds are forced to zero, meaning the entire remaining NBV becomes a loss on the profit and loss account. Common examples include equipment damaged beyond repair, assets destroyed in a fire, or obsolete technology with zero resale value.
+
 Use this option when the asset is scrapped, lost, or fully impaired and no proceeds are received.
 
 1. Open an **In Service** asset.
@@ -229,6 +264,9 @@ The loss equals the full NBV at the write-off date (proceeds are forced to zero)
 ---
 
 ## 9. FA to GL reconciliation
+
+**What is the FA-to-GL reconciliation, and why does it matter?**
+The reconciliation screen confirms that the asset register and the General Ledger agree. Because every capitalisation, depreciation run, revaluation, and disposal in this module posts a matching GL journal, the sum of all asset costs in the register should always equal the balance on the Fixed Assets GL account, and the sum of all accumulated depreciation in the register should always equal the balance on the Accumulated Depreciation GL account. A discrepancy means someone has posted a manual journal directly to one of those GL accounts, bypassing the register — a data-integrity problem that must be investigated. A green "Ties" indicator confirms the books are clean; a red "Does Not Tie" indicator is a flag for the finance team to investigate before month-end or year-end close.
 
 Navigate to **Fixed Assets > Reconciliation** (`/admin/fixed-assets/reconciliation`). Requires the `FA.VIEW` permission.
 
