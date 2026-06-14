@@ -23,7 +23,7 @@
       @if (order(); as o) {
         <p class="text-muted mt-1 mb-3" style="font-size:0.9rem">
           Order <strong class="font-monospace">{{ o.orderNumber ?? 'DRAFT' }}</strong>
-          &mdash; Customer {{ o.customerId }} &mdash; {{ o.currency }}
+          &mdash; {{ o.currency }}
         </p>
 
         <form (ngSubmit)="submit()" aria-label="Create delivery">

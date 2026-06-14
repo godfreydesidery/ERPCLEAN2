@@ -82,7 +82,6 @@
               <thead>
                 <tr>
                   <th scope="col">Order #</th>
-                  <th scope="col">Customer ID</th>
                   <th scope="col">Frequency</th>
                   <th scope="col">Status</th>
                   <th scope="col">Start Date</th>
@@ -95,7 +94,6 @@
                 @for (so of rows(); track so.uid) {
                   <tr>
                     <td class="font-monospace">{{ orderLabel(so) }}</td>
-                    <td class="small text-muted">{{ so.customerId }}</td>
                     <td class="small">{{ so.frequency }}</td>
                     <td>
                       <span class="badge" [class]="statusBadgeClass(so.status)">{{ so.status }}</span>

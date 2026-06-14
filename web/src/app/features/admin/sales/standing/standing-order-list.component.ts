@@ -129,6 +129,6 @@ export class StandingOrderListComponent {
   }
 
   orderLabel(so: StandingOrderDto): string {
-    return so.orderNumber ?? so.uid;
+    return so.orderNumber ?? 'DRAFT';
   }
 }
