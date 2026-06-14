@@ -140,6 +140,10 @@ export class ProjectDetailComponent {
   readonly pickerUsers = signal<User[]>([]);
   readonly pickerProducts = signal<ProductModel[]>([]);
 
+  private readonly userById = computed<Map<string, User>>(() =>
+    new Map(this.pickerUsers().map((u) => [u.id, u])),
+  );
+
   readonly customerOptions = computed<UidOption[]>(() =>
     this.pickerCustomers().map((c) => ({ uid: c.uid, label: c.displayName })),
   );
@@ -571,6 +575,11 @@ export class ProjectDetailComponent {
       case 'OVERHEAD': return 'text-bg-secondary';
       default: return 'text-bg-light border';
     }
+  }
+
+  userDisplayName(userId: string): string {
+    const u = this.userById().get(String(userId));
+    return u ? u.displayName : userId;
   }
 
   private messageFrom(err: unknown, fallback: string): string {

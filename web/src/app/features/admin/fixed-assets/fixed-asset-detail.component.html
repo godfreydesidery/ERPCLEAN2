@@ -58,8 +58,10 @@
         <!-- ── Asset metadata ─────────────────────────────────────────────── -->
         <dl class="row small mb-4">
           <dt class="col-sm-3">Asset Number</dt><dd class="col-sm-9 font-monospace">{{ a.assetNumber }}</dd>
-          <dt class="col-sm-3">Category ID</dt><dd class="col-sm-9">{{ a.categoryId }}</dd>
-          <dt class="col-sm-3">Branch ID</dt><dd class="col-sm-9">{{ a.branchId }}</dd>
+          <dt class="col-sm-3">Category</dt><dd class="col-sm-9">
+            <a [routerLink]="['/admin/asset-categories/uid', categoryUid(a.categoryId)]">{{ categoryLabel(a.categoryId) }}</a>
+          </dd>
+          <dt class="col-sm-3">Branch</dt><dd class="col-sm-9">{{ branchDisplay(a.branchId) }}</dd>
           <dt class="col-sm-3">Depreciation Method</dt><dd class="col-sm-9">{{ a.depreciationMethod === 'STRAIGHT_LINE' ? 'Straight Line' : 'Reducing Balance' }}</dd>
           <dt class="col-sm-3">Life Periods</dt><dd class="col-sm-9">{{ a.lifePeriods }}</dd>
           @if (a.reducingRate) {
@@ -79,11 +81,10 @@
           @if (a.assetTag) {
             <dt class="col-sm-3">Asset Tag</dt><dd class="col-sm-9 font-monospace">{{ a.assetTag }}</dd>
           }
-          @if (a.costCentreId) {
-            <dt class="col-sm-3">Cost Centre ID</dt><dd class="col-sm-9">{{ a.costCentreId }}</dd>
-          }
           @if (a.sourceBillUid) {
-            <dt class="col-sm-3">Source Bill</dt><dd class="col-sm-9 small font-monospace">{{ a.sourceBillUid }}</dd>
+            <dt class="col-sm-3">Source Bill</dt><dd class="col-sm-9">
+              <a [routerLink]="['/admin/ap/supplier-bills/uid', a.sourceBillUid]">View Source Bill</a>
+            </dd>
           }
           @if (a.disposedAt) {
             <dt class="col-sm-3">Disposed At</dt><dd class="col-sm-9">{{ a.disposedAt }}</dd>

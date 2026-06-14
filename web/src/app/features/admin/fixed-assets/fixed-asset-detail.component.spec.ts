@@ -12,6 +12,9 @@ import { of, throwError } from 'rxjs';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
+import { BranchService } from '../branch/branch.service';
+import { CompanyService } from '../company/company.service';
+import { OrganisationService } from '../organisation/organisation.service';
 import { FixedAssetsService } from './fixed-assets.service';
 import { FixedAssetDetailComponent } from './fixed-asset-detail.component';
 import type { FixedAssetDto } from './models/fixed-assets.model';
@@ -55,6 +58,7 @@ function makeBed(
     dispose: vi.fn(() => of({ uid: 'd1', disposalType: 'SALE' } as any)),
     listSchedule: vi.fn(() => of([])),
     listRevaluations: vi.fn(() => of([])),
+    listCategories: vi.fn(() => of([])),
     ...faService,
   };
 
@@ -64,6 +68,9 @@ function makeBed(
       provideRouter([]),
       { provide: FixedAssetsService, useValue: svc },
       { provide: AlertService, useValue: { success: vi.fn(), error: vi.fn() } },
+      { provide: OrganisationService, useValue: { current: vi.fn(() => of({ uid: 'org-1' })) } },
+      { provide: CompanyService, useValue: { list: vi.fn(() => of([])) } },
+      { provide: BranchService, useValue: { list: vi.fn(() => of([])) } },
       {
         provide: SessionStore,
         useValue: {

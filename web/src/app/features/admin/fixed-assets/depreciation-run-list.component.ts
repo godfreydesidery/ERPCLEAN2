@@ -11,6 +11,8 @@ import { SessionStore } from '../../../core/auth/session.store';
 import { Company } from '../models/company.model';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
+import { FiscalPeriodDto } from '../gl/models/gl.model';
+import { GlService } from '../gl/gl.service';
 import { FixedAssetsService } from './fixed-assets.service';
 import type { DepreciationRunPage } from './fixed-assets.service';
 import { DepreciationRunDto } from './models/fixed-assets.model';
@@ -32,10 +34,13 @@ interface LoadTrigger { page: number }
 })
 export class DepreciationRunListComponent {
   private readonly faService = inject(FixedAssetsService);
+  private readonly glService = inject(GlService);
   private readonly companyService = inject(CompanyService);
   private readonly organisationService = inject(OrganisationService);
   private readonly alerts = inject(AlertService);
   protected readonly session = inject(SessionStore);
+
+  private readonly periodById = signal<Map<string, FiscalPeriodDto>>(new Map());
 
   // ── Company context ──────────────────────────────────────────────────────────
   readonly companies = signal<Company[]>([]);
@@ -96,6 +101,7 @@ export class DepreciationRunListComponent {
             if (list.length > 0) {
               this.selectedCompanyId.set(list[0].id);
               this.load(0);
+              this.loadPeriods(list[0].id);
             }
           },
           error: () => this.companyState.set('error'),
@@ -107,7 +113,24 @@ export class DepreciationRunListComponent {
 
   onCompanyChange(id: string): void {
     this.selectedCompanyId.set(id);
-    if (id) this.load(0);
+    if (id) {
+      this.load(0);
+      this.loadPeriods(id);
+    }
+  }
+
+  private loadPeriods(companyId: string): void {
+    this.glService.listPeriods(companyId).subscribe({
+      next: (periods) => {
+        this.periodById.set(new Map(periods.map((p) => [p.id, p])));
+      },
+      error: () => undefined,
+    });
+  }
+
+  periodLabel(fiscalPeriodId: string): string {
+    const p = this.periodById().get(fiscalPeriodId);
+    return p ? `Period ${p.periodNo} (${p.startDate})` : fiscalPeriodId;
   }
 
   load(page: number): void {

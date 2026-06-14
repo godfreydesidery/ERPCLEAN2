@@ -4,6 +4,10 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
+import { CompanyService } from '../company/company.service';
+import { OrganisationService } from '../organisation/organisation.service';
+import { AccountDto } from '../gl/models/gl.model';
+import { GlService } from '../gl/gl.service';
 import { HrPayrollService } from './hr-payroll.service';
 import { CreatePayComponentRequest, PayComponentBasis, PayComponentDto, PayComponentKind } from './models/hr-payroll.model';
 
@@ -19,8 +23,13 @@ import { CreatePayComponentRequest, PayComponentBasis, PayComponentDto, PayCompo
 })
 export class PayComponentDetailComponent {
   private readonly hrService = inject(HrPayrollService);
+  private readonly glService = inject(GlService);
+  private readonly companyService = inject(CompanyService);
+  private readonly organisationService = inject(OrganisationService);
   private readonly alerts = inject(AlertService);
   protected readonly session = inject(SessionStore);
+
+  private readonly glAccountMap = signal<Map<string, AccountDto>>(new Map());
 
   readonly uid = input.required<string>();
 
@@ -47,6 +56,7 @@ export class PayComponentDetailComponent {
 
   private init(): void {
     this.state.set('loading');
+    this.loadGlAccounts();
     this.hrService.getPayComponentByUid(this.uid()).subscribe({
       next: (c) => {
         this.comp.set(c);
@@ -55,6 +65,31 @@ export class PayComponentDetailComponent {
       },
       error: () => this.state.set('error'),
     });
+  }
+
+  private loadGlAccounts(): void {
+    this.organisationService.current().subscribe({
+      next: (org) => {
+        this.companyService.list(org.uid).subscribe({
+          next: (companies) => {
+            if (companies.length === 0) return;
+            this.glService.listAllActiveAccounts(companies[0].id).subscribe({
+              next: (accounts) => {
+                this.glAccountMap.set(new Map(accounts.map((a) => [a.id, a])));
+              },
+              error: () => undefined,
+            });
+          },
+          error: () => undefined,
+        });
+      },
+      error: () => undefined,
+    });
+  }
+
+  glAccountLabel(glAccountId: string): string {
+    const acc = this.glAccountMap().get(String(glAccountId));
+    return acc ? `${acc.accountCode} — ${acc.name}` : String(glAccountId ?? '');
   }
 
   private patchForm(c: PayComponentDto): void {
