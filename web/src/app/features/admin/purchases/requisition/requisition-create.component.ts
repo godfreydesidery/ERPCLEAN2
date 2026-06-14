@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
@@ -42,6 +42,7 @@ export class RequisitionCreateComponent {
   private readonly router = inject(Router);
   private readonly alerts = inject(AlertService);
   protected readonly session = inject(SessionStore);
+  private readonly destroyRef = inject(DestroyRef);
 
   // ── Company context ────────────────────────────────────────────────────────
   readonly companies = signal<Company[]>([]);
@@ -104,7 +105,7 @@ export class RequisitionCreateComponent {
       products: this.productService.list(companyId, undefined, 0, 200),
       units: this.productService.listUnits(companyId, undefined, 0, 200),
     })
-      .pipe(takeUntilDestroyed())
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: ({ products, units }) => {
           this.products.set(products.rows);

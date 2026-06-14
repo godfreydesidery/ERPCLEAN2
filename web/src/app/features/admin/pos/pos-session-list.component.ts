@@ -11,6 +11,8 @@ import { SessionStore } from '../../../core/auth/session.store';
 import { Company } from '../models/company.model';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
+import { BranchService } from '../branch/branch.service';
+import { Branch } from '../models/branch.model';
 import { UidPickerComponent, UidOption } from '../../../shared/uid-picker/uid-picker.component';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 import { PosService } from './pos.service';
@@ -37,6 +39,7 @@ export class PosSessionListComponent {
   private readonly posService = inject(PosService);
   private readonly companyService = inject(CompanyService);
   private readonly organisationService = inject(OrganisationService);
+  private readonly branchService = inject(BranchService);
   private readonly alerts = inject(AlertService);
   protected readonly session = inject(SessionStore);
 
@@ -44,6 +47,10 @@ export class PosSessionListComponent {
   readonly companies = signal<Company[]>([]);
   readonly selectedCompanyId = signal('');
   readonly companyState = signal<'loading' | 'idle' | 'error'>('loading');
+
+  // ── Branch context (needed for listTills which requires branchId) ──────────
+  readonly branches = signal<Branch[]>([]);
+  readonly activeBranchId = signal<string | undefined>(undefined);
 
   // ── List state ─────────────────────────────────────────────────────────────
   readonly rows = signal<PosSessionDto[]>([]);
@@ -116,7 +123,7 @@ export class PosSessionListComponent {
             this.companyState.set('idle');
             if (list.length > 0) {
               this.selectedCompanyId.set(list[0].id);
-              this.loadTills(list[0].id);
+              this.loadBranchesAndTills(list[0].uid, list[0].id);
               this.load(0);
             }
           },
@@ -127,8 +134,32 @@ export class PosSessionListComponent {
     });
   }
 
-  private loadTills(companyId: string): void {
-    this.posService.listTills(companyId).subscribe({
+  /**
+   * Load branches for the company, resolve the active branch id from the session,
+   * then load tills for that branch. listTills requires branchId (backend @RequestParam).
+   */
+  private loadBranchesAndTills(companyUid: string, companyId: string): void {
+    this.branchService.list(companyUid).subscribe({
+      next: (branchList) => {
+        this.branches.set(branchList);
+        // Use the session's active branch if it belongs to this company, else fall back to the first.
+        const activeBranchUid = this.session.activeBranchUid();
+        const active = branchList.find((b) => b.uid === activeBranchUid) ?? branchList[0];
+        const branchId = active?.id;
+        this.activeBranchId.set(branchId);
+        if (branchId) {
+          this.loadTills(companyId, branchId);
+        }
+      },
+      error: () => {
+        // Non-fatal: till picker will be empty but sessions list can still load.
+        this.tills.set([]);
+      },
+    });
+  }
+
+  private loadTills(companyId: string, branchId: string): void {
+    this.posService.listTills(companyId, branchId).subscribe({
       next: (list) => this.tills.set(list),
       error: () => this.tills.set([]),
     });
@@ -137,7 +168,8 @@ export class PosSessionListComponent {
   onCompanyChange(id: string): void {
     this.selectedCompanyId.set(id);
     if (id) {
-      this.loadTills(id);
+      const company = this.companies().find((c) => c.id === id);
+      if (company) this.loadBranchesAndTills(company.uid, id);
       this.load(0);
     }
   }
