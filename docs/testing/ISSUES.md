@@ -58,7 +58,7 @@ Fixed across branch `feat/e2e-playwright` (`f2684e2`) in 4 passes. **Verificatio
 | 010 supplier-quote 400 | ✅ FIXED | `companyUid` accessor on the DTO |
 | 011 purchase-return confirm 500 | ✅ FIXED | AP debit-note GL post |
 | 012 stock-location create | ✅ FIXED | default-location flush ordering |
-| 014 C1 uid-visible | ✅ **RESOLVED** | Codebase-wide sweep: ~93 raw machine-id renders (60 `…Uid` + 33 numeric `…Id`) across 22 areas → human name/number/resolver/routerLink, plus 4 `…Ref` data-fields holding a uid. Two durable gates added: static `npm run c1` (181 templates, **0 offenders**) + runtime detail-route scan. Final Playwright vs fresh backend **513/0**. See ISSUE-014 entry below. |
+| 014 C1 uid-visible | ✅ FIXED | Codebase-wide sweep: ~93 raw machine-id renders (60 `…Uid` + 33 numeric `…Id`) across 22 areas → human name/number/resolver/routerLink, plus 4 `…Ref` data-fields holding a uid. Two durable gates added: static `npm run c1` (181 templates, **0 offenders**) + runtime detail-route scan. Final Playwright vs fresh backend **513/0**. See ISSUE-014 entry below. |
 | 015 axe a11y (7 screens) | ✅ FIXED | removed prohibited aria / added labels — axe now 0 serious/critical |
 | + pos.session 500 (cascade) | ✅ FIXED | generate `session_number` (new field + generator) |
 | + stock-transfer in-transit 409 (cascade) | ✅ FIXED | seed in-transit location per company/branch (`StockLocationSeeder`) |
@@ -194,8 +194,8 @@ seeded via `e2e/full-coverage-drive.js`. Evidence: `web/test-results/`, `web/pw-
 - **Found by:** `smoke.spec.ts::login and reach the admin home page`
 - **Observed:** the single login assertion timed out once while 128 route tests logged in concurrently. **Not a product defect** — 121 route tests + the API seeder all authenticated fine. Mitigation: raise the login timeout / reduce workers for that spec.
 
-### ISSUE-014 — C1: raw machine identifiers (uid + numeric id) shown in the UI — ✅ **RESOLVED**
-- **Severity:** P2 (was filed P3) · **Status:** ✅ **RESOLVED (2026-06-14, branch `feat/c1-sweep`)** · **Layer:** L3 (convention C1)
+### ISSUE-014 — C1: raw machine identifiers (uid + numeric id) shown in the UI — ✅ **FIXED**
+- **Severity:** P2 (was filed P3) · **Status:** ✅ **FIXED (2026-06-14, branch `feat/c1-sweep`; was re-opened as systemic)** · **Layer:** L3 (convention C1)
 - **Resolution:** swept ~93 raw machine-id renders across 22 areas (60 `…Uid` + 33 raw numeric `…Id`) to human
   name/number/code, name-resolvers (mirroring `branchDisplay()`/`glAccountLabel()`), routerLinks (uid only in
   the path), or dropped where no user value. Also fixed 4 `…Ref`/`journalEntryRef` *data*-fields that held a
