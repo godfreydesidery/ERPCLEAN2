@@ -71,6 +71,7 @@
                    (ngModelChange)="onCustomerSearchChange($event)"
                    [disabled]="saving()"
                    autocomplete="off"
+                   role="combobox"
                    [attr.aria-expanded]="customerResults().length > 0"
                    aria-haspopup="listbox"
                    aria-autocomplete="list" />
@@ -188,6 +189,7 @@
                      (ngModelChange)="onProductSearchChange($event)"
                      [disabled]="saving()"
                      autocomplete="off"
+                     role="combobox"
                      [attr.aria-expanded]="productResults().length > 0"
                      aria-haspopup="listbox"
                      aria-autocomplete="list" />

@@ -177,8 +177,8 @@
                   <tr>
                     <td>
                       <a [routerLink]="['/admin/boms/uid', row.uid]"
-                         [attr.aria-label]="'View BOM for product ' + row.parentProductUid">
-                        {{ row.parentProductUid }}
+                         [attr.aria-label]="'View BOM for ' + productLabel(row.parentProductUid)">
+                        {{ productLabel(row.parentProductUid) }}
                       </a>
                     </td>
                     <td>v{{ row.versionNo }}</td>
@@ -193,7 +193,7 @@
                     <td>
                       <a [routerLink]="['/admin/boms/uid', row.uid]"
                          class="btn btn-sm btn-outline-secondary"
-                         [attr.aria-label]="'Open BOM ' + row.uid">
+                         [attr.aria-label]="'Open BOM for ' + productLabel(row.parentProductUid) + ' v' + row.versionNo">
                         <i class="bi bi-pencil" aria-hidden="true"></i>
                       </a>
                     </td>

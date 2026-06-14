@@ -185,9 +185,9 @@
                     <td class="small text-muted">{{ a.normalBalance }}</td>
                     <td>
                       @if (a.active) {
-                        <i class="bi bi-check-circle-fill text-success" aria-label="Active"></i>
+                        <span role="img" aria-label="Active"><i class="bi bi-check-circle-fill text-success" aria-hidden="true"></i></span>
                       } @else {
-                        <i class="bi bi-dash-circle text-muted" aria-label="Inactive"></i>
+                        <span role="img" aria-label="Inactive"><i class="bi bi-dash-circle text-muted" aria-hidden="true"></i></span>
                       }
                     </td>
                     @if (canManage()) {

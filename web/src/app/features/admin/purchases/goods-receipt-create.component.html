@@ -45,6 +45,7 @@
                  [ngModel]="poSearchQ()"
                  (ngModelChange)="onPoSearchChange($event)"
                  autocomplete="off"
+                 role="combobox"
                  [attr.aria-expanded]="poResults().length > 0"
                  aria-haspopup="listbox"
                  aria-autocomplete="list" />
