@@ -276,7 +276,7 @@ public class PosSessionServiceImpl implements PosSessionService {
 
     private void requireOpen(PosSession session) {
         if (session.getStatus() != PosSessionStatus.OPEN) {
-            throw new ConflictException("Session " + session.getUid() + " is not OPEN.");
+            throw new ConflictException("Session " + session.getSessionNumber() + " is not OPEN.");
         }
     }
 
