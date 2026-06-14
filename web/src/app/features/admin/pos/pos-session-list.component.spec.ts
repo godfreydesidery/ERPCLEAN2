@@ -20,6 +20,7 @@ import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
+import { BranchService } from '../branch/branch.service';
 import { PosService } from './pos.service';
 import type { PosSessionPage } from './pos.service';
 import { PosSessionListComponent } from './pos-session-list.component';
@@ -73,6 +74,10 @@ function makeBed(opts: { listImpl?: () => any; canOpen?: boolean } = {}) {
       {
         provide: CompanyService,
         useValue: { list: vi.fn(() => of([{ uid: 'CO1', id: '10', name: 'Main Co' }])) },
+      },
+      {
+        provide: BranchService,
+        useValue: { list: vi.fn(() => of([{ uid: 'BR1', id: '2', name: 'HQ', code: 'HQ', companyId: '10', companyUid: 'CO1', isDefault: true, status: 'ACTIVE', timeZone: 'UTC' }])) },
       },
       {
         provide: AlertService,
