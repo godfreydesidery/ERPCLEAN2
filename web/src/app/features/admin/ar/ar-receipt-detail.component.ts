@@ -1,5 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, input, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { SessionStore } from '../../../core/auth/session.store';
 import { ArReceiptDto } from './models/ar.model';
 import { ArService } from './ar.service';
@@ -9,7 +10,7 @@ import { ArService } from './ar.service';
  */
 @Component({
   selector: 'app-ar-receipt-detail',
-  imports: [],
+  imports: [RouterLink],
   templateUrl: './ar-receipt-detail.component.html',
   styleUrl: './ar-receipt-detail.component.scss',
 })

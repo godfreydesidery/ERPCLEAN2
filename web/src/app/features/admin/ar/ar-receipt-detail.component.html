@@ -45,14 +45,20 @@
             <caption class="visually-hidden">Receipt allocations</caption>
             <thead class="table-light">
               <tr>
-                <th scope="col">Invoice UID</th>
+                <th scope="col">Invoice</th>
                 <th scope="col" class="text-end">Allocated Amount</th>
               </tr>
             </thead>
             <tbody>
               @for (a of r.allocations; track a.arInvoiceUid) {
                 <tr>
-                  <td class="font-monospace text-break" style="font-size:0.8em">{{ a.arInvoiceUid }}</td>
+                  <td>
+                    <a [routerLink]="['/admin/ar/invoices']"
+                       [queryParams]="{ invoiceUid: a.arInvoiceUid }"
+                       class="text-decoration-none small">
+                      <i class="bi bi-cash-coin me-1" aria-hidden="true"></i>View Invoice
+                    </a>
+                  </td>
                   <td class="text-end font-monospace">{{ fmtMoney(a.allocatedAmount) }}</td>
                 </tr>
               }

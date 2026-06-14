@@ -158,7 +158,7 @@
                       </a>
                     </td>
                     <td class="small text-muted font-monospace">{{ bill.supplierInvoiceNo }}</td>
-                    <td class="small text-muted font-monospace">{{ bill.supplierId }}</td>
+                    <td class="small">{{ supplierDisplay(bill.supplierId) }}</td>
                     <td class="small">{{ bill.billDate }}</td>
                     <td class="small">{{ bill.dueDate ?? '—' }}</td>
                     <td class="text-end font-monospace small">{{ fmtMoney(bill.grossAmount) }}</td>
