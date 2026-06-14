@@ -6,6 +6,7 @@ import { AlertService } from '../../../../core/feedback/alert.service';
 import { SessionStore } from '../../../../core/auth/session.store';
 import { StockTransferDto, StockTransferStatus } from './stock-transfer.model';
 import { StockTransferService } from './stock-transfer.service';
+import { StockLocationService } from '../locations/stock-location.service';
 
 @Component({
   selector: 'app-stock-transfer-detail',
@@ -17,11 +18,15 @@ export class StockTransferDetailComponent {
   readonly uid = input.required<string>();
 
   private readonly transferService = inject(StockTransferService);
+  private readonly locationService = inject(StockLocationService);
   private readonly alerts = inject(AlertService);
   protected readonly session = inject(SessionStore);
 
   readonly entity = signal<StockTransferDto | null>(null);
   readonly state = signal<'loading' | 'idle' | 'error' | 'forbidden'>('loading');
+
+  /** id → "code — name" map loaded once for label resolution. */
+  private readonly locationNameMap = signal<Map<string, string>>(new Map());
 
   readonly actionBusy = signal(false);
   readonly actionError = signal<string | null>(null);
@@ -59,12 +64,28 @@ export class StockTransferDetailComponent {
       next: (t) => {
         this.entity.set(t);
         this.state.set('idle');
+        this.loadLocationNames();
       },
       error: (err) =>
         this.state.set(
           err instanceof HttpErrorResponse && err.status === 403 ? 'forbidden' : 'error',
         ),
     });
+  }
+
+  private loadLocationNames(): void {
+    this.locationService.list(0, 500).subscribe({
+      next: ({ rows }) => {
+        const map = new Map<string, string>();
+        for (const loc of rows) map.set(loc.id, `${loc.code} — ${loc.name}`);
+        this.locationNameMap.set(map);
+      },
+      error: () => undefined, // non-fatal — label falls back
+    });
+  }
+
+  locationLabel(locationId: string): string {
+    return this.locationNameMap().get(locationId) ?? locationId.slice(0, 8) + '…';
   }
 
   dispatch(): void {

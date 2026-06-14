@@ -47,8 +47,8 @@
                       {{ row.status }}
                     </span>
                   </td>
-                  <td>{{ row.sourceLocationId }}</td>
-                  <td>{{ row.destLocationId }}</td>
+                  <td>{{ locationLabel(row.sourceLocationId) }}</td>
+                  <td>{{ locationLabel(row.destLocationId) }}</td>
                   <td class="text-end">
                     <a [routerLink]="['/admin/stock-transfers/uid', row.uid]"
                        [attr.aria-label]="'View transfer ' + transferLabel(row)">

@@ -9,6 +9,7 @@ import { SessionStore } from '../../../../core/auth/session.store';
 import { PaginatorComponent } from '../../../../shared/paginator/paginator.component';
 import { StockTransferDto, StockTransferStatus } from './stock-transfer.model';
 import { StockTransferService } from './stock-transfer.service';
+import { StockLocationService } from '../locations/stock-location.service';
 
 const DEFAULT_SIZE = 20;
 
@@ -24,6 +25,7 @@ interface LoadTrigger {
 })
 export class StockTransferListComponent {
   private readonly transferService = inject(StockTransferService);
+  private readonly locationService = inject(StockLocationService);
   protected readonly session = inject(SessionStore);
 
   // ── List state ────────────────────────────────────────────────────────────────
@@ -41,6 +43,9 @@ export class StockTransferListComponent {
   readonly isEmpty = computed(() => this.state() === 'idle' && this.rows().length === 0);
   readonly canCreate = computed(() => this.session.hasPermission('STOCK.TRANSFER.CREATE'));
   readonly canView = computed(() => this.session.hasPermission('STOCK.TRANSFER.VIEW'));
+
+  /** id → "code — name" map loaded once for location label resolution. */
+  private readonly locationNameMap = signal<Map<string, string>>(new Map());
 
   private readonly immediateTrigger$ = new Subject<LoadTrigger>();
 
@@ -73,6 +78,22 @@ export class StockTransferListComponent {
       });
 
     this.load(0);
+    this.loadLocationNames();
+  }
+
+  private loadLocationNames(): void {
+    this.locationService.list(0, 500).subscribe({
+      next: ({ rows }) => {
+        const map = new Map<string, string>();
+        for (const loc of rows) map.set(loc.id, `${loc.code} — ${loc.name}`);
+        this.locationNameMap.set(map);
+      },
+      error: () => undefined,
+    });
+  }
+
+  locationLabel(locationId: string): string {
+    return this.locationNameMap().get(locationId) ?? locationId.slice(0, 8) + '…';
   }
 
   load(page: number): void {

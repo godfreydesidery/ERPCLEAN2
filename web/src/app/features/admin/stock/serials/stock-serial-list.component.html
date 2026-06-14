@@ -108,10 +108,10 @@
                 </span>
               </span>
               @if (lookupResult()!.receivedDocumentUid) {
-                <span><strong>Received Doc:</strong> {{ lookupResult()!.receivedDocumentUid }}</span>
+                <span><strong>Received:</strong> Yes</span>
               }
               @if (lookupResult()!.issuedDocumentUid) {
-                <span><strong>Issued Doc:</strong> {{ lookupResult()!.issuedDocumentUid }}</span>
+                <span><strong>Issued:</strong> Yes</span>
               }
             </div>
           }
@@ -152,8 +152,8 @@
                 <tr>
                   <th scope="col">Serial #</th>
                   <th scope="col">Status</th>
-                  <th scope="col">Received Doc</th>
-                  <th scope="col">Issued Doc</th>
+                  <th scope="col">Received</th>
+                  <th scope="col">Issued</th>
                   <th scope="col">Created</th>
                 </tr>
               </thead>
@@ -166,8 +166,8 @@
                         {{ row.serialStatus }}
                       </span>
                     </td>
-                    <td>{{ row.receivedDocumentUid ?? '—' }}</td>
-                    <td>{{ row.issuedDocumentUid ?? '—' }}</td>
+                    <td>{{ row.receivedDocumentUid ? 'Yes' : '—' }}</td>
+                    <td>{{ row.issuedDocumentUid ? 'Yes' : '—' }}</td>
                     <td>{{ row.createdAt ? (row.createdAt | slice:0:10) : '—' }}</td>
                   </tr>
                 }
