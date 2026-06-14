@@ -10,6 +10,7 @@ public record PosTillDto(
         String uid,
         Long companyId,
         Long branchId,
+        String code,
         String name,
         MasterStatus status
 ) {}

@@ -26,6 +26,14 @@ public class PosTill extends UidEntity {
     @Column(name = "branch_id", nullable = false, updatable = false)
     private Long branchId;
 
+    /**
+     * Optional short code for the till (e.g. "T-001"). Nullable — generated externally or
+     * left unset. Uniqueness on (company_id, name) is enforced by uq_pos_till_company_name.
+     */
+    @Column(name = "code", nullable = true, length = 30)
+    @Setter
+    private String code;
+
     /** Short human label, e.g. "Till 1". */
     @Column(name = "name", nullable = false, length = 60)
     @Setter

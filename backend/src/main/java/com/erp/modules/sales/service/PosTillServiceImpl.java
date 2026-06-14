@@ -88,6 +88,6 @@ public class PosTillServiceImpl implements PosTillService {
 
     private PosTillDto toDto(PosTill t) {
         return new PosTillDto(t.getId(), t.getUid(), t.getCompanyId(), t.getBranchId(),
-                t.getName(), t.getStatus());
+                t.getCode(), t.getName(), t.getStatus());
     }
 }
