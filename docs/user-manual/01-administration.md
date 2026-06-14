@@ -18,7 +18,7 @@ The system is structured in three levels:
 
 **Required permission:** `COMPANY.VIEW`
 
-Navigate to **Administration > Companies** in the sidebar.
+Navigate to **Administration › Companies** (`/admin/companies`) in the sidebar.
 
 The list shows each company's code, name, and status (Active or Archived). Your view is limited to companies within your active organisation and, for non-admin users, to companies you are scoped to act in.
 
@@ -53,7 +53,7 @@ Click **Archive** on the company detail screen. The company's status changes to 
 
 **Required permission:** `BRANCH.VIEW`
 
-From the Companies list, click a company to open its detail, then click **Branches** to see the list of branches under that company.
+Navigate to **Administration › Companies** (`/admin/companies`), click a company to open its detail, then click **Branches** to open the branch list at `/admin/companies/<companyUid>/branches`.
 
 ### Creating a branch
 
@@ -90,11 +90,11 @@ The previously default branch is cleared automatically.
 **Required permission to view:** `USER.VIEW`
 **Required permission to create/edit/disable/unlock/reset password:** `USER.MANAGE`
 
-Navigate to **Administration > Users**.
+Navigate to **Administration › Users** (`/admin/users`) in the sidebar.
 
 ### The users list
 
-The list shows each user's username, display name, and status. Use the search bar to filter by name. Click **Manage branches** on any row to open the user's detail page.
+The list shows each user's username, display name, and status. Use the search bar to filter by name. Click **Manage branches** on any row to open the user's detail page at `/admin/users/uid/<uid>`.
 
 ### Creating a user
 
@@ -131,7 +131,7 @@ The user can sign in immediately with the new password. Passwords are never stor
 
 ### Editing user contact details
 
-Navigate to the user's detail page (click **Manage branches** from the list). You can update the display name, email, and phone number. The username and status are changed via their dedicated actions, not here.
+Navigate to the user's detail page (`/admin/users/uid/<uid>`) by clicking **Manage branches** from the list. You can update the display name, email, and phone number. The username and status are changed via their dedicated actions, not here.
 
 ---
 
@@ -140,13 +140,13 @@ Navigate to the user's detail page (click **Manage branches** from the list). Yo
 **Required permission to view:** `ROLE.VIEW`
 **Required permission to create/edit/set permissions/archive:** `ROLE.MANAGE`
 
-Navigate to **Administration > Roles**.
+Navigate to **Administration › Roles** (`/admin/roles`) in the sidebar.
 
 Roles are named bundles of permissions. A user can be granted one or more roles; the effective permissions are the union of all granted roles in the active branch context.
 
 ### The roles list
 
-The list shows each role's code, name, and whether it is a **System** role (pre-defined and cannot be archived) or a custom role. Click a role's code or name to open its edit page.
+The list shows each role's code, name, and whether it is a **System** role (pre-defined and cannot be archived) or a custom role. Click a role's code or name to open its edit page at `/admin/roles/uid/<uid>`.
 
 ### Creating a role
 
@@ -161,7 +161,7 @@ The new role is created with no permissions. Assign permissions next.
 
 ### Editing a role's name or description
 
-Open the role's edit page and update the name or description fields, then click **Save details**. The code cannot be changed.
+Open the role's edit page (`/admin/roles/uid/<uid>`) and update the name or description fields, then click **Save details**. The code cannot be changed.
 
 ### Setting a role's permissions
 
@@ -185,13 +185,13 @@ Click **Archive** on the role edit page. The role status changes to **Archived**
 
 **Required permission:** `ROLE.MANAGE`
 
-Navigate to **Administration > Role Grants**.
+Navigate to **Administration › Role Grants** (`/admin/role-grants`) in the sidebar.
 
 This screen lets you grant a role to a user for a specific company, optionally restricted to a single branch.
 
 ### Granting a role
 
-1. On the Role Grants screen, choose the **User** by typing their name in the picker.
+1. On the Role Grants screen (`/admin/role-grants`), choose the **User** by typing their name in the picker.
 2. Choose the **Role** by name.
 3. Choose the **Company** by name (the system resolves this to your active company by default).
 4. Optionally choose a **Branch** to restrict the grant to one branch. Leave blank to grant the role across all branches of that company.
@@ -216,7 +216,7 @@ The grant is revoked immediately. The user loses those permissions on their next
 **Required permission to view branch assignments:** `USER.VIEW`
 **Required permission to assign / change default / remove:** `BRANCH.ASSIGN`
 
-Branch assignments control which branches a user can switch to and which data they can access. Open a user's detail page by clicking **Manage branches** from the Users list.
+Branch assignments control which branches a user can switch to and which data they can access. Open a user's detail page (`/admin/users/uid/<uid>`) by clicking **Manage branches** from the **Administration › Users** (`/admin/users`) list.
 
 ### Assigning a user to a branch
 
@@ -243,11 +243,53 @@ Click **Remove** on the assignment row. If you remove the user's current default
 
 ---
 
+**Example — Create the ACCOUNTANT role and assign it to a new user scoped to the Head Office branch**
+
+This example walks through the complete new-staff onboarding flow for Amina Juma, who joins as an accountant at the Head Office branch of Orbix Trading Co.
+
+**Step 1 — Create the role (if it does not already exist)**
+
+1. Navigate to **Administration › Roles** (`/admin/roles`).
+2. Click **Create Role**.
+3. Enter Code `ACCOUNTANT`, Name `Accountant`, Description `GL posting, AR, AP, Cash & Bank, Tax`.
+4. Click **Save**. The role is created with no permissions.
+5. Click the `ACCOUNTANT` row to open `/admin/roles/uid/<uid>`.
+6. In the permissions panel, check the following codes: `GL.VIEW`, `GL.POST`, `AR.VIEW`, `AR.RECEIPT.RECORD`, `AR.STATEMENT.VIEW`, `AP.VIEW`, `AP.BILL.ENTER`, `AP.PAYMENT.RUN`, `CASH.VIEW`, `CASH.ENTRY.RECORD`, `CASH.TRANSFER`, `CASH.RECONCILE`, `VAT.VIEW`, `TAXRATE.VIEW`, `REPORT.PL.VIEW`, `REPORT.BS.VIEW`, `REPORT.CASHFLOW.VIEW`, `REPORT.LEDGER.VIEW`.
+7. Click **Save permissions**. The panel refreshes showing 18 codes saved.
+
+**Step 2 — Create the user account**
+
+1. Navigate to **Administration › Users** (`/admin/users`).
+2. Click **Create User**.
+3. Enter Username `amina.juma`, Display Name `Amina Juma`, Password `Amina2024#`, Email `amina.juma@orbixtrading.co.tz`.
+4. Click **Save**. The row appears with status **Active**.
+
+**Step 3 — Assign the Head Office branch**
+
+1. Click **Manage branches** on Amina Juma's row to open `/admin/users/uid/<uid>`.
+2. In the **Branch Assignments** panel, select Company `Orbix Trading Co.`, Branch `HO — Head Office`.
+3. Check **Make default**.
+4. Click **Assign**. The branch appears in the list marked as default.
+
+**Step 4 — Grant the ACCOUNTANT role**
+
+1. Navigate to **Administration › Role Grants** (`/admin/role-grants`).
+2. Select User `Amina Juma`, Role `ACCOUNTANT`, Company `Orbix Trading Co.`, Branch `HO — Head Office`.
+3. Click **Grant**. The grant row appears immediately.
+
+**Step 5 — Verify**
+
+1. Navigate to **Administration › Audit** (`/admin/audit`).
+2. Filter by Actor `rootadmin` (or whichever admin performed these steps). Confirm four audit entries: `ROLE.CREATE`, `ROLE.PERMISSIONS.SET`, `USER.CREATE`, `ROLE.GRANT`.
+3. Sign in as `amina.juma` / `Amina2024#`. Confirm the **Accounting** sidebar group is visible and items such as **Chart of Accounts** (`/admin/gl/accounts`) and **Payables** (`/admin/ap/supplier-bills`) are accessible.
+
+---
+
 ## Audit Trail
 
 **Required permission:** `AUDIT.VIEW`
 
-Navigate to **Administration > Audit**.
+Navigate to **Administration › Audit** (`/admin/audit`) in the sidebar.
 
 The audit trail is an append-only log of every significant action performed in the system — who did it, what they did, and when. It cannot be edited or deleted.
 
@@ -263,7 +305,7 @@ Every create, update, state change (such as enabling or disabling a user), grant
 
 ### Reviewing the audit log
 
-1. Navigate to **Administration > Audit**.
+1. Navigate to **Administration › Audit** (`/admin/audit`).
 2. Use the filters at the top to narrow by action type, actor, date range, or target type.
 3. The list shows the most recent events first. Use the pager to browse older records.
 
