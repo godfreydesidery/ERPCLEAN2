@@ -259,8 +259,8 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
                     LocalDate.now(),
                     totalReturnValue,
                     BigDecimal.ZERO,                     // no VAT on the goods cost reversal
-                    "Purchase return " + ret.getReturnNumber() + ": " + ret.getReason(),
-                    "PURCHASE_RETURN:" + ret.getUid());
+                    "Purchase return " + ret.getReturnNumber() + " [" + ret.getUid() + "]: " + ret.getReason(),
+                    "PURCHASE_RETURN");                  // origin matches CHECK constraint in ap_debit_notes
 
             ApDebitNoteDto debitNote = apDebitNoteService.raise(debitNoteReq);
             ret.setDebitNoteUid(debitNote.uid());

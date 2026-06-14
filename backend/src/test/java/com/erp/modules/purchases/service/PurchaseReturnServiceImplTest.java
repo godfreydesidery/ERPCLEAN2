@@ -133,7 +133,9 @@ class PurchaseReturnServiceImplTest {
         assertThat(req.companyUid()).isEqualTo("COMP-UID-1");
         assertThat(req.supplierUid()).isEqualTo("SUPP-UID-1");
         assertThat(req.netAmount()).isEqualByComparingTo(new BigDecimal("100.00"));
-        assertThat(req.origin()).startsWith("PURCHASE_RETURN:");
+        // Bug #11 fix: origin must be exactly "PURCHASE_RETURN" — the ap_debit_notes CHECK
+        // constraint only allows 'STANDALONE' or 'PURCHASE_RETURN' (no colon+uid suffix).
+        assertThat(req.origin()).isEqualTo("PURCHASE_RETURN");
 
         // assert: debitNoteUid set on the return header
         verify(ret).setDebitNoteUid("DN-UID-1");
