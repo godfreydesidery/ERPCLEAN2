@@ -58,7 +58,7 @@ Fixed across branch `feat/e2e-playwright` (`f2684e2`) in 4 passes. **Verificatio
 | 010 supplier-quote 400 | ✅ FIXED | `companyUid` accessor on the DTO |
 | 011 purchase-return confirm 500 | ✅ FIXED | AP debit-note GL post |
 | 012 stock-location create | ✅ FIXED | default-location flush ordering |
-| 014 C1 uid-visible | 🔶 **PARTIAL — RE-OPENED** | Only the targeted *list-screen ULID* cases fixed (pos/sessions, notification-deliveries, pos-tills, POS-variance memo, gl/journals, ap-supplier-bills, boms list). The C1 gate gave a false "none" — it skips detail routes + can't see numeric ids. **~32 templates still render raw uids + ~33 raw numeric ids. See re-opened ISSUE-014 below.** |
+| 014 C1 uid-visible | ✅ **RESOLVED** | Codebase-wide sweep: ~93 raw machine-id renders (60 `…Uid` + 33 numeric `…Id`) across 22 areas → human name/number/resolver/routerLink, plus 4 `…Ref` data-fields holding a uid. Two durable gates added: static `npm run c1` (181 templates, **0 offenders**) + runtime detail-route scan. Final Playwright vs fresh backend **513/0**. See ISSUE-014 entry below. |
 | 015 axe a11y (7 screens) | ✅ FIXED | removed prohibited aria / added labels — axe now 0 serious/critical |
 | + pos.session 500 (cascade) | ✅ FIXED | generate `session_number` (new field + generator) |
 | + stock-transfer in-transit 409 (cascade) | ✅ FIXED | seed in-transit location per company/branch (`StockLocationSeeder`) |
@@ -67,10 +67,10 @@ Fixed across branch `feat/e2e-playwright` (`f2684e2`) in 4 passes. **Verificatio
 Confirmed by a clean final Playwright run: **385 pass / 0 fail** (axe serious: none · login-flake: none) +
 backend `mvn clean verify` **748 / 0 failures** + API re-seed green.
 
-> ⚠️ **Caveat on "C1 uid-visible: none" (corrected 2026-06-14):** that result means *none detected by the
-> automated C1 gate* — but the gate is **blind** to most C1 violations (it skips all `/uid/:uid` detail
-> routes and only matches 26-char ULIDs, not numeric ids). FOLLOW-001/002 (below) genuinely fixed their
-> specific list screens, but the broad C1 convention is **NOT** resolved — see the re-opened **ISSUE-014**.
+> ℹ️ **Note on "C1 uid-visible: none" (history):** at this point that result only meant *none detected by the
+> original C1 gate*, which was **blind** to detail routes + numeric ids. FOLLOW-001/002 fixed their specific
+> list screens; the broad C1 convention was then re-opened as **ISSUE-014** and has since been **RESOLVED**
+> by a dedicated codebase-wide sweep + a hardened static gate (`npm run c1`) + a runtime detail-route scan.
 - **FOLLOW-001 (P3, C1) — GL journal memos embed source uids.** ✅ FIXED. Added document-number fields to
   all 8 outbox payloads (with backward-compat constructors for in-flight events), populated them in the 6
   publishers, and threaded a `docNumber` through every `InventoryGlPoster` method — memos now read e.g.
