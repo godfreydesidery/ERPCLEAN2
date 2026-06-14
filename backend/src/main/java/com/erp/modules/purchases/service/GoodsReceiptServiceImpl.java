@@ -157,7 +157,8 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
                         saved.getCompanyId(),
                         saved.getBranchId(),
                         receivedAt,
-                        payloadLines));
+                        payloadLines,
+                        receiptNumber));
 
         // 9. Audit (ADR-0011 D-13)
         audit.record(AuditEvent.of(AuditActions.PURCHASE_GR_RECEIVE, "goods_receipts",
@@ -247,7 +248,8 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
                         gr.getUid(),
                         gr.getCompanyId(),
                         gr.getBranchId(),
-                        payloadLines));
+                        payloadLines,
+                        gr.getReceiptNumber()));
 
         // 5. Audit (ADR-0011 D-13)
         audit.record(AuditEvent.of(AuditActions.PURCHASE_GR_VOID, "goods_receipts",

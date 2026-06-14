@@ -27,8 +27,15 @@ public record StockReceivedPayload(
         Long    companyId,
         Long    branchId,
         Instant receivedAt,
-        List<LineItem> lines
+        List<LineItem> lines,
+        /** Human-readable GRN number (e.g. GRN-0001) — used in GL journal memos (FOLLOW-001). */
+        String  receiptNumber
 ) {
+    /** Back-compat: callers that do not yet supply receiptNumber. */
+    public StockReceivedPayload(String receiptUid, Long companyId, Long branchId,
+                                Instant receivedAt, List<LineItem> lines) {
+        this(receiptUid, companyId, branchId, receivedAt, lines, null);
+    }
     public record LineItem(
             Long       productId,
             String     productUid,

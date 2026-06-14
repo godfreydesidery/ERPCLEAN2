@@ -236,7 +236,8 @@ public class SalesReturnServiceImpl implements SalesReturnService {
                 new DeliveryReturnedPayload(
                         savedReturn.getUid(), delivery.getUid(),
                         delivery.getCompanyId(), delivery.getBranchId(),
-                        Instant.now(), payloadLines));
+                        Instant.now(), payloadLines,
+                        savedReturn.getReturnNumber()));
 
         // Raise credit note synchronously (origin=RETURN — ADR-0021 D-11)
         ArCreditNoteDto creditNote = raiseCreditNote(

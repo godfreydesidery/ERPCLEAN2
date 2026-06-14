@@ -19,8 +19,16 @@ public record DeliveryConfirmedPayload(
         Long companyId,
         Long branchId,
         Instant deliveredAt,
-        List<LineItem> lines
+        List<LineItem> lines,
+        /** Human-readable delivery number (e.g. DLV-0001) — used in GL journal memos (FOLLOW-001). */
+        String deliveryNumber
 ) {
+    /** Back-compat: pre-FOLLOW-001 callers that do not supply deliveryNumber. */
+    public DeliveryConfirmedPayload(String deliveryUid, String salesOrderUid,
+                                    Long companyId, Long branchId,
+                                    Instant deliveredAt, List<LineItem> lines) {
+        this(deliveryUid, salesOrderUid, companyId, branchId, deliveredAt, lines, null);
+    }
 
     /**
      * Per-line item — what the stock consumer needs for stock deduction and recipe explosion.

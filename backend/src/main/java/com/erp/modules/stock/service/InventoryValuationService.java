@@ -94,23 +94,39 @@ public interface InventoryValuationService {
      * <p>ADR-0025 D-6: {@code costCentreValueId} and {@code departmentValueId} are optional
      * dimension ids for the P&L expense leg; null = untagged (NFR-CC-01).
      *
-     * @param movementUid        the uid of the ADJUSTMENT movement just posted by StockServiceImpl
+     * <p>FOLLOW-001: {@code productCode} and {@code reasonCode} are used for human-readable GL
+     * memo text; raw ULID is never embedded in a visible journal description.
+     *
+     * @param movementUid        the uid of the ADJUSTMENT movement (used as GL sourceRef)
      * @param soh                the on-hand row (already loaded by StockServiceImpl)
      * @param adjustQty          the signed adjustment quantity
      * @param postingDate        the posting date for the GL entry
      * @param costCentreValueId  nullable dimension id for cost-centre tagging
      * @param departmentValueId  nullable dimension id for department tagging
+     * @param productCode        human-readable product code for GL memo (nullable)
+     * @param reasonCode         adjustment reason code for GL memo (nullable)
      */
     void revalueAdjustment(String movementUid, StockOnHand soh, BigDecimal adjustQty,
                             LocalDate postingDate,
-                            Long costCentreValueId, Long departmentValueId);
+                            Long costCentreValueId, Long departmentValueId,
+                            String productCode, String reasonCode);
+
+    /**
+     * Overload without productCode/reasonCode — dimension-tagged callers that predate FOLLOW-001.
+     */
+    default void revalueAdjustment(String movementUid, StockOnHand soh, BigDecimal adjustQty,
+                                   LocalDate postingDate,
+                                   Long costCentreValueId, Long departmentValueId) {
+        revalueAdjustment(movementUid, soh, adjustQty, postingDate,
+                costCentreValueId, departmentValueId, null, null);
+    }
 
     /**
      * Backward-compatible overload — calls the full form with null dimension ids (NFR-CC-01).
      */
     default void revalueAdjustment(String movementUid, StockOnHand soh, BigDecimal adjustQty,
                                    LocalDate postingDate) {
-        revalueAdjustment(movementUid, soh, adjustQty, postingDate, null, null);
+        revalueAdjustment(movementUid, soh, adjustQty, postingDate, null, null, null, null);
     }
 
     /**

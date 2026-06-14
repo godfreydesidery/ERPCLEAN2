@@ -88,7 +88,7 @@ public class LandedCostStockHandler implements DomainEventHandler {
             if (glAmount.signum() > 0) {
                 String glEntryUid = glPoster.postLandedCostInNewTx(
                         payload.companyId(), payload.branchId(), LocalDate.now(),
-                        payload.landedCostUid(),
+                        payload.landedCostUid(), payload.landedCostNumber(),
                         payload.currency() != null ? payload.currency() : "TZS",
                         glAmount);
                 if (glEntryUid == null) {

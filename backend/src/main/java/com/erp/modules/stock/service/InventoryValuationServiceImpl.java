@@ -447,10 +447,11 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
     @Override
     public void revalueAdjustment(String movementUid, StockOnHand soh, BigDecimal adjustQty,
                                    LocalDate postingDate,
-                                   Long costCentreValueId, Long departmentValueId) {
+                                   Long costCentreValueId, Long departmentValueId,
+                                   String productCode, String reasonCode) {
         try {
             doRevalueAdjustment(movementUid, soh, adjustQty, postingDate,
-                    costCentreValueId, departmentValueId);
+                    costCentreValueId, departmentValueId, productCode, reasonCode);
         } catch (ObjectOptimisticLockingFailureException ex) {
             log.debug("InventoryValuation: optimistic lock clash on revalueAdjustment " +
                               "company={} movement={} — retrying once (FIX D / NFR-INV-05)",
@@ -464,13 +465,14 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
                     : onHands.findByCompanyIdAndBranchIdAndProductId(
                             soh.getCompanyId(), soh.getBranchId(), soh.getProductId()).orElse(soh);
             doRevalueAdjustment(movementUid, freshSoh, adjustQty, postingDate,
-                    costCentreValueId, departmentValueId);
+                    costCentreValueId, departmentValueId, productCode, reasonCode);
         }
     }
 
     private void doRevalueAdjustment(String movementUid, StockOnHand soh, BigDecimal adjustQty,
                                       LocalDate postingDate,
-                                      Long costCentreValueId, Long departmentValueId) {
+                                      Long costCentreValueId, Long departmentValueId,
+                                      String productCode, String reasonCode) {
         if (soh.getAvgCost() == null) {
             log.warn("InventoryValuation: revalueAdjustment — avg_cost IS NULL for company={} product={} " +
                              "movement={} — GL leg skipped (D-2 edge)", soh.getCompanyId(), soh.getProductId(), movementUid);
@@ -491,12 +493,14 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
 
         // Post GL directly — a missing config MUST fail the operator's command (BR-INV-12)
         // ADR-0025 D-6: pass dimension ids to tag the expense leg (null = untagged)
+        // FOLLOW-001: pass productCode + reasonCode so memo text is human-readable, not a ULID.
         glPoster.postAdjustmentDirect(
                 soh.getCompanyId(), soh.getBranchId(), postingDate,
                 new InventoryGlPoster.AdjustmentPostCmd(
                         movementUid, BASE_CURRENCY, value, decrease,
                         actorId(RequestContext.get()),
-                        costCentreValueId, departmentValueId));
+                        costCentreValueId, departmentValueId,
+                        productCode, reasonCode));
     }
 
     // -------------------------------------------------------------------------

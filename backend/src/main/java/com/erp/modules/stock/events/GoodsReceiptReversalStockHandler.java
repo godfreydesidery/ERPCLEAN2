@@ -133,7 +133,7 @@ public class GoodsReceiptReversalStockHandler implements DomainEventHandler {
             if (totalOriginalValue.compareTo(BigDecimal.ZERO) > 0) {
                 String glEntryUid = glPoster.postReceiptReversalInNewTx(
                         event.getCompanyId(), event.getBranchId(), LocalDate.now(),
-                        payload.receiptUid(), "TZS", totalOriginalValue);
+                        payload.receiptUid(), payload.receiptNumber(), "TZS", totalOriginalValue);
                 if (glEntryUid == null) {
                     log.warn("GoodsReceiptReversalStockHandler: receipt reversal GL post returned null " +
                                      "for receipt uid={} — GL not configured (qty still reversed)",

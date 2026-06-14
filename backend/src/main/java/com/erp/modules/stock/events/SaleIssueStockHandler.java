@@ -123,7 +123,7 @@ public class SaleIssueStockHandler implements DomainEventHandler {
                         : LocalDate.now();
                 String glEntryUid = glPoster.postCogsInNewTx(
                         event.getCompanyId(), event.getBranchId(), postingDate,
-                        payload.invoiceUid(), "TZS", cogsLegs);
+                        payload.invoiceUid(), payload.invoiceNumber(), "TZS", cogsLegs);
                 if (glEntryUid == null) {
                     log.warn("SaleIssueStockHandler: COGS GL post returned null for invoice uid={} " +
                                      "— GL not configured or period closed (qty still moved)",

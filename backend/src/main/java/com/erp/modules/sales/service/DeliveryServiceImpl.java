@@ -216,7 +216,8 @@ public class DeliveryServiceImpl implements DeliveryService {
                 new DeliveryConfirmedPayload(
                         saved.getUid(), order.getUid(),
                         saved.getCompanyId(), saved.getBranchId(),
-                        saved.getConfirmedAt(), payloadLines));
+                        saved.getConfirmedAt(), payloadLines,
+                        saved.getDeliveryNumber()));
 
         // Recompute SO status (may transition to PARTIALLY_FULFILLED or FULFILLED)
         salesOrderService.recomputeStatus(order.getId());

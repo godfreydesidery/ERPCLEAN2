@@ -114,7 +114,7 @@ public class DeliveryIssueStockHandler implements DomainEventHandler {
                         : LocalDate.now();
                 String glEntryUid = glPoster.postCogsInNewTx(
                         event.getCompanyId(), event.getBranchId(), postingDate,
-                        payload.deliveryUid(), "TZS", cogsLegs);
+                        payload.deliveryUid(), payload.deliveryNumber(), "TZS", cogsLegs);
                 if (glEntryUid == null) {
                     log.warn("DeliveryIssueStockHandler: COGS GL post returned null for delivery uid={} " +
                                      "— GL not configured or period closed (qty still moved)",

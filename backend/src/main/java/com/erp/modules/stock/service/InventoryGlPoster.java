@@ -42,6 +42,11 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>All amounts are base currency, HALF_UP (BR-INV-11). Accounts resolved via
  * {@link GLConfigResolver#resolve} (throws on missing/inactive — BR-GL-10 / BR-INV-12).
+ *
+ * <p><strong>FOLLOW-001:</strong> all journal DESCRIPTION / line memo texts use human-readable
+ * document numbers (GRN, invoice, delivery numbers) passed in by the caller. The {@code sourceRef}
+ * arg still carries the uid (machine linkage, not displayed as text). Raw 26-char ULIDs are never
+ * embedded in user-visible memo text.
  */
 @Component
 public class InventoryGlPoster {
@@ -68,7 +73,8 @@ public class InventoryGlPoster {
      * REQUIRES_NEW — returns null on GL anomaly, never propagates to the handler TX.
      *
      * @param legs        per-line (lineUid, productCode, value) tuples
-     * @param receiptUid  sourceRef
+     * @param receiptUid  sourceRef (machine linkage — kept as uid per ADR)
+     * @param receiptNumber human-readable document number for memo text (FOLLOW-001)
      * @param postingDate posting date
      * @param currency    base currency code
      * @param companyId   tenant
@@ -77,8 +83,9 @@ public class InventoryGlPoster {
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public String postReceiptInNewTx(Long companyId, Long branchId, LocalDate postingDate,
-                                      String receiptUid, String currency,
+                                      String receiptUid, String receiptNumber, String currency,
                                       List<ReceiptLeg> legs) {
+        String docLabel = receiptNumber != null ? receiptNumber : receiptUid;
         try {
             ChartOfAccount inventoryAcct = configResolver.resolve(companyId, GlConfigKey.INVENTORY);
             ChartOfAccount grniAcct      = configResolver.resolve(companyId, GlConfigKey.GRNI);
@@ -95,7 +102,7 @@ public class InventoryGlPoster {
 
             JournalEntryDraft draft = new JournalEntryDraft(
                     companyId, branchId, postingDate,
-                    "Goods receipt " + receiptUid,
+                    "Goods receipt " + docLabel,
                     JournalSourceType.STOCK_RECEIPT, receiptUid,
                     null, null, lines);
 
@@ -104,7 +111,7 @@ public class InventoryGlPoster {
 
         } catch (Exception ex) {
             log.warn("InventoryGlPoster: receipt GL post failed for company={} receipt={} — {}",
-                    companyId, receiptUid, ex.getMessage());
+                    companyId, docLabel, ex.getMessage());
             return null;
         }
     }
@@ -119,14 +126,16 @@ public class InventoryGlPoster {
      * One journal per SALE.FINALISED, one DR/CR leg pair per issued component (ADR-0020 D-4b).
      * REQUIRES_NEW — returns null on GL anomaly; never propagates.
      *
-     * @param legs       per-component (productId, productCode, value) tuples
-     * @param invoiceUid sourceRef
+     * @param legs          per-component (productId, productCode, value) tuples
+     * @param invoiceUid    sourceRef (machine linkage)
+     * @param invoiceNumber human-readable invoice number for memo text (FOLLOW-001)
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public String postCogsInNewTx(Long companyId, Long branchId, LocalDate postingDate,
-                                   String invoiceUid, String currency,
+                                   String invoiceUid, String invoiceNumber, String currency,
                                    List<CogsLeg> legs) {
         if (legs.isEmpty()) return null;
+        String docLabel = invoiceNumber != null ? invoiceNumber : invoiceUid;
         try {
             ChartOfAccount cogsAcct      = configResolver.resolve(companyId, GlConfigKey.COGS);
             ChartOfAccount inventoryAcct = configResolver.resolve(companyId, GlConfigKey.INVENTORY);
@@ -135,15 +144,15 @@ public class InventoryGlPoster {
             for (CogsLeg leg : legs) {
                 lines.add(new LineDraft(cogsAcct.getId(),
                         leg.value(), BigDecimal.ZERO,
-                        currency, "COGS " + leg.productCode() + " — " + invoiceUid));
+                        currency, "COGS " + leg.productCode() + " — " + docLabel));
                 lines.add(new LineDraft(inventoryAcct.getId(),
                         BigDecimal.ZERO, leg.value(),
-                        currency, "Inventory out " + leg.productCode() + " — " + invoiceUid));
+                        currency, "Inventory out " + leg.productCode() + " — " + docLabel));
             }
 
             JournalEntryDraft draft = new JournalEntryDraft(
                     companyId, branchId, postingDate,
-                    "COGS — sale " + invoiceUid,
+                    "COGS — sale " + docLabel,
                     JournalSourceType.COGS, invoiceUid,
                     null, null, lines);
 
@@ -152,7 +161,7 @@ public class InventoryGlPoster {
 
         } catch (Exception ex) {
             log.warn("InventoryGlPoster: COGS GL post failed for company={} invoice={} — {}",
-                    companyId, invoiceUid, ex.getMessage());
+                    companyId, docLabel, ex.getMessage());
             return null;
         }
     }
@@ -168,16 +177,18 @@ public class InventoryGlPoster {
      * REQUIRES_NEW — returns null on GL anomaly; never propagates to caller TX.
      *
      * @param legs          per-line (productId, productCode, value, projectCostType) tuples
-     * @param issueRef      issue document uid (sourceRef)
+     * @param issueRef      issue document uid (sourceRef — machine linkage)
+     * @param issueNumber   human-readable issue number for memo text (FOLLOW-001; nullable)
      * @param projectId     FK to projects(id) — stamped on the COGS leg
      * @param projectTaskId FK to project_tasks(id) — stamped on the COGS leg (nullable)
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public String postCogsForProjectInNewTx(Long companyId, Long branchId, LocalDate postingDate,
-                                             String issueRef, String currency,
+                                             String issueRef, String issueNumber, String currency,
                                              Long projectId, Long projectTaskId,
                                              List<ProjectCogsLeg> legs) {
         if (legs.isEmpty()) return null;
+        String docLabel = issueNumber != null ? issueNumber : issueRef;
         try {
             ChartOfAccount cogsAcct      = configResolver.resolve(companyId, GlConfigKey.COGS);
             ChartOfAccount inventoryAcct = configResolver.resolve(companyId, GlConfigKey.INVENTORY);
@@ -187,18 +198,18 @@ public class InventoryGlPoster {
                 // COGS leg: project-tagged (ADR-0033 D-1 — project_id / project_task_id scalars)
                 lines.add(new LineDraft(cogsAcct.getId(),
                         leg.value(), BigDecimal.ZERO,
-                        currency, "Project COGS " + leg.productCode() + " — " + issueRef,
+                        currency, "Project COGS " + leg.productCode() + " — " + docLabel,
                         null, null, null, null,
                         projectId, projectTaskId, leg.projectCostType()));
                 // Inventory CR leg: untagged (balance-sheet leg, ADR-0025 D-6 pattern)
                 lines.add(new LineDraft(inventoryAcct.getId(),
                         BigDecimal.ZERO, leg.value(),
-                        currency, "Inventory out " + leg.productCode() + " — " + issueRef));
+                        currency, "Inventory out " + leg.productCode() + " — " + docLabel));
             }
 
             JournalEntryDraft draft = new JournalEntryDraft(
                     companyId, branchId, postingDate,
-                    "Project material issue — " + issueRef,
+                    "Project material issue — " + docLabel,
                     JournalSourceType.COGS, issueRef,
                     null, null, lines);
 
@@ -207,7 +218,7 @@ public class InventoryGlPoster {
 
         } catch (Exception ex) {
             log.warn("InventoryGlPoster: project COGS GL post failed for company={} issue={} — {}",
-                    companyId, issueRef, ex.getMessage());
+                    companyId, docLabel, ex.getMessage());
             return null;
         }
     }
@@ -220,11 +231,16 @@ public class InventoryGlPoster {
     /**
      * Post DR GRNI (2150) / CR INVENTORY (1300) for a receipt reversal at original cost.
      * (ADR-0020 D-5). REQUIRES_NEW — returns null on anomaly; never propagates.
+     *
+     * @param receiptUid    sourceRef (machine linkage)
+     * @param receiptNumber human-readable GRN number for memo text (FOLLOW-001)
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public String postReceiptReversalInNewTx(Long companyId, Long branchId, LocalDate postingDate,
-                                              String receiptUid, String currency,
+                                              String receiptUid, String receiptNumber,
+                                              String currency,
                                               BigDecimal totalOriginalValue) {
+        String docLabel = receiptNumber != null ? receiptNumber : receiptUid;
         try {
             ChartOfAccount grniAcct      = configResolver.resolve(companyId, GlConfigKey.GRNI);
             ChartOfAccount inventoryAcct = configResolver.resolve(companyId, GlConfigKey.INVENTORY);
@@ -232,15 +248,15 @@ public class InventoryGlPoster {
             List<LineDraft> lines = List.of(
                     new LineDraft(grniAcct.getId(),
                             totalOriginalValue, BigDecimal.ZERO,
-                            currency, "GR reversal GRNI — " + receiptUid),
+                            currency, "GR reversal GRNI — " + docLabel),
                     new LineDraft(inventoryAcct.getId(),
                             BigDecimal.ZERO, totalOriginalValue,
-                            currency, "GR reversal Inventory — " + receiptUid)
+                            currency, "GR reversal Inventory — " + docLabel)
             );
 
             JournalEntryDraft draft = new JournalEntryDraft(
                     companyId, branchId, postingDate,
-                    "GR reversal " + receiptUid,
+                    "GR reversal " + docLabel,
                     JournalSourceType.STOCK_RECEIPT, receiptUid,
                     null, null, lines);
 
@@ -249,7 +265,7 @@ public class InventoryGlPoster {
 
         } catch (Exception ex) {
             log.warn("InventoryGlPoster: receipt reversal GL post failed for company={} receipt={} — {}",
-                    companyId, receiptUid, ex.getMessage());
+                    companyId, docLabel, ex.getMessage());
             return null;
         }
     }
@@ -262,11 +278,16 @@ public class InventoryGlPoster {
     /**
      * Post DR INVENTORY (1300) / CR COGS (5100) for a sale void at original cost.
      * (ADR-0020 D-5). REQUIRES_NEW — returns null on anomaly; never propagates.
+     *
+     * @param invoiceUid    sourceRef (machine linkage)
+     * @param invoiceNumber human-readable invoice number for memo text (FOLLOW-001)
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public String postSaleReversalInNewTx(Long companyId, Long branchId, LocalDate postingDate,
-                                           String invoiceUid, String currency,
+                                           String invoiceUid, String invoiceNumber,
+                                           String currency,
                                            BigDecimal totalOriginalValue) {
+        String docLabel = invoiceNumber != null ? invoiceNumber : invoiceUid;
         try {
             ChartOfAccount inventoryAcct = configResolver.resolve(companyId, GlConfigKey.INVENTORY);
             ChartOfAccount cogsAcct      = configResolver.resolve(companyId, GlConfigKey.COGS);
@@ -274,15 +295,15 @@ public class InventoryGlPoster {
             List<LineDraft> lines = List.of(
                     new LineDraft(inventoryAcct.getId(),
                             totalOriginalValue, BigDecimal.ZERO,
-                            currency, "Sale reversal Inventory — " + invoiceUid),
+                            currency, "Sale reversal Inventory — " + docLabel),
                     new LineDraft(cogsAcct.getId(),
                             BigDecimal.ZERO, totalOriginalValue,
-                            currency, "Sale reversal COGS — " + invoiceUid)
+                            currency, "Sale reversal COGS — " + docLabel)
             );
 
             JournalEntryDraft draft = new JournalEntryDraft(
                     companyId, branchId, postingDate,
-                    "COGS reversal — void " + invoiceUid,
+                    "COGS reversal — void " + docLabel,
                     JournalSourceType.COGS, invoiceUid,
                     null, null, lines);
 
@@ -291,7 +312,7 @@ public class InventoryGlPoster {
 
         } catch (Exception ex) {
             log.warn("InventoryGlPoster: sale reversal GL post failed for company={} invoice={} — {}",
-                    companyId, invoiceUid, ex.getMessage());
+                    companyId, docLabel, ex.getMessage());
             return null;
         }
     }
@@ -303,6 +324,11 @@ public class InventoryGlPoster {
     /**
      * Post DR INVENTORY (1300) / CR OPENING_BALANCE_EQUITY (3100) for opening valuation.
      * Direct post — a missing config MUST fail the operator's command (BR-INV-12).
+     *
+     * <p>FOLLOW-001: the opening valuation has no human document number; the on-hand uid is a
+     * stable machine reference for the stock_on_hand record and is kept as the sourceRef.
+     * The memo text uses the uid as a system identifier (opening valuation is an admin-only
+     * operation not surfaced on the /admin/gl/journals user view in normal workflow).
      */
     public JournalEntryDto postOpeningValuationDirect(Long companyId, Long branchId,
                                                        LocalDate postingDate,
@@ -338,14 +364,18 @@ public class InventoryGlPoster {
      * or DR INVENTORY / CR STOCK_ADJUSTMENT for an increase.
      * Direct post — a missing config MUST fail the operator's command (BR-INV-12).
      *
-     * @param cmd bundles the adjustment-specific posting parameters (movementUid, currency,
-     *            value, decrease flag, postedBy) to keep the method under the 7-param limit.
+     * @param cmd bundles the adjustment-specific posting parameters to keep the method under
+     *            the 7-param limit.
      */
     public JournalEntryDto postAdjustmentDirect(Long companyId, Long branchId,
                                                  LocalDate postingDate,
                                                  AdjustmentPostCmd cmd) {
         ChartOfAccount inventoryAcct   = configResolver.resolve(companyId, GlConfigKey.INVENTORY);
         ChartOfAccount adjustmentAcct  = configResolver.resolve(companyId, GlConfigKey.STOCK_ADJUSTMENT);
+
+        // FOLLOW-001: build a human-readable memo; never embed the raw ULID (movementUid).
+        // Use productCode + reasonCode as the descriptor — always available from the caller.
+        String memoDescriptor = buildAdjustmentDescriptor(cmd);
 
         // ADR-0025 D-6: only the P&L-relevant leg (STOCK_ADJUSTMENT expense) carries the
         // dimension tag; the balance-sheet INVENTORY control leg posts untagged (D-6 decision).
@@ -355,32 +385,41 @@ public class InventoryGlPoster {
             lines = List.of(
                     new LineDraft(adjustmentAcct.getId(),
                             cmd.value(), BigDecimal.ZERO,
-                            cmd.currency(), "Stock adjustment — " + cmd.movementUid(),
+                            cmd.currency(), "Stock adjustment — " + memoDescriptor,
                             cmd.costCentreValueId(), cmd.departmentValueId(), null, null),
                     new LineDraft(inventoryAcct.getId(),
                             BigDecimal.ZERO, cmd.value(),
-                            cmd.currency(), "Inventory adjustment — " + cmd.movementUid())
+                            cmd.currency(), "Inventory adjustment — " + memoDescriptor)
             );
         } else {
             // DR INVENTORY (BS — untagged) / CR STOCK_ADJUSTMENT (expense — tagged)
             lines = List.of(
                     new LineDraft(inventoryAcct.getId(),
                             cmd.value(), BigDecimal.ZERO,
-                            cmd.currency(), "Inventory adjustment — " + cmd.movementUid()),
+                            cmd.currency(), "Inventory adjustment — " + memoDescriptor),
                     new LineDraft(adjustmentAcct.getId(),
                             BigDecimal.ZERO, cmd.value(),
-                            cmd.currency(), "Stock adjustment — " + cmd.movementUid(),
+                            cmd.currency(), "Stock adjustment — " + memoDescriptor,
                             cmd.costCentreValueId(), cmd.departmentValueId(), null, null)
             );
         }
 
         JournalEntryDraft draft = new JournalEntryDraft(
                 companyId, branchId, postingDate,
-                "Stock adjustment " + cmd.movementUid(),
-                JournalSourceType.STOCK_ADJUSTMENT, cmd.movementUid(),
+                "Stock adjustment " + memoDescriptor,
+                JournalSourceType.STOCK_ADJUSTMENT, cmd.sourceRef(),
                 null, cmd.postedBy(), lines);
 
         return directPosting.post(draft);
+    }
+
+    /** Build human-readable descriptor for the adjustment GL memo (FOLLOW-001). */
+    private static String buildAdjustmentDescriptor(AdjustmentPostCmd cmd) {
+        String base = cmd.productCode() != null ? cmd.productCode() : "UNKNOWN";
+        if (cmd.reasonCode() != null && !cmd.reasonCode().isBlank()) {
+            return base + "/" + cmd.reasonCode();
+        }
+        return base;
     }
 
     // -------------------------------------------------------------------------
@@ -392,13 +431,16 @@ public class InventoryGlPoster {
      * Post DR INVENTORY (1300) / CR LANDED_COST_CLEARING (2160) for the total landed-cost amount.
      * One journal per landed cost confirm. REQUIRES_NEW — returns null on anomaly; never propagates.
      *
-     * @param landedCostUid sourceRef (landed_cost.uid)
-     * @param totalAmount   sum of all charge allocations
+     * @param landedCostUid    sourceRef (machine linkage — landed_cost.uid)
+     * @param landedCostNumber human-readable LC number for memo text (FOLLOW-001)
+     * @param totalAmount      sum of all charge allocations
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public String postLandedCostInNewTx(Long companyId, Long branchId, LocalDate postingDate,
-                                         String landedCostUid, String currency,
+                                         String landedCostUid, String landedCostNumber,
+                                         String currency,
                                          BigDecimal totalAmount) {
+        String docLabel = landedCostNumber != null ? landedCostNumber : landedCostUid;
         try {
             ChartOfAccount inventoryAcct     = configResolver.resolve(companyId, GlConfigKey.INVENTORY);
             ChartOfAccount landedClearAcct   = configResolver.resolve(companyId, GlConfigKey.LANDED_COST_CLEARING);
@@ -406,15 +448,15 @@ public class InventoryGlPoster {
             List<LineDraft> lines = List.of(
                     new LineDraft(inventoryAcct.getId(),
                             totalAmount, BigDecimal.ZERO,
-                            currency, "Landed cost — " + landedCostUid),
+                            currency, "Landed cost — " + docLabel),
                     new LineDraft(landedClearAcct.getId(),
                             BigDecimal.ZERO, totalAmount,
-                            currency, "Landed cost clearing — " + landedCostUid)
+                            currency, "Landed cost clearing — " + docLabel)
             );
 
             JournalEntryDraft draft = new JournalEntryDraft(
                     companyId, branchId, postingDate,
-                    "Landed cost " + landedCostUid,
+                    "Landed cost " + docLabel,
                     JournalSourceType.LANDED_COST, landedCostUid,
                     null, null, lines);
 
@@ -423,7 +465,7 @@ public class InventoryGlPoster {
 
         } catch (Exception ex) {
             log.warn("InventoryGlPoster: landed cost GL post failed for company={} landedCost={} — {}",
-                    companyId, landedCostUid, ex.getMessage());
+                    companyId, docLabel, ex.getMessage());
             return null;
         }
     }
@@ -437,13 +479,16 @@ public class InventoryGlPoster {
      * Post DR GRNI (2150) / CR INVENTORY (1300) for a purchase return at original receipt cost.
      * One journal per confirmed purchase return. REQUIRES_NEW — returns null on anomaly; never propagates.
      *
-     * @param returnUid      sourceRef (purchase_return.uid)
+     * @param returnUid        sourceRef (machine linkage — purchase_return.uid)
+     * @param returnNumber     human-readable return number for memo text (FOLLOW-001)
      * @param totalReturnValue total value being returned (sum of line_value_amount from return lines)
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public String postPurchaseReturnInNewTx(Long companyId, Long branchId, LocalDate postingDate,
-                                             String returnUid, String currency,
+                                             String returnUid, String returnNumber,
+                                             String currency,
                                              BigDecimal totalReturnValue) {
+        String docLabel = returnNumber != null ? returnNumber : returnUid;
         try {
             ChartOfAccount grniAcct      = configResolver.resolve(companyId, GlConfigKey.GRNI);
             ChartOfAccount inventoryAcct = configResolver.resolve(companyId, GlConfigKey.INVENTORY);
@@ -451,15 +496,15 @@ public class InventoryGlPoster {
             List<LineDraft> lines = List.of(
                     new LineDraft(grniAcct.getId(),
                             totalReturnValue, BigDecimal.ZERO,
-                            currency, "Purchase return GRNI — " + returnUid),
+                            currency, "Purchase return GRNI — " + docLabel),
                     new LineDraft(inventoryAcct.getId(),
                             BigDecimal.ZERO, totalReturnValue,
-                            currency, "Purchase return Inventory — " + returnUid)
+                            currency, "Purchase return Inventory — " + docLabel)
             );
 
             JournalEntryDraft draft = new JournalEntryDraft(
                     companyId, branchId, postingDate,
-                    "Purchase return " + returnUid,
+                    "Purchase return " + docLabel,
                     JournalSourceType.PURCHASE_RETURN, returnUid,
                     null, null, lines);
 
@@ -468,7 +513,7 @@ public class InventoryGlPoster {
 
         } catch (Exception ex) {
             log.warn("InventoryGlPoster: purchase return GL post failed for company={} return={} — {}",
-                    companyId, returnUid, ex.getMessage());
+                    companyId, docLabel, ex.getMessage());
             return null;
         }
     }
@@ -494,15 +539,45 @@ public class InventoryGlPoster {
      * <p>ADR-0025 D-6: {@code costCentreValueId} and {@code departmentValueId} are optional
      * dimension tag ids for the expense leg (already resolved by the caller via
      * {@code DimensionResolver}). Null = untagged (NFR-CC-01).
-     * The 5-arg constructor defaults them to null for backward compatibility.
+     *
+     * <p>FOLLOW-001: {@code productCode} and {@code reasonCode} are used for human-readable memo
+     * text; {@code sourceRef} is the machine uid for sourceRef linkage (never shown in memo text).
+     * The legacy 5-arg constructor defaults productCode, reasonCode, and sourceRef to null for
+     * backward compatibility (existing callers are migrated to the named constructor).
      */
-    public record AdjustmentPostCmd(String movementUid, String currency,
-                                    BigDecimal value, boolean decrease, Long postedBy,
-                                    Long costCentreValueId, Long departmentValueId) {
-        /** Convenience 5-arg constructor — existing callers unchanged (NFR-CC-01). */
-        public AdjustmentPostCmd(String movementUid, String currency,
-                                 BigDecimal value, boolean decrease, Long postedBy) {
-            this(movementUid, currency, value, decrease, postedBy, null, null);
+    public record AdjustmentPostCmd(
+            /** Machine reference for JournalEntry.sourceRef — uid, never shown in memo text. */
+            String sourceRef,
+            String currency,
+            BigDecimal value,
+            boolean decrease,
+            Long postedBy,
+            Long costCentreValueId,
+            Long departmentValueId,
+            /** Human-readable product code for memo text (e.g. "RICE-5KG"). FOLLOW-001. */
+            String productCode,
+            /** Reason code for memo text (e.g. "DAMAGE", "COUNT_CORRECTION"). FOLLOW-001. */
+            String reasonCode
+    ) {
+        /** Convenience 7-arg constructor — dimension-tagged, no productCode/reasonCode. */
+        public AdjustmentPostCmd(String sourceRef, String currency,
+                                 BigDecimal value, boolean decrease, Long postedBy,
+                                 Long costCentreValueId, Long departmentValueId) {
+            this(sourceRef, currency, value, decrease, postedBy,
+                    costCentreValueId, departmentValueId, null, null);
         }
+
+        /** Convenience 5-arg constructor — backward compat, no dimensions / no memo info. */
+        public AdjustmentPostCmd(String sourceRef, String currency,
+                                 BigDecimal value, boolean decrease, Long postedBy) {
+            this(sourceRef, currency, value, decrease, postedBy, null, null, null, null);
+        }
+
+        /**
+         * Legacy alias: old callers used field name {@code movementUid} for the sourceRef.
+         * @deprecated Use {@link #sourceRef()} — kept for zero-risk migration; will be removed.
+         */
+        @Deprecated
+        public String movementUid() { return sourceRef; }
     }
 }

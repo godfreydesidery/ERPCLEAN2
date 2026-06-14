@@ -153,8 +153,10 @@ public class StockServiceImpl implements StockService {
         StockOnHand soh = onHands.findByCompanyIdAndBranchIdAndProductId(
                 product.companyId(), principal.branchId(), product.id()).orElse(null);
         if (soh != null) {
+            // FOLLOW-001: pass productCode + reasonCode so memo text avoids raw ULID.
             valuation.revalueAdjustment(movementUid, soh, request.quantity(), LocalDate.now(),
-                    dimTag.costCentreValueId(), dimTag.departmentValueId());
+                    dimTag.costCentreValueId(), dimTag.departmentValueId(),
+                    product.code(), request.reasonCode() != null ? request.reasonCode().name() : null);
         }
 
         return StockMovementDto.from(movement);
