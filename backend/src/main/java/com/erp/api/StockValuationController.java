@@ -56,7 +56,7 @@ public class StockValuationController {
      * currently ignored by the query (real-time balance is returned).
      */
     @GetMapping("/report")
-    @PreAuthorize("hasAuthority('INVENTORY.VALUATION.VIEW')")
+    @PreAuthorize("@perm.has('INVENTORY.VALUATION.VIEW')")
     public StockValuationReportDto report(
             @RequestParam(name = "asOf", required = false) LocalDate asOf) {
         RequestContext.Principal principal = RequestContext.get();
@@ -74,7 +74,7 @@ public class StockValuationController {
      */
     @PostMapping("/opening")
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasAuthority('INVENTORY.OPENING.SET')")
+    @PreAuthorize("@perm.has('INVENTORY.OPENING.SET')")
     public OpeningValuationResultDto setOpening(
             @Valid @RequestBody SetOpeningValuationRequest request) {
         return valuationService.setOpeningValue(request, LocalDate.now());

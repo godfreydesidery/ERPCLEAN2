@@ -96,6 +96,15 @@ public interface ArInvoiceRepository extends JpaRepository<ArInvoice, Long> {
     List<ArInvoice> findOpenForStatement(@Param("companyId") Long companyId,
                                           @Param("customerId") Long customerId);
 
+    /** All open/partial invoices for a company (company-wide ageing — no customer filter). */
+    @Query("""
+            SELECT i FROM ArInvoice i
+            WHERE i.companyId = :companyId
+              AND i.status IN ('OPEN','PARTIAL')
+            ORDER BY i.customerId ASC, i.dueDate ASC
+            """)
+    List<ArInvoice> findOpenForCompany(@Param("companyId") Long companyId);
+
     /** Status check only. */
     boolean existsByCompanyIdAndUid(Long companyId, String uid);
 

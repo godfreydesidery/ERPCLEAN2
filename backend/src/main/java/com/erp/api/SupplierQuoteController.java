@@ -35,7 +35,7 @@ public class SupplierQuoteController {
     /** Capture a supplier's quote against an RFQ. */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("@perm.scoped(#req.companyUid(), 'company', 'PURCHASE.QUOTE.CREATE')")
+    @PreAuthorize("@perm.has('PURCHASE.QUOTE.CREATE')")
     public ApiResponse<SupplierQuoteDto> capture(@RequestBody CaptureSupplierQuoteRequest req) {
         return ApiResponse.ok(service.capture(req));
     }

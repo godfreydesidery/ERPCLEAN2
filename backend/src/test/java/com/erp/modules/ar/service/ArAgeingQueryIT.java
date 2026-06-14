@@ -285,6 +285,50 @@ class ArAgeingQueryIT extends PostgresIntegrationTest {
     }
 
     // =========================================================================
+    // Bar 7: Company-wide ageing (Bug #5 fix) — customerId=null returns ALL customers' buckets
+    // =========================================================================
+
+    @Test
+    void ageing_nullCustomerId_returnsCompanyWideAgeing() {
+        // Two customers; create one open item each in different buckets.
+        // customerId / customerUidStr = customer 1 (set in @BeforeEach)
+        openItem(new BigDecimal("1000"), AS_AT);               // CURRENT for customer 1
+
+        // Customer 2 — scoped to same company
+        var cust2 = customerService.create(new CreateCustomerRequest(
+                companyId, PartyType.INDIVIDUAL, "Ageing Customer 2",
+                null, null, null, null, null, null, null, null, null, null, null, null,
+                CustomerKind.CREDIT_ACCOUNT, null, null));
+        Long cust2Id   = cust2.id();
+        String cust2Uid = cust2.uid();
+        // Open item for customer 2 (overdue by 40 days → D31_60)
+        String savedCustUid = customerUidStr;
+        customerUidStr = cust2Uid;
+        openItem(new BigDecimal("2000"), AS_AT.minusDays(40));
+        customerUidStr = savedCustUid; // restore for other helpers
+
+        // Null customerId → company-wide ageing aggregates both customers
+        List<ArAgeingRowDto> rows = ageingQuery.ageing(companyId, null, AS_AT);
+
+        assertThat(rows).hasSize(5);
+        assertBucket(rows, AgeingBucket.CURRENT, new BigDecimal("1000"));
+        assertBucket(rows, AgeingBucket.D31_60,  new BigDecimal("2000"));
+    }
+
+    @Test
+    void ageing_nullCustomerId_noOpenItems_allBucketsZero() {
+        // No invoices at all — company-wide ageing must return all zeros (not throw NPE / 400)
+        List<ArAgeingRowDto> rows = ageingQuery.ageing(companyId, null, AS_AT);
+
+        assertThat(rows).hasSize(5);
+        for (ArAgeingRowDto row : rows) {
+            assertThat(row.amount())
+                    .as("bucket %s must be zero when company has no open items", row.bucket())
+                    .isEqualByComparingTo(BigDecimal.ZERO);
+        }
+    }
+
+    // =========================================================================
     // Helpers
     // =========================================================================
 

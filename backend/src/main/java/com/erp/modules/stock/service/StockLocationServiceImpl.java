@@ -55,13 +55,16 @@ public class StockLocationServiceImpl implements StockLocationService {
             throw com.erp.platform.common.api.ForbiddenException.notPermitted();
         }
 
-        // If makeDefault, clear any existing default first
+        // If makeDefault, clear any existing default first and FLUSH immediately.
+        // Without the flush the Hibernate batch could INSERT the new is_default=true row
+        // before the UPDATE clearing the old one reaches the DB, violating the partial
+        // unique index uq_stock_location_one_default (company_id, branch_id) WHERE is_default.
         if (request.makeDefault()) {
             locations.findByCompanyIdAndBranchIdAndIsDefaultTrue(
                     principal.companyId(), branch.getId())
                     .ifPresent(existing -> {
                         existing.clearDefault(principal.userId());
-                        locations.save(existing);
+                        locations.saveAndFlush(existing);
                     });
         }
 
