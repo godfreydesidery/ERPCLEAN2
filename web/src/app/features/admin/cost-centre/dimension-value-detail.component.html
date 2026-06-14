@@ -37,16 +37,18 @@
       @if (entity(); as v) {
         <!-- Meta -->
         <dl class="row small mb-3">
-          <dt class="col-sm-3 text-muted">UID</dt>
-          <dd class="col-sm-9 font-monospace">{{ v.uid }}</dd>
           <dt class="col-sm-3 text-muted">Code</dt>
           <dd class="col-sm-9 font-monospace">{{ v.code }}</dd>
           <dt class="col-sm-3 text-muted">Slot</dt>
           <dd class="col-sm-9"><span class="badge text-bg-info">{{ v.slot }}</span></dd>
-          <dt class="col-sm-3 text-muted">Dimension UID</dt>
-          <dd class="col-sm-9 font-monospace">{{ v.dimensionUid }}</dd>
-          <dt class="col-sm-3 text-muted">Parent UID</dt>
-          <dd class="col-sm-9 font-monospace">{{ v.parentUid ?? '— (root)' }}</dd>
+          <dt class="col-sm-3 text-muted">Parent</dt>
+          <dd class="col-sm-9">
+            @if (v.parentUid) {
+              <a [routerLink]="['/admin/cost-centre/values/uid', v.parentUid]">Parent value</a>
+            } @else {
+              <span class="text-muted">— (root)</span>
+            }
+          </dd>
           <dt class="col-sm-3 text-muted">Active for tagging</dt>
           <dd class="col-sm-9">
             @if (v.active) {

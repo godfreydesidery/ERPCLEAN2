@@ -238,7 +238,7 @@
                     <td>{{ companyName()(g.companyUid) }}</td>
                     <td class="text-muted small">
                       @if (g.branchUid) {
-                        {{ g.branchUid }}
+                        {{ branchName()(g.branchUid) }}
                       } @else {
                         <span class="fst-italic">All branches</span>
                       }

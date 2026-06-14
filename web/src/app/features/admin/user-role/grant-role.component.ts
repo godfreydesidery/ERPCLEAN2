@@ -53,6 +53,21 @@ export class GrantRoleComponent {
     this.branches().map((b) => ({ uid: b.uid, label: b.name, hint: b.code })),
   );
 
+  /** All branches across all loaded companies — used for the branchName() resolver in the grants table. */
+  readonly allBranches = signal<Branch[]>([]);
+
+  /** Look up a company name; falls back to uid. */
+  readonly companyName = computed(() => {
+    const map = new Map(this.companies().map((c) => [c.uid, c.name]));
+    return (uid: string) => map.get(uid) ?? uid;
+  });
+
+  /** Look up a branch name; falls back to uid. */
+  readonly branchName = computed(() => {
+    const map = new Map(this.allBranches().map((b) => [b.uid, b.name]));
+    return (uid: string) => map.get(uid) ?? uid;
+  });
+
   // Form fields
   readonly userUid = signal('');
   readonly roleUid = signal('');
@@ -90,6 +105,13 @@ export class GrantRoleComponent {
             this.companies.set(list);
             // Load branches for the first company so the picker is pre-populated
             if (list.length > 0) this.loadBranches(list[0].uid);
+            // Pre-load all branches for the branchName() resolver in the grants table.
+            list.forEach((c) => {
+              this.branchService.list(c.uid).subscribe({
+                next: (bs) => this.allBranches.update((prev) => [...prev, ...bs]),
+                error: () => undefined,
+              });
+            });
           },
           error: () => undefined,
         });
