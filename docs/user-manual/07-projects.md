@@ -186,6 +186,24 @@ For each line, the system:
 
 ---
 
+**Example — Issue materials to a construction job and verify stock deduction:**
+
+Project manager Salma Abdallah is running project `PRJ-0007` (Kariakoo Office Fit-Out), status **Active**. The site team needs electrical cables and paint for the first week.
+
+1. Navigate to **Projects › Projects** (`/admin/projects`), click on `PRJ-0007` to open the detail at `/admin/projects/uid/:uid`.
+2. Scroll to the **Issue to Job** panel. Click **Issue Materials**.
+3. Add lines:
+   - Product: `Electrical Cable 2.5mm (ELC-025)`, Qty: `150` (metres).
+   - Product: `Interior Paint 20L (PNT-INT)`, Qty: `8` (tins).
+4. Issue Date: `2026-06-10`; Reason: `Week 1 site works`. Click **Submit**.
+5. System generates issue `PJI-0014`. For each line:
+   - 150 metres of cable deducted from stock at DSM Branch at the cable's current moving-average cost (TZS 4,200/m = TZS 630,000).
+   - 8 tins of paint deducted at TZS 38,500/tin = TZS 308,000.
+   - GL entries posted: DR Cost of Sales / CR Inventory, each tagged to project `PRJ-0007`.
+6. Total materials issued: TZS 938,000. The project's P&L now reflects this cost under the **Material** cost type.
+
+---
+
 ## 8. Project P&L
 
 From the project detail screen, click **View P&L** (requires `PROJECTS.COSTING.VIEW`). The P&L report loads as a panel showing:
@@ -203,6 +221,30 @@ From the project detail screen, click **View P&L** (requires `PROJECTS.COSTING.V
 | Reconciliation | Computed cost from the project ledger vs GL account totals |
 
 The reconciliation bar shows **Balanced** when the two totals agree. A mismatch here indicates a data integrity issue requiring finance review.
+
+---
+
+**Example — View the project P&L mid-project and check the WIP balance:**
+
+Three weeks into project `PRJ-0007` (Kariakoo Office Fit-Out), Salma Abdallah wants to check profitability before the final billing.
+
+1. Open the project detail at `/admin/projects/uid/:uid` for `PRJ-0007`.
+2. Click **View P&L** (requires `PROJECTS.COSTING.VIEW`). The P&L panel loads:
+
+| Section | Amount (TZS) |
+|---|---|
+| Revenue | 3,500,000 |
+| Cost — Material | 2,175,000 |
+| Cost — Labour | 840,000 |
+| Cost — Overhead | 120,000 |
+| Total Cost | 3,135,000 |
+| Gross Margin | 365,000 |
+| Margin % | 10.4% |
+| Budget | 4,200,000 |
+| Budget Variance | +1,065,000 (cost below budget) |
+| WIP | 0 (Revenue > Cost) |
+
+The Reconciliation bar shows **Balanced** — the project ledger ties to the GL account totals. Revenue of TZS 3.5M was posted via a sales invoice tagged to this project; costs include the two material issues (TZS 938,000 from week 1 + TZS 1,237,000 from week 2) plus labour timesheets. Since revenue exceeds total cost, WIP is zero. Salma notes the healthy margin and continues to the next billing milestone.
 
 ---
 
