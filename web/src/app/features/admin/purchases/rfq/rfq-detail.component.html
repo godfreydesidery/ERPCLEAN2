@@ -43,9 +43,8 @@
             @if (r.awardedPoUid) {
               <dt class="col-sm-2 text-muted fw-normal">Awarded PO</dt>
               <dd class="col-sm-10 mb-0">
-                <a [routerLink]="['/admin/purchase-orders/uid', r.awardedPoUid]"
-                   class="font-monospace">
-                  {{ r.awardedPoUid }}
+                <a [routerLink]="['/admin/purchase-orders/uid', r.awardedPoUid]">
+                  <i class="bi bi-box-arrow-up-right me-1" aria-hidden="true"></i>View Purchase Order
                 </a>
               </dd>
             }

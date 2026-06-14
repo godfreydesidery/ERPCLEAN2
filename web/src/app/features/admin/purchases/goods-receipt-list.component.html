@@ -109,7 +109,15 @@
                     <td>
                       <span class="badge" [class]="statusBadgeClass(gr.status)">{{ gr.status }}</span>
                     </td>
-                    <td class="small text-muted font-monospace">{{ gr.purchaseOrderId }}</td>
+                    <td class="small">
+                      @if (gr.purchaseOrderUid) {
+                        <a [routerLink]="['/admin/purchase-orders/uid', gr.purchaseOrderUid]">
+                          <i class="bi bi-box-arrow-up-right me-1" aria-hidden="true"></i>View PO
+                        </a>
+                      } @else {
+                        <span class="text-muted">—</span>
+                      }
+                    </td>
                     <td class="small text-muted">{{ gr.receivedAt | date:'dd/MM/yyyy HH:mm' }}</td>
                     <td class="small text-muted">{{ gr.notes ?? '—' }}</td>
                     <td>

@@ -61,14 +61,15 @@
               @if (r.debitNoteUid) {
                 <div class="col-sm-3">
                   <div class="small text-muted">Debit Note</div>
-                  <div class="small font-monospace">{{ r.debitNoteUid }}</div>
+                  <div class="small text-muted fst-italic">Issued</div>
                 </div>
               }
               @if (r.glEntryUid) {
                 <div class="col-sm-3">
                   <div class="small text-muted">GL Entry</div>
-                  <a [routerLink]="['/admin/gl/journals/uid', r.glEntryUid]"
-                     class="small font-monospace">{{ r.glEntryUid }}</a>
+                  <a [routerLink]="['/admin/gl/journals/uid', r.glEntryUid]" class="small">
+                    <i class="bi bi-journal-text me-1" aria-hidden="true"></i>View GL Entry
+                  </a>
                 </div>
               }
             </div>
