@@ -223,7 +223,6 @@
               <thead>
                 <tr>
                   <th scope="col">Order #</th>
-                  <th scope="col">Customer</th>
                   <th scope="col">Status</th>
                   <th scope="col">Order Date</th>
                   <th scope="col" class="text-end">Total (gross)</th>
@@ -234,7 +233,6 @@
                 @for (o of rows(); track o.uid) {
                   <tr>
                     <td class="font-monospace">{{ orderLabel(o) }}</td>
-                    <td class="small">{{ o.customerId }}</td>
                     <td>
                       <span class="badge" [class]="statusBadgeClass(o.status)">{{ o.status }}</span>
                     </td>

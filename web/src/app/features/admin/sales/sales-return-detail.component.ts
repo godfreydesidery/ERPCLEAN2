@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { DecimalPipe, SlicePipe } from '@angular/common';
+import { DecimalPipe } from '@angular/common';
 import { Component, computed, inject, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { SessionStore } from '../../../core/auth/session.store';
@@ -17,7 +17,7 @@ type LoadState = 'loading' | 'idle' | 'error';
  */
 @Component({
   selector: 'app-sales-return-detail',
-  imports: [RouterLink, DecimalPipe, SlicePipe],
+  imports: [RouterLink, DecimalPipe],
   templateUrl: './sales-return-detail.component.html',
   styleUrl: './sales-return-detail.component.scss',
 })

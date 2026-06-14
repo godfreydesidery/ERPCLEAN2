@@ -143,10 +143,6 @@
                     {{ +z.varianceAmount | number:'1.2-2' }}
                   </span>
                 </dd>
-                @if (z.varianceJournalId) {
-                  <dt class="col-sm-4 text-muted">Journal</dt>
-                  <dd class="col-sm-8 font-monospace">{{ z.varianceJournalId }}</dd>
-                }
                 <dt class="col-sm-4 text-muted">Invoice Count</dt>
                 <dd class="col-sm-8">{{ z.invoiceCount }}</dd>
               </dl>

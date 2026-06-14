@@ -47,7 +47,7 @@
         @if (savedInvoice(); as inv) {
           <div class="alert alert-success d-flex flex-column gap-1 mb-3" role="status">
             <strong><i class="bi bi-check-circle-fill me-1" aria-hidden="true"></i>Sale recorded!</strong>
-            <span>Invoice: <span class="font-monospace">{{ inv.invoiceNumber ?? inv.uid }}</span></span>
+            <span>Invoice: <span class="font-monospace">{{ inv.invoiceNumber ?? 'DRAFT' }}</span></span>
             <span>Total: {{ inv.currency }} {{ +inv.grossTotalAmount | number:'1.2-2' }}</span>
             <a [routerLink]="['/admin/sales-invoices/uid', inv.uid]"
                class="btn btn-sm btn-outline-success mt-1 align-self-start">
