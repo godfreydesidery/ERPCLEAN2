@@ -86,7 +86,7 @@
                 @for (run of rows(); track run.uid) {
                   <tr>
                     <td class="font-monospace small">{{ run.runNumber }}</td>
-                    <td class="small">{{ run.fiscalPeriodId }}</td>
+                    <td class="small">{{ periodLabel(run.fiscalPeriodId) }}</td>
                     <td class="small text-muted">{{ run.postingDate }}</td>
                     <td><span class="badge text-bg-success">{{ run.status }}</span></td>
                     <td class="text-end font-monospace small">{{ run.currency }} {{ +run.totalChargeAmount | number:'1.2-2' }}</td>

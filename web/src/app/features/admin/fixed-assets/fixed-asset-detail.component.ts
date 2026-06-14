@@ -5,7 +5,12 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
+import { Branch } from '../models/branch.model';
+import { BranchService } from '../branch/branch.service';
+import { CompanyService } from '../company/company.service';
+import { OrganisationService } from '../organisation/organisation.service';
 import {
+  AssetCategoryDto,
   AssetDisposalDto,
   AssetRevaluationDto,
   DepreciationScheduleLineDto,
@@ -41,8 +46,15 @@ type LoadState = 'loading' | 'idle' | 'error';
 })
 export class FixedAssetDetailComponent {
   private readonly faService = inject(FixedAssetsService);
+  private readonly branchService = inject(BranchService);
+  private readonly companyService = inject(CompanyService);
+  private readonly organisationService = inject(OrganisationService);
   private readonly alerts = inject(AlertService);
   protected readonly session = inject(SessionStore);
+
+  // ── Lookup maps for display resolvers ────────────────────────────────────────
+  private readonly branchById = signal<Map<string, Branch>>(new Map());
+  private readonly categoryById = signal<Map<string, AssetCategoryDto>>(new Map());
 
   readonly uid = input.required<string>();
 
@@ -124,7 +136,35 @@ export class FixedAssetDetailComponent {
   }
 
   private init(): void {
+    this.loadLookups();
     this.loadAsset();
+  }
+
+  private loadLookups(): void {
+    this.organisationService.current().subscribe({
+      next: (org) => {
+        this.companyService.list(org.uid).subscribe({
+          next: (companies) => {
+            if (companies.length === 0) return;
+            const companyId = companies[0].id;
+            this.branchService.list(companies[0].uid).subscribe({
+              next: (branches) => {
+                this.branchById.set(new Map(branches.map((b) => [b.id, b])));
+              },
+              error: () => undefined,
+            });
+            this.faService.listCategories(companyId).subscribe({
+              next: (cats) => {
+                this.categoryById.set(new Map(cats.map((c) => [c.id, c])));
+              },
+              error: () => undefined,
+            });
+          },
+          error: () => undefined,
+        });
+      },
+      error: () => undefined,
+    });
   }
 
   private loadAsset(): void {
@@ -406,6 +446,20 @@ export class FixedAssetDetailComponent {
 
   categoryStatusBadgeClass(status: MasterStatus): string {
     return status === 'ACTIVE' ? 'text-bg-success' : 'text-bg-secondary';
+  }
+
+  branchDisplay(branchId: string): string {
+    const b = this.branchById().get(branchId);
+    return b ? `${b.code} — ${b.name}` : branchId;
+  }
+
+  categoryLabel(categoryId: string): string {
+    const c = this.categoryById().get(categoryId);
+    return c ? `${c.code} — ${c.name}` : categoryId;
+  }
+
+  categoryUid(categoryId: string): string {
+    return this.categoryById().get(categoryId)?.uid ?? categoryId;
   }
 
   private messageFrom(err: unknown, fallback: string): string {

@@ -29,7 +29,7 @@
         <!-- Header -->
         <dl class="row small mb-4">
           <dt class="col-sm-3">Run Number</dt><dd class="col-sm-9 font-monospace">{{ r.runNumber }}</dd>
-          <dt class="col-sm-3">Fiscal Period</dt><dd class="col-sm-9">{{ r.fiscalPeriodId }}</dd>
+          <dt class="col-sm-3">Fiscal Period</dt><dd class="col-sm-9">{{ periodLabel(r.fiscalPeriodId) }}</dd>
           <dt class="col-sm-3">Posting Date</dt><dd class="col-sm-9">{{ r.postingDate }}</dd>
           <dt class="col-sm-3">Status</dt><dd class="col-sm-9"><span class="badge text-bg-success">{{ r.status }}</span></dd>
           <dt class="col-sm-3">Total Charge</dt>
@@ -37,7 +37,9 @@
           <dt class="col-sm-3">Assets</dt><dd class="col-sm-9">{{ r.assetCount }}</dd>
           <dt class="col-sm-3">Executed</dt><dd class="col-sm-9 text-muted">{{ r.executedAt }}</dd>
           @if (r.glEntryUid) {
-            <dt class="col-sm-3">GL Entry</dt><dd class="col-sm-9 font-monospace small">{{ r.glEntryUid }}</dd>
+            <dt class="col-sm-3">GL Entry</dt><dd class="col-sm-9">
+              <a [routerLink]="['/admin/gl/journals/uid', r.glEntryUid]">View GL Entry</a>
+            </dd>
           }
         </dl>
 
@@ -51,7 +53,6 @@
               <caption class="visually-hidden">Depreciation run lines</caption>
               <thead>
                 <tr>
-                  <th scope="col">Asset ID</th>
                   <th scope="col" class="text-end">Charge Amount</th>
                   <th scope="col" class="text-end">Accum. Dep After</th>
                   <th scope="col" class="text-end">NBV After</th>
@@ -60,7 +61,6 @@
               <tbody>
                 @for (line of r.lines; track line.uid) {
                   <tr>
-                    <td class="small font-monospace">{{ line.fixedAssetId }}</td>
                     <td class="text-end font-monospace small">{{ +line.chargeAmount | number:'1.2-2' }}</td>
                     <td class="text-end font-monospace small">{{ +line.accumDepAfter | number:'1.2-2' }}</td>
                     <td class="text-end font-monospace small">{{ +line.nbvAfter | number:'1.2-2' }}</td>

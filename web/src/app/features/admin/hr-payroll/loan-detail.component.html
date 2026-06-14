@@ -43,7 +43,7 @@
               <dd class="col-sm-3 font-monospace">{{ l.currency }} {{ +l.installmentAmount | number:'1.2-2' }}</dd>
               <dt class="col-sm-3">Outstanding</dt>
               <dd class="col-sm-3 font-monospace">{{ l.currency }} {{ +l.outstandingAmount | number:'1.2-2' }}</dd>
-              <dt class="col-sm-3">GL Account ID</dt><dd class="col-sm-3">{{ l.glAccountId }}</dd>
+              <dt class="col-sm-3">GL Account</dt><dd class="col-sm-3">{{ glAccountLabel(l.glAccountId) }}</dd>
             </dl>
           </div>
         </div>

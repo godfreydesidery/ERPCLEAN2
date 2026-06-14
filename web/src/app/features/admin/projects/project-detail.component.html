@@ -449,7 +449,7 @@
                     @for (ts of timesheets(); track ts.uid) {
                       <tr>
                         <td class="small">{{ ts.workDate }}</td>
-                        <td class="font-monospace small">{{ ts.userId }}</td>
+                        <td class="small">{{ userDisplayName(ts.userId) }}</td>
                         <td class="text-end small">{{ +ts.hours | number:'1.2-2' }}</td>
                         <td>
                           @if (ts.billable) {
@@ -489,7 +489,7 @@
             <div>
               <strong>Issued: {{ result.issueNumber }}</strong>
               — Total value: {{ result.currency }} {{ +result.totalValue | number:'1.2-2' }}
-              (COGS entry: {{ result.cogsGlEntryUid }})
+              — <a [routerLink]="['/admin/gl/journals/uid', result.cogsGlEntryUid]">View COGS Entry</a>
             </div>
           </div>
         }

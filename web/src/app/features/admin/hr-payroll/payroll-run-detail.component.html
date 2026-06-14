@@ -69,7 +69,7 @@
               @if (r.glEntryUid) {
                 <div class="col-sm-3">
                   <span class="text-muted">GL Entry</span><br>
-                  <strong class="font-monospace small">{{ r.glEntryUid }}</strong>
+                  <a [routerLink]="['/admin/gl/journals/uid', r.glEntryUid]">View GL Entry</a>
                 </div>
               }
             </div>
