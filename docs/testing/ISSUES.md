@@ -29,11 +29,12 @@ CRM activity, supplier-quote, purchase-return. See entries below.
 
 ---
 
-## RESOLUTION (2026-06-14) — 14 of 15 fixed + verified; **ISSUE-014 (C1) re-opened as systemic**
+## RESOLUTION (2026-06-14) — all 15 fixed + verified (ISSUE-014 C1 resolved via a dedicated sweep)
 
-> 14 functional defects (001–012, 015 + cascades) are FIXED + verified. **ISSUE-014 (C1 uid/id visibility)
-> was prematurely closed** — the automated C1 gate is blind to detail screens + numeric ids, so it reported
-> a false "none". C1 is a codebase-wide pattern (~32 raw-uid + ~33 raw-id renders) and is **re-opened** below.
+> 14 functional defects (001–012, 015 + cascades) fixed + verified. **ISSUE-014 (C1 uid/id visibility)** was
+> re-opened as systemic (the old gate gave a false "none") and is now **RESOLVED** by a codebase-wide sweep
+> (~93 renders) + a real static gate (`npm run c1`, 0 offenders) + a runtime detail-route scan. Final
+> Playwright vs a fresh backend: **513 / 0**. See the ISSUE-014 entry for details.
 
 Fixed across branch `feat/e2e-playwright` (`f2684e2`) in 4 passes. **Verification gates green:**
 - Backend `mvn clean verify` — **748 tests, 0 failures** (incl. new regression tests).
@@ -193,8 +194,23 @@ seeded via `e2e/full-coverage-drive.js`. Evidence: `web/test-results/`, `web/pw-
 - **Found by:** `smoke.spec.ts::login and reach the admin home page`
 - **Observed:** the single login assertion timed out once while 128 route tests logged in concurrently. **Not a product defect** — 121 route tests + the API seeder all authenticated fine. Mitigation: raise the login timeout / reduce workers for that spec.
 
-### ISSUE-014 — C1: raw machine identifiers (uid + numeric id) shown in the UI — **RE-OPENED (systemic)**
-- **Severity:** P2 (was filed P3) · **Status:** 🔶 **OPEN (re-opened 2026-06-14)** · **Layer:** L3 (convention C1)
+### ISSUE-014 — C1: raw machine identifiers (uid + numeric id) shown in the UI — ✅ **RESOLVED**
+- **Severity:** P2 (was filed P3) · **Status:** ✅ **RESOLVED (2026-06-14, branch `feat/c1-sweep`)** · **Layer:** L3 (convention C1)
+- **Resolution:** swept ~93 raw machine-id renders across 22 areas (60 `…Uid` + 33 raw numeric `…Id`) to human
+  name/number/code, name-resolvers (mirroring `branchDisplay()`/`glAccountLabel()`), routerLinks (uid only in
+  the path), or dropped where no user value. Also fixed 4 `…Ref`/`journalEntryRef` *data*-fields that held a
+  uid as their VALUE (journal-detail/account-ledger/wht-register `sourceRef`, cash-transfer `journalEntryRef`).
+  **Gates added + green:** (1) a STATIC gate `web/scripts/c1-check.mjs` (`npm run c1`) scans every admin
+  template for raw `…Uid`/`…Id` interpolation — **clean: 181 templates, 0 offenders** (was 78); (2) the
+  runtime `conventions.spec.ts` now also visits each list's first-row DETAIL route (this caught the `sourceRef`
+  data-value residual the static gate cannot see). Final Playwright vs a fresh backend: **513 pass / 0 fail**;
+  `ng build` clean; `ng test` 678 green.
+- **Backend follow-ups (optional, P3 — flagged by the sweep agents, NOT blocking C1):** a few DTOs could expose
+  a human number/name so the FE shows it instead of dropping/linking — e.g. `FixedAssetDto.costCentreName`,
+  `SupplierBillDto.supplierName`/`supplierCode`, `GeneratedDocumentDto` source name/number. Tracked separately.
+- *(original report retained below for history)*
+
+- **Severity (orig):** P2 (was filed P3) · **Layer:** L3 (convention C1)
 - **Originally filed** as 3 list screens; **investigation 2026-06-14 found C1 is a codebase-wide pattern that the
   automated gate could not see** — so it was prematurely marked resolved. The list-screen ULID cases that were
   targeted ARE fixed; the broad convention is not.
