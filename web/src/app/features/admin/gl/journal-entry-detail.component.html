@@ -52,7 +52,7 @@
 
               @if (e.sourceRef) {
                 <dt class="col-sm-2 text-muted">Source Ref</dt>
-                <dd class="col-sm-4 font-monospace">{{ e.sourceRef }}</dd>
+                <dd class="col-sm-4 font-monospace">{{ e.sourceRef.length > 12 ? (e.sourceRef.slice(0, 12) + '…') : e.sourceRef }}</dd>
               }
               @if (e.reversalOfId) {
                 <dt class="col-sm-2 text-muted">Reversal of</dt>

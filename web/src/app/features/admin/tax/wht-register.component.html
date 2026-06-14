@@ -116,7 +116,7 @@
                     <div class="fw-semibold">{{ row.partyName }}</div>
                     <small class="text-muted">{{ row.partyKind }}</small>
                   </td>
-                  <td class="font-monospace small">{{ row.sourceRef }}</td>
+                  <td class="font-monospace small">{{ row.sourceRef ? (row.sourceRef.length > 12 ? (row.sourceRef.slice(0, 12) + '…') : row.sourceRef) : '—' }}</td>
                   <td class="text-end font-monospace">{{ fmtMoney(row.taxableBase) }}</td>
                   <td class="text-end font-monospace text-danger fw-semibold">{{ fmtMoney(row.whtAmount) }}</td>
                   <td>{{ row.certificateDate }}</td>
@@ -166,7 +166,7 @@
                     <div class="fw-semibold">{{ row.partyName }}</div>
                     <small class="text-muted">{{ row.partyKind }}</small>
                   </td>
-                  <td class="font-monospace small">{{ row.sourceRef }}</td>
+                  <td class="font-monospace small">{{ row.sourceRef ? (row.sourceRef.length > 12 ? (row.sourceRef.slice(0, 12) + '…') : row.sourceRef) : '—' }}</td>
                   <td class="text-end font-monospace">{{ fmtMoney(row.taxableBase) }}</td>
                   <td class="text-end font-monospace text-success fw-semibold">{{ fmtMoney(row.whtAmount) }}</td>
                   <td>{{ row.certificateDate }}</td>

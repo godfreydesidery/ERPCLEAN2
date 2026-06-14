@@ -162,7 +162,7 @@
                   <tr>
                     <td class="small text-nowrap">{{ row.postingDate }}</td>
                     <td class="small">{{ row.sourceType }}</td>
-                    <td class="small font-monospace">{{ row.sourceRef }}</td>
+                    <td class="small font-monospace">{{ row.sourceRef ? (row.sourceRef.length > 12 ? (row.sourceRef.slice(0, 12) + '…') : row.sourceRef) : '—' }}</td>
                     <td class="small text-muted">{{ row.lineMemo ?? '' }}</td>
                     <td class="text-end font-monospace small">
                       @if (+(row.debit ?? 0) !== 0) {
