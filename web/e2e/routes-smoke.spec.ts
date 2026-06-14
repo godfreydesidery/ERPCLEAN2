@@ -8,10 +8,13 @@
  *   - an error-state banner is not the dominant content
  * Each route is its own test so failures are isolated and reported per-route → docs/testing/ISSUES.md.
  *
+ * Auth: uses the pre-saved storageState from auth.setup.ts (no per-test login).
+ * Workers share the authenticated token, eliminating concurrent /login race timeouts.
+ *
  * Prereqs: backend :8081 (dev, bootstrapped) + seeded data + ng serve :4200. ROOT_PASS env.
  */
-import { test, expect } from '@playwright/test';
-import { login, watchProblems, realConsoleErrors } from './_helpers';
+import { test, expect } from './_test-authenticated';
+import { watchProblems, realConsoleErrors } from './_helpers';
 import routesRaw from './_routes.json';
 
 const ROUTES: [string, string][] = (routesRaw as [string, string][])
@@ -22,7 +25,6 @@ test.describe('L2 route smoke (rootadmin)', () => {
   for (const [route, perm] of ROUTES) {
     test(`route /admin/${route} loads cleanly [perm ${perm}]`, async ({ page }) => {
       const problems = watchProblems(page);
-      await login(page);
       await page.goto(`/admin/${route}`, { waitUntil: 'networkidle' });
 
       // session preserved (not bounced to login)
