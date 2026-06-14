@@ -222,7 +222,6 @@
               <thead>
                 <tr>
                   <th scope="col">Quote #</th>
-                  <th scope="col">Customer</th>
                   <th scope="col">Status</th>
                   <th scope="col">Quote Date</th>
                   <th scope="col">Valid Until</th>
@@ -234,7 +233,6 @@
                 @for (q of rows(); track q.uid) {
                   <tr>
                     <td class="font-monospace">{{ quoteLabel(q) }}</td>
-                    <td class="small">{{ q.customerId }}</td>
                     <td>
                       <span class="badge" [class]="statusBadgeClass(q.status)">{{ q.status }}</span>
                     </td>

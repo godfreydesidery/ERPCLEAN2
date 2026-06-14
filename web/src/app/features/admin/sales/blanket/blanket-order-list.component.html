@@ -79,7 +79,6 @@
               <thead>
                 <tr>
                   <th scope="col">Order #</th>
-                  <th scope="col">Customer ID</th>
                   <th scope="col">Status</th>
                   <th scope="col">Valid From</th>
                   <th scope="col">Valid To</th>
@@ -93,7 +92,6 @@
                 @for (b of rows(); track b.uid) {
                   <tr>
                     <td class="font-monospace">{{ b.orderNumber ?? 'DRAFT' }}</td>
-                    <td class="small">{{ b.customerId }}</td>
                     <td>
                       <span class="badge" [class]="statusBadgeClass(b.status)">{{ b.status }}</span>
                     </td>

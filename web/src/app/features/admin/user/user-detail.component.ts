@@ -90,9 +90,18 @@ export class UserDetailComponent {
 
   readonly hasRoleGrants = computed(() => this.roleGrants().length > 0);
 
+  /** All branches across all loaded companies — used for the branchName() resolver. */
+  readonly allBranches = signal<Branch[]>([]);
+
   /** Look up a company name from the shared companies list; fall back to the uid. */
   readonly companyName = computed(() => {
     const map = new Map(this.companies().map((c) => [c.uid, c.name]));
+    return (uid: string) => map.get(uid) ?? uid;
+  });
+
+  /** Look up a branch name from all loaded branches; fall back to the uid. */
+  readonly branchName = computed(() => {
+    const map = new Map(this.allBranches().map((b) => [b.uid, b.name]));
     return (uid: string) => map.get(uid) ?? uid;
   });
 
@@ -138,6 +147,13 @@ export class UserDetailComponent {
           next: (rows) => {
             this.companies.set(rows);
             this.companiesState.set('idle');
+            // Pre-load branches for all companies so branchName() can resolve role-grant branch uids.
+            rows.forEach((c) => {
+              this.branchService.list(c.uid).subscribe({
+                next: (bs) => this.allBranches.update((prev) => [...prev, ...bs]),
+                error: () => undefined,
+              });
+            });
           },
           error: () => this.companiesState.set('error'),
         });

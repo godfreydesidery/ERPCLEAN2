@@ -133,7 +133,7 @@
               <tbody>
                 @for (s of rows(); track s.uid) {
                   <tr>
-                    <td class="font-monospace small">{{ s.sessionNumber ?? ('…' + s.uid.slice(-6)) }}</td>
+                    <td class="font-monospace small">{{ s.sessionNumber ?? '—' }}</td>
                     <td>
                       <span class="badge" [class]="statusBadgeClass(s.status)">{{ s.status }}</span>
                     </td>

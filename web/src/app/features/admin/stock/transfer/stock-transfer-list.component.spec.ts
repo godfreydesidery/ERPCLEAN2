@@ -15,6 +15,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { SessionStore } from '../../../../core/auth/session.store';
+import { StockLocationService } from '../locations/stock-location.service';
 import { StockTransferService } from './stock-transfer.service';
 import type { StockTransferPage } from './stock-transfer.service';
 import { StockTransferListComponent } from './stock-transfer-list.component';
@@ -55,6 +56,12 @@ function makeBed(opts: { listImpl?: () => any; canView?: boolean } = {}) {
       {
         provide: StockTransferService,
         useValue: { list: listSpy },
+      },
+      {
+        provide: StockLocationService,
+        useValue: {
+          list: vi.fn(() => of({ rows: [], meta: { page: 0, size: 20, totalElements: 0, totalPages: 0, hasNext: false } })),
+        },
       },
       {
         provide: SessionStore,

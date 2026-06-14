@@ -8,6 +8,8 @@ import { SessionStore } from '../../../core/auth/session.store';
 import { Company } from '../models/company.model';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
+import { FiscalPeriodDto } from '../gl/models/gl.model';
+import { GlService } from '../gl/gl.service';
 import { FixedAssetsService } from './fixed-assets.service';
 import { DepreciationRunDto, DepreciationRunPreviewDto, RunDepreciationRequest } from './models/fixed-assets.model';
 
@@ -25,11 +27,14 @@ import { DepreciationRunDto, DepreciationRunPreviewDto, RunDepreciationRequest }
 })
 export class DepreciationPostComponent {
   private readonly faService = inject(FixedAssetsService);
+  private readonly glService = inject(GlService);
   private readonly companyService = inject(CompanyService);
   private readonly organisationService = inject(OrganisationService);
   private readonly alerts = inject(AlertService);
   private readonly router = inject(Router);
   protected readonly session = inject(SessionStore);
+
+  private readonly periodById = signal<Map<string, FiscalPeriodDto>>(new Map());
 
   // ── Company context ──────────────────────────────────────────────────────────
   readonly companies = signal<Company[]>([]);
@@ -64,7 +69,10 @@ export class DepreciationPostComponent {
           next: (list) => {
             this.companies.set(list);
             this.companyState.set('idle');
-            if (list.length > 0) this.selectedCompanyId.set(list[0].id);
+            if (list.length > 0) {
+              this.selectedCompanyId.set(list[0].id);
+              this.loadPeriods(list[0].id);
+            }
           },
           error: () => this.companyState.set('error'),
         });
@@ -77,6 +85,21 @@ export class DepreciationPostComponent {
     this.selectedCompanyId.set(id);
     this.preview.set(null);
     this.postedRun.set(null);
+    if (id) this.loadPeriods(id);
+  }
+
+  private loadPeriods(companyId: string): void {
+    this.glService.listPeriods(companyId).subscribe({
+      next: (periods) => {
+        this.periodById.set(new Map(periods.map((p) => [p.id, p])));
+      },
+      error: () => undefined,
+    });
+  }
+
+  periodLabel(fiscalPeriodId: string): string {
+    const p = this.periodById().get(fiscalPeriodId);
+    return p ? `Period ${p.periodNo} (${p.startDate})` : fiscalPeriodId;
   }
 
   runPreview(): void {

@@ -69,6 +69,7 @@ describe('CashTransfersListComponent', () => {
           provide: CashbankService,
           useValue: {
             listTransfers: vi.fn(() => of({ rows: [makeTransfer(1)], meta: META })),
+            listAllAccounts: vi.fn(() => of([])),
             getTransfer: vi.fn(),
           },
         },

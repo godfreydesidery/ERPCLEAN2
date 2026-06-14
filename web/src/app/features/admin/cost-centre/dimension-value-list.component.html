@@ -191,7 +191,14 @@
                         <i class="bi bi-x-circle-fill text-secondary" aria-label="Inactive" title="Excluded from new tagging"></i>
                       }
                     </td>
-                    <td class="text-muted small font-monospace">{{ val.parentUid ?? '—' }}</td>
+                    <td class="small">
+                      @if (val.parentUid) {
+                        <a [routerLink]="['/admin/cost-centre/values/uid', val.parentUid]"
+                           class="text-muted">Parent</a>
+                      } @else {
+                        <span class="text-muted">—</span>
+                      }
+                    </td>
                     <td>
                       @if (canManage()) {
                         <div class="d-flex gap-1">

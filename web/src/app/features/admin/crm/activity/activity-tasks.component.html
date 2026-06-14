@@ -68,9 +68,9 @@
                   <td>{{ row.dueDate ?? '—' }}</td>
                   <td class="small">
                     @if (row.leadId) {
-                      <span class="text-muted">Lead #{{ row.leadId }}</span>
+                      <span class="text-muted">Lead</span>
                     } @else if (row.opportunityId) {
-                      <span class="text-muted">Opp #{{ row.opportunityId }}</span>
+                      <span class="text-muted">Opportunity</span>
                     } @else {
                       <span class="text-muted">—</span>
                     }

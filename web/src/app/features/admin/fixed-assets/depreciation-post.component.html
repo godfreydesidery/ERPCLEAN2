@@ -97,7 +97,7 @@
     <!-- Posted run result -->
     @if (postedRun(); as run) {
       <div class="alert alert-success mb-4" role="status">
-        <strong>Run posted:</strong> {{ run.runNumber }} | Period: {{ run.fiscalPeriodId }} |
+        <strong>Run posted:</strong> {{ run.runNumber }} | Period: {{ periodLabel(run.fiscalPeriodId) }} |
         Total: {{ run.currency }} {{ +run.totalChargeAmount | number:'1.2-2' }} | Assets: {{ run.assetCount }}
         <button type="button" class="btn btn-sm btn-outline-success ms-3" (click)="goToRun()">
           View Run

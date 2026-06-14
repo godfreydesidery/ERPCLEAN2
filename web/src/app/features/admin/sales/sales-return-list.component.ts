@@ -1,7 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
-import { SlicePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { debounceTime, distinctUntilChanged, map, merge, skip, Subject, switchMap } from 'rxjs';
@@ -26,7 +25,7 @@ interface LoadTrigger { page: number }
  */
 @Component({
   selector: 'app-sales-return-list',
-  imports: [FormsModule, RouterLink, SlicePipe, PaginatorComponent],
+  imports: [FormsModule, RouterLink, PaginatorComponent],
   templateUrl: './sales-return-list.component.html',
   styleUrl: './sales-return-list.component.scss',
 })

@@ -6,7 +6,7 @@
  *  2. isEmpty is true when no rows returned.
  *  3. 403 response sets state to 'forbidden'.
  *  4. statusBadgeClass: ACTIVE, PAUSED, CANCELLED.
- *  5. orderLabel returns orderNumber when present, uid when null.
+ *  5. orderLabel returns orderNumber when present, DRAFT when null.
  *  6. canCreate is true when session has SALES.STANDING.CREATE permission.
  */
 import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
@@ -180,10 +180,10 @@ describe('StandingOrderListComponent — orderLabel', () => {
     expect(comp.orderLabel(stubOrder as any)).toBe('STD-0001');
   });
 
-  it('returns uid when orderNumber is null', async () => {
+  it('returns DRAFT when orderNumber is null', async () => {
     const comp = TestBed.createComponent(StandingOrderListComponent).componentInstance;
     await vi.runAllTimersAsync();
-    expect(comp.orderLabel({ ...stubOrder, orderNumber: null } as any)).toBe('SO1');
+    expect(comp.orderLabel({ ...stubOrder, orderNumber: null } as any)).toBe('DRAFT');
   });
 });
 
