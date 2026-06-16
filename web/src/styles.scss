@@ -23,7 +23,7 @@
   --erp-primary-hover:  #1d4ed8;
   --erp-primary-active: #1e40af;
   --erp-primary-soft:   #eff4ff;   /* tinted backgrounds, active rows */
-  --erp-accent:         #38bdf8;   /* gradient partner for the brand mark */
+  --erp-accent:         #1d4ed8;   /* gradient partner for the brand mark — a BLUE (not cyan) so chrome stays on-palette */
 
   /* ---- Semantic STATUS palette (status only — not decoration) ---- */
   --erp-ok:        #16a34a;  --erp-ok-bg:     #dcfce7;  --erp-ok-fg:     #166534;
@@ -70,6 +70,15 @@
   --bs-border-color: var(--erp-border);
   --bs-body-color: var(--erp-text);
   --bs-secondary-color: var(--erp-text-2);
+
+  /* Bootstrap's "info" defaults to cyan (#0dcaf0), which clashes with the system blue.
+     Remap the whole info ramp to the brand blue so alert-info / text-info / text-bg-info
+     read as on-palette informational, not light-blue/cyan. */
+  --bs-info: var(--erp-primary);
+  --bs-info-rgb: 37, 99, 235;
+  --bs-info-text-emphasis: var(--erp-primary-active);
+  --bs-info-bg-subtle: var(--erp-primary-soft);
+  --bs-info-border-subtle: #c7d7fe;
 }
 
 body {
@@ -102,6 +111,18 @@ body {
   --bs-btn-hover-bg: var(--erp-primary);
   --bs-btn-hover-border-color: var(--erp-primary);
   --bs-btn-active-bg: var(--erp-primary-active);
+}
+/* Info button → solid brand blue with white text (Bootstrap's cyan btn-info clashes). */
+.btn-info {
+  --bs-btn-color: #fff;
+  --bs-btn-bg: var(--erp-primary);
+  --bs-btn-border-color: var(--erp-primary);
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: var(--erp-primary-hover);
+  --bs-btn-hover-border-color: var(--erp-primary-hover);
+  --bs-btn-active-color: #fff;
+  --bs-btn-active-bg: var(--erp-primary-active);
+  --bs-btn-active-border-color: var(--erp-primary-active);
 }
 
 /* ============================================================================

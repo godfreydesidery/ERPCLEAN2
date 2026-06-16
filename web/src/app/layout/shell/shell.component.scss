@@ -30,7 +30,7 @@
   right: 0;
   height: 3px;
   z-index: 1100;
-  background: linear-gradient(90deg, transparent, var(--sb-accent, #4178d9), transparent);
+  background: linear-gradient(90deg, transparent, var(--sb-accent, var(--erp-primary-hover)), transparent);
   background-size: 40% 100%;
   background-repeat: no-repeat;
   animation: global-progress-slide 1.1s ease-in-out infinite;
@@ -48,7 +48,7 @@
 @media (prefers-reduced-motion: reduce) {
   .global-progress {
     animation: none;
-    background: var(--sb-accent, #4178d9);
+    background: var(--sb-accent, var(--erp-primary-hover));
     opacity: 0.6;
   }
 }
@@ -101,7 +101,7 @@
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  background: linear-gradient(135deg, var(--erp-primary, #2563eb), var(--erp-accent, #38bdf8));
+  background: linear-gradient(135deg, var(--erp-primary, #2563eb), var(--erp-accent, var(--erp-primary-hover)));
   color: #fff;
   display: inline-flex;
   align-items: center;
@@ -126,10 +126,10 @@
   align-items: center;
   gap: 0.625rem;
   padding: 0.3rem 0.75rem 0.3rem 0.3rem;
-  background: #f1f5fb;
-  border: 1px solid #dde6f3;
+  background: var(--erp-card);
+  border: 1px solid var(--erp-border);
   border-radius: 999px;
-  color: #0d2a5b;
+  color: var(--erp-text);
   font-size: 0.85rem;
   line-height: 1;
   cursor: pointer;
@@ -140,14 +140,14 @@
 }
 
 .branch-chip.is-switchable:hover {
-  background: #e8eff9;
-  border-color: #b9c8df;
+  background: var(--erp-primary-soft);
+  border-color: var(--erp-border-strong);
 }
 
 .branch-chip.is-open {
-  border-color: #1a4fb5;
+  border-color: var(--erp-primary);
   background: #fff;
-  box-shadow: 0 0 0 0.2rem rgba(26, 79, 181, 0.12);
+  box-shadow: 0 0 0 0.2rem rgba(37, 99, 235, 0.12);
 }
 
 .branch-chip:disabled {
@@ -170,7 +170,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #1a4fb5, #4178d9);
+  background: linear-gradient(135deg, var(--erp-primary), var(--erp-primary-hover));
   color: #fff;
   font-size: 0.9rem;
   flex-shrink: 0;
@@ -244,7 +244,7 @@
   max-height: 60vh;
   overflow-y: auto;
   background: #fff;
-  border: 1px solid #dde6f3;
+  border: 1px solid var(--erp-border);
   border-radius: 12px;
   padding: 0.5rem 0;
   z-index: 1040;
@@ -280,7 +280,7 @@
 }
 
 .branch-menu__item.is-active {
-  background: #eef4ff;
+  background: var(--erp-primary-soft);
 }
 
 .branch-menu__item:disabled {
@@ -297,7 +297,7 @@
 }
 
 .branch-menu__item.is-active .branch-menu__dot {
-  background: #1a4fb5;
+  background: var(--erp-primary);
 }
 
 @media (max-width: 575.98px) {
@@ -374,8 +374,8 @@
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: #e8eef9;
-  color: #1a4fb5;
+  background: var(--erp-primary-soft);
+  color: var(--erp-primary);
   display: inline-flex;
   align-items: center;
   justify-content: center;
