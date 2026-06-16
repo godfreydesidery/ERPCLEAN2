@@ -151,8 +151,9 @@
 }
 
 .branch-chip:disabled {
+  /* Single-branch users get a non-interactive chip — keep it full-strength so the
+     solid-blue icon doesn't wash out to a light blue. cursor:default signals it. */
   cursor: default;
-  opacity: 0.85;
 }
 
 /* No-branch indicator — amber, read-only */
