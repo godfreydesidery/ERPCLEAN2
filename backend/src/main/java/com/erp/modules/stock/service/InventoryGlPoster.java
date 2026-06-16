@@ -92,12 +92,14 @@ public class InventoryGlPoster {
 
             List<LineDraft> lines = new ArrayList<>();
             for (ReceiptLeg leg : legs) {
+                // FOLLOW-001: human-readable memo only (product code + GRN number) — never a uid.
+                // Mirrors the COGS leg format ("COGS <productCode> — <docLabel>").
                 lines.add(new LineDraft(inventoryAcct.getId(),
                         leg.value(), BigDecimal.ZERO,
-                        currency, "GR line " + leg.grLineUid() + " — " + leg.productCode()));
+                        currency, "GR " + leg.productCode() + " — " + docLabel));
                 lines.add(new LineDraft(grniAcct.getId(),
                         BigDecimal.ZERO, leg.value(),
-                        currency, "GRNI " + leg.grLineUid() + " — " + leg.productCode()));
+                        currency, "GRNI " + leg.productCode() + " — " + docLabel));
             }
 
             JournalEntryDraft draft = new JournalEntryDraft(
