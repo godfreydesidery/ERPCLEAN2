@@ -24,6 +24,21 @@
   font-size: 1.15rem;
 }
 
+/* Small ordered-step marker on each setup card. */
+.setup-step {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--erp-primary);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .home-card {
     transition: none;
