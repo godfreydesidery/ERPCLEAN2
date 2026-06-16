@@ -1,10 +1,10 @@
 <section class="admin-page">
   <header class="page-head">
-    <a class="back-link text-muted small" routerLink="/admin/blanket-orders">
+    <a class="text-muted small" routerLink="/admin/blanket-orders">
       <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Blanket Orders
     </a>
     <h1 class="h4 mb-0 mt-1">New Blanket Order</h1>
-    <p class="text-muted mb-0 mt-1" style="font-size:0.9rem">
+    <p class="subtitle">
       Create a blanket sales agreement to draw releases against.
     </p>
   </header>
@@ -22,247 +22,257 @@
       </p>
     }
     @default {
-      <form class="create-form card card-body" (ngSubmit)="submit()" aria-label="Create blanket order">
+      <form (ngSubmit)="submit()" aria-label="Create blanket order">
 
-        <!-- Header row 1: company + branch + customer -->
-        <h2 class="h6 mb-3">Agreement Header</h2>
-        <div class="row g-3 mb-3">
+        <!-- Agreement header -->
+        <div class="erp-card mb-3">
+          <div class="erp-card__head"><h2>Agreement Header</h2></div>
+          <div class="erp-card__body">
+            <div class="erp-form-grid">
 
-          <!-- Company -->
-          @if (companies().length > 1) {
-            <div class="col-sm-4">
-              <label class="form-label small text-muted mb-1" for="companyPicker">
-                Company <span class="text-danger" aria-hidden="true">*</span>
-              </label>
-              <select id="companyPicker" name="companyPicker" class="form-select"
-                      [ngModel]="selectedCompany()?.id ?? ''"
-                      (ngModelChange)="onCompanyChange($event)"
-                      [disabled]="saving()">
-                @for (c of companies(); track c.uid) {
-                  <option [value]="c.id">{{ c.name }}</option>
-                }
-              </select>
-            </div>
-          }
-
-          <!-- Branch -->
-          <div class="col-sm-4">
-            <label class="form-label small text-muted mb-1" for="branchPicker">
-              Branch <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <select id="branchPicker" name="branchPicker" class="form-select"
-                    [ngModel]="selectedBranchId()" (ngModelChange)="selectedBranchId.set($event)"
-                    [disabled]="saving() || branches().length === 0">
-              @for (b of branches(); track b.uid) {
-                <option [value]="b.id">{{ b.name }}</option>
+              <!-- Company -->
+              @if (companies().length > 1) {
+                <div class="erp-field">
+                  <label for="companyPicker">
+                    Company <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <select id="companyPicker" name="companyPicker" class="form-select"
+                          [ngModel]="selectedCompany()?.id ?? ''"
+                          (ngModelChange)="onCompanyChange($event)"
+                          [disabled]="saving()">
+                    @for (c of companies(); track c.uid) {
+                      <option [value]="c.id">{{ c.name }}</option>
+                    }
+                  </select>
+                </div>
               }
-            </select>
-          </div>
 
-          <!-- Customer search -->
-          <div class="col-sm-4 position-relative">
-            <label class="form-label small text-muted mb-1" for="customerSearch">
-              Customer <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="customerSearch" name="customerSearch" type="search"
-                   class="form-control"
-                   placeholder="Search by name or code…"
-                   [ngModel]="customerSearchQ()"
-                   (ngModelChange)="onCustomerSearchChange($event)"
-                   [disabled]="saving()"
-                   autocomplete="off"
-                   role="combobox"
-                   [attr.aria-expanded]="customerResults().length > 0"
-                   aria-haspopup="listbox"
-                   aria-autocomplete="list" />
-            @if (selectedCustomer()) {
-              <div class="d-flex align-items-center gap-1 mt-1">
-                <i class="bi bi-check-circle-fill text-success small" aria-hidden="true"></i>
-                <span class="small text-muted">{{ selectedCustomer()!.label }}</span>
+              <!-- Branch -->
+              <div class="erp-field">
+                <label for="branchPicker">
+                  Branch <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <select id="branchPicker" name="branchPicker" class="form-select"
+                        [ngModel]="selectedBranchId()" (ngModelChange)="selectedBranchId.set($event)"
+                        [disabled]="saving() || branches().length === 0">
+                  @for (b of branches(); track b.uid) {
+                    <option [value]="b.id">{{ b.name }}</option>
+                  }
+                </select>
               </div>
-            }
-            @if (customerResults().length > 0) {
-              <ul class="list-group position-absolute shadow-sm mt-1 w-100" role="listbox"
-                  aria-label="Customer suggestions"
-                  style="z-index:1050;max-height:220px;overflow-y:auto;">
-                @for (c of customerResults(); track c.uid) {
-                  <li class="list-group-item list-group-item-action small py-2"
-                      role="option" style="cursor:pointer"
-                      (click)="selectCustomer(c)"
-                      (keydown.enter)="selectCustomer(c)"
-                      tabindex="0"
-                      [attr.aria-label]="c.code + ' — ' + c.displayName">
-                    <strong>{{ c.code }}</strong> — {{ c.displayName }}
-                  </li>
-                }
-              </ul>
-            }
-          </div>
-        </div>
 
-        <!-- Header row 2: currency + dates + notes -->
-        <div class="row g-3 mb-4">
-          <div class="col-sm-2">
-            <label class="form-label small text-muted mb-1" for="currency">
-              Currency <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="currency" name="currency" type="text" class="form-control"
-                   placeholder="TZS"
-                   [ngModel]="currency()" (ngModelChange)="currency.set($event)"
-                   [disabled]="saving()" autocomplete="off" />
-          </div>
-          <div class="col-sm-2">
-            <label class="form-label small text-muted mb-1" for="validFrom">
-              Valid From <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="validFrom" name="validFrom" type="date" class="form-control"
-                   [ngModel]="validFrom()" (ngModelChange)="validFrom.set($event)"
-                   [disabled]="saving()" />
-          </div>
-          <div class="col-sm-2">
-            <label class="form-label small text-muted mb-1" for="validTo">
-              Valid To <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="validTo" name="validTo" type="date" class="form-control"
-                   [ngModel]="validTo()" (ngModelChange)="validTo.set($event)"
-                   [disabled]="saving()" />
-          </div>
-          <div class="col-sm-6">
-            <label class="form-label small text-muted mb-1" for="notes">Notes</label>
-            <input id="notes" name="notes" type="text" class="form-control"
-                   [ngModel]="notes()" (ngModelChange)="notes.set($event)"
-                   [disabled]="saving()" autocomplete="off" />
+              <!-- Customer search -->
+              <div class="erp-field position-relative">
+                <label for="customerSearch">
+                  Customer <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="customerSearch" name="customerSearch" type="search"
+                       class="form-control"
+                       placeholder="Search by name or code…"
+                       [ngModel]="customerSearchQ()"
+                       (ngModelChange)="onCustomerSearchChange($event)"
+                       [disabled]="saving()"
+                       autocomplete="off"
+                       role="combobox"
+                       [attr.aria-expanded]="customerResults().length > 0"
+                       aria-haspopup="listbox"
+                       aria-autocomplete="list" />
+                @if (selectedCustomer()) {
+                  <div class="d-flex align-items-center gap-1 mt-1">
+                    <i class="bi bi-check-circle-fill text-success small" aria-hidden="true"></i>
+                    <span class="small text-muted">{{ selectedCustomer()!.label }}</span>
+                  </div>
+                }
+                @if (customerResults().length > 0) {
+                  <ul class="list-group position-absolute shadow-sm mt-1 w-100" role="listbox"
+                      aria-label="Customer suggestions"
+                      style="z-index:1050;max-height:220px;overflow-y:auto;">
+                    @for (c of customerResults(); track c.uid) {
+                      <li class="list-group-item list-group-item-action small py-2"
+                          role="option" style="cursor:pointer"
+                          (click)="selectCustomer(c)"
+                          (keydown.enter)="selectCustomer(c)"
+                          tabindex="0"
+                          [attr.aria-label]="c.code + ' — ' + c.displayName">
+                        <strong>{{ c.code }}</strong> — {{ c.displayName }}
+                      </li>
+                    }
+                  </ul>
+                }
+              </div>
+
+              <!-- Currency -->
+              <div class="erp-field">
+                <label for="currency">
+                  Currency <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="currency" name="currency" type="text" class="form-control"
+                       placeholder="TZS"
+                       [ngModel]="currency()" (ngModelChange)="currency.set($event)"
+                       [disabled]="saving()" autocomplete="off" />
+              </div>
+
+              <!-- Valid From -->
+              <div class="erp-field">
+                <label for="validFrom">
+                  Valid From <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="validFrom" name="validFrom" type="date" class="form-control"
+                       [ngModel]="validFrom()" (ngModelChange)="validFrom.set($event)"
+                       [disabled]="saving()" />
+              </div>
+
+              <!-- Valid To -->
+              <div class="erp-field">
+                <label for="validTo">
+                  Valid To <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="validTo" name="validTo" type="date" class="form-control"
+                       [ngModel]="validTo()" (ngModelChange)="validTo.set($event)"
+                       [disabled]="saving()" />
+              </div>
+
+              <!-- Notes -->
+              <div class="erp-field full">
+                <label for="notes">Notes</label>
+                <input id="notes" name="notes" type="text" class="form-control"
+                       [ngModel]="notes()" (ngModelChange)="notes.set($event)"
+                       [disabled]="saving()" autocomplete="off" />
+              </div>
+            </div>
           </div>
         </div>
 
         <!-- Agreement lines -->
-        <h2 class="h6 mb-2">Agreement Lines</h2>
-        @if (lines().length > 0) {
-          <div class="table-responsive mb-3">
-            <table class="table table-sm align-middle bg-white">
-              <caption class="visually-hidden">Agreement lines</caption>
-              <thead>
-                <tr>
-                  <th scope="col">#</th>
-                  <th scope="col">Product</th>
-                  <th scope="col">Unit</th>
-                  <th scope="col" class="text-end">Committed Qty</th>
-                  <th scope="col" class="text-end">Unit Price</th>
-                  <th scope="col"><span class="visually-hidden">Remove</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (l of lines(); track $index) {
-                  <tr>
-                    <td class="small text-muted">{{ $index + 1 }}</td>
-                    <td class="small">{{ l.productLabel }}</td>
-                    <td class="small">{{ l.unitName }}</td>
-                    <td class="text-end font-monospace small">{{ +l.committedQtyBase | number:'1.4-4' }}</td>
-                    <td class="text-end font-monospace small">{{ currency() }} {{ +l.unitPriceAmount | number:'1.2-2' }}</td>
-                    <td>
-                      <button type="button" class="btn btn-sm btn-outline-danger"
-                              (click)="removeLine($index)"
-                              [attr.aria-label]="'Remove line ' + ($index + 1)"
-                              [disabled]="saving()">
-                        <i class="bi bi-trash" aria-hidden="true"></i>
-                      </button>
-                    </td>
-                  </tr>
+        <div class="erp-card mb-3">
+          <div class="erp-card__head"><h2>Agreement Lines</h2></div>
+          <div class="erp-card__body">
+            @if (lines().length > 0) {
+              <div class="erp-table-wrap mb-3">
+                <table class="erp-table">
+                  <caption class="visually-hidden">Agreement lines</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">#</th>
+                      <th scope="col">Product</th>
+                      <th scope="col">Unit</th>
+                      <th scope="col" class="num">Committed Qty</th>
+                      <th scope="col" class="num">Unit Price</th>
+                      <th scope="col"><span class="visually-hidden">Remove</span></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (l of lines(); track $index) {
+                      <tr>
+                        <td class="small text-muted">{{ $index + 1 }}</td>
+                        <td class="small">{{ l.productLabel }}</td>
+                        <td class="small">{{ l.unitName }}</td>
+                        <td class="num small">{{ +l.committedQtyBase | number:'1.4-4' }}</td>
+                        <td class="num small">{{ currency() }} {{ +l.unitPriceAmount | number:'1.2-2' }}</td>
+                        <td>
+                          <button type="button" class="btn btn-sm btn-outline-danger"
+                                  (click)="removeLine($index)"
+                                  [attr.aria-label]="'Remove line ' + ($index + 1)"
+                                  [disabled]="saving()">
+                            <i class="bi bi-trash" aria-hidden="true"></i>
+                          </button>
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+
+            <!-- Add line form -->
+            <h3 class="erp-section-title" style="font-size:0.875rem">Add Line</h3>
+            <div class="row g-2 align-items-end mb-2">
+
+              <!-- Product picker -->
+              <div class="col-sm-4 position-relative">
+                <label class="form-label small text-muted mb-1" for="productSearch">Product</label>
+                <input id="productSearch" name="productSearch" type="search"
+                       class="form-control form-control-sm"
+                       placeholder="Search product…"
+                       [ngModel]="productSearchQ()"
+                       (ngModelChange)="onProductSearchChange($event)"
+                       [disabled]="saving()"
+                       autocomplete="off"
+                       role="combobox"
+                       [attr.aria-expanded]="productResults().length > 0"
+                       aria-haspopup="listbox"
+                       aria-autocomplete="list" />
+                @if (selectedProduct()) {
+                  <div class="d-flex align-items-center gap-1 mt-1">
+                    <i class="bi bi-check-circle-fill text-success small" aria-hidden="true"></i>
+                    <span class="small text-muted">{{ selectedProduct()!.label }}</span>
+                  </div>
                 }
-              </tbody>
-            </table>
-          </div>
-        }
+                @if (productResults().length > 0) {
+                  <ul class="list-group position-absolute shadow-sm mt-1 w-100" role="listbox"
+                      aria-label="Product suggestions"
+                      style="z-index:1050;max-height:200px;overflow-y:auto;">
+                    @for (p of productResults(); track p.uid) {
+                      <li class="list-group-item list-group-item-action small py-1"
+                          role="option" style="cursor:pointer"
+                          (click)="selectProduct(p)"
+                          (keydown.enter)="selectProduct(p)"
+                          tabindex="0">
+                        <strong>{{ p.code }}</strong> — {{ p.name }}
+                      </li>
+                    }
+                  </ul>
+                }
+              </div>
 
-        <!-- Add line form -->
-        <div class="border rounded p-3 mb-3 bg-light">
-          <p class="small fw-semibold mb-2">Add Line</p>
-          <div class="row g-2 align-items-end">
-
-            <!-- Product picker -->
-            <div class="col-sm-4 position-relative">
-              <label class="form-label small text-muted mb-1" for="productSearch">Product</label>
-              <input id="productSearch" name="productSearch" type="search"
-                     class="form-control form-control-sm"
-                     placeholder="Search product…"
-                     [ngModel]="productSearchQ()"
-                     (ngModelChange)="onProductSearchChange($event)"
-                     [disabled]="saving()"
-                     autocomplete="off"
-                     role="combobox"
-                     [attr.aria-expanded]="productResults().length > 0"
-                     aria-haspopup="listbox"
-                     aria-autocomplete="list" />
-              @if (selectedProduct()) {
-                <div class="d-flex align-items-center gap-1 mt-1">
-                  <i class="bi bi-check-circle-fill text-success small" aria-hidden="true"></i>
-                  <span class="small text-muted">{{ selectedProduct()!.label }}</span>
-                </div>
-              }
-              @if (productResults().length > 0) {
-                <ul class="list-group position-absolute shadow-sm mt-1 w-100" role="listbox"
-                    aria-label="Product suggestions"
-                    style="z-index:1050;max-height:200px;overflow-y:auto;">
-                  @for (p of productResults(); track p.uid) {
-                    <li class="list-group-item list-group-item-action small py-1"
-                        role="option" style="cursor:pointer"
-                        (click)="selectProduct(p)"
-                        (keydown.enter)="selectProduct(p)"
-                        tabindex="0">
-                      <strong>{{ p.code }}</strong> — {{ p.name }}
-                    </li>
+              <!-- Unit -->
+              <div class="col-sm-2">
+                <label class="form-label small text-muted mb-1" for="lineUnit">Unit</label>
+                <select id="lineUnit" name="lineUnit" class="form-select form-select-sm"
+                        [ngModel]="selectedUnitId()" (ngModelChange)="selectedUnitId.set($event)"
+                        [disabled]="saving() || units().length === 0">
+                  <option value="">— select —</option>
+                  @for (u of units(); track u.uid) {
+                    <option [value]="u.id">{{ u.name }}</option>
                   }
-                </ul>
-              }
-            </div>
+                </select>
+              </div>
 
-            <!-- Unit -->
-            <div class="col-sm-2">
-              <label class="form-label small text-muted mb-1" for="lineUnit">Unit</label>
-              <select id="lineUnit" name="lineUnit" class="form-select form-select-sm"
-                      [ngModel]="selectedUnitId()" (ngModelChange)="selectedUnitId.set($event)"
-                      [disabled]="saving() || units().length === 0">
-                <option value="">— select —</option>
-                @for (u of units(); track u.uid) {
-                  <option [value]="u.id">{{ u.name }}</option>
-                }
-              </select>
-            </div>
+              <!-- Committed qty -->
+              <div class="col-sm-2">
+                <label class="form-label small text-muted mb-1" for="lineQty">Committed Qty</label>
+                <input id="lineQty" name="lineQty" type="number" min="0.0001" step="any"
+                       class="form-control form-control-sm"
+                       [ngModel]="lineQty()" (ngModelChange)="lineQty.set(toStr($event))"
+                       [disabled]="saving()" />
+              </div>
 
-            <!-- Committed qty -->
-            <div class="col-sm-2">
-              <label class="form-label small text-muted mb-1" for="lineQty">Committed Qty</label>
-              <input id="lineQty" name="lineQty" type="number" min="0.0001" step="any"
-                     class="form-control form-control-sm"
-                     [ngModel]="lineQty()" (ngModelChange)="lineQty.set(toStr($event))"
-                     [disabled]="saving()" />
-            </div>
+              <!-- Unit price -->
+              <div class="col-sm-2">
+                <label class="form-label small text-muted mb-1" for="lineUnitPrice">Unit Price</label>
+                <input id="lineUnitPrice" name="lineUnitPrice" type="number" min="0" step="any"
+                       class="form-control form-control-sm"
+                       [ngModel]="lineUnitPrice()" (ngModelChange)="lineUnitPrice.set(toStr($event))"
+                       [disabled]="saving()" />
+              </div>
 
-            <!-- Unit price -->
-            <div class="col-sm-2">
-              <label class="form-label small text-muted mb-1" for="lineUnitPrice">Unit Price</label>
-              <input id="lineUnitPrice" name="lineUnitPrice" type="number" min="0" step="any"
-                     class="form-control form-control-sm"
-                     [ngModel]="lineUnitPrice()" (ngModelChange)="lineUnitPrice.set(toStr($event))"
-                     [disabled]="saving()" />
+              <!-- Add button -->
+              <div class="col-sm-2">
+                <button type="button" class="btn btn-sm btn-outline-primary w-100"
+                        (click)="addLine()" [disabled]="saving()">
+                  <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add
+                </button>
+              </div>
             </div>
-
-            <!-- Add button -->
-            <div class="col-sm-2">
-              <button type="button" class="btn btn-sm btn-outline-primary w-100"
-                      (click)="addLine()" [disabled]="saving()">
-                <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add
-              </button>
-            </div>
+            @if (addLineError(); as msg) {
+              <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+            }
           </div>
-          @if (addLineError(); as msg) {
-            <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-          }
         </div>
 
-        <!-- Form error + submit -->
+        <!-- Submit -->
         @if (formError(); as msg) {
-          <p class="form-error text-danger small mb-2" role="alert">{{ msg }}</p>
+          <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
         }
         <div class="d-flex gap-2">
           <button type="submit" class="btn btn-primary" [disabled]="saving()">

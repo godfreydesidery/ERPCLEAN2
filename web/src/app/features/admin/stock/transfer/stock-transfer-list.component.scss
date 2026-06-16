@@ -1,6 +1,1 @@
-// Stock Transfer List — component-scoped overrides
-// Global .admin-page, .page-head, .grid, .state from admin.styles.scss
-
-.table td:last-child {
-  white-space: nowrap;
-}
+// Stock Transfer List — no component-specific overrides; global erp-table handles dense rows.

@@ -1,7 +1,7 @@
 <section class="admin-page">
   <header class="page-head">
-    <h1 class="h4 mb-1">Deliveries</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
+    <h1>Deliveries</h1>
+    <p class="subtitle">
       <i class="bi bi-truck me-1" aria-hidden="true"></i>
       View all deliveries. Create deliveries from the Sales Order detail screen.
     </p>
@@ -22,8 +22,8 @@
     }
     @default {
       @if (companies().length > 1) {
-        <div class="mb-3" style="max-width:320px">
-          <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+        <div class="mb-3 erp-field" style="max-width:320px">
+          <label for="companyPicker">Company</label>
           <select id="companyPicker" name="companyPicker" class="form-select"
                   [ngModel]="selectedCompanyId()"
                   (ngModelChange)="onCompanyChange($event)">
@@ -37,31 +37,33 @@
   }
 
   @if (selectedCompanyId()) {
-    <!-- List states -->
     @switch (state()) {
       @case ('loading') {
-        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading deliveries…
         </p>
       }
       @case ('error') {
-        <p class="state text-danger" role="alert">
+        <p class="text-danger" role="alert">
           <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
           Could not load deliveries. Please try again.
         </p>
       }
       @case ('forbidden') {
-        <p class="state text-muted d-flex align-items-center gap-2">
-          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock"></i>
           You don't have permission to view deliveries.
-        </p>
+        </div>
       }
       @default {
         @if (isEmpty()) {
-          <p class="state text-muted">No deliveries yet. Create them from the Sales Order detail screen.</p>
+          <div class="erp-empty">
+            <i class="bi bi-truck"></i>
+            No deliveries yet. Create them from the Sales Order detail screen.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Deliveries</caption>
               <thead>
                 <tr>
@@ -76,15 +78,18 @@
               <tbody>
                 @for (d of rows(); track d.uid) {
                   <tr>
-                    <td class="font-monospace">{{ d.deliveryNumber ?? 'DRAFT' }}</td>
+                    <td class="mono">{{ d.deliveryNumber ?? 'DRAFT' }}</td>
                     <td>
                       <a [routerLink]="['/admin/sales-orders/uid', d.salesOrderUid]"
-                         class="small">
-                        View SO
-                      </a>
+                         class="small">View SO</a>
                     </td>
                     <td>
-                      <span class="badge" [class]="statusBadgeClass(d.status)">{{ d.status }}</span>
+                      <span class="status-tag"
+                            [class.status-tag--ok]="d.status === 'CONFIRMED'"
+                            [class.status-tag--warn]="d.status === 'DRAFT'"
+                            [class.status-tag--danger]="d.status === 'CANCELLED'">
+                        {{ d.status }}
+                      </span>
                     </td>
                     <td class="small text-muted">{{ d.deliveryDate }}</td>
                     <td class="small text-muted">

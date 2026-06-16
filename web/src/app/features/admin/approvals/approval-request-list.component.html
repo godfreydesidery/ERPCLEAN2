@@ -1,7 +1,7 @@
 <section class="admin-page">
   <header class="page-head">
-    <h1 class="h4 mb-1">Approval Requests</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
+    <h1>Approval Requests</h1>
+    <p class="subtitle">
       <i class="bi bi-clipboard-check me-1" aria-hidden="true"></i>
       View and track all approval requests across the organisation.
     </p>
@@ -15,15 +15,15 @@
       </p>
     }
     @case ('error') {
-      <p class="text-danger mb-3" role="alert">
+      <div class="text-danger mb-3" role="alert">
         <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
         Could not load companies. Is the API running?
-      </p>
+      </div>
     }
     @default {
       @if (companies().length > 1) {
-        <div class="mb-3" style="max-width:320px">
-          <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+        <div class="erp-field mb-3" style="max-width:320px">
+          <label for="companyPicker">Company</label>
           <select id="companyPicker" name="companyPicker" class="form-select"
                   [ngModel]="selectedCompanyId()"
                   (ngModelChange)="onCompanyChange($event)">
@@ -38,9 +38,9 @@
 
   @if (selectedCompanyId()) {
     <!-- Toolbar: filter -->
-    <div class="d-flex flex-wrap gap-2 mb-3 align-items-end">
-      <div>
-        <label class="form-label small text-muted mb-1" for="filterStatus">Status</label>
+    <div class="erp-toolbar">
+      <div class="erp-field" style="flex:0 0 auto">
+        <label for="filterStatus">Status</label>
         <select id="filterStatus" name="filterStatus" class="form-select form-select-sm"
                 style="width:180px"
                 [ngModel]="filterStatus()"
@@ -50,7 +50,7 @@
           }
         </select>
       </div>
-      <button type="button" class="btn btn-sm btn-outline-secondary align-self-end"
+      <button type="button" class="btn btn-sm btn-outline-secondary"
               (click)="applyFilter()">
         <i class="bi bi-funnel me-1" aria-hidden="true"></i>Filter
       </button>
@@ -59,34 +59,37 @@
     <!-- List states -->
     @switch (state()) {
       @case ('loading') {
-        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading requests…
         </p>
       }
       @case ('error') {
-        <p class="state text-danger" role="alert">
+        <div class="text-danger" role="alert">
           <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
           Could not load approval requests. Please try again.
-        </p>
+        </div>
       }
       @case ('forbidden') {
-        <p class="state text-muted d-flex align-items-center gap-2">
+        <p class="text-muted d-flex align-items-center gap-2" role="alert">
           <i class="bi bi-shield-lock" aria-hidden="true"></i>
           You don't have permission to view approval requests.
         </p>
       }
       @default {
         @if (isEmpty()) {
-          <p class="state text-muted">No approval requests found.</p>
+          <div class="erp-empty">
+            <i class="bi bi-clipboard-check" aria-hidden="true"></i>
+            No approval requests found.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Approval Requests</caption>
               <thead>
                 <tr>
                   <th scope="col">Request #</th>
                   <th scope="col">Document Type</th>
-                  <th scope="col">Amount</th>
+                  <th scope="col" class="text-end">Amount</th>
                   <th scope="col">Status</th>
                   <th scope="col">Submitted</th>
                   <th scope="col">Auto-approved</th>
@@ -96,18 +99,25 @@
               <tbody>
                 @for (r of rows(); track r.uid) {
                   <tr>
-                    <td class="font-monospace small">{{ r.requestNumber }}</td>
-                    <td class="small font-monospace">{{ r.documentType }}</td>
-                    <td class="text-end font-monospace small">{{ r.currency }} {{ +r.amount | number:'1.2-2' }}</td>
+                    <td class="mono">{{ r.requestNumber }}</td>
+                    <td class="mono">{{ r.documentType }}</td>
+                    <td class="num">{{ r.currency }} {{ +r.amount | number:'1.2-2' }}</td>
                     <td>
-                      <span class="badge" [class]="statusBadgeClass(r.status)">{{ r.status }}</span>
+                      <span class="status-tag"
+                            [class.status-tag--warn]="r.status === 'PENDING'"
+                            [class.status-tag--ok]="r.status === 'APPROVED'"
+                            [class.status-tag--danger]="r.status === 'REJECTED'"
+                            [class.status-tag--neutral]="r.status === 'RECALLED' || r.status === 'CANCELLED'">
+                        <span class="status-tag__dot" aria-hidden="true"></span>{{ r.status }}
+                      </span>
                     </td>
-                    <td class="small text-muted">{{ r.submittedAt | slice:0:10 }}</td>
+                    <td>{{ r.submittedAt | slice:0:10 }}</td>
                     <td class="text-center">
                       @if (r.autoApproved) {
-                        <i class="bi bi-check-circle-fill text-success" aria-label="Auto-approved"></i>
+                        <i role="img" class="bi bi-check-circle-fill text-success" aria-label="Auto-approved"></i>
                       } @else {
-                        <span class="text-muted small">—</span>
+                        <span class="text-muted" aria-hidden="true">—</span>
+                        <span class="visually-hidden">No</span>
                       }
                     </td>
                     <td>

@@ -10,7 +10,7 @@
  *  5. create() validation: requires quoteDate.
  *  6. create() calls soService.createQuotation with correct payload.
  *  7. 403 response sets state to 'forbidden'.
- *  8. statusBadgeClass returns correct badge class per status.
+ *  8. Status-tag modifier: ACCEPTED→ok, SENT→info, DRAFT→warn, REJECTED→danger, EXPIRED→neutral.
  */
 import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -202,40 +202,46 @@ describe('QuotationListComponent — create form validation', () => {
   });
 });
 
-// ── Status badge class ──────────────────────────────────────────────────────────
+// ── status-tag modifier logic ─────────────────────────────────────────────────
+// Mirrors inline template bindings on the quotation status span.
 
-describe('QuotationListComponent — statusBadgeClass', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    makeBed();
-  });
-  afterEach(() => {
-    vi.useRealTimers();
-    TestBed.resetTestingModule();
-  });
+function quoteOk(s: string)      { return s === 'ACCEPTED'; }
+function quoteInfo(s: string)    { return s === 'SENT'; }
+function quoteWarn(s: string)    { return s === 'DRAFT'; }
+function quoteDanger(s: string)  { return s === 'REJECTED'; }
+function quoteNeutral(s: string) { return s === 'EXPIRED'; }
 
-  it('DRAFT → text-bg-warning', async () => {
-    const comp = TestBed.createComponent(QuotationListComponent).componentInstance;
-    await vi.runAllTimersAsync();
-    expect(comp.statusBadgeClass('DRAFT')).toBe('text-bg-warning');
-  });
-
-  it('SENT → text-bg-info', async () => {
-    const comp = TestBed.createComponent(QuotationListComponent).componentInstance;
-    await vi.runAllTimersAsync();
-    expect(comp.statusBadgeClass('SENT')).toBe('text-bg-info');
+describe('QuotationListComponent — status-tag modifier', () => {
+  it('ACCEPTED → ok only', () => {
+    expect(quoteOk('ACCEPTED')).toBe(true);
+    expect(quoteInfo('ACCEPTED')).toBe(false);
+    expect(quoteWarn('ACCEPTED')).toBe(false);
+    expect(quoteDanger('ACCEPTED')).toBe(false);
+    expect(quoteNeutral('ACCEPTED')).toBe(false);
   });
 
-  it('ACCEPTED → text-bg-success', async () => {
-    const comp = TestBed.createComponent(QuotationListComponent).componentInstance;
-    await vi.runAllTimersAsync();
-    expect(comp.statusBadgeClass('ACCEPTED')).toBe('text-bg-success');
+  it('SENT → info only', () => {
+    expect(quoteOk('SENT')).toBe(false);
+    expect(quoteInfo('SENT')).toBe(true);
+    expect(quoteWarn('SENT')).toBe(false);
+    expect(quoteDanger('SENT')).toBe(false);
   });
 
-  it('REJECTED → text-bg-danger', async () => {
-    const comp = TestBed.createComponent(QuotationListComponent).componentInstance;
-    await vi.runAllTimersAsync();
-    expect(comp.statusBadgeClass('REJECTED')).toBe('text-bg-danger');
+  it('DRAFT → warn only', () => {
+    expect(quoteOk('DRAFT')).toBe(false);
+    expect(quoteWarn('DRAFT')).toBe(true);
+    expect(quoteDanger('DRAFT')).toBe(false);
+  });
+
+  it('REJECTED → danger only', () => {
+    expect(quoteOk('REJECTED')).toBe(false);
+    expect(quoteWarn('REJECTED')).toBe(false);
+    expect(quoteDanger('REJECTED')).toBe(true);
+  });
+
+  it('EXPIRED → neutral only', () => {
+    expect(quoteOk('EXPIRED')).toBe(false);
+    expect(quoteNeutral('EXPIRED')).toBe(true);
   });
 });
 

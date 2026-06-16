@@ -11,8 +11,6 @@ import {
   IssueLine,
   IssueToProjectRequest,
   IssueToProjectResultDto,
-  MasterStatus,
-  ProjectCostType,
   ProjectDto,
   ProjectPnlDto,
   ProjectStatus,
@@ -548,34 +546,6 @@ export class ProjectDetailComponent {
   }
 
   // ── Display helpers ────────────────────────────────────────────────────────
-
-  projectStatusBadgeClass(status: ProjectStatus): string {
-    switch (status) {
-      case 'ACTIVE': return 'text-bg-success';
-      case 'ON_HOLD': return 'text-bg-warning';
-      case 'COMPLETED': return 'text-bg-primary';
-      case 'CANCELLED': return 'text-bg-danger';
-      default: return 'text-bg-secondary';
-    }
-  }
-
-  masterStatusBadgeClass(status: MasterStatus): string {
-    switch (status) {
-      case 'ACTIVE': return 'text-bg-success';
-      case 'ARCHIVED': return 'text-bg-secondary';
-      default: return 'text-bg-warning';
-    }
-  }
-
-  costTypeBadgeClass(ct: ProjectCostType): string {
-    switch (ct) {
-      case 'MATERIAL': return 'text-bg-info';
-      case 'LABOUR': return 'text-bg-primary';
-      case 'SUBCONTRACT': return 'text-bg-warning';
-      case 'OVERHEAD': return 'text-bg-secondary';
-      default: return 'text-bg-light border';
-    }
-  }
 
   userDisplayName(userId: string): string {
     const u = this.userById().get(String(userId));

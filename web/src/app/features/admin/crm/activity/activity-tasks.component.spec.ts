@@ -119,11 +119,13 @@ describe('ActivityTasksComponent', () => {
     expect(comp.state()).toBe('forbidden');
   });
 
-  it('activityTypeBadgeClass returns correct class for TASK', () => {
+  it('activityTypeBadgeClass returns correct status-tag variant for each type', () => {
     const fixture = TestBed.createComponent(ActivityTasksComponent);
     const comp = fixture.componentInstance;
-    expect(comp.activityTypeBadgeClass('TASK')).toBe('text-bg-warning');
-    expect(comp.activityTypeBadgeClass('CALL')).toBe('text-bg-info');
-    expect(comp.activityTypeBadgeClass('MEETING')).toBe('text-bg-primary');
+    expect(comp.activityTypeBadgeClass('TASK')).toBe('status-tag--warn');
+    expect(comp.activityTypeBadgeClass('CALL')).toBe('status-tag--info');
+    expect(comp.activityTypeBadgeClass('MEETING')).toBe('status-tag--info');
+    expect(comp.activityTypeBadgeClass('EMAIL')).toBe('status-tag--neutral');
+    expect(comp.activityTypeBadgeClass('NOTE')).toBe('status-tag--neutral');
   });
 });

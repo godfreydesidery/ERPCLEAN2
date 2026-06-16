@@ -1,170 +1,177 @@
 <section class="admin-page">
-  <div class="page-head">
-    <h1>New Stock Transfer</h1>
-    <a routerLink="/admin/stock-transfers" class="btn btn-outline-secondary btn-sm">
-      <i class="bi bi-arrow-left" aria-hidden="true"></i> Back to list
-    </a>
+  <div class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>New Stock Transfer</h1>
+    </div>
+    <div class="erp-page-head__actions">
+      <a routerLink="/admin/stock-transfers" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left" aria-hidden="true"></i> Back to list
+      </a>
+    </div>
   </div>
 
   @switch (contextState()) {
     @case ('loading') {
-      <p aria-live="polite" class="state">Loading context…</p>
+      <div class="erp-empty" aria-live="polite">
+        <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Loading context…
+      </div>
     }
     @case ('error') {
-      <p role="alert" class="state text-danger">Failed to load company/branch context.</p>
+      <div class="erp-empty" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Failed to load company/branch context.
+      </div>
     }
     @default {
-      <form class="create-form" (ngSubmit)="submit()" #f="ngForm" novalidate>
+      <form class="erp-card" (ngSubmit)="submit()" #f="ngForm" novalidate>
+        <div class="erp-card__body">
 
-        <!-- Transfer header -->
-        <fieldset>
-          <legend>Transfer Details</legend>
-
-          <div class="row g-3 mb-3">
-            <div class="col-md-6">
-              <label for="transferMode" class="form-label">Transfer Mode <span aria-hidden="true">*</span></label>
-              <select id="transferMode" class="form-select form-select-sm"
-                      [ngModel]="transferMode()" (ngModelChange)="transferMode.set($event)"
-                      name="transferMode" required>
-                <option value="IN_TRANSIT">In-Transit (cross-branch: DRAFT → DISPATCHED → RECEIVED)</option>
-                <option value="INSTANT">Instant (same-branch: DRAFT → COMPLETED)</option>
-              </select>
+          <!-- Transfer header -->
+          <fieldset class="mb-4">
+            <legend class="erp-section-title">Transfer Details</legend>
+            <div class="erp-form-grid">
+              <div class="erp-field">
+                <label for="transferMode" class="form-label">Transfer Mode <span aria-hidden="true">*</span></label>
+                <select id="transferMode" class="form-select form-select-sm"
+                        [ngModel]="transferMode()" (ngModelChange)="transferMode.set($event)"
+                        name="transferMode" required>
+                  <option value="IN_TRANSIT">In-Transit (cross-branch: DRAFT → DISPATCHED → RECEIVED)</option>
+                  <option value="INSTANT">Instant (same-branch: DRAFT → COMPLETED)</option>
+                </select>
+              </div>
+              <div class="erp-field">
+                <label for="transferDate" class="form-label">Transfer Date <span aria-hidden="true">*</span></label>
+                <input id="transferDate" type="date" class="form-control form-control-sm"
+                       [ngModel]="transferDate()" (ngModelChange)="transferDate.set($event)"
+                       name="transferDate" required />
+              </div>
             </div>
+          </fieldset>
 
-            <div class="col-md-6">
-              <label for="transferDate" class="form-label">Transfer Date <span aria-hidden="true">*</span></label>
-              <input id="transferDate" type="date" class="form-control form-control-sm"
-                     [ngModel]="transferDate()" (ngModelChange)="transferDate.set($event)"
-                     name="transferDate" required />
-            </div>
-          </div>
-        </fieldset>
-
-        <!-- Source -->
-        <fieldset class="mt-3">
-          <legend>Source</legend>
-          <div class="row g-3 mb-3">
-            <div class="col-md-6">
-              <label class="form-label" id="srcBranchLabel">Source Branch <span aria-hidden="true">*</span></label>
-              <app-uid-picker
-                [ngModel]="sourceBranchUid()"
-                (ngModelChange)="onSourceBranchChange($event)"
-                [options]="branchOptions()"
-                placeholder="Select source branch"
-                [required]="true"
-                name="sourceBranchUid"
-                aria-labelledby="srcBranchLabel" />
-            </div>
-
-            <div class="col-md-6">
-              <label class="form-label" id="srcLocLabel">Source Location <span aria-hidden="true">*</span></label>
-              <app-uid-picker
-                [ngModel]="sourceLocationUid()"
-                (ngModelChange)="sourceLocationUid.set($event)"
-                [options]="sourceLocationOptions()"
-                placeholder="Select source location"
-                [required]="true"
-                name="sourceLocationUid"
-                aria-labelledby="srcLocLabel" />
-            </div>
-          </div>
-        </fieldset>
-
-        <!-- Destination -->
-        <fieldset class="mt-3">
-          <legend>Destination</legend>
-          <div class="row g-3 mb-3">
-            <div class="col-md-6">
-              <label class="form-label" id="destBranchLabel">Destination Branch <span aria-hidden="true">*</span></label>
-              <app-uid-picker
-                [ngModel]="destBranchUid()"
-                (ngModelChange)="onDestBranchChange($event)"
-                [options]="branchOptions()"
-                placeholder="Select destination branch"
-                [required]="true"
-                name="destBranchUid"
-                aria-labelledby="destBranchLabel" />
-            </div>
-
-            <div class="col-md-6">
-              <label class="form-label" id="destLocLabel">Destination Location <span aria-hidden="true">*</span></label>
-              <app-uid-picker
-                [ngModel]="destLocationUid()"
-                (ngModelChange)="destLocationUid.set($event)"
-                [options]="destLocationOptions()"
-                placeholder="Select destination location"
-                [required]="true"
-                name="destLocationUid"
-                aria-labelledby="destLocLabel" />
-            </div>
-          </div>
-        </fieldset>
-
-        <!-- Line items -->
-        <fieldset class="mt-3">
-          <legend>Line Items</legend>
-
-          @for (line of lines(); track $index; let i = $index) {
-            <div class="row g-2 align-items-end mb-2">
-              <div class="col-md-7">
-                <label [for]="'lineProd' + i" class="form-label">Product <span aria-hidden="true">*</span></label>
+          <!-- Source -->
+          <fieldset class="mb-4">
+            <legend class="erp-section-title">Source</legend>
+            <div class="erp-form-grid">
+              <div class="erp-field">
+                <label class="form-label" id="srcBranchLabel">Source Branch <span aria-hidden="true">*</span></label>
                 <app-uid-picker
-                  [ngModel]="line.productUid"
-                  (ngModelChange)="updateLineProduct(i, $event)"
-                  [options]="productOptions()"
-                  placeholder="Select product"
+                  [ngModel]="sourceBranchUid()"
+                  (ngModelChange)="onSourceBranchChange($event)"
+                  [options]="branchOptions()"
+                  placeholder="Select source branch"
                   [required]="true"
-                  [name]="'lineProd' + i"
-                  [attr.id]="'lineProd' + i" />
+                  name="sourceBranchUid"
+                  aria-labelledby="srcBranchLabel" />
               </div>
-              <div class="col-md-3">
-                <label [for]="'lineQty' + i" class="form-label">Qty <span aria-hidden="true">*</span></label>
-                <input [id]="'lineQty' + i" type="number" min="0.0001" step="any"
-                       class="form-control form-control-sm"
-                       [ngModel]="line.qty"
-                       (ngModelChange)="updateLineQty(i, $event)"
-                       [name]="'lineQty' + i"
-                       required />
-              </div>
-              <div class="col-md-2">
-                @if (lines().length > 1) {
-                  <button type="button" class="btn btn-outline-danger btn-sm w-100"
-                          (click)="removeLine(i)"
-                          [attr.aria-label]="'Remove line ' + (i + 1)">
-                    <i class="bi bi-trash" aria-hidden="true"></i> Remove
-                  </button>
-                }
+              <div class="erp-field">
+                <label class="form-label" id="srcLocLabel">Source Location <span aria-hidden="true">*</span></label>
+                <app-uid-picker
+                  [ngModel]="sourceLocationUid()"
+                  (ngModelChange)="sourceLocationUid.set($event)"
+                  [options]="sourceLocationOptions()"
+                  placeholder="Select source location"
+                  [required]="true"
+                  name="sourceLocationUid"
+                  aria-labelledby="srcLocLabel" />
               </div>
             </div>
+          </fieldset>
+
+          <!-- Destination -->
+          <fieldset class="mb-4">
+            <legend class="erp-section-title">Destination</legend>
+            <div class="erp-form-grid">
+              <div class="erp-field">
+                <label class="form-label" id="destBranchLabel">Destination Branch <span aria-hidden="true">*</span></label>
+                <app-uid-picker
+                  [ngModel]="destBranchUid()"
+                  (ngModelChange)="onDestBranchChange($event)"
+                  [options]="branchOptions()"
+                  placeholder="Select destination branch"
+                  [required]="true"
+                  name="destBranchUid"
+                  aria-labelledby="destBranchLabel" />
+              </div>
+              <div class="erp-field">
+                <label class="form-label" id="destLocLabel">Destination Location <span aria-hidden="true">*</span></label>
+                <app-uid-picker
+                  [ngModel]="destLocationUid()"
+                  (ngModelChange)="destLocationUid.set($event)"
+                  [options]="destLocationOptions()"
+                  placeholder="Select destination location"
+                  [required]="true"
+                  name="destLocationUid"
+                  aria-labelledby="destLocLabel" />
+              </div>
+            </div>
+          </fieldset>
+
+          <!-- Line items -->
+          <fieldset class="mb-4">
+            <legend class="erp-section-title">Line Items</legend>
+
+            @for (line of lines(); track $index; let i = $index) {
+              <div class="row g-2 align-items-end mb-2">
+                <div class="col-md-7">
+                  <label [for]="'lineProd' + i" class="form-label">Product <span aria-hidden="true">*</span></label>
+                  <app-uid-picker
+                    [ngModel]="line.productUid"
+                    (ngModelChange)="updateLineProduct(i, $event)"
+                    [options]="productOptions()"
+                    placeholder="Select product"
+                    [required]="true"
+                    [name]="'lineProd' + i"
+                    [attr.id]="'lineProd' + i" />
+                </div>
+                <div class="col-md-3">
+                  <label [for]="'lineQty' + i" class="form-label">Qty <span aria-hidden="true">*</span></label>
+                  <input [id]="'lineQty' + i" type="number" min="0.0001" step="any"
+                         class="form-control form-control-sm"
+                         [ngModel]="line.qty"
+                         (ngModelChange)="updateLineQty(i, $event)"
+                         [name]="'lineQty' + i"
+                         required />
+                </div>
+                <div class="col-md-2">
+                  @if (lines().length > 1) {
+                    <button type="button" class="btn btn-outline-danger btn-sm w-100"
+                            (click)="removeLine(i)"
+                            [attr.aria-label]="'Remove line ' + (i + 1)">
+                      <i class="bi bi-trash" aria-hidden="true"></i> Remove
+                    </button>
+                  }
+                </div>
+              </div>
+            }
+
+            <button type="button" class="btn btn-outline-secondary btn-sm mt-1" (click)="addLine()">
+              <i class="bi bi-plus" aria-hidden="true"></i> Add line
+            </button>
+          </fieldset>
+
+          <!-- Notes -->
+          <div class="erp-field mb-4" style="max-width:560px">
+            <label for="notes" class="form-label">Notes</label>
+            <textarea id="notes" class="form-control form-control-sm" rows="2"
+                      [ngModel]="notes()" (ngModelChange)="notes.set($event)"
+                      name="notes" maxlength="500"></textarea>
+          </div>
+
+          @if (formError()) {
+            <p role="alert" class="text-danger small mb-3">{{ formError() }}</p>
           }
 
-          <button type="button" class="btn btn-outline-secondary btn-sm mt-1" (click)="addLine()">
-            <i class="bi bi-plus" aria-hidden="true"></i> Add line
-          </button>
-        </fieldset>
-
-        <!-- Notes -->
-        <div class="mt-3">
-          <label for="notes" class="form-label">Notes</label>
-          <textarea id="notes" class="form-control form-control-sm" rows="2"
-                    [ngModel]="notes()" (ngModelChange)="notes.set($event)"
-                    name="notes" maxlength="500"></textarea>
-        </div>
-
-        @if (formError()) {
-          <p role="alert" class="form-error">{{ formError() }}</p>
-        }
-
-        <div class="mt-3 d-flex gap-2">
-          <button type="submit" class="btn btn-primary" [disabled]="saving()">
-            @if (saving()) {
-              <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
-              Saving…
-            } @else {
-              Create Transfer
-            }
-          </button>
-          <a routerLink="/admin/stock-transfers" class="btn btn-outline-secondary">Cancel</a>
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary" [disabled]="saving()">
+              @if (saving()) {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                Saving…
+              } @else {
+                Create Transfer
+              }
+            </button>
+            <a routerLink="/admin/stock-transfers" class="btn btn-outline-secondary">Cancel</a>
+          </div>
         </div>
       </form>
     }

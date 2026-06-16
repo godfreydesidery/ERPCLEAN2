@@ -1,75 +1,103 @@
 <section class="admin-page">
-  <header class="page-head">
-    <nav aria-label="breadcrumb">
-      <ol class="breadcrumb small mb-1">
-        <li class="breadcrumb-item"><a routerLink="/admin/hr/payroll-runs">Payroll Runs</a></li>
-        <li class="breadcrumb-item active" aria-current="page">
-          @if (run(); as r) { {{ r.runNumber }} } @else { Loading… }
-        </li>
-      </ol>
-    </nav>
-    <div class="d-flex align-items-center gap-3 flex-wrap">
-      <h1 class="h4 mb-0">
-        @if (run(); as r) { {{ r.runNumber }} } @else { Payroll Run Detail }
-      </h1>
-      @if (run(); as r) {
-        <span class="badge" [class]="statusBadgeClass(r.status)">{{ r.status }}</span>
-      }
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <nav aria-label="breadcrumb">
+        <ol class="breadcrumb small mb-1">
+          <li class="breadcrumb-item"><a routerLink="/admin/hr/payroll-runs">Payroll Runs</a></li>
+          <li class="breadcrumb-item active" aria-current="page">
+            @if (run(); as r) { {{ r.runNumber }} } @else { Loading… }
+          </li>
+        </ol>
+      </nav>
+      <div class="d-flex align-items-center gap-3 flex-wrap">
+        <h1>
+          @if (run(); as r) { {{ r.runNumber }} } @else { Payroll Run Detail }
+        </h1>
+        @if (run(); as r) {
+          <span class="status-tag"
+            [class.status-tag--ok]="r.status === 'PAID' || r.status === 'POSTED'"
+            [class.status-tag--warn]="r.status === 'DRAFT' || r.status === 'CALCULATED' || r.status === 'APPROVED'"
+            [class.status-tag--danger]="r.status === 'REVERSED'">
+            <span class="status-tag__dot" aria-hidden="true"></span>{{ r.status }}
+          </span>
+        }
+      </div>
     </div>
   </header>
 
   @switch (state()) {
     @case ('loading') {
-      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+      <output class="text-muted d-flex align-items-center gap-2" aria-live="polite">
         <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
-      </p>
+      </output>
     }
     @case ('error') {
-      <p class="state text-danger" role="alert">
+      <output class="d-block text-danger" role="alert">
         <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
         Could not load payroll run. Please try again.
-      </p>
+      </output>
     }
     @default {
       @if (run(); as r) {
-        <!-- Summary card -->
-        <div class="card mb-3">
-          <div class="card-body">
-            <div class="row g-3 small">
+        <!-- Summary card with KPI tiles -->
+        <div class="erp-card mb-3">
+          <div class="erp-card__head">
+            <h2>Run Summary</h2>
+          </div>
+          <div class="erp-card__body">
+            <div class="row g-3">
               <div class="col-sm-3">
-                <span class="text-muted">Period</span><br>
-                <strong>{{ r.periodYear }}-{{ r.periodMonth | number:'2.0-0' }}</strong>
+                <div class="erp-kpi">
+                  <span class="erp-kpi__label">Period</span>
+                  <span class="erp-kpi__value">{{ r.periodYear }}-{{ r.periodMonth | number:'2.0-0' }}</span>
+                </div>
               </div>
               <div class="col-sm-3">
-                <span class="text-muted">Pay Date</span><br>
-                <strong>{{ r.payDate }}</strong>
+                <div class="erp-kpi">
+                  <span class="erp-kpi__label">Pay Date</span>
+                  <span class="erp-kpi__value">{{ r.payDate }}</span>
+                </div>
               </div>
               <div class="col-sm-3">
-                <span class="text-muted">Gross Total</span><br>
-                <strong class="font-monospace">TZS {{ +r.grossTotal | number:'1.2-2' }}</strong>
+                <div class="erp-kpi">
+                  <span class="erp-kpi__label">Gross Total</span>
+                  <span class="erp-kpi__value mono">TZS {{ +r.grossTotal | number:'1.2-2' }}</span>
+                </div>
               </div>
               <div class="col-sm-3">
-                <span class="text-muted">Net Total</span><br>
-                <strong class="font-monospace">TZS {{ +r.netTotal | number:'1.2-2' }}</strong>
+                <div class="erp-kpi">
+                  <span class="erp-kpi__label">Net Total</span>
+                  <span class="erp-kpi__value mono">TZS {{ +r.netTotal | number:'1.2-2' }}</span>
+                </div>
               </div>
               <div class="col-sm-3">
-                <span class="text-muted">Deduction Total</span><br>
-                <strong class="font-monospace">TZS {{ +r.deductionTotal | number:'1.2-2' }}</strong>
+                <div class="erp-kpi">
+                  <span class="erp-kpi__label">Deduction Total</span>
+                  <span class="erp-kpi__value mono">TZS {{ +r.deductionTotal | number:'1.2-2' }}</span>
+                </div>
               </div>
               <div class="col-sm-3">
-                <span class="text-muted">Employer Cost</span><br>
-                <strong class="font-monospace">TZS {{ +r.employerCostTotal | number:'1.2-2' }}</strong>
+                <div class="erp-kpi">
+                  <span class="erp-kpi__label">Employer Cost</span>
+                  <span class="erp-kpi__value mono">TZS {{ +r.employerCostTotal | number:'1.2-2' }}</span>
+                </div>
               </div>
               @if (r.approvedBy) {
                 <div class="col-sm-3">
-                  <span class="text-muted">Approved By</span><br>
-                  <strong>{{ r.approvedBy }}</strong>
+                  <div class="erp-kpi">
+                    <span class="erp-kpi__label">Approved By</span>
+                    <span class="erp-kpi__value">{{ r.approvedBy }}</span>
+                  </div>
                 </div>
               }
               @if (r.glEntryUid) {
                 <div class="col-sm-3">
-                  <span class="text-muted">GL Entry</span><br>
-                  <a [routerLink]="['/admin/gl/journals/uid', r.glEntryUid]">View GL Entry</a>
+                  <div class="erp-kpi">
+                    <span class="erp-kpi__label">GL Entry</span>
+                    <span class="erp-kpi__value">
+                      <a [routerLink]="['/admin/gl/journals/uid', r.glEntryUid]">View GL Entry</a>
+                    </span>
+                  </div>
                 </div>
               }
             </div>
@@ -78,9 +106,9 @@
 
         <!-- Action error -->
         @if (actionError(); as msg) {
-          <p class="text-danger small mb-3" role="alert">
+          <output class="d-block text-danger small mb-3" role="alert">
             <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ msg }}
-          </p>
+          </output>
         }
 
         <!-- Lifecycle actions -->
@@ -90,7 +118,7 @@
                     (click)="calculate()"
                     [disabled]="calculating()">
               @if (calculating()) {
-                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
               } @else {
                 <i class="bi bi-calculator me-1" aria-hidden="true"></i>
               }
@@ -100,7 +128,7 @@
 
           @if (canApprove() && canApproveAction()) {
             @if (hasFlaggedLines()) {
-              <span class="badge text-bg-warning align-self-center">
+              <span class="status-tag status-tag--warn align-self-center">
                 <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
                 Flagged lines — resolve before approving
               </span>
@@ -109,7 +137,7 @@
                       (click)="approve()"
                       [disabled]="approving()">
                 @if (approving()) {
-                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
                 } @else {
                   <i class="bi bi-check2 me-1" aria-hidden="true"></i>
                 }
@@ -123,7 +151,7 @@
                     (click)="post()"
                     [disabled]="posting()">
               @if (posting()) {
-                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
               } @else {
                 <i class="bi bi-journal-check me-1" aria-hidden="true"></i>
               }
@@ -146,7 +174,7 @@
                     (click)="reverse()"
                     [disabled]="reversing()">
               @if (reversing()) {
-                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
               } @else {
                 <i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i>
               }
@@ -157,31 +185,38 @@
 
         <!-- Disburse form -->
         @if (showDisburseForm()) {
-          <form id="disburseForm" class="create-form card card-body mb-3"
+          <form id="disburseForm" class="erp-card mb-3"
                 (ngSubmit)="disburse()" aria-label="Disburse payroll">
-            <h2 class="h6 mb-3">Disburse Payroll</h2>
-            <div class="row g-2">
-              <div class="col-sm-5">
-                <label class="form-label small text-muted mb-1" for="dCashAcct">
-                  Cash / Bank Account UID <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <input id="dCashAcct" name="dCashAcct" type="text" class="form-control"
-                       placeholder="Account uid"
-                       [ngModel]="fCashBankAccountUid()" (ngModelChange)="fCashBankAccountUid.set($event)"
-                       [disabled]="disbursing()" autocomplete="off" />
+            <div class="erp-card__head">
+              <h2>Disburse Payroll</h2>
+            </div>
+            <div class="erp-card__body">
+              <div class="erp-form-grid">
+                <div class="erp-field">
+                  <label class="form-label" for="dCashAcct">
+                    Cash / Bank Account UID <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <input id="dCashAcct" name="dCashAcct" type="text" class="form-control"
+                         placeholder="Account uid"
+                         [ngModel]="fCashBankAccountUid()" (ngModelChange)="fCashBankAccountUid.set($event)"
+                         [disabled]="disbursing()" autocomplete="off" />
+                </div>
+                <div class="erp-field">
+                  <label class="form-label" for="dTxnDate">
+                    Transaction Date <span class="text-muted small">(defaults to pay date)</span>
+                  </label>
+                  <input id="dTxnDate" name="dTxnDate" type="date" class="form-control"
+                         [ngModel]="fTxnDate()" (ngModelChange)="fTxnDate.set($event)"
+                         [disabled]="disbursing()" />
+                </div>
               </div>
-              <div class="col-sm-3">
-                <label class="form-label small text-muted mb-1" for="dTxnDate">
-                  Transaction Date <span class="text-muted small">(defaults to pay date)</span>
-                </label>
-                <input id="dTxnDate" name="dTxnDate" type="date" class="form-control"
-                       [ngModel]="fTxnDate()" (ngModelChange)="fTxnDate.set($event)"
-                       [disabled]="disbursing()" />
-              </div>
-              <div class="col-sm-2 d-flex align-items-end">
-                <button type="submit" class="btn btn-success w-100" [disabled]="disbursing()">
+              @if (disburseError(); as msg) {
+                <output class="d-block text-danger small mt-2 mb-0" role="alert">{{ msg }}</output>
+              }
+              <div class="mt-3">
+                <button type="submit" class="btn btn-success" [disabled]="disbursing()">
                   @if (disbursing()) {
-                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
                     Disbursing…
                   } @else {
                     Disburse
@@ -189,40 +224,40 @@
                 </button>
               </div>
             </div>
-            @if (disburseError(); as msg) {
-              <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-            }
           </form>
         }
 
         <!-- Payroll Lines -->
-        <h2 class="h5 mt-4 mb-2">Payroll Lines</h2>
+        <h2 class="erp-section-title mt-4 mb-2">Payroll Lines</h2>
 
         @switch (linesState()) {
           @case ('loading') {
-            <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+            <output class="text-muted d-flex align-items-center gap-2" aria-live="polite">
               <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading lines…
-            </p>
+            </output>
           }
           @case ('error') {
-            <p class="text-danger small" role="alert">Could not load payroll lines.</p>
+            <output class="d-block text-danger small" role="alert">Could not load payroll lines.</output>
           }
           @default {
             @if (lines().length === 0) {
-              <p class="text-muted small">No lines yet — run Calculate to generate them.</p>
+              <div class="erp-empty">
+                <i class="bi bi-table" aria-hidden="true"></i>
+                No lines yet — run Calculate to generate them.
+              </div>
             } @else {
-              <div class="table-responsive">
-                <table class="table table-sm table-hover align-middle bg-white">
+              <div class="erp-table-wrap">
+                <table class="erp-table">
                   <caption class="visually-hidden">Payroll Lines</caption>
                   <thead>
                     <tr>
                       <th scope="col">Employee #</th>
                       <th scope="col">Name</th>
                       <th scope="col">Department</th>
-                      <th scope="col" class="text-end">Gross</th>
-                      <th scope="col" class="text-end">Net</th>
-                      <th scope="col" class="text-end">PAYE</th>
-                      <th scope="col" class="text-end">NSSF (Emp.)</th>
+                      <th scope="col" class="num">Gross</th>
+                      <th scope="col" class="num">Net</th>
+                      <th scope="col" class="num">PAYE</th>
+                      <th scope="col" class="num">NSSF (Emp.)</th>
                       <th scope="col">Status</th>
                       <th scope="col">Flag Reason</th>
                     </tr>
@@ -230,19 +265,21 @@
                   <tbody>
                     @for (l of lines(); track l.uid) {
                       <tr [class.table-danger]="l.status === 'FLAGGED'">
-                        <td class="font-monospace small">{{ l.employeeNumber }}</td>
-                        <td class="small">{{ l.employeeName }}</td>
-                        <td class="small text-muted">{{ l.departmentName }}</td>
-                        <td class="text-end font-monospace small">{{ l.currency }} {{ +l.grossAmount | number:'1.2-2' }}</td>
-                        <td class="text-end font-monospace small">{{ l.currency }} {{ +l.netAmount | number:'1.2-2' }}</td>
-                        <td class="text-end font-monospace small">{{ l.currency }} {{ +l.payeAmount | number:'1.2-2' }}</td>
-                        <td class="text-end font-monospace small">{{ l.currency }} {{ +l.nssfEmployeeAmount | number:'1.2-2' }}</td>
+                        <td class="mono">{{ l.employeeNumber }}</td>
+                        <td>{{ l.employeeName }}</td>
+                        <td class="text-muted">{{ l.departmentName }}</td>
+                        <td class="num mono">{{ l.currency }} {{ +l.grossAmount | number:'1.2-2' }}</td>
+                        <td class="num mono">{{ l.currency }} {{ +l.netAmount | number:'1.2-2' }}</td>
+                        <td class="num mono">{{ l.currency }} {{ +l.payeAmount | number:'1.2-2' }}</td>
+                        <td class="num mono">{{ l.currency }} {{ +l.nssfEmployeeAmount | number:'1.2-2' }}</td>
                         <td>
-                          <span class="badge" [class]="l.status === 'FLAGGED' ? 'text-bg-danger' : 'text-bg-success'">
-                            {{ l.status }}
+                          <span class="status-tag"
+                            [class.status-tag--danger]="l.status === 'FLAGGED'"
+                            [class.status-tag--ok]="l.status !== 'FLAGGED'">
+                            <span class="status-tag__dot" aria-hidden="true"></span>{{ l.status }}
                           </span>
                         </td>
-                        <td class="small text-danger">{{ l.flagReason }}</td>
+                        <td class="text-danger small">{{ l.flagReason }}</td>
                       </tr>
                     }
                   </tbody>

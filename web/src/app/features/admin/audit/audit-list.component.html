@@ -9,7 +9,7 @@
   </header>
 
   <!-- Filter bar -->
-  <form class="filter-bar card card-body mb-3"
+  <form class="card card-body mb-3"
         (ngSubmit)="applyFilter()"
         aria-label="Filter audit log">
     <div class="row g-2 align-items-end">
@@ -81,10 +81,13 @@
     }
     @default {
       @if (isEmpty()) {
-        <p class="state text-muted">No audit entries match the current filters.</p>
+        <div class="erp-empty">
+          <i class="bi bi-clipboard-data" aria-hidden="true"></i>
+          No audit entries match the current filters.
+        </div>
       } @else {
-        <div class="table-responsive">
-          <table class="table table-hover align-middle bg-white grid table-sm">
+        <div class="erp-table-wrap">
+          <table class="erp-table">
             <caption class="sr-only">Audit trail entries</caption>
             <thead>
               <tr>
@@ -109,7 +112,11 @@
                     }
                   </td>
                   <td>
-                    <span class="badge {{ actionBadgeClass(entry.action) }} font-monospace small">
+                    <span class="status-tag mono"
+                          [class.status-tag--info]="entry.action.startsWith('LOGIN.') || entry.action.startsWith('USER.')"
+                          [class.status-tag--warn]="entry.action.startsWith('ROLE.')"
+                          [class.status-tag--neutral]="entry.action.startsWith('BRANCH.')"
+                          [class.status-tag--danger]="entry.action.startsWith('ACCOUNT.') || entry.action.startsWith('ROOT.')">
                       {{ entry.action }}
                     </span>
                   </td>

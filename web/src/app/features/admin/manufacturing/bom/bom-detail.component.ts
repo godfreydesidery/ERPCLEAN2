@@ -389,19 +389,6 @@ export class BomDetailComponent {
     return uid ? uid.slice(0, 8) + '…' : '—';
   }
 
-  statusBadgeClass(status: string): string {
-    switch (status) {
-      case 'DRAFT':
-        return 'text-bg-warning';
-      case 'ACTIVE':
-        return 'text-bg-success';
-      case 'ARCHIVED':
-        return 'text-bg-secondary';
-      default:
-        return 'text-bg-secondary';
-    }
-  }
-
   private messageFrom(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {
       const errors = (err.error as { errors?: string[] })?.errors;

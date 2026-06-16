@@ -5,10 +5,10 @@
     </a>
   </div>
 
-  <header class="page-head">
-    <h1 class="h4 mb-1">
-      <i class="bi bi-receipt-cutoff me-2" aria-hidden="true"></i>Supplier Bill Detail
-    </h1>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1><i class="bi bi-receipt-cutoff me-2" aria-hidden="true"></i>Supplier Bill Detail</h1>
+    </div>
   </header>
 
   @switch (state()) {
@@ -18,10 +18,10 @@
       </p>
     }
     @case ('forbidden') {
-      <p class="text-muted d-flex align-items-center gap-2 mt-3" role="alert">
+      <div class="erp-empty mt-3" role="alert">
         <i class="bi bi-shield-lock" aria-hidden="true"></i>
         You don't have permission to view this bill.
-      </p>
+      </div>
     }
     @case ('error') {
       <p class="text-danger mt-3" role="alert">
@@ -33,12 +33,20 @@
       @if (bill(); as b) {
 
         <!-- ── Header card ──────────────────────────────────────────────────── -->
-        <div class="card mb-4 shadow-sm">
-          <div class="card-header d-flex justify-content-between align-items-center">
-            <span class="fw-semibold font-monospace">{{ b.billNumber }}</span>
-            <span class="badge fs-6" [class]="statusBadgeClass(b.status)">{{ b.status }}</span>
+        <div class="erp-card mb-4">
+          <div class="erp-card__head">
+            <h2 class="mono fw-semibold mb-0">{{ b.billNumber }}</h2>
+            <span class="spacer"></span>
+            <span class="status-tag"
+                  [class.status-tag--neutral]="b.status === 'DRAFT'"
+                  [class.status-tag--info]="b.status === 'MATCHED'"
+                  [class.status-tag--danger]="b.status === 'HELD'"
+                  [class.status-tag--ok]="b.status === 'APPROVED' || b.status === 'PAID'"
+                  [class.status-tag--warn]="b.status === 'PARTIALLY_PAID'">
+              <span class="status-tag__dot"></span>{{ b.status }}
+            </span>
           </div>
-          <div class="card-body">
+          <div class="erp-card__body">
             <div class="row g-3">
               <div class="col-sm-6 col-md-4">
                 <div class="small text-muted">Supplier Invoice No.</div>
@@ -75,7 +83,7 @@
               <div class="col-sm-6 col-md-4">
                 <div class="small text-muted">Source</div>
                 <div>
-                  <span class="badge text-bg-secondary">{{ b.source }}</span>
+                  <span class="status-tag status-tag--neutral">{{ b.source }}</span>
                 </div>
               </div>
               @if (b.purchaseOrderUid) {
@@ -103,8 +111,8 @@
             </div>
           </div>
           @if (canPayBill(b) && canPay()) {
-            <div class="card-footer">
-              <a routerLink="/admin/ap/payments/record" class="btn btn-success btn-sm">
+            <div class="erp-card__body border-top pt-3">
+              <a routerLink="/admin/ap/payments/record" class="btn btn-primary btn-sm">
                 <i class="bi bi-cash-stack me-1" aria-hidden="true"></i>Record Payment
               </a>
             </div>
@@ -113,21 +121,26 @@
 
         <!-- ── Bill lines ───────────────────────────────────────────────────── -->
         @if (b.lines && b.lines.length > 0) {
-          <div class="card mb-4 shadow-sm">
-            <div class="card-header small fw-semibold text-muted">
-              <i class="bi bi-list-ul me-1" aria-hidden="true"></i>
-              Bill Lines ({{ b.lines.length }})
+          <div class="erp-card mb-4">
+            <div class="erp-card__head">
+              <h2 class="h6 mb-0">
+                <i class="bi bi-list-ul me-1" aria-hidden="true"></i>
+                Bill Lines
+              </h2>
+              <span class="spacer"></span>
+              <span class="text-muted small">{{ b.lines.length }} line(s)</span>
             </div>
-            <div class="card-body p-0">
-              <div class="table-responsive">
-                <table class="table table-sm align-middle mb-0" aria-label="Supplier bill lines">
-                  <thead class="table-light">
+            <div class="erp-card__body p-0">
+              <div class="erp-table-wrap">
+                <table class="erp-table">
+                  <caption class="visually-hidden">Supplier bill lines</caption>
+                  <thead>
                     <tr>
                       <th scope="col">#</th>
                       <th scope="col">Description</th>
-                      <th scope="col" class="text-end">Billed Qty</th>
-                      <th scope="col" class="text-end">Unit Cost</th>
-                      <th scope="col" class="text-end">Line Net</th>
+                      <th scope="col" class="num">Billed Qty</th>
+                      <th scope="col" class="num">Unit Cost</th>
+                      <th scope="col" class="num">Line Net</th>
                       <th scope="col">Currency</th>
                     </tr>
                   </thead>
@@ -136,9 +149,9 @@
                       <tr>
                         <td class="text-muted small">{{ line.lineNo }}</td>
                         <td>{{ line.description }}</td>
-                        <td class="text-end font-monospace small">{{ fmtMoney(line.billedQty) }}</td>
-                        <td class="text-end font-monospace small">{{ fmtMoney(line.unitCostAmount) }}</td>
-                        <td class="text-end font-monospace small fw-semibold">{{ fmtMoney(line.lineNetAmount) }}</td>
+                        <td class="num">{{ fmtMoney(line.billedQty) }}</td>
+                        <td class="num">{{ fmtMoney(line.unitCostAmount) }}</td>
+                        <td class="num fw-semibold">{{ fmtMoney(line.lineNetAmount) }}</td>
                         <td class="small">{{ line.currency }}</td>
                       </tr>
                     }

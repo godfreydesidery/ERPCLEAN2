@@ -1,6 +1,8 @@
 <div class="admin-page">
-  <div class="page-head">
-    <h1>Stock Batches</h1>
+  <div class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>Stock Batches</h1>
+    </div>
   </div>
 
   <!-- Company selector -->
@@ -18,7 +20,7 @@
   }
 
   <!-- View mode tabs -->
-  <ul class="nav nav-tabs mb-3" role="tablist">
+  <ul class="nav nav-tabs mb-3" role="tablist" aria-label="Batch view mode">
     <li class="nav-item" role="presentation">
       <button type="button" class="nav-link" [class.active]="viewMode() === 'location'"
               (click)="switchToLocation()" role="tab"
@@ -39,17 +41,17 @@
 
   @if (viewMode() === 'location') {
     <!-- Location + Product filters -->
-    <div class="row g-3 mb-3">
-      <div class="col-md-4">
-        <label class="form-label" for="locationPicker">Location <span aria-hidden="true">*</span></label>
+    <div class="erp-toolbar mb-3">
+      <div>
+        <label class="form-label mb-1" for="locationPicker">Location <span aria-hidden="true">*</span></label>
         <app-uid-picker id="locationPicker"
                         [ngModel]="selectedLocationUid()"
                         (ngModelChange)="onLocationChange($event)"
                         [options]="locationOptions()"
                         placeholder="Select location" />
       </div>
-      <div class="col-md-4">
-        <label class="form-label" for="productPicker">Product <span aria-hidden="true">*</span></label>
+      <div>
+        <label class="form-label mb-1" for="productPicker">Product <span aria-hidden="true">*</span></label>
         <app-uid-picker id="productPicker"
                         [ngModel]="selectedProductUid()"
                         (ngModelChange)="onProductChange($event)"
@@ -58,52 +60,51 @@
       </div>
     </div>
     @if (!selectedLocationId() || !selectedProductId()) {
-      <p class="text-muted">Select a location and product to view batches.</p>
+      <div class="erp-empty"><i class="bi bi-box-seam"></i> Select a location and product to view batches.</div>
     }
   } @else {
     <!-- Expiring horizon -->
-    <div class="row g-3 mb-3">
-      <div class="col-md-3">
-        <label for="horizonDate" class="form-label">Expiring on or before</label>
-        <input id="horizonDate" type="date" class="form-control form-control-sm"
-               [ngModel]="horizonDate()" (ngModelChange)="horizonDate.set($event); load(0)" />
-      </div>
+    <div class="mb-3" style="max-width:260px">
+      <label for="horizonDate" class="form-label">Expiring on or before</label>
+      <input id="horizonDate" type="date" class="form-control form-control-sm"
+             [ngModel]="horizonDate()" (ngModelChange)="horizonDate.set($event); load(0)" />
     </div>
   }
 
   <!-- Four-state switch -->
   @switch (state()) {
     @case ('loading') {
-      <div class="state" aria-live="polite" aria-busy="true">
-        <div class="spinner-border spinner-border-sm text-secondary" role="status">
+      <div class="erp-empty" aria-live="polite" aria-busy="true">
+        <div class="spinner-border spinner-border-sm text-secondary me-2" role="status">
           <span class="visually-hidden">Loading batches…</span>
         </div>
-        <span class="ms-2 text-muted">Loading…</span>
+        Loading…
       </div>
     }
     @case ('forbidden') {
-      <div class="state" role="alert">
-        <i class="bi bi-shield-x text-danger" aria-hidden="true"></i>
+      <div class="erp-empty" role="alert">
+        <i class="bi bi-shield-x me-1" aria-hidden="true"></i>
         You do not have permission to view stock batches.
       </div>
     }
     @case ('error') {
-      <div class="state" role="alert">
-        <i class="bi bi-exclamation-triangle text-danger" aria-hidden="true"></i>
-        Could not load batches. <button class="btn btn-sm btn-link" (click)="load(currentPage())">Retry</button>
+      <div class="erp-empty" role="alert">
+        <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
+        Could not load batches.
+        <button class="btn btn-sm btn-link ms-1" (click)="load(currentPage())">Retry</button>
       </div>
     }
     @default {
       @if (isEmpty()) {
-        <div class="state text-muted">No batches found for the selected filters.</div>
+        <div class="erp-empty"><i class="bi bi-box-seam"></i> No batches found for the selected filters.</div>
       } @else {
-        <div class="table-responsive">
-          <table class="table table-hover align-middle bg-white grid">
+        <div class="erp-table-wrap">
+          <table class="erp-table">
             <caption class="visually-hidden">Stock batches</caption>
             <thead>
               <tr>
                 <th scope="col">Lot #</th>
-                <th scope="col">Qty On Hand</th>
+                <th scope="col" class="num">Qty On Hand</th>
                 <th scope="col">Manufacture Date</th>
                 <th scope="col">Expiry Date</th>
                 <th scope="col">Expired</th>
@@ -112,14 +113,16 @@
             <tbody>
               @for (row of rows(); track row.uid) {
                 <tr>
-                  <td class="fw-semibold">{{ row.lotNumber }}</td>
-                  <td>{{ row.qtyOnHand }}</td>
+                  <td class="fw-semibold mono">{{ row.lotNumber }}</td>
+                  <td class="num">{{ row.qtyOnHand }}</td>
                   <td>{{ row.manufactureDate ?? '—' }}</td>
                   <td>{{ row.expiryDate ?? '—' }}</td>
                   <td>
                     @if (row.expiryDate) {
-                      <span class="badge" [class]="expiryBadgeClass(row.expired)">
-                        {{ row.expired ? 'Expired' : 'OK' }}
+                      <span class="status-tag"
+                            [class.status-tag--ok]="!row.expired"
+                            [class.status-tag--danger]="row.expired">
+                        <span class="status-tag__dot" aria-hidden="true"></span>{{ row.expired ? 'Expired' : 'OK' }}
                       </span>
                     }
                   </td>

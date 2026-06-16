@@ -403,12 +403,6 @@ export class SalesInvoiceDetailComponent {
 
   // ── Display helpers ────────────────────────────────────────────────────────
 
-  statusBadgeClass(status: string): string {
-    if (status === 'FINALISED') return 'text-bg-success';
-    if (status === 'VOID') return 'text-bg-secondary';
-    return 'text-bg-warning'; // DRAFT
-  }
-
   private messageFrom(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {
       const errors = (err.error as { errors?: string[] })?.errors;

@@ -126,11 +126,5 @@ export class DeliveryListComponent {
   prevPage(): void { if (this.currentPage() > 0) this.load(this.currentPage() - 1); }
   nextPage(): void { if (this.meta().hasNext) this.load(this.currentPage() + 1); }
 
-  // ── Display helpers ──────────────────────────────────────────────────────────
-
-  statusBadgeClass(status: DeliveryStatus): string {
-    if (status === 'CONFIRMED') return 'text-bg-success';
-    if (status === 'CANCELLED') return 'text-bg-danger';
-    return 'text-bg-warning'; // DRAFT
-  }
 }
+

@@ -11,7 +11,7 @@ import { Company } from '../models/company.model';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { HrPayrollService, LeaveRequestPage } from './hr-payroll.service';
-import { LeaveRequestDto, LeaveRequestStatus, SubmitLeaveRequest } from './models/hr-payroll.model';
+import { LeaveRequestDto, SubmitLeaveRequest } from './models/hr-payroll.model';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 import { UidOption, UidPickerComponent } from '../../../shared/uid-picker/uid-picker.component';
 
@@ -204,15 +204,6 @@ export class LeaveRequestListComponent {
         this.saving.set(false);
       },
     });
-  }
-
-  statusBadgeClass(status: LeaveRequestStatus): string {
-    switch (status) {
-      case 'APPROVED': return 'text-bg-success';
-      case 'REJECTED': return 'text-bg-danger';
-      case 'CANCELLED': return 'text-bg-secondary';
-      default: return 'text-bg-warning'; // PENDING
-    }
   }
 
   private messageFrom(err: unknown, fallback: string): string {

@@ -134,15 +134,4 @@ export class ApprovalRequestListComponent {
   prevPage(): void { if (this.currentPage() > 0) this.load(this.currentPage() - 1); }
   nextPage(): void { if (this.meta().hasNext) this.load(this.currentPage() + 1); }
 
-  // ── Display helpers ──────────────────────────────────────────────────────────
-
-  statusBadgeClass(status: ApprovalRequestStatus): string {
-    switch (status) {
-      case 'PENDING': return 'text-bg-warning';
-      case 'APPROVED': return 'text-bg-success';
-      case 'REJECTED': return 'text-bg-danger';
-      case 'RECALLED': return 'text-bg-secondary';
-      case 'CANCELLED': return 'text-bg-secondary';
-    }
-  }
 }

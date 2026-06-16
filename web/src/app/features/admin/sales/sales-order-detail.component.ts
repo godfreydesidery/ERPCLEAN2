@@ -14,7 +14,6 @@ import {
   DeliveryDto,
   SalesOrderDto,
   SalesOrderLineDto,
-  SalesOrderStatus,
 } from '../models/sales-orders.model';
 import { ProductService } from '../products/product.service';
 import { SalesOrdersService } from './sales-orders.service';
@@ -313,25 +312,6 @@ export class SalesOrderDetailComponent {
   }
 
   // ── Display helpers ────────────────────────────────────────────────────────────
-
-  statusBadgeClass(status: SalesOrderStatus): string {
-    switch (status) {
-      case 'CONFIRMED': return 'text-bg-primary';
-      case 'PARTIALLY_FULFILLED': return 'text-bg-info';
-      case 'FULFILLED': return 'text-bg-success';
-      case 'PARTIALLY_INVOICED': return 'text-bg-warning';
-      case 'INVOICED': return 'text-bg-success';
-      case 'CLOSED': return 'text-bg-secondary';
-      case 'CANCELLED': return 'text-bg-danger';
-      default: return 'text-bg-warning';
-    }
-  }
-
-  deliveryStatusBadgeClass(status: string): string {
-    if (status === 'CONFIRMED') return 'text-bg-success';
-    if (status === 'CANCELLED') return 'text-bg-danger';
-    return 'text-bg-warning'; // DRAFT
-  }
 
   private messageFrom(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {

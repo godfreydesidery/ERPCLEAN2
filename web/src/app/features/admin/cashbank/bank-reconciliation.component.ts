@@ -301,10 +301,6 @@ export class BankReconciliationComponent {
     return Number.isFinite(n) ? n.toFixed(2) : '0.00';
   }
 
-  directionBadgeClass(direction: string): string {
-    return direction === 'IN' ? 'text-bg-success' : 'text-bg-danger';
-  }
-
   private messageFrom(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {
       const errors = (err.error as { errors?: string[] })?.errors;

@@ -1,7 +1,7 @@
 <section class="admin-page">
   <header class="page-head">
     <h1 class="h4 mb-1">Purchase Returns</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
+    <p class="subtitle">
       <i class="bi bi-arrow-return-left me-1" aria-hidden="true"></i>
       Returns raised against goods receipts.
     </p>
@@ -36,9 +36,10 @@
   }
 
   @if (selectedCompanyId()) {
-    <div class="d-flex mb-3">
+    <div class="erp-toolbar mb-3">
+      <div class="erp-toolbar__spacer"></div>
       @if (canCreate()) {
-        <a class="btn btn-primary ms-auto" routerLink="/admin/purchase-returns/create">
+        <a class="btn btn-primary" routerLink="/admin/purchase-returns/create">
           <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>New Return
         </a>
       }
@@ -46,28 +47,31 @@
 
     @switch (state()) {
       @case ('loading') {
-        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading returns…
         </p>
       }
       @case ('error') {
-        <p class="state text-danger" role="alert">
+        <p class="text-danger" role="alert">
           <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
           Could not load purchase returns. Please try again.
         </p>
       }
       @case ('forbidden') {
-        <p class="state text-muted d-flex align-items-center gap-2">
-          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock"></i>
           You don't have permission to view purchase returns.
-        </p>
+        </div>
       }
       @default {
         @if (isEmpty()) {
-          <p class="state text-muted">No purchase returns yet.</p>
+          <div class="erp-empty">
+            <i class="bi bi-arrow-return-left"></i>
+            No purchase returns yet.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Purchase returns</caption>
               <thead>
                 <tr>
@@ -75,7 +79,7 @@
                   <th scope="col">Supplier</th>
                   <th scope="col">Status</th>
                   <th scope="col">Currency</th>
-                  <th scope="col" class="text-end">Gross</th>
+                  <th scope="col" class="num">Gross</th>
                   <th scope="col">Created</th>
                   <th scope="col"><span class="visually-hidden">Actions</span></th>
                 </tr>
@@ -83,13 +87,17 @@
               <tbody>
                 @for (r of rows(); track r.uid) {
                   <tr>
-                    <td class="font-monospace">{{ r.returnNumber }}</td>
+                    <td class="mono">{{ r.returnNumber }}</td>
                     <td>{{ r.supplierName }}</td>
                     <td>
-                      <span class="badge" [class]="statusBadgeClass(r.status)">{{ r.status }}</span>
+                      <span class="status-tag"
+                        [class.status-tag--ok]="r.status === 'CONFIRMED'"
+                        [class.status-tag--warn]="r.status !== 'CONFIRMED'">
+                        {{ r.status }}
+                      </span>
                     </td>
                     <td class="small">{{ r.currency }}</td>
-                    <td class="text-end font-monospace">{{ +r.grossAmount | number:'1.2-2' }}</td>
+                    <td class="num">{{ +r.grossAmount | number:'1.2-2' }}</td>
                     <td class="small text-muted">{{ r.createdAt | date:'dd/MM/yyyy' }}</td>
                     <td>
                       <a class="btn btn-sm btn-outline-primary"

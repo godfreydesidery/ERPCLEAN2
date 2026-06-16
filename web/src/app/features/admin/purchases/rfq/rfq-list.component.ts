@@ -106,16 +106,4 @@ export class RfqListComponent {
   }
 
   goToPage(page: number): void { this.load(page); }
-
-  // ── Display helpers ────────────────────────────────────────────────────────
-
-  statusBadgeClass(status: RfqStatus): string {
-    switch (status) {
-      case 'SENT': return 'text-bg-primary';
-      case 'QUOTES_RECEIVED': return 'text-bg-info';
-      case 'AWARDED': return 'text-bg-success';
-      case 'CANCELLED': return 'text-bg-secondary';
-      default: return 'text-bg-warning'; // DRAFT
-    }
-  }
 }

@@ -1,14 +1,5 @@
-/* Company list — Bootstrap-themed (Orbix). Layout comes from Bootstrap utility/component classes;
-   these are the few company-specific touches. The shared admin.styles.scss is intentionally NOT
-   imported here so the Bootstrap card/table styling isn't overridden by the legacy admin styles. */
-
-.admin-page {
-  max-width: 960px;
-}
-
-.page-head {
-  margin-bottom: 1rem;
-}
+/* Company list — relies on global ERP kit (.admin-page, .page-head, .erp-table, .status-tag).
+   Only component-specific touches remain here. */
 
 .org-line {
   font-size: 0.9rem;
@@ -16,13 +7,4 @@
 
 .state {
   padding: 1rem 0;
-}
-
-.grid {
-  th {
-    font-size: 0.78rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: #6b7280;
-  }
 }

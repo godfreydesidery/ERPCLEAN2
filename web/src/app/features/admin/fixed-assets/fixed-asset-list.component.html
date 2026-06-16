@@ -1,7 +1,7 @@
 <section class="admin-page">
   <header class="page-head">
     <h1 class="h4 mb-1">Fixed Assets</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
+    <p class="subtitle">
       <i class="bi bi-building-gear me-1" aria-hidden="true"></i>
       Register and manage fixed assets, track depreciation, disposals, and revaluations.
     </p>
@@ -37,8 +37,8 @@
 
   @if (selectedCompanyId()) {
     <!-- Toolbar: filters + New button -->
-    <div class="d-flex flex-wrap gap-2 mb-3 align-items-end">
-      <div style="min-width:160px">
+    <div class="erp-toolbar mb-3">
+      <div class="erp-toolbar__search" style="min-width:160px">
         <label class="form-label small text-muted mb-1" for="statusFilter">Status</label>
         <select id="statusFilter" name="statusFilter" class="form-select form-select-sm"
                 [ngModel]="filterStatus()"
@@ -48,9 +48,9 @@
           }
         </select>
       </div>
+      <span class="erp-toolbar__spacer"></span>
       @if (canCreate()) {
-        <a class="btn btn-primary ms-auto align-self-end" routerLink="/admin/fixed-assets/create"
-           aria-label="Register new fixed asset">
+        <a class="btn btn-primary" routerLink="/admin/fixed-assets/create">
           <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Register Asset
         </a>
       }
@@ -59,26 +59,29 @@
     <!-- List states -->
     @switch (state()) {
       @case ('loading') {
-        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading assets…
         </p>
       }
       @case ('error') {
-        <p class="state text-danger" role="alert">
+        <p class="text-danger" role="alert">
           <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load fixed assets.
         </p>
       }
       @case ('forbidden') {
-        <p class="state text-muted">
+        <p class="text-muted">
           <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>You don't have permission to view fixed assets.
         </p>
       }
       @default {
         @if (isEmpty()) {
-          <p class="state text-muted">No fixed assets found. Register one above.</p>
+          <div class="erp-empty">
+            <i class="bi bi-building-gear" aria-hidden="true"></i>
+            No fixed assets found. Register one above.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Fixed Assets</caption>
               <thead>
                 <tr>
@@ -86,8 +89,8 @@
                   <th scope="col">Name</th>
                   <th scope="col">Status</th>
                   <th scope="col">Method</th>
-                  <th scope="col" class="text-end">Acquisition Cost</th>
-                  <th scope="col" class="text-end">NBV</th>
+                  <th scope="col" class="num">Acquisition Cost</th>
+                  <th scope="col" class="num">NBV</th>
                   <th scope="col">Acq. Date</th>
                   <th scope="col"><span class="visually-hidden">Actions</span></th>
                 </tr>
@@ -95,12 +98,20 @@
               <tbody>
                 @for (asset of rows(); track asset.uid) {
                   <tr>
-                    <td class="font-monospace small">{{ asset.assetNumber }}</td>
+                    <td class="mono">{{ asset.assetNumber }}</td>
                     <td>{{ asset.name }}</td>
-                    <td><span class="badge" [class]="statusBadgeClass(asset.status)">{{ asset.status }}</span></td>
+                    <td>
+                      <span class="status-tag"
+                        [class.status-tag--warn]="asset.status === 'DRAFT'"
+                        [class.status-tag--ok]="asset.status === 'IN_SERVICE'"
+                        [class.status-tag--neutral]="asset.status === 'DISPOSED'"
+                        [class.status-tag--danger]="asset.status === 'WRITTEN_OFF'">
+                        <span class="status-tag__dot" aria-hidden="true"></span>{{ asset.status }}
+                      </span>
+                    </td>
                     <td class="small">{{ asset.depreciationMethod === 'STRAIGHT_LINE' ? 'SL' : 'RB' }}</td>
-                    <td class="text-end font-monospace small">{{ +asset.acquisitionCost | number:'1.2-2' }}</td>
-                    <td class="text-end font-monospace small">{{ +asset.nbv | number:'1.2-2' }}</td>
+                    <td class="num mono">{{ +asset.acquisitionCost | number:'1.2-2' }}</td>
+                    <td class="num mono">{{ +asset.nbv | number:'1.2-2' }}</td>
                     <td class="small text-muted">{{ asset.acquisitionDate }}</td>
                     <td>
                       <a class="btn btn-sm btn-outline-primary"

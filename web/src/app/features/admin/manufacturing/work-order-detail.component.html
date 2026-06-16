@@ -1,40 +1,53 @@
 <section class="admin-page">
-  <header class="page-head">
-    <nav aria-label="Breadcrumb">
-      <a routerLink="/admin/work-orders" class="text-muted small">
-        <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Work Orders
-      </a>
-    </nav>
-    @if (wo(); as w) {
-      <h1 class="h4 mb-1">{{ w.woNumber }}</h1>
-      <div class="d-flex align-items-center gap-2">
-        <span class="badge" [class]="statusBadgeClass(w.status)">{{ w.status }}</span>
-        @if (w.incompleteCost) {
-          <span class="badge text-bg-warning" title="Incomplete cost — one or more components have no average cost">
-            <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>Incomplete Cost
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <nav aria-label="Breadcrumb">
+        <a routerLink="/admin/work-orders" class="text-muted small">
+          <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Work Orders
+        </a>
+      </nav>
+      @if (wo(); as w) {
+        <h1>{{ w.woNumber }}</h1>
+        <div class="d-flex align-items-center gap-2 mt-1">
+          <span class="status-tag"
+                [class.status-tag--warn]="w.status === 'PLANNED' || w.status === 'IN_PROGRESS'"
+                [class.status-tag--info]="w.status === 'RELEASED'"
+                [class.status-tag--ok]="w.status === 'COMPLETED'"
+                [class.status-tag--neutral]="w.status === 'CLOSED'"
+                [class.status-tag--danger]="w.status === 'CANCELLED'">
+            <span class="status-tag__dot"></span>{{ w.status }}
           </span>
-        }
+          @if (w.incompleteCost) {
+            <span class="status-tag status-tag--warn">
+              <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>Incomplete Cost
+            </span>
+          }
+        </div>
+      } @else if (woState() === 'loading') {
+        <h1 class="text-muted">Loading…</h1>
+      } @else {
+        <h1 class="text-muted">Work Order</h1>
+      }
+    </div>
+    @if (wo()) {
+      <div class="erp-page-head__actions">
         <a [routerLink]="['/admin/work-orders/uid', uid(), 'cost-report']"
-           class="btn btn-sm btn-outline-secondary ms-auto"
+           class="btn btn-sm btn-outline-secondary"
            aria-label="View cost report for this work order">
           <i class="bi bi-bar-chart me-1" aria-hidden="true"></i>Cost Report
         </a>
       </div>
-    } @else if (woState() === 'loading') {
-      <h1 class="h4 mb-1 text-muted">Loading…</h1>
-    } @else {
-      <h1 class="h4 mb-1 text-muted">Work Order</h1>
     }
   </header>
 
   @switch (woState()) {
     @case ('loading') {
-      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+      <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
         <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
       </p>
     }
     @case ('error') {
-      <p class="state text-danger" role="alert">
+      <p class="text-danger" role="alert">
         <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
         Could not load work order. Please try again.
       </p>
@@ -43,8 +56,11 @@
       @if (wo(); as w) {
 
         <!-- ── Summary card ─────────────────────────────────────────────── -->
-        <div class="card mb-4">
-          <div class="card-body">
+        <div class="erp-card mb-4">
+          <div class="erp-card__head">
+            <h2>Summary</h2>
+          </div>
+          <div class="erp-card__body">
             <div class="row g-3">
               <div class="col-sm-4">
                 <div class="small text-muted">Finished Product</div>
@@ -111,13 +127,15 @@
 
         <!-- ── Edit form (PLANNED only) ─────────────────────────────────── -->
         @if (canEdit()) {
-          <div class="card mb-4">
-            <div class="card-header fw-semibold">Edit Work Order</div>
-            <div class="card-body">
+          <div class="erp-card mb-4">
+            <div class="erp-card__head">
+              <h2>Edit Work Order</h2>
+            </div>
+            <div class="erp-card__body">
               <form (ngSubmit)="save()" aria-label="Edit work order">
-                <div class="row g-2 align-items-start mb-2">
-                  <div class="col-sm-2">
-                    <label class="form-label small text-muted mb-1" for="fPlannedQty">
+                <div class="erp-form-grid">
+                  <div class="erp-field">
+                    <label for="fPlannedQty">
                       Planned Qty <span class="text-danger" aria-hidden="true">*</span>
                     </label>
                     <input id="fPlannedQty" name="fPlannedQty" type="number" class="form-control"
@@ -125,43 +143,43 @@
                            [ngModel]="fPlannedQty()" (ngModelChange)="fPlannedQty.set($event)"
                            [disabled]="saving()" />
                   </div>
-                  <!-- BOM UID — no BOM list endpoint yet; deferred pending BOM list service -->
-                  <div class="col-sm-3">
-                    <label class="form-label small text-muted mb-1" for="fBomUid">BOM UID (override)</label>
+                  <div class="erp-field">
+                    <label for="fBomUid">BOM UID (override)</label>
                     <input id="fBomUid" name="fBomUid" type="text" class="form-control"
                            [ngModel]="fBomUid()" (ngModelChange)="fBomUid.set($event)"
                            [disabled]="saving()" autocomplete="off" />
                   </div>
-                  <div class="col-sm-3">
-                    <label class="form-label small text-muted mb-1">Branch</label>
+                  <!-- Branch: picker self-labels via placeholder -->
+                  <div class="erp-field">
+                    <span class="erp-field__label">Branch</span>
                     <app-uid-picker [(ngModel)]="fBranchUid" [options]="branchOptions()"
                                     placeholder="Select branch" name="fBranchUid" />
                   </div>
-                  <div class="col-sm-2">
-                    <label class="form-label small text-muted mb-1" for="fPlannedDate">Planned Date</label>
+                  <div class="erp-field">
+                    <label for="fPlannedDate">Planned Date</label>
                     <input id="fPlannedDate" name="fPlannedDate" type="date" class="form-control"
                            [ngModel]="fPlannedDate()" (ngModelChange)="fPlannedDate.set($event)"
                            [disabled]="saving()" />
                   </div>
-                  <div class="col-sm-4">
-                    <label class="form-label small text-muted mb-1" for="fNotes">Notes</label>
+                  <div class="erp-field full">
+                    <label for="fNotes">Notes</label>
                     <input id="fNotes" name="fNotes" type="text" class="form-control"
                            [ngModel]="fNotes()" (ngModelChange)="fNotes.set($event)"
                            [disabled]="saving()" autocomplete="off" />
                   </div>
-                  <div class="col-sm-2 d-flex align-items-end">
-                    <button type="submit" class="btn btn-primary w-100" [disabled]="saving()">
-                      @if (saving()) {
-                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                        Saving…
-                      } @else {
-                        Save
-                      }
-                    </button>
-                  </div>
+                </div>
+                <div class="mt-3">
+                  <button type="submit" class="btn btn-primary" [disabled]="saving()">
+                    @if (saving()) {
+                      <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                      Saving…
+                    } @else {
+                      Save
+                    }
+                  </button>
                 </div>
                 @if (saveError(); as msg) {
-                  <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+                  <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
                 }
               </form>
             </div>
@@ -169,24 +187,23 @@
         }
 
         <!-- ── Lifecycle actions ─────────────────────────────────────────── -->
-        <div class="card mb-4">
-          <div class="card-header fw-semibold">Lifecycle Actions</div>
-          <div class="card-body d-flex flex-column gap-4">
+        <div class="erp-card mb-4">
+          <div class="erp-card__head">
+            <h2>Lifecycle Actions</h2>
+          </div>
+          <div class="erp-card__body d-flex flex-column gap-4">
 
             <!-- Release -->
             @if (canReleaseAction()) {
               <div>
-                <h3 class="h6">Release Work Order</h3>
+                <h3 class="erp-section-title">Release Work Order</h3>
                 <p class="small text-muted mb-2">
                   Explodes the BOM, materialises component plan lines. No stock/GL effect.
                   Optionally pin a specific BOM UID.
                 </p>
                 <div class="d-flex gap-2 align-items-end flex-wrap">
-                  <!-- BOM UID for release — no BOM list endpoint yet; deferred pending BOM list service -->
-                  <div style="max-width:280px">
-                    <label class="form-label small text-muted mb-1" for="releaseBomUid">
-                      BOM UID (optional override)
-                    </label>
+                  <div class="erp-field" style="max-width:280px">
+                    <label for="releaseBomUid">BOM UID (optional override)</label>
                     <input id="releaseBomUid" name="releaseBomUid" type="text" class="form-control form-control-sm"
                            placeholder="leave blank for active BOM"
                            [ngModel]="releaseBomUid()" (ngModelChange)="releaseBomUid.set($event)"
@@ -195,7 +212,7 @@
                   <button type="button" class="btn btn-warning"
                           (click)="release()" [disabled]="releasing()">
                     @if (releasing()) {
-                      <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                      <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
                     }
                     <i class="bi bi-play-fill me-1" aria-hidden="true"></i>Release
                   </button>
@@ -209,14 +226,14 @@
             <!-- Issue components -->
             @if (canIssue()) {
               <div>
-                <h3 class="h6">Issue Components (Full)</h3>
+                <h3 class="erp-section-title">Issue Components (Full)</h3>
                 <p class="small text-muted mb-2">
                   Posts PRODUCTION_ISSUE movements for all un-issued component lines
                   (DR WIP 1320 / CR Inventory 1300). First issue transitions RELEASED → IN_PROGRESS.
                 </p>
                 <div class="d-flex gap-2 align-items-end flex-wrap">
-                  <div style="max-width:200px">
-                    <label class="form-label small text-muted mb-1" for="issuePostingDate">
+                  <div class="erp-field" style="max-width:200px">
+                    <label for="issuePostingDate">
                       Posting Date <span class="text-danger" aria-hidden="true">*</span>
                     </label>
                     <input id="issuePostingDate" name="issuePostingDate" type="date" class="form-control form-control-sm"
@@ -226,7 +243,7 @@
                   <button type="button" class="btn btn-info text-white"
                           (click)="issueComponents()" [disabled]="issuing()">
                     @if (issuing()) {
-                      <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                      <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
                     }
                     <i class="bi bi-arrow-down-square me-1" aria-hidden="true"></i>Issue All Components
                   </button>
@@ -240,33 +257,34 @@
             <!-- Apply cost -->
             @if (canApplyCost()) {
               <div>
-                <h3 class="h6">Apply Labour / Overhead Cost</h3>
+                <h3 class="erp-section-title">Apply Labour / Overhead Cost</h3>
                 <p class="small text-muted mb-2">
                   DR WIP 1320 / CR Labour Applied 2350 / CR Overhead Applied 2360.
                   Optionally link to a specific operation UID.
                 </p>
                 <div class="d-flex gap-2 align-items-end flex-wrap">
-                  <div style="max-width:160px">
-                    <label class="form-label small text-muted mb-1" for="costLabourAmount">Labour Amount</label>
+                  <div class="erp-field" style="max-width:160px">
+                    <label for="costLabourAmount">Labour Amount</label>
                     <input id="costLabourAmount" name="costLabourAmount" type="number" class="form-control form-control-sm"
                            step="0.0001" min="0"
                            [ngModel]="costLabourAmount()" (ngModelChange)="costLabourAmount.set($event)"
                            [disabled]="applyingCost()" />
                   </div>
-                  <div style="max-width:160px">
-                    <label class="form-label small text-muted mb-1" for="costOverheadAmount">Overhead Amount</label>
+                  <div class="erp-field" style="max-width:160px">
+                    <label for="costOverheadAmount">Overhead Amount</label>
                     <input id="costOverheadAmount" name="costOverheadAmount" type="number" class="form-control form-control-sm"
                            step="0.0001" min="0"
                            [ngModel]="costOverheadAmount()" (ngModelChange)="costOverheadAmount.set($event)"
                            [disabled]="applyingCost()" />
                   </div>
-                  <div style="max-width:240px">
-                    <label class="form-label small text-muted mb-1">Operation (optional)</label>
+                  <!-- Operation picker self-labels via placeholder -->
+                  <div class="erp-field" style="max-width:240px">
+                    <span class="erp-field__label">Operation (optional)</span>
                     <app-uid-picker [(ngModel)]="costOperationUid" [options]="operationOptions()"
                                     placeholder="Select operation" name="costOperationUid" />
                   </div>
-                  <div style="max-width:200px">
-                    <label class="form-label small text-muted mb-1" for="costPostingDate">
+                  <div class="erp-field" style="max-width:200px">
+                    <label for="costPostingDate">
                       Posting Date <span class="text-danger" aria-hidden="true">*</span>
                     </label>
                     <input id="costPostingDate" name="costPostingDate" type="date" class="form-control form-control-sm"
@@ -276,7 +294,7 @@
                   <button type="button" class="btn btn-secondary"
                           (click)="applyCost()" [disabled]="applyingCost()">
                     @if (applyingCost()) {
-                      <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                      <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
                     }
                     <i class="bi bi-calculator me-1" aria-hidden="true"></i>Apply Cost
                   </button>
@@ -290,15 +308,15 @@
             <!-- Complete -->
             @if (canComplete()) {
               <div>
-                <h3 class="h6">Complete Work Order</h3>
+                <h3 class="erp-section-title">Complete Work Order</h3>
                 <p class="small text-muted mb-2">
                   Computes unit cost = relieable WIP / good qty.
                   Posts PRODUCTION_RECEIPT + recompute; DR Finished Goods 1300 / CR WIP 1320.
                   Sets status → COMPLETED.
                 </p>
                 <div class="d-flex gap-2 align-items-end flex-wrap">
-                  <div style="max-width:160px">
-                    <label class="form-label small text-muted mb-1" for="completeGoodQty">
+                  <div class="erp-field" style="max-width:160px">
+                    <label for="completeGoodQty">
                       Good Qty <span class="text-danger" aria-hidden="true">*</span>
                     </label>
                     <input id="completeGoodQty" name="completeGoodQty" type="number" class="form-control form-control-sm"
@@ -306,15 +324,15 @@
                            [ngModel]="completeGoodQty()" (ngModelChange)="completeGoodQty.set($event)"
                            [disabled]="completing()" />
                   </div>
-                  <div style="max-width:160px">
-                    <label class="form-label small text-muted mb-1" for="completeScrapQty">Scrap Qty</label>
+                  <div class="erp-field" style="max-width:160px">
+                    <label for="completeScrapQty">Scrap Qty</label>
                     <input id="completeScrapQty" name="completeScrapQty" type="number" class="form-control form-control-sm"
                            step="0.000001" min="0"
                            [ngModel]="completeScrapQty()" (ngModelChange)="completeScrapQty.set($event)"
                            [disabled]="completing()" />
                   </div>
-                  <div style="max-width:200px">
-                    <label class="form-label small text-muted mb-1" for="completePostingDate">
+                  <div class="erp-field" style="max-width:200px">
+                    <label for="completePostingDate">
                       Posting Date <span class="text-danger" aria-hidden="true">*</span>
                     </label>
                     <input id="completePostingDate" name="completePostingDate" type="date" class="form-control form-control-sm"
@@ -331,7 +349,7 @@
                   <button type="button" class="btn btn-success"
                           (click)="complete()" [disabled]="completing()">
                     @if (completing()) {
-                      <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                      <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
                     }
                     <i class="bi bi-check-circle me-1" aria-hidden="true"></i>Complete
                   </button>
@@ -345,13 +363,13 @@
             <!-- Close -->
             @if (canCloseAction()) {
               <div>
-                <h3 class="h6">Close Work Order</h3>
+                <h3 class="erp-section-title">Close Work Order</h3>
                 <p class="small text-muted mb-2">
                   Clears residual WIP to Manufacturing Variance 5180. Terminal state.
                 </p>
                 <div class="d-flex gap-2 align-items-end flex-wrap">
-                  <div style="max-width:200px">
-                    <label class="form-label small text-muted mb-1" for="closePostingDate">
+                  <div class="erp-field" style="max-width:200px">
+                    <label for="closePostingDate">
                       Posting Date <span class="text-danger" aria-hidden="true">*</span>
                     </label>
                     <input id="closePostingDate" name="closePostingDate" type="date" class="form-control form-control-sm"
@@ -361,7 +379,7 @@
                   <button type="button" class="btn btn-secondary"
                           (click)="closeOrder()" [disabled]="closing()">
                     @if (closing()) {
-                      <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                      <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
                     }
                     <i class="bi bi-lock me-1" aria-hidden="true"></i>Close
                   </button>
@@ -375,13 +393,13 @@
             <!-- Cancel -->
             @if (canCancel()) {
               <div>
-                <h3 class="h6">Cancel Work Order</h3>
+                <h3 class="erp-section-title">Cancel Work Order</h3>
                 <p class="small text-muted mb-2">
                   Reverses all posted issues/receipts/labour at original cost.
                 </p>
                 <div class="d-flex gap-2 align-items-end flex-wrap">
-                  <div style="max-width:340px">
-                    <label class="form-label small text-muted mb-1" for="cancelReason">Reason (optional)</label>
+                  <div class="erp-field" style="max-width:340px">
+                    <label for="cancelReason">Reason (optional)</label>
                     <input id="cancelReason" name="cancelReason" type="text" class="form-control form-control-sm"
                            [ngModel]="cancelReason()" (ngModelChange)="cancelReason.set($event)"
                            [disabled]="cancelling()" autocomplete="off" />
@@ -389,7 +407,7 @@
                   <button type="button" class="btn btn-danger"
                           (click)="cancelOrder()" [disabled]="cancelling()">
                     @if (cancelling()) {
-                      <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                      <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
                     }
                     <i class="bi bi-x-circle me-1" aria-hidden="true"></i>Cancel
                   </button>
@@ -404,14 +422,19 @@
         </div>
 
         <!-- ── Components table ──────────────────────────────────────────── -->
-        <div class="card mb-4">
-          <div class="card-header fw-semibold">Component Lines</div>
-          <div class="card-body p-0">
+        <div class="erp-card mb-4">
+          <div class="erp-card__head">
+            <h2>Component Lines</h2>
+          </div>
+          <div class="erp-card__body p-0">
             @if (w.components.length === 0) {
-              <p class="text-muted p-3 mb-0">No components — release the work order to explode the BOM.</p>
+              <div class="erp-empty">
+                <i class="bi bi-list-ul" aria-hidden="true"></i>
+                No components — release the work order to explode the BOM.
+              </div>
             } @else {
-              <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
+              <div class="erp-table-wrap">
+                <table class="erp-table">
                   <caption class="visually-hidden">Component lines for work order {{ w.woNumber }}</caption>
                   <thead>
                     <tr>
@@ -427,23 +450,29 @@
                   <tbody>
                     @for (comp of w.components; track comp.uid) {
                       <tr>
-                        <td class="small text-muted">{{ comp.lineNo }}</td>
-                        <td class="small">
+                        <td class="text-muted">{{ comp.lineNo }}</td>
+                        <td>
                           <div class="fw-semibold">{{ comp.componentProductCode }}</div>
                           <div class="text-muted" style="font-size:0.8rem">{{ comp.componentProductName }}</div>
                         </td>
-                        <td class="font-monospace small text-end">{{ +comp.plannedQty | number:'1.2-6' }}</td>
-                        <td class="font-monospace small text-end">{{ +comp.issuedQty | number:'1.2-6' }}</td>
-                        <td class="font-monospace small text-end">{{ +comp.issuedValue | number:'1.2-4' }}</td>
-                        <td class="font-monospace small text-end">
+                        <td class="num">{{ +comp.plannedQty | number:'1.2-6' }}</td>
+                        <td class="num">{{ +comp.issuedQty | number:'1.2-6' }}</td>
+                        <td class="num">{{ +comp.issuedValue | number:'1.2-4' }}</td>
+                        <td class="num"
+                            [class.text-danger]="comp.costSkipped">
                           @if (comp.costSkipped) {
-                            <span class="badge text-bg-warning" title="Issued with no average cost">no cost</span>
+                            <span class="status-tag status-tag--warn" title="Issued with no average cost">no cost</span>
                           } @else {
                             {{ +comp.unitCostAtIssue | number:'1.2-4' }}
                           }
                         </td>
                         <td>
-                          <span class="badge" [class]="componentBadgeClass(comp.status)">{{ comp.status }}</span>
+                          <span class="status-tag"
+                                [class.status-tag--ok]="comp.status === 'ISSUED'"
+                                [class.status-tag--warn]="comp.status === 'PARTIAL'"
+                                [class.status-tag--neutral]="comp.status === 'PLANNED'">
+                            {{ comp.status }}
+                          </span>
                         </td>
                       </tr>
                     }
@@ -455,14 +484,19 @@
         </div>
 
         <!-- ── Operations table ──────────────────────────────────────────── -->
-        <div class="card mb-4">
-          <div class="card-header fw-semibold">Operations</div>
-          <div class="card-body">
+        <div class="erp-card mb-4">
+          <div class="erp-card__head">
+            <h2>Operations</h2>
+          </div>
+          <div class="erp-card__body">
             @if (w.operations.length === 0) {
-              <p class="text-muted mb-3">No operations defined.</p>
+              <div class="erp-empty">
+                <i class="bi bi-diagram-2" aria-hidden="true"></i>
+                No operations defined.
+              </div>
             } @else {
-              <div class="table-responsive mb-3">
-                <table class="table table-hover align-middle mb-0">
+              <div class="erp-table-wrap mb-3">
+                <table class="erp-table">
                   <caption class="visually-hidden">Operations for work order {{ w.woNumber }}</caption>
                   <thead>
                     <tr>
@@ -480,16 +514,16 @@
                   <tbody>
                     @for (op of w.operations; track op.uid) {
                       <tr>
-                        <td class="small text-muted">{{ op.seqNo }}</td>
-                        <td class="small">{{ op.description }}</td>
-                        <td class="small text-muted">{{ op.workCentre || '—' }}</td>
-                        <td class="font-monospace small text-end">{{ +op.labourAmount | number:'1.2-4' }}</td>
-                        <td class="font-monospace small text-end">{{ +op.overheadAmount | number:'1.2-4' }}</td>
+                        <td class="text-muted">{{ op.seqNo }}</td>
+                        <td>{{ op.description }}</td>
+                        <td class="text-muted">{{ op.workCentre || '—' }}</td>
+                        <td class="num">{{ +op.labourAmount | number:'1.2-4' }}</td>
+                        <td class="num">{{ +op.overheadAmount | number:'1.2-4' }}</td>
                         <td>
                           @if (op.applied) {
-                            <span class="badge text-bg-success">Applied</span>
+                            <span class="status-tag status-tag--ok">Applied</span>
                           } @else {
-                            <span class="badge text-bg-secondary">Pending</span>
+                            <span class="status-tag status-tag--neutral">Pending</span>
                           }
                         </td>
                         @if (canManage()) {
@@ -499,7 +533,7 @@
                                     [disabled]="removingOpUid() !== null"
                                     [attr.aria-label]="'Remove operation ' + op.description">
                               @if (removingOpUid() === op.uid) {
-                                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
                               } @else {
                                 <i class="bi bi-trash" aria-hidden="true"></i>
                               }
@@ -516,10 +550,10 @@
             <!-- Add operation form -->
             @if (canAddOp()) {
               <form (ngSubmit)="addOperation()" aria-label="Add operation">
-                <h3 class="h6">Add Operation</h3>
+                <h3 class="erp-section-title">Add Operation</h3>
                 <div class="d-flex gap-2 align-items-end flex-wrap mb-2">
-                  <div style="max-width:80px">
-                    <label class="form-label small text-muted mb-1" for="opSeqNo">
+                  <div class="erp-field" style="max-width:80px">
+                    <label for="opSeqNo">
                       Seq <span class="text-danger" aria-hidden="true">*</span>
                     </label>
                     <input id="opSeqNo" name="opSeqNo" type="number" class="form-control form-control-sm"
@@ -527,29 +561,29 @@
                            [ngModel]="opSeqNo()" (ngModelChange)="opSeqNo.set($event)"
                            [disabled]="addingOp()" />
                   </div>
-                  <div style="max-width:240px">
-                    <label class="form-label small text-muted mb-1" for="opDescription">
+                  <div class="erp-field" style="max-width:240px">
+                    <label for="opDescription">
                       Description <span class="text-danger" aria-hidden="true">*</span>
                     </label>
                     <input id="opDescription" name="opDescription" type="text" class="form-control form-control-sm"
                            [ngModel]="opDescription()" (ngModelChange)="opDescription.set($event)"
                            [disabled]="addingOp()" autocomplete="off" />
                   </div>
-                  <div style="max-width:160px">
-                    <label class="form-label small text-muted mb-1" for="opWorkCentre">Work Centre</label>
+                  <div class="erp-field" style="max-width:160px">
+                    <label for="opWorkCentre">Work Centre</label>
                     <input id="opWorkCentre" name="opWorkCentre" type="text" class="form-control form-control-sm"
                            [ngModel]="opWorkCentre()" (ngModelChange)="opWorkCentre.set($event)"
                            [disabled]="addingOp()" autocomplete="off" />
                   </div>
-                  <div style="max-width:130px">
-                    <label class="form-label small text-muted mb-1" for="opLabourAmount">Labour Amt</label>
+                  <div class="erp-field" style="max-width:130px">
+                    <label for="opLabourAmount">Labour Amt</label>
                     <input id="opLabourAmount" name="opLabourAmount" type="number" class="form-control form-control-sm"
                            step="0.0001" min="0"
                            [ngModel]="opLabourAmount()" (ngModelChange)="opLabourAmount.set($event)"
                            [disabled]="addingOp()" />
                   </div>
-                  <div style="max-width:130px">
-                    <label class="form-label small text-muted mb-1" for="opOverheadAmount">Overhead Amt</label>
+                  <div class="erp-field" style="max-width:130px">
+                    <label for="opOverheadAmount">Overhead Amt</label>
                     <input id="opOverheadAmount" name="opOverheadAmount" type="number" class="form-control form-control-sm"
                            step="0.0001" min="0"
                            [ngModel]="opOverheadAmount()" (ngModelChange)="opOverheadAmount.set($event)"
@@ -557,7 +591,7 @@
                   </div>
                   <button type="submit" class="btn btn-sm btn-outline-primary" [disabled]="addingOp()">
                     @if (addingOp()) {
-                      <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                      <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
                     } @else {
                       <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
                     }

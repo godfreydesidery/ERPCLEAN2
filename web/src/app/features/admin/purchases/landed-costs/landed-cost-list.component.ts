@@ -8,7 +8,7 @@ import { debounceTime, distinctUntilChanged, map, merge, skip, Subject, switchMa
 import { PageMeta } from '../../../../core/api/api-response.model';
 import { SessionStore } from '../../../../core/auth/session.store';
 import { Company } from '../../models/company.model';
-import { LandedCostDto, LandedCostStatus } from '../../models/purchases.model';
+import { LandedCostDto } from '../../models/purchases.model';
 import { CompanyService } from '../../company/company.service';
 import { OrganisationService } from '../../organisation/organisation.service';
 import { LandedCostService } from './landed-cost.service';
@@ -105,8 +105,4 @@ export class LandedCostListComponent {
   }
 
   goToPage(page: number): void { this.load(page); }
-
-  statusBadgeClass(status: LandedCostStatus): string {
-    return status === 'CONFIRMED' ? 'text-bg-success' : 'text-bg-warning';
-  }
 }

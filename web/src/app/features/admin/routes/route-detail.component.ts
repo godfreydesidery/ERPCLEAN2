@@ -458,12 +458,6 @@ export class RouteDetailComponent {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  statusBadgeClass(status: string): string {
-    if (status === 'ACTIVE') return 'text-bg-success';
-    if (status === 'ARCHIVED') return 'text-bg-secondary';
-    return 'text-bg-warning'; // INACTIVE
-  }
-
   private messageFrom(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {
       const errors = (err.error as { errors?: string[] })?.errors;

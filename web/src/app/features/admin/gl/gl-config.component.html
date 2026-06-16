@@ -1,19 +1,19 @@
 <section class="admin-page">
-  <header class="page-head">
-    <h1 class="h4 mb-1">
-      <i class="bi bi-gear me-2" aria-hidden="true"></i>Posting Accounts
-    </h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
-      Map config keys to GL accounts. These mappings drive automated journal posting for sales,
-      purchases, and other system transactions.
-    </p>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1><i class="bi bi-gear me-2" aria-hidden="true"></i>Posting Accounts</h1>
+      <p class="subtitle">
+        Map config keys to GL accounts. These mappings drive automated journal posting for sales,
+        purchases, and other system transactions.
+      </p>
+    </div>
   </header>
 
   @if (!canManage()) {
-    <p class="text-muted d-flex align-items-center gap-2 mt-3" role="alert">
-      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+    <div class="erp-empty mt-3" role="alert">
+      <i class="bi bi-shield-lock"></i>
       You don't have permission to manage GL configuration.
-    </p>
+    </div>
   } @else {
 
     <!-- Company selector -->
@@ -49,78 +49,81 @@
 
       <!-- Set config form -->
       @if (showSetForm()) {
-        <form class="card card-body mb-3"
-              (ngSubmit)="saveConfig()" aria-label="Set posting account">
-          <h2 class="h6 mb-3">
-            Set Posting Account —
-            <span class="font-monospace text-primary">{{ setConfigKey() }}</span>
-          </h2>
-          <div class="row g-2 align-items-end">
-            <div class="col-sm-5">
-              <label class="form-label small text-muted mb-1" for="setAccountPicker">
-                Account <span class="text-danger" aria-hidden="true">*</span>
-              </label>
-              @if (accountsState() === 'loading') {
-                <div class="form-control d-flex align-items-center gap-2 text-muted small">
-                  <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
-                </div>
-              } @else {
-                <select id="setAccountPicker" name="setAccountPicker" class="form-select"
-                        [ngModel]="setAccountUid()" (ngModelChange)="setAccountUid.set($event)"
-                        required [disabled]="setting()">
-                  <option value="">— select account —</option>
-                  @for (a of accounts(); track a.uid) {
-                    <option [value]="a.uid">
-                      {{ a.accountCode }} — {{ a.name }} ({{ a.accountType }})
-                    </option>
-                  }
-                </select>
-              }
-            </div>
-            <div class="col-sm-2">
-              <button type="submit" class="btn btn-primary w-100" [disabled]="setting()">
-                @if (setting()) {
-                  <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
-                  Saving…
-                } @else {
-                  Save
-                }
-              </button>
-            </div>
-            <div class="col-sm-2">
-              <button type="button" class="btn btn-outline-secondary w-100"
-                      [disabled]="setting()" (click)="cancelSetForm()">
-                Cancel
-              </button>
-            </div>
+        <div class="erp-card mb-3">
+          <div class="erp-card__head">
+            <h2>
+              Set Posting Account —
+              <span class="font-monospace text-primary">{{ setConfigKey() }}</span>
+            </h2>
           </div>
-          @if (setError(); as msg) {
-            <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-          }
-        </form>
+          <div class="erp-card__body">
+            <form class="erp-form-grid"
+                  (ngSubmit)="saveConfig()" aria-label="Set posting account">
+              <div class="erp-field">
+                <label class="form-label" for="setAccountPicker">
+                  Account <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                @if (accountsState() === 'loading') {
+                  <div class="form-control d-flex align-items-center gap-2 text-muted small">
+                    <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+                  </div>
+                } @else {
+                  <select id="setAccountPicker" name="setAccountPicker" class="form-select"
+                          [ngModel]="setAccountUid()" (ngModelChange)="setAccountUid.set($event)"
+                          required [disabled]="setting()">
+                    <option value="">— select account —</option>
+                    @for (a of accounts(); track a.uid) {
+                      <option [value]="a.uid">
+                        {{ a.accountCode }} — {{ a.name }} ({{ a.accountType }})
+                      </option>
+                    }
+                  </select>
+                }
+              </div>
+              <div class="erp-field full d-flex gap-2 align-items-end">
+                <button type="submit" class="btn btn-primary" [disabled]="setting()">
+                  @if (setting()) {
+                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                    Saving…
+                  } @else {
+                    Save
+                  }
+                </button>
+                <button type="button" class="btn btn-outline-secondary"
+                        [disabled]="setting()" (click)="cancelSetForm()">
+                  Cancel
+                </button>
+              </div>
+              @if (setError(); as msg) {
+                <p class="erp-field full text-danger small mt-1 mb-0" role="alert">{{ msg }}</p>
+              }
+            </form>
+          </div>
+        </div>
       }
 
       <!-- Configs table -->
       @switch (configsState()) {
         @case ('loading') {
-          <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
             <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading config…
           </p>
         }
         @case ('error') {
-          <p class="state text-danger" role="alert">
+          <p class="text-danger" role="alert">
             <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
             Could not load posting accounts.
           </p>
         }
         @default {
           @if (configs().length === 0) {
-            <p class="state text-muted">
+            <div class="erp-empty">
+              <i class="bi bi-gear"></i>
               No posting accounts configured yet. Use the button below to add the first mapping.
-            </p>
+            </div>
           } @else {
-            <div class="table-responsive mb-3">
-              <table class="table table-hover align-middle bg-white grid">
+            <div class="erp-table-wrap mb-3">
+              <table class="erp-table">
                 <caption class="visually-hidden">GL posting account mappings</caption>
                 <thead>
                   <tr>
@@ -133,8 +136,8 @@
                 <tbody>
                   @for (cfg of configs(); track cfg.uid) {
                     <tr>
-                      <td class="font-monospace small fw-semibold">{{ cfg.configKey ?? '—' }}</td>
-                      <td class="font-monospace small">{{ cfg.accountCode }}</td>
+                      <td class="mono small fw-semibold">{{ cfg.configKey ?? '—' }}</td>
+                      <td class="mono small">{{ cfg.accountCode }}</td>
                       <td class="small">{{ cfg.accountName }}</td>
                       <td>
                         <button type="button" class="btn btn-sm btn-outline-primary"

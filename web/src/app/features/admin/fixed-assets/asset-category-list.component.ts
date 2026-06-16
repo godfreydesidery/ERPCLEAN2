@@ -14,7 +14,6 @@ import {
   AssetCategoryDto,
   CreateAssetCategoryRequest,
   DepreciationMethod,
-  MasterStatus,
 } from './models/fixed-assets.model';
 
 interface LoadTrigger { page: number }
@@ -120,14 +119,6 @@ export class AssetCategoryListComponent {
   load(): void {
     if (!this.selectedCompanyId()) return;
     this.immediateTrigger$.next({ page: 0 });
-  }
-
-  statusBadgeClass(status: MasterStatus): string {
-    switch (status) {
-      case 'ACTIVE': return 'text-bg-success';
-      case 'ARCHIVED': return 'text-bg-secondary';
-      default: return 'text-bg-warning';
-    }
   }
 
   // ── Create form ─────────────────────────────────────────────────────────────

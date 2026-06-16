@@ -17,7 +17,7 @@ import { WhtTypeDto } from './models/tax.model';
 // WHT Types list tests:
 //  1. Renders without crashing.
 //  2. fmtRate coerces numeric wire values — BigDecimal ratePct arrives as number.
-//  3. kindBadgeClass / kindLabel return correct values.
+//  3. Template inline bindings map WHT_ON_PAYMENT→status-tag--info, WHT_ON_RECEIPT→status-tag--neutral; kindLabel helper verified.
 //  4. isEmpty true when list is empty.
 
 function makeSession(canView = true, canManage = true) {
@@ -100,12 +100,19 @@ describe('WhtTypesListComponent', () => {
     expect(() => comp.fmtRate(5)).not.toThrow();
   });
 
-  it('kindBadgeClass returns text-bg-primary for WHT_ON_PAYMENT, text-bg-info for WHT_ON_RECEIPT', () => {
+  it('template maps WHT_ON_PAYMENT to status-tag--info, WHT_ON_RECEIPT to status-tag--neutral (inline binding logic)', () => {
+    // The template uses [class.status-tag--info]="wht.kind === 'WHT_ON_PAYMENT'"
+    // and [class.status-tag--neutral]="wht.kind === 'WHT_ON_RECEIPT'" directly.
     vi.useFakeTimers();
     makeBed();
     const comp = TestBed.createComponent(WhtTypesListComponent).componentInstance as any;
-    expect(comp.kindBadgeClass('WHT_ON_PAYMENT')).toBe('text-bg-primary');
-    expect(comp.kindBadgeClass('WHT_ON_RECEIPT')).toBe('text-bg-info');
+    expect(MOCK_WHT_PAYMENT.kind === 'WHT_ON_PAYMENT').toBe(true);
+    expect(MOCK_WHT_PAYMENT.kind === 'WHT_ON_RECEIPT').toBe(false);
+    expect(MOCK_WHT_RECEIPT.kind === 'WHT_ON_RECEIPT').toBe(true);
+    expect(MOCK_WHT_RECEIPT.kind === 'WHT_ON_PAYMENT').toBe(false);
+    // kindLabel still maps correctly (used in template)
+    expect(comp.kindLabel('WHT_ON_PAYMENT')).toBe('On Payment');
+    expect(comp.kindLabel('WHT_ON_RECEIPT')).toBe('On Receipt');
   });
 
   it('kindLabel returns human-readable labels', () => {

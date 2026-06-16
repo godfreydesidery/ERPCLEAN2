@@ -1,11 +1,9 @@
 <section class="admin-page">
-  <header class="page-head">
-    <h1 class="h4 mb-1">
-      <i class="bi bi-file-earmark-text me-2" aria-hidden="true"></i>Customer Statement
-    </h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
-      Select a customer to view their outstanding balance, ageing, and transaction history.
-    </p>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1><i class="bi bi-file-earmark-text me-2" aria-hidden="true"></i>Customer Statement</h1>
+      <p class="subtitle">Select a customer to view their outstanding balance, ageing, and transaction history.</p>
+    </div>
   </header>
 
   @if (!canView()) {
@@ -57,7 +55,7 @@
                   style="top:100%; left:0; max-height:220px; overflow-y:auto">
                 @for (c of customerResults(); track c.uid) {
                   <li class="list-group-item list-group-item-action py-1 small"
-                      role="option" style="cursor:pointer"
+                      role="option" aria-selected="false" style="cursor:pointer"
                       (click)="selectCustomer(c)"
                       (keydown.enter)="selectCustomer(c)"
                       tabindex="0">
@@ -81,76 +79,72 @@
     <!-- Statement states -->
     @switch (state()) {
       @case ('loading') {
-        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading statement…
         </p>
       }
       @case ('error') {
-        <p class="state text-danger" role="alert">
+        <p class="text-danger" role="alert">
           <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
           Could not load customer statement. Please try again.
         </p>
       }
       @case ('forbidden') {
-        <p class="state text-muted d-flex align-items-center gap-2">
+        <p class="text-muted d-flex align-items-center gap-2">
           <i class="bi bi-shield-lock" aria-hidden="true"></i>
           You don't have permission to view this statement.
         </p>
       }
       @default {
         @if (isEmpty()) {
-          <p class="state text-muted">Select a customer above to load their statement.</p>
+          <div class="erp-empty">
+            <i class="bi bi-person-lines-fill"></i> Select a customer above to load their statement.
+          </div>
         } @else if (statement(); as stmt) {
 
-          <!-- ── Headline ─────────────────────────────────────────────────── -->
+          <!-- ── KPI headline ──────────────────────────────────────────────── -->
           <div class="d-flex flex-wrap gap-3 mb-4">
-            <div class="card border-0 shadow-sm flex-fill" style="min-width:200px; max-width:280px">
-              <div class="card-body text-center">
-                <div class="small text-muted mb-1">Total Outstanding</div>
-                <div class="h3 font-monospace mb-0"
-                     [class.text-danger]="totalOutstanding() > 0"
-                     [class.text-success]="totalOutstanding() === 0">
-                  {{ fmtMoney(stmt.totalOutstanding) }}
-                </div>
-                <div class="small text-muted">{{ stmt.currency }}</div>
-              </div>
+            <div class="erp-kpi">
+              <span class="erp-kpi__label">Total Outstanding</span>
+              <span class="erp-kpi__value mono"
+                    [class.text-danger]="totalOutstanding() > 0"
+                    [class.text-success]="totalOutstanding() === 0">
+                {{ fmtMoney(stmt.totalOutstanding) }}
+              </span>
+              <span class="erp-kpi__label">{{ stmt.currency }}</span>
             </div>
-            <div class="card border-0 shadow-sm flex-fill" style="min-width:180px; max-width:240px">
-              <div class="card-body text-center">
-                <div class="small text-muted mb-1">As At</div>
-                <div class="fw-semibold">{{ stmt.asAt }}</div>
-              </div>
+            <div class="erp-kpi">
+              <span class="erp-kpi__label">As At</span>
+              <span class="erp-kpi__value">{{ stmt.asAt }}</span>
             </div>
-            <div class="card border-0 shadow-sm flex-fill" style="min-width:180px; max-width:240px">
-              <div class="card-body text-center">
-                <div class="small text-muted mb-1">Open Items</div>
-                <div class="h4 mb-0">{{ openItems().length }}</div>
-              </div>
+            <div class="erp-kpi">
+              <span class="erp-kpi__label">Open Items</span>
+              <span class="erp-kpi__value">{{ openItems().length }}</span>
             </div>
           </div>
 
           <!-- ── Ageing buckets ──────────────────────────────────────────── -->
           @if (sortedAgeing().length > 0) {
-            <div class="card mb-4">
-              <div class="card-header small fw-semibold text-muted">
-                <i class="bi bi-hourglass-split me-1" aria-hidden="true"></i>Ageing Analysis
+            <div class="erp-card mb-4">
+              <div class="erp-card__head">
+                <h2><i class="bi bi-hourglass-split me-1" aria-hidden="true"></i>Ageing Analysis</h2>
               </div>
-              <div class="card-body p-0">
-                <div class="table-responsive">
-                  <table class="table table-sm align-middle mb-0">
+              <div class="erp-card__body p-0">
+                <div class="erp-table-wrap">
+                  <table class="erp-table">
                     <caption class="visually-hidden">Ageing buckets for this customer</caption>
-                    <thead class="table-light">
+                    <thead>
                       <tr>
                         @for (b of sortedAgeing(); track b.bucket) {
-                          <th scope="col" class="text-end">{{ bucketLabel(b.bucket) }}</th>
+                          <th scope="col" class="num">{{ bucketLabel(b.bucket) }}</th>
                         }
-                        <th scope="col" class="text-end fw-bold">Total</th>
+                        <th scope="col" class="num fw-bold">Total</th>
                       </tr>
                     </thead>
                     <tbody>
                       <tr>
                         @for (b of sortedAgeing(); track b.bucket) {
-                          <td class="text-end font-monospace"
+                          <td class="num"
                               [class.text-danger]="+(b.amount) > 0 && b.bucket !== 'CURRENT'"
                               [class.text-muted]="+(b.amount) === 0">
                             @if (+(b.amount) === 0) {
@@ -160,7 +154,7 @@
                             }
                           </td>
                         }
-                        <td class="text-end font-monospace fw-bold"
+                        <td class="num fw-bold"
                             [class.text-danger]="totalOutstanding() > 0">
                           {{ fmtMoney(stmt.totalOutstanding) }}
                         </td>
@@ -175,7 +169,8 @@
                     @for (b of sortedAgeing(); track b.bucket) {
                       @let pct = totalOutstanding() > 0 ? (+(b.amount) / totalOutstanding() * 100) : 0;
                       @if (+(b.amount) > 0) {
-                        <div [class]="'flex-shrink-0 ' + bucketBadgeClass(b.bucket)"
+                        <div class="flex-shrink-0"
+                             [style.background]="bucketBarColor(b.bucket)"
                              [style.width.%]="pct"
                              [attr.title]="bucketLabel(b.bucket) + ': ' + fmtMoney(b.amount)"
                              role="presentation"></div>
@@ -189,22 +184,21 @@
 
           <!-- ── Open items ──────────────────────────────────────────────── -->
           @if (openItems().length > 0) {
-            <div class="card mb-4">
-              <div class="card-header small fw-semibold text-muted">
-                <i class="bi bi-cash-coin me-1" aria-hidden="true"></i>
-                Open Items ({{ openItems().length }})
+            <div class="erp-card mb-4">
+              <div class="erp-card__head">
+                <h2><i class="bi bi-cash-coin me-1" aria-hidden="true"></i>Open Items ({{ openItems().length }})</h2>
               </div>
-              <div class="card-body p-0">
-                <div class="table-responsive">
-                  <table class="table table-sm align-middle mb-0">
+              <div class="erp-card__body p-0">
+                <div class="erp-table-wrap">
+                  <table class="erp-table">
                     <caption class="visually-hidden">Open invoice items for this customer</caption>
-                    <thead class="table-light">
+                    <thead>
                       <tr>
                         <th scope="col">Document No.</th>
                         <th scope="col">Invoice Date</th>
                         <th scope="col">Due Date</th>
-                        <th scope="col" class="text-end">Original</th>
-                        <th scope="col" class="text-end">Outstanding</th>
+                        <th scope="col" class="num">Original</th>
+                        <th scope="col" class="num">Outstanding</th>
                         <th scope="col">Currency</th>
                         <th scope="col">Status</th>
                       </tr>
@@ -212,16 +206,18 @@
                     <tbody>
                       @for (inv of openItems(); track inv.uid) {
                         <tr>
-                          <td class="font-monospace small fw-semibold">{{ inv.documentNo }}</td>
-                          <td class="small">{{ inv.invoiceDate }}</td>
-                          <td class="small">{{ inv.dueDate ?? '—' }}</td>
-                          <td class="text-end font-monospace small">{{ fmtMoney(inv.originalAmount) }}</td>
-                          <td class="text-end font-monospace small fw-semibold text-danger">
-                            {{ fmtMoney(inv.outstandingAmount) }}
-                          </td>
-                          <td class="small">{{ inv.currency }}</td>
+                          <td class="mono fw-semibold">{{ inv.documentNo }}</td>
+                          <td>{{ inv.invoiceDate }}</td>
+                          <td>{{ inv.dueDate ?? '—' }}</td>
+                          <td class="num">{{ fmtMoney(inv.originalAmount) }}</td>
+                          <td class="num fw-semibold text-danger">{{ fmtMoney(inv.outstandingAmount) }}</td>
+                          <td>{{ inv.currency }}</td>
                           <td>
-                            <span class="badge" [class]="invoiceStatusBadgeClass(inv.status)">
+                            <span class="status-tag"
+                                  [class.status-tag--warn]="inv.status === 'OPEN'"
+                                  [class.status-tag--info]="inv.status === 'PARTIAL'"
+                                  [class.status-tag--ok]="inv.status === 'PAID'"
+                                  [class.status-tag--neutral]="inv.status === 'WRITTEN_OFF'">
                               {{ inv.status }}
                             </span>
                           </td>
@@ -241,21 +237,20 @@
 
           <!-- ── Recent receipts ─────────────────────────────────────────── -->
           @if (recentReceipts().length > 0) {
-            <div class="card mb-4">
-              <div class="card-header small fw-semibold text-muted">
-                <i class="bi bi-receipt me-1" aria-hidden="true"></i>
-                Recent Receipts ({{ recentReceipts().length }})
+            <div class="erp-card mb-4">
+              <div class="erp-card__head">
+                <h2><i class="bi bi-receipt me-1" aria-hidden="true"></i>Recent Receipts ({{ recentReceipts().length }})</h2>
               </div>
-              <div class="card-body p-0">
-                <div class="table-responsive">
-                  <table class="table table-sm align-middle mb-0">
+              <div class="erp-card__body p-0">
+                <div class="erp-table-wrap">
+                  <table class="erp-table">
                     <caption class="visually-hidden">Recent receipts for this customer</caption>
-                    <thead class="table-light">
+                    <thead>
                       <tr>
                         <th scope="col">Receipt No.</th>
                         <th scope="col">Date</th>
-                        <th scope="col" class="text-end">Amount</th>
-                        <th scope="col" class="text-end">Unallocated</th>
+                        <th scope="col" class="num">Amount</th>
+                        <th scope="col" class="num">Unallocated</th>
                         <th scope="col">Currency</th>
                         <th scope="col">Tender</th>
                       </tr>
@@ -263,15 +258,15 @@
                     <tbody>
                       @for (r of recentReceipts(); track r.uid) {
                         <tr>
-                          <td class="font-monospace small fw-semibold">{{ r.receiptNumber }}</td>
-                          <td class="small">{{ r.receiptDate }}</td>
-                          <td class="text-end font-monospace small">{{ fmtMoney(r.amount) }}</td>
-                          <td class="text-end font-monospace small"
+                          <td class="mono fw-semibold">{{ r.receiptNumber }}</td>
+                          <td>{{ r.receiptDate }}</td>
+                          <td class="num">{{ fmtMoney(r.amount) }}</td>
+                          <td class="num"
                               [class.text-warning]="+(r.unallocatedAmount) > 0">
                             {{ fmtMoney(r.unallocatedAmount) }}
                           </td>
-                          <td class="small">{{ r.currency }}</td>
-                          <td class="small text-muted">{{ r.tenderType }}</td>
+                          <td>{{ r.currency }}</td>
+                          <td class="text-muted">{{ r.tenderType }}</td>
                         </tr>
                       }
                     </tbody>

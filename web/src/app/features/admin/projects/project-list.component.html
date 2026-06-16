@@ -1,11 +1,13 @@
 <section class="admin-page">
-  <header class="page-head">
-    <h1 class="h4 mb-1">Projects</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
-      <i class="bi bi-kanban me-1" aria-hidden="true"></i>
-      Manage projects, tasks, timesheets and costing.
-    </p>
-  </header>
+  <div class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>Projects</h1>
+      <p class="subtitle">
+        <i class="bi bi-kanban me-1" aria-hidden="true"></i>
+        Manage projects, tasks, timesheets and costing.
+      </p>
+    </div>
+  </div>
 
   <!-- Company selector -->
   @switch (companyState()) {
@@ -38,151 +40,173 @@
 
   @if (selectedCompanyId()) {
     <!-- Toolbar -->
-    <div class="d-flex flex-wrap gap-2 mb-3 align-items-end">
+    <div class="erp-toolbar">
+      <span class="erp-toolbar__spacer"></span>
       @if (canCreate()) {
-        <div class="ms-auto align-self-end">
-          <button type="button" class="btn btn-primary"
-                  (click)="toggleCreateForm()"
-                  [attr.aria-expanded]="showCreateForm()"
-                  aria-controls="createProjectForm">
-            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
-            New Project
-          </button>
-        </div>
+        <button type="button" class="btn btn-primary"
+                (click)="toggleCreateForm()"
+                [attr.aria-expanded]="showCreateForm()"
+                aria-controls="createProjectForm">
+          <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+          New Project
+        </button>
       }
     </div>
 
     <!-- Create form -->
     @if (showCreateForm()) {
-      <form id="createProjectForm" class="create-form card card-body mb-3"
-            (ngSubmit)="create()" aria-label="Create project">
-        <h2 class="h6 mb-3">New Project</h2>
-        <div class="row g-2 align-items-start mb-2">
-          <!-- Name -->
-          <div class="col-sm-6">
-            <label class="form-label small text-muted mb-1" for="fName">
-              Name <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="fName" name="fName" type="text" class="form-control"
-                   placeholder="Project name"
-                   [ngModel]="fName()" (ngModelChange)="fName.set($event)"
-                   [disabled]="saving()" autocomplete="off" />
-          </div>
-
-          <!-- Budget -->
-          <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="fBudget">Budget Amount</label>
-            <input id="fBudget" name="fBudget" type="text" class="form-control"
-                   placeholder="0.00"
-                   [ngModel]="fBudget()" (ngModelChange)="fBudget.set($event)"
-                   [disabled]="saving()" autocomplete="off" />
-          </div>
-
-          <!-- Planned Start -->
-          <div class="col-sm-2">
-            <label class="form-label small text-muted mb-1" for="fPlannedStart">Start Date</label>
-            <input id="fPlannedStart" name="fPlannedStart" type="date" class="form-control"
-                   [ngModel]="fPlannedStart()" (ngModelChange)="fPlannedStart.set($event)"
-                   [disabled]="saving()" />
-          </div>
-
-          <!-- Planned End -->
-          <div class="col-sm-2">
-            <label class="form-label small text-muted mb-1" for="fPlannedEnd">End Date</label>
-            <input id="fPlannedEnd" name="fPlannedEnd" type="date" class="form-control"
-                   [ngModel]="fPlannedEnd()" (ngModelChange)="fPlannedEnd.set($event)"
-                   [disabled]="saving()" />
-          </div>
+      <div class="erp-card mb-3">
+        <div class="erp-card__head">
+          <h2>New Project</h2>
         </div>
+        <div class="erp-card__body">
+          <form id="createProjectForm" (ngSubmit)="create()" aria-label="Create project">
+            <div class="erp-form-grid">
+              <!-- Name -->
+              <div class="erp-field full">
+                <label for="fName">
+                  Name <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="fName" name="fName" type="text" class="form-control"
+                       placeholder="Project name"
+                       [ngModel]="fName()" (ngModelChange)="fName.set($event)"
+                       [disabled]="saving()" autocomplete="off" />
+              </div>
 
-        <div class="row g-2 mb-2">
-          <div class="col-sm-8">
-            <label class="form-label small text-muted mb-1" for="fNotes">Notes</label>
-            <input id="fNotes" name="fNotes" type="text" class="form-control"
-                   [ngModel]="fNotes()" (ngModelChange)="fNotes.set($event)"
-                   [disabled]="saving()" autocomplete="off" />
-          </div>
-          <div class="col-sm-4 d-flex align-items-end">
-            <button type="submit" class="btn btn-primary w-100" [disabled]="saving()">
-              @if (saving()) {
-                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                Saving…
-              } @else {
-                Create Project
-              }
-            </button>
-          </div>
+              <!-- Budget -->
+              <div class="erp-field">
+                <label for="fBudget">Budget Amount</label>
+                <input id="fBudget" name="fBudget" type="text" class="form-control"
+                       placeholder="0.00"
+                       [ngModel]="fBudget()" (ngModelChange)="fBudget.set($event)"
+                       [disabled]="saving()" autocomplete="off" />
+              </div>
+
+              <!-- Planned Start -->
+              <div class="erp-field">
+                <label for="fPlannedStart">Start Date</label>
+                <input id="fPlannedStart" name="fPlannedStart" type="date" class="form-control"
+                       [ngModel]="fPlannedStart()" (ngModelChange)="fPlannedStart.set($event)"
+                       [disabled]="saving()" />
+              </div>
+
+              <!-- Planned End -->
+              <div class="erp-field">
+                <label for="fPlannedEnd">End Date</label>
+                <input id="fPlannedEnd" name="fPlannedEnd" type="date" class="form-control"
+                       [ngModel]="fPlannedEnd()" (ngModelChange)="fPlannedEnd.set($event)"
+                       [disabled]="saving()" />
+              </div>
+
+              <!-- Notes -->
+              <div class="erp-field full">
+                <label for="fNotes">Notes</label>
+                <input id="fNotes" name="fNotes" type="text" class="form-control"
+                       [ngModel]="fNotes()" (ngModelChange)="fNotes.set($event)"
+                       [disabled]="saving()" autocomplete="off" />
+              </div>
+            </div>
+
+            <div class="mt-3 d-flex gap-2">
+              <button type="submit" class="btn btn-primary" [disabled]="saving()">
+                @if (saving()) {
+                  <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                  Saving…
+                } @else {
+                  Create Project
+                }
+              </button>
+              <button type="button" class="btn btn-outline-secondary"
+                      (click)="toggleCreateForm()">Cancel</button>
+            </div>
+
+            @if (formError(); as msg) {
+              <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+            }
+          </form>
         </div>
-
-        @if (formError(); as msg) {
-          <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-        }
-      </form>
+      </div>
     }
 
     <!-- List states -->
     @switch (state()) {
       @case ('loading') {
-        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading projects…
         </p>
       }
       @case ('error') {
-        <p class="state text-danger" role="alert">
+        <p class="text-danger" role="alert">
           <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
           Could not load projects. Please try again.
         </p>
       }
       @case ('forbidden') {
-        <p class="state text-muted d-flex align-items-center gap-2">
-          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock"></i>
           You don't have permission to view projects.
-        </p>
+        </div>
       }
       @default {
         @if (isEmpty()) {
-          <p class="state text-muted">No projects yet. Create one above.</p>
-        } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
-              <caption class="visually-hidden">Projects</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Project #</th>
-                  <th scope="col">Name</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Start</th>
-                  <th scope="col">End</th>
-                  <th scope="col" class="text-end">Budget</th>
-                  <th scope="col"><span class="visually-hidden">Actions</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (p of rows(); track p.uid) {
-                  <tr>
-                    <td class="font-monospace small">{{ p.projectNumber }}</td>
-                    <td>{{ p.name }}</td>
-                    <td>
-                      <span class="badge" [class]="statusBadgeClass(p.projectStatus)">{{ p.projectStatus }}</span>
-                    </td>
-                    <td class="small text-muted">{{ p.plannedStartDate }}</td>
-                    <td class="small text-muted">{{ p.plannedEndDate }}</td>
-                    <td class="text-end font-monospace small">{{ p.currency }} {{ +p.budgetAmount | number:'1.2-2' }}</td>
-                    <td>
-                      <a class="btn btn-sm btn-outline-primary"
-                         [routerLink]="['/admin/projects/uid', p.uid]"
-                         [attr.aria-label]="'Open project ' + p.projectNumber">
-                        <i class="bi bi-eye me-1" aria-hidden="true"></i>Open
-                      </a>
-                    </td>
-                  </tr>
-                }
-              </tbody>
-            </table>
+          <div class="erp-empty">
+            <i class="bi bi-kanban"></i>
+            No projects yet. Create one above.
           </div>
+        } @else {
+          <div class="erp-card">
+            <div class="erp-card__body p-0">
+              <div class="erp-table-wrap">
+                <table class="erp-table">
+                  <caption class="visually-hidden">Projects</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Project #</th>
+                      <th scope="col">Name</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Start</th>
+                      <th scope="col">End</th>
+                      <th scope="col" class="num">Budget</th>
+                      <th scope="col"><span class="visually-hidden">Actions</span></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (p of rows(); track p.uid) {
+                      <tr>
+                        <td class="mono">{{ p.projectNumber }}</td>
+                        <td>{{ p.name }}</td>
+                        <td>
+                          <span class="status-tag"
+                            [class.status-tag--warn]="p.projectStatus === 'DRAFT'"
+                            [class.status-tag--ok]="p.projectStatus === 'ACTIVE'"
+                            [class.status-tag--info]="p.projectStatus === 'ON_HOLD'"
+                            [class.status-tag--neutral]="p.projectStatus === 'COMPLETED'"
+                            [class.status-tag--danger]="p.projectStatus === 'CANCELLED'">
+                            <span class="status-tag__dot" aria-hidden="true"></span>{{ p.projectStatus }}
+                          </span>
+                        </td>
+                        <td class="text-muted small">{{ p.plannedStartDate }}</td>
+                        <td class="text-muted small">{{ p.plannedEndDate }}</td>
+                        <td class="num">{{ p.currency }} {{ +p.budgetAmount | number:'1.2-2' }}</td>
+                        <td>
+                          <a class="btn btn-sm btn-outline-primary"
+                             [routerLink]="['/admin/projects/uid', p.uid]"
+                             [attr.aria-label]="'Open project ' + p.projectNumber">
+                            <i class="bi bi-eye me-1" aria-hidden="true"></i>Open
+                          </a>
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
 
-          <!-- Pagination -->
-          <app-paginator [meta]="meta()" [label]="'Projects'" (pageChange)="goToPage($event)" />
+              <!-- Pagination -->
+              <div class="erp-tfoot">
+                <app-paginator [meta]="meta()" [label]="'Projects'" (pageChange)="goToPage($event)" />
+              </div>
+            </div>
+          </div>
         }
       }
     }

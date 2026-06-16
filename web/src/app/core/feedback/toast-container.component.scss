@@ -67,10 +67,10 @@
 }
 
 .toast-info {
-  border-left-color: #1a4fb5;
+  border-left-color: var(--erp-primary);
 }
 .toast-info .toast-icon {
-  color: #1a4fb5;
+  color: var(--erp-primary);
 }
 
 @keyframes toast-in {

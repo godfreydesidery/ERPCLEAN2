@@ -1,24 +1,14 @@
 @use '../admin.styles' as *;
 
-.admin-page {
-  max-width: 1000px;
+// Sticky header for the trial balance table — functional, not decorative.
+.tb-sticky thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
-.tb-grid {
-  border-collapse: collapse;
-
-  thead th {
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    color: #6b7280;
-    background: #f9fafb;
-    position: sticky;
-    top: 0;
-    z-index: 1;
-  }
-
-  tfoot td {
-    border-top: 2px solid #dee2e6;
-    font-size: 0.9rem;
-  }
+// Group-header rows get a surface tint to separate account-type sections.
+.tb-group-row td {
+  background: var(--erp-surface, #f9fafb);
+  border-top: 1px solid var(--erp-border, #dee2e6);
 }

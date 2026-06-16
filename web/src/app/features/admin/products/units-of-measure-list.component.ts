@@ -204,10 +204,6 @@ export class UnitsOfMeasureListComponent {
     });
   }
 
-  statusBadgeClass(status: string): string {
-    return status === 'ACTIVE' ? 'text-bg-success' : 'text-bg-secondary';
-  }
-
   private messageFrom(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {
       const errors = (err.error as { errors?: string[] })?.errors;

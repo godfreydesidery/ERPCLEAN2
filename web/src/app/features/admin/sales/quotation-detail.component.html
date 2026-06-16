@@ -1,6 +1,6 @@
 <section class="admin-page">
   <header class="page-head">
-    <a class="back-link text-muted small" routerLink="/admin/quotations">
+    <a class="text-muted small" routerLink="/admin/quotations">
       <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Quotations
     </a>
 
@@ -22,10 +22,17 @@
           <div class="d-flex flex-wrap align-items-start gap-3 mt-1">
             <div>
               <h1 class="h4 mb-0">
-                <span class="font-monospace text-primary">{{ quoteLabel() }}</span>
+                <span class="mono text-primary">{{ quoteLabel() }}</span>
               </h1>
               <div class="d-flex gap-2 mt-1 flex-wrap align-items-center">
-                <span class="badge" [class]="statusBadgeClass(q.status)">{{ q.status }}</span>
+                <span class="status-tag"
+                      [class.status-tag--ok]="q.status === 'ACCEPTED'"
+                      [class.status-tag--info]="q.status === 'SENT'"
+                      [class.status-tag--warn]="q.status === 'DRAFT'"
+                      [class.status-tag--danger]="q.status === 'REJECTED'"
+                      [class.status-tag--neutral]="q.status === 'EXPIRED'">
+                  {{ q.status }}
+                </span>
               </div>
             </div>
 
@@ -64,21 +71,25 @@
             </dl>
 
             <!-- Totals card -->
-            <div class="card border-0 bg-light" style="min-width:200px">
-              <div class="card-body py-2 px-3">
-                <table class="table table-sm table-borderless mb-0" style="font-size:0.875rem">
+            <div class="erp-card" style="min-width:200px">
+              <div class="erp-card__body">
+                <table class="erp-table" style="font-size:0.875rem">
+                  <caption class="visually-hidden">Quotation totals</caption>
+                  <thead class="visually-hidden">
+                    <tr><th scope="col">Label</th><th scope="col" class="num">Amount</th></tr>
+                  </thead>
                   <tbody>
                     <tr>
-                      <td class="px-0 text-muted">Net</td>
-                      <td class="text-end font-monospace px-0">{{ q.currency }} {{ +q.netTotalAmount | number:'1.2-2' }}</td>
+                      <td class="text-muted">Net</td>
+                      <td class="num">{{ q.currency }} {{ +q.netTotalAmount | number:'1.2-2' }}</td>
                     </tr>
                     <tr>
-                      <td class="px-0 text-muted">VAT</td>
-                      <td class="text-end font-monospace px-0">{{ q.currency }} {{ +q.vatTotalAmount | number:'1.2-2' }}</td>
+                      <td class="text-muted">VAT</td>
+                      <td class="num">{{ q.currency }} {{ +q.vatTotalAmount | number:'1.2-2' }}</td>
                     </tr>
-                    <tr class="fw-bold border-top">
-                      <td class="px-0">Total</td>
-                      <td class="text-end font-monospace px-0">{{ q.currency }} {{ +q.grossTotalAmount | number:'1.2-2' }}</td>
+                    <tr class="fw-bold">
+                      <td>Total</td>
+                      <td class="num">{{ q.currency }} {{ +q.grossTotalAmount | number:'1.2-2' }}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -153,7 +164,7 @@
 
   <!-- Lines panel -->
   <div class="mt-4">
-    <h2 class="h5 mb-2">Quotation Lines</h2>
+    <h2 class="erp-section-title">Quotation Lines</h2>
 
     @switch (linesState()) {
       @case ('loading') {
@@ -167,127 +178,134 @@
       @default {
         <!-- Add-line form (DRAFT only) -->
         @if (isEditable() && canCreate()) {
-          <form class="card card-body mb-3" (ngSubmit)="addLine()" aria-label="Add line to quotation">
-            <h3 class="h6 mb-2">Add Line</h3>
-            <div class="row g-2 align-items-start">
-              <!-- Product picker -->
-              <div class="col-sm-4 position-relative">
-                <label class="form-label small text-muted mb-1" for="lineProductSearch">
-                  Product <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <input id="lineProductSearch" name="lineProductSearch" type="search"
-                       class="form-control form-control-sm"
-                       placeholder="Search by name or code…"
-                       [ngModel]="productSearchQ()"
-                       (ngModelChange)="onProductSearchChange($event)"
-                       [disabled]="addingLine()"
-                       autocomplete="off"
-                       [attr.aria-expanded]="productResults().length > 0"
-                       aria-haspopup="listbox"
-                       aria-autocomplete="list" />
-                @if (selectedProduct()) {
-                  <div class="d-flex align-items-center gap-1 mt-1">
-                    <i class="bi bi-check-circle-fill text-success small" aria-hidden="true"></i>
-                    <span class="small text-muted">{{ selectedProduct()!.label }}</span>
-                  </div>
-                }
-                @if (productResults().length > 0) {
-                  <ul class="list-group position-absolute shadow-sm mt-1 w-100" role="listbox"
-                      aria-label="Product suggestions" style="z-index:1050;max-height:200px;overflow-y:auto;">
-                    @for (p of productResults(); track p.uid) {
-                      <li class="list-group-item list-group-item-action small py-1"
-                          role="option" style="cursor:pointer"
-                          (click)="selectProduct(p)"
-                          (keydown.enter)="selectProduct(p)"
-                          tabindex="0">
-                        <strong>{{ p.code }}</strong> — {{ p.name }}
-                      </li>
+          <div class="erp-card mb-3">
+            <div class="erp-card__head"><h3>Add Line</h3></div>
+            <div class="erp-card__body">
+              <form (ngSubmit)="addLine()" aria-label="Add line to quotation">
+                <div class="row g-2 align-items-start">
+                  <!-- Product picker -->
+                  <div class="col-sm-4 position-relative">
+                    <label class="form-label small text-muted mb-1" for="lineProductSearch">
+                      Product <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <input id="lineProductSearch" name="lineProductSearch" type="search"
+                           class="form-control form-control-sm"
+                           placeholder="Search by name or code…"
+                           [ngModel]="productSearchQ()"
+                           (ngModelChange)="onProductSearchChange($event)"
+                           [disabled]="addingLine()"
+                           autocomplete="off"
+                           [attr.aria-expanded]="productResults().length > 0"
+                           aria-haspopup="listbox"
+                           aria-autocomplete="list" />
+                    @if (selectedProduct()) {
+                      <div class="d-flex align-items-center gap-1 mt-1">
+                        <i class="bi bi-check-circle-fill text-success small" aria-hidden="true"></i>
+                        <span class="small text-muted">{{ selectedProduct()!.label }}</span>
+                      </div>
                     }
-                  </ul>
+                    @if (productResults().length > 0) {
+                      <ul class="list-group position-absolute shadow-sm mt-1 w-100" role="listbox"
+                          aria-label="Product suggestions" style="z-index:1050;max-height:200px;overflow-y:auto;">
+                        @for (p of productResults(); track p.uid) {
+                          <li class="list-group-item list-group-item-action small py-1"
+                              role="option" style="cursor:pointer"
+                              (click)="selectProduct(p)"
+                              (keydown.enter)="selectProduct(p)"
+                              tabindex="0">
+                            <strong>{{ p.code }}</strong> — {{ p.name }}
+                          </li>
+                        }
+                      </ul>
+                    }
+                  </div>
+
+                  <!-- Unit -->
+                  <div class="col-sm-2">
+                    <label class="form-label small text-muted mb-1" for="lineUnit">
+                      Unit <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <select id="lineUnit" name="lineUnit" class="form-select form-select-sm"
+                            [ngModel]="newLineUnitUid()"
+                            (ngModelChange)="newLineUnitUid.set($event)"
+                            [disabled]="addingLine() || lineUnitsState() !== 'idle'">
+                      <option value="">— select —</option>
+                      @for (u of lineUnits(); track u.uid) {
+                        <option [value]="u.uid">{{ u.name }}</option>
+                      }
+                    </select>
+                  </div>
+
+                  <!-- Qty -->
+                  <div class="col-sm-1">
+                    <label class="form-label small text-muted mb-1" for="lineQty">
+                      Qty <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <input id="lineQty" name="lineQty" type="number" min="0.001" step="any"
+                           class="form-control form-control-sm"
+                           [ngModel]="newLineQty()" (ngModelChange)="newLineQty.set($event)"
+                           [disabled]="addingLine()" />
+                  </div>
+
+                  <!-- Unit price override -->
+                  <div class="col-sm-2">
+                    <label class="form-label small text-muted mb-1" for="lineUnitPrice">Price Override</label>
+                    <input id="lineUnitPrice" name="lineUnitPrice" type="number" min="0" step="any"
+                           class="form-control form-control-sm"
+                           placeholder="(list price)"
+                           [ngModel]="newLineUnitPrice()" (ngModelChange)="newLineUnitPrice.set($event)"
+                           [disabled]="addingLine()" />
+                  </div>
+
+                  <!-- Discount % -->
+                  <div class="col-sm-1">
+                    <label class="form-label small text-muted mb-1" for="lineDiscountPct">Disc %</label>
+                    <input id="lineDiscountPct" name="lineDiscountPct" type="number" min="0" max="100" step="any"
+                           class="form-control form-control-sm"
+                           [ngModel]="newLineDiscountPct()" (ngModelChange)="newLineDiscountPct.set($event)"
+                           [disabled]="addingLine()" />
+                  </div>
+
+                  <!-- Add button -->
+                  <div class="col-sm-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-sm btn-primary w-100" [disabled]="addingLine()">
+                      @if (addingLine()) {
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                      } @else {
+                        <i class="bi bi-plus-lg" aria-hidden="true"></i>
+                      }
+                      <span class="visually-hidden">Add line</span>
+                    </button>
+                  </div>
+                </div>
+                @if (lineFormError(); as msg) {
+                  <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
                 }
-              </div>
-
-              <!-- Unit -->
-              <div class="col-sm-2">
-                <label class="form-label small text-muted mb-1" for="lineUnit">
-                  Unit <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <select id="lineUnit" name="lineUnit" class="form-select form-select-sm"
-                        [ngModel]="newLineUnitUid()"
-                        (ngModelChange)="newLineUnitUid.set($event)"
-                        [disabled]="addingLine() || lineUnitsState() !== 'idle'">
-                  <option value="">— select —</option>
-                  @for (u of lineUnits(); track u.uid) {
-                    <option [value]="u.uid">{{ u.name }}</option>
-                  }
-                </select>
-              </div>
-
-              <!-- Qty -->
-              <div class="col-sm-1">
-                <label class="form-label small text-muted mb-1" for="lineQty">
-                  Qty <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <input id="lineQty" name="lineQty" type="number" min="0.001" step="any"
-                       class="form-control form-control-sm"
-                       [ngModel]="newLineQty()" (ngModelChange)="newLineQty.set($event)"
-                       [disabled]="addingLine()" />
-              </div>
-
-              <!-- Unit price override -->
-              <div class="col-sm-2">
-                <label class="form-label small text-muted mb-1" for="lineUnitPrice">Price Override</label>
-                <input id="lineUnitPrice" name="lineUnitPrice" type="number" min="0" step="any"
-                       class="form-control form-control-sm"
-                       placeholder="(list price)"
-                       [ngModel]="newLineUnitPrice()" (ngModelChange)="newLineUnitPrice.set($event)"
-                       [disabled]="addingLine()" />
-              </div>
-
-              <!-- Discount % -->
-              <div class="col-sm-1">
-                <label class="form-label small text-muted mb-1" for="lineDiscountPct">Disc %</label>
-                <input id="lineDiscountPct" name="lineDiscountPct" type="number" min="0" max="100" step="any"
-                       class="form-control form-control-sm"
-                       [ngModel]="newLineDiscountPct()" (ngModelChange)="newLineDiscountPct.set($event)"
-                       [disabled]="addingLine()" />
-              </div>
-
-              <!-- Add button -->
-              <div class="col-sm-2 d-flex align-items-end">
-                <button type="submit" class="btn btn-sm btn-primary w-100" [disabled]="addingLine()">
-                  @if (addingLine()) {
-                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                  } @else {
-                    <i class="bi bi-plus-lg" aria-hidden="true"></i>
-                  }
-                  <span class="visually-hidden">Add line</span>
-                </button>
-              </div>
+              </form>
             </div>
-            @if (lineFormError(); as msg) {
-              <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-            }
-          </form>
+          </div>
         }
 
         @if (lines().length === 0) {
-          <p class="text-muted small">No lines yet.@if (isEditable() && canCreate()) { Add a line above.}</p>
+          <div class="erp-empty">
+            <i class="bi bi-list-ul"></i>
+            No lines yet.@if (isEditable() && canCreate()) { Add a line above.}
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-sm table-hover align-middle bg-white">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Quotation lines</caption>
               <thead>
                 <tr>
                   <th scope="col">#</th>
                   <th scope="col">Product</th>
                   <th scope="col">Unit</th>
-                  <th scope="col" class="text-end">Qty</th>
-                  <th scope="col" class="text-end">Unit Price</th>
-                  <th scope="col" class="text-end">Disc %</th>
-                  <th scope="col" class="text-end">Net</th>
-                  <th scope="col" class="text-end">VAT</th>
-                  <th scope="col" class="text-end">Gross</th>
+                  <th scope="col" class="num">Qty</th>
+                  <th scope="col" class="num">Unit Price</th>
+                  <th scope="col" class="num">Disc %</th>
+                  <th scope="col" class="num">Net</th>
+                  <th scope="col" class="num">VAT</th>
+                  <th scope="col" class="num">Gross</th>
                   @if (isEditable() && canCreate()) {
                     <th scope="col"><span class="visually-hidden">Actions</span></th>
                   }
@@ -296,18 +314,18 @@
               <tbody>
                 @for (line of lines(); track line.uid) {
                   <tr>
-                    <td class="small text-muted">{{ line.lineNo }}</td>
+                    <td class="text-muted">{{ line.lineNo }}</td>
                     <td>
-                      <span class="font-monospace small">{{ line.productCode }}</span>
+                      <span class="mono">{{ line.productCode }}</span>
                       <br /><span class="small text-muted">{{ line.productName }}</span>
                     </td>
                     <td class="small">{{ line.unitName }}</td>
-                    <td class="text-end font-monospace">{{ +line.quantity | number:'1.3-3' }}</td>
-                    <td class="text-end font-monospace">{{ +line.unitPriceAmount | number:'1.2-2' }}</td>
-                    <td class="text-end font-monospace">{{ line.lineDiscountPercent ? (+line.lineDiscountPercent | number:'1.2-2') : '—' }}</td>
-                    <td class="text-end font-monospace">{{ +line.netAmount | number:'1.2-2' }}</td>
-                    <td class="text-end font-monospace">{{ +line.vatAmount | number:'1.2-2' }}</td>
-                    <td class="text-end font-monospace">{{ +line.grossAmount | number:'1.2-2' }}</td>
+                    <td class="num">{{ +line.quantity | number:'1.3-3' }}</td>
+                    <td class="num">{{ +line.unitPriceAmount | number:'1.2-2' }}</td>
+                    <td class="num">{{ line.lineDiscountPercent ? (+line.lineDiscountPercent | number:'1.2-2') : '—' }}</td>
+                    <td class="num">{{ +line.netAmount | number:'1.2-2' }}</td>
+                    <td class="num">{{ +line.vatAmount | number:'1.2-2' }}</td>
+                    <td class="num">{{ +line.grossAmount | number:'1.2-2' }}</td>
                     @if (isEditable() && canCreate()) {
                       <td>
                         <button type="button" class="btn btn-sm btn-outline-danger"

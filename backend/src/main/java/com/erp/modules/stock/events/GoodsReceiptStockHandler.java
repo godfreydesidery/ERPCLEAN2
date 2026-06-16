@@ -117,10 +117,10 @@ public class GoodsReceiptStockHandler implements DomainEventHandler {
 
                 // (3) Accumulate GL legs for the journal (one journal per receipt, D-4a).
                 if (receiptValue != null && receiptValue.compareTo(BigDecimal.ZERO) > 0) {
-                    // Use line uid as memo key; fall back to productUid if grLineUid not in payload
+                    // FOLLOW-001: memo uses product code (fallback to NAME, never a uid) + GRN number.
                     glLegs.add(new ReceiptLeg(
-                            line.productUid(),   // grLineUid best-effort; Purchases may enrich later
-                            product.code() != null ? product.code() : line.productUid(),
+                            line.productUid(),   // retained for traceability; not rendered in the memo
+                            product.code() != null ? product.code() : product.name(),
                             receiptValue));
                 }
             }

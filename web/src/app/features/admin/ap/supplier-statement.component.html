@@ -1,18 +1,16 @@
 <section class="admin-page">
-  <header class="page-head">
-    <h1 class="h4 mb-1">
-      <i class="bi bi-file-earmark-text me-2" aria-hidden="true"></i>Supplier Statement
-    </h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
-      Select a supplier to view their outstanding balance, ageing, and open bills.
-    </p>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1><i class="bi bi-file-earmark-text me-2" aria-hidden="true"></i>Supplier Statement</h1>
+      <p class="subtitle">Select a supplier to view their outstanding balance, ageing, and open bills.</p>
+    </div>
   </header>
 
   @if (!canView()) {
-    <p class="text-muted d-flex align-items-center gap-2 mt-3" role="alert">
+    <div class="erp-empty mt-3" role="alert">
       <i class="bi bi-shield-lock" aria-hidden="true"></i>
       You don't have permission to view supplier statements.
-    </p>
+    </div>
   } @else {
 
     <!-- Company + supplier selectors -->
@@ -29,9 +27,9 @@
         </p>
       }
       @default {
-        <div class="d-flex flex-wrap gap-3 mb-4 align-items-end">
+        <div class="erp-toolbar mb-4">
           @if (companies().length > 1) {
-            <div style="min-width:220px">
+            <div class="erp-field" style="min-width:220px">
               <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
               <select id="companyPicker" name="companyPicker" class="form-select"
                       [ngModel]="selectedCompanyId()"
@@ -44,7 +42,7 @@
           }
 
           <!-- Supplier picker -->
-          <div style="min-width:280px; position:relative">
+          <div class="erp-field" style="min-width:280px; position:relative">
             <label class="form-label small text-muted mb-1" for="supplierSearch">Supplier</label>
             <input id="supplierSearch" name="supplierSearch" type="search"
                    class="form-control" placeholder="Type supplier name or code…"
@@ -57,7 +55,7 @@
                   style="top:100%; left:0; max-height:220px; overflow-y:auto">
                 @for (s of supplierResults(); track s.uid) {
                   <li class="list-group-item list-group-item-action py-1 small"
-                      role="option" style="cursor:pointer"
+                      role="option" aria-selected="false" style="cursor:pointer"
                       (click)="selectSupplier(s)"
                       (keydown.enter)="selectSupplier(s)"
                       tabindex="0">
@@ -69,10 +67,12 @@
           </div>
 
           @if (selectedSupplier()) {
-            <button type="button" class="btn btn-outline-secondary btn-sm align-self-end"
-                    (click)="refresh()" [disabled]="state() === 'loading'">
-              <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Refresh
-            </button>
+            <div class="erp-field align-self-end">
+              <button type="button" class="btn btn-outline-secondary btn-sm"
+                      (click)="refresh()" [disabled]="state() === 'loading'">
+                <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Refresh
+              </button>
+            </div>
           }
         </div>
       }
@@ -92,75 +92,70 @@
         </p>
       }
       @case ('forbidden') {
-        <p class="text-muted d-flex align-items-center gap-2">
+        <div class="erp-empty" role="alert">
           <i class="bi bi-shield-lock" aria-hidden="true"></i>
           You don't have permission to view this statement.
-        </p>
+        </div>
       }
       @default {
         @if (isEmpty()) {
-          <p class="text-muted">Select a supplier above to load their statement.</p>
+          <div class="erp-empty">
+            <i class="bi bi-file-earmark-text"></i>
+            Select a supplier above to load their statement.
+          </div>
         } @else if (balance(); as bal) {
 
-          <!-- ── Headline ──────────────────────────────────────────────────── -->
+          <!-- ── KPI tiles ──────────────────────────────────────────────────── -->
           <div class="d-flex flex-wrap gap-3 mb-4">
-            <div class="card border-0 shadow-sm flex-fill" style="min-width:200px; max-width:280px">
-              <div class="card-body text-center">
-                <div class="small text-muted mb-1">Outstanding Balance</div>
-                <div class="h3 font-monospace mb-0"
-                     [class.text-danger]="outstandingBalance() > 0"
-                     [class.text-success]="outstandingBalance() === 0">
-                  {{ fmtMoney(bal.outstandingBalance) }}
-                </div>
-                <div class="small text-muted">{{ bal.currency }}</div>
+            <div class="erp-kpi">
+              <div class="erp-kpi__label">Outstanding Balance</div>
+              <div class="erp-kpi__value mono"
+                   [class.text-danger]="outstandingBalance() > 0"
+                   [class.text-success]="outstandingBalance() === 0">
+                {{ fmtMoney(bal.outstandingBalance) }}
               </div>
+              <div class="erp-kpi__delta">{{ bal.currency }}</div>
             </div>
-            <div class="card border-0 shadow-sm flex-fill" style="min-width:180px; max-width:240px">
-              <div class="card-body text-center">
-                <div class="small text-muted mb-1">Open Bills</div>
-                <div class="h4 mb-0">{{ openBills().length }}</div>
-              </div>
+            <div class="erp-kpi">
+              <div class="erp-kpi__label">Open Bills</div>
+              <div class="erp-kpi__value">{{ openBills().length }}</div>
             </div>
-            <div class="card border-0 shadow-sm flex-fill" style="min-width:180px; max-width:240px">
-              <div class="card-body text-center">
-                <div class="small text-muted mb-1">Supplier</div>
-                <div class="small fw-semibold">{{ selectedSupplier()?.label ?? '—' }}</div>
-              </div>
+            <div class="erp-kpi">
+              <div class="erp-kpi__label">Supplier</div>
+              <div class="erp-kpi__value small fw-semibold">{{ selectedSupplier()?.label ?? '—' }}</div>
             </div>
           </div>
 
           <!-- ── Ageing buckets ───────────────────────────────────────────── -->
           @if (sortedAgeing().length > 0) {
-            <div class="card mb-4">
-              <div class="card-header small fw-semibold text-muted">
-                <i class="bi bi-hourglass-split me-1" aria-hidden="true"></i>Ageing Analysis
+            <div class="erp-card mb-4">
+              <div class="erp-card__head">
+                <h2 class="erp-section-title mb-0">
+                  <i class="bi bi-hourglass-split me-1" aria-hidden="true"></i>Ageing Analysis
+                </h2>
               </div>
-              <div class="card-body p-0">
-                <div class="table-responsive">
-                  <table class="table table-sm align-middle mb-0">
+              <div class="erp-card__body p-0">
+                <div class="erp-table-wrap">
+                  <table class="erp-table">
                     <caption class="visually-hidden">Ageing buckets for this supplier</caption>
-                    <thead class="table-light">
+                    <thead>
                       <tr>
                         @for (b of sortedAgeing(); track b.bucket) {
-                          <th scope="col" class="text-end">{{ bucketLabel(b.bucket) }}</th>
+                          <th scope="col" class="num">{{ bucketLabel(b.bucket) }}</th>
                         }
-                        <th scope="col" class="text-end fw-bold">Total</th>
+                        <th scope="col" class="num fw-bold">Total</th>
                       </tr>
                     </thead>
                     <tbody>
                       <tr>
                         @for (b of sortedAgeing(); track b.bucket) {
-                          <td class="text-end font-monospace"
+                          <td class="num"
                               [class.text-danger]="+(b.amount) > 0 && b.bucket !== 'CURRENT'"
                               [class.text-muted]="+(b.amount) === 0">
-                            @if (+(b.amount) === 0) {
-                              —
-                            } @else {
-                              {{ fmtMoney(b.amount) }}
-                            }
+                            @if (+(b.amount) === 0) { — } @else { {{ fmtMoney(b.amount) }} }
                           </td>
                         }
-                        <td class="text-end font-monospace fw-bold"
+                        <td class="num fw-bold"
                             [class.text-danger]="outstandingBalance() > 0">
                           {{ fmtMoney(bal.outstandingBalance) }}
                         </td>
@@ -171,14 +166,13 @@
 
                 <!-- Ageing bar visualisation -->
                 @if (outstandingBalance() > 0) {
-                  <div class="ageing-bar d-flex" style="height:8px; overflow:hidden">
+                  <div class="d-flex" style="height:8px; overflow:hidden" aria-hidden="true">
                     @for (b of sortedAgeing(); track b.bucket) {
                       @let pct = outstandingBalance() > 0 ? (+(b.amount) / outstandingBalance() * 100) : 0;
                       @if (+(b.amount) > 0) {
                         <div [class]="'flex-shrink-0 ' + bucketBadgeClass(b.bucket)"
                              [style.width.%]="pct"
-                             [attr.title]="bucketLabel(b.bucket) + ': ' + fmtMoney(b.amount)"
-                             role="presentation"></div>
+                             [attr.title]="bucketLabel(b.bucket) + ': ' + fmtMoney(b.amount)"></div>
                       }
                     }
                   </div>
@@ -189,23 +183,27 @@
 
           <!-- ── Open bills ───────────────────────────────────────────────── -->
           @if (openBills().length > 0) {
-            <div class="card mb-4">
-              <div class="card-header small fw-semibold text-muted">
-                <i class="bi bi-receipt-cutoff me-1" aria-hidden="true"></i>
-                Open Bills ({{ openBills().length }})
+            <div class="erp-card mb-4">
+              <div class="erp-card__head">
+                <h2 class="erp-section-title mb-0">
+                  <i class="bi bi-receipt-cutoff me-1" aria-hidden="true"></i>
+                  Open Bills
+                </h2>
+                <span class="spacer"></span>
+                <span class="text-muted small">{{ openBills().length }}</span>
               </div>
-              <div class="card-body p-0">
-                <div class="table-responsive">
-                  <table class="table table-sm align-middle mb-0">
+              <div class="erp-card__body p-0">
+                <div class="erp-table-wrap">
+                  <table class="erp-table">
                     <caption class="visually-hidden">Open bills for this supplier</caption>
-                    <thead class="table-light">
+                    <thead>
                       <tr>
                         <th scope="col">Bill No.</th>
                         <th scope="col">Supplier Inv.</th>
                         <th scope="col">Bill Date</th>
                         <th scope="col">Due Date</th>
-                        <th scope="col" class="text-end">Gross</th>
-                        <th scope="col" class="text-end">Outstanding</th>
+                        <th scope="col" class="num">Gross</th>
+                        <th scope="col" class="num">Outstanding</th>
                         <th scope="col">Currency</th>
                         <th scope="col">Status</th>
                       </tr>
@@ -213,17 +211,22 @@
                     <tbody>
                       @for (bill of openBills(); track bill.uid) {
                         <tr>
-                          <td class="font-monospace small fw-semibold">{{ bill.billNumber }}</td>
+                          <td class="mono fw-semibold">{{ bill.billNumber }}</td>
                           <td class="small">{{ bill.supplierInvoiceNo || '—' }}</td>
                           <td class="small">{{ bill.billDate }}</td>
                           <td class="small">{{ bill.dueDate ?? '—' }}</td>
-                          <td class="text-end font-monospace small">{{ fmtMoney(bill.grossAmount) }}</td>
-                          <td class="text-end font-monospace small fw-semibold text-danger">
+                          <td class="num">{{ fmtMoney(bill.grossAmount) }}</td>
+                          <td class="num fw-semibold text-danger">
                             {{ fmtMoney(bill.outstandingAmount) }}
                           </td>
                           <td class="small">{{ bill.currency }}</td>
                           <td>
-                            <span class="badge" [class]="billStatusBadgeClass(bill.status)">
+                            <span class="status-tag"
+                                  [class.status-tag--neutral]="bill.status === 'DRAFT'"
+                                  [class.status-tag--info]="bill.status === 'MATCHED'"
+                                  [class.status-tag--danger]="bill.status === 'HELD'"
+                                  [class.status-tag--ok]="bill.status === 'APPROVED' || bill.status === 'PAID'"
+                                  [class.status-tag--warn]="bill.status === 'PARTIALLY_PAID'">
                               {{ bill.status }}
                             </span>
                           </td>
@@ -235,37 +238,43 @@
               </div>
             </div>
           } @else {
-            <p class="text-muted small mb-4">
-              <i class="bi bi-check-circle-fill text-success me-1" aria-hidden="true"></i>
+            <div class="erp-empty mb-4">
+              <i class="bi bi-check-circle-fill text-success"></i>
               No outstanding open bills.
-            </p>
+            </div>
           }
 
           <!-- ── AP Sub-ledger vs GL Reconciliation ───────────────────────── -->
           @if (reconciliation(); as rec) {
-            <div class="card mb-4">
-              <div class="card-header small fw-semibold text-muted">
-                <i class="bi bi-bank me-1" aria-hidden="true"></i>AP Sub-ledger vs GL Reconciliation
+            <div class="erp-card mb-4">
+              <div class="erp-card__head">
+                <h2 class="erp-section-title mb-0">
+                  <i class="bi bi-bank me-1" aria-hidden="true"></i>AP Sub-ledger vs GL Reconciliation
+                </h2>
               </div>
-              <div class="card-body">
+              <div class="erp-card__body">
                 <dl class="row mb-0">
                   <dt class="col-sm-4">Sub-ledger Total</dt>
-                  <dd class="col-sm-8 font-monospace">
+                  <dd class="col-sm-8 mono">
                     {{ rec.currency }} {{ fmtMoney(rec.subLedgerTotal) }}
                   </dd>
                   <dt class="col-sm-4">GL Control Balance</dt>
-                  <dd class="col-sm-8 font-monospace">
+                  <dd class="col-sm-8 mono">
                     {{ rec.currency }} {{ fmtMoney(rec.glControlBalance) }}
                   </dd>
                   <dt class="col-sm-4">Difference</dt>
-                  <dd class="col-sm-8 font-monospace"
+                  <dd class="col-sm-8 mono"
                       [class.text-danger]="+(rec.difference) !== 0"
                       [class.text-success]="+(rec.difference) === 0">
                     {{ rec.currency }} {{ fmtMoney(rec.difference) }}
                     @if (+(rec.difference) === 0) {
-                      <span class="badge text-bg-success ms-2">Reconciled</span>
+                      <span class="status-tag status-tag--ok ms-2">
+                        <span class="status-tag__dot"></span>Reconciled
+                      </span>
                     } @else {
-                      <span class="badge text-bg-danger ms-2">Out of Balance</span>
+                      <span class="status-tag status-tag--danger ms-2">
+                        <span class="status-tag__dot"></span>Out of Balance
+                      </span>
                     }
                   </dd>
                 </dl>

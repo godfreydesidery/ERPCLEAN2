@@ -1,7 +1,7 @@
 <section class="admin-page">
   <header class="page-head">
-    <h1 class="h4 mb-1">New Standing Order</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
+    <h1>New Standing Order</h1>
+    <p class="subtitle">
       <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>
       Set up a recurring sales order with a fixed schedule and line items.
     </p>
@@ -27,204 +27,212 @@
       </p>
     }
     @default {
-      <form class="create-form card card-body" (ngSubmit)="submit()" aria-label="Create standing order">
+      <form (ngSubmit)="submit()" aria-label="Create standing order">
 
         <!-- Company selector (multi-company) -->
         @if (companies().length > 1) {
-          <div class="row g-2 mb-3">
-            <div class="col-sm-4">
-              <label class="form-label small text-muted mb-1" for="companySel">
-                Company <span class="text-danger" aria-hidden="true">*</span>
-              </label>
-              <select id="companySel" name="companySel" class="form-select"
-                      [ngModel]="selectedCompanyUid()"
-                      (ngModelChange)="onCompanyChange($event)"
-                      [disabled]="saving()">
-                @for (c of companies(); track c.uid) {
-                  <option [value]="c.uid">{{ c.name }}</option>
-                }
-              </select>
+          <div class="erp-card mb-3">
+            <div class="erp-card__body">
+              <div class="erp-field" style="max-width:320px">
+                <label for="companySel">
+                  Company <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <select id="companySel" name="companySel" class="form-select"
+                        [ngModel]="selectedCompanyUid()"
+                        (ngModelChange)="onCompanyChange($event)"
+                        [disabled]="saving()">
+                  @for (c of companies(); track c.uid) {
+                    <option [value]="c.uid">{{ c.name }}</option>
+                  }
+                </select>
+              </div>
             </div>
           </div>
         }
 
         <!-- Header fields -->
-        <h2 class="h6 mb-2">Header</h2>
-        <div class="row g-2 mb-3">
+        <div class="erp-card mb-3">
+          <div class="erp-card__head"><h2>Header</h2></div>
+          <div class="erp-card__body">
+            <div class="erp-form-grid">
 
-          <!-- Branch -->
-          <div class="col-sm-4">
-            <label class="form-label small text-muted mb-1" for="branchPicker">
-              Branch <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <app-uid-picker id="branchPicker"
-                            [(ngModel)]="selectedBranchUid"
-                            name="branchPicker"
-                            [options]="branchOptions()"
-                            placeholder="Select branch"
-                            [required]="true" />
-          </div>
+              <!-- Branch -->
+              <div class="erp-field">
+                <label for="branchPicker">
+                  Branch <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <app-uid-picker id="branchPicker"
+                                [(ngModel)]="selectedBranchUid"
+                                name="branchPicker"
+                                [options]="branchOptions()"
+                                placeholder="Select branch"
+                                [required]="true" />
+              </div>
 
-          <!-- Customer -->
-          <div class="col-sm-4">
-            <label class="form-label small text-muted mb-1" for="customerPicker">
-              Customer <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <app-uid-picker id="customerPicker"
-                            [(ngModel)]="selectedCustomerUid"
-                            name="customerPicker"
-                            [options]="customerOptions()"
-                            placeholder="Select customer"
-                            [required]="true" />
-          </div>
+              <!-- Customer -->
+              <div class="erp-field">
+                <label for="customerPicker">
+                  Customer <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <app-uid-picker id="customerPicker"
+                                [(ngModel)]="selectedCustomerUid"
+                                name="customerPicker"
+                                [options]="customerOptions()"
+                                placeholder="Select customer"
+                                [required]="true" />
+              </div>
 
-          <!-- Currency -->
-          <div class="col-sm-2">
-            <label class="form-label small text-muted mb-1" for="fCurrency">
-              Currency <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="fCurrency" name="fCurrency" type="text" class="form-control"
-                   placeholder="TZS"
-                   [ngModel]="fCurrency()" (ngModelChange)="fCurrency.set($event)"
-                   [disabled]="saving()" autocomplete="off" />
-          </div>
+              <!-- Currency -->
+              <div class="erp-field">
+                <label for="fCurrency">
+                  Currency <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="fCurrency" name="fCurrency" type="text" class="form-control"
+                       placeholder="TZS"
+                       [ngModel]="fCurrency()" (ngModelChange)="fCurrency.set($event)"
+                       [disabled]="saving()" autocomplete="off" />
+              </div>
 
-          <!-- Frequency -->
-          <div class="col-sm-2">
-            <label class="form-label small text-muted mb-1" for="fFrequency">
-              Frequency <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <select id="fFrequency" name="fFrequency" class="form-select"
-                    [ngModel]="fFrequency()" (ngModelChange)="fFrequency.set($event)"
-                    [disabled]="saving()">
-              @for (opt of frequencyOptions; track opt.value) {
-                <option [value]="opt.value">{{ opt.label }}</option>
-              }
-            </select>
-          </div>
+              <!-- Frequency -->
+              <div class="erp-field">
+                <label for="fFrequency">
+                  Frequency <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <select id="fFrequency" name="fFrequency" class="form-select"
+                        [ngModel]="fFrequency()" (ngModelChange)="fFrequency.set($event)"
+                        [disabled]="saving()">
+                  @for (opt of frequencyOptions; track opt.value) {
+                    <option [value]="opt.value">{{ opt.label }}</option>
+                  }
+                </select>
+              </div>
 
-          <!-- Start date -->
-          <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="fStartDate">
-              Start Date <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="fStartDate" name="fStartDate" type="date" class="form-control"
-                   [ngModel]="fStartDate()" (ngModelChange)="fStartDate.set($event)"
-                   [disabled]="saving()" />
-          </div>
+              <!-- Start date -->
+              <div class="erp-field">
+                <label for="fStartDate">
+                  Start Date <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="fStartDate" name="fStartDate" type="date" class="form-control"
+                       [ngModel]="fStartDate()" (ngModelChange)="fStartDate.set($event)"
+                       [disabled]="saving()" />
+              </div>
 
-          <!-- End date (optional) -->
-          <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="fEndDate">End Date (optional)</label>
-            <input id="fEndDate" name="fEndDate" type="date" class="form-control"
-                   [ngModel]="fEndDate()" (ngModelChange)="fEndDate.set($event)"
-                   [disabled]="saving()" />
-          </div>
+              <!-- End date (optional) -->
+              <div class="erp-field">
+                <label for="fEndDate">End Date (optional)</label>
+                <input id="fEndDate" name="fEndDate" type="date" class="form-control"
+                       [ngModel]="fEndDate()" (ngModelChange)="fEndDate.set($event)"
+                       [disabled]="saving()" />
+              </div>
 
-          <!-- Notes -->
-          <div class="col-sm-6">
-            <label class="form-label small text-muted mb-1" for="fNotes">Notes</label>
-            <input id="fNotes" name="fNotes" type="text" class="form-control"
-                   [ngModel]="fNotes()" (ngModelChange)="fNotes.set($event)"
-                   [disabled]="saving()" autocomplete="off" maxlength="500" />
+              <!-- Notes -->
+              <div class="erp-field full">
+                <label for="fNotes">Notes</label>
+                <input id="fNotes" name="fNotes" type="text" class="form-control"
+                       [ngModel]="fNotes()" (ngModelChange)="fNotes.set($event)"
+                       [disabled]="saving()" autocomplete="off" maxlength="500" />
+              </div>
+            </div>
           </div>
         </div>
 
         <!-- Line items -->
-        <h2 class="h6 mb-2 mt-2">Line Items</h2>
-        <div class="table-responsive mb-2">
-          <table class="table table-sm align-middle">
-            <caption class="visually-hidden">Standing order line items</caption>
-            <thead>
-              <tr>
-                <th scope="col">#</th>
-                <th scope="col">Product</th>
-                <th scope="col">Unit</th>
-                <th scope="col">Qty</th>
-                <th scope="col">Qty (Base)</th>
-                <th scope="col">Unit Price</th>
-                <th scope="col"><span class="visually-hidden">Remove</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (line of lines(); track $index; let i = $index) {
-                <tr>
-                  <td class="small text-muted">{{ i + 1 }}</td>
-                  <td style="min-width:200px">
-                    <app-uid-picker
-                        [id]="'lineProduct' + i"
-                        [ngModel]="line.productUid"
-                        [name]="'lineProduct' + i"
-                        [options]="productOptions()"
-                        placeholder="Select product"
-                        [required]="true"
-                        [disabled]="saving()"
-                        (ngModelChange)="updateLine(i, { productUid: $event })" />
-                  </td>
-                  <td style="min-width:140px">
-                    <app-uid-picker
-                        [id]="'lineUnit' + i"
-                        [ngModel]="line.unitUid"
-                        [name]="'lineUnit' + i"
-                        [options]="unitOptions()"
-                        placeholder="Select unit"
-                        [required]="true"
-                        [disabled]="saving()"
-                        (ngModelChange)="updateLine(i, { unitUid: $event })" />
-                  </td>
-                  <td style="min-width:90px">
-                    <input [id]="'lineQty' + i" [name]="'lineQty' + i"
-                           type="number" min="0.0001" step="0.001"
-                           class="form-control form-control-sm"
-                           [ngModel]="line.qty"
-                           (ngModelChange)="updateLine(i, { qty: $event })"
-                           [disabled]="saving()"
-                           [attr.aria-label]="'Quantity for line ' + (i + 1)" />
-                  </td>
-                  <td style="min-width:90px">
-                    <input [id]="'lineQtyBase' + i" [name]="'lineQtyBase' + i"
-                           type="number" min="0.0001" step="0.001"
-                           class="form-control form-control-sm"
-                           [ngModel]="line.qtyBase"
-                           (ngModelChange)="updateLine(i, { qtyBase: $event })"
-                           [disabled]="saving()"
-                           placeholder="= qty"
-                           [attr.aria-label]="'Base quantity for line ' + (i + 1)" />
-                  </td>
-                  <td style="min-width:100px">
-                    <input [id]="'linePrice' + i" [name]="'linePrice' + i"
-                           type="number" min="0" step="0.01"
-                           class="form-control form-control-sm"
-                           [ngModel]="line.unitPriceAmount"
-                           (ngModelChange)="updateLine(i, { unitPriceAmount: $event })"
-                           [disabled]="saving()"
-                           [attr.aria-label]="'Unit price for line ' + (i + 1)" />
-                  </td>
-                  <td>
-                    @if (lines().length > 1) {
-                      <button type="button" class="btn btn-sm btn-outline-danger"
-                              (click)="removeLine(i)"
-                              [disabled]="saving()"
-                              [attr.aria-label]="'Remove line ' + (i + 1)">
-                        <i class="bi bi-trash" aria-hidden="true"></i>
-                      </button>
-                    }
-                  </td>
-                </tr>
-              }
-            </tbody>
-          </table>
-        </div>
-        <div class="mb-3">
-          <button type="button" class="btn btn-sm btn-outline-secondary"
-                  (click)="addLine()" [disabled]="saving()">
-            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add Line
-          </button>
+        <div class="erp-card mb-3">
+          <div class="erp-card__head"><h2>Line Items</h2></div>
+          <div class="erp-card__body">
+            <div class="erp-table-wrap mb-3">
+              <table class="erp-table">
+                <caption class="visually-hidden">Standing order line items</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">#</th>
+                    <th scope="col">Product</th>
+                    <th scope="col">Unit</th>
+                    <th scope="col" class="num">Qty</th>
+                    <th scope="col" class="num">Qty (Base)</th>
+                    <th scope="col" class="num">Unit Price</th>
+                    <th scope="col"><span class="visually-hidden">Remove</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (line of lines(); track $index; let i = $index) {
+                    <tr>
+                      <td class="small text-muted">{{ i + 1 }}</td>
+                      <td style="min-width:200px">
+                        <app-uid-picker
+                            [id]="'lineProduct' + i"
+                            [ngModel]="line.productUid"
+                            [name]="'lineProduct' + i"
+                            [options]="productOptions()"
+                            placeholder="Select product"
+                            [required]="true"
+                            [disabled]="saving()"
+                            (ngModelChange)="updateLine(i, { productUid: $event })" />
+                      </td>
+                      <td style="min-width:140px">
+                        <app-uid-picker
+                            [id]="'lineUnit' + i"
+                            [ngModel]="line.unitUid"
+                            [name]="'lineUnit' + i"
+                            [options]="unitOptions()"
+                            placeholder="Select unit"
+                            [required]="true"
+                            [disabled]="saving()"
+                            (ngModelChange)="updateLine(i, { unitUid: $event })" />
+                      </td>
+                      <td class="num" style="min-width:90px">
+                        <input [id]="'lineQty' + i" [name]="'lineQty' + i"
+                               type="number" min="0.0001" step="0.001"
+                               class="form-control form-control-sm"
+                               [ngModel]="line.qty"
+                               (ngModelChange)="updateLine(i, { qty: $event })"
+                               [disabled]="saving()"
+                               [attr.aria-label]="'Quantity for line ' + (i + 1)" />
+                      </td>
+                      <td class="num" style="min-width:90px">
+                        <input [id]="'lineQtyBase' + i" [name]="'lineQtyBase' + i"
+                               type="number" min="0.0001" step="0.001"
+                               class="form-control form-control-sm"
+                               [ngModel]="line.qtyBase"
+                               (ngModelChange)="updateLine(i, { qtyBase: $event })"
+                               [disabled]="saving()"
+                               placeholder="= qty"
+                               [attr.aria-label]="'Base quantity for line ' + (i + 1)" />
+                      </td>
+                      <td class="num" style="min-width:100px">
+                        <input [id]="'linePrice' + i" [name]="'linePrice' + i"
+                               type="number" min="0" step="0.01"
+                               class="form-control form-control-sm"
+                               [ngModel]="line.unitPriceAmount"
+                               (ngModelChange)="updateLine(i, { unitPriceAmount: $event })"
+                               [disabled]="saving()"
+                               [attr.aria-label]="'Unit price for line ' + (i + 1)" />
+                      </td>
+                      <td>
+                        @if (lines().length > 1) {
+                          <button type="button" class="btn btn-sm btn-outline-danger"
+                                  (click)="removeLine(i)"
+                                  [disabled]="saving()"
+                                  [attr.aria-label]="'Remove line ' + (i + 1)">
+                            <i class="bi bi-trash" aria-hidden="true"></i>
+                          </button>
+                        }
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-secondary"
+                    (click)="addLine()" [disabled]="saving()">
+              <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add Line
+            </button>
+          </div>
         </div>
 
         <!-- Error + submit -->
         @if (formError(); as msg) {
-          <p class="form-error text-danger small mb-2" role="alert">{{ msg }}</p>
+          <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
         }
 
         <div class="d-flex gap-2">

@@ -1,13 +1,16 @@
 <section class="admin-page">
-  <header class="page-head">
-    <h1 class="h4 mb-1">
-      <i class="bi bi-cash-stack me-2" aria-hidden="true"></i>
-      AP Payment
-      @if (entity(); as p) { — {{ p.paymentNumber }} }
-    </h1>
-    <a routerLink="/admin/ap/payments" class="btn btn-outline-secondary btn-sm mt-2">
-      <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Payments
-    </a>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>
+        <i class="bi bi-cash-stack me-2" aria-hidden="true"></i>
+        AP Payment@if (entity(); as p) { — {{ p.paymentNumber }} }
+      </h1>
+    </div>
+    <div class="erp-page-head__actions">
+      <a routerLink="/admin/ap/payments" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Payments
+      </a>
+    </div>
   </header>
 
   @switch (state()) {
@@ -22,59 +25,82 @@
       </p>
     }
     @case ('forbidden') {
-      <p class="text-muted mt-3" role="alert">
-        <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>No permission.
-      </p>
+      <div class="erp-empty mt-3" role="alert">
+        <i class="bi bi-shield-lock" aria-hidden="true"></i>No permission.
+      </div>
     }
     @default {
       @if (entity(); as p) {
-        <dl class="row mt-3">
-          <dt class="col-sm-3">Payment Number</dt><dd class="col-sm-9">{{ p.paymentNumber }}</dd>
-          <dt class="col-sm-3">Date</dt><dd class="col-sm-9">{{ p.paymentDate }}</dd>
-          <dt class="col-sm-3">Kind</dt><dd class="col-sm-9">
-            <span class="badge" [class]="p.kind === 'SINGLE' ? 'text-bg-info' : 'text-bg-primary'">
-              {{ p.kind }}
-            </span>
-          </dd>
-          <dt class="col-sm-3">Amount</dt>
-          <dd class="col-sm-9 font-monospace">{{ p.currency }} {{ fmtMoney(p.amount) }}</dd>
-          <dt class="col-sm-3">Tender</dt><dd class="col-sm-9">{{ p.tenderType }}</dd>
-          @if (p.bankReference) {
-            <dt class="col-sm-3">Reference</dt><dd class="col-sm-9">{{ p.bankReference }}</dd>
-          }
-          @if (p.glEntryUid) {
-            <dt class="col-sm-3">GL Entry</dt><dd class="col-sm-9">
-              <a [routerLink]="['/admin/gl/journals']" class="text-decoration-none small text-muted">
-                <i class="bi bi-journal-text me-1" aria-hidden="true"></i>Posted
-              </a>
-            </dd>
-          }
-        </dl>
+        <div class="erp-card mt-3 mb-4">
+          <div class="erp-card__head">
+            <h2 class="erp-section-title mb-0">Payment Details</h2>
+          </div>
+          <div class="erp-card__body">
+            <dl class="row mb-0">
+              <dt class="col-sm-3">Payment Number</dt>
+              <dd class="col-sm-9 mono">{{ p.paymentNumber }}</dd>
+              <dt class="col-sm-3">Date</dt>
+              <dd class="col-sm-9">{{ p.paymentDate }}</dd>
+              <dt class="col-sm-3">Kind</dt>
+              <dd class="col-sm-9">
+                <span class="status-tag"
+                      [class.status-tag--info]="p.kind === 'SINGLE'"
+                      [class.status-tag--ok]="p.kind !== 'SINGLE'">
+                  {{ p.kind }}
+                </span>
+              </dd>
+              <dt class="col-sm-3">Amount</dt>
+              <dd class="col-sm-9 mono">{{ p.currency }} {{ fmtMoney(p.amount) }}</dd>
+              <dt class="col-sm-3">Tender</dt>
+              <dd class="col-sm-9">{{ p.tenderType }}</dd>
+              @if (p.bankReference) {
+                <dt class="col-sm-3">Reference</dt>
+                <dd class="col-sm-9">{{ p.bankReference }}</dd>
+              }
+              @if (p.glEntryUid) {
+                <dt class="col-sm-3">GL Entry</dt>
+                <dd class="col-sm-9">
+                  <a [routerLink]="['/admin/gl/journals']" class="text-decoration-none small text-muted">
+                    <i class="bi bi-journal-text me-1" aria-hidden="true"></i>Posted
+                  </a>
+                </dd>
+              }
+            </dl>
+          </div>
+        </div>
 
         @if (p.allocations.length > 0) {
-          <h2 class="h6 mt-3">Bill Allocations</h2>
-          <table class="table table-sm table-bordered align-middle">
-            <caption class="visually-hidden">Payment allocations</caption>
-            <thead class="table-light">
-              <tr>
-                <th scope="col">Supplier Bill</th>
-                <th scope="col" class="text-end">Allocated</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (a of p.allocations; track a.supplierBillUid) {
-                <tr>
-                  <td>
-                    <a [routerLink]="['/admin/ap/supplier-bills/uid', a.supplierBillUid]"
-                       class="text-decoration-none">
-                      <i class="bi bi-receipt-cutoff me-1" aria-hidden="true"></i>View Bill
-                    </a>
-                  </td>
-                  <td class="text-end font-monospace">{{ fmtMoney(a.allocatedAmount) }}</td>
-                </tr>
-              }
-            </tbody>
-          </table>
+          <div class="erp-card mb-4">
+            <div class="erp-card__head">
+              <h2 class="erp-section-title mb-0">Bill Allocations</h2>
+            </div>
+            <div class="erp-card__body p-0">
+              <div class="erp-table-wrap">
+                <table class="erp-table">
+                  <caption class="visually-hidden">Payment allocations</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Supplier Bill</th>
+                      <th scope="col" class="num">Allocated</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (a of p.allocations; track a.supplierBillUid) {
+                      <tr>
+                        <td>
+                          <a [routerLink]="['/admin/ap/supplier-bills/uid', a.supplierBillUid]"
+                             class="text-decoration-none">
+                            <i class="bi bi-receipt-cutoff me-1" aria-hidden="true"></i>View Bill
+                          </a>
+                        </td>
+                        <td class="num">{{ fmtMoney(a.allocatedAmount) }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         }
       }
     }

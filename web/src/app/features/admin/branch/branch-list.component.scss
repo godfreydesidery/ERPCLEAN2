@@ -1,20 +1,6 @@
-@use '../admin.styles';
+/* Branch list — relies on global ERP kit (.admin-page, .page-head, .erp-table, .status-tag).
+   The @use '../admin.styles' import is removed; only component-specific touches remain. */
 
-.admin-page {
-  .check label {
-    flex-direction: row;
-    align-items: center;
-    gap: 0.4rem;
-  }
-
-  button.link {
-    background: none;
-    color: #2563eb;
-    padding: 0;
-    text-decoration: underline;
-  }
-
-  button.link.danger {
-    color: #b91c1c;
-  }
+.state {
+  padding: 1rem 0;
 }

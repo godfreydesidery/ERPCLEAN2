@@ -1,11 +1,9 @@
 <section class="admin-page">
-  <header class="page-head">
-    <h1 class="h4 mb-1">
-      <i class="bi bi-bar-chart-steps me-2" aria-hidden="true"></i>AR Ageing
-    </h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
-      Company-wide customer ageing buckets and per-customer balance lookup.
-    </p>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1><i class="bi bi-bar-chart-steps me-2" aria-hidden="true"></i>AR Ageing</h1>
+      <p class="subtitle">Company-wide customer ageing buckets and per-customer balance lookup.</p>
+    </div>
   </header>
 
   @if (!canView()) {
@@ -44,7 +42,7 @@
     }
 
     <!-- Ageing table -->
-    <h2 class="h6 mt-2">Customer Ageing Buckets</h2>
+    <h2 class="erp-section-title">Customer Ageing Buckets</h2>
     @switch (state()) {
       @case ('loading') {
         <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
@@ -63,20 +61,22 @@
       }
       @default {
         @if (isEmpty()) {
-          <p class="text-muted fst-italic">No ageing data found.</p>
+          <div class="erp-empty">
+            <i class="bi bi-inbox"></i> No ageing data found.
+          </div>
         } @else {
-          <div class="table-responsive mb-4">
-            <table class="table table-hover align-middle bg-white grid table-sm">
+          <div class="erp-table-wrap mb-4">
+            <table class="erp-table">
               <caption class="visually-hidden">AR ageing by customer</caption>
-              <thead class="table-light">
+              <thead>
                 <tr>
                   <th scope="col">Customer</th>
-                  <th scope="col" class="text-end">Current</th>
-                  <th scope="col" class="text-end">1–30 days</th>
-                  <th scope="col" class="text-end">31–60 days</th>
-                  <th scope="col" class="text-end">61–90 days</th>
-                  <th scope="col" class="text-end">90+ days</th>
-                  <th scope="col" class="text-end">Total</th>
+                  <th scope="col" class="num">Current</th>
+                  <th scope="col" class="num">1–30 days</th>
+                  <th scope="col" class="num">31–60 days</th>
+                  <th scope="col" class="num">61–90 days</th>
+                  <th scope="col" class="num">90+ days</th>
+                  <th scope="col" class="num">Total</th>
                   <th scope="col">Ccy</th>
                 </tr>
               </thead>
@@ -87,12 +87,12 @@
                       <span class="fw-semibold">{{ row.customerCode }}</span><br>
                       <span class="text-muted" style="font-size:0.85em">{{ row.customerName }}</span>
                     </td>
-                    <td class="text-end font-monospace">{{ fmtMoney(row.current) }}</td>
-                    <td class="text-end font-monospace">{{ fmtMoney(row.days1to30) }}</td>
-                    <td class="text-end font-monospace">{{ fmtMoney(row.days31to60) }}</td>
-                    <td class="text-end font-monospace">{{ fmtMoney(row.days61to90) }}</td>
-                    <td class="text-end font-monospace">{{ fmtMoney(row.days91Plus) }}</td>
-                    <td class="text-end font-monospace fw-semibold">{{ fmtMoney(row.total) }}</td>
+                    <td class="num">{{ fmtMoney(row.current) }}</td>
+                    <td class="num">{{ fmtMoney(row.days1to30) }}</td>
+                    <td class="num">{{ fmtMoney(row.days31to60) }}</td>
+                    <td class="num">{{ fmtMoney(row.days61to90) }}</td>
+                    <td class="num">{{ fmtMoney(row.days91Plus) }}</td>
+                    <td class="num fw-semibold">{{ fmtMoney(row.total) }}</td>
                     <td>{{ row.currency }}</td>
                   </tr>
                 }
@@ -104,7 +104,7 @@
     }
 
     <!-- Per-customer balance lookup -->
-    <h2 class="h6 mt-2">Per-Customer Balance Lookup</h2>
+    <h2 class="erp-section-title">Per-Customer Balance Lookup</h2>
     <div class="mb-3" style="max-width:400px;position:relative">
       <label for="balanceCustomer" class="form-label">Customer</label>
       <input id="balanceCustomer" type="text" class="form-control form-control-sm"
@@ -137,7 +137,7 @@
         <i class="bi bi-wallet2" aria-hidden="true"></i>
         <span>Outstanding balance for
           <strong>{{ selectedBalanceCustomer()?.label }}</strong>:
-          <span class="font-monospace">{{ b.currency }} {{ fmtMoney(b.balance) }}</span>
+          <span class="mono">{{ b.currency }} {{ fmtMoney(b.balance) }}</span>
         </span>
       </div>
     }

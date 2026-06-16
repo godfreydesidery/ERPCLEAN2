@@ -158,16 +158,6 @@ export class TrialBalanceComponent {
     });
   }
 
-  typeBadgeClass(type: AccountType): string {
-    switch (type) {
-      case 'ASSET': return 'text-bg-primary';
-      case 'LIABILITY': return 'text-bg-warning';
-      case 'EQUITY': return 'text-bg-info';
-      case 'INCOME': return 'text-bg-success';
-      case 'EXPENSE': return 'text-bg-danger';
-    }
-  }
-
   rowsForType(type: AccountType): TrialBalanceRowDto[] {
     return this.groupedByType().get(type) ?? [];
   }

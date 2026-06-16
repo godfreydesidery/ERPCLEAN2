@@ -364,10 +364,6 @@ export class PricingRulesComponent {
 
   // ── Display helpers ──────────────────────────────────────────────────────────
 
-  statusBadgeClass(status: string): string {
-    return status === 'ACTIVE' ? 'text-bg-success' : 'text-bg-secondary';
-  }
-
   productLabel(productId: string): string {
     const p = this.products().find((x) => x.id === productId);
     return p ? `${p.code} — ${p.name}` : productId;

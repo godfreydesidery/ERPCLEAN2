@@ -270,17 +270,6 @@ export class DimensionValueListComponent {
     });
   }
 
-  // ── Display helpers ────────────────────────────────────────────────────────
-
-  statusBadgeClass(status: string): string {
-    switch (status) {
-      case 'ACTIVE': return 'text-bg-success';
-      case 'INACTIVE': return 'text-bg-secondary';
-      case 'ARCHIVED': return 'text-bg-dark';
-      default: return 'text-bg-secondary';
-    }
-  }
-
   private messageFrom(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {
       const errors = (err.error as { errors?: string[] })?.errors;

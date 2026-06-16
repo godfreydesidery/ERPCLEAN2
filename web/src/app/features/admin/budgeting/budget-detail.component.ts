@@ -8,7 +8,6 @@ import { SessionStore } from '../../../core/auth/session.store';
 import {
   BudgetDto,
   BudgetVersionDto,
-  BudgetVersionStatus,
   CreateBudgetVersionRequest,
 } from './models/budgeting.model';
 import { BudgetingService } from './budgeting.service';
@@ -238,16 +237,6 @@ export class BudgetDetailComponent {
         versions: b.versions.map((v) => (v.uid === updated.uid ? updated : v)),
       };
     });
-  }
-
-  statusBadgeClass(status: BudgetVersionStatus): string {
-    switch (status) {
-      case 'APPROVED': return 'text-bg-success';
-      case 'SUBMITTED': return 'text-bg-primary';
-      case 'REJECTED': return 'text-bg-danger';
-      case 'SUPERSEDED': return 'text-bg-secondary';
-      default: return 'text-bg-warning'; // DRAFT
-    }
   }
 
   totalLines(version: BudgetVersionDto): number {

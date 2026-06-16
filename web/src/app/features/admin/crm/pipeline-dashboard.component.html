@@ -1,7 +1,7 @@
 <section class="admin-page">
   <header class="page-head">
     <h1 class="h4 mb-1">Pipeline Dashboard</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
+    <p class="subtitle">
       <i class="bi bi-bar-chart-line me-1" aria-hidden="true"></i>
       Pipeline board, weighted forecast, and win-rate KPIs.
     </p>
@@ -77,7 +77,7 @@
     </div>
 
     <!-- ── Pipeline Board (by stage) ── -->
-    <h2 class="h5 mb-3">Pipeline Board</h2>
+    <h2 class="erp-section-title">Pipeline Board</h2>
     @switch (summaryState()) {
       @case ('loading') {
         <p class="text-muted d-flex align-items-center gap-2 mb-4" aria-live="polite">
@@ -91,38 +91,39 @@
         </p>
       }
       @case ('forbidden') {
-        <p class="text-muted mb-4">
-          <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>
-          You don't have permission to view pipeline reports.
-        </p>
+        <div class="erp-empty mb-4">
+          <i class="bi bi-shield-lock"></i> You don't have permission to view pipeline reports.
+        </div>
       }
       @default {
         @if (summary()?.stages?.length) {
-          <div class="table-responsive mb-4">
-            <table class="table table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap mb-4">
+            <table class="erp-table">
               <caption class="visually-hidden">Pipeline board — open opportunities by stage</caption>
               <thead>
                 <tr>
                   <th scope="col">Stage</th>
-                  <th scope="col" class="text-end">Open Opps</th>
-                  <th scope="col" class="text-end">Total Value</th>
-                  <th scope="col" class="text-end">Weighted Value</th>
+                  <th scope="col" class="num">Open Opps</th>
+                  <th scope="col" class="num">Total Value</th>
+                  <th scope="col" class="num">Weighted Value</th>
                 </tr>
               </thead>
               <tbody>
                 @for (row of summary()!.stages; track row.stageUid) {
                   <tr>
                     <td>{{ row.stageName }}</td>
-                    <td class="text-end font-monospace">{{ row.openCount }}</td>
-                    <td class="text-end font-monospace">{{ row.currency }} {{ +row.totalValueAmount | number:'1.2-2' }}</td>
-                    <td class="text-end font-monospace">{{ row.currency }} {{ +row.weightedValueAmount | number:'1.2-2' }}</td>
+                    <td class="num mono">{{ row.openCount }}</td>
+                    <td class="num mono">{{ row.currency }} {{ +row.totalValueAmount | number:'1.2-2' }}</td>
+                    <td class="num mono">{{ row.currency }} {{ +row.weightedValueAmount | number:'1.2-2' }}</td>
                   </tr>
                 }
               </tbody>
             </table>
           </div>
         } @else {
-          <p class="text-muted mb-4">No open opportunities in the pipeline for this branch.</p>
+          <div class="erp-empty mb-4">
+            <i class="bi bi-bar-chart-line"></i> No open opportunities in the pipeline for this branch.
+          </div>
         }
       }
     }
@@ -131,7 +132,7 @@
     <div class="row g-4 mb-4">
       <!-- Forecast -->
       <div class="col-md-6">
-        <h2 class="h5 mb-3">Forecast
+        <h2 class="erp-section-title">Forecast
           <span class="text-muted small ms-2">({{ fromDate() }} — {{ toDate() }})</span>
         </h2>
         @switch (forecastState()) {
@@ -146,22 +147,27 @@
             </p>
           }
           @case ('forbidden') {
-            <p class="text-muted">No permission to view forecast.</p>
+            <div class="erp-empty">
+              <i class="bi bi-shield-lock"></i> No permission to view forecast.
+            </div>
           }
           @default {
             @if (forecast(); as f) {
-              <dl class="row mb-0">
-                <dt class="col-sm-6">Open Opportunities</dt>
-                <dd class="col-sm-6 font-monospace">{{ f.openCount }}</dd>
-                <dt class="col-sm-6">Weighted Value</dt>
-                <dd class="col-sm-6 font-monospace text-primary fw-semibold">
-                  {{ f.currency }} {{ +f.weightedValueAmount | number:'1.2-2' }}
-                </dd>
-                <dt class="col-sm-6">Period</dt>
-                <dd class="col-sm-6 small text-muted">{{ f.periodStart }} – {{ f.periodEnd }}</dd>
-              </dl>
+              <div class="d-flex flex-wrap gap-3 mb-2">
+                <div class="erp-kpi">
+                  <span class="erp-kpi__label">Open Opportunities</span>
+                  <span class="erp-kpi__value mono">{{ f.openCount }}</span>
+                </div>
+                <div class="erp-kpi">
+                  <span class="erp-kpi__label">Weighted Value</span>
+                  <span class="erp-kpi__value mono">{{ f.currency }} {{ +f.weightedValueAmount | number:'1.2-2' }}</span>
+                </div>
+              </div>
+              <p class="small text-muted mb-0">Period: {{ f.periodStart }} – {{ f.periodEnd }}</p>
             } @else {
-              <p class="text-muted">No forecast data.</p>
+              <div class="erp-empty">
+                <i class="bi bi-bar-chart-line"></i> No forecast data.
+              </div>
             }
           }
         }
@@ -169,7 +175,7 @@
 
       <!-- KPIs -->
       <div class="col-md-6">
-        <h2 class="h5 mb-3">Win-Rate KPIs
+        <h2 class="erp-section-title">Win-Rate KPIs
           <span class="text-muted small ms-2">({{ fromDate() }} — {{ toDate() }})</span>
         </h2>
         @switch (kpisState()) {
@@ -184,24 +190,37 @@
             </p>
           }
           @case ('forbidden') {
-            <p class="text-muted">No permission to view KPIs.</p>
+            <div class="erp-empty">
+              <i class="bi bi-shield-lock"></i> No permission to view KPIs.
+            </div>
           }
           @default {
             @if (kpis(); as k) {
-              <dl class="row mb-0">
-                <dt class="col-sm-6">Won</dt>
-                <dd class="col-sm-6 font-monospace text-success">{{ k.wonCount }}</dd>
-                <dt class="col-sm-6">Lost</dt>
-                <dd class="col-sm-6 font-monospace text-danger">{{ k.lostCount }}</dd>
-                <dt class="col-sm-6">Win Rate</dt>
-                <dd class="col-sm-6 font-monospace fw-semibold">{{ +k.winRatePercent | number:'1.1-1' }}%</dd>
-                <dt class="col-sm-6">Avg Cycle (days)</dt>
-                <dd class="col-sm-6 font-monospace">{{ +k.avgCycleDays | number:'1.1-1' }}</dd>
-                <dt class="col-sm-6">Period</dt>
-                <dd class="col-sm-6 small text-muted">{{ k.periodStart }} – {{ k.periodEnd }}</dd>
-              </dl>
+              <div class="d-flex flex-wrap gap-3 mb-2">
+                <div class="erp-kpi">
+                  <span class="erp-kpi__label">Won</span>
+                  <span class="erp-kpi__value mono">{{ k.wonCount }}</span>
+                  <span class="erp-kpi__delta erp-kpi__delta--up">won</span>
+                </div>
+                <div class="erp-kpi">
+                  <span class="erp-kpi__label">Lost</span>
+                  <span class="erp-kpi__value mono">{{ k.lostCount }}</span>
+                  <span class="erp-kpi__delta erp-kpi__delta--down">lost</span>
+                </div>
+                <div class="erp-kpi">
+                  <span class="erp-kpi__label">Win Rate</span>
+                  <span class="erp-kpi__value mono">{{ +k.winRatePercent | number:'1.1-1' }}%</span>
+                </div>
+                <div class="erp-kpi">
+                  <span class="erp-kpi__label">Avg Cycle (days)</span>
+                  <span class="erp-kpi__value mono">{{ +k.avgCycleDays | number:'1.1-1' }}</span>
+                </div>
+              </div>
+              <p class="small text-muted mb-0">Period: {{ k.periodStart }} – {{ k.periodEnd }}</p>
             } @else {
-              <p class="text-muted">No KPI data.</p>
+              <div class="erp-empty">
+                <i class="bi bi-bar-chart-line"></i> No KPI data.
+              </div>
             }
           }
         }

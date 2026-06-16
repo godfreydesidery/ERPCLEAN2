@@ -12,7 +12,7 @@ import { Company } from '../models/company.model';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { HrPayrollService, PayrollRunPage } from './hr-payroll.service';
-import { CreatePayrollRunRequest, PayrollRunDto, PayrollRunStatus } from './models/hr-payroll.model';
+import { CreatePayrollRunRequest, PayrollRunDto } from './models/hr-payroll.model';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
@@ -183,17 +183,6 @@ export class PayrollRunListComponent {
         this.saving.set(false);
       },
     });
-  }
-
-  statusBadgeClass(status: PayrollRunStatus): string {
-    switch (status) {
-      case 'CALCULATED': return 'text-bg-info';
-      case 'APPROVED': return 'text-bg-primary';
-      case 'POSTED': return 'text-bg-warning';
-      case 'PAID': return 'text-bg-success';
-      case 'REVERSED': return 'text-bg-danger';
-      default: return 'text-bg-secondary'; // DRAFT
-    }
   }
 
   private messageFrom(err: unknown, fallback: string): string {

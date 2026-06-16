@@ -1,1 +1,7 @@
-// Approval policy list — relies on global admin.styles.scss
+// Pseudo-label span used where a custom picker component cannot accept a native <label for>.
+// Matches the global .erp-field > label rule so visual presentation is identical.
+.erp-field__label-text {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--erp-text);
+}

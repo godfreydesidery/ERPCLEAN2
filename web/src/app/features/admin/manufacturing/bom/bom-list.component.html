@@ -1,10 +1,12 @@
 <section class="admin-page">
-  <header class="page-head">
-    <h1 class="h4 mb-1">Bills of Materials</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
-      <i class="bi bi-diagram-3 me-1" aria-hidden="true"></i>
-      Define product structures — parent product, output quantity, component lines and scrap %.
-    </p>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>Bills of Materials</h1>
+      <p class="subtitle">
+        <i class="bi bi-diagram-3 me-1" aria-hidden="true"></i>
+        Define product structures — parent product, output quantity, component lines and scrap %.
+      </p>
+    </div>
   </header>
 
   <!-- Company selector -->
@@ -38,10 +40,9 @@
 
   @if (selectedCompanyId()) {
     <!-- Toolbar -->
-    <div class="d-flex flex-wrap gap-2 mb-3 align-items-end">
-      <!-- Status filter -->
-      <div style="max-width:180px">
-        <label class="form-label small text-muted mb-1" for="statusFilter">Status</label>
+    <div class="erp-toolbar">
+      <div class="erp-field" style="max-width:180px">
+        <label for="statusFilter">Status</label>
         <select id="statusFilter" name="statusFilter" class="form-select form-select-sm"
                 [ngModel]="statusFilter()"
                 (ngModelChange)="onStatusChange($event)">
@@ -51,81 +52,86 @@
         </select>
       </div>
 
+      <span class="erp-toolbar__spacer"></span>
+
       @if (canManage()) {
-        <div class="ms-auto align-self-end">
-          <button type="button" class="btn btn-primary"
-                  (click)="toggleCreateForm()"
-                  [attr.aria-expanded]="showCreateForm()"
-                  aria-controls="createBomForm">
-            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
-            New BOM
-          </button>
-        </div>
+        <button type="button" class="btn btn-primary"
+                (click)="toggleCreateForm()"
+                [attr.aria-expanded]="showCreateForm()"
+                aria-controls="createBomForm">
+          <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+          New BOM
+        </button>
       }
     </div>
 
     <!-- Create form -->
     @if (showCreateForm()) {
-      <form id="createBomForm" class="create-form card card-body mb-3"
-            (ngSubmit)="create()" aria-label="Create bill of materials">
-        <h2 class="h6 mb-3">New Bill of Materials</h2>
-        <div class="row g-2 align-items-start mb-2">
-          <!-- Parent product -->
-          <div class="col-sm-5">
-            <label class="form-label small text-muted mb-1" for="newParentProductUid">
-              Parent Product <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <app-uid-picker [(ngModel)]="newParentProductUid" [options]="productOptions()"
-                            placeholder="Select finished product" [required]="true"
-                            name="newParentProductUid" />
-          </div>
-          <!-- Output qty -->
-          <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="newOutputQty">
-              Output Qty <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="newOutputQty" name="newOutputQty" type="number" min="0.000001" step="any"
-                   class="form-control form-control-sm"
-                   [(ngModel)]="newOutputQty"
-                   placeholder="1" required />
-          </div>
-          <!-- Yield % -->
-          <div class="col-sm-2">
-            <label class="form-label small text-muted mb-1" for="newYieldPercent">Yield %</label>
-            <input id="newYieldPercent" name="newYieldPercent" type="number"
-                   min="0.0001" max="100" step="any"
-                   class="form-control form-control-sm"
-                   [(ngModel)]="newYieldPercent"
-                   placeholder="100" />
-          </div>
+      <div class="erp-card mb-3">
+        <div class="erp-card__head">
+          <h2>New Bill of Materials</h2>
         </div>
-        <!-- Notes -->
-        <div class="mb-2" style="max-width:520px">
-          <label class="form-label small text-muted mb-1" for="newNotes">Notes</label>
-          <textarea id="newNotes" name="newNotes" rows="2" class="form-control form-control-sm"
-                    [(ngModel)]="newNotes"
-                    placeholder="Optional engineering notes"></textarea>
-        </div>
+        <div class="erp-card__body">
+          <form id="createBomForm" (ngSubmit)="create()" aria-label="Create bill of materials">
+            <div class="erp-form-grid">
+              <!-- Parent product: picker self-labels via placeholder -->
+              <div class="erp-field full">
+                <span class="erp-field__label">
+                  Parent Product <span class="text-danger" aria-hidden="true">*</span>
+                </span>
+                <app-uid-picker [(ngModel)]="newParentProductUid" [options]="productOptions()"
+                                placeholder="Select finished product" [required]="true"
+                                name="newParentProductUid" />
+              </div>
 
-        @if (formError()) {
-          <p class="form-error text-danger small mb-2" role="alert">
-            <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ formError() }}
-          </p>
-        }
+              <div class="erp-field">
+                <label for="newOutputQty">
+                  Output Qty <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="newOutputQty" name="newOutputQty" type="number" min="0.000001" step="any"
+                       class="form-control"
+                       [(ngModel)]="newOutputQty"
+                       placeholder="1" required />
+              </div>
 
-        <div class="d-flex gap-2 mt-1">
-          <button type="submit" class="btn btn-sm btn-primary" [disabled]="saving()">
-            @if (saving()) {
-              <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Saving…
-            } @else {
-              <i class="bi bi-check-lg me-1" aria-hidden="true"></i>Create BOM
+              <div class="erp-field">
+                <label for="newYieldPercent">Yield %</label>
+                <input id="newYieldPercent" name="newYieldPercent" type="number"
+                       min="0.0001" max="100" step="any"
+                       class="form-control"
+                       [(ngModel)]="newYieldPercent"
+                       placeholder="100" />
+              </div>
+
+              <div class="erp-field full">
+                <label for="newNotes">Notes</label>
+                <textarea id="newNotes" name="newNotes" rows="2" class="form-control"
+                          [(ngModel)]="newNotes"
+                          placeholder="Optional engineering notes"></textarea>
+              </div>
+            </div>
+
+            @if (formError()) {
+              <p class="text-danger small mt-2 mb-0" role="alert">
+                <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ formError() }}
+              </p>
             }
-          </button>
-          <button type="button" class="btn btn-sm btn-outline-secondary" (click)="toggleCreateForm()">
-            Cancel
-          </button>
+
+            <div class="d-flex gap-2 mt-3">
+              <button type="submit" class="btn btn-primary btn-sm" [disabled]="saving()">
+                @if (saving()) {
+                  <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Saving…
+                } @else {
+                  <i class="bi bi-check-lg me-1" aria-hidden="true"></i>Create BOM
+                }
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" (click)="toggleCreateForm()">
+                Cancel
+              </button>
+            </div>
+          </form>
         </div>
-      </form>
+      </div>
     }
 
     <!-- Four-state list -->
@@ -136,71 +142,76 @@
         </p>
       }
       @case ('error') {
-        <p class="text-danger state" role="alert">
+        <p class="text-danger" role="alert">
           <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
           Failed to load BOMs. Please try again.
         </p>
       }
       @case ('forbidden') {
-        <p class="text-warning state" role="alert">
+        <p class="text-warning" role="alert">
           <i class="bi bi-lock me-1" aria-hidden="true"></i>
           You do not have permission to view BOMs.
         </p>
       }
       @default {
         @if (isEmpty()) {
-          <p class="text-muted state">
-            <i class="bi bi-inbox me-1" aria-hidden="true"></i>
+          <div class="erp-empty">
+            <i class="bi bi-diagram-3" aria-hidden="true"></i>
             No BOMs found for this company.
             @if (canManage()) {
               <button type="button" class="btn btn-sm btn-outline-primary ms-2"
                       (click)="toggleCreateForm()">Create one</button>
             }
-          </p>
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
-              <caption class="visually-hidden">Bills of Materials</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Parent Product</th>
-                  <th scope="col">Version</th>
-                  <th scope="col">Output Qty</th>
-                  <th scope="col">Yield %</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Effective From</th>
-                  <th scope="col" class="visually-hidden">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (row of rows(); track row.uid) {
+          <div class="erp-card">
+            <div class="erp-table-wrap">
+              <table class="erp-table">
+                <caption class="visually-hidden">Bills of Materials</caption>
+                <thead>
                   <tr>
-                    <td>
-                      <a [routerLink]="['/admin/boms/uid', row.uid]"
-                         [attr.aria-label]="'View BOM for ' + productLabel(row.parentProductUid)">
-                        {{ productLabel(row.parentProductUid) }}
-                      </a>
-                    </td>
-                    <td>v{{ row.versionNo }}</td>
-                    <td>{{ +row.outputQty | number:'1.0-4' }}</td>
-                    <td>{{ +row.yieldPercent | number:'1.2-2' }}%</td>
-                    <td>
-                      <span class="badge" [class]="statusBadgeClass(row.status)">
-                        {{ row.status }}
-                      </span>
-                    </td>
-                    <td>{{ row.effectiveFrom || '—' }}</td>
-                    <td>
-                      <a [routerLink]="['/admin/boms/uid', row.uid]"
-                         class="btn btn-sm btn-outline-secondary"
-                         [attr.aria-label]="'Open BOM for ' + productLabel(row.parentProductUid) + ' v' + row.versionNo">
-                        <i class="bi bi-pencil" aria-hidden="true"></i>
-                      </a>
-                    </td>
+                    <th scope="col">Parent Product</th>
+                    <th scope="col">Version</th>
+                    <th scope="col" class="text-end">Output Qty</th>
+                    <th scope="col" class="text-end">Yield %</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Effective From</th>
+                    <th scope="col"><span class="visually-hidden">Actions</span></th>
                   </tr>
-                }
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  @for (row of rows(); track row.uid) {
+                    <tr>
+                      <td>
+                        <a [routerLink]="['/admin/boms/uid', row.uid]"
+                           [attr.aria-label]="'View BOM for ' + productLabel(row.parentProductUid)">
+                          {{ productLabel(row.parentProductUid) }}
+                        </a>
+                      </td>
+                      <td class="mono">v{{ row.versionNo }}</td>
+                      <td class="num">{{ +row.outputQty | number:'1.0-4' }}</td>
+                      <td class="num">{{ +row.yieldPercent | number:'1.2-2' }}%</td>
+                      <td>
+                        <span class="status-tag"
+                              [class.status-tag--warn]="row.status === 'DRAFT'"
+                              [class.status-tag--ok]="row.status === 'ACTIVE'"
+                              [class.status-tag--neutral]="row.status === 'ARCHIVED'">
+                          <span class="status-tag__dot"></span>{{ row.status }}
+                        </span>
+                      </td>
+                      <td>{{ row.effectiveFrom || '—' }}</td>
+                      <td>
+                        <a [routerLink]="['/admin/boms/uid', row.uid]"
+                           class="btn btn-sm btn-outline-secondary"
+                           [attr.aria-label]="'Open BOM for ' + productLabel(row.parentProductUid) + ' v' + row.versionNo">
+                          <i class="bi bi-pencil" aria-hidden="true"></i>
+                        </a>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
           </div>
           <app-paginator [meta]="meta()" [label]="'BOMs'" (pageChange)="goToPage($event)" />
         }

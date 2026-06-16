@@ -56,10 +56,13 @@
     }
     @default {
       @if (!hasRoles()) {
-        <p class="state text-muted">No roles yet. Add one above.</p>
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          No roles yet. Add one above.
+        </div>
       } @else {
-        <div class="table-responsive">
-          <table class="table table-hover align-middle bg-white grid">
+        <div class="erp-table-wrap">
+          <table class="erp-table">
             <caption class="sr-only">Roles in this system</caption>
             <thead>
               <tr>
@@ -73,17 +76,23 @@
             <tbody>
               @for (r of roles(); track r.uid) {
                 <tr>
-                  <td class="font-monospace">{{ r.code }}</td>
+                  <td class="mono">{{ r.code }}</td>
                   <td>
                     {{ r.name }}
                     @if (r.system) {
-                      <span class="badge text-bg-secondary ms-1">system</span>
+                      <span class="status-tag status-tag--neutral ms-1">system</span>
                     }
                   </td>
                   <td>
-                    <span class="badge text-bg-light border">{{ r.permissionCodes.length }}</span>
+                    <span class="status-tag status-tag--neutral">{{ r.permissionCodes.length }}</span>
                   </td>
-                  <td><span class="badge text-bg-light border">{{ r.status }}</span></td>
+                  <td>
+                    <span class="status-tag"
+                          [class.status-tag--ok]="r.status === 'ACTIVE'"
+                          [class.status-tag--neutral]="r.status !== 'ACTIVE'">
+                      {{ r.status }}
+                    </span>
+                  </td>
                   <td>
                     <a class="btn btn-sm btn-outline-primary"
                        [routerLink]="['/admin/roles/uid', r.uid]">

@@ -18,7 +18,7 @@ import { SessionStore } from '../../../core/auth/session.store';
 // Enter Bill spec:
 //  1. submitDisabled when no supplier / missing required fields.
 //  2. lineNetAmount computed correctly (qty * cost as numbers).
-//  3. Match result: matchLineBadgeClass returns correct classes; isHeld identifies HELD lines.
+//  3. Match result: status-tag pills rendered for match statuses; isHeld identifies HELD lines.
 //  4. addLine / removeLine mutations.
 
 const MOCK_BILL = {
@@ -167,14 +167,30 @@ describe('EnterBillComponent', () => {
     expect(comp.lines()[0].description).toBe('Line B');
   });
 
-  it('matchLineBadgeClass returns correct classes for each status', () => {
+  it('match result pills: status-tag--ok for MATCHED, --danger for HELD_PRICE_VARIANCE, --warn for HELD_QTY_VARIANCE, --info for VARIANCE_ACCEPTED', async () => {
     vi.useFakeTimers();
     makeBed();
-    const comp = TestBed.createComponent(EnterBillComponent).componentInstance as any;
-    expect(comp.matchLineBadgeClass({ matchStatus: 'MATCHED' })).toBe('text-bg-success');
-    expect(comp.matchLineBadgeClass({ matchStatus: 'HELD_PRICE_VARIANCE' })).toBe('text-bg-danger');
-    expect(comp.matchLineBadgeClass({ matchStatus: 'HELD_QTY_VARIANCE' })).toBe('text-bg-warning');
-    expect(comp.matchLineBadgeClass({ matchStatus: 'VARIANCE_ACCEPTED' })).toBe('text-bg-info');
+    const fixture = TestBed.createComponent(EnterBillComponent);
+    const comp = fixture.componentInstance as any;
+    await vi.runAllTimersAsync();
+
+    comp.matchResult.set({
+      billStatus: 'HELD',
+      lineResults: [
+        { billLineUid: 'L1', matchStatus: 'MATCHED',              poUnitCostAmount: 100, priceVarianceAmount: 0, priceVariancePct: 0, grReceivedQty: 1, billedQty: 1, qtyVariance: 0 },
+        { billLineUid: 'L2', matchStatus: 'HELD_PRICE_VARIANCE',  poUnitCostAmount: 100, priceVarianceAmount: 5, priceVariancePct: 5, grReceivedQty: 1, billedQty: 1, qtyVariance: 0 },
+        { billLineUid: 'L3', matchStatus: 'HELD_QTY_VARIANCE',    poUnitCostAmount: 100, priceVarianceAmount: 0, priceVariancePct: 0, grReceivedQty: 2, billedQty: 3, qtyVariance: 1 },
+        { billLineUid: 'L4', matchStatus: 'VARIANCE_ACCEPTED',    poUnitCostAmount: 100, priceVarianceAmount: 0, priceVariancePct: 0, grReceivedQty: 1, billedQty: 1, qtyVariance: 0 },
+      ],
+    });
+    comp.matchState.set('done');
+    fixture.detectChanges();
+
+    const el: HTMLElement = fixture.nativeElement;
+    expect(el.querySelector('.status-tag.status-tag--ok')).not.toBeNull();
+    expect(el.querySelector('.status-tag.status-tag--danger')).not.toBeNull();
+    expect(el.querySelector('.status-tag.status-tag--warn')).not.toBeNull();
+    expect(el.querySelector('.status-tag.status-tag--info')).not.toBeNull();
   });
 
   it('isHeld returns true only for HELD statuses', () => {

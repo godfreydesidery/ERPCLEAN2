@@ -240,15 +240,4 @@ export class SupplierStatementComponent {
     }
   }
 
-  billStatusBadgeClass(status: string): string {
-    switch (status) {
-      case 'DRAFT':          return 'text-bg-secondary';
-      case 'MATCHED':        return 'text-bg-info';
-      case 'HELD':           return 'text-bg-danger';
-      case 'APPROVED':       return 'text-bg-primary';
-      case 'PARTIALLY_PAID': return 'text-bg-warning';
-      case 'PAID':           return 'text-bg-success';
-      default:               return 'text-bg-light border';
-    }
-  }
 }

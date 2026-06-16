@@ -1,10 +1,12 @@
 <section class="admin-page">
-  <header class="page-head">
-    <h1 class="h4 mb-1">Budgets</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
-      <i class="bi bi-calculator me-1" aria-hidden="true"></i>
-      Manage annual budgets by company and fiscal year.
-    </p>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>Budgets</h1>
+      <p class="subtitle">
+        <i class="bi bi-calculator me-1" aria-hidden="true"></i>
+        Manage annual budgets by company and fiscal year.
+      </p>
+    </div>
   </header>
 
   <!-- Company selector -->
@@ -38,8 +40,8 @@
 
   @if (selectedCompanyId()) {
     <!-- Toolbar -->
-    <div class="d-flex flex-wrap gap-2 mb-3 align-items-end">
-      <div style="max-width:200px">
+    <div class="erp-toolbar mb-3">
+      <div class="erp-field" style="max-width:200px">
         <label class="form-label small text-muted mb-1" for="statusFilter">Status filter</label>
         <select id="statusFilter" name="statusFilter" class="form-select form-select-sm"
                 [ngModel]="filterStatus()"
@@ -50,58 +52,62 @@
         </select>
       </div>
 
+      <span class="erp-toolbar__spacer"></span>
+
       @if (canManage()) {
-        <div class="ms-auto align-self-end">
-          <button type="button" class="btn btn-primary"
-                  (click)="toggleCreateForm()"
-                  [attr.aria-expanded]="showCreateForm()"
-                  aria-controls="createBudgetForm">
-            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
-            New Budget
-          </button>
-        </div>
+        <button type="button" class="btn btn-primary"
+                (click)="toggleCreateForm()"
+                [attr.aria-expanded]="showCreateForm()"
+                aria-controls="createBudgetForm">
+          <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+          New Budget
+        </button>
       }
     </div>
 
     <!-- Create form -->
     @if (showCreateForm()) {
-      <form id="createBudgetForm" class="create-form card card-body mb-3"
+      <form id="createBudgetForm" class="erp-card mb-3"
             (ngSubmit)="create()" aria-label="Create budget">
-        <h2 class="h6 mb-3">New Budget</h2>
-        <div class="row g-2 align-items-start mb-2">
-          <div class="col-sm-4">
-            <label class="form-label small text-muted mb-1" for="fName">
-              Name <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="fName" name="fName" type="text" class="form-control"
-                   placeholder="e.g. FY2025 Operating Budget"
-                   [ngModel]="fName()" (ngModelChange)="fName.set($event)"
-                   [disabled]="saving()" autocomplete="off" maxlength="160" />
+        <div class="erp-card__head">
+          <h2>New Budget</h2>
+        </div>
+        <div class="erp-card__body">
+          <div class="erp-form-grid">
+            <div class="erp-field">
+              <label class="form-label" for="fName">
+                Name <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="fName" name="fName" type="text" class="form-control"
+                     placeholder="e.g. FY2025 Operating Budget"
+                     [ngModel]="fName()" (ngModelChange)="fName.set($event)"
+                     [disabled]="saving()" autocomplete="off" maxlength="160" />
+            </div>
+            <div class="erp-field">
+              <label class="form-label" for="fFiscalYearUid">
+                Fiscal Year UID <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="fFiscalYearUid" name="fFiscalYearUid" type="text" class="form-control"
+                     placeholder="Paste fiscal year UID"
+                     [ngModel]="fFiscalYearUid()" (ngModelChange)="fFiscalYearUid.set($event)"
+                     [disabled]="saving()" autocomplete="off" />
+            </div>
+            <div class="erp-field">
+              <label class="form-label" for="fInitialLabel">Version label (optional)</label>
+              <input id="fInitialLabel" name="fInitialLabel" type="text" class="form-control"
+                     placeholder="e.g. Initial draft"
+                     [ngModel]="fInitialLabel()" (ngModelChange)="fInitialLabel.set($event)"
+                     [disabled]="saving()" autocomplete="off" maxlength="120" />
+            </div>
+            <div class="erp-field full">
+              <label class="form-label" for="fNotes">Notes (optional)</label>
+              <input id="fNotes" name="fNotes" type="text" class="form-control"
+                     [ngModel]="fNotes()" (ngModelChange)="fNotes.set($event)"
+                     [disabled]="saving()" autocomplete="off" maxlength="500" />
+            </div>
           </div>
-          <div class="col-sm-4">
-            <label class="form-label small text-muted mb-1" for="fFiscalYearUid">
-              Fiscal Year UID <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="fFiscalYearUid" name="fFiscalYearUid" type="text" class="form-control"
-                   placeholder="Paste fiscal year UID"
-                   [ngModel]="fFiscalYearUid()" (ngModelChange)="fFiscalYearUid.set($event)"
-                   [disabled]="saving()" autocomplete="off" />
-          </div>
-          <div class="col-sm-4">
-            <label class="form-label small text-muted mb-1" for="fInitialLabel">Version label (optional)</label>
-            <input id="fInitialLabel" name="fInitialLabel" type="text" class="form-control"
-                   placeholder="e.g. Initial draft"
-                   [ngModel]="fInitialLabel()" (ngModelChange)="fInitialLabel.set($event)"
-                   [disabled]="saving()" autocomplete="off" maxlength="120" />
-          </div>
-          <div class="col-sm-8">
-            <label class="form-label small text-muted mb-1" for="fNotes">Notes (optional)</label>
-            <input id="fNotes" name="fNotes" type="text" class="form-control"
-                   [ngModel]="fNotes()" (ngModelChange)="fNotes.set($event)"
-                   [disabled]="saving()" autocomplete="off" maxlength="500" />
-          </div>
-          <div class="col-sm-4 d-flex align-items-end">
-            <button type="submit" class="btn btn-primary w-100" [disabled]="saving()">
+          <div class="mt-3 d-flex gap-2 align-items-center">
+            <button type="submit" class="btn btn-primary" [disabled]="saving()">
               @if (saving()) {
                 <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
                 Saving…
@@ -110,38 +116,39 @@
               }
             </button>
           </div>
+          @if (formError(); as msg) {
+            <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+          }
         </div>
-        @if (formError(); as msg) {
-          <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-        }
       </form>
     }
 
     <!-- List states -->
     @switch (state()) {
       @case ('loading') {
-        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading budgets…
         </p>
       }
       @case ('error') {
-        <p class="state text-danger" role="alert">
+        <p class="text-danger" role="alert">
           <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
           Could not load budgets. Please try again.
         </p>
       }
       @case ('forbidden') {
-        <p class="state text-muted d-flex align-items-center gap-2">
-          <i class="bi bi-shield-lock" aria-hidden="true"></i>
-          You don't have permission to view budgets.
-        </p>
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock"></i> You don't have permission to view budgets.
+        </div>
       }
       @default {
         @if (isEmpty()) {
-          <p class="state text-muted">No budgets yet. Create one above.</p>
+          <div class="erp-empty">
+            <i class="bi bi-calculator"></i> No budgets yet. Create one above.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Budgets</caption>
               <thead>
                 <tr>
@@ -150,23 +157,27 @@
                   <th scope="col">Fiscal Year</th>
                   <th scope="col">Cost Centre</th>
                   <th scope="col">Latest Status</th>
-                  <th scope="col">Versions</th>
+                  <th scope="col" class="num">Versions</th>
                   <th scope="col"><span class="visually-hidden">Actions</span></th>
                 </tr>
               </thead>
               <tbody>
                 @for (row of rows(); track row.uid) {
                   <tr>
-                    <td class="font-monospace small">{{ row.budgetNumber }}</td>
+                    <td class="mono">{{ row.budgetNumber }}</td>
                     <td>{{ row.name }}</td>
                     <td class="small text-muted">{{ row.fiscalYearCode }}</td>
                     <td class="small text-muted">{{ row.costCentreValueName ?? '—' }}</td>
                     <td>
-                      <span class="badge" [class]="statusBadgeClass(latestStatus(row))">
+                      <span class="status-tag"
+                            [class.status-tag--ok]="latestStatus(row) === 'APPROVED'"
+                            [class.status-tag--warn]="latestStatus(row) === 'DRAFT' || latestStatus(row) === 'SUBMITTED'"
+                            [class.status-tag--danger]="latestStatus(row) === 'REJECTED'"
+                            [class.status-tag--neutral]="latestStatus(row) === 'SUPERSEDED' || latestStatus(row) === null">
                         {{ latestStatus(row) ?? 'No versions' }}
                       </span>
                     </td>
-                    <td class="small text-muted">{{ row.versions?.length ?? 0 }}</td>
+                    <td class="num small text-muted">{{ row.versions?.length ?? 0 }}</td>
                     <td>
                       <a class="btn btn-sm btn-outline-primary"
                          [routerLink]="['/admin/budgets/uid', row.uid]"

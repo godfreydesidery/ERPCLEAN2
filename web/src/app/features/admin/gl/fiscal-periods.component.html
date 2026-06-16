@@ -1,11 +1,9 @@
 <section class="admin-page">
-  <header class="page-head">
-    <h1 class="h4 mb-1">
-      <i class="bi bi-calendar3 me-2" aria-hidden="true"></i>Fiscal Periods
-    </h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
-      Manage fiscal years and accounting periods. Close periods to prevent further posting.
-    </p>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1><i class="bi bi-calendar3 me-2" aria-hidden="true"></i>Fiscal Periods</h1>
+      <p class="subtitle">Manage fiscal years and accounting periods. Close periods to prevent further posting.</p>
+    </div>
   </header>
 
   <!-- Company selector -->
@@ -53,72 +51,76 @@
     }
 
     @if (showOpenYearForm()) {
-      <form id="openYearForm" class="card card-body mb-3"
-            (ngSubmit)="openFiscalYear()" aria-label="Open fiscal year">
-        <h2 class="h6 mb-3">Open New Fiscal Year</h2>
-        <div class="row g-2 align-items-end">
-          <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="yearCode">
-              Year Code <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="yearCode" name="yearCode" type="text" class="form-control"
-                   placeholder="e.g. FY2025"
-                   [ngModel]="newYearCode()" (ngModelChange)="newYearCode.set($event)"
-                   required [disabled]="openingYear()" autocomplete="off" />
-          </div>
-          <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="startMonth">Start Month</label>
-            <select id="startMonth" name="startMonth" class="form-select"
-                    [ngModel]="newStartMonth()" (ngModelChange)="newStartMonth.set($event)"
-                    [disabled]="openingYear()">
-              @for (m of months; track m.value) {
-                <option [value]="m.value">{{ m.label }}</option>
-              }
-            </select>
-          </div>
-          <div class="col-sm-2">
-            <label class="form-label small text-muted mb-1" for="calendarYear">
-              Calendar Year <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="calendarYear" name="calendarYear" type="number" class="form-control"
-                   min="2000" max="2100"
-                   [ngModel]="newCalendarYear()" (ngModelChange)="newCalendarYear.set($event)"
-                   required [disabled]="openingYear()" />
-          </div>
-          <div class="col-sm-2">
-            <button type="submit" class="btn btn-primary w-100" [disabled]="openingYear()">
-              @if (openingYear()) {
-                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
-                Opening…
-              } @else {
-                Open Year
-              }
-            </button>
-          </div>
-          <div class="col-sm-2">
-            <button type="button" class="btn btn-outline-secondary w-100"
-                    [disabled]="openingYear()" (click)="toggleOpenYearForm()">
-              Cancel
-            </button>
-          </div>
+      <div class="erp-card mb-3">
+        <div class="erp-card__head">
+          <h2>Open New Fiscal Year</h2>
         </div>
-        @if (openYearError(); as msg) {
-          <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-        }
-      </form>
+        <div class="erp-card__body">
+          <form id="openYearForm" class="erp-form-grid"
+                (ngSubmit)="openFiscalYear()" aria-label="Open fiscal year">
+            <div class="erp-field">
+              <label class="form-label" for="yearCode">
+                Year Code <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="yearCode" name="yearCode" type="text" class="form-control"
+                     placeholder="e.g. FY2025"
+                     [ngModel]="newYearCode()" (ngModelChange)="newYearCode.set($event)"
+                     required [disabled]="openingYear()" autocomplete="off" />
+            </div>
+            <div class="erp-field">
+              <label class="form-label" for="startMonth">Start Month</label>
+              <select id="startMonth" name="startMonth" class="form-select"
+                      [ngModel]="newStartMonth()" (ngModelChange)="newStartMonth.set($event)"
+                      [disabled]="openingYear()">
+                @for (m of months; track m.value) {
+                  <option [value]="m.value">{{ m.label }}</option>
+                }
+              </select>
+            </div>
+            <div class="erp-field">
+              <label class="form-label" for="calendarYear">
+                Calendar Year <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="calendarYear" name="calendarYear" type="number" class="form-control"
+                     min="2000" max="2100"
+                     [ngModel]="newCalendarYear()" (ngModelChange)="newCalendarYear.set($event)"
+                     required [disabled]="openingYear()" />
+            </div>
+            <div class="erp-field full d-flex gap-2 align-items-end">
+              <button type="submit" class="btn btn-primary" [disabled]="openingYear()">
+                @if (openingYear()) {
+                  <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                  Opening…
+                } @else {
+                  Open Year
+                }
+              </button>
+              <button type="button" class="btn btn-outline-secondary"
+                      [disabled]="openingYear()" (click)="toggleOpenYearForm()">
+                Cancel
+              </button>
+            </div>
+            @if (openYearError(); as msg) {
+              <p class="erp-field full text-danger small mt-1 mb-0" role="alert">{{ msg }}</p>
+            }
+          </form>
+        </div>
+      </div>
     }
 
     <!-- Fiscal Years summary -->
     @if (fiscalYearsState() === 'idle' && fiscalYears().length > 0) {
       <div class="mb-3">
-        <h2 class="h6 mb-2">Fiscal Years</h2>
+        <h2 class="erp-section-title">Fiscal Years</h2>
         <div class="d-flex flex-wrap gap-2">
           @for (fy of fiscalYears(); track fy.uid) {
-            <div class="card border" style="min-width:180px">
-              <div class="card-body py-2 px-3 small">
-                <div class="fw-semibold">{{ fy.yearCode }}</div>
-                <div class="text-muted">{{ fy.startDate }} – {{ fy.endDate }}</div>
-                <span class="badge mt-1" [class]="yearStatusBadgeClass(fy.status)">
+            <div class="erp-card" style="min-width:180px">
+              <div class="erp-card__body py-2 px-3">
+                <div class="fw-semibold small">{{ fy.yearCode }}</div>
+                <div class="text-muted small">{{ fy.startDate }} – {{ fy.endDate }}</div>
+                <span class="status-tag mt-1 d-inline-flex"
+                      [class.status-tag--ok]="fy.status === 'OPEN'"
+                      [class.status-tag--neutral]="fy.status !== 'OPEN'">
                   {{ fy.status }}
                 </span>
               </div>
@@ -129,25 +131,28 @@
     }
 
     <!-- Periods table -->
-    <h2 class="h6 mb-2">Accounting Periods</h2>
+    <h2 class="erp-section-title">Accounting Periods</h2>
     @switch (periodsState()) {
       @case ('loading') {
-        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading periods…
         </p>
       }
       @case ('error') {
-        <p class="state text-danger" role="alert">
+        <p class="text-danger" role="alert">
           <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
           Could not load periods.
         </p>
       }
       @default {
         @if (periods().length === 0) {
-          <p class="state text-muted">No periods yet. Open a fiscal year to generate periods.</p>
+          <div class="erp-empty">
+            <i class="bi bi-calendar3"></i>
+            No periods yet. Open a fiscal year to generate periods.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Accounting periods for this company</caption>
               <thead>
                 <tr>
@@ -162,12 +167,14 @@
               </thead>
               <tbody>
                 @for (p of periods(); track p.uid) {
-                  <tr [class.table-secondary]="p.status === 'CLOSED'">
+                  <tr [class.is-muted]="p.status === 'CLOSED'">
                     <td class="fw-semibold">{{ p.periodNo }}</td>
                     <td class="small">{{ p.startDate }}</td>
                     <td class="small">{{ p.endDate }}</td>
                     <td>
-                      <span class="badge" [class]="statusBadgeClass(p.status)">
+                      <span class="status-tag"
+                            [class.status-tag--ok]="p.status === 'OPEN'"
+                            [class.status-tag--neutral]="p.status !== 'OPEN'">
                         {{ p.status }}
                       </span>
                     </td>

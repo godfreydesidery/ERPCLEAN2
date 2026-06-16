@@ -230,10 +230,6 @@ export class WhtTypesListComponent {
     return Number.isFinite(n) ? n.toFixed(2) : '0.00';
   }
 
-  kindBadgeClass(kind: WhtKind): string {
-    return kind === 'WHT_ON_PAYMENT' ? 'text-bg-primary' : 'text-bg-info';
-  }
-
   kindLabel(kind: WhtKind): string {
     return kind === 'WHT_ON_PAYMENT' ? 'On Payment' : 'On Receipt';
   }

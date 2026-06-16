@@ -7,7 +7,7 @@ import { debounceTime, distinctUntilChanged, map, merge, skip, Subject, switchMa
 import { PageMeta } from '../../../../core/api/api-response.model';
 import { SessionStore } from '../../../../core/auth/session.store';
 import { PaginatorComponent } from '../../../../shared/paginator/paginator.component';
-import { StockTransferDto, StockTransferStatus } from './stock-transfer.model';
+import { StockTransferDto } from './stock-transfer.model';
 import { StockTransferService } from './stock-transfer.service';
 import { StockLocationService } from '../locations/stock-location.service';
 
@@ -103,23 +103,6 @@ export class StockTransferListComponent {
 
   goToPage(page: number): void {
     this.load(page);
-  }
-
-  statusBadgeClass(status: StockTransferStatus): string {
-    switch (status) {
-      case 'DRAFT':
-        return 'text-bg-warning';
-      case 'DISPATCHED':
-        return 'text-bg-info';
-      case 'RECEIVED':
-        return 'text-bg-primary';
-      case 'COMPLETED':
-        return 'text-bg-success';
-      case 'CANCELLED':
-        return 'text-bg-danger';
-      default:
-        return 'text-bg-secondary';
-    }
   }
 
   transferLabel(t: StockTransferDto): string {

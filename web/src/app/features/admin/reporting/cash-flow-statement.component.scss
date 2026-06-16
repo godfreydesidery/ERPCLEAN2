@@ -1,5 +1,11 @@
+// Statement-grid overrides — global erp-table handles density/hover/borders.
+// Only the code column width and row-tier highlights are local.
+
 .stmt-grid {
-  .col-code {
-    width: 6rem;
-  }
+  .col-code { width: 6rem; }
+
+  .section-head-row td { background: var(--erp-canvas); }
+  .subtotal-row td     { border-top: 1px solid var(--erp-border-strong); }
+  .total-row td        { background: var(--erp-primary-soft); }
+  .grand-total-row td  { background: var(--erp-primary); color: #fff; }
 }

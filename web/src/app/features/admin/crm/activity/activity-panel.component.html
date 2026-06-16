@@ -1,5 +1,5 @@
 <section class="activity-panel mt-4">
-  <div class="d-flex align-items-center justify-content-between mb-2">
+  <div class="erp-card__head d-flex align-items-center justify-content-between mb-2" style="border-bottom:none;padding:0;">
     <h2 class="h6 mb-0">
       <i class="bi bi-calendar2-event me-1" aria-hidden="true"></i>Activities
     </h2>
@@ -19,66 +19,70 @@
 
   <!-- Log activity form -->
   @if (showLogForm()) {
-    <div id="logActivityForm" class="card card-body mb-3 border-primary-subtle">
-      <h3 class="h6 mb-3">Log New Activity</h3>
-      <div class="row g-2 mb-2">
-        <div class="col-sm-3">
-          <label class="form-label small text-muted mb-1" for="actFType">
-            Type <span class="text-danger" aria-hidden="true">*</span>
-          </label>
-          <select id="actFType" name="actFType" class="form-select form-select-sm"
-                  [ngModel]="fType()" (ngModelChange)="fType.set($event)"
-                  [disabled]="saving()">
-            @for (opt of activityTypeOptions; track opt.value) {
-              <option [value]="opt.value">{{ opt.label }}</option>
-            }
-          </select>
-        </div>
-        <div class="col-sm-9">
-          <label class="form-label small text-muted mb-1" for="actFSubject">
-            Subject <span class="text-danger" aria-hidden="true">*</span>
-          </label>
-          <input id="actFSubject" name="actFSubject" type="text" class="form-control form-control-sm"
-                 [ngModel]="fSubject()" (ngModelChange)="fSubject.set($event)"
-                 [disabled]="saving()" autocomplete="off"
-                 placeholder="Brief description of the activity" />
-        </div>
-        @if (!isTask()) {
-          <div class="col-sm-4">
-            <label class="form-label small text-muted mb-1" for="actFOccurredAt">Occurred At</label>
-            <input id="actFOccurredAt" name="actFOccurredAt" type="datetime-local"
-                   class="form-control form-control-sm"
-                   [ngModel]="fOccurredAt()" (ngModelChange)="fOccurredAt.set($event)"
-                   [disabled]="saving()" />
-          </div>
-        }
-        @if (isTask()) {
-          <div class="col-sm-4">
-            <label class="form-label small text-muted mb-1" for="actFDueDate">Due Date</label>
-            <input id="actFDueDate" name="actFDueDate" type="date" class="form-control form-control-sm"
-                   [ngModel]="fDueDate()" (ngModelChange)="fDueDate.set($event)"
-                   [disabled]="saving()" />
-          </div>
-        }
-        <div class="col-sm-8">
-          <label class="form-label small text-muted mb-1" for="actFBody">Notes</label>
-          <input id="actFBody" name="actFBody" type="text" class="form-control form-control-sm"
-                 [ngModel]="fBody()" (ngModelChange)="fBody.set($event)"
-                 [disabled]="saving()" autocomplete="off"
-                 placeholder="Optional notes" />
-        </div>
+    <div id="logActivityForm" class="erp-card mb-3">
+      <div class="erp-card__head">
+        <h3 class="h6 mb-0">Log New Activity</h3>
       </div>
-      @if (formError(); as msg) {
-        <p class="form-error text-danger small mt-1 mb-2" role="alert">{{ msg }}</p>
-      }
-      <div class="d-flex gap-2 mt-1">
-        <button type="button" class="btn btn-sm btn-primary" [disabled]="saving()" (click)="logActivity()">
-          @if (saving()) {
-            <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+      <div class="erp-card__body">
+        <div class="row g-2 mb-2">
+          <div class="col-sm-3">
+            <label class="form-label small text-muted mb-1" for="actFType">
+              Type <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <select id="actFType" name="actFType" class="form-select form-select-sm"
+                    [ngModel]="fType()" (ngModelChange)="fType.set($event)"
+                    [disabled]="saving()">
+              @for (opt of activityTypeOptions; track opt.value) {
+                <option [value]="opt.value">{{ opt.label }}</option>
+              }
+            </select>
+          </div>
+          <div class="col-sm-9">
+            <label class="form-label small text-muted mb-1" for="actFSubject">
+              Subject <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="actFSubject" name="actFSubject" type="text" class="form-control form-control-sm"
+                   [ngModel]="fSubject()" (ngModelChange)="fSubject.set($event)"
+                   [disabled]="saving()" autocomplete="off"
+                   placeholder="Brief description of the activity" />
+          </div>
+          @if (!isTask()) {
+            <div class="col-sm-4">
+              <label class="form-label small text-muted mb-1" for="actFOccurredAt">Occurred At</label>
+              <input id="actFOccurredAt" name="actFOccurredAt" type="datetime-local"
+                     class="form-control form-control-sm"
+                     [ngModel]="fOccurredAt()" (ngModelChange)="fOccurredAt.set($event)"
+                     [disabled]="saving()" />
+            </div>
           }
-          Log Activity
-        </button>
-        <button type="button" class="btn btn-sm btn-outline-secondary" (click)="toggleLogForm()">Cancel</button>
+          @if (isTask()) {
+            <div class="col-sm-4">
+              <label class="form-label small text-muted mb-1" for="actFDueDate">Due Date</label>
+              <input id="actFDueDate" name="actFDueDate" type="date" class="form-control form-control-sm"
+                     [ngModel]="fDueDate()" (ngModelChange)="fDueDate.set($event)"
+                     [disabled]="saving()" />
+            </div>
+          }
+          <div class="col-sm-8">
+            <label class="form-label small text-muted mb-1" for="actFBody">Notes</label>
+            <input id="actFBody" name="actFBody" type="text" class="form-control form-control-sm"
+                   [ngModel]="fBody()" (ngModelChange)="fBody.set($event)"
+                   [disabled]="saving()" autocomplete="off"
+                   placeholder="Optional notes" />
+          </div>
+        </div>
+        @if (formError(); as msg) {
+          <p class="text-danger small mt-1 mb-2" role="alert">{{ msg }}</p>
+        }
+        <div class="d-flex gap-2 mt-1">
+          <button type="button" class="btn btn-sm btn-primary" [disabled]="saving()" (click)="logActivity()">
+            @if (saving()) {
+              <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+            }
+            Log Activity
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" (click)="toggleLogForm()">Cancel</button>
+        </div>
       </div>
     </div>
   }
@@ -97,10 +101,12 @@
     }
     @default {
       @if (isEmpty()) {
-        <p class="text-muted small">No activities logged yet.</p>
+        <div class="erp-empty">
+          <i class="bi bi-calendar2-event"></i> No activities logged yet.
+        </div>
       } @else {
-        <div class="table-responsive">
-          <table class="table table-sm table-hover align-middle bg-white">
+        <div class="erp-table-wrap">
+          <table class="erp-table">
             <caption class="visually-hidden">Activities</caption>
             <thead>
               <tr>
@@ -115,7 +121,10 @@
               @for (row of rows(); track row.uid) {
                 <tr>
                   <td>
-                    <span class="badge" [class]="activityTypeBadgeClass(row.activityType)">
+                    <span class="status-tag"
+                          [class.status-tag--warn]="row.activityType === 'TASK'"
+                          [class.status-tag--info]="row.activityType === 'CALL' || row.activityType === 'MEETING'"
+                          [class.status-tag--neutral]="row.activityType === 'EMAIL' || row.activityType === 'NOTE'">
                       {{ row.activityType }}
                     </span>
                   </td>
@@ -130,9 +139,9 @@
                   </td>
                   <td>
                     @if (row.done) {
-                      <span class="badge text-bg-success">Done</span>
+                      <span class="status-tag status-tag--ok">Done</span>
                     } @else if (row.activityType === 'TASK') {
-                      <span class="badge text-bg-warning">Open</span>
+                      <span class="status-tag status-tag--warn">Open</span>
                     } @else {
                       <span class="text-muted small">—</span>
                     }

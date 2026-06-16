@@ -1,39 +1,44 @@
-<section class="container-fluid py-3" aria-label="Cheque Register">
-  <div class="d-flex align-items-center mb-3 gap-2 flex-wrap">
-    <h1 class="h4 mb-0 me-auto">Cheque Register</h1>
-
-    @if (companyState() === 'loading') {
-      <span class="spinner-border spinner-border-sm text-secondary" aria-label="Loading"></span>
-    }
-    @if (companies().length > 1) {
-      <label class="visually-hidden" for="chqCompany">Company</label>
-      <select id="chqCompany" class="form-select form-select-sm w-auto"
-              [ngModel]="selectedCompanyId()" (ngModelChange)="onCompanyChange($event)">
-        @for (c of companies(); track c.id) {
-          <option [value]="c.id">{{ c.name }}</option>
-        }
-      </select>
-    }
-
-    @if (canManage()) {
-      <button type="button" class="btn btn-primary btn-sm"
-              (click)="openForm()" [disabled]="showForm()">
-        <i class="bi bi-plus-lg" aria-hidden="true"></i> Register Cheque
-      </button>
-    }
+<section class="admin-page" aria-label="Cheque Register">
+  <div class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>Cheque Register</h1>
+      <p class="subtitle">Track issued cheques and their clearing status.</p>
+    </div>
+    <div class="erp-page-head__actions">
+      @if (companyState() === 'loading') {
+        <span class="spinner-border spinner-border-sm text-secondary" aria-label="Loading"></span>
+      }
+      @if (companies().length > 1) {
+        <label class="visually-hidden" for="chqCompany">Company</label>
+        <select id="chqCompany" class="form-select form-select-sm w-auto"
+                [ngModel]="selectedCompanyId()" (ngModelChange)="onCompanyChange($event)">
+          @for (c of companies(); track c.id) {
+            <option [value]="c.id">{{ c.name }}</option>
+          }
+        </select>
+      }
+      @if (canManage()) {
+        <button type="button" class="btn btn-primary btn-sm"
+                (click)="openForm()" [disabled]="showForm()">
+          <i class="bi bi-plus-lg" aria-hidden="true"></i> Register Cheque
+        </button>
+      }
+    </div>
   </div>
 
   <!-- Register form -->
   @if (showForm()) {
-    <div class="card mb-3 border-primary" role="form" aria-label="Register cheque">
-      <div class="card-header fw-semibold">Register Cheque</div>
-      <div class="card-body">
+    <div class="erp-card mb-3" aria-label="Register cheque">
+      <div class="erp-card__head">
+        <h2>Register Cheque</h2>
+      </div>
+      <div class="erp-card__body">
         @if (registerError()) {
-          <div class="alert alert-danger py-2" role="alert">{{ registerError() }}</div>
+          <div class="alert alert-danger py-2 mb-3" role="alert">{{ registerError() }}</div>
         }
-        <div class="row g-3">
-          <div class="col-12 col-md-4">
-            <label class="form-label" for="chqAccount">Bank Account <span aria-hidden="true">*</span></label>
+        <div class="erp-form-grid">
+          <div class="erp-field">
+            <label for="chqAccount">Bank Account <span aria-hidden="true">*</span></label>
             <select id="chqAccount" class="form-select form-select-sm"
                     [ngModel]="newAccountUid()" (ngModelChange)="newAccountUid.set($event)" required>
               <option value="">— select bank account —</option>
@@ -43,41 +48,41 @@
             </select>
           </div>
 
-          <div class="col-12 col-md-3">
-            <label class="form-label" for="chqNumber">Cheque Number <span aria-hidden="true">*</span></label>
-            <input id="chqNumber" type="text" class="form-control form-control-sm font-monospace"
+          <div class="erp-field">
+            <label for="chqNumber">Cheque Number <span aria-hidden="true">*</span></label>
+            <input id="chqNumber" type="text" class="form-control form-control-sm mono"
                    [ngModel]="newChequeNumber()" (ngModelChange)="newChequeNumber.set($event)"
                    maxlength="30" required />
           </div>
 
-          <div class="col-12 col-md-5">
-            <label class="form-label" for="chqPayee">Payee <span aria-hidden="true">*</span></label>
+          <div class="erp-field full">
+            <label for="chqPayee">Payee <span aria-hidden="true">*</span></label>
             <input id="chqPayee" type="text" class="form-control form-control-sm"
                    [ngModel]="newPayee()" (ngModelChange)="newPayee.set($event)"
                    maxlength="120" required />
           </div>
 
-          <div class="col-12 col-md-3">
-            <label class="form-label" for="chqAmount">Amount <span aria-hidden="true">*</span></label>
+          <div class="erp-field">
+            <label for="chqAmount">Amount <span aria-hidden="true">*</span></label>
             <input id="chqAmount" type="number" class="form-control form-control-sm" min="0.01" step="0.01"
                    [ngModel]="newAmount()" (ngModelChange)="newAmount.set($event)"
                    placeholder="0.00" required />
           </div>
 
-          <div class="col-12 col-md-3">
-            <label class="form-label" for="chqIssueDate">Issue Date <span aria-hidden="true">*</span></label>
+          <div class="erp-field">
+            <label for="chqIssueDate">Issue Date <span aria-hidden="true">*</span></label>
             <input id="chqIssueDate" type="date" class="form-control form-control-sm"
                    [ngModel]="newIssueDate()" (ngModelChange)="newIssueDate.set($event)" required />
           </div>
 
-          <div class="col-12 col-md-3">
-            <label class="form-label" for="chqValueDate">Value Date <span aria-hidden="true">*</span></label>
+          <div class="erp-field">
+            <label for="chqValueDate">Value Date <span aria-hidden="true">*</span></label>
             <input id="chqValueDate" type="date" class="form-control form-control-sm"
                    [ngModel]="newValueDate()" (ngModelChange)="newValueDate.set($event)" required />
           </div>
         </div>
       </div>
-      <div class="card-footer d-flex gap-2">
+      <div class="d-flex gap-2 px-3 pb-3" style="border-top:1px solid var(--erp-border); padding-top:0.75rem">
         <button type="button" class="btn btn-primary btn-sm"
                 (click)="submitRegister()" [disabled]="registering()">
           @if (registering()) {
@@ -92,8 +97,8 @@
 
   <!-- States -->
   @if (state() === 'loading') {
-    <div class="text-center py-5" aria-busy="true">
-      <span class="spinner-border text-primary" role="status" aria-label="Loading cheques"></span>
+    <div class="text-center py-5" aria-live="polite">
+      <span class="spinner-border text-primary" aria-label="Loading cheques"></span>
     </div>
   } @else if (state() === 'forbidden') {
     <div class="alert alert-warning" role="alert">You do not have permission (CHEQUE.MANAGE).</div>
@@ -104,16 +109,19 @@
       <button type="button" class="btn btn-sm btn-outline-danger ms-auto" (click)="load(0)">Retry</button>
     </div>
   } @else if (isEmpty()) {
-    <div class="alert alert-info" role="status">No cheques found for this company.</div>
+    <div class="erp-empty">
+      <i class="bi bi-journal-check"></i>
+      No cheques found for this company.
+    </div>
   } @else {
-    <div class="table-responsive">
-      <table class="table table-sm table-hover align-middle">
+    <div class="erp-table-wrap">
+      <table class="erp-table">
         <caption class="visually-hidden">Cheque register</caption>
-        <thead class="table-light">
+        <thead>
           <tr>
             <th scope="col">Cheque No.</th>
             <th scope="col">Payee</th>
-            <th scope="col">Amount</th>
+            <th scope="col" class="num">Amount</th>
             <th scope="col">Issue Date</th>
             <th scope="col">Value Date</th>
             <th scope="col">Status</th>
@@ -125,19 +133,25 @@
         <tbody>
           @for (chq of rows(); track chq.uid) {
             <tr>
-              <td class="font-monospace">{{ chq.chequeNumber }}</td>
+              <td class="mono">{{ chq.chequeNumber }}</td>
               <td>{{ chq.payee }}</td>
-              <td class="text-end font-monospace">{{ chq.currency }} {{ fmtMoney(chq.amount) }}</td>
+              <td class="num mono">{{ chq.currency }} {{ fmtMoney(chq.amount) }}</td>
               <td>{{ chq.issueDate }}</td>
               <td>{{ chq.valueDate }}</td>
               <td>
-                <span class="badge" [class]="statusBadgeClass(chq.status)">{{ chq.status }}</span>
+                <span class="status-tag"
+                      [class.status-tag--warn]="chq.status === 'PENDING'"
+                      [class.status-tag--ok]="chq.status === 'CLEARED'"
+                      [class.status-tag--neutral]="chq.status === 'CANCELLED'">
+                  {{ chq.status }}
+                </span>
               </td>
               @if (canManage()) {
                 <td>
                   @if (chq.status === 'PENDING') {
-                    <div class="btn-group btn-group-sm" role="group" aria-label="Cheque actions">
-                      <button type="button" class="btn btn-outline-success"
+                    <fieldset class="d-flex gap-1 border-0 p-0 m-0">
+                      <legend class="visually-hidden">Actions for cheque {{ chq.chequeNumber }}</legend>
+                      <button type="button" class="btn btn-outline-success btn-sm"
                               [disabled]="actionUid() === chq.uid"
                               (click)="clearCheque(chq)"
                               [attr.aria-label]="'Clear cheque ' + chq.chequeNumber">
@@ -147,13 +161,13 @@
                           Clear
                         }
                       </button>
-                      <button type="button" class="btn btn-outline-danger"
+                      <button type="button" class="btn btn-outline-danger btn-sm"
                               [disabled]="actionUid() === chq.uid"
                               (click)="cancelCheque(chq)"
                               [attr.aria-label]="'Cancel cheque ' + chq.chequeNumber">
                         Cancel
                       </button>
-                    </div>
+                    </fieldset>
                   }
                 </td>
               }

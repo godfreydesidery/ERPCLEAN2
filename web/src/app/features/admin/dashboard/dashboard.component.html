@@ -1,9 +1,9 @@
 <section class="admin-page">
   <header class="page-head">
-    <h1 class="h4 mb-1">
+    <h1>
       <i class="bi bi-speedometer2 me-2" aria-hidden="true"></i>Analytics Dashboard
     </h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
+    <p class="subtitle mb-0">
       Executive view: finance, working capital, inventory, CRM and trends.
     </p>
   </header>
@@ -76,24 +76,27 @@
 
     <!-- ── Health strip ──────────────────────────────────────────────────────── -->
     @if (health().length > 0) {
-      <div class="mb-4 d-flex flex-wrap gap-2" role="status" aria-label="Reconciliation health indicators">
+      <output class="mb-4 d-flex flex-wrap gap-2" aria-label="Reconciliation health indicators">
         @for (h of health(); track h.label) {
-          <span class="badge" [class]="healthBadgeClass(h.ties)">
+          <span class="status-tag"
+                [class.status-tag--ok]="h.ties"
+                [class.status-tag--danger]="!h.ties">
+            <span class="status-tag__dot" aria-hidden="true"></span>
             {{ healthPrefix(h.ties) }} {{ h.label }}
             @if (!h.ties) {
               (diff: {{ +h.difference | number:'1.2-2' }})
             }
           </span>
         }
-      </div>
+      </output>
     }
 
     <!-- ── Finance + Working Capital stat-cards row ─────────────────────────── -->
     <div class="row g-3 mb-4">
 
-      <!-- Finance stat-cards -->
+      <!-- Finance KPIs -->
       <div class="col-lg-8">
-        <h2 class="h5 mb-3">
+        <h2 class="erp-section-title">
           Finance
           <a routerLink="/admin/reporting/income-statement" class="ms-2 small text-muted"
              aria-label="Go to income statement">
@@ -120,41 +123,48 @@
             @if (finance(); as f) {
               <div class="row g-2">
                 <div class="col-6 col-md-4">
-                  <div class="card h-100 border-0 bg-light p-3">
-                    <div class="small text-muted mb-1">Revenue</div>
-                    <div class="fs-5 fw-semibold font-monospace">{{ +f.revenue | number:'1.2-2' }}</div>
+                  <div class="erp-kpi h-100">
+                    <div class="erp-kpi__label">Revenue</div>
+                    <div class="erp-kpi__value">{{ +f.revenue | number:'1.2-2' }}</div>
                   </div>
                 </div>
                 <div class="col-6 col-md-4">
-                  <div class="card h-100 border-0 bg-light p-3">
-                    <div class="small text-muted mb-1">OpEx</div>
-                    <div class="fs-5 fw-semibold font-monospace">{{ +f.opex | number:'1.2-2' }}</div>
+                  <div class="erp-kpi h-100">
+                    <div class="erp-kpi__label">OpEx</div>
+                    <div class="erp-kpi__value">{{ +f.opex | number:'1.2-2' }}</div>
                   </div>
                 </div>
                 <div class="col-6 col-md-4">
-                  <div class="card h-100 border-0 bg-success bg-opacity-10 p-3">
-                    <div class="small text-muted mb-1">Net Profit (period)</div>
-                    <div class="fs-5 fw-bold font-monospace" [class.text-success]="+f.netProfitPeriod>=0" [class.text-danger]="+f.netProfitPeriod<0">
+                  <div class="erp-kpi h-100">
+                    <div class="erp-kpi__label">Net Profit (period)</div>
+                    <div class="erp-kpi__value"
+                         [class.text-success]="+f.netProfitPeriod>=0"
+                         [class.text-danger]="+f.netProfitPeriod<0">
                       {{ +f.netProfitPeriod | number:'1.2-2' }}
                     </div>
                   </div>
                 </div>
                 <div class="col-6 col-md-4">
-                  <div class="card h-100 border-0 p-3" [class.bg-light]="f.tbTies" [class.border-danger]="!f.tbTies">
-                    <div class="small text-muted mb-1">Trial Balance</div>
-                    <div class="d-flex align-items-center gap-2">
-                      <span class="badge" [class]="healthBadgeClass(f.tbTies)">
-                        {{ healthPrefix(f.tbTies) }} {{ f.tbTies ? 'Balanced' : 'Out of balance' }}
+                  <div class="erp-kpi h-100" [class.border-danger]="!f.tbTies">
+                    <div class="erp-kpi__label">Trial Balance</div>
+                    <div class="d-flex align-items-center gap-2 mt-1">
+                      <span class="status-tag"
+                            [class.status-tag--ok]="f.tbTies"
+                            [class.status-tag--danger]="!f.tbTies">
+                        <span class="status-tag__dot" aria-hidden="true"></span>
+                        {{ f.tbTies ? 'Balanced' : 'Out of balance' }}
                       </span>
                     </div>
                     <div class="small text-muted mt-1">
-                      <a routerLink="/admin/gl/trial-balance" aria-label="Go to trial balance">View TB</a>
+                      <a routerLink="/admin/gl/trial-balance">View TB<span class="sr-only"> (trial balance)</span></a>
                     </div>
                   </div>
                 </div>
               </div>
             } @else {
-              <p class="text-muted">No finance data yet for this period.</p>
+              <div class="erp-empty">
+                <i class="bi bi-bar-chart-line"></i>No finance data yet for this period.
+              </div>
             }
           }
         }
@@ -162,7 +172,7 @@
 
       <!-- Cash position -->
       <div class="col-lg-4">
-        <h2 class="h5 mb-3">
+        <h2 class="erp-section-title">
           Cash Position
           <a routerLink="/admin/cash/accounts" class="ms-2 small text-muted"
              aria-label="Go to cash accounts">
@@ -185,30 +195,33 @@
           }
           @default {
             @if (finance()?.cash; as cash) {
-              <div class="card border-0 bg-light p-3 mb-3">
-                <div class="small text-muted mb-1">Total Book Balance</div>
-                <div class="fs-4 fw-bold font-monospace">{{ +cash.total | number:'1.2-2' }}</div>
-                <div class="mt-1">
-                  <span class="badge" [class]="healthBadgeClass(cash.cashTies)">
+              <div class="erp-kpi mb-3">
+                <div class="erp-kpi__label">Total Book Balance</div>
+                <div class="erp-kpi__value">{{ +cash.total | number:'1.2-2' }}</div>
+                <div class="mt-2">
+                  <span class="status-tag"
+                        [class.status-tag--ok]="cash.cashTies"
+                        [class.status-tag--danger]="!cash.cashTies">
+                    <span class="status-tag__dot" aria-hidden="true"></span>
                     {{ healthPrefix(cash.cashTies) }} Cash-GL recon
                   </span>
                 </div>
               </div>
               @if (cash.accounts.length > 0) {
-                <div class="table-responsive">
-                  <table class="table table-sm align-middle bg-white">
+                <div class="erp-table-wrap">
+                  <table class="erp-table">
                     <caption class="visually-hidden">Cash account balances</caption>
                     <thead>
                       <tr>
                         <th scope="col">Account</th>
-                        <th scope="col" class="text-end">Balance</th>
+                        <th scope="col" class="num">Balance</th>
                       </tr>
                     </thead>
                     <tbody>
                       @for (acc of cash.accounts; track acc.cashBankAccountUid) {
                         <tr>
                           <td class="small">{{ acc.accountCode }} {{ acc.accountName }}</td>
-                          <td class="text-end font-monospace small">{{ acc.currency }} {{ +acc.bookBalance | number:'1.2-2' }}</td>
+                          <td class="num mono small">{{ acc.currency }} {{ +acc.bookBalance | number:'1.2-2' }}</td>
                         </tr>
                       }
                     </tbody>
@@ -216,7 +229,9 @@
                 </div>
               }
             } @else {
-              <p class="text-muted">No cash data yet.</p>
+              <div class="erp-empty">
+                <i class="bi bi-wallet2"></i>No cash data yet.
+              </div>
             }
           }
         }
@@ -224,7 +239,7 @@
     </div>
 
     <!-- ── Working Capital row ───────────────────────────────────────────────── -->
-    <h2 class="h5 mb-3">Working Capital</h2>
+    <h2 class="erp-section-title">Working Capital</h2>
     @switch (workingCapitalState()) {
       @case ('loading') {
         <p class="text-muted d-flex align-items-center gap-2 mb-4" aria-live="polite">
@@ -243,42 +258,50 @@
         @if (workingCapital(); as wc) {
           <div class="row g-3 mb-4">
             <div class="col-sm-6">
-              <div class="card border-0 bg-light p-3 h-100">
+              <div class="erp-kpi h-100">
                 <div class="d-flex justify-content-between align-items-start mb-2">
-                  <div class="small text-muted">AR Outstanding</div>
-                  <span class="badge" [class]="healthBadgeClass(wc.arTies)">
-                    {{ healthPrefix(wc.arTies) }} AR-GL
+                  <div class="erp-kpi__label">AR Outstanding</div>
+                  <span class="status-tag"
+                        [class.status-tag--ok]="wc.arTies"
+                        [class.status-tag--danger]="!wc.arTies">
+                    <span class="status-tag__dot" aria-hidden="true"></span>
+                    AR-GL
                   </span>
                 </div>
-                <div class="fs-4 fw-bold font-monospace">{{ +wc.arOutstanding | number:'1.2-2' }}</div>
+                <div class="erp-kpi__value">{{ +wc.arOutstanding | number:'1.2-2' }}</div>
                 <div class="mt-2">
-                  <a routerLink="/admin/ar/invoices" class="small" aria-label="Go to AR invoices">View Receivables</a>
+                  <a routerLink="/admin/ar/invoices" class="small">View Receivables<span class="sr-only"> (AR invoices)</span></a>
                 </div>
               </div>
             </div>
             <div class="col-sm-6">
-              <div class="card border-0 bg-light p-3 h-100">
+              <div class="erp-kpi h-100">
                 <div class="d-flex justify-content-between align-items-start mb-2">
-                  <div class="small text-muted">AP Outstanding</div>
-                  <span class="badge" [class]="healthBadgeClass(wc.apTies)">
-                    {{ healthPrefix(wc.apTies) }} AP-GL
+                  <div class="erp-kpi__label">AP Outstanding</div>
+                  <span class="status-tag"
+                        [class.status-tag--ok]="wc.apTies"
+                        [class.status-tag--danger]="!wc.apTies">
+                    <span class="status-tag__dot" aria-hidden="true"></span>
+                    AP-GL
                   </span>
                 </div>
-                <div class="fs-4 fw-bold font-monospace">{{ +wc.apOutstanding | number:'1.2-2' }}</div>
+                <div class="erp-kpi__value">{{ +wc.apOutstanding | number:'1.2-2' }}</div>
                 <div class="mt-2">
-                  <a routerLink="/admin/ap/supplier-bills" class="small" aria-label="Go to AP supplier bills">View Payables</a>
+                  <a routerLink="/admin/ap/supplier-bills" class="small">View Payables<span class="sr-only"> (AP supplier bills)</span></a>
                 </div>
               </div>
             </div>
           </div>
         } @else {
-          <p class="text-muted mb-4">No working capital data yet for this period.</p>
+          <div class="erp-empty mb-4">
+            <i class="bi bi-clipboard-data"></i>No working capital data yet for this period.
+          </div>
         }
       }
     }
 
     <!-- ── Inventory panel ───────────────────────────────────────────────────── -->
-    <h2 class="h5 mb-3">
+    <h2 class="erp-section-title">
       Inventory
       <a routerLink="/admin/stock/valuation" class="ms-2 small text-muted"
          aria-label="Go to stock valuation">
@@ -303,28 +326,35 @@
         @if (inventory(); as inv) {
           <div class="row g-3 mb-4">
             <div class="col-sm-4">
-              <div class="card border-0 bg-light p-3">
-                <div class="small text-muted mb-1">Stock Value</div>
-                <div class="fs-4 fw-bold font-monospace">{{ +inv.stockValue | number:'1.2-2' }}</div>
+              <div class="erp-kpi">
+                <div class="erp-kpi__label">Stock Value</div>
+                <div class="erp-kpi__value">{{ +inv.stockValue | number:'1.2-2' }}</div>
               </div>
             </div>
             <div class="col-sm-4">
-              <div class="card border-0 bg-light p-3">
-                <div class="small text-muted mb-1">Stock-GL (acct 1300)</div>
-                <span class="badge" [class]="healthBadgeClass(inv.stockTies)">
-                  {{ healthPrefix(inv.stockTies) }} {{ inv.stockTies ? 'Reconciled' : 'Difference: ' + (+inv.stockDifference | number:'1.2-2') }}
-                </span>
+              <div class="erp-kpi">
+                <div class="erp-kpi__label">Stock-GL (acct 1300)</div>
+                <div class="mt-2">
+                  <span class="status-tag"
+                        [class.status-tag--ok]="inv.stockTies"
+                        [class.status-tag--danger]="!inv.stockTies">
+                    <span class="status-tag__dot" aria-hidden="true"></span>
+                    {{ inv.stockTies ? 'Reconciled' : 'Difference: ' + (+inv.stockDifference | number:'1.2-2') }}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
         } @else {
-          <p class="text-muted mb-4">No inventory data yet.</p>
+          <div class="erp-empty mb-4">
+            <i class="bi bi-boxes"></i>No inventory data yet.
+          </div>
         }
       }
     }
 
     <!-- ── CRM panel ─────────────────────────────────────────────────────────── -->
-    <h2 class="h5 mb-3">
+    <h2 class="erp-section-title">
       CRM
       <a routerLink="/admin/crm/pipeline" class="ms-2 small text-muted"
          aria-label="Go to CRM pipeline dashboard">
@@ -352,7 +382,9 @@
             <div class="col-md-7">
               <h3 class="h6 mb-3">Pipeline by Stage</h3>
               @if (c.pipeline?.stages?.length) {
-                <div class="bi-bar-chart" role="img" aria-label="Pipeline by stage bar chart">
+                <figure class="mb-0">
+                  <figcaption class="sr-only">Pipeline by stage bar chart</figcaption>
+                  <div class="bi-bar-chart">
                   @for (row of c.pipeline!.stages; track row.stageUid) {
                     <div class="bi-bar-row mb-2">
                       <div class="d-flex justify-content-between small mb-1">
@@ -371,9 +403,12 @@
                       </div>
                     </div>
                   }
-                </div>
+                  </div>
+                </figure>
               } @else {
-                <p class="text-muted">No open pipeline.</p>
+                <div class="erp-empty">
+                  <i class="bi bi-funnel"></i>No open pipeline.
+                </div>
               }
             </div>
             <!-- CRM KPIs -->
@@ -405,13 +440,15 @@
             </div>
           </div>
         } @else {
-          <p class="text-muted mb-4">No CRM data yet for this period.</p>
+          <div class="erp-empty mb-4">
+            <i class="bi bi-people"></i>No CRM data yet for this period.
+          </div>
         }
       }
     }
 
     <!-- ── Revenue Trend (12-period CSS bars) ──────────────────────────────── -->
-    <h2 class="h5 mb-3">Revenue Trend (12 periods)</h2>
+    <h2 class="erp-section-title">Revenue Trend (12 periods)</h2>
     @switch (revenueTrendState()) {
       @case ('loading') {
         <p class="text-muted d-flex align-items-center gap-2 mb-4" aria-live="polite">
@@ -429,37 +466,43 @@
       @default {
         @if (revenueTrend(); as t) {
           @if (t.points.length > 0) {
-            <div class="bi-bar-chart mb-2" role="img"
-                 [attr.aria-label]="t.metricLabel + ' trend, ' + t.currency">
-              @for (pt of t.points; track pt.periodLabel) {
-                <div class="bi-bar-row mb-1">
-                  <div class="d-flex justify-content-between small mb-1">
-                    <span class="text-muted">{{ pt.periodLabel }}</span>
-                    <span class="font-monospace text-muted small">
-                      {{ t.currency }} {{ +pt.value | number:'1.2-2' }}
-                    </span>
-                  </div>
-                  <div class="d-flex align-items-center gap-2">
-                    <div class="bi-bar-track flex-grow-1">
-                      <div class="bi-bar-fill bi-bar-fill--revenue" aria-hidden="true"
-                           [style.width.%]="trendBarWidth(pt.value, revenueTrendMax())">
+            <figure class="mb-0">
+              <figcaption class="sr-only">{{ t.metricLabel }} trend, {{ t.currency }}</figcaption>
+              <div class="bi-bar-chart mb-2">
+                @for (pt of t.points; track pt.periodLabel) {
+                  <div class="bi-bar-row mb-1">
+                    <div class="d-flex justify-content-between small mb-1">
+                      <span class="text-muted">{{ pt.periodLabel }}</span>
+                      <span class="font-monospace text-muted small">
+                        {{ t.currency }} {{ +pt.value | number:'1.2-2' }}
+                      </span>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                      <div class="bi-bar-track flex-grow-1">
+                        <div class="bi-bar-fill bi-bar-fill--revenue" aria-hidden="true"
+                             [style.width.%]="trendBarWidth(pt.value, revenueTrendMax())">
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              }
-            </div>
+                }
+              </div>
+            </figure>
           } @else {
-            <p class="text-muted mb-4">No revenue trend data yet for this period.</p>
+            <div class="erp-empty mb-4">
+              <i class="bi bi-graph-up"></i>No revenue trend data yet for this period.
+            </div>
           }
         } @else {
-          <p class="text-muted mb-4">No revenue trend data yet for this period.</p>
+          <div class="erp-empty mb-4">
+            <i class="bi bi-graph-up"></i>No revenue trend data yet for this period.
+          </div>
         }
       }
     }
 
     <!-- ── Net Profit Trend (12-period CSS bars) ─────────────────────────────── -->
-    <h2 class="h5 mb-3 mt-3">Net Profit Trend (12 periods)</h2>
+    <h2 class="erp-section-title mt-3">Net Profit Trend (12 periods)</h2>
     @switch (netProfitTrendState()) {
       @case ('loading') {
         <p class="text-muted d-flex align-items-center gap-2 mb-4" aria-live="polite">
@@ -477,33 +520,39 @@
       @default {
         @if (netProfitTrend(); as t) {
           @if (t.points.length > 0) {
-            <div class="bi-bar-chart mb-4" role="img"
-                 [attr.aria-label]="t.metricLabel + ' trend, ' + t.currency">
-              @for (pt of t.points; track pt.periodLabel) {
-                <div class="bi-bar-row mb-1">
-                  <div class="d-flex justify-content-between small mb-1">
-                    <span class="text-muted">{{ pt.periodLabel }}</span>
-                    <span class="font-monospace small" [class.text-success]="+pt.value>=0" [class.text-danger]="+pt.value<0">
-                      {{ t.currency }} {{ +pt.value | number:'1.2-2' }}
-                    </span>
-                  </div>
-                  <div class="d-flex align-items-center gap-2">
-                    <div class="bi-bar-track flex-grow-1">
-                      <div class="bi-bar-fill" aria-hidden="true"
-                           [class.bi-bar-fill--profit]="+pt.value>=0"
-                           [class.bi-bar-fill--loss]="+pt.value<0"
-                           [style.width.%]="trendBarWidth(pt.value, netProfitTrendMax())">
+            <figure class="mb-0">
+              <figcaption class="sr-only">{{ t.metricLabel }} trend, {{ t.currency }}</figcaption>
+              <div class="bi-bar-chart mb-4">
+                @for (pt of t.points; track pt.periodLabel) {
+                  <div class="bi-bar-row mb-1">
+                    <div class="d-flex justify-content-between small mb-1">
+                      <span class="text-muted">{{ pt.periodLabel }}</span>
+                      <span class="font-monospace small" [class.text-success]="+pt.value>=0" [class.text-danger]="+pt.value<0">
+                        {{ t.currency }} {{ +pt.value | number:'1.2-2' }}
+                      </span>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                      <div class="bi-bar-track flex-grow-1">
+                        <div class="bi-bar-fill" aria-hidden="true"
+                             [class.bi-bar-fill--profit]="+pt.value>=0"
+                             [class.bi-bar-fill--loss]="+pt.value<0"
+                             [style.width.%]="trendBarWidth(pt.value, netProfitTrendMax())">
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              }
-            </div>
+                }
+              </div>
+            </figure>
           } @else {
-            <p class="text-muted mb-4">No net profit trend data yet for this period.</p>
+            <div class="erp-empty mb-4">
+              <i class="bi bi-graph-down"></i>No net profit trend data yet for this period.
+            </div>
           }
         } @else {
-          <p class="text-muted mb-4">No net profit trend data yet for this period.</p>
+          <div class="erp-empty mb-4">
+            <i class="bi bi-graph-down"></i>No net profit trend data yet for this period.
+          </div>
         }
       }
     }
@@ -520,8 +569,7 @@
         </select>
         <button type="button" class="btn btn-outline-primary btn-sm"
                 (click)="exportDashboard()"
-                [disabled]="exporting()"
-                aria-label="Download dashboard export">
+                [disabled]="exporting()">
           @if (exporting()) {
             <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Exporting…
           } @else {

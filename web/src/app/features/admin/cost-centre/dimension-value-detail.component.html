@@ -1,63 +1,75 @@
 <section class="admin-page">
-  <header class="page-head">
-    <nav aria-label="Breadcrumb" class="mb-1">
-      <ol class="breadcrumb mb-0 small">
-        <li class="breadcrumb-item"><a routerLink="/admin/cost-centre/values">Dimension Values</a></li>
-        <li class="breadcrumb-item active" aria-current="page">
-          {{ entity()?.code ?? uid() }}
-        </li>
-      </ol>
-    </nav>
-    <h1 class="h4 mb-0">
-      @if (entity(); as v) {
-        {{ v.name }}
-        <span class="badge ms-2" [class]="statusBadgeClass(v.status)">{{ v.status }}</span>
-        @if (!v.active) {
-          <span class="badge text-bg-secondary ms-1">Tagging inactive</span>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <nav aria-label="Breadcrumb" class="mb-1">
+        <ol class="breadcrumb mb-0 small">
+          <li class="breadcrumb-item"><a routerLink="/admin/cost-centre/values">Dimension Values</a></li>
+          <li class="breadcrumb-item active" aria-current="page">
+            {{ entity()?.code ?? uid() }}
+          </li>
+        </ol>
+      </nav>
+      <h1>
+        @if (entity(); as v) {
+          {{ v.name }}
+          <span class="status-tag ms-2"
+                [class.status-tag--ok]="v.status === 'ACTIVE'"
+                [class.status-tag--neutral]="v.status === 'INACTIVE' || v.status === 'ARCHIVED'">
+            {{ v.status }}
+          </span>
+          @if (!v.active) {
+            <span class="status-tag status-tag--neutral ms-1">Tagging inactive</span>
+          }
+        } @else {
+          Dimension Value
         }
-      } @else {
-        Dimension Value
-      }
-    </h1>
+      </h1>
+    </div>
   </header>
 
   @switch (entityState()) {
     @case ('loading') {
-      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+      <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
         <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
       </p>
     }
     @case ('error') {
-      <p class="state text-danger" role="alert">
+      <p class="text-danger" role="alert">
         <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
         Could not load this dimension value.
       </p>
     }
     @default {
       @if (entity(); as v) {
-        <!-- Meta -->
-        <dl class="row small mb-3">
-          <dt class="col-sm-3 text-muted">Code</dt>
-          <dd class="col-sm-9 font-monospace">{{ v.code }}</dd>
-          <dt class="col-sm-3 text-muted">Slot</dt>
-          <dd class="col-sm-9"><span class="badge text-bg-info">{{ v.slot }}</span></dd>
-          <dt class="col-sm-3 text-muted">Parent</dt>
-          <dd class="col-sm-9">
-            @if (v.parentUid) {
-              <a [routerLink]="['/admin/cost-centre/values/uid', v.parentUid]">Parent value</a>
-            } @else {
-              <span class="text-muted">— (root)</span>
-            }
-          </dd>
-          <dt class="col-sm-3 text-muted">Active for tagging</dt>
-          <dd class="col-sm-9">
-            @if (v.active) {
-              <i class="bi bi-check-circle-fill text-success me-1" aria-hidden="true"></i>Yes
-            } @else {
-              <i class="bi bi-x-circle-fill text-secondary me-1" aria-hidden="true"></i>No (excluded from new tagging; historical lines unaffected)
-            }
-          </dd>
-        </dl>
+        <!-- Meta card -->
+        <div class="erp-card mb-3">
+          <div class="erp-card__body">
+            <dl class="row small mb-0">
+              <dt class="col-sm-3 text-muted">Code</dt>
+              <dd class="col-sm-9 mono">{{ v.code }}</dd>
+              <dt class="col-sm-3 text-muted">Slot</dt>
+              <dd class="col-sm-9">
+                <span class="status-tag status-tag--info">{{ v.slot }}</span>
+              </dd>
+              <dt class="col-sm-3 text-muted">Parent</dt>
+              <dd class="col-sm-9">
+                @if (v.parentUid) {
+                  <a [routerLink]="['/admin/cost-centre/values/uid', v.parentUid]">Parent value</a>
+                } @else {
+                  <span class="text-muted">— (root)</span>
+                }
+              </dd>
+              <dt class="col-sm-3 text-muted">Active for tagging</dt>
+              <dd class="col-sm-9">
+                @if (v.active) {
+                  <i class="bi bi-check-circle-fill text-success me-1" aria-hidden="true"></i>Yes
+                } @else {
+                  <i class="bi bi-x-circle-fill text-secondary me-1" aria-hidden="true"></i>No (excluded from new tagging; historical lines unaffected)
+                }
+              </dd>
+            </dl>
+          </div>
+        </div>
 
         <!-- Lifecycle action buttons -->
         @if (canManage()) {
@@ -92,47 +104,51 @@
 
         <!-- Edit form -->
         @if (canManage()) {
-          <form class="card card-body" (ngSubmit)="save()" aria-label="Edit dimension value">
-            <h2 class="h6 mb-3">Edit</h2>
-            <div class="row g-3 mb-3">
-              <div class="col-sm-6">
-                <label class="form-label" for="fName">
-                  Name <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <input id="fName" name="fName" type="text" class="form-control"
-                       [ngModel]="fName()" (ngModelChange)="fName.set($event)"
-                       [disabled]="saving()" autocomplete="off" />
-              </div>
-              <div class="col-sm-6">
-                <label class="form-label" for="fParentUid">Parent UID (blank = no change)</label>
-                <input id="fParentUid" name="fParentUid" type="text" class="form-control font-monospace"
-                       placeholder="Leave blank to keep current parent"
-                       [ngModel]="fParentUid()" (ngModelChange)="fParentUid.set($event)"
-                       [disabled]="saving() || fClearParent()" autocomplete="off" />
-              </div>
-              <div class="col-12">
-                <div class="form-check">
-                  <input class="form-check-input" type="checkbox" id="fClearParent" name="fClearParent"
-                         [ngModel]="fClearParent()" (ngModelChange)="fClearParent.set($event)"
-                         [disabled]="saving()" />
-                  <label class="form-check-label" for="fClearParent">
-                    Clear parent (make this a root value)
+          <form class="erp-card" (ngSubmit)="save()" aria-label="Edit dimension value">
+            <div class="erp-card__head">
+              <h2>Edit</h2>
+            </div>
+            <div class="erp-card__body">
+              <div class="erp-form-grid">
+                <div class="erp-field">
+                  <label class="form-label" for="fName">
+                    Name <span class="text-danger" aria-hidden="true">*</span>
                   </label>
+                  <input id="fName" name="fName" type="text" class="form-control"
+                         [ngModel]="fName()" (ngModelChange)="fName.set($event)"
+                         [disabled]="saving()" autocomplete="off" />
+                </div>
+                <div class="erp-field">
+                  <label class="form-label" for="fParentUid">Parent UID (blank = no change)</label>
+                  <input id="fParentUid" name="fParentUid" type="text" class="form-control mono"
+                         placeholder="Leave blank to keep current parent"
+                         [ngModel]="fParentUid()" (ngModelChange)="fParentUid.set($event)"
+                         [disabled]="saving() || fClearParent()" autocomplete="off" />
+                </div>
+                <div class="erp-field full">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="fClearParent" name="fClearParent"
+                           [ngModel]="fClearParent()" (ngModelChange)="fClearParent.set($event)"
+                           [disabled]="saving()" />
+                    <label class="form-check-label" for="fClearParent">
+                      Clear parent (make this a root value)
+                    </label>
+                  </div>
                 </div>
               </div>
-            </div>
-            @if (saveError(); as msg) {
-              <p class="form-error text-danger small mb-2" role="alert">{{ msg }}</p>
-            }
-            <div>
-              <button type="submit" class="btn btn-primary" [disabled]="saving()">
-                @if (saving()) {
-                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                  Saving…
-                } @else {
-                  Save Changes
-                }
-              </button>
+              @if (saveError(); as msg) {
+                <p class="text-danger small mb-2 mt-2" role="alert">{{ msg }}</p>
+              }
+              <div class="mt-3">
+                <button type="submit" class="btn btn-primary" [disabled]="saving()">
+                  @if (saving()) {
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    Saving…
+                  } @else {
+                    Save Changes
+                  }
+                </button>
+              </div>
             </div>
           </form>
         }

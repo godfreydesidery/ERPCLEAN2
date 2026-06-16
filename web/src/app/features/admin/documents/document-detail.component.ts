@@ -5,7 +5,7 @@ import { RouterLink } from '@angular/router';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import { DocumentsService } from './documents.service';
-import { DocumentType, GeneratedDocumentDto } from './models/documents.model';
+import { GeneratedDocumentDto } from './models/documents.model';
 
 type LoadState = 'loading' | 'idle' | 'error' | 'forbidden';
 
@@ -73,18 +73,6 @@ export class DocumentDetailComponent {
         this.alerts.error('Download failed', 'Could not fetch the PDF.');
       },
     });
-  }
-
-  typeBadgeClass(type: DocumentType): string {
-    switch (type) {
-      case 'INVOICE': return 'text-bg-primary';
-      case 'AR_STATEMENT': return 'text-bg-info';
-      case 'PURCHASE_ORDER': return 'text-bg-warning';
-      case 'GOODS_RECEIPT': return 'text-bg-success';
-      case 'DELIVERY_NOTE': return 'text-bg-secondary';
-      case 'CREDIT_NOTE': return 'text-bg-danger';
-      default: return 'text-bg-secondary';
-    }
   }
 
   private messageFrom(err: unknown, fallback: string): string {

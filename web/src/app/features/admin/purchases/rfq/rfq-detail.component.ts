@@ -286,24 +286,6 @@ export class RfqDetailComponent {
 
   // ── Display helpers ────────────────────────────────────────────────────────
 
-  rfqStatusBadgeClass(status: string): string {
-    switch (status) {
-      case 'SENT': return 'text-bg-primary';
-      case 'QUOTES_RECEIVED': return 'text-bg-info';
-      case 'AWARDED': return 'text-bg-success';
-      case 'CANCELLED': return 'text-bg-secondary';
-      default: return 'text-bg-warning';
-    }
-  }
-
-  quoteStatusBadgeClass(status: string): string {
-    switch (status) {
-      case 'AWARDED': return 'text-bg-success';
-      case 'NOT_AWARDED': return 'text-bg-secondary';
-      default: return 'text-bg-light border';
-    }
-  }
-
   supplierLabel(uid: string): string {
     const opt = this.supplierOptions().find((o) => o.uid === uid);
     return opt ? `${opt.hint} — ${opt.label}` : uid;

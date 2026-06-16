@@ -132,12 +132,12 @@ export class ActivityTasksComponent {
 
   activityTypeBadgeClass(type: ActivityType): string {
     switch (type) {
-      case 'CALL': return 'text-bg-info';
-      case 'EMAIL': return 'text-bg-secondary';
-      case 'MEETING': return 'text-bg-primary';
-      case 'NOTE': return 'text-bg-light';
-      case 'TASK': return 'text-bg-warning';
-      default: return 'text-bg-secondary';
+      case 'CALL':    return 'status-tag--info';
+      case 'EMAIL':   return 'status-tag--neutral';
+      case 'MEETING': return 'status-tag--info';
+      case 'NOTE':    return 'status-tag--neutral';
+      case 'TASK':    return 'status-tag--warn';
+      default:        return 'status-tag--neutral';
     }
   }
 

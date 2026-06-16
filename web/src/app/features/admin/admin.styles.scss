@@ -1,12 +1,8 @@
 // Shared admin styles (DRY) — imported by company-list and branch-list component styles.
+// Page chrome (.admin-page width, .page-head) and the dense `table.grid` treatment now live
+// GLOBALLY in src/styles.scss so every list looks the same; this file keeps only the
+// create-form + state styling those two screens rely on.
 .admin-page {
-  max-width: 880px;
-
-  h1 {
-    font-size: 1.4rem;
-    margin-bottom: 1rem;
-  }
-
   .org-bar,
   .create-form {
     display: flex;
@@ -14,9 +10,11 @@
     align-items: flex-end;
     gap: 0.75rem;
     margin-bottom: 1rem;
-    padding: 0.75rem;
-    background: #f3f4f6;
-    border-radius: 6px;
+    padding: 0.85rem 1rem;
+    background: #fff;
+    border: 1px solid var(--erp-border, #e3e7ee);
+    border-radius: var(--erp-radius, 10px);
+    box-shadow: var(--erp-shadow, 0 1px 3px rgba(16, 24, 40, 0.06));
   }
 
   .field {
@@ -28,64 +26,48 @@
   label {
     font-size: 0.8rem;
     font-weight: 600;
-    color: #374151;
+    color: var(--erp-text, #14181d);
   }
 
   input {
-    padding: 0.4rem 0.5rem;
-    border: 1px solid #d1d5db;
-    border-radius: 4px;
+    padding: 0.45rem 0.6rem;
+    border: 1px solid var(--erp-border-strong, #cdd4df);
+    border-radius: var(--erp-radius-sm, 7px);
   }
 
-  button {
+  .create-form button[type='submit'] {
     padding: 0.45rem 0.9rem;
     border: 0;
-    border-radius: 4px;
-    background: #2563eb;
+    border-radius: var(--erp-radius-sm, 7px);
+    background: var(--erp-primary, #2563eb);
     color: #fff;
     cursor: pointer;
   }
 
-  button:disabled {
+  .create-form button:disabled {
     background: #9ca3af;
     cursor: not-allowed;
   }
 
   .form-error,
   .state.error {
-    color: #b91c1c;
+    color: var(--erp-danger, #dc2626);
   }
 
   .state {
     padding: 1rem 0;
-    color: #6b7280;
+    color: var(--erp-text-2, #4b5563);
   }
 
-  .grid {
-    width: 100%;
-    border-collapse: collapse;
-
-    th,
-    td {
-      text-align: left;
-      padding: 0.5rem 0.75rem;
-      border-bottom: 1px solid #e5e7eb;
-    }
-
-    th {
-      font-size: 0.8rem;
-      text-transform: uppercase;
-      color: #6b7280;
-    }
-  }
-
+  // Default-branch marker — reuses the kit's "ok" status pill look.
   .badge-default {
     display: inline-block;
-    padding: 0.1rem 0.5rem;
-    font-size: 0.75rem;
+    padding: 0.28rem 0.6rem;
+    font-size: 0.72rem;
+    font-weight: 600;
     border-radius: 999px;
-    background: #dcfce7;
-    color: #166534;
+    background: var(--erp-ok-bg, #dcfce7);
+    color: var(--erp-ok-fg, #166534);
   }
 }
 

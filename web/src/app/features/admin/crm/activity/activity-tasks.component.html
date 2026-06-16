@@ -1,7 +1,7 @@
 <section class="admin-page">
   <header class="page-head">
     <h1 class="h4 mb-1">CRM Activities — Open Tasks</h1>
-    <p class="text-muted mb-0 small">All open tasks for the selected company.</p>
+    <p class="subtitle">All open tasks for the selected company.</p>
   </header>
 
   <!-- Company selector -->
@@ -19,31 +19,29 @@
 
   @switch (state()) {
     @case ('loading') {
-      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+      <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
         <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading tasks…
       </p>
     }
     @case ('error') {
-      <p class="state text-danger" role="alert">
+      <p class="text-danger" role="alert">
         <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
         Could not load open tasks.
       </p>
     }
     @case ('forbidden') {
-      <p class="state text-warning" role="alert">
-        <i class="bi bi-lock me-1" aria-hidden="true"></i>
-        You do not have permission to view CRM activities.
-      </p>
+      <div class="erp-empty" role="alert">
+        <i class="bi bi-lock"></i> You do not have permission to view CRM activities.
+      </div>
     }
     @default {
       @if (isEmpty()) {
-        <p class="state text-muted">
-          <i class="bi bi-check2-circle me-1" aria-hidden="true"></i>
-          No open tasks — inbox clear.
-        </p>
+        <div class="erp-empty">
+          <i class="bi bi-check2-circle"></i> No open tasks — inbox clear.
+        </div>
       } @else {
-        <div class="table-responsive">
-          <table class="table table-hover align-middle bg-white grid">
+        <div class="erp-table-wrap">
+          <table class="erp-table">
             <caption class="visually-hidden">Open tasks</caption>
             <thead>
               <tr>
@@ -58,9 +56,12 @@
             <tbody>
               @for (row of rows(); track row.uid) {
                 <tr>
-                  <td class="text-muted small">{{ row.activityNumber }}</td>
+                  <td class="mono small text-muted">{{ row.activityNumber }}</td>
                   <td>
-                    <span class="badge" [class]="activityTypeBadgeClass(row.activityType)">
+                    <span class="status-tag"
+                          [class.status-tag--warn]="row.activityType === 'TASK'"
+                          [class.status-tag--info]="row.activityType === 'CALL' || row.activityType === 'MEETING'"
+                          [class.status-tag--neutral]="row.activityType === 'EMAIL' || row.activityType === 'NOTE'">
                       {{ row.activityType }}
                     </span>
                   </td>

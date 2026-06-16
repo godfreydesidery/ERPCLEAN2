@@ -209,15 +209,6 @@ export class FxRateListComponent {
     return Number.isFinite(n) ? n.toFixed(6) : '—';
   }
 
-  rateTypeBadgeClass(type: string | null): string {
-    switch (type) {
-      case 'SPOT':  return 'text-bg-success';
-      case 'FORWARD': return 'text-bg-info';
-      case 'OFFICIAL': return 'text-bg-primary';
-      default: return 'text-bg-secondary';
-    }
-  }
-
   private messageFrom(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {
       const errors = (err.error as { errors?: string[] })?.errors;

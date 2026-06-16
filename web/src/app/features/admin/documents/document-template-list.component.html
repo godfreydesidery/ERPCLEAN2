@@ -1,7 +1,7 @@
 <section class="admin-page">
   <header class="page-head">
     <h1 class="h4 mb-1">Document Templates</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
+    <p class="subtitle">
       <i class="bi bi-layout-text-sidebar me-1" aria-hidden="true"></i>
       Company template registry — toggle active/inactive, update title and branding reference.
     </p>
@@ -9,33 +9,36 @@
 
   @switch (state()) {
     @case ('loading') {
-      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+      <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
         <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading templates…
       </p>
     }
     @case ('error') {
-      <p class="state text-danger" role="alert">
+      <p class="text-danger" role="alert">
         <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
         Could not load templates. Please try again.
       </p>
     }
     @case ('forbidden') {
-      <p class="state text-muted d-flex align-items-center gap-2">
+      <div class="erp-empty">
         <i class="bi bi-shield-lock" aria-hidden="true"></i>
         You don't have permission to manage document templates.
-      </p>
+      </div>
     }
     @default {
       @if (isEmpty()) {
-        <p class="state text-muted">No templates found for this company.</p>
+        <div class="erp-empty">
+          <i class="bi bi-layout-text-sidebar" aria-hidden="true"></i>
+          No templates found for this company.
+        </div>
       } @else {
         <p class="text-muted small mb-3">
           <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
           Templates are seeded per company — one per document type. You can update the title, status, and branding reference.
           Only ACTIVE templates can be used for rendering.
         </p>
-        <div class="table-responsive">
-          <table class="table table-hover align-middle bg-white grid">
+        <div class="erp-table-wrap">
+          <table class="erp-table">
             <caption class="visually-hidden">Document Templates</caption>
             <thead>
               <tr>
@@ -54,9 +57,9 @@
                 @let edit = getEdit(t.uid);
                 <tr>
                   <td>
-                    <span class="badge text-bg-secondary">{{ t.documentType }}</span>
+                    <span class="status-tag status-tag--info">{{ t.documentType }}</span>
                   </td>
-                  <td class="small text-muted">{{ t.rendererKey }}</td>
+                  <td class="text-muted">{{ t.rendererKey }}</td>
                   <td>
                     @if (canManage() && edit) {
                       <input type="text" class="form-control form-control-sm"
@@ -80,7 +83,12 @@
                         }
                       </select>
                     } @else {
-                      <span class="badge" [class]="statusBadgeClass(t.status)">{{ t.status }}</span>
+                      <span class="status-tag"
+                            [class.status-tag--ok]="t.status === 'ACTIVE'"
+                            [class.status-tag--warn]="t.status === 'INACTIVE'"
+                            [class.status-tag--neutral]="t.status === 'ARCHIVED'">
+                        {{ t.status }}
+                      </span>
                     }
                   </td>
                   <td>
@@ -92,7 +100,7 @@
                              (ngModelChange)="updateEditField(t.uid, 'brandingId', $event)"
                              [disabled]="edit.saving" />
                     } @else {
-                      <span class="small text-muted">{{ t.brandingId ? 'Set' : '—' }}</span>
+                      <span class="text-muted">{{ t.brandingId ? 'Set' : '—' }}</span>
                     }
                   </td>
                   @if (canManage() && edit) {
@@ -102,7 +110,7 @@
                               (click)="save(t.uid)"
                               [attr.aria-label]="'Save changes for ' + t.documentType">
                         @if (edit.saving) {
-                          <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                          <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
                         } @else {
                           <i class="bi bi-check-lg me-1" aria-hidden="true"></i>
                         }

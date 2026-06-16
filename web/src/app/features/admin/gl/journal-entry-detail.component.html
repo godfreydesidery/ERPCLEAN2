@@ -9,12 +9,12 @@
   <!-- Loading / error states -->
   @switch (entryState()) {
     @case ('loading') {
-      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+      <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
         <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading journal entry…
       </p>
     }
     @case ('error') {
-      <p class="state text-danger" role="alert">
+      <p class="text-danger" role="alert">
         <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
         Could not load journal entry. Please try again.
       </p>
@@ -22,29 +22,33 @@
     @default {
       @if (entry(); as e) {
         <!-- Header card -->
-        <div class="card mb-4">
-          <div class="card-body">
-            <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
-              <div>
-                <h1 class="h5 mb-1">
-                  <i class="bi bi-journal-text me-2" aria-hidden="true"></i>
-                  Journal Entry — {{ e.batchNumber }}
-                </h1>
-                <p class="text-muted small mb-0">{{ e.description }}</p>
-              </div>
-              <div class="d-flex align-items-center gap-2">
-                <span class="badge" [class]="sourceBadgeClass(e.sourceType)">
-                  {{ e.sourceType }}
-                </span>
-                @if (isBalanced()) {
-                  <span class="badge text-bg-success">
-                    <i class="bi bi-check-circle me-1" aria-hidden="true"></i>Balanced
-                  </span>
-                }
-              </div>
+        <div class="erp-card mb-4">
+          <div class="erp-card__head">
+            <div>
+              <h1 class="h5 mb-1">
+                <i class="bi bi-journal-text me-2" aria-hidden="true"></i>
+                Journal Entry — {{ e.batchNumber }}
+              </h1>
+              <p class="text-muted small mb-0">{{ e.description }}</p>
             </div>
-
-            <dl class="row mt-3 mb-0 small">
+            <span class="spacer"></span>
+            <div class="d-flex align-items-center gap-2">
+              <span class="status-tag"
+                    [class.status-tag--info]="e.sourceType === 'MANUAL'"
+                    [class.status-tag--ok]="e.sourceType === 'SALES'"
+                    [class.status-tag--warn]="e.sourceType === 'SALES_REVERSAL' || e.sourceType === 'PURCHASE_REVERSAL'"
+                    [class.status-tag--neutral]="e.sourceType === 'PURCHASE' || e.sourceType === 'OPENING_BALANCE'">
+                {{ e.sourceType }}
+              </span>
+              @if (isBalanced()) {
+                <span class="status-tag status-tag--ok">
+                  <span class="status-tag__dot"></span>Balanced
+                </span>
+              }
+            </div>
+          </div>
+          <div class="erp-card__body">
+            <dl class="row mb-0 small">
               <dt class="col-sm-2 text-muted">Posting Date</dt>
               <dd class="col-sm-4">{{ e.postingDate }}</dd>
               <dt class="col-sm-2 text-muted">Batch Number</dt>
@@ -57,7 +61,7 @@
               @if (e.reversalOfId) {
                 <dt class="col-sm-2 text-muted">Reversal of</dt>
                 <dd class="col-sm-4">
-                  <span class="badge text-bg-warning">
+                  <span class="status-tag status-tag--warn">
                     <i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i>Reversal entry
                   </span>
                 </dd>
@@ -98,23 +102,26 @@
         </div>
 
         <!-- Lines table -->
-        <h2 class="h6 mb-2">
+        <h2 class="erp-section-title">
           <i class="bi bi-list-ul me-1" aria-hidden="true"></i>
           Lines ({{ e.lines ? e.lines.length : 0 }})
         </h2>
         @if (!e.lines || !e.lines.length) {
-          <p class="text-muted small">No lines on this entry.</p>
+          <div class="erp-empty">
+            <i class="bi bi-list-ul"></i>
+            No lines on this entry.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-sm align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Journal entry lines</caption>
               <thead>
                 <tr>
                   <th scope="col">#</th>
                   <th scope="col">Account Code</th>
                   <th scope="col">Account Name</th>
-                  <th scope="col" class="text-end">Debit</th>
-                  <th scope="col" class="text-end">Credit</th>
+                  <th scope="col" class="num">Debit</th>
+                  <th scope="col" class="num">Credit</th>
                   <th scope="col">Currency</th>
                   <th scope="col">Memo</th>
                 </tr>
@@ -123,16 +130,16 @@
                 @for (line of e.lines; track line.lineNo) {
                   <tr>
                     <td class="small text-muted">{{ line.lineNo }}</td>
-                    <td class="font-monospace small fw-semibold">{{ line.accountCode }}</td>
+                    <td class="mono small fw-semibold">{{ line.accountCode }}</td>
                     <td class="small">{{ line.accountName }}</td>
-                    <td class="text-end font-monospace small">
+                    <td class="num mono small">
                       @if (parseFloat(line.debitAmount) > 0) {
                         {{ line.debitAmount }}
                       } @else {
                         <span class="text-muted">—</span>
                       }
                     </td>
-                    <td class="text-end font-monospace small">
+                    <td class="num mono small">
                       @if (parseFloat(line.creditAmount) > 0) {
                         {{ line.creditAmount }}
                       } @else {
@@ -144,19 +151,19 @@
                   </tr>
                 }
               </tbody>
-              <tfoot class="table-light fw-semibold">
+              <tfoot class="erp-tfoot fw-semibold">
                 <tr>
                   <td colspan="3" class="text-end small">Totals</td>
-                  <td class="text-end font-monospace small">{{ totalDebits() }}</td>
-                  <td class="text-end font-monospace small">{{ totalCredits() }}</td>
+                  <td class="num mono small">{{ totalDebits() }}</td>
+                  <td class="num mono small">{{ totalCredits() }}</td>
                   <td colspan="2">
                     @if (isBalanced()) {
-                      <span class="text-success small">
-                        <i class="bi bi-check-circle-fill me-1" aria-hidden="true"></i>Balanced
+                      <span class="status-tag status-tag--ok">
+                        <span class="status-tag__dot"></span>Balanced
                       </span>
                     } @else {
-                      <span class="text-danger small">
-                        <i class="bi bi-exclamation-circle-fill me-1" aria-hidden="true"></i>Unbalanced
+                      <span class="status-tag status-tag--danger">
+                        <span class="status-tag__dot"></span>Unbalanced
                       </span>
                     }
                   </td>

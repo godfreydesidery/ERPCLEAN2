@@ -15,7 +15,6 @@ import { SupplierModel } from '../models/party.model';
 import { SupplierService } from '../parties/supplier.service';
 import {
   SupplierBillDto,
-  SupplierBillStatus,
   RaiseDebitNoteRequest,
 } from './models/ap.model';
 import { ApService } from './ap.service';
@@ -296,18 +295,6 @@ export class SupplierBillsListComponent {
   }
 
   // ── Display helpers ────────────────────────────────────────────────────────
-
-  statusBadgeClass(status: SupplierBillStatus): string {
-    switch (status) {
-      case 'DRAFT':         return 'text-bg-secondary';
-      case 'MATCHED':       return 'text-bg-info';
-      case 'HELD':          return 'text-bg-danger';
-      case 'APPROVED':      return 'text-bg-primary';
-      case 'PARTIALLY_PAID': return 'text-bg-warning';
-      case 'PAID':          return 'text-bg-success';
-      default:              return 'text-bg-light border';
-    }
-  }
 
   supplierDisplay(supplierId: string): string {
     return this.supplierMap().get(String(supplierId)) ?? String(supplierId);

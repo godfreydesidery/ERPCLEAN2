@@ -1,26 +1,26 @@
 <section class="admin-page">
-  <header class="page-head">
-    <nav aria-label="Breadcrumb">
-      <a [routerLink]="['/admin/work-orders/uid', uid()]" class="text-muted small">
-        <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Work Order
-      </a>
-    </nav>
-    <h1 class="h4 mb-1">Cost Report</h1>
-    @if (report(); as r) {
-      <p class="text-muted mb-0 small">
-        {{ r.woNumber }} — {{ r.finishedProductCode }} {{ r.finishedProductName }}
-      </p>
-    }
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <nav aria-label="Breadcrumb">
+        <a [routerLink]="['/admin/work-orders/uid', uid()]" class="text-muted small">
+          <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Work Order
+        </a>
+      </nav>
+      <h1>Cost Report</h1>
+      @if (report(); as r) {
+        <p class="subtitle">{{ r.woNumber }} — {{ r.finishedProductCode }} {{ r.finishedProductName }}</p>
+      }
+    </div>
   </header>
 
   @switch (state()) {
     @case ('loading') {
-      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+      <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
         <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading cost report…
       </p>
     }
     @case ('error') {
-      <p class="state text-danger" role="alert">
+      <p class="text-danger" role="alert">
         <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
         Could not load cost report. Please try again.
       </p>
@@ -29,9 +29,11 @@
       @if (report(); as r) {
 
         <!-- ── Header summary ─────────────────────────────────────────── -->
-        <div class="card mb-4">
-          <div class="card-header fw-semibold">Summary</div>
-          <div class="card-body">
+        <div class="erp-card mb-4">
+          <div class="erp-card__head">
+            <h2>Summary</h2>
+          </div>
+          <div class="erp-card__body">
             @if (r.incompleteCost) {
               <div class="alert alert-warning d-flex align-items-center gap-2 mb-3" role="alert">
                 <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
@@ -100,14 +102,19 @@
         </div>
 
         <!-- ── Components ──────────────────────────────────────────────── -->
-        <div class="card mb-4">
-          <div class="card-header fw-semibold">Components</div>
-          <div class="card-body p-0">
+        <div class="erp-card mb-4">
+          <div class="erp-card__head">
+            <h2>Components</h2>
+          </div>
+          <div class="erp-card__body p-0">
             @if (r.components.length === 0) {
-              <p class="text-muted p-3 mb-0">No component lines.</p>
+              <div class="erp-empty">
+                <i class="bi bi-list-ul" aria-hidden="true"></i>
+                No component lines.
+              </div>
             } @else {
-              <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
+              <div class="erp-table-wrap">
+                <table class="erp-table">
                   <caption class="visually-hidden">Components for {{ r.woNumber }}</caption>
                   <thead>
                     <tr>
@@ -123,27 +130,27 @@
                   <tbody>
                     @for (comp of r.components; track comp.uid) {
                       <tr>
-                        <td class="small text-muted">{{ comp.lineNo }}</td>
-                        <td class="small">
+                        <td class="text-muted">{{ comp.lineNo }}</td>
+                        <td>
                           <div class="fw-semibold">{{ comp.componentProductCode }}</div>
                           <div class="text-muted" style="font-size:0.8rem">{{ comp.componentProductName }}</div>
                         </td>
-                        <td class="font-monospace small text-end">{{ +comp.plannedQty | number:'1.2-6' }}</td>
-                        <td class="font-monospace small text-end">{{ +comp.issuedQty | number:'1.2-6' }}</td>
-                        <td class="font-monospace small text-end">{{ +comp.issuedValue | number:'1.2-4' }}</td>
-                        <td class="font-monospace small text-end"
+                        <td class="num">{{ +comp.plannedQty | number:'1.2-6' }}</td>
+                        <td class="num">{{ +comp.issuedQty | number:'1.2-6' }}</td>
+                        <td class="num">{{ +comp.issuedValue | number:'1.2-4' }}</td>
+                        <td class="num"
                             [class.text-danger]="comp.costSkipped">
                           @if (comp.costSkipped) {
-                            <span title="No moving-average cost at time of issue">no cost</span>
+                            <span class="status-tag status-tag--warn" title="No moving-average cost at time of issue">no cost</span>
                           } @else {
                             {{ +comp.unitCostAtIssue | number:'1.2-4' }}
                           }
                         </td>
                         <td>
-                          <span class="badge"
-                                [class.text-bg-success]="comp.status === 'ISSUED'"
-                                [class.text-bg-warning]="comp.status === 'PARTIAL'"
-                                [class.text-bg-secondary]="comp.status === 'PLANNED'">
+                          <span class="status-tag"
+                                [class.status-tag--ok]="comp.status === 'ISSUED'"
+                                [class.status-tag--warn]="comp.status === 'PARTIAL'"
+                                [class.status-tag--neutral]="comp.status === 'PLANNED'">
                             {{ comp.status }}
                           </span>
                         </td>
@@ -157,14 +164,19 @@
         </div>
 
         <!-- ── Operations ─────────────────────────────────────────────── -->
-        <div class="card mb-4">
-          <div class="card-header fw-semibold">Operations</div>
-          <div class="card-body p-0">
+        <div class="erp-card mb-4">
+          <div class="erp-card__head">
+            <h2>Operations</h2>
+          </div>
+          <div class="erp-card__body p-0">
             @if (r.operations.length === 0) {
-              <p class="text-muted p-3 mb-0">No operations.</p>
+              <div class="erp-empty">
+                <i class="bi bi-diagram-2" aria-hidden="true"></i>
+                No operations.
+              </div>
             } @else {
-              <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
+              <div class="erp-table-wrap">
+                <table class="erp-table">
                   <caption class="visually-hidden">Operations for {{ r.woNumber }}</caption>
                   <thead>
                     <tr>
@@ -179,16 +191,16 @@
                   <tbody>
                     @for (op of r.operations; track op.uid) {
                       <tr>
-                        <td class="small text-muted">{{ op.seqNo }}</td>
-                        <td class="small">{{ op.description }}</td>
-                        <td class="small text-muted">{{ op.workCentre || '—' }}</td>
-                        <td class="font-monospace small text-end">{{ +op.labourAmount | number:'1.2-4' }}</td>
-                        <td class="font-monospace small text-end">{{ +op.overheadAmount | number:'1.2-4' }}</td>
+                        <td class="text-muted">{{ op.seqNo }}</td>
+                        <td>{{ op.description }}</td>
+                        <td class="text-muted">{{ op.workCentre || '—' }}</td>
+                        <td class="num">{{ +op.labourAmount | number:'1.2-4' }}</td>
+                        <td class="num">{{ +op.overheadAmount | number:'1.2-4' }}</td>
                         <td>
                           @if (op.applied) {
-                            <span class="badge text-bg-success">Applied</span>
+                            <span class="status-tag status-tag--ok">Applied</span>
                           } @else {
-                            <span class="badge text-bg-secondary">Pending</span>
+                            <span class="status-tag status-tag--neutral">Pending</span>
                           }
                         </td>
                       </tr>

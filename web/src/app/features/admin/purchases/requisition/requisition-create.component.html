@@ -4,7 +4,7 @@
       <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Requisitions
     </a>
     <h1 class="h4 mb-1 mt-1">New Purchase Requisition</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
+    <p class="subtitle">
       Create a purchase requisition for approval and conversion to PO or RFQ.
     </p>
   </header>
@@ -18,7 +18,7 @@
     <p class="text-danger mb-3" role="alert">Could not load companies.</p>
   } @else {
 
-    <form class="create-form" (ngSubmit)="submit()" aria-label="Create purchase requisition">
+    <form (ngSubmit)="submit()" aria-label="Create purchase requisition">
 
       <!-- Company (multi-company) -->
       @if (companies().length > 1) {
@@ -38,21 +38,21 @@
       }
 
       <!-- Header fields -->
-      <div class="row g-3 mb-3">
-        <div class="col-sm-3">
+      <div class="erp-form-grid mb-3">
+        <div class="erp-field">
           <label class="form-label small text-muted mb-1" for="requiredByDate">Required By Date</label>
           <input id="requiredByDate" name="requiredByDate" type="date" class="form-control"
                  [ngModel]="requiredByDate()" (ngModelChange)="requiredByDate.set($event)"
                  [disabled]="saving()" />
         </div>
-        <div class="col-sm-3">
+        <div class="erp-field">
           <label class="form-label small text-muted mb-1" for="costCentreCode">Cost Centre Code</label>
           <input id="costCentreCode" name="costCentreCode" type="text" class="form-control"
                  placeholder="e.g. CC-001"
                  [ngModel]="costCentreCode()" (ngModelChange)="costCentreCode.set($event)"
                  [disabled]="saving()" autocomplete="off" />
         </div>
-        <div class="col-sm-6">
+        <div class="erp-field full">
           <label class="form-label small text-muted mb-1" for="reqNotes">Notes</label>
           <input id="reqNotes" name="reqNotes" type="text" class="form-control"
                  [ngModel]="notes()" (ngModelChange)="notes.set($event)"
@@ -61,7 +61,7 @@
       </div>
 
       <!-- Line items -->
-      <h2 class="h6 mb-2">Line Items</h2>
+      <h2 class="erp-section-title">Line Items</h2>
 
       @if (pickerState() === 'loading') {
         <p class="text-muted small" aria-live="polite">
@@ -71,8 +71,8 @@
       } @else if (pickerState() === 'error') {
         <p class="text-danger small" role="alert">Could not load products/units.</p>
       } @else {
-        <div class="table-responsive mb-2">
-          <table class="table table-sm align-middle" aria-label="Requisition line items">
+        <div class="erp-table-wrap mb-2">
+          <table class="erp-table" aria-label="Requisition line items">
             <caption class="visually-hidden">Requisition lines</caption>
             <thead>
               <tr>
@@ -167,7 +167,7 @@
       }
 
       @if (formError(); as msg) {
-        <p class="form-error text-danger small mb-2" role="alert">{{ msg }}</p>
+        <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
       }
 
       <div class="d-flex gap-2">

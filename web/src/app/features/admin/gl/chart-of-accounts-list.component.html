@@ -1,11 +1,9 @@
 <section class="admin-page">
-  <header class="page-head">
-    <h1 class="h4 mb-1">
-      <i class="bi bi-diagram-3 me-2" aria-hidden="true"></i>Chart of Accounts
-    </h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
-      Manage the general ledger account structure for this company.
-    </p>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1><i class="bi bi-diagram-3 me-2" aria-hidden="true"></i>Chart of Accounts</h1>
+      <p class="subtitle">Manage the general ledger account structure for this company.</p>
+    </div>
   </header>
 
   <!-- Company selector -->
@@ -38,10 +36,10 @@
   }
 
   @if (selectedCompanyId()) {
-    <!-- Search bar + create toggle -->
-    <div class="d-flex flex-wrap gap-2 mb-3 align-items-end">
-      <form class="d-flex gap-2" (ngSubmit)="applySearch()" aria-label="Search accounts">
-        <div>
+    <!-- Toolbar: search + create -->
+    <div class="erp-toolbar mb-3">
+      <form class="d-flex gap-2 align-items-end" (ngSubmit)="applySearch()" aria-label="Search accounts">
+        <div class="erp-toolbar__search">
           <label class="form-label small text-muted mb-1" for="accountSearch">Search</label>
           <input id="accountSearch" name="accountSearch" type="search"
                  class="form-control" placeholder="Code, name…"
@@ -61,104 +59,109 @@
         }
       </form>
 
+      <span class="erp-toolbar__spacer"></span>
+
       @if (canManage()) {
-        <div class="ms-auto align-self-end">
-          <button type="button" class="btn btn-primary"
-                  (click)="toggleCreateForm()"
-                  [attr.aria-expanded]="showCreateForm()"
-                  aria-controls="createAccountForm">
-            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
-            New Account
-          </button>
-        </div>
+        <button type="button" class="btn btn-primary"
+                (click)="toggleCreateForm()"
+                [attr.aria-expanded]="showCreateForm()"
+                aria-controls="createAccountForm">
+          <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+          New Account
+        </button>
       }
     </div>
 
     <!-- Create form -->
     @if (showCreateForm()) {
-      <form id="createAccountForm" class="create-form card card-body mb-3"
-            (ngSubmit)="create()" aria-label="Create account">
-        <h2 class="h6 mb-3">New Account</h2>
-        <div class="row g-2 align-items-end">
-          <div class="col-sm-2">
-            <label class="form-label small text-muted mb-1" for="newCode">
-              Code <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="newCode" name="newCode" type="text" class="form-control"
-                   placeholder="e.g. 1001"
-                   [ngModel]="newCode()" (ngModelChange)="newCode.set($event)"
-                   required [disabled]="saving()" autocomplete="off" />
-          </div>
-          <div class="col-sm-4">
-            <label class="form-label small text-muted mb-1" for="newName">
-              Name <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="newName" name="newName" type="text" class="form-control"
-                   placeholder="e.g. Cash at Bank"
-                   [ngModel]="newName()" (ngModelChange)="newName.set($event)"
-                   required [disabled]="saving()" autocomplete="off" />
-          </div>
-          <div class="col-sm-2">
-            <label class="form-label small text-muted mb-1" for="newAccountType">
-              Type <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <select id="newAccountType" name="newAccountType" class="form-select"
-                    [ngModel]="newAccountType()" (ngModelChange)="newAccountType.set($event)"
-                    [disabled]="saving()">
-              @for (t of accountTypes; track t) {
-                <option [value]="t">{{ t }}</option>
-              }
-            </select>
-          </div>
-          <div class="col-sm-2">
-            <button type="submit" class="btn btn-primary w-100" [disabled]="saving()">
-              @if (saving()) {
-                <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
-                Saving…
-              } @else {
-                Create
-              }
-            </button>
-          </div>
-          <div class="col-sm-2">
-            <button type="button" class="btn btn-outline-secondary w-100"
-                    [disabled]="saving()" (click)="toggleCreateForm()">
-              Cancel
-            </button>
-          </div>
+      <div class="erp-card mb-3">
+        <div class="erp-card__head">
+          <h2>New Account</h2>
         </div>
+        <div class="erp-card__body">
+          <form id="createAccountForm" class="erp-form-grid"
+                (ngSubmit)="create()" aria-label="Create account">
+            <div class="erp-field">
+              <label class="form-label" for="newCode">
+                Code <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="newCode" name="newCode" type="text" class="form-control"
+                     placeholder="e.g. 1001"
+                     [ngModel]="newCode()" (ngModelChange)="newCode.set($event)"
+                     required [disabled]="saving()" autocomplete="off" />
+            </div>
+            <div class="erp-field">
+              <label class="form-label" for="newName">
+                Name <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="newName" name="newName" type="text" class="form-control"
+                     placeholder="e.g. Cash at Bank"
+                     [ngModel]="newName()" (ngModelChange)="newName.set($event)"
+                     required [disabled]="saving()" autocomplete="off" />
+            </div>
+            <div class="erp-field">
+              <label class="form-label" for="newAccountType">
+                Type <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <select id="newAccountType" name="newAccountType" class="form-select"
+                      [ngModel]="newAccountType()" (ngModelChange)="newAccountType.set($event)"
+                      [disabled]="saving()">
+                @for (t of accountTypes; track t) {
+                  <option [value]="t">{{ t }}</option>
+                }
+              </select>
+            </div>
+            <div class="erp-field full d-flex gap-2 align-items-end">
+              <button type="submit" class="btn btn-primary" [disabled]="saving()">
+                @if (saving()) {
+                  <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                  Saving…
+                } @else {
+                  Create
+                }
+              </button>
+              <button type="button" class="btn btn-outline-secondary"
+                      [disabled]="saving()" (click)="toggleCreateForm()">
+                Cancel
+              </button>
+            </div>
 
-        @if (formError(); as msg) {
-          <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-        }
-      </form>
+            @if (formError(); as msg) {
+              <p class="erp-field full text-danger small mt-1 mb-0" role="alert">{{ msg }}</p>
+            }
+          </form>
+        </div>
+      </div>
     }
 
     <!-- List states -->
     @switch (state()) {
       @case ('loading') {
-        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading accounts…
         </p>
       }
       @case ('error') {
-        <p class="state text-danger" role="alert">
+        <p class="text-danger" role="alert">
           <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
           Could not load accounts. Please try again.
         </p>
       }
       @case ('forbidden') {
-        <p class="state text-muted d-flex align-items-center gap-2">
-          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock"></i>
           You don't have permission to view chart of accounts.
-        </p>
+        </div>
       }
       @default {
         @if (isEmpty()) {
-          <p class="state text-muted">No accounts yet. Create one above.</p>
+          <div class="erp-empty">
+            <i class="bi bi-diagram-3"></i>
+            No accounts yet. Create one above.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Chart of accounts for this company</caption>
               <thead>
                 <tr>
@@ -174,11 +177,16 @@
               </thead>
               <tbody>
                 @for (a of rows(); track a.uid) {
-                  <tr [class.table-secondary]="!a.active">
-                    <td class="font-monospace fw-semibold">{{ a.accountCode }}</td>
+                  <tr [class.is-muted]="!a.active">
+                    <td class="mono fw-semibold">{{ a.accountCode }}</td>
                     <td>{{ a.name }}</td>
                     <td>
-                      <span class="badge" [class]="typeBadgeClass(a.accountType)">
+                      <span class="status-tag"
+                            [class.status-tag--info]="a.accountType === 'ASSET'"
+                            [class.status-tag--warn]="a.accountType === 'LIABILITY'"
+                            [class.status-tag--neutral]="a.accountType === 'EQUITY'"
+                            [class.status-tag--ok]="a.accountType === 'INCOME'"
+                            [class.status-tag--danger]="a.accountType === 'EXPENSE'">
                         {{ a.accountType }}
                       </span>
                     </td>

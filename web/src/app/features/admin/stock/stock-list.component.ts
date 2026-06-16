@@ -633,10 +633,6 @@ export class StockListComponent {
 
   // ── Display helpers ───────────────────────────────────────────────────────────
 
-  directionBadge(dir: string): string {
-    return dir === 'IN' ? 'text-bg-success' : 'text-bg-warning';
-  }
-
   private messageFrom(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {
       const errors = (err.error as { errors?: string[] })?.errors;

@@ -16,7 +16,6 @@ import {
   CreateLeadRequest,
   LeadDto,
   LeadSource,
-  LeadStatus,
 } from './models/crm.model';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
@@ -197,16 +196,6 @@ export class LeadListComponent {
         this.saving.set(false);
       },
     });
-  }
-
-  statusBadgeClass(status: LeadStatus): string {
-    switch (status) {
-      case 'CONTACTED': return 'text-bg-info';
-      case 'QUALIFIED': return 'text-bg-primary';
-      case 'CONVERTED': return 'text-bg-success';
-      case 'DISQUALIFIED': return 'text-bg-danger';
-      default: return 'text-bg-warning'; // NEW
-    }
   }
 
   private messageFrom(err: unknown, fallback: string): string {

@@ -10,7 +10,6 @@ import {
   FiscalPeriodDto,
   FiscalYearDto,
   OpenFiscalYearRequest,
-  PeriodStatus,
 } from './models/gl.model';
 import { GlService } from './gl.service';
 
@@ -215,14 +214,6 @@ export class FiscalPeriodsComponent {
   }
 
   // ── Display helpers ────────────────────────────────────────────────────────
-
-  statusBadgeClass(status: PeriodStatus): string {
-    return status === 'OPEN' ? 'text-bg-success' : 'text-bg-secondary';
-  }
-
-  yearStatusBadgeClass(status: string): string {
-    return status === 'OPEN' ? 'text-bg-success' : 'text-bg-secondary';
-  }
 
   private messageFrom(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {

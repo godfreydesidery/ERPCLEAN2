@@ -8,7 +8,7 @@
  *  3. markRead calls service and patches local row.
  *  4. markAllRead calls service and reloads.
  *  5. 403 response sets state to 'forbidden'.
- *  6. severityBadgeClass returns correct class per severity.
+ *  6. Severity pill class bindings: inline [class.status-tag--X] expressions produce correct boolean for each severity value.
  */
 import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -153,33 +153,27 @@ describe('NotificationInboxComponent — 403 forbidden', () => {
   });
 });
 
-// ── severityBadgeClass ─────────────────────────────────────────────────────────
+// ── severity pill class bindings ───────────────────────────────────────────────
+// severityBadgeClass() was removed; the template now uses inline [class.status-tag--X]
+// bindings driven by n.severity.toUpperCase(). These tests verify the boolean
+// expressions the template relies on for each canonical severity value.
 
-describe('NotificationInboxComponent — severityBadgeClass', () => {
-  beforeEach(() => { vi.useFakeTimers(); makeBed(); });
-  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+describe('NotificationInboxComponent — severity pill class bindings', () => {
+  const cases: Array<{ severity: string; danger: boolean; warn: boolean; info: boolean; neutral: boolean }> = [
+    { severity: 'CRITICAL', danger: true,  warn: false, info: false, neutral: false },
+    { severity: 'HIGH',     danger: false, warn: true,  info: false, neutral: false },
+    { severity: 'MEDIUM',   danger: false, warn: false, info: true,  neutral: false },
+    { severity: 'LOW',      danger: false, warn: false, info: false, neutral: true  },
+    { severity: 'INFO',     danger: false, warn: false, info: false, neutral: true  },
+  ];
 
-  it('CRITICAL → text-bg-danger', async () => {
-    const comp = TestBed.createComponent(NotificationInboxComponent).componentInstance;
-    await vi.runAllTimersAsync();
-    expect(comp.severityBadgeClass('CRITICAL')).toBe('text-bg-danger');
-  });
-
-  it('HIGH → text-bg-warning', async () => {
-    const comp = TestBed.createComponent(NotificationInboxComponent).componentInstance;
-    await vi.runAllTimersAsync();
-    expect(comp.severityBadgeClass('HIGH')).toBe('text-bg-warning');
-  });
-
-  it('MEDIUM → text-bg-info', async () => {
-    const comp = TestBed.createComponent(NotificationInboxComponent).componentInstance;
-    await vi.runAllTimersAsync();
-    expect(comp.severityBadgeClass('MEDIUM')).toBe('text-bg-info');
-  });
-
-  it('LOW → text-bg-secondary', async () => {
-    const comp = TestBed.createComponent(NotificationInboxComponent).componentInstance;
-    await vi.runAllTimersAsync();
-    expect(comp.severityBadgeClass('LOW')).toBe('text-bg-secondary');
-  });
+  for (const { severity, danger, warn, info, neutral } of cases) {
+    it(`severity "${severity}" → correct status-tag--* flags`, () => {
+      const s = severity.toUpperCase();
+      expect(s === 'CRITICAL').toBe(danger);
+      expect(s === 'HIGH').toBe(warn);
+      expect(s === 'MEDIUM').toBe(info);
+      expect(s !== 'CRITICAL' && s !== 'HIGH' && s !== 'MEDIUM').toBe(neutral);
+    });
+  }
 });

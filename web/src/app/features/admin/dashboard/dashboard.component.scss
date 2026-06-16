@@ -1,6 +1,11 @@
 // BI Dashboard — chart-free CSS bar widgets (ADR-0037 D-8).
 // Follows admin.styles.scss minimalism; no layout overrides.
 
+// <figure> wrappers used as accessible chart containers — strip browser default margin.
+figure.mb-0 {
+  margin: 0;
+}
+
 .bi-bar-chart {
   width: 100%;
 }
@@ -27,14 +32,14 @@
   }
 
   &--revenue {
-    background: #0d6efd;
+    background: var(--erp-primary);
   }
 
   &--profit {
-    background: #198754;
+    background: var(--erp-ok);
   }
 
   &--loss {
-    background: #dc3545;
+    background: var(--erp-danger);
   }
 }

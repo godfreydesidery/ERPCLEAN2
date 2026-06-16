@@ -1,125 +1,135 @@
-<section class="container-fluid py-3" aria-label="Currency Rates">
-  <div class="d-flex align-items-center mb-3 gap-2 flex-wrap">
-    <h1 class="h4 mb-0 me-auto">Currency Exchange Rates</h1>
+<div class="admin-page" aria-label="Currency Rates">
 
-    @if (companyState() === 'loading') {
-      <span class="spinner-border spinner-border-sm text-secondary" aria-label="Loading companies"></span>
-    }
-    @if (companies().length > 1) {
-      <label class="visually-hidden" for="fxRateCompany">Company</label>
-      <select id="fxRateCompany" class="form-select form-select-sm w-auto"
-              [ngModel]="selectedCompanyId()"
-              (ngModelChange)="onCompanyChange($event)">
-        @for (c of companies(); track c.id) {
-          <option [value]="c.id">{{ c.name }}</option>
-        }
-      </select>
-    }
-
-    @if (canManage()) {
-      <button type="button" class="btn btn-primary btn-sm"
-              (click)="openCreate()"
-              [disabled]="showCreateForm()">
-        <i class="bi bi-plus-lg" aria-hidden="true"></i> New Rate
-      </button>
-    }
+  <!-- Page header -->
+  <div class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>Currency Exchange Rates</h1>
+      <p class="subtitle">Effective-dated rates used for multi-currency transactions</p>
+    </div>
+    <div class="erp-page-head__actions">
+      @if (companyState() === 'loading') {
+        <span class="spinner-border spinner-border-sm text-secondary" aria-label="Loading companies"></span>
+      }
+      @if (companies().length > 1) {
+        <label class="visually-hidden" for="fxRateCompany">Company</label>
+        <select id="fxRateCompany" class="form-select form-select-sm w-auto"
+                [ngModel]="selectedCompanyId()"
+                (ngModelChange)="onCompanyChange($event)">
+          @for (c of companies(); track c.id) {
+            <option [value]="c.id">{{ c.name }}</option>
+          }
+        </select>
+      }
+      @if (canManage()) {
+        <button type="button" class="btn btn-primary btn-sm"
+                (click)="openCreate()"
+                [disabled]="showCreateForm()">
+          <i class="bi bi-plus-lg" aria-hidden="true"></i> New Rate
+        </button>
+      }
+    </div>
   </div>
 
   <!-- Create form -->
   @if (showCreateForm()) {
-    <div class="card mb-3 border-primary" role="form" aria-label="Add exchange rate">
-      <div class="card-header fw-semibold">New Exchange Rate</div>
-      <div class="card-body">
-        @if (createError()) {
-          <div class="alert alert-danger py-2" role="alert">{{ createError() }}</div>
-        }
-        <div class="row g-3">
-          <div class="col-12 col-md-2">
-            <label class="form-label" for="fxNewFrom">
-              From Currency <span aria-hidden="true">*</span>
-            </label>
-            @if (currencies().length > 0) {
-              <select id="fxNewFrom" class="form-select form-select-sm"
-                      [ngModel]="newFromCurrency()"
-                      (ngModelChange)="newFromCurrency.set($event)"
-                      required>
-                <option value="">— select —</option>
-                @for (c of currencies(); track c.uid) {
-                  <option [value]="c.code">{{ c.code }} — {{ c.name }}</option>
-                }
-              </select>
-            } @else {
-              <input id="fxNewFrom" type="text" class="form-control form-control-sm"
-                     [ngModel]="newFromCurrency()" (ngModelChange)="newFromCurrency.set($event)"
-                     placeholder="USD" maxlength="3" required />
-            }
-          </div>
-          <div class="col-12 col-md-2">
-            <label class="form-label" for="fxNewTo">
-              To Currency <span aria-hidden="true">*</span>
-            </label>
-            @if (currencies().length > 0) {
-              <select id="fxNewTo" class="form-select form-select-sm"
-                      [ngModel]="newToCurrency()"
-                      (ngModelChange)="newToCurrency.set($event)"
-                      required>
-                <option value="">— select —</option>
-                @for (c of currencies(); track c.uid) {
-                  <option [value]="c.code">{{ c.code }} — {{ c.name }}</option>
-                }
-              </select>
-            } @else {
-              <input id="fxNewTo" type="text" class="form-control form-control-sm"
-                     [ngModel]="newToCurrency()" (ngModelChange)="newToCurrency.set($event)"
-                     placeholder="TZS" maxlength="3" required />
-            }
-          </div>
-          <div class="col-12 col-md-2">
-            <label class="form-label" for="fxNewRate">
-              Rate <span aria-hidden="true">*</span>
-            </label>
-            <input id="fxNewRate" type="number" class="form-control form-control-sm"
-                   [ngModel]="newRate()" (ngModelChange)="newRate.set($event)"
-                   min="0.000001" step="0.000001" placeholder="1.000000" required />
-            <div class="form-text">Units of To-currency per 1 unit of From-currency.</div>
-          </div>
-          <div class="col-12 col-md-2">
-            <label class="form-label" for="fxNewDate">
-              Effective Date <span aria-hidden="true">*</span>
-            </label>
-            <input id="fxNewDate" type="date" class="form-control form-control-sm"
-                   [ngModel]="newEffectiveDate()" (ngModelChange)="newEffectiveDate.set($event)"
-                   required />
-          </div>
-          <div class="col-12 col-md-2">
-            <label class="form-label" for="fxNewType">Rate Type</label>
-            <select id="fxNewType" class="form-select form-select-sm"
-                    [ngModel]="newRateType()"
-                    (ngModelChange)="newRateType.set($event)">
-              <option value="">— none —</option>
-              <option value="SPOT">Spot</option>
-              <option value="FORWARD">Forward</option>
-              <option value="OFFICIAL">Official</option>
-            </select>
-          </div>
-          <div class="col-12 col-md-2">
-            <label class="form-label" for="fxNewSource">Source</label>
-            <input id="fxNewSource" type="text" class="form-control form-control-sm"
-                   [ngModel]="newSource()" (ngModelChange)="newSource.set($event)"
-                   placeholder="e.g. Central Bank" maxlength="40" />
-          </div>
-        </div>
+    <div class="erp-card mb-3">
+      <div class="erp-card__head">
+        <h2>New Exchange Rate</h2>
       </div>
-      <div class="card-footer d-flex gap-2">
-        <button type="button" class="btn btn-primary btn-sm"
-                (click)="submitCreate()" [disabled]="creating()">
-          @if (creating()) {
-            <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+      <div class="erp-card__body">
+        <form aria-label="Add exchange rate" (ngSubmit)="submitCreate()">
+          @if (createError()) {
+            <div class="alert alert-danger py-2" role="alert">{{ createError() }}</div>
           }
-          Save Rate
-        </button>
-        <button type="button" class="btn btn-outline-secondary btn-sm"
-                (click)="cancelCreate()">Cancel</button>
+          <div class="erp-form-grid">
+            <div class="erp-field">
+              <label class="form-label" for="fxNewFrom">
+                From Currency <span aria-hidden="true">*</span>
+              </label>
+              @if (currencies().length > 0) {
+                <select id="fxNewFrom" class="form-select form-select-sm"
+                        [ngModel]="newFromCurrency()"
+                        (ngModelChange)="newFromCurrency.set($event)"
+                        name="fxNewFrom" required>
+                  <option value="">— select —</option>
+                  @for (c of currencies(); track c.uid) {
+                    <option [value]="c.code">{{ c.code }} — {{ c.name }}</option>
+                  }
+                </select>
+              } @else {
+                <input id="fxNewFrom" type="text" class="form-control form-control-sm"
+                       [ngModel]="newFromCurrency()" (ngModelChange)="newFromCurrency.set($event)"
+                       name="fxNewFrom" placeholder="USD" maxlength="3" required />
+              }
+            </div>
+            <div class="erp-field">
+              <label class="form-label" for="fxNewTo">
+                To Currency <span aria-hidden="true">*</span>
+              </label>
+              @if (currencies().length > 0) {
+                <select id="fxNewTo" class="form-select form-select-sm"
+                        [ngModel]="newToCurrency()"
+                        (ngModelChange)="newToCurrency.set($event)"
+                        name="fxNewTo" required>
+                  <option value="">— select —</option>
+                  @for (c of currencies(); track c.uid) {
+                    <option [value]="c.code">{{ c.code }} — {{ c.name }}</option>
+                  }
+                </select>
+              } @else {
+                <input id="fxNewTo" type="text" class="form-control form-control-sm"
+                       [ngModel]="newToCurrency()" (ngModelChange)="newToCurrency.set($event)"
+                       name="fxNewTo" placeholder="TZS" maxlength="3" required />
+              }
+            </div>
+            <div class="erp-field">
+              <label class="form-label" for="fxNewRate">
+                Rate <span aria-hidden="true">*</span>
+              </label>
+              <input id="fxNewRate" type="number" class="form-control form-control-sm"
+                     [ngModel]="newRate()" (ngModelChange)="newRate.set($event)"
+                     name="fxNewRate" min="0.000001" step="0.000001" placeholder="1.000000" required />
+              <span class="hint">Units of To-currency per 1 unit of From-currency.</span>
+            </div>
+            <div class="erp-field">
+              <label class="form-label" for="fxNewDate">
+                Effective Date <span aria-hidden="true">*</span>
+              </label>
+              <input id="fxNewDate" type="date" class="form-control form-control-sm"
+                     [ngModel]="newEffectiveDate()" (ngModelChange)="newEffectiveDate.set($event)"
+                     name="fxNewDate" required />
+            </div>
+            <div class="erp-field">
+              <label class="form-label" for="fxNewType">Rate Type</label>
+              <select id="fxNewType" class="form-select form-select-sm"
+                      [ngModel]="newRateType()"
+                      (ngModelChange)="newRateType.set($event)"
+                      name="fxNewType">
+                <option value="">— none —</option>
+                <option value="SPOT">Spot</option>
+                <option value="FORWARD">Forward</option>
+                <option value="OFFICIAL">Official</option>
+              </select>
+            </div>
+            <div class="erp-field">
+              <label class="form-label" for="fxNewSource">Source</label>
+              <input id="fxNewSource" type="text" class="form-control form-control-sm"
+                     [ngModel]="newSource()" (ngModelChange)="newSource.set($event)"
+                     name="fxNewSource" placeholder="e.g. Central Bank" maxlength="40" />
+            </div>
+          </div>
+          <div class="d-flex gap-2 mt-3">
+            <button type="submit" class="btn btn-primary btn-sm"
+                    [disabled]="creating()">
+              @if (creating()) {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+              }
+              Save Rate
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm"
+                    (click)="cancelCreate()">Cancel</button>
+          </div>
+        </form>
       </div>
     </div>
   }
@@ -127,8 +137,8 @@
   <!-- Four-state switch -->
   @switch (state()) {
     @case ('loading') {
-      <div class="text-center py-5" aria-busy="true" aria-label="Loading exchange rates">
-        <span class="spinner-border text-primary" role="status"></span>
+      <div class="text-center py-5" aria-busy="true" aria-live="polite" aria-label="Loading exchange rates">
+        <span class="spinner-border text-primary" aria-label="Loading"></span>
       </div>
     }
     @case ('forbidden') {
@@ -147,18 +157,19 @@
     }
     @default {
       @if (isEmpty()) {
-        <div class="alert alert-info" role="status">
+        <div class="erp-empty" aria-live="polite">
+          <i class="bi bi-currency-exchange"></i>
           No exchange rates found for this company. Add the first rate to get started.
         </div>
       } @else {
-        <div class="table-responsive">
-          <table class="table table-sm table-hover align-middle bg-white">
+        <div class="erp-table-wrap">
+          <table class="erp-table">
             <caption class="visually-hidden">Exchange rates — newest effective date first</caption>
-            <thead class="table-light">
+            <thead>
               <tr>
                 <th scope="col">From</th>
                 <th scope="col">To</th>
-                <th scope="col" class="text-end">Rate</th>
+                <th scope="col" class="num">Rate</th>
                 <th scope="col">Effective Date</th>
                 <th scope="col">Type</th>
                 <th scope="col">Source</th>
@@ -168,14 +179,17 @@
             <tbody>
               @for (row of rows(); track row.uid) {
                 <tr>
-                  <td class="font-monospace fw-semibold">{{ row.fromCurrency }}</td>
-                  <td class="font-monospace fw-semibold">{{ row.toCurrency }}</td>
-                  <td class="text-end font-monospace">{{ fmtRate(row.rate) }}</td>
+                  <td class="mono fw-semibold">{{ row.fromCurrency }}</td>
+                  <td class="mono fw-semibold">{{ row.toCurrency }}</td>
+                  <td class="num">{{ fmtRate(row.rate) }}</td>
                   <td>{{ row.effectiveDate }}</td>
                   <td>
                     @if (row.rateType) {
-                      <span class="badge" [class]="rateTypeBadgeClass(row.rateType)">
-                        {{ row.rateType }}
+                      <span class="status-tag"
+                            [class.status-tag--ok]="row.rateType === 'SPOT'"
+                            [class.status-tag--info]="row.rateType === 'FORWARD'"
+                            [class.status-tag--neutral]="row.rateType === 'OFFICIAL'">
+                        <span class="status-tag__dot" aria-hidden="true"></span>{{ row.rateType }}
                       </span>
                     } @else {
                       <span class="text-muted">—</span>
@@ -184,9 +198,11 @@
                   <td>{{ row.source || '—' }}</td>
                   <td>
                     @if (row.active) {
-                      <i class="bi bi-check-circle-fill text-success" aria-label="Active"></i>
+                      <span class="status-tag status-tag--ok">
+                        <span class="status-tag__dot" aria-hidden="true"></span>Active
+                      </span>
                     } @else {
-                      <span class="badge text-bg-secondary">Inactive</span>
+                      <span class="status-tag status-tag--neutral"><span class="status-tag__dot" aria-hidden="true"></span>Inactive</span>
                     }
                   </td>
                 </tr>
@@ -196,8 +212,8 @@
         </div>
 
         <!-- Pagination -->
-          <app-paginator [meta]="meta()" [label]="'FX rates'" (pageChange)="goToPage($event)" />
+        <app-paginator [meta]="meta()" [label]="'FX rates'" (pageChange)="goToPage($event)" />
       }
     }
   }
-</section>
+</div>

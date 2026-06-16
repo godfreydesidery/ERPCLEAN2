@@ -37,99 +37,112 @@
   @if (state() === 'idle' && role(); as r) {
 
     <!-- Details card -->
-    <form class="card card-body mb-3" (ngSubmit)="saveDetails()" aria-label="Edit role details">
-      <h2 class="h6 mb-3">Role Details</h2>
-      <div class="row g-2 align-items-end">
-        <div class="col-sm-3">
-          <label class="form-label small text-muted mb-1" for="editCode">Code</label>
-          <input id="editCode" type="text" class="form-control font-monospace"
-                 [value]="r.code" disabled aria-describedby="codeHint" />
-          <div id="codeHint" class="form-text">Immutable — set at creation.</div>
-        </div>
-        <div class="col-sm-5">
-          <label class="form-label small text-muted mb-1" for="editName">Name</label>
-          <input id="editName" name="editName" type="text" class="form-control"
-                 [(ngModel)]="editName" required [disabled]="savingDetails()" />
-        </div>
-        <div class="col-sm-4">
-          <label class="form-label small text-muted mb-1" for="editDesc">Description</label>
-          <input id="editDesc" name="editDesc" type="text" class="form-control"
-                 [(ngModel)]="editDescription" [disabled]="savingDetails()" />
-        </div>
+    <div class="erp-card mb-3">
+      <div class="erp-card__head">
+        <h2>Role Details</h2>
       </div>
-      <div class="mt-3 d-flex align-items-center gap-2">
-        <button type="submit" class="btn btn-primary" [disabled]="savingDetails()">
-          @if (savingDetails()) {
-            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-            Saving…
-          } @else {
-            Save details
+      <div class="erp-card__body">
+        <form (ngSubmit)="saveDetails()" aria-label="Edit role details">
+          <div class="row g-2 align-items-end">
+            <div class="col-sm-3">
+              <label class="form-label small text-muted mb-1" for="editCode">Code</label>
+              <input id="editCode" type="text" class="form-control font-monospace"
+                     [value]="r.code" disabled aria-describedby="codeHint" />
+              <div id="codeHint" class="form-text">Immutable — set at creation.</div>
+            </div>
+            <div class="col-sm-5">
+              <label class="form-label small text-muted mb-1" for="editName">Name</label>
+              <input id="editName" name="editName" type="text" class="form-control"
+                     [(ngModel)]="editName" required [disabled]="savingDetails()" />
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label small text-muted mb-1" for="editDesc">Description</label>
+              <input id="editDesc" name="editDesc" type="text" class="form-control"
+                     [(ngModel)]="editDescription" [disabled]="savingDetails()" />
+            </div>
+          </div>
+          <div class="mt-3 d-flex align-items-center gap-2">
+            <button type="submit" class="btn btn-primary" [disabled]="savingDetails()">
+              @if (savingDetails()) {
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                Saving…
+              } @else {
+                Save details
+              }
+            </button>
+            @if (detailsSaved()) {
+              <span class="text-success small" aria-live="polite">
+                <i class="bi bi-check-circle me-1" aria-hidden="true"></i>Saved.
+              </span>
+            }
+          </div>
+          @if (detailsError(); as msg) {
+            <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
           }
-        </button>
-        @if (detailsSaved()) {
-          <span class="text-success small" aria-live="polite">
-            <i class="bi bi-check-circle me-1" aria-hidden="true"></i>Saved.
-          </span>
-        }
+        </form>
       </div>
-      @if (detailsError(); as msg) {
-        <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-      }
-    </form>
+    </div>
 
     <!-- Permissions card -->
-    <form class="card card-body" (ngSubmit)="savePermissions()" aria-label="Set role permissions">
-      <h2 class="h6 mb-1">Permissions</h2>
-      <p class="text-muted small mb-3">
-        {{ selectedCodes().size }} of {{ allPermissions().length }} selected
-      </p>
-
-      @if (permGroups().length === 0) {
-        <p class="text-muted">No permissions defined.</p>
-      } @else {
-        <div class="perm-grid">
-          @for (group of permGroups(); track group.module) {
-            <fieldset class="perm-group">
-              <legend class="perm-group-legend">{{ group.module }}</legend>
-              @for (perm of group.permissions; track perm.code) {
-                <div class="form-check">
-                  <input class="form-check-input" type="checkbox"
-                         [id]="'perm-' + perm.code"
-                         [checked]="isChecked(perm.code)"
-                         [disabled]="savingPerms()"
-                         (change)="togglePermission(perm.code, $any($event.target).checked)" />
-                  <label class="form-check-label" [for]="'perm-' + perm.code">
-                    <span class="font-monospace small">{{ perm.code }}</span>
-                    @if (perm.description) {
-                      <span class="text-muted small ms-1">— {{ perm.description }}</span>
-                    }
-                  </label>
-                </div>
-              }
-            </fieldset>
-          }
-        </div>
-      }
-
-      <div class="mt-3 d-flex align-items-center gap-2">
-        <button type="submit" class="btn btn-primary" [disabled]="savingPerms()">
-          @if (savingPerms()) {
-            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-            Saving…
-          } @else {
-            Save permissions
-          }
-        </button>
-        @if (permsSaved()) {
-          <span class="text-success small" aria-live="polite">
-            <i class="bi bi-check-circle me-1" aria-hidden="true"></i>Saved.
-          </span>
-        }
+    <div class="erp-card">
+      <div class="erp-card__head">
+        <h2>Permissions</h2>
+        <span class="spacer"></span>
+        <span class="text-muted small">{{ selectedCodes().size }} of {{ allPermissions().length }} selected</span>
       </div>
-      @if (permsError(); as msg) {
-        <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-      }
-    </form>
+      <div class="erp-card__body">
+        <form (ngSubmit)="savePermissions()" aria-label="Set role permissions">
+          @if (permGroups().length === 0) {
+            <div class="erp-empty">
+              <i class="bi bi-shield" aria-hidden="true"></i>
+              No permissions defined.
+            </div>
+          } @else {
+            <div class="perm-grid">
+              @for (group of permGroups(); track group.module) {
+                <fieldset class="perm-group">
+                  <legend class="perm-group-legend">{{ group.module }}</legend>
+                  @for (perm of group.permissions; track perm.code) {
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox"
+                             [id]="'perm-' + perm.code"
+                             [checked]="isChecked(perm.code)"
+                             [disabled]="savingPerms()"
+                             (change)="togglePermission(perm.code, $any($event.target).checked)" />
+                      <label class="form-check-label" [for]="'perm-' + perm.code">
+                        <span class="font-monospace small">{{ perm.code }}</span>
+                        @if (perm.description) {
+                          <span class="text-muted small ms-1">— {{ perm.description }}</span>
+                        }
+                      </label>
+                    </div>
+                  }
+                </fieldset>
+              }
+            </div>
+          }
+
+          <div class="mt-3 d-flex align-items-center gap-2">
+            <button type="submit" class="btn btn-primary" [disabled]="savingPerms()">
+              @if (savingPerms()) {
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                Saving…
+              } @else {
+                Save permissions
+              }
+            </button>
+            @if (permsSaved()) {
+              <span class="text-success small" aria-live="polite">
+                <i class="bi bi-check-circle me-1" aria-hidden="true"></i>Saved.
+              </span>
+            }
+          </div>
+          @if (permsError(); as msg) {
+            <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+          }
+        </form>
+      </div>
+    </div>
 
   }
 </section>

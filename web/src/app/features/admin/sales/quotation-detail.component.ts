@@ -12,7 +12,6 @@ import {
   AddQuotationLineRequest,
   QuotationDto,
   QuotationLineDto,
-  QuotationStatus,
 } from '../models/sales-orders.model';
 import { ProductService } from '../products/product.service';
 import { SalesOrdersService } from './sales-orders.service';
@@ -291,16 +290,6 @@ export class QuotationDetailComponent {
   }
 
   // ── Display helpers ───────────────────────────────────────────────────────────
-
-  statusBadgeClass(status: QuotationStatus): string {
-    switch (status) {
-      case 'SENT': return 'text-bg-info';
-      case 'ACCEPTED': return 'text-bg-success';
-      case 'REJECTED': return 'text-bg-danger';
-      case 'EXPIRED': return 'text-bg-secondary';
-      default: return 'text-bg-warning';
-    }
-  }
 
   private messageFrom(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {

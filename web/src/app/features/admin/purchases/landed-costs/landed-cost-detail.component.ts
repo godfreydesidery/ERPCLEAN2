@@ -4,7 +4,7 @@ import { Component, computed, inject, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AlertService } from '../../../../core/feedback/alert.service';
 import { SessionStore } from '../../../../core/auth/session.store';
-import { LandedCostDto, LandedCostStatus } from '../../models/purchases.model';
+import { LandedCostDto } from '../../models/purchases.model';
 import { LandedCostService } from './landed-cost.service';
 
 type LoadState = 'loading' | 'idle' | 'error';
@@ -58,10 +58,6 @@ export class LandedCostDetailComponent {
         this.confirming.set(false);
       },
     });
-  }
-
-  statusBadgeClass(status: LandedCostStatus): string {
-    return status === 'CONFIRMED' ? 'text-bg-success' : 'text-bg-warning';
   }
 
   private messageFrom(err: unknown, fallback: string): string {

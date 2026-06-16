@@ -10,7 +10,6 @@ import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import {
   ApprovalPolicyDto,
-  MasterStatus,
   PolicyBranchScope,
   PolicyStepInputDto,
   UpdateApprovalPolicyRequest,
@@ -228,16 +227,6 @@ export class ApprovalPolicyDetailComponent {
         this.deactivating.set(false);
       },
     });
-  }
-
-  // ── Display helpers ───────────────────────────────────────────────────────
-
-  statusBadgeClass(status: MasterStatus): string {
-    switch (status) {
-      case 'ACTIVE': return 'text-bg-success';
-      case 'INACTIVE': return 'text-bg-warning';
-      case 'ARCHIVED': return 'text-bg-secondary';
-    }
   }
 
   private messageFrom(err: unknown, fallback: string): string {

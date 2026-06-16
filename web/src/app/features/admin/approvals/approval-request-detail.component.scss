@@ -1,1 +1,7 @@
-// Approval request detail — relies on global admin.styles.scss
+// Pseudo-label span used in read-only metadata grid (no native input to associate with).
+// Matches the global .erp-field > label rule.
+.erp-field__label-text {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--erp-text);
+}

@@ -1,7 +1,7 @@
 <section class="admin-page">
   <header class="page-head">
-    <h1 class="h4 mb-1">Approval Inbox</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
+    <h1>Approval Inbox</h1>
+    <p class="subtitle">
       <i class="bi bi-inbox me-1" aria-hidden="true"></i>
       Pending requests awaiting your decision.
     </p>
@@ -9,37 +9,37 @@
 
   @switch (state()) {
     @case ('loading') {
-      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+      <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
         <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading inbox…
       </p>
     }
     @case ('error') {
-      <p class="state text-danger" role="alert">
+      <p class="text-danger" role="alert">
         <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
         Could not load the inbox. Please try again.
       </p>
     }
     @case ('forbidden') {
-      <p class="state text-muted d-flex align-items-center gap-2">
+      <p class="text-muted d-flex align-items-center gap-2" role="alert">
         <i class="bi bi-shield-lock" aria-hidden="true"></i>
         You don't have permission to view the approval inbox.
       </p>
     }
     @default {
       @if (isEmpty()) {
-        <div class="state text-center py-5">
-          <i class="bi bi-check-circle text-success" style="font-size:2.5rem;" aria-hidden="true"></i>
-          <p class="text-muted mt-2">Your inbox is empty — no pending requests require your decision.</p>
+        <div class="erp-empty">
+          <i class="bi bi-check-circle" aria-hidden="true"></i>
+          Your inbox is empty — no pending requests require your decision.
         </div>
       } @else {
-        <div class="table-responsive">
-          <table class="table table-hover align-middle bg-white grid">
+        <div class="erp-table-wrap">
+          <table class="erp-table">
             <caption class="visually-hidden">Approval Inbox — Pending Requests</caption>
             <thead>
               <tr>
                 <th scope="col">Request #</th>
                 <th scope="col">Document Type</th>
-                <th scope="col">Amount</th>
+                <th scope="col" class="text-end">Amount</th>
                 <th scope="col">Status</th>
                 <th scope="col">Submitted</th>
                 <th scope="col">Current Step Role</th>
@@ -49,14 +49,20 @@
             <tbody>
               @for (r of rows(); track r.uid) {
                 <tr>
-                  <td class="font-monospace small">{{ r.requestNumber }}</td>
-                  <td class="small font-monospace">{{ r.documentType }}</td>
-                  <td class="text-end font-monospace small">{{ r.currency }} {{ +r.amount | number:'1.2-2' }}</td>
+                  <td class="mono">{{ r.requestNumber }}</td>
+                  <td class="mono">{{ r.documentType }}</td>
+                  <td class="num">{{ r.currency }} {{ +r.amount | number:'1.2-2' }}</td>
                   <td>
-                    <span class="badge" [class]="statusBadgeClass(r.status)">{{ r.status }}</span>
+                    <span class="status-tag"
+                          [class.status-tag--warn]="r.status === 'PENDING'"
+                          [class.status-tag--ok]="r.status === 'APPROVED'"
+                          [class.status-tag--danger]="r.status === 'REJECTED'"
+                          [class.status-tag--neutral]="r.status === 'RECALLED' || r.status === 'CANCELLED'">
+                      <span class="status-tag__dot" aria-hidden="true"></span>{{ r.status }}
+                    </span>
                   </td>
-                  <td class="small text-muted">{{ r.submittedAt | slice:0:10 }}</td>
-                  <td class="small font-monospace">
+                  <td>{{ r.submittedAt | slice:0:10 }}</td>
+                  <td class="mono">
                     @for (step of r.steps; track step.uid) {
                       @if (step.status === 'PENDING') {
                         <span>{{ step.approverRoleCode }}</span>
@@ -64,7 +70,7 @@
                     }
                   </td>
                   <td>
-                    <a class="btn btn-sm btn-success"
+                    <a class="btn btn-sm btn-primary"
                        [routerLink]="['/admin/approvals/requests/uid', r.uid]"
                        [attr.aria-label]="'Decide on request ' + r.requestNumber">
                       <i class="bi bi-check2-circle me-1" aria-hidden="true"></i>Decide
@@ -76,7 +82,7 @@
           </table>
         </div>
 
-          <app-paginator [meta]="meta()" [label]="'Approvals'" (pageChange)="goToPage($event)" />
+        <app-paginator [meta]="meta()" [label]="'Approvals'" (pageChange)="goToPage($event)" />
       }
     }
   }

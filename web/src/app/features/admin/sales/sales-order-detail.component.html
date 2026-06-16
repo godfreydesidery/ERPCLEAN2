@@ -1,6 +1,6 @@
 <section class="admin-page">
   <header class="page-head">
-    <a class="back-link text-muted small" routerLink="/admin/sales-orders">
+    <a class="text-muted small" routerLink="/admin/sales-orders">
       <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Sales Orders
     </a>
 
@@ -22,10 +22,17 @@
           <div class="d-flex flex-wrap align-items-start gap-3 mt-1">
             <div>
               <h1 class="h4 mb-0">
-                <span class="font-monospace text-primary">{{ orderLabel() }}</span>
+                <span class="mono text-primary">{{ orderLabel() }}</span>
               </h1>
               <div class="d-flex gap-2 mt-1 flex-wrap align-items-center">
-                <span class="badge" [class]="statusBadgeClass(o.status)">{{ o.status }}</span>
+                <span class="status-tag"
+                      [class.status-tag--ok]="o.status === 'FULFILLED' || o.status === 'INVOICED'"
+                      [class.status-tag--info]="o.status === 'CONFIRMED' || o.status === 'PARTIALLY_FULFILLED'"
+                      [class.status-tag--warn]="o.status === 'DRAFT' || o.status === 'PARTIALLY_INVOICED'"
+                      [class.status-tag--danger]="o.status === 'CANCELLED'"
+                      [class.status-tag--neutral]="o.status === 'CLOSED'">
+                  {{ o.status }}
+                </span>
                 @if (o.sourceQuotationUid) {
                   <a class="small text-muted"
                      [routerLink]="['/admin/quotations/uid', o.sourceQuotationUid]">
@@ -60,21 +67,25 @@
             </dl>
 
             <!-- Totals card -->
-            <div class="card border-0 bg-light" style="min-width:200px">
-              <div class="card-body py-2 px-3">
-                <table class="table table-sm table-borderless mb-0" style="font-size:0.875rem">
+            <div class="erp-card" style="min-width:200px">
+              <div class="erp-card__body">
+                <table class="erp-table" style="font-size:0.875rem">
+                  <caption class="visually-hidden">Order totals</caption>
+                  <thead class="visually-hidden">
+                    <tr><th scope="col">Label</th><th scope="col" class="num">Amount</th></tr>
+                  </thead>
                   <tbody>
                     <tr>
-                      <td class="px-0 text-muted">Net</td>
-                      <td class="text-end font-monospace px-0">{{ o.currency }} {{ +o.netTotalAmount | number:'1.2-2' }}</td>
+                      <td class="text-muted">Net</td>
+                      <td class="num">{{ o.currency }} {{ +o.netTotalAmount | number:'1.2-2' }}</td>
                     </tr>
                     <tr>
-                      <td class="px-0 text-muted">VAT</td>
-                      <td class="text-end font-monospace px-0">{{ o.currency }} {{ +o.vatTotalAmount | number:'1.2-2' }}</td>
+                      <td class="text-muted">VAT</td>
+                      <td class="num">{{ o.currency }} {{ +o.vatTotalAmount | number:'1.2-2' }}</td>
                     </tr>
-                    <tr class="fw-bold border-top">
-                      <td class="px-0">Total</td>
-                      <td class="text-end font-monospace px-0">{{ o.currency }} {{ +o.grossTotalAmount | number:'1.2-2' }}</td>
+                    <tr class="fw-bold">
+                      <td>Total</td>
+                      <td class="num">{{ o.currency }} {{ +o.grossTotalAmount | number:'1.2-2' }}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -84,7 +95,6 @@
 
           <!-- Action buttons -->
           <div class="d-flex gap-2 mt-3 flex-wrap align-items-start">
-            <!-- Confirm (DRAFT → stock reserved) -->
             @if (isDraft() && canConfirm()) {
               <button type="button" class="btn btn-success"
                       [disabled]="!canConfirmNow() || confirming()"
@@ -98,7 +108,6 @@
               }
             }
 
-            <!-- Create delivery link (post-DRAFT, not cancelled/closed) -->
             @if (canDeliverNow()) {
               <a class="btn btn-outline-primary"
                  [routerLink]="['/admin/deliveries/create']"
@@ -109,7 +118,6 @@
               </a>
             }
 
-            <!-- Cancel -->
             @if (canCancelNow()) {
               <button type="button" class="btn btn-outline-danger"
                       (click)="toggleCancelForm()"
@@ -122,58 +130,63 @@
 
           <!-- Confirm dialog -->
           @if (showConfirmDialog()) {
-            <div class="card card-body mt-2 mb-3 border-success" style="max-width:480px"
+            <div class="erp-card mt-2 mb-3" style="max-width:480px"
                  role="dialog" aria-label="Confirm order" aria-modal="true">
-              <h2 class="h6 mb-2">Confirm Order?</h2>
-              <p class="small text-muted mb-3">
-                Confirming will attempt to reserve stock for all order lines.
-                If insufficient stock is available the order will confirm with a backorder.
-              </p>
-              <div class="d-flex gap-2">
-                <button type="button" class="btn btn-success" [disabled]="confirming()" (click)="confirmOrder()">
-                  @if (confirming()) {
-                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-                  }
-                  Yes, Confirm
-                </button>
-                <button type="button" class="btn btn-outline-secondary"
-                        (click)="toggleConfirmDialog()" [disabled]="confirming()">
-                  Cancel
-                </button>
+              <div class="erp-card__head"><h2>Confirm Order?</h2></div>
+              <div class="erp-card__body">
+                <p class="small text-muted mb-3">
+                  Confirming will attempt to reserve stock for all order lines.
+                  If insufficient stock is available the order will confirm with a backorder.
+                </p>
+                <div class="d-flex gap-2">
+                  <button type="button" class="btn btn-success" [disabled]="confirming()" (click)="confirmOrder()">
+                    @if (confirming()) {
+                      <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                    }
+                    Yes, Confirm
+                  </button>
+                  <button type="button" class="btn btn-outline-secondary"
+                          (click)="toggleConfirmDialog()" [disabled]="confirming()">
+                    Cancel
+                  </button>
+                </div>
+                @if (confirmError(); as msg) {
+                  <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+                }
               </div>
-              @if (confirmError(); as msg) {
-                <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-              }
             </div>
           }
 
           <!-- Cancel form -->
           @if (showCancelForm()) {
-            <form class="card card-body mt-2 mb-3" style="max-width:480px"
-                  (ngSubmit)="submitCancel()" aria-label="Cancel sales order">
-              <h2 class="h6 mb-2">Cancel Order</h2>
-              <div class="mb-2">
-                <label class="form-label small text-muted mb-1" for="cancelReason">Reason (optional)</label>
-                <input id="cancelReason" name="cancelReason" type="text" class="form-control"
-                       [ngModel]="cancelReason()" (ngModelChange)="cancelReason.set($event)"
-                       [disabled]="cancelling()" autocomplete="off" />
-              </div>
-              <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-danger" [disabled]="cancelling()">
-                  @if (cancelling()) {
-                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+            <div class="erp-card mt-2 mb-3" style="max-width:480px">
+              <div class="erp-card__head"><h2>Cancel Order</h2></div>
+              <div class="erp-card__body">
+                <form (ngSubmit)="submitCancel()" aria-label="Cancel sales order">
+                  <div class="erp-field mb-3">
+                    <label for="cancelReason">Reason (optional)</label>
+                    <input id="cancelReason" name="cancelReason" type="text" class="form-control"
+                           [ngModel]="cancelReason()" (ngModelChange)="cancelReason.set($event)"
+                           [disabled]="cancelling()" autocomplete="off" />
+                  </div>
+                  <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-danger" [disabled]="cancelling()">
+                      @if (cancelling()) {
+                        <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                      }
+                      Confirm Cancel
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary"
+                            (click)="toggleCancelForm()" [disabled]="cancelling()">
+                      Keep Order
+                    </button>
+                  </div>
+                  @if (cancelError(); as msg) {
+                    <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
                   }
-                  Confirm Cancel
-                </button>
-                <button type="button" class="btn btn-outline-secondary"
-                        (click)="toggleCancelForm()" [disabled]="cancelling()">
-                  Keep Order
-                </button>
+                </form>
               </div>
-              @if (cancelError(); as msg) {
-                <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-              }
-            </form>
+            </div>
           }
         }
       }
@@ -182,7 +195,7 @@
 
   <!-- Order Lines panel -->
   <div class="mt-4">
-    <h2 class="h5 mb-2">Order Lines</h2>
+    <h2 class="erp-section-title">Order Lines</h2>
 
     @switch (linesState()) {
       @case ('loading') {
@@ -194,131 +207,137 @@
         <p class="text-danger" role="alert">Could not load order lines.</p>
       }
       @default {
-        <!-- Add-line form (DRAFT only) -->
         @if (isDraft() && canCreate()) {
-          <form class="card card-body mb-3" (ngSubmit)="addLine()" aria-label="Add line to order">
-            <h3 class="h6 mb-2">Add Line</h3>
-            <div class="row g-2 align-items-start">
-              <!-- Product picker -->
-              <div class="col-sm-4 position-relative">
-                <label class="form-label small text-muted mb-1" for="lineProductSearch">
-                  Product <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <input id="lineProductSearch" name="lineProductSearch" type="search"
-                       class="form-control form-control-sm"
-                       placeholder="Search by name or code…"
-                       [ngModel]="productSearchQ()"
-                       (ngModelChange)="onProductSearchChange($event)"
-                       [disabled]="addingLine()"
-                       autocomplete="off"
-                       [attr.aria-expanded]="productResults().length > 0"
-                       aria-haspopup="listbox"
-                       aria-autocomplete="list" />
-                @if (selectedProduct()) {
-                  <div class="d-flex align-items-center gap-1 mt-1">
-                    <i class="bi bi-check-circle-fill text-success small" aria-hidden="true"></i>
-                    <span class="small text-muted">{{ selectedProduct()!.label }}</span>
-                  </div>
-                }
-                @if (productResults().length > 0) {
-                  <ul class="list-group position-absolute shadow-sm mt-1 w-100" role="listbox"
-                      aria-label="Product suggestions" style="z-index:1050;max-height:200px;overflow-y:auto;">
-                    @for (p of productResults(); track p.uid) {
-                      <li class="list-group-item list-group-item-action small py-1"
-                          role="option" style="cursor:pointer"
-                          (click)="selectProduct(p)"
-                          (keydown.enter)="selectProduct(p)"
-                          tabindex="0">
-                        <strong>{{ p.code }}</strong> — {{ p.name }}
-                      </li>
+          <div class="erp-card mb-3">
+            <div class="erp-card__head"><h3>Add Line</h3></div>
+            <div class="erp-card__body">
+              <form (ngSubmit)="addLine()" aria-label="Add line to order">
+                <div class="row g-2 align-items-start">
+                  <!-- Product picker -->
+                  <div class="col-sm-4 position-relative">
+                    <label class="form-label small text-muted mb-1" for="lineProductSearch">
+                      Product <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <input id="lineProductSearch" name="lineProductSearch" type="search"
+                           class="form-control form-control-sm"
+                           placeholder="Search by name or code…"
+                           [ngModel]="productSearchQ()"
+                           (ngModelChange)="onProductSearchChange($event)"
+                           [disabled]="addingLine()"
+                           autocomplete="off"
+                           [attr.aria-expanded]="productResults().length > 0"
+                           aria-haspopup="listbox"
+                           aria-autocomplete="list" />
+                    @if (selectedProduct()) {
+                      <div class="d-flex align-items-center gap-1 mt-1">
+                        <i class="bi bi-check-circle-fill text-success small" aria-hidden="true"></i>
+                        <span class="small text-muted">{{ selectedProduct()!.label }}</span>
+                      </div>
                     }
-                  </ul>
+                    @if (productResults().length > 0) {
+                      <ul class="list-group position-absolute shadow-sm mt-1 w-100" role="listbox"
+                          aria-label="Product suggestions" style="z-index:1050;max-height:200px;overflow-y:auto;">
+                        @for (p of productResults(); track p.uid) {
+                          <li class="list-group-item list-group-item-action small py-1"
+                              role="option" style="cursor:pointer"
+                              (click)="selectProduct(p)"
+                              (keydown.enter)="selectProduct(p)"
+                              tabindex="0">
+                            <strong>{{ p.code }}</strong> — {{ p.name }}
+                          </li>
+                        }
+                      </ul>
+                    }
+                  </div>
+
+                  <!-- Unit -->
+                  <div class="col-sm-2">
+                    <label class="form-label small text-muted mb-1" for="lineUnit">
+                      Unit <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <select id="lineUnit" name="lineUnit" class="form-select form-select-sm"
+                            [ngModel]="newLineUnitUid()"
+                            (ngModelChange)="newLineUnitUid.set($event)"
+                            [disabled]="addingLine() || lineUnitsState() !== 'idle'">
+                      <option value="">— select —</option>
+                      @for (u of lineUnits(); track u.uid) {
+                        <option [value]="u.uid">{{ u.name }}</option>
+                      }
+                    </select>
+                  </div>
+
+                  <!-- Qty -->
+                  <div class="col-sm-1">
+                    <label class="form-label small text-muted mb-1" for="lineQty">
+                      Qty <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <input id="lineQty" name="lineQty" type="number" min="0.001" step="any"
+                           class="form-control form-control-sm"
+                           [ngModel]="newLineQty()" (ngModelChange)="newLineQty.set($event)"
+                           [disabled]="addingLine()" />
+                  </div>
+
+                  <!-- Price override -->
+                  <div class="col-sm-2">
+                    <label class="form-label small text-muted mb-1" for="lineUnitPrice">Price Override</label>
+                    <input id="lineUnitPrice" name="lineUnitPrice" type="number" min="0" step="any"
+                           class="form-control form-control-sm"
+                           placeholder="(list price)"
+                           [ngModel]="newLineUnitPrice()" (ngModelChange)="newLineUnitPrice.set($event)"
+                           [disabled]="addingLine()" />
+                  </div>
+
+                  <!-- Discount % -->
+                  <div class="col-sm-1">
+                    <label class="form-label small text-muted mb-1" for="lineDiscountPct">Disc %</label>
+                    <input id="lineDiscountPct" name="lineDiscountPct" type="number" min="0" max="100" step="any"
+                           class="form-control form-control-sm"
+                           [ngModel]="newLineDiscountPct()" (ngModelChange)="newLineDiscountPct.set($event)"
+                           [disabled]="addingLine()" />
+                  </div>
+
+                  <div class="col-sm-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-sm btn-primary w-100" [disabled]="addingLine()">
+                      @if (addingLine()) {
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                      } @else {
+                        <i class="bi bi-plus-lg" aria-hidden="true"></i>
+                      }
+                      <span class="visually-hidden">Add line</span>
+                    </button>
+                  </div>
+                </div>
+                @if (lineFormError(); as msg) {
+                  <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
                 }
-              </div>
-
-              <!-- Unit -->
-              <div class="col-sm-2">
-                <label class="form-label small text-muted mb-1" for="lineUnit">
-                  Unit <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <select id="lineUnit" name="lineUnit" class="form-select form-select-sm"
-                        [ngModel]="newLineUnitUid()"
-                        (ngModelChange)="newLineUnitUid.set($event)"
-                        [disabled]="addingLine() || lineUnitsState() !== 'idle'">
-                  <option value="">— select —</option>
-                  @for (u of lineUnits(); track u.uid) {
-                    <option [value]="u.uid">{{ u.name }}</option>
-                  }
-                </select>
-              </div>
-
-              <!-- Qty -->
-              <div class="col-sm-1">
-                <label class="form-label small text-muted mb-1" for="lineQty">
-                  Qty <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <input id="lineQty" name="lineQty" type="number" min="0.001" step="any"
-                       class="form-control form-control-sm"
-                       [ngModel]="newLineQty()" (ngModelChange)="newLineQty.set($event)"
-                       [disabled]="addingLine()" />
-              </div>
-
-              <!-- Price override -->
-              <div class="col-sm-2">
-                <label class="form-label small text-muted mb-1" for="lineUnitPrice">Price Override</label>
-                <input id="lineUnitPrice" name="lineUnitPrice" type="number" min="0" step="any"
-                       class="form-control form-control-sm"
-                       placeholder="(list price)"
-                       [ngModel]="newLineUnitPrice()" (ngModelChange)="newLineUnitPrice.set($event)"
-                       [disabled]="addingLine()" />
-              </div>
-
-              <!-- Discount % -->
-              <div class="col-sm-1">
-                <label class="form-label small text-muted mb-1" for="lineDiscountPct">Disc %</label>
-                <input id="lineDiscountPct" name="lineDiscountPct" type="number" min="0" max="100" step="any"
-                       class="form-control form-control-sm"
-                       [ngModel]="newLineDiscountPct()" (ngModelChange)="newLineDiscountPct.set($event)"
-                       [disabled]="addingLine()" />
-              </div>
-
-              <div class="col-sm-2 d-flex align-items-end">
-                <button type="submit" class="btn btn-sm btn-primary w-100" [disabled]="addingLine()">
-                  @if (addingLine()) {
-                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                  } @else {
-                    <i class="bi bi-plus-lg" aria-hidden="true"></i>
-                  }
-                  <span class="visually-hidden">Add line</span>
-                </button>
-              </div>
+              </form>
             </div>
-            @if (lineFormError(); as msg) {
-              <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-            }
-          </form>
+          </div>
         }
 
         @if (lines().length === 0) {
-          <p class="text-muted small">No lines yet.@if (isDraft() && canCreate()) { Add a line above.}</p>
+          <div class="erp-empty">
+            <i class="bi bi-list-ul"></i>
+            No lines yet.@if (isDraft() && canCreate()) { Add a line above.}
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-sm table-hover align-middle bg-white">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Sales order lines</caption>
               <thead>
                 <tr>
                   <th scope="col">#</th>
                   <th scope="col">Product</th>
                   <th scope="col">Unit</th>
-                  <th scope="col" class="text-end">Ordered</th>
-                  <th scope="col" class="text-end">Reserved</th>
-                  <th scope="col" class="text-end">Fulfilled</th>
-                  <th scope="col" class="text-end">Invoiced</th>
-                  <th scope="col" class="text-end">Open (backorder)</th>
-                  <th scope="col" class="text-end">Unit Price</th>
-                  <th scope="col" class="text-end">Disc %</th>
-                  <th scope="col" class="text-end">Net</th>
-                  <th scope="col" class="text-end">Gross</th>
+                  <th scope="col" class="num">Ordered</th>
+                  <th scope="col" class="num">Reserved</th>
+                  <th scope="col" class="num">Fulfilled</th>
+                  <th scope="col" class="num">Invoiced</th>
+                  <th scope="col" class="num">Open (backorder)</th>
+                  <th scope="col" class="num">Unit Price</th>
+                  <th scope="col" class="num">Disc %</th>
+                  <th scope="col" class="num">Net</th>
+                  <th scope="col" class="num">Gross</th>
                   @if (isDraft() && canCreate()) {
                     <th scope="col"><span class="visually-hidden">Actions</span></th>
                   }
@@ -327,24 +346,24 @@
               <tbody>
                 @for (line of lines(); track line.uid) {
                   <tr>
-                    <td class="small text-muted">{{ line.lineNo }}</td>
+                    <td class="text-muted">{{ line.lineNo }}</td>
                     <td>
-                      <span class="font-monospace small">{{ line.productCode }}</span>
+                      <span class="mono small">{{ line.productCode }}</span>
                       <br /><span class="small text-muted">{{ line.productName }}</span>
                     </td>
                     <td class="small">{{ line.unitName }}</td>
-                    <td class="text-end font-monospace">{{ +line.qtyOrdered | number:'1.3-3' }}</td>
-                    <td class="text-end font-monospace">{{ +line.qtyReservedBase | number:'1.3-3' }}</td>
-                    <td class="text-end font-monospace">{{ +line.qtyFulfilledBase | number:'1.3-3' }}</td>
-                    <td class="text-end font-monospace">{{ +line.qtyInvoicedBase | number:'1.3-3' }}</td>
-                    <td class="text-end font-monospace"
+                    <td class="num">{{ +line.qtyOrdered | number:'1.3-3' }}</td>
+                    <td class="num">{{ +line.qtyReservedBase | number:'1.3-3' }}</td>
+                    <td class="num">{{ +line.qtyFulfilledBase | number:'1.3-3' }}</td>
+                    <td class="num">{{ +line.qtyInvoicedBase | number:'1.3-3' }}</td>
+                    <td class="num"
                         [class.text-danger]="+line.openQtyBase > 0 && !isDraft()">
                       {{ +line.openQtyBase | number:'1.3-3' }}
                     </td>
-                    <td class="text-end font-monospace">{{ +line.unitPriceAmount | number:'1.2-2' }}</td>
-                    <td class="text-end font-monospace">{{ line.lineDiscountPercent ? (+line.lineDiscountPercent | number:'1.2-2') : '—' }}</td>
-                    <td class="text-end font-monospace">{{ +line.netAmount | number:'1.2-2' }}</td>
-                    <td class="text-end font-monospace">{{ +line.grossAmount | number:'1.2-2' }}</td>
+                    <td class="num">{{ +line.unitPriceAmount | number:'1.2-2' }}</td>
+                    <td class="num">{{ line.lineDiscountPercent ? (+line.lineDiscountPercent | number:'1.2-2') : '—' }}</td>
+                    <td class="num">{{ +line.netAmount | number:'1.2-2' }}</td>
+                    <td class="num">{{ +line.grossAmount | number:'1.2-2' }}</td>
                     @if (isDraft() && canCreate()) {
                       <td>
                         <button type="button" class="btn btn-sm btn-outline-danger"
@@ -373,7 +392,7 @@
   @if (canViewDeliveries()) {
     <div class="mt-4">
       <div class="d-flex align-items-center gap-2 mb-2">
-        <h2 class="h5 mb-0">Deliveries</h2>
+        <h2 class="erp-section-title mb-0">Deliveries</h2>
         @if (canDeliverNow()) {
           <a class="btn btn-sm btn-outline-primary"
              [routerLink]="['/admin/deliveries/create']"
@@ -395,10 +414,13 @@
         }
         @default {
           @if (deliveries().length === 0) {
-            <p class="text-muted small">No deliveries yet.</p>
+            <div class="erp-empty">
+              <i class="bi bi-truck"></i>
+              No deliveries yet.
+            </div>
           } @else {
-            <div class="table-responsive">
-              <table class="table table-sm table-hover align-middle bg-white">
+            <div class="erp-table-wrap">
+              <table class="erp-table">
                 <caption class="visually-hidden">Deliveries for this order</caption>
                 <thead>
                   <tr>
@@ -412,12 +434,17 @@
                 <tbody>
                   @for (d of deliveries(); track d.uid) {
                     <tr>
-                      <td class="font-monospace">{{ d.deliveryNumber ?? 'DRAFT' }}</td>
+                      <td class="mono">{{ d.deliveryNumber ?? 'DRAFT' }}</td>
                       <td>
-                        <span class="badge" [class]="deliveryStatusBadgeClass(d.status)">{{ d.status }}</span>
+                        <span class="status-tag"
+                              [class.status-tag--ok]="d.status === 'CONFIRMED'"
+                              [class.status-tag--warn]="d.status === 'DRAFT'"
+                              [class.status-tag--danger]="d.status === 'CANCELLED'">
+                          {{ d.status }}
+                        </span>
                       </td>
-                      <td class="small text-muted">{{ d.deliveryDate }}</td>
-                      <td class="small text-muted">
+                      <td>{{ d.deliveryDate }}</td>
+                      <td>
                         @if (d.confirmedAt) {
                           {{ d.confirmedAt | date:'dd/MM/yyyy HH:mm' }}
                         } @else {

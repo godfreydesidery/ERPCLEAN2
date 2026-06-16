@@ -296,17 +296,6 @@ export class StockLocationListComponent {
     });
   }
 
-  // ── Display helpers ───────────────────────────────────────────────────────
-
-  statusBadgeClass(status: string): string {
-    switch (status) {
-      case 'ACTIVE': return 'text-bg-success';
-      case 'INACTIVE': return 'text-bg-secondary';
-      case 'ARCHIVED': return 'text-bg-danger';
-      default: return 'text-bg-light';
-    }
-  }
-
   private messageFrom(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {
       const errors = (err.error as { errors?: string[] })?.errors;

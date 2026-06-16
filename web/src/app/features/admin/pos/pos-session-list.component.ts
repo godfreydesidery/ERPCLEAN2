@@ -223,15 +223,6 @@ export class PosSessionListComponent {
 
   // ── Display helpers ────────────────────────────────────────────────────────
 
-  statusBadgeClass(status: PosSessionStatus): string {
-    switch (status) {
-      case 'OPEN': return 'text-bg-success';
-      case 'CLOSED': return 'text-bg-warning';
-      case 'RECONCILED': return 'text-bg-secondary';
-      default: return 'text-bg-light';
-    }
-  }
-
   private messageFrom(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {
       const errors = (err.error as { errors?: string[] })?.errors;

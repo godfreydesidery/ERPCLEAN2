@@ -1,17 +1,13 @@
-.admin-page {
-  max-width: 960px;
-}
+/* .admin-page max-width comes from global kit (1280px) — no override needed here. */
 
 .home-card {
-  border: 1px solid #e6e9ee;
-  border-radius: 10px;
   transition: border-color 0.12s ease, box-shadow 0.12s ease, transform 0.08s ease;
 }
 
 .home-card:hover,
 .home-card:focus-visible {
-  border-color: var(--orbix-accent, #4178d9);
-  box-shadow: 0 4px 14px rgba(13, 42, 91, 0.1);
+  border-color: var(--erp-primary);
+  box-shadow: var(--erp-shadow-md);
   transform: translateY(-1px);
 }
 
@@ -19,13 +15,28 @@
   flex-shrink: 0;
   width: 40px;
   height: 40px;
-  border-radius: 10px;
+  border-radius: var(--erp-radius-sm);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #e8eef9;
-  color: var(--orbix-primary, #1a4fb5);
+  background: var(--erp-neutral-bg);   /* neutral grey tile — not a light-blue tint */
+  color: var(--erp-primary);           /* brand-blue glyph */
   font-size: 1.15rem;
+}
+
+/* Small ordered-step marker on each setup card. */
+.setup-step {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--erp-primary);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 @media (prefers-reduced-motion: reduce) {

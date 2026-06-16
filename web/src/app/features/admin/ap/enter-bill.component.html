@@ -5,20 +5,18 @@
     </a>
   </div>
 
-  <header class="page-head">
-    <h1 class="h4 mb-1">
-      <i class="bi bi-file-earmark-plus me-2" aria-hidden="true"></i>Enter Supplier Bill
-    </h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
-      Enter a supplier invoice, run 3-way match, and review line variances.
-    </p>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1><i class="bi bi-file-earmark-plus me-2" aria-hidden="true"></i>Enter Supplier Bill</h1>
+      <p class="subtitle">Enter a supplier invoice, run 3-way match, and review line variances.</p>
+    </div>
   </header>
 
   @if (!canEnter()) {
-    <p class="text-muted d-flex align-items-center gap-2 mt-3" role="alert">
+    <div class="erp-empty mt-3" role="alert">
       <i class="bi bi-shield-lock" aria-hidden="true"></i>
       You don't have permission to enter bills.
-    </p>
+    </div>
   } @else {
 
     <!-- Company selector -->
@@ -65,30 +63,34 @@
     }
 
     @if (matchState() === 'done' && matchResult(); as result) {
-      <div class="card mb-4 border-0 shadow-sm">
-        <div class="card-header d-flex justify-content-between align-items-center">
-          <span class="fw-semibold">
+      <div class="erp-card mb-4">
+        <div class="erp-card__head">
+          <h2 class="h6 mb-0">
             <i class="bi bi-check2-all me-2" aria-hidden="true"></i>3-Way Match Result
-          </span>
-          <span class="badge"
-                [class]="result.billStatus === 'MATCHED' ? 'text-bg-success' : result.billStatus === 'HELD' ? 'text-bg-danger' : 'text-bg-secondary'">
-            {{ result.billStatus }}
+          </h2>
+          <span class="spacer"></span>
+          <span class="status-tag"
+                [class.status-tag--ok]="result.billStatus === 'MATCHED'"
+                [class.status-tag--danger]="result.billStatus === 'HELD'"
+                [class.status-tag--neutral]="result.billStatus !== 'MATCHED' && result.billStatus !== 'HELD'">
+            <span class="status-tag__dot"></span>{{ result.billStatus }}
           </span>
         </div>
-        <div class="card-body p-0">
-          <div class="table-responsive">
-            <table class="table table-sm align-middle mb-0" aria-label="3-way match line results">
-              <thead class="table-light">
+        <div class="erp-card__body p-0">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
+              <caption class="visually-hidden">3-way match line results</caption>
+              <thead>
                 <tr>
                   <th scope="col">#</th>
                   <th scope="col">Status</th>
-                  <th scope="col" class="text-end">PO Cost</th>
-                  <th scope="col" class="text-end">Price Var.</th>
-                  <th scope="col" class="text-end">Price Var. %</th>
-                  <th scope="col" class="text-end">GR Qty</th>
-                  <th scope="col" class="text-end">Billed Qty</th>
-                  <th scope="col" class="text-end">Qty Var.</th>
-                  <th scope="col"></th>
+                  <th scope="col" class="num">PO Cost</th>
+                  <th scope="col" class="num">Price Var.</th>
+                  <th scope="col" class="num">Price Var. %</th>
+                  <th scope="col" class="num">GR Qty</th>
+                  <th scope="col" class="num">Billed Qty</th>
+                  <th scope="col" class="num">Qty Var.</th>
+                  <th scope="col"><span class="visually-hidden">Actions</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -96,22 +98,26 @@
                   <tr [class]="isHeld(line) ? 'table-danger' : line.matchStatus === 'MATCHED' ? 'table-success' : ''">
                     <td class="small text-center">{{ lineIdx + 1 }}</td>
                     <td>
-                      <span class="badge" [class]="matchLineBadgeClass(line)">
+                      <span class="status-tag"
+                            [class.status-tag--ok]="line.matchStatus === 'MATCHED'"
+                            [class.status-tag--danger]="line.matchStatus === 'HELD_PRICE_VARIANCE'"
+                            [class.status-tag--warn]="line.matchStatus === 'HELD_QTY_VARIANCE'"
+                            [class.status-tag--info]="line.matchStatus === 'VARIANCE_ACCEPTED'">
                         {{ line.matchStatus }}
                       </span>
                     </td>
-                    <td class="text-end font-monospace small">{{ fmtMoney(line.poUnitCostAmount) }}</td>
-                    <td class="text-end font-monospace small"
+                    <td class="num">{{ fmtMoney(line.poUnitCostAmount) }}</td>
+                    <td class="num"
                         [class.text-danger]="+(line.priceVarianceAmount) !== 0">
                       {{ fmtMoney(line.priceVarianceAmount) }}
                     </td>
-                    <td class="text-end font-monospace small"
+                    <td class="num"
                         [class.text-danger]="+(line.priceVariancePct) !== 0">
                       {{ fmtPct(line.priceVariancePct) }}
                     </td>
-                    <td class="text-end font-monospace small">{{ fmtMoney(line.grReceivedQty) }}</td>
-                    <td class="text-end font-monospace small">{{ fmtMoney(line.billedQty) }}</td>
-                    <td class="text-end font-monospace small"
+                    <td class="num">{{ fmtMoney(line.grReceivedQty) }}</td>
+                    <td class="num">{{ fmtMoney(line.billedQty) }}</td>
+                    <td class="num"
                         [class.text-warning]="+(line.qtyVariance) !== 0">
                       {{ fmtMoney(line.qtyVariance) }}
                     </td>
@@ -120,7 +126,7 @@
                         <button type="button" class="btn btn-sm btn-outline-warning"
                                 [disabled]="acceptingLine() === line.billLineUid"
                                 (click)="acceptVariance(line.billLineUid)"
-                                [attr.title]="'Accept variance for line ' + (lineIdx + 1)">
+                                [attr.aria-label]="'Accept variance for line ' + (lineIdx + 1)">
                           @if (acceptingLine() === line.billLineUid) {
                             <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
                           } @else {
@@ -136,17 +142,19 @@
             </table>
           </div>
         </div>
-        @if (result.billStatus === 'MATCHED') {
-          <div class="card-footer small text-success d-flex align-items-center gap-2">
-            <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
-            All lines matched — bill is ready for payment.
-          </div>
-        } @else {
-          <div class="card-footer small text-danger d-flex align-items-center gap-2">
-            <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
-            One or more lines are HELD. Accept variances to release the bill for payment.
-          </div>
-        }
+        <div class="erp-card__body border-top pt-3">
+          @if (result.billStatus === 'MATCHED') {
+            <p class="text-success small mb-0 d-flex align-items-center gap-2">
+              <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
+              All lines matched — bill is ready for payment.
+            </p>
+          } @else {
+            <p class="text-danger small mb-0 d-flex align-items-center gap-2">
+              <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+              One or more lines are HELD. Accept variances to release the bill for payment.
+            </p>
+          }
+        </div>
       </div>
 
       <div class="d-flex gap-2 mb-4">
@@ -166,9 +174,11 @@
       <form (ngSubmit)="submit()" aria-label="Enter supplier bill">
 
         <!-- ── Header card ──────────────────────────────────────────────────── -->
-        <div class="card mb-3">
-          <div class="card-header small fw-semibold text-muted">Bill Details</div>
-          <div class="card-body">
+        <div class="erp-card mb-3">
+          <div class="erp-card__head">
+            <h2 class="erp-section-title mb-0">Bill Details</h2>
+          </div>
+          <div class="erp-card__body">
             <div class="row g-3">
 
               <!-- Supplier picker -->
@@ -189,7 +199,7 @@
                         style="top:100%; left:0; max-height:220px; overflow-y:auto">
                       @for (s of supplierResults(); track s.uid) {
                         <li class="list-group-item list-group-item-action py-1 small"
-                            role="option" style="cursor:pointer"
+                            role="option" aria-selected="false" style="cursor:pointer"
                             (click)="selectSupplier(s)"
                             (keydown.enter)="selectSupplier(s)"
                             tabindex="0">
@@ -269,14 +279,15 @@
 
               <!-- Purchase Order (optional) -->
               <div class="col-md-5">
-                <label class="form-label">
+                <span id="poPickerLabel" class="form-label d-block">
                   Purchase Order <span class="text-muted small">(optional — for 3-way match)</span>
-                </label>
+                </span>
                 <app-uid-picker [ngModel]="purchaseOrderUid()"
                                 (ngModelChange)="onPoUidChange($event)"
                                 [options]="poOptions()"
                                 placeholder="Select PO or leave blank"
-                                name="purchaseOrderUid" />
+                                name="purchaseOrderUid"
+                                [attr.aria-labelledby]="'poPickerLabel'" />
               </div>
 
             </div>
@@ -284,29 +295,31 @@
         </div>
 
         <!-- ── Line editor ─────────────────────────────────────────────────── -->
-        <div class="card mb-3">
-          <div class="card-header d-flex justify-content-between align-items-center">
-            <span class="small fw-semibold text-muted">
+        <div class="erp-card mb-3">
+          <div class="erp-card__head">
+            <h2 class="erp-section-title mb-0">
               <i class="bi bi-list-ul me-1" aria-hidden="true"></i>
               Bill Lines
-              <span class="badge text-bg-secondary ms-1">{{ lines().length }}</span>
-            </span>
+              <span class="text-muted fw-normal small ms-1">({{ lines().length }})</span>
+            </h2>
+            <span class="spacer"></span>
             <button type="button" class="btn btn-sm btn-outline-primary"
                     (click)="addLine()" [disabled]="submitting()">
               <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add Line
             </button>
           </div>
-          <div class="card-body p-0">
-            <div class="table-responsive">
-              <table class="table table-sm align-middle mb-0" aria-label="Bill lines">
-                <thead class="table-light">
+          <div class="erp-card__body p-0">
+            <div class="erp-table-wrap">
+              <table class="erp-table">
+                <caption class="visually-hidden">Bill lines editor</caption>
+                <thead>
                   <tr>
                     <th scope="col" style="min-width:200px">Description <span class="text-danger" aria-hidden="true">*</span></th>
-                    <th scope="col" style="min-width:110px" class="text-end">Billed Qty</th>
-                    <th scope="col" style="min-width:130px" class="text-end">Unit Cost</th>
-                    <th scope="col" style="min-width:130px" class="text-end">Line Net</th>
+                    <th scope="col" class="num" style="min-width:110px">Billed Qty</th>
+                    <th scope="col" class="num" style="min-width:130px">Unit Cost</th>
+                    <th scope="col" class="num" style="min-width:130px">Line Net</th>
                     <th scope="col" style="min-width:180px">PO Line <span class="text-muted small">(opt.)</span></th>
-                    <th scope="col"></th>
+                    <th scope="col"><span class="visually-hidden">Remove</span></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -336,16 +349,17 @@
                                (ngModelChange)="updateLine(i, 'unitCostAmount', $event)"
                                [disabled]="submitting()" autocomplete="off" />
                       </td>
-                      <td class="text-end font-monospace small">
+                      <td class="num fw-semibold">
                         {{ fmtMoney(lineNetAmount(line)) }}
                       </td>
                       <td>
-                        <label class="visually-hidden">PO line for line {{ i + 1 }}</label>
+                        <span [id]="'poLineLabel_' + i" class="visually-hidden">PO line for line {{ i + 1 }}</span>
                         <app-uid-picker [ngModel]="line.poLineUid"
                                         (ngModelChange)="updateLine(i, 'poLineUid', $event)"
                                         [options]="poLineOptions()"
                                         placeholder="Select PO line"
-                                        [name]="'poline_' + i" />
+                                        [name]="'poline_' + i"
+                                        [attr.aria-labelledby]="'poLineLabel_' + i" />
                       </td>
                       <td>
                         @if (lines().length > 1) {
@@ -359,10 +373,10 @@
                     </tr>
                   }
                 </tbody>
-                <tfoot>
-                  <tr class="table-light">
+                <tfoot class="erp-tfoot">
+                  <tr>
                     <td colspan="3" class="text-end small fw-semibold">Total Net:</td>
-                    <td class="text-end font-monospace fw-bold">{{ fmtMoney(totalNet) }}</td>
+                    <td class="num fw-bold">{{ fmtMoney(totalNet) }}</td>
                     <td colspan="2"></td>
                   </tr>
                 </tfoot>

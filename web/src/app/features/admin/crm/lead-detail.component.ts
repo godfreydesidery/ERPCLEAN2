@@ -9,7 +9,6 @@ import {
   DisqualifyLeadRequest,
   LeadDto,
   LeadSource,
-  LeadStatus,
   QualifyLeadRequest,
   UpdateLeadRequest,
 } from './models/crm.model';
@@ -299,16 +298,6 @@ export class LeadDetailComponent {
         this.disqualifying.set(false);
       },
     });
-  }
-
-  statusBadgeClass(status: LeadStatus): string {
-    switch (status) {
-      case 'CONTACTED': return 'text-bg-info';
-      case 'QUALIFIED': return 'text-bg-primary';
-      case 'CONVERTED': return 'text-bg-success';
-      case 'DISQUALIFIED': return 'text-bg-danger';
-      default: return 'text-bg-warning';
-    }
   }
 
   private messageFrom(err: unknown, fallback: string): string {
