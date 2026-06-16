@@ -118,20 +118,3 @@ CREATE INDEX ix_bom_components_child
     ON bom_components (component_product_id);
 CREATE INDEX ix_bom_components_company
     ON bom_components (company_id);
-
--- ============================================================================
--- (5) Permission seed + ORG_ADMIN grant (D-11 / V3/V7/V17 pattern)
--- No uid column on permissions — #12 N/A.
--- ============================================================================
-INSERT INTO permissions (code, module, description) VALUES
-    ('BOM.VIEW',   'products', 'View, list, explode, where-used and cost-roll-up for Bills of Materials'),
-    ('BOM.MANAGE', 'products', 'Create, edit drafts, add/remove components, activate, archive and clone BOMs')
-ON CONFLICT (code) DO NOTHING;
-
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM   roles r
-CROSS JOIN permissions p
-WHERE  r.code   = 'ORG_ADMIN'
-  AND  p.code IN ('BOM.VIEW', 'BOM.MANAGE')
-ON CONFLICT DO NOTHING;

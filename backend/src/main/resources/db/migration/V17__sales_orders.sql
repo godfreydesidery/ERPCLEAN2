@@ -390,34 +390,3 @@ ALTER TABLE ar_credit_notes
 ALTER TABLE ar_credit_notes
     ADD CONSTRAINT chk_ar_credit_note_origin
         CHECK (origin IN ('STANDALONE','SALE_VOID','RETURN'));
-
--- ============================================================================
--- (8) permission seed + ORG_ADMIN grant  (ADR-0021 D-8 / V14/V16/V17 pattern)
--- ============================================================================
-INSERT INTO permissions (code, module, description) VALUES
-    ('SALES.QUOTE.VIEW',        'sales', 'View quotations'),
-    ('SALES.QUOTE.CREATE',      'sales', 'Create and edit draft quotations'),
-    ('SALES.QUOTE.SEND',        'sales', 'Send a quotation to the customer (allocates QUOTE-####)'),
-    ('SALES.QUOTE.ACCEPT',      'sales', 'Accept a quotation and convert it to a sales order'),
-    ('SALES.ORDER.VIEW',        'sales', 'View sales orders'),
-    ('SALES.ORDER.CREATE',      'sales', 'Create and edit draft sales orders'),
-    ('SALES.ORDER.CONFIRM',     'sales', 'Confirm a sales order (reserves stock)'),
-    ('SALES.ORDER.CANCEL',      'sales', 'Cancel a sales order (releases reservation)'),
-    ('SALES.DELIVERY.VIEW',     'sales', 'View delivery documents'),
-    ('SALES.DELIVERY.CREATE',   'sales', 'Create a delivery against a confirmed sales order (issues stock + COGS)'),
-    ('SALES.RETURN.VIEW',       'sales', 'View sales returns / RMA'),
-    ('SALES.RETURN.CREATE',     'sales', 'Create a sales return against a delivery (stock back in + credit note)')
-ON CONFLICT (code) DO NOTHING;
-
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM   roles r
-CROSS JOIN permissions p
-WHERE  r.code = 'ORG_ADMIN'
-  AND  p.code IN (
-    'SALES.QUOTE.VIEW','SALES.QUOTE.CREATE','SALES.QUOTE.SEND','SALES.QUOTE.ACCEPT',
-    'SALES.ORDER.VIEW','SALES.ORDER.CREATE','SALES.ORDER.CONFIRM','SALES.ORDER.CANCEL',
-    'SALES.DELIVERY.VIEW','SALES.DELIVERY.CREATE',
-    'SALES.RETURN.VIEW','SALES.RETURN.CREATE'
-  )
-ON CONFLICT DO NOTHING;

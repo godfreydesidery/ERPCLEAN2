@@ -98,22 +98,3 @@ CREATE TABLE fx_revaluation_run_lines (
 
 CREATE INDEX ix_fx_revaluation_run_lines_run
     ON fx_revaluation_run_lines (fx_revaluation_run_id);
-
--- ============================================================================
--- Permission seed: FX.REVALUE + FX.EXPOSURE.VIEW (ADR-0036 D-7)
--- Grant to ORG_ADMIN (CROSS JOIN ON CONFLICT DO NOTHING — the V7/V12/V14 pattern).
--- ============================================================================
-
-INSERT INTO permissions (code, module, description)
-VALUES
-    ('FX.REVALUE',       'fx', 'Preview and post the period-end FX revaluation run'),
-    ('FX.EXPOSURE.VIEW', 'fx', 'View FX exposure report and document FX detail')
-ON CONFLICT (code) DO NOTHING;
-
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM   roles r
-CROSS  JOIN permissions p
-WHERE  r.code = 'ORG_ADMIN'
-  AND  p.code IN ('FX.REVALUE', 'FX.EXPOSURE.VIEW')
-ON CONFLICT DO NOTHING;

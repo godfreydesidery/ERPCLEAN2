@@ -120,19 +120,3 @@ ALTER TABLE product_bulk_packs ADD CONSTRAINT uq_product_bulk_pack_unit
 
 CREATE INDEX ix_product_bulk_packs_unit
     ON product_bulk_packs (unit_id);
-
--- ---------------------------------------------------------------------------
--- (5) Permission seed + additive ORG_ADMIN grant (mirror V3 block)
--- ---------------------------------------------------------------------------
-INSERT INTO permissions (code, module, description) VALUES
-    ('UOM.VIEW',   'products', 'View units of measure'),
-    ('UOM.MANAGE', 'products', 'Create, update, archive and restore units of measure')
-ON CONFLICT (code) DO NOTHING;
-
--- Additively grant all new UOM permissions to ORG_ADMIN.
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM roles r
-CROSS JOIN permissions p
-WHERE r.code = 'ORG_ADMIN' AND p.code IN ('UOM.VIEW', 'UOM.MANAGE')
-ON CONFLICT DO NOTHING;

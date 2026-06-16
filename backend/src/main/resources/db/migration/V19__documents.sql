@@ -117,27 +117,3 @@ CREATE TABLE generated_documents (
 CREATE INDEX ix_generated_documents_company_type  ON generated_documents (company_id, document_type);
 CREATE INDEX ix_generated_documents_source        ON generated_documents (source_type, source_uid);
 CREATE INDEX ix_generated_documents_generated_at  ON generated_documents (company_id, generated_at);
-
--- ============================================================================
--- (4) Permission seed + ORG_ADMIN grant (D-10)
--- ============================================================================
-
-INSERT INTO permissions (code, module, description) VALUES
-    ('DOCUMENT.RENDER',           'documents', 'Render / download a document PDF'),
-    ('DOCUMENT.VIEW',             'documents', 'View the generated-documents render log'),
-    ('DOCUMENT.BRANDING.MANAGE',  'documents', 'Edit the company branding profile'),
-    ('DOCUMENT.TEMPLATE.MANAGE',  'documents', 'Toggle document types active/inactive in the registry')
-ON CONFLICT (code) DO NOTHING;
-
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM   roles r
-CROSS JOIN permissions p
-WHERE  r.code = 'ORG_ADMIN'
-  AND  p.code IN (
-    'DOCUMENT.RENDER',
-    'DOCUMENT.VIEW',
-    'DOCUMENT.BRANDING.MANAGE',
-    'DOCUMENT.TEMPLATE.MANAGE'
-  )
-ON CONFLICT DO NOTHING;

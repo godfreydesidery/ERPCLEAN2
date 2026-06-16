@@ -117,19 +117,3 @@ CREATE INDEX ix_purchase_returns_company_status ON purchase_returns (company_id,
 CREATE INDEX ix_purchase_returns_receipt        ON purchase_returns (goods_receipt_id);
 CREATE INDEX ix_purchase_return_lines_return    ON purchase_return_lines (purchase_return_id);
 CREATE INDEX ix_purchase_return_lines_gr_line   ON purchase_return_lines (goods_receipt_line_id);
-
--- ============================================================================
--- (6) Permission seed + ORG_ADMIN grant (ADR-0027 D-10)
--- ============================================================================
-INSERT INTO permissions (code, module, description) VALUES
-    ('PURCHASE.RETURN.VIEW',   'purchases', 'View and list purchase returns'),
-    ('PURCHASE.RETURN.CREATE', 'purchases', 'Create and confirm a purchase return')
-ON CONFLICT (code) DO NOTHING;
-
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM   roles r
-CROSS JOIN permissions p
-WHERE  r.code = 'ORG_ADMIN'
-  AND  p.code IN ('PURCHASE.RETURN.VIEW', 'PURCHASE.RETURN.CREATE')
-ON CONFLICT DO NOTHING;

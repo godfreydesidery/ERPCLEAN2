@@ -86,20 +86,3 @@ ALTER TABLE journal_entries
             'VAT_RETURN',
             'YEAR_END_CLOSE'
         ));
-
--- ============================================================================
--- (5) GL.YEAR.CLOSE permission + ORG_ADMIN grant (D-12, ADR-0019)
--- Mirrors V14 §10 / V15 pattern. One permission covers both close and reopen.
--- ============================================================================
-INSERT INTO permissions (code, module, description) VALUES
-    ('GL.YEAR.CLOSE', 'gl',
-     'Close / reopen a fiscal year — the year-end closing entry + the reopen reversal')
-ON CONFLICT (code) DO NOTHING;
-
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM   roles r
-CROSS JOIN permissions p
-WHERE  r.code = 'ORG_ADMIN'
-  AND  p.code = 'GL.YEAR.CLOSE'
-ON CONFLICT DO NOTHING;

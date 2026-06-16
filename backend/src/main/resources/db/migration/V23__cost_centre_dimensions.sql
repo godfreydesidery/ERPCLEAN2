@@ -105,22 +105,7 @@ CREATE INDEX ix_journal_lines_department
 -- ============================================================================
 -- (4) Permission seed + ORG_ADMIN grant (ADR-0025 D-10; V17 pattern)
 -- ============================================================================
-INSERT INTO permissions (code, module, description) VALUES
-    ('COSTING.VIEW',   'costing',
-     'View dimensions, dimension values (cost centres / departments), and the dimension-sliced trial balance'),
-    ('COSTING.MANAGE', 'costing',
-     'Maintain dimension values (create/edit/deactivate) and set a dimension mandatory/optional'),
-    ('COSTING.TAG',    'costing',
-     'Pick dimension values on a journal / invoice / bill / adjustment when posting')
-ON CONFLICT (code) DO NOTHING;
 
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM   roles r
-CROSS JOIN permissions p
-WHERE  r.code   = 'ORG_ADMIN'
-  AND  p.code IN ('COSTING.VIEW', 'COSTING.MANAGE', 'COSTING.TAG')
-ON CONFLICT DO NOTHING;
 
 -- ============================================================================
 -- (5) Dimension seed per existing company — built-in COST_CENTRE + DEPARTMENT (ADR-0025 D-9)
