@@ -62,6 +62,17 @@ Press **Escape** at any time to close the sidebar on a small screen.
 
 The large area to the right of the sidebar is where each screen loads. The current route is reflected in the browser address bar.
 
+### The home page
+
+When you sign in — or click the **ERP** logo in the top bar, or are redirected after trying to open a screen you cannot access — you land on the **home page** (`/admin`).
+
+What you see depends on your account:
+
+- **System administrators (`rootadmin`)** see a **System setup** panel: an ordered set of configuration steps — *Companies & branches → Roles & permissions → Users → Audit log* — for standing the platform up. Each step links straight to that area.
+- **Everyone else** sees a brief welcome. The home page does **not** repeat the menu — use the sidebar on the left to reach your work. (Personalised shortcuts on this page are planned for a future release.)
+
+The home page never requires a permission and never loads business data, so it is always safe to land on; this is why the system uses it as the silent redirect target for screens you cannot access.
+
 ---
 
 ## The Branch Switcher
