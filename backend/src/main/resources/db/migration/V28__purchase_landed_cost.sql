@@ -259,19 +259,3 @@ ALTER TABLE journal_entries
             -- procurement-depth (ADR-0027) ---
             'LANDED_COST','PURCHASE_RETURN'
         ));
-
--- ============================================================================
--- (11) Permission seed + ORG_ADMIN grant (ADR-0027 D-10)
--- ============================================================================
-INSERT INTO permissions (code, module, description) VALUES
-    ('PURCHASE.LANDEDCOST.VIEW',   'purchases', 'View landed-cost documents and allocations'),
-    ('PURCHASE.LANDEDCOST.MANAGE', 'purchases', 'Create and confirm landed-cost allocations')
-ON CONFLICT (code) DO NOTHING;
-
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM   roles r
-CROSS JOIN permissions p
-WHERE  r.code = 'ORG_ADMIN'
-  AND  p.code IN ('PURCHASE.LANDEDCOST.VIEW', 'PURCHASE.LANDEDCOST.MANAGE')
-ON CONFLICT DO NOTHING;

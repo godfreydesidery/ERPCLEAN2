@@ -145,30 +145,3 @@ CREATE INDEX ix_standing_order_lines_standing_id ON standing_order_lines (standi
 ALTER TABLE sales_orders
     ADD COLUMN source_blanket_uid  VARCHAR(26),
     ADD COLUMN source_standing_uid VARCHAR(26);
-
--- ============================================================================
--- (6) permission seed + ORG_ADMIN grant
--- ============================================================================
-INSERT INTO permissions (code, module, description) VALUES
-    ('SALES.BLANKET.VIEW',       'sales', 'View blanket orders and call-off draw-down'),
-    ('SALES.BLANKET.CREATE',     'sales', 'Create blanket orders with committed quantities'),
-    ('SALES.BLANKET.CLOSE',      'sales', 'Manually close a blanket order'),
-    ('SALES.STANDING.VIEW',      'sales', 'View standing / recurring orders'),
-    ('SALES.STANDING.CREATE',    'sales', 'Create standing / recurring orders'),
-    ('SALES.STANDING.GENERATE',  'sales', 'Trigger generation of the next child SO from a standing order')
-ON CONFLICT (code) DO NOTHING;
-
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM   roles r
-CROSS JOIN permissions p
-WHERE  r.code = 'ORG_ADMIN'
-  AND  p.code IN (
-      'SALES.BLANKET.VIEW',
-      'SALES.BLANKET.CREATE',
-      'SALES.BLANKET.CLOSE',
-      'SALES.STANDING.VIEW',
-      'SALES.STANDING.CREATE',
-      'SALES.STANDING.GENERATE'
-  )
-ON CONFLICT DO NOTHING;

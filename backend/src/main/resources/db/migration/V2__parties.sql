@@ -297,26 +297,3 @@ CREATE UNIQUE INDEX uq_other_party_company_vrn
 
 CREATE INDEX ix_other_party_branch_op     ON other_party_branch (other_party_id);
 CREATE INDEX ix_other_party_branch_branch ON other_party_branch (branch_id);
-
--- ---------------------------------------------------------------------------
--- (5) Permission seed + additive ORG_ADMIN grant (ADR-0006 D-10)
--- ---------------------------------------------------------------------------
-INSERT INTO permissions (code, module, description) VALUES
-    ('CUSTOMER.VIEW',       'parties', 'View and select customers'),
-    ('CUSTOMER.MANAGE',     'parties', 'Create, update and archive customers'),
-    ('SUPPLIER.VIEW',       'parties', 'View and select suppliers'),
-    ('SUPPLIER.MANAGE',     'parties', 'Create, update and archive suppliers'),
-    ('AGENT.VIEW',          'parties', 'View and select sales agents'),
-    ('AGENT.MANAGE',        'parties', 'Create, update and archive sales agents'),
-    ('OTHERPARTY.VIEW',     'parties', 'View and select other/misc parties'),
-    ('OTHERPARTY.MANAGE',   'parties', 'Create, update and archive other/misc parties'),
-    ('PARTY.BRANCH.ASSIGN', 'parties', 'Associate/dissociate any party with branches of its company')
-ON CONFLICT (code) DO NOTHING;
-
--- Additively grant all parties permissions to ORG_ADMIN (same INSERT-SELECT pattern as V1).
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM roles r
-CROSS JOIN permissions p
-WHERE r.code = 'ORG_ADMIN' AND p.module = 'parties'
-ON CONFLICT DO NOTHING;

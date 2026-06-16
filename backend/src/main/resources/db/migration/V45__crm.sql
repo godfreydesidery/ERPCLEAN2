@@ -279,28 +279,3 @@ SELECT
     c.id, 'CLOSING', 5, 90.00, true, 'ACTIVE', 0
 FROM companies c
 ON CONFLICT (company_id, name) DO NOTHING;
-
--- ============================================================================
--- (8) Permission seed + ORG_ADMIN grant  (ADR-0031 D-11)
--- ============================================================================
-
-INSERT INTO permissions (code, module, description) VALUES
-    ('CRM.LEAD.VIEW',             'crm', 'View CRM leads'),
-    ('CRM.LEAD.MANAGE',           'crm', 'Create and edit CRM leads'),
-    ('CRM.LEAD.QUALIFY',          'crm', 'Qualify a CRM lead (link or promote to a Parties customer)'),
-    ('CRM.OPPORTUNITY.VIEW',      'crm', 'View CRM opportunities'),
-    ('CRM.OPPORTUNITY.MANAGE',    'crm', 'Create and manage CRM opportunities (advance stage, win, lose)'),
-    ('CRM.OPPORTUNITY.CONVERT',   'crm', 'Convert a CRM opportunity to a quotation or sales order'),
-    ('CRM.ACTIVITY.VIEW',         'crm', 'View CRM activities and tasks'),
-    ('CRM.ACTIVITY.MANAGE',       'crm', 'Log and complete CRM activities and tasks'),
-    ('CRM.PIPELINE.VIEW',         'crm', 'View the CRM pipeline, forecast and KPI report'),
-    ('CRM.STAGE.MANAGE',          'crm', 'Manage per-company CRM pipeline stages (add, rename, reorder, deactivate)')
-ON CONFLICT (code) DO NOTHING;
-
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM   roles r
-CROSS JOIN permissions p
-WHERE  r.code = 'ORG_ADMIN'
-  AND  p.module = 'crm'
-ON CONFLICT DO NOTHING;

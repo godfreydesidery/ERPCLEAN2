@@ -325,26 +325,3 @@ FROM companies c
 JOIN gl_configs gc  ON gc.company_id = c.id AND gc.config_key = 'CASH'
 JOIN chart_of_accounts coa ON coa.id = gc.account_id
 ON CONFLICT (company_id, code) DO NOTHING;
-
--- ============================================================================
--- (10) Permission seed + ORG_ADMIN grant (ADR-0016 D-13; mirror V11/V12 pattern)
--- ============================================================================
-INSERT INTO permissions (code, module, description) VALUES
-    ('CASH.VIEW',           'cashbank', 'View cash/bank accounts, balances, statements, and the GL-reconciliation read'),
-    ('CASH.ACCOUNT.MANAGE', 'cashbank', 'Create/edit/deactivate a cash/bank account, set its GL link, set the company default'),
-    ('CASH.TRANSFER',       'cashbank', 'Record an inter-account transfer (CBT-####)'),
-    ('CASH.ENTRY.RECORD',   'cashbank', 'Record a direct cash/bank entry (bank charge, interest, sundry)'),
-    ('CASH.RECONCILE',      'cashbank', 'Perform a manual bank reconciliation (open/mark-cleared/complete)'),
-    ('CHEQUE.MANAGE',       'cashbank', 'Manage the cheque register (register/clear/cancel)')
-ON CONFLICT (code) DO NOTHING;
-
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM   roles r
-CROSS JOIN permissions p
-WHERE  r.code   = 'ORG_ADMIN'
-AND    p.code IN (
-    'CASH.VIEW','CASH.ACCOUNT.MANAGE','CASH.TRANSFER',
-    'CASH.ENTRY.RECORD','CASH.RECONCILE','CHEQUE.MANAGE'
-)
-ON CONFLICT DO NOTHING;

@@ -16,7 +16,7 @@ CREATE TABLE pos_tills (
     uid                  VARCHAR(26)     NOT NULL,
     company_id           BIGINT          NOT NULL,
     branch_id            BIGINT          NOT NULL,
-    code                 VARCHAR(30)     NOT NULL,
+    code                 VARCHAR(30),
     name                 VARCHAR(120)    NOT NULL,
     cash_bank_account_id BIGINT          NOT NULL,
     status               VARCHAR(20)     NOT NULL DEFAULT 'ACTIVE',
@@ -26,7 +26,9 @@ CREATE TABLE pos_tills (
     updated_at           TIMESTAMPTZ,
     updated_by           BIGINT,
     CONSTRAINT uq_pos_till_uid             UNIQUE (uid),
-    CONSTRAINT uq_pos_till_company_code    UNIQUE (company_id, code),
+    -- till code is nullable (no service-side generator); logical uniqueness is by name
+    -- per company (folded from V82 / ISSUE-008 in the ephemeral-window consolidation).
+    CONSTRAINT uq_pos_till_company_name    UNIQUE (company_id, name),
     CONSTRAINT fk_pos_till_company         FOREIGN KEY (company_id)           REFERENCES companies(id),
     CONSTRAINT fk_pos_till_branch          FOREIGN KEY (branch_id)            REFERENCES branches(id),
     CONSTRAINT fk_pos_till_cashaccount     FOREIGN KEY (cash_bank_account_id) REFERENCES cash_bank_accounts(id),
@@ -261,32 +263,3 @@ ALTER TABLE journal_entries
             -- sales-depth (ADR-0029) ---
             'POS_VARIANCE'
         ));
-
--- ============================================================================
--- (10) permission seed + ORG_ADMIN grant
--- ============================================================================
-INSERT INTO permissions (code, module, description) VALUES
-    ('SALES.POS.TILL.MANAGE',        'sales', 'Create and manage POS tills (registers)'),
-    ('SALES.POS.SESSION.OPEN',       'sales', 'Open a POS cashier session on a till'),
-    ('SALES.POS.SESSION.CLOSE',      'sales', 'Close an open POS session, declaring counted cash'),
-    ('SALES.POS.SESSION.RECONCILE',  'sales', 'Reconcile a closed POS session (posts variance to GL)'),
-    ('SALES.POS.SELL',               'sales', 'Ring a POS sale on an open session'),
-    ('SALES.POS.REFUND',             'sales', 'Process a POS refund (void / return + cash payout)'),
-    ('SALES.POS.VIEW',               'sales', 'View POS tills, sessions, X/Z reads, and session history')
-ON CONFLICT (code) DO NOTHING;
-
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM   roles r
-CROSS JOIN permissions p
-WHERE  r.code = 'ORG_ADMIN'
-  AND  p.code IN (
-      'SALES.POS.TILL.MANAGE',
-      'SALES.POS.SESSION.OPEN',
-      'SALES.POS.SESSION.CLOSE',
-      'SALES.POS.SESSION.RECONCILE',
-      'SALES.POS.SELL',
-      'SALES.POS.REFUND',
-      'SALES.POS.VIEW'
-  )
-ON CONFLICT DO NOTHING;

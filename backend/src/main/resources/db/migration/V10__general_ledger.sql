@@ -287,20 +287,7 @@ CREATE INDEX ix_gl_configs_company
 -- ============================================================================
 -- (10) Permission seed + ORG_ADMIN grant (ADR-0013 D-14; mirror V7/V9 pattern)
 -- ============================================================================
-INSERT INTO permissions (code, module, description) VALUES
-    ('GL.VIEW',         'gl', 'View chart of accounts, posted journals, fiscal periods, and the trial balance'),
-    ('GL.MANAGE',       'gl', 'Maintain the chart of accounts and the gl_configs account mapping'),
-    ('GL.POST',         'gl', 'Post manual journal entries (accruals, adjustments, opening balances)'),
-    ('GL.PERIOD.CLOSE', 'gl', 'Open/close fiscal periods and open a new fiscal year')
-ON CONFLICT (code) DO NOTHING;
 
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM   roles r
-CROSS JOIN permissions p
-WHERE  r.code   = 'ORG_ADMIN'
-AND    p.module = 'gl'
-ON CONFLICT DO NOTHING;
 
 -- ============================================================================
 -- (11) CoA seed — standard TZ small-business chart of accounts, per existing company

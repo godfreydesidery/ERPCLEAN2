@@ -152,28 +152,3 @@ SELECT
     now()
 FROM companies c
 ON CONFLICT (company_id) DO NOTHING;
-
--- ============================================================================
--- (7) Permission seed + ORG_ADMIN grant (ADR-0027 D-10; V8/V12 CROSS-JOIN pattern)
--- ============================================================================
-INSERT INTO permissions (code, module, description) VALUES
-    ('PURCHASE.REQUISITION.VIEW',    'purchases', 'View and list purchase requisitions'),
-    ('PURCHASE.REQUISITION.CREATE',  'purchases', 'Create, edit, submit, cancel a requisition'),
-    ('PURCHASE.REQUISITION.APPROVE', 'purchases', 'Approve/reject a submitted requisition (fallback approval gate, ADR-0027 D-6)'),
-    ('PURCHASE.ORDER.APPROVE',       'purchases', 'Approve/reject an over-threshold PO (fallback approval gate, ADR-0027 D-6)'),
-    ('PURCHASE.SETTINGS.MANAGE',     'purchases', 'Set the PO approval threshold and enable flag')
-ON CONFLICT (code) DO NOTHING;
-
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM   roles r
-CROSS JOIN permissions p
-WHERE  r.code = 'ORG_ADMIN'
-  AND  p.code IN (
-    'PURCHASE.REQUISITION.VIEW',
-    'PURCHASE.REQUISITION.CREATE',
-    'PURCHASE.REQUISITION.APPROVE',
-    'PURCHASE.ORDER.APPROVE',
-    'PURCHASE.SETTINGS.MANAGE'
-  )
-ON CONFLICT DO NOTHING;

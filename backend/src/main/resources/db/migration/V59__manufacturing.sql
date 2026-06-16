@@ -259,24 +259,3 @@ ALTER TABLE journal_entries
             'PRODUCTION_ISSUE','PRODUCTION_RECEIPT','PRODUCTION_LABOUR','PRODUCTION_VARIANCE'
         )
     );
-
--- ============================================================================
--- (6) Permission seed + ORG_ADMIN grant (D-13)
--- ============================================================================
-INSERT INTO permissions (code, module, description)
-VALUES
-    ('MANUFACTURING.VIEW',  'manufacturing', 'View and list work orders, cost report, WIP recon'),
-    ('WORKORDER.MANAGE',    'manufacturing', 'Create / edit draft / issue / apply-cost / complete / cancel work orders + add operations'),
-    ('WORKORDER.RELEASE',   'manufacturing', 'Release a planned work order (BOM explosion + component plan)'),
-    ('WORKORDER.CLOSE',     'manufacturing', 'Close a completed work order (variance-clear, finance act)'),
-    ('WORKORDER.QC',        'manufacturing', 'RESERVED — no workflow in v1; hook for future QC workflow')
-ON CONFLICT (code) DO NOTHING;
-
--- Grant all manufacturing permissions to ORG_ADMIN (mirrors V3/V7/V17 pattern)
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM   roles r
-CROSS JOIN permissions p
-WHERE  r.code   = 'ORG_ADMIN'
-AND    p.module = 'manufacturing'
-ON CONFLICT DO NOTHING;

@@ -357,26 +357,3 @@ ALTER TABLE journal_entries
             'CASH_TRANSFER','CASH_DIRECT',
             'VAT_RETURN'
         ));
-
--- ============================================================================
--- (10) Permission seed + ORG_ADMIN grant (ADR-0017 D-13; mirror V11/V12/V13 pattern)
--- ============================================================================
-INSERT INTO permissions (code, module, description) VALUES
-    ('VAT.VIEW',            'tax', 'View VAT returns (face + band breakdown) and the WHT register'),
-    ('VAT.RETURN.PREPARE',  'tax', 'Open / compute / recompute a DRAFT VAT return'),
-    ('VAT.RETURN.FILE',     'tax', 'File a VAT return — the lock + the synchronous GL settlement post'),
-    ('VAT.ADJUST',          'tax', 'Add / remove adjustment lines on a DRAFT return'),
-    ('WHT.VIEW',            'tax', 'Read WHT transactions / the WHT register'),
-    ('WHT.MANAGE',          'tax', 'Manage WHT rates/types; capture WHT on an AP payment / AR receipt; issue certificates')
-ON CONFLICT (code) DO NOTHING;
-
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM   roles r
-CROSS JOIN permissions p
-WHERE  r.code   = 'ORG_ADMIN'
-AND    p.code IN (
-    'VAT.VIEW','VAT.RETURN.PREPARE','VAT.RETURN.FILE',
-    'VAT.ADJUST','WHT.VIEW','WHT.MANAGE'
-)
-ON CONFLICT DO NOTHING;

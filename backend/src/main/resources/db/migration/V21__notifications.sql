@@ -252,31 +252,3 @@ CROSS JOIN (
 ) AS t(type_key, display_name, description, audience_permission, branch_scoped,
        default_channels, severity, title_template, body_template, link_route_template)
 ON CONFLICT (company_id, type_key) DO NOTHING;
-
--- ============================================================
--- 7. Permissions + grants (module: notifications)
--- ============================================================
-INSERT INTO permissions (code, module, description)
-VALUES
-    ('NOTIFICATION.VIEW',              'notifications', 'Read own in-app inbox, unread count, mark-read'),
-    ('NOTIFICATION.PREFERENCE.MANAGE', 'notifications', 'Read and set own per-type notification preferences'),
-    ('NOTIFICATION.ADMIN',             'notifications', 'View notification type catalogue, delivery log; enable/disable types per company')
-ON CONFLICT (code) DO NOTHING;
-
--- Grant NOTIFICATION.VIEW + NOTIFICATION.PREFERENCE.MANAGE to all operational roles + ORG_ADMIN
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM roles r
-CROSS JOIN permissions p
-WHERE r.code IN ('ORG_ADMIN','SALES_MANAGER','SALES_REP','ACCOUNTANT','STOREKEEPER','PURCHASE_OFFICER')
-  AND p.code IN ('NOTIFICATION.VIEW','NOTIFICATION.PREFERENCE.MANAGE')
-ON CONFLICT DO NOTHING;
-
--- Grant NOTIFICATION.ADMIN to ORG_ADMIN only
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM roles r
-CROSS JOIN permissions p
-WHERE r.code = 'ORG_ADMIN'
-  AND p.code = 'NOTIFICATION.ADMIN'
-ON CONFLICT DO NOTHING;

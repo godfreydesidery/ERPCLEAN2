@@ -172,27 +172,3 @@ CREATE INDEX ix_approval_decisions_step    ON approval_decisions (approval_reque
 ALTER TABLE approval_request_steps
     ADD CONSTRAINT fk_approval_request_step_decision
         FOREIGN KEY (resolving_decision_id) REFERENCES approval_decisions(id);
-
--- ============================================================
--- 6. Permissions + ORG_ADMIN grant — D-3 (block 6, V19 pattern)
--- ============================================================
-INSERT INTO permissions (code, module, description) VALUES
-    ('APPROVALS.POLICY.VIEW',    'approvals', 'View approval policies'),
-    ('APPROVALS.POLICY.MANAGE',  'approvals', 'Create/edit/deactivate approval policies and their step chains'),
-    ('APPROVALS.REQUEST.VIEW',   'approvals', 'View approval requests'),
-    ('APPROVALS.DECIDE',         'approvals', 'Approve/reject approval-request steps and see the approvals inbox'),
-    ('APPROVALS.ADMIN',          'approvals', 'Recall/cancel any approval request; override a stuck chain')
-ON CONFLICT (code) DO NOTHING;
-
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM   roles r CROSS JOIN permissions p
-WHERE  r.code = 'ORG_ADMIN'
-  AND  p.code IN (
-      'APPROVALS.POLICY.VIEW',
-      'APPROVALS.POLICY.MANAGE',
-      'APPROVALS.REQUEST.VIEW',
-      'APPROVALS.DECIDE',
-      'APPROVALS.ADMIN'
-  )
-ON CONFLICT DO NOTHING;

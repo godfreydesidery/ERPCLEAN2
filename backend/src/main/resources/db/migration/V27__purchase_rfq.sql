@@ -185,19 +185,3 @@ CREATE INDEX ix_supplier_quote_lines_quote ON supplier_quote_lines (supplier_quo
 -- supplier_id is on supplier_quotes (parent), not on quote_lines — cannot index here.
 -- Use a join-based query; index the quote lines with product_id for fast lookup:
 CREATE INDEX ix_supplier_quote_lines_product ON supplier_quote_lines (product_id, company_id);
-
--- ============================================================================
--- (7) Permission seed + ORG_ADMIN grant (ADR-0027 D-10)
--- ============================================================================
-INSERT INTO permissions (code, module, description) VALUES
-    ('PURCHASE.RFQ.VIEW',   'purchases', 'View and list RFQs, supplier quotes, and the quote comparison'),
-    ('PURCHASE.RFQ.MANAGE', 'purchases', 'Create/send RFQs, capture supplier quotes, award')
-ON CONFLICT (code) DO NOTHING;
-
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM   roles r
-CROSS JOIN permissions p
-WHERE  r.code = 'ORG_ADMIN'
-  AND  p.code IN ('PURCHASE.RFQ.VIEW', 'PURCHASE.RFQ.MANAGE')
-ON CONFLICT DO NOTHING;

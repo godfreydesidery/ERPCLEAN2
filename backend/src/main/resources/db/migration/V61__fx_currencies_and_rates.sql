@@ -107,27 +107,3 @@ ON CONFLICT (code) DO NOTHING;
 UPDATE currencies
 SET    uid = 'CUR' || lpad(id::text, 6, '0') || code
 WHERE  uid LIKE 'CUR_PLACEHOLDER_%';
-
--- No currency_rates rows seeded: single-currency companies need none (the from==base
--- short-circuit in CurrencyConversionService requires no rate row — D-1/D-8).
-
--- ============================================================================
--- (4) Permission seed + ORG_ADMIN grant (ADR-0036 D-7)
---   CURRENCY.MANAGE — create/update currency masters and rates
---   CURRENCY.VIEW   — read currencies and rates
--- uid: code itself is short enough; use 'PERM' prefix + substr for safety.
--- ============================================================================
-INSERT INTO permissions (code, module, description)
-VALUES
-    ('CURRENCY.MANAGE', 'fx', 'Create and maintain currency master and exchange rates'),
-    ('CURRENCY.VIEW',   'fx', 'View currencies and exchange rates (read-only)')
-ON CONFLICT (code) DO NOTHING;
-
--- Grant both FX permissions to ORG_ADMIN (mirrors V3/V7/V17/V74 CROSS-JOIN pattern)
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM   roles r
-CROSS JOIN permissions p
-WHERE  r.code   = 'ORG_ADMIN'
-AND    p.module = 'fx'
-ON CONFLICT DO NOTHING;

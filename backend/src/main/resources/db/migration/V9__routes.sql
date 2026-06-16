@@ -124,21 +124,3 @@ CREATE INDEX ix_route_branch_branch ON route_branch (branch_id);
 -- sales_invoices.route_id: partial index for future sales-by-route reporting (NFR-ROUTE-04)
 CREATE INDEX ix_sales_invoices_route
     ON sales_invoices (route_id) WHERE route_id IS NOT NULL;
-
--- ---------------------------------------------------------------------------
--- (7) Permission seed + additive ORG_ADMIN grant (ADR-0012 D-10)
--- Mirror the exact V2/V3/V5/V8 seed pattern: idempotent INSERT … ON CONFLICT DO NOTHING.
--- ---------------------------------------------------------------------------
-INSERT INTO permissions (code, module, description) VALUES
-    ('ROUTE.VIEW',   'routes', 'View, list, search and select routes'),
-    ('ROUTE.MANAGE', 'routes', 'Create, update, archive and restore routes; manage branch associations'),
-    ('ROUTE.ASSIGN', 'routes', 'Assign/unassign customers and external agents to/from a route; set primary agent')
-ON CONFLICT (code) DO NOTHING;
-
--- Additively grant all routes permissions to ORG_ADMIN (same INSERT-SELECT pattern as V2/V8).
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM roles r
-CROSS JOIN permissions p
-WHERE r.code = 'ORG_ADMIN' AND p.module = 'routes'
-ON CONFLICT DO NOTHING;

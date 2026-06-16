@@ -148,21 +148,3 @@ ALTER TABLE journal_entries
             'YEAR_END_CLOSE',
             'STOCK_RECEIPT','COGS','STOCK_ADJUSTMENT','OPENING_INVENTORY'
         ));
-
--- ============================================================================
--- (7) permission seed + ORG_ADMIN grant (ADR-0020 D-9; V7/V12/V14/V16 pattern)
--- ============================================================================
-INSERT INTO permissions (code, module, description) VALUES
-    ('INVENTORY.VALUATION.VIEW', 'stock',
-     'View the stock valuation report (qty × avg = value) and the GL reconciliation bar'),
-    ('INVENTORY.OPENING.SET',    'stock',
-     'Set the one-time opening inventory valuation (cost/value) for a product')
-ON CONFLICT (code) DO NOTHING;
-
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM   roles r
-CROSS JOIN permissions p
-WHERE  r.code   = 'ORG_ADMIN'
-  AND  p.code IN ('INVENTORY.VALUATION.VIEW', 'INVENTORY.OPENING.SET')
-ON CONFLICT DO NOTHING;
