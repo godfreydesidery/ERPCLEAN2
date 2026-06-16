@@ -11,7 +11,9 @@
   padding: 1rem;
   padding-top: max(1rem, env(safe-area-inset-top));
   padding-bottom: max(1rem, env(safe-area-inset-bottom));
-  background: linear-gradient(135deg, var(--erp-primary-active) 0%, var(--erp-primary) 55%, var(--erp-accent) 100%);
+  /* Slate gradient — same dark-chrome family as the app sidebar (--erp-sidebar) so the
+     sign-in screen and the shell share one identity. Brand blue stays on the mark + CTA. */
+  background: linear-gradient(150deg, var(--erp-sidebar-deep) 0%, var(--erp-sidebar) 55%, #29384a 100%);
   position: relative;
   overflow: hidden;
 }

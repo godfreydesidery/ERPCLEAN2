@@ -37,6 +37,11 @@
   --erp-card:      #ffffff;
   --erp-border:    #e3e7ee;
   --erp-border-strong: #cdd4df;
+
+  /* Dark slate chrome — ONE source of truth for the sidebar AND the login background,
+     so the app shell and the sign-in screen share a single identity. */
+  --erp-sidebar:      #1f2937;
+  --erp-sidebar-deep: #111827;
   --erp-text:      #14181d;   /* near-black headings/body */
   --erp-text-2:    #4b5563;   /* AA-safe secondary        */
   --erp-text-3:    #6b7280;   /* AA-safe muted (≥4.5 on white) */

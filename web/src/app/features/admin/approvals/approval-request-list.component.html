@@ -114,7 +114,7 @@
                     <td>{{ r.submittedAt | slice:0:10 }}</td>
                     <td class="text-center">
                       @if (r.autoApproved) {
-                        <i class="bi bi-check-circle-fill text-success" aria-label="Auto-approved"></i>
+                        <i role="img" class="bi bi-check-circle-fill text-success" aria-label="Auto-approved"></i>
                       } @else {
                         <span class="text-muted" aria-hidden="true">—</span>
                         <span class="visually-hidden">No</span>

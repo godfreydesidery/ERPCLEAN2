@@ -3,9 +3,10 @@
 :host {
   --sb-width: 248px;
   --tb-height: 56px;
-  /* Sidebar surface — refined dark slate (template "charcoal" family).
-     Change just this one token to restore the previous navy (#0d2a5b). */
-  --sb-bg: #1f2937;
+  /* Sidebar surface — refined dark slate (template "charcoal" family), shared with the
+     login background via the global --erp-sidebar token so the chrome is consistent.
+     Change --erp-sidebar (in styles.scss) to retheme both at once. */
+  --sb-bg: var(--erp-sidebar, #1f2937);
   --sb-bg-hover: rgba(255, 255, 255, 0.07);
   --sb-bg-active: rgba(255, 255, 255, 0.12);
   --sb-fg: rgba(255, 255, 255, 0.86);
