@@ -174,21 +174,3 @@ CREATE INDEX ix_sales_invoice_lines_company    ON sales_invoice_lines (company_i
 CREATE INDEX ix_sales_invoice_payments_invoice ON sales_invoice_payments (invoice_id);
 CREATE INDEX ix_sales_invoice_payments_company ON sales_invoice_payments (company_id);
 CREATE INDEX ix_tax_rates_company              ON tax_rates (company_id);
-
--- (8) Permission seed + additive ORG_ADMIN grant (V3 lines 208-222 pattern)
-INSERT INTO permissions (code, module, description) VALUES
-    ('SALES.INVOICE.VIEW',     'sales', 'View and list/search sales invoices'),
-    ('SALES.INVOICE.CREATE',   'sales', 'Create and edit draft invoices; add/edit/remove lines; finalise'),
-    ('SALES.INVOICE.SETTLE',   'sales', 'Take payment / record tenders against an invoice'),
-    ('SALES.INVOICE.OVERRIDE', 'sales', 'Override a line unit price / non-default discount / default agent'),
-    ('SALES.INVOICE.VOID',     'sales', 'Void a finalised invoice'),
-    ('TAXRATE.VIEW',           'sales', 'View company VAT rates'),
-    ('TAXRATE.MANAGE',         'sales', 'Maintain company VAT rates')
-ON CONFLICT (code) DO NOTHING;
-
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM roles r
-CROSS JOIN permissions p
-WHERE r.code = 'ORG_ADMIN' AND p.module = 'sales'
-ON CONFLICT DO NOTHING;

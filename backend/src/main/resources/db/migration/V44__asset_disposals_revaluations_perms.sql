@@ -82,28 +82,3 @@ CREATE TABLE asset_revaluations (
 
 CREATE INDEX ix_asset_revaluations_company ON asset_revaluations (company_id);
 CREATE INDEX ix_asset_revaluations_asset   ON asset_revaluations (fixed_asset_id);
-
--- ============================================================================
--- (3) Permission seed + ORG_ADMIN grant (D-14; V7/V12/V14/V17 pattern)
--- ============================================================================
-INSERT INTO permissions (code, module, description) VALUES
-    ('FA.CATEGORY.VIEW',    'fixedassets', 'View fixed asset categories'),
-    ('FA.CATEGORY.MANAGE',  'fixedassets', 'Create and manage fixed asset categories'),
-    ('FA.VIEW',             'fixedassets', 'View fixed asset register, schedules and reconciliation'),
-    ('FA.REGISTER.MANAGE',  'fixedassets', 'Register, edit, place-in-service and transfer assets'),
-    ('FA.DEPRECIATE',       'fixedassets', 'Preview and post the periodic depreciation run'),
-    ('FA.DISPOSE',          'fixedassets', 'Dispose, write-off or revalue a fixed asset'),
-    ('FA.VERIFY',           'fixedassets', 'Verify / flag a fixed asset (reserved)')
-ON CONFLICT (code) DO NOTHING;
-
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM   roles r
-CROSS JOIN permissions p
-WHERE  r.code   = 'ORG_ADMIN'
-  AND  p.code IN (
-    'FA.CATEGORY.VIEW', 'FA.CATEGORY.MANAGE',
-    'FA.VIEW', 'FA.REGISTER.MANAGE',
-    'FA.DEPRECIATE', 'FA.DISPOSE', 'FA.VERIFY'
-  )
-ON CONFLICT DO NOTHING;

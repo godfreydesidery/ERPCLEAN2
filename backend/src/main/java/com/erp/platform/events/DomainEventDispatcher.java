@@ -35,10 +35,11 @@ import org.springframework.transaction.annotation.Transactional;
  * DEBUG. This avoids piling up PENDING rows for event types whose consumers are absent in a partial
  * deployment; it surfaces a misconfiguration via the DEBUG log.
  *
- * <p><strong>Single-instance safety:</strong> correct under one container — there is only one
- * poller, so the read→process→update loop cannot double-dispatch. The {@code @Version} on
- * {@link DomainEvent} is the seam for the multi-instance {@code SELECT … FOR UPDATE SKIP LOCKED}
- * upgrade (not built yet — QA runs one container, D-4/D-scaling).
+ * <p><strong>Multi-instance safety (ADR-0009 D-4/D-scaling — built):</strong> the poller reads a
+ * batch un-locked, then {@link #dispatchOne(Long)} re-claims each row with
+ * {@link DomainEventRepository#claimPendingForUpdate(Long)} ({@code FOR UPDATE SKIP LOCKED}), so two
+ * pollers on two containers never dispatch the same event — the second instance's claim skips a row
+ * the first has locked. The {@code @Version} on {@link DomainEvent} is a belt-and-braces backstop.
  *
  * <p>{@code fixedDelay} ensures a slow batch never overlaps itself.
  */
@@ -111,9 +112,11 @@ public class DomainEventDispatcher {
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void dispatchOne(Long eventId) {
-        DomainEvent event = repository.findById(eventId).orElse(null);
-        if (event == null || event.getStatus() != DomainEventStatus.PENDING) {
-            return; // already dispatched by a concurrent runner (future SKIP LOCKED scenario)
+        // Multi-instance-safe claim: FOR UPDATE SKIP LOCKED returns empty when the row is no longer
+        // PENDING or is locked by another instance, so two pollers never dispatch the same event.
+        DomainEvent event = repository.claimPendingForUpdate(eventId).orElse(null);
+        if (event == null) {
+            return; // not PENDING, or claimed/locked by a concurrent runner — skip
         }
 
         List<DomainEventHandler> handlers = handlersByType.getOrDefault(event.getEventType(), List.of());

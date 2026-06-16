@@ -306,30 +306,3 @@ ALTER TABLE journal_entries
             'MANUAL','SALES','SALES_REVERSAL','OPENING_BALANCE',
             'AR_RECEIPT','AR_WRITEOFF','AR_CREDIT_NOTE'
         ));
-
--- ============================================================================
--- (10) Permission seed + ORG_ADMIN grant (ADR-0014 D-13; mirror V10 pattern)
--- ============================================================================
-INSERT INTO permissions (code, module, description) VALUES
-    ('AR.VIEW',              'ar',    'View the AR sub-ledger, balances, ageing, and the reconciliation read'),
-    ('AR.INVOICE.VIEW',      'ar',    'View AR open items (the receivable detail)'),
-    ('AR.RECEIPT.RECORD',    'ar',    'Record a customer receipt (RCT-####) and post its cash leg'),
-    ('AR.RECEIPT.ALLOCATE',  'ar',    'Allocate or re-allocate a receipt across open items'),
-    ('AR.WRITEOFF',          'ar',    'Write off an uncollectable open item (bad debt)'),
-    ('AR.CREDITNOTE',        'ar',    'Raise a credit note that reduces a customer receivable'),
-    ('AR.STATEMENT.VIEW',    'ar',    'View or print a customer statement'),
-    ('AR.OPENING.SET',       'ar',    'Enter AR opening balances at go-live'),
-    ('SALES.CREDIT.OVERRIDE','sales', 'Finalise a credit sale that exceeds the customer credit limit (audited override)')
-ON CONFLICT (code) DO NOTHING;
-
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM   roles r
-CROSS JOIN permissions p
-WHERE  r.code   = 'ORG_ADMIN'
-AND    p.code IN (
-    'AR.VIEW','AR.INVOICE.VIEW','AR.RECEIPT.RECORD','AR.RECEIPT.ALLOCATE',
-    'AR.WRITEOFF','AR.CREDITNOTE','AR.STATEMENT.VIEW','AR.OPENING.SET',
-    'SALES.CREDIT.OVERRIDE'
-)
-ON CONFLICT DO NOTHING;

@@ -1,0 +1,28 @@
+# Line-ending normalization. This repo is developed on Windows but builds/runs on Linux
+# (CI runners, Docker images). Without this, a CRLF<->LF flip silently changes a file's bytes.
+#
+# For Flyway migrations this is not cosmetic: Flyway records a CHECKSUM per applied migration and
+# fails the app at boot if a previously-applied file's checksum changes. A line-ending normalization
+# of an already-shipped *.sql migration would therefore break startup on staging/prod while every
+# fresh dev/CI database stays green. Pin migrations (and all SQL) to LF so the checksum is stable
+# regardless of the author's OS or git autocrlf setting.
+
+# Let git decide for unmarked files (normalizes to LF in the repo, checks out native on Windows).
+* text=auto
+
+# Force LF in the working tree too for these — never CRLF, on any platform.
+*.sql   text eol=lf
+*.sh    text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+
+# Binary assets — never normalize.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.pdf   binary
+*.jar   binary
+*.woff  binary
+*.woff2 binary

@@ -201,22 +201,3 @@ CREATE INDEX ix_product_branch_branch
 -- price_lists: tenant read
 CREATE INDEX ix_price_lists_company
     ON price_lists (company_id);
-
--- ---------------------------------------------------------------------------
--- (6) Permission seed + additive ORG_ADMIN grant (ADR-0007 D-11)
--- ---------------------------------------------------------------------------
-INSERT INTO permissions (code, module, description) VALUES
-    ('PRODUCT.VIEW',          'products', 'View and select products'),
-    ('PRODUCT.MANAGE',        'products', 'Create, update, archive products; manage units, barcodes, prices and recipes'),
-    ('PRICELIST.VIEW',        'products', 'View price lists'),
-    ('PRICELIST.MANAGE',      'products', 'Create, update, archive price lists'),
-    ('PRODUCT.BRANCH.ASSIGN', 'products', 'Associate/dissociate a product with branches of its company')
-ON CONFLICT (code) DO NOTHING;
-
--- Additively grant all products permissions to ORG_ADMIN (same INSERT-SELECT pattern as V2).
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM roles r
-CROSS JOIN permissions p
-WHERE r.code = 'ORG_ADMIN' AND p.module = 'products'
-ON CONFLICT DO NOTHING;

@@ -125,19 +125,3 @@ ALTER TABLE sales_invoice_lines
 
 ALTER TABLE sales_order_lines
     ADD COLUMN price_source VARCHAR(20);
-
--- ============================================================================
--- (6) permission seed + ORG_ADMIN grant
--- ============================================================================
-INSERT INTO permissions (code, module, description) VALUES
-    ('SALES.PRICING.RULE.VIEW',   'products', 'View pricing rules (tiers, customer prices, promotions)'),
-    ('SALES.PRICING.RULE.MANAGE', 'products', 'Create and manage pricing rules (tiers, customer prices, promotions)')
-ON CONFLICT (code) DO NOTHING;
-
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM   roles r
-CROSS JOIN permissions p
-WHERE  r.code = 'ORG_ADMIN'
-  AND  p.code IN ('SALES.PRICING.RULE.VIEW', 'SALES.PRICING.RULE.MANAGE')
-ON CONFLICT DO NOTHING;

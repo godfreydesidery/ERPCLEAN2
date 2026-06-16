@@ -17,6 +17,23 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+    # ── Migration safety on a DURABLE, multi-tenant DB (prod/QA are no longer ephemeral) ──
+    # These mirror Flyway's own defaults where noted, but are pinned here so the policy is
+    # explicit and version-controlled rather than relying on an unstated default. No code or
+    # test invokes flyway clean, so disabling it everywhere costs nothing.
+    #
+    # clean is a full data-drop; never allow it against any persistent ERP database.
+    clean-disabled: true
+    # Checksum drift on an already-applied migration must FAIL FAST at boot — never silently
+    # re-run or skip. (Flyway default true; pinned to make the policy auditable.)
+    validate-on-migrate: true
+    # Strict version order. A lower-versioned migration arriving AFTER a higher one (the classic
+    # parallel-feature-branch case) is rejected, not silently interleaved. (Flyway default false.)
+    out-of-order: false
+    # Never auto-baseline. A restored pg_dump carries flyway_schema_history with it, so a real
+    # restore needs no baseline. Auto-baselining a history-less HEAD dump would mark V1 applied
+    # then re-run V2..HEAD onto an existing schema = mass failure. Adopt legacy DBs manually.
+    baseline-on-migrate: false
 
 server:
   # 8081 by default (8080 is often taken by another local app); override with ERP_API_PORT.

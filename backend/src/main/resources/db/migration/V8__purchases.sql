@@ -182,22 +182,3 @@ CREATE INDEX ix_goods_receipt_lines_receipt    ON goods_receipt_lines (goods_rec
 CREATE INDEX ix_goods_receipt_lines_po_line    ON goods_receipt_lines (purchase_order_line_id);
 CREATE INDEX ix_goods_receipt_lines_product    ON goods_receipt_lines (product_id);
 CREATE INDEX ix_goods_receipt_lines_company    ON goods_receipt_lines (company_id);
-
--- (6) Permission seed + additive ORG_ADMIN grant (ADR-0011 D-11; mirrors V5 / V7 pattern)
-INSERT INTO permissions (code, module, description) VALUES
-    ('PURCHASE.ORDER.VIEW',        'purchases', 'View and list/search purchase orders'),
-    ('PURCHASE.ORDER.CREATE',      'purchases', 'Create and edit draft POs; add/edit/remove ordered lines; place; close'),
-    ('PURCHASE.ORDER.VOID',        'purchases', 'Void a purchase order'),
-    ('PURCHASE.GOODS_RECEIPT.VIEW','purchases', 'View and list/search goods receipts'),
-    ('PURCHASE.RECEIVE',           'purchases', 'Create a draft GR and receive (finalise) it — pushes stock in'),
-    ('PURCHASE.VOID',              'purchases', 'Void a finalised goods receipt — reverses stock-in')
-ON CONFLICT (code) DO NOTHING;
-
--- Additive ORG_ADMIN grant for all purchases permissions (mirrors V2/V3/V5/V7)
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM   roles r
-CROSS JOIN permissions p
-WHERE  r.code = 'ORG_ADMIN'
-  AND  p.module = 'purchases'
-ON CONFLICT DO NOTHING;

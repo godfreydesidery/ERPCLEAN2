@@ -10,7 +10,10 @@ import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.repository.OrganisationRepository;
 import com.erp.support.IamTestData;
 import com.erp.support.PostgresIntegrationTest;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -405,5 +408,50 @@ class DomainEventDispatcherIT extends PostgresIntegrationTest {
         assertThat(evt.getStatus()).isEqualTo(DomainEventStatus.DISPATCHED);
         assertThat(evt.getDispatchedAt()).isNotNull();
         assertThat(evt.getAttemptCount()).isZero();
+    }
+
+    // -------------------------------------------------------------------------
+    // Multi-instance claim (ADR-0009 D-4/D-scaling): FOR UPDATE SKIP LOCKED — a
+    // second concurrent claimant skips a row the first instance holds, so two
+    // pollers on two containers never dispatch the same event.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void claimPendingForUpdate_secondConcurrentClaim_skipsLockedRow() throws Exception {
+        Long eventId = publishPing();
+
+        CountDownLatch aHoldsLock = new CountDownLatch(1); // A signals it has claimed + holds the lock
+        CountDownLatch release    = new CountDownLatch(1); // test releases A to commit
+        AtomicReference<Boolean> aClaimed = new AtomicReference<>();
+        AtomicReference<Boolean> bClaimed = new AtomicReference<>();
+
+        // A: claim the row inside a TX and hold the lock open until released.
+        Thread a = new Thread(() -> txTemplate.executeWithoutResult(s -> {
+            aClaimed.set(domainEventRepository.claimPendingForUpdate(eventId).isPresent());
+            aHoldsLock.countDown();
+            await(release);
+        }), "claimant-A");
+        a.start();
+        assertThat(aHoldsLock.await(5, TimeUnit.SECONDS)).as("A acquired the row lock").isTrue();
+
+        // B: while A holds the row lock, B's SKIP LOCKED claim must return empty (skip, not block).
+        Thread b = new Thread(() -> txTemplate.executeWithoutResult(s ->
+                bClaimed.set(domainEventRepository.claimPendingForUpdate(eventId).isPresent())), "claimant-B");
+        b.start();
+        b.join(5_000);
+
+        release.countDown(); // let A commit
+        a.join(5_000);
+
+        assertThat(aClaimed.get()).as("first claimant locks the row").isTrue();
+        assertThat(bClaimed.get()).as("second concurrent claimant skips the locked row").isFalse();
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            latch.await(5, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 }

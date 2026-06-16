@@ -389,26 +389,3 @@ ALTER TABLE journal_entries
             'AR_RECEIPT','AR_WRITEOFF','AR_CREDIT_NOTE',
             'AP_BILL','AP_PAYMENT','AP_DEBIT_NOTE'
         ));
-
--- ============================================================================
--- (12) Permission seed + ORG_ADMIN grant (ADR-0015 D-13; mirror V11 pattern)
--- ============================================================================
-INSERT INTO permissions (code, module, description) VALUES
-    ('AP.VIEW',         'ap', 'View the AP sub-ledger, balances, ageing, and the reconciliation read'),
-    ('AP.BILL.ENTER',   'ap', 'Enter a supplier bill (BILL-####) and edit its draft lines'),
-    ('AP.BILL.MATCH',   'ap', 'Run / accept the 3-way match; accept an over-tolerance variance'),
-    ('AP.PAYMENT.RUN',  'ap', 'Pay a single bill and run a payment run (PAYRUN-####)'),
-    ('AP.DEBITNOTE',    'ap', 'Raise a debit note / adjustment against an open payable'),
-    ('AP.OPENING.SET',  'ap', 'Enter AP opening balances at go-live')
-ON CONFLICT (code) DO NOTHING;
-
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM   roles r
-CROSS JOIN permissions p
-WHERE  r.code   = 'ORG_ADMIN'
-AND    p.code IN (
-    'AP.VIEW','AP.BILL.ENTER','AP.BILL.MATCH',
-    'AP.PAYMENT.RUN','AP.DEBITNOTE','AP.OPENING.SET'
-)
-ON CONFLICT DO NOTHING;

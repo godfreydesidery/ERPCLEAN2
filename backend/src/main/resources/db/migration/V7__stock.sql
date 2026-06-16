@@ -95,20 +95,3 @@ CREATE INDEX ix_stock_movements_company_branch
 -- Reversal lookup: "all movements for this invoice/receipt" (OQ-STOCK-10, D-5)
 CREATE INDEX ix_stock_movements_source_doc
     ON stock_movements (source_document_type, source_document_uid);
-
--- (5) Permission seed + additive ORG_ADMIN grant (ADR-0010 D-13, V5 pattern)
-INSERT INTO permissions (code, module, description)
-VALUES
-    ('STOCK.VIEW',    'stock', 'View on-hand levels and movement history'),
-    ('STOCK.ADJUST',  'stock', 'Record a manual stock adjustment (+/-) with a reason; set reorder level'),
-    ('STOCK.OPENING', 'stock', 'Seed an opening-balance on-hand for a never-tracked product at a branch')
-ON CONFLICT (code) DO NOTHING;
-
--- Grant all three stock permissions to ORG_ADMIN (mirrors V3 PRODUCT.* / V5 SALES.* pattern)
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM   roles r
-CROSS JOIN permissions p
-WHERE  r.code    = 'ORG_ADMIN'
-AND    p.module  = 'stock'
-ON CONFLICT DO NOTHING;

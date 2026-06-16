@@ -91,19 +91,6 @@ CREATE INDEX ix_permission_module ON permissions (module);
 
 -- Seed the IAM permission catalogue (idempotent). Gates are enforced from Slice 3 (DATA-MODEL
 -- "Seed data"). Every permission-gated endpoint must have its code here (PROJECT-CONVENTIONS §3.4).
-INSERT INTO permissions (code, module, description) VALUES
-    ('COMPANY.VIEW',    'iam', 'View companies'),
-    ('COMPANY.MANAGE',  'iam', 'Create, update and archive companies'),
-    ('BRANCH.VIEW',     'iam', 'View branches'),
-    ('BRANCH.MANAGE',   'iam', 'Create, update, set-default and archive branches'),
-    ('BRANCH.ASSIGN',   'iam', 'Assign users to branches and set their default branch'),
-    ('USER.VIEW',       'iam', 'View users'),
-    ('USER.MANAGE',     'iam', 'Create, update, disable and unlock users; set passwords'),
-    ('ROLE.VIEW',       'iam', 'View roles and their permissions'),
-    ('ROLE.MANAGE',     'iam', 'Create and update roles; grant and revoke role assignments'),
-    ('PERMISSION.VIEW', 'iam', 'View the permission catalogue'),
-    ('AUDIT.VIEW',      'iam', 'View the IAM audit trail')
-ON CONFLICT (code) DO NOTHING;
 
 -- ---------------------------------------------------------------------------
 -- Slice 2: identity & authentication.
@@ -257,12 +244,6 @@ INSERT INTO roles (uid, code, name, description, is_system) VALUES
      'Full IAM administration across the organisation.', true)
 ON CONFLICT (code) DO NOTHING;
 
-INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM roles r
-CROSS JOIN permissions p
-WHERE r.code = 'ORG_ADMIN' AND p.module = 'iam'
-ON CONFLICT DO NOTHING;
 
 -- ---------------------------------------------------------------------------
 -- Slice 6: audit_logs — append-only IAM (and later, global) action trail
