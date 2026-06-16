@@ -12,7 +12,7 @@ import { Company } from '../models/company.model';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { HrPayrollService, LoanPage } from './hr-payroll.service';
-import { CreateLoanRequest, EmployeeLoanDto, LoanStatus } from './models/hr-payroll.model';
+import { CreateLoanRequest, EmployeeLoanDto } from './models/hr-payroll.model';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 import { UidOption, UidPickerComponent } from '../../../shared/uid-picker/uid-picker.component';
 
@@ -213,15 +213,6 @@ export class LoanListComponent {
         this.saving.set(false);
       },
     });
-  }
-
-  statusBadgeClass(status: LoanStatus): string {
-    switch (status) {
-      case 'ACTIVE': return 'text-bg-success';
-      case 'SETTLED': return 'text-bg-info';
-      case 'CANCELLED': return 'text-bg-danger';
-      default: return 'text-bg-secondary';
-    }
   }
 
   private messageFrom(err: unknown, fallback: string): string {

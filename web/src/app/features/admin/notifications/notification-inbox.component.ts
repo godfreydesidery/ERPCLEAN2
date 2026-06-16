@@ -125,15 +125,6 @@ export class NotificationInboxComponent {
     });
   }
 
-  severityBadgeClass(severity: string): string {
-    switch (severity?.toUpperCase()) {
-      case 'CRITICAL': return 'text-bg-danger';
-      case 'HIGH': return 'text-bg-warning';
-      case 'MEDIUM': return 'text-bg-info';
-      default: return 'text-bg-secondary'; // LOW / INFO
-    }
-  }
-
   private messageFrom(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {
       const errors = (err.error as { errors?: string[] })?.errors;

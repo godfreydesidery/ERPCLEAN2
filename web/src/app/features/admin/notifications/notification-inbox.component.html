@@ -1,69 +1,74 @@
 <section class="admin-page">
-  <header class="page-head">
-    <h1 class="h4 mb-1">Notification Inbox</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
-      <i class="bi bi-bell me-1" aria-hidden="true"></i>
-      Your in-app notifications for the active company.
-    </p>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>Notification Inbox</h1>
+      <p class="subtitle">
+        <i class="bi bi-bell me-1" aria-hidden="true"></i>
+        Your in-app notifications for the active company.
+      </p>
+    </div>
+    @if (canView()) {
+      <div class="erp-page-head__actions">
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                [disabled]="markingAll()"
+                (click)="markAllRead()">
+          @if (markingAll()) {
+            <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+            Marking…
+          } @else {
+            <i class="bi bi-check2-all me-1" aria-hidden="true"></i>
+            Mark all read
+          }
+        </button>
+      </div>
+    }
   </header>
 
   <!-- Toolbar -->
-  <div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
+  <div class="erp-toolbar">
     <div class="form-check form-switch mb-0">
       <input class="form-check-input" type="checkbox" role="switch"
              id="filterUnread"
+             [attr.aria-checked]="filterUnread()"
              [ngModel]="filterUnread()"
              (ngModelChange)="onFilterUnreadChange($event)" />
       <label class="form-check-label" for="filterUnread">Show unread only</label>
     </div>
-
-    @if (canView()) {
-      <button type="button" class="btn btn-sm btn-outline-secondary ms-auto"
-              [disabled]="markingAll()"
-              (click)="markAllRead()">
-        @if (markingAll()) {
-          <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-          Marking…
-        } @else {
-          <i class="bi bi-check2-all me-1" aria-hidden="true"></i>
-          Mark all read
-        }
-      </button>
-    }
+    <span class="erp-toolbar__spacer"></span>
   </div>
 
   <!-- List states -->
   @switch (state()) {
     @case ('loading') {
-      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
-        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading notifications…
+      <p class="erp-empty" aria-live="polite">
+        <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Loading notifications…
       </p>
     }
     @case ('error') {
-      <p class="state text-danger" role="alert">
-        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+      <p class="erp-empty" role="alert">
+        <i class="bi bi-exclamation-circle text-danger me-1" aria-hidden="true"></i>
         Could not load notifications. Please try again.
       </p>
     }
     @case ('forbidden') {
-      <p class="state text-muted d-flex align-items-center gap-2">
-        <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      <div class="erp-empty">
+        <i class="bi bi-shield-lock"></i>
         You don't have permission to view notifications.
-      </p>
+      </div>
     }
     @default {
       @if (isEmpty()) {
-        <p class="state text-muted">
-          <i class="bi bi-bell-slash me-1" aria-hidden="true"></i>
+        <div class="erp-empty">
+          <i class="bi bi-bell-slash"></i>
           @if (filterUnread()) {
             No unread notifications.
           } @else {
             No notifications yet.
           }
-        </p>
+        </div>
       } @else {
-        <div class="table-responsive">
-          <table class="table table-hover align-middle bg-white grid">
+        <div class="erp-table-wrap">
+          <table class="erp-table">
             <caption class="visually-hidden">Notification inbox</caption>
             <thead>
               <tr>
@@ -79,18 +84,24 @@
             <tbody>
               @for (n of rows(); track n.uid) {
                 <tr [class.fw-bold]="!n.read">
-                  <td class="small font-monospace">{{ n.typeKey }}</td>
+                  <td class="mono">{{ n.typeKey }}</td>
                   <td>
-                    <span class="badge" [class]="severityBadgeClass(n.severity)">{{ n.severity }}</span>
+                    <span class="status-tag"
+                          [class.status-tag--danger]="n.severity.toUpperCase() === 'CRITICAL'"
+                          [class.status-tag--warn]="n.severity.toUpperCase() === 'HIGH'"
+                          [class.status-tag--info]="n.severity.toUpperCase() === 'MEDIUM'"
+                          [class.status-tag--neutral]="n.severity.toUpperCase() !== 'CRITICAL' && n.severity.toUpperCase() !== 'HIGH' && n.severity.toUpperCase() !== 'MEDIUM'">
+                      {{ n.severity }}
+                    </span>
                   </td>
-                  <td class="small">{{ n.title }}</td>
-                  <td class="small text-muted" style="max-width:300px;white-space:normal">{{ n.body }}</td>
-                  <td class="small text-muted">{{ n.createdAt | slice:0:16 }}</td>
+                  <td>{{ n.title }}</td>
+                  <td class="text-muted" style="max-width:300px;white-space:normal">{{ n.body }}</td>
+                  <td class="text-muted">{{ n.createdAt | slice:0:16 }}</td>
                   <td>
                     @if (n.read) {
-                      <span class="badge text-bg-secondary">Read</span>
+                      <span class="status-tag status-tag--neutral">Read</span>
                     } @else {
-                      <span class="badge text-bg-primary">Unread</span>
+                      <span class="status-tag status-tag--info">Unread</span>
                     }
                   </td>
                   <td>
@@ -100,7 +111,7 @@
                               (click)="markRead(n)"
                               [attr.aria-label]="'Mark notification read: ' + n.title">
                         @if (busyUid() === n.uid) {
-                          <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
                         } @else {
                           <i class="bi bi-check2 me-1" aria-hidden="true"></i>Mark read
                         }
@@ -114,7 +125,7 @@
         </div>
 
         <!-- Pagination -->
-          <app-paginator [meta]="meta()" [label]="'Notifications'" (pageChange)="goToPage($event)" />
+        <app-paginator [meta]="meta()" [label]="'Notifications'" (pageChange)="goToPage($event)" />
       }
     }
   }

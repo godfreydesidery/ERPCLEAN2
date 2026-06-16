@@ -7,8 +7,6 @@ import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import {
   ApprovalRequestDto,
-  ApprovalRequestStatus,
-  ApprovalStepStatus,
   DecideRequest,
 } from './models/approvals.model';
 import { ApprovalsService } from './approvals.service';
@@ -198,27 +196,6 @@ export class ApprovalRequestDetailComponent {
         this.cancelling.set(false);
       },
     });
-  }
-
-  // ── Display helpers ───────────────────────────────────────────────────────
-
-  statusBadgeClass(status: ApprovalRequestStatus): string {
-    switch (status) {
-      case 'PENDING': return 'text-bg-warning';
-      case 'APPROVED': return 'text-bg-success';
-      case 'REJECTED': return 'text-bg-danger';
-      case 'RECALLED': return 'text-bg-secondary';
-      case 'CANCELLED': return 'text-bg-secondary';
-    }
-  }
-
-  stepStatusBadgeClass(status: ApprovalStepStatus): string {
-    switch (status) {
-      case 'PENDING': return 'text-bg-warning';
-      case 'APPROVED': return 'text-bg-success';
-      case 'REJECTED': return 'text-bg-danger';
-      case 'SKIPPED': return 'text-bg-secondary';
-    }
   }
 
   private messageFrom(err: unknown, fallback: string): string {

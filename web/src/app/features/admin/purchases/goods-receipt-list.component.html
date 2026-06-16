@@ -1,7 +1,7 @@
 <section class="admin-page">
   <header class="page-head">
     <h1 class="h4 mb-1">Goods Receipts</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
+    <p class="subtitle">
       <i class="bi bi-box-arrow-in-down me-1" aria-hidden="true"></i>
       Stock receipts against purchase orders.
     </p>
@@ -37,10 +37,10 @@
   }
 
   @if (selectedCompanyId()) {
-    <!-- Search + create link -->
-    <div class="d-flex flex-wrap gap-2 mb-3 align-items-end">
+    <!-- Toolbar: search + create -->
+    <div class="erp-toolbar mb-3">
       <form class="d-flex gap-2" (ngSubmit)="load(0)" aria-label="Search goods receipts">
-        <div>
+        <div class="erp-toolbar__search">
           <label class="form-label small text-muted mb-1" for="grSearch">Search</label>
           <input id="grSearch" name="grSearch" type="search"
                  class="form-control" placeholder="Receipt number, PO…"
@@ -55,42 +55,45 @@
         </div>
       </form>
 
+      <div class="erp-toolbar__spacer"></div>
+
       @if (canReceive()) {
-        <div class="ms-auto align-self-end">
-          <a class="btn btn-primary" routerLink="/admin/goods-receipts/create"
-             aria-label="Create a new goods receipt">
-            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
-            New Receipt
-          </a>
-        </div>
+        <a class="btn btn-primary" routerLink="/admin/goods-receipts/create"
+           aria-label="Create a new goods receipt">
+          <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+          New Receipt
+        </a>
       }
     </div>
 
     <!-- List states -->
     @switch (state()) {
       @case ('loading') {
-        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading receipts…
         </p>
       }
       @case ('error') {
-        <p class="state text-danger" role="alert">
+        <p class="text-danger" role="alert">
           <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
           Could not load goods receipts. Please try again.
         </p>
       }
       @case ('forbidden') {
-        <p class="state text-muted d-flex align-items-center gap-2">
-          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock"></i>
           You don't have permission to view goods receipts.
-        </p>
+        </div>
       }
       @default {
         @if (isEmpty()) {
-          <p class="state text-muted">No goods receipts yet.</p>
+          <div class="erp-empty">
+            <i class="bi bi-box-arrow-in-down"></i>
+            No goods receipts yet.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Goods receipts</caption>
               <thead>
                 <tr>
@@ -105,9 +108,14 @@
               <tbody>
                 @for (gr of rows(); track gr.uid) {
                   <tr>
-                    <td class="font-monospace">{{ gr.receiptNumber }}</td>
+                    <td class="mono">{{ gr.receiptNumber }}</td>
                     <td>
-                      <span class="badge" [class]="statusBadgeClass(gr.status)">{{ gr.status }}</span>
+                      <span class="status-tag"
+                        [class.status-tag--ok]="gr.status === 'RECEIVED'"
+                        [class.status-tag--neutral]="gr.status === 'VOID'"
+                        [class.status-tag--warn]="gr.status !== 'RECEIVED' && gr.status !== 'VOID'">
+                        {{ gr.status }}
+                      </span>
                     </td>
                     <td class="small">
                       @if (gr.purchaseOrderUid) {

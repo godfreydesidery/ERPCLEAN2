@@ -6,27 +6,33 @@
       </a>
     </nav>
     @if (request(); as r) {
-      <h1 class="h4 mb-0">{{ r.requestNumber }}</h1>
-      <span class="badge ms-2" [class]="statusBadgeClass(r.status)">{{ r.status }}</span>
+      <h1>{{ r.requestNumber }}</h1>
+      <span class="status-tag ms-2"
+            [class.status-tag--warn]="r.status === 'PENDING'"
+            [class.status-tag--ok]="r.status === 'APPROVED'"
+            [class.status-tag--danger]="r.status === 'REJECTED'"
+            [class.status-tag--neutral]="r.status === 'RECALLED' || r.status === 'CANCELLED'">
+        <span class="status-tag__dot" aria-hidden="true"></span>{{ r.status }}
+      </span>
       @if (r.autoApproved) {
-        <span class="badge text-bg-info ms-1">Auto-approved</span>
+        <span class="status-tag status-tag--info ms-1">Auto-approved</span>
       }
     } @else {
-      <h1 class="h4 mb-0">Approval Request</h1>
+      <h1>Approval Request</h1>
     }
   </header>
 
   @switch (requestState()) {
     @case ('loading') {
-      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+      <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
         <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading request…
       </p>
     }
     @case ('error') {
-      <p class="state text-danger" role="alert">
+      <div class="text-danger" role="alert">
         <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
         Could not load the approval request. Please try again.
-      </p>
+      </div>
     }
     @default {
       @if (request(); as r) {
@@ -54,7 +60,7 @@
                     [disabled]="recalling()"
                     (click)="recall()">
               @if (recalling()) {
-                <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
               }
               <i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i>Recall
             </button>
@@ -64,7 +70,7 @@
                     [disabled]="cancelling()"
                     (click)="cancel()">
               @if (cancelling()) {
-                <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
               }
               <i class="bi bi-slash-circle me-1" aria-hidden="true"></i>Cancel
             </button>
@@ -72,167 +78,196 @@
         </div>
 
         @if (recallError(); as msg) {
-          <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
+          <div class="text-danger small mb-2" role="alert">{{ msg }}</div>
         }
         @if (cancelError(); as msg) {
-          <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
+          <div class="text-danger small mb-2" role="alert">{{ msg }}</div>
         }
 
         <!-- Approve form -->
         @if (showApproveForm()) {
-          <form class="card card-body mb-3 border-success" (ngSubmit)="approve()" aria-label="Approve request">
-            <h2 class="h6 mb-2 text-success">Approve Request</h2>
-            <div class="mb-2">
-              <label class="form-label small text-muted mb-1" for="approveComment">Comment (optional)</label>
-              <input id="approveComment" name="approveComment" type="text" class="form-control"
-                     [ngModel]="approveComment()" (ngModelChange)="approveComment.set($event)"
-                     [disabled]="approving()" autocomplete="off"
-                     placeholder="Add a comment…" />
+          <div class="erp-card mb-3" style="border-color:var(--erp-ok)">
+            <div class="erp-card__head">
+              <h2 style="color:var(--erp-ok-fg)">Approve Request</h2>
             </div>
-            <div class="d-flex gap-2">
-              <button type="submit" class="btn btn-success btn-sm" [disabled]="approving()">
-                @if (approving()) {
-                  <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+            <div class="erp-card__body">
+              <form (ngSubmit)="approve()" aria-label="Approve request">
+                <div class="erp-field mb-3">
+                  <label for="approveComment">Comment (optional)</label>
+                  <input id="approveComment" name="approveComment" type="text" class="form-control"
+                         [ngModel]="approveComment()" (ngModelChange)="approveComment.set($event)"
+                         [disabled]="approving()" autocomplete="off"
+                         placeholder="Add a comment…" />
+                </div>
+                <div class="d-flex gap-2">
+                  <button type="submit" class="btn btn-success btn-sm" [disabled]="approving()">
+                    @if (approving()) {
+                      <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                    }
+                    Confirm Approve
+                  </button>
+                  <button type="button" class="btn btn-outline-secondary btn-sm"
+                          (click)="toggleApproveForm()" [disabled]="approving()">
+                    Cancel
+                  </button>
+                </div>
+                @if (approveError(); as msg) {
+                  <div class="text-danger small mt-2" role="alert">{{ msg }}</div>
                 }
-                Confirm Approve
-              </button>
-              <button type="button" class="btn btn-outline-secondary btn-sm"
-                      (click)="toggleApproveForm()" [disabled]="approving()">
-                Cancel
-              </button>
+              </form>
             </div>
-            @if (approveError(); as msg) {
-              <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-            }
-          </form>
+          </div>
         }
 
         <!-- Reject form -->
         @if (showRejectForm()) {
-          <form class="card card-body mb-3 border-danger" (ngSubmit)="reject()" aria-label="Reject request">
-            <h2 class="h6 mb-2 text-danger">Reject Request</h2>
-            <div class="mb-2">
-              <label class="form-label small text-muted mb-1" for="rejectComment">Comment (optional)</label>
-              <input id="rejectComment" name="rejectComment" type="text" class="form-control"
-                     [ngModel]="rejectComment()" (ngModelChange)="rejectComment.set($event)"
-                     [disabled]="rejecting()" autocomplete="off"
-                     placeholder="Reason for rejection…" />
+          <div class="erp-card mb-3" style="border-color:var(--erp-danger)">
+            <div class="erp-card__head">
+              <h2 style="color:var(--erp-danger-fg)">Reject Request</h2>
             </div>
-            <div class="d-flex gap-2">
-              <button type="submit" class="btn btn-danger btn-sm" [disabled]="rejecting()">
-                @if (rejecting()) {
-                  <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+            <div class="erp-card__body">
+              <form (ngSubmit)="reject()" aria-label="Reject request">
+                <div class="erp-field mb-3">
+                  <label for="rejectComment">Comment (optional)</label>
+                  <input id="rejectComment" name="rejectComment" type="text" class="form-control"
+                         [ngModel]="rejectComment()" (ngModelChange)="rejectComment.set($event)"
+                         [disabled]="rejecting()" autocomplete="off"
+                         placeholder="Reason for rejection…" />
+                </div>
+                <div class="d-flex gap-2">
+                  <button type="submit" class="btn btn-danger btn-sm" [disabled]="rejecting()">
+                    @if (rejecting()) {
+                      <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                    }
+                    Confirm Reject
+                  </button>
+                  <button type="button" class="btn btn-outline-secondary btn-sm"
+                          (click)="toggleRejectForm()" [disabled]="rejecting()">
+                    Cancel
+                  </button>
+                </div>
+                @if (rejectError(); as msg) {
+                  <div class="text-danger small mt-2" role="alert">{{ msg }}</div>
                 }
-                Confirm Reject
-              </button>
-              <button type="button" class="btn btn-outline-secondary btn-sm"
-                      (click)="toggleRejectForm()" [disabled]="rejecting()">
-                Cancel
-              </button>
+              </form>
             </div>
-            @if (rejectError(); as msg) {
-              <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-            }
-          </form>
+          </div>
         }
 
         <!-- Request metadata -->
-        <div class="card card-body mb-3 bg-light small">
-          <div class="row g-2">
-            <div class="col-sm-3">
-              <span class="text-muted d-block">Document Type</span>
-              <span class="font-monospace">{{ r.documentType }}</span>
-            </div>
-            <div class="col-sm-3">
-              <span class="text-muted d-block">Document</span>
-              <a [routerLink]="['/admin/documents/uid', r.documentUid]"
-                 class="small">{{ r.documentType }}</a>
-            </div>
-            <div class="col-sm-3">
-              <span class="text-muted d-block">Amount</span>
-              <span class="font-monospace">{{ r.currency }} {{ +r.amount | number:'1.2-2' }}</span>
-            </div>
-            <div class="col-sm-3">
-              <span class="text-muted d-block">Submitted By</span>
-              <span>{{ r.submittedBy }}</span>
-            </div>
-            <div class="col-sm-3">
-              <span class="text-muted d-block">Submitted At</span>
-              <span>{{ r.submittedAt | date:'yyyy-MM-dd HH:mm' }}</span>
-            </div>
-            @if (r.resolvedAt) {
-              <div class="col-sm-3">
-                <span class="text-muted d-block">Resolved At</span>
-                <span>{{ r.resolvedAt | date:'yyyy-MM-dd HH:mm' }}</span>
+        <div class="erp-card mb-3">
+          <div class="erp-card__head">
+            <h2>Request Details</h2>
+          </div>
+          <div class="erp-card__body">
+            <div class="erp-form-grid">
+              <div class="erp-field">
+                <span class="erp-field__label-text">Document Type</span>
+                <span class="mono">{{ r.documentType }}</span>
               </div>
-            }
-            @if (r.resolvedBy) {
-              <div class="col-sm-3">
-                <span class="text-muted d-block">Resolved By</span>
-                <span>{{ r.resolvedBy }}</span>
+              <div class="erp-field">
+                <span class="erp-field__label-text">Document</span>
+                <a [routerLink]="['/admin/documents/uid', r.documentUid]">{{ r.documentType }}</a>
               </div>
-            }
-            @if (r.summary) {
-              <div class="col-12">
-                <span class="text-muted d-block">Summary</span>
-                <span>{{ r.summary }}</span>
+              <div class="erp-field">
+                <span class="erp-field__label-text">Amount</span>
+                <span class="mono">{{ r.currency }} {{ +r.amount | number:'1.2-2' }}</span>
               </div>
-            }
-            @if (r.sourcePolicyUid) {
-              <div class="col-sm-4">
-                <span class="text-muted d-block">Source Policy</span>
-                <a [routerLink]="['/admin/approvals/policies/uid', r.sourcePolicyUid]"
-                   class="small">View policy</a>
+              <div class="erp-field">
+                <span class="erp-field__label-text">Submitted By</span>
+                <span>{{ r.submittedBy }}</span>
               </div>
-            }
+              <div class="erp-field">
+                <span class="erp-field__label-text">Submitted At</span>
+                <span>{{ r.submittedAt | date:'yyyy-MM-dd HH:mm' }}</span>
+              </div>
+              @if (r.resolvedAt) {
+                <div class="erp-field">
+                  <span class="erp-field__label-text">Resolved At</span>
+                  <span>{{ r.resolvedAt | date:'yyyy-MM-dd HH:mm' }}</span>
+                </div>
+              }
+              @if (r.resolvedBy) {
+                <div class="erp-field">
+                  <span class="erp-field__label-text">Resolved By</span>
+                  <span>{{ r.resolvedBy }}</span>
+                </div>
+              }
+              @if (r.summary) {
+                <div class="erp-field full">
+                  <span class="erp-field__label-text">Summary</span>
+                  <span>{{ r.summary }}</span>
+                </div>
+              }
+              @if (r.sourcePolicyUid) {
+                <div class="erp-field">
+                  <span class="erp-field__label-text">Source Policy</span>
+                  <a [routerLink]="['/admin/approvals/policies/uid', r.sourcePolicyUid]">View policy</a>
+                </div>
+              }
+            </div>
           </div>
         </div>
 
         <!-- Steps + decision history -->
-        <div class="card card-body mb-3">
-          <h2 class="h6 mb-2">Approval Steps</h2>
-          @if (r.steps.length === 0) {
-            <p class="text-muted small mb-0">No steps (auto-approved or no policy matched).</p>
-          } @else {
-            @for (step of r.steps; track step.uid) {
-              <div class="mb-3 ps-2 border-start border-2"
-                   [class.border-warning]="step.status === 'PENDING'"
-                   [class.border-success]="step.status === 'APPROVED'"
-                   [class.border-danger]="step.status === 'REJECTED'"
-                   [class.border-secondary]="step.status === 'SKIPPED'">
-                <div class="d-flex align-items-center gap-2 mb-1">
-                  <span class="fw-semibold small">Step {{ step.sequence }}</span>
-                  <span class="badge" [class]="stepStatusBadgeClass(step.status)">{{ step.status }}</span>
-                  <span class="text-muted small font-monospace">{{ step.approverRoleCode }}</span>
-                  @if (step.resolvedBy) {
-                    <span class="text-muted small">by {{ step.resolvedBy }}</span>
-                  }
-                  @if (step.resolvedAt) {
-                    <span class="text-muted small">at {{ step.resolvedAt | date:'yyyy-MM-dd HH:mm' }}</span>
+        <div class="erp-card mb-3">
+          <div class="erp-card__head">
+            <h2>Approval Steps</h2>
+          </div>
+          <div class="erp-card__body">
+            @if (r.steps.length === 0) {
+              <div class="erp-empty">
+                <i class="bi bi-list-check" aria-hidden="true"></i>
+                No steps (auto-approved or no policy matched).
+              </div>
+            } @else {
+              @for (step of r.steps; track step.uid) {
+                <div class="mb-3 ps-2 border-start border-2"
+                     [class.border-warning]="step.status === 'PENDING'"
+                     [class.border-success]="step.status === 'APPROVED'"
+                     [class.border-danger]="step.status === 'REJECTED'"
+                     [class.border-secondary]="step.status === 'SKIPPED'">
+                  <div class="d-flex align-items-center gap-2 mb-1">
+                    <span class="fw-semibold small">Step {{ step.sequence }}</span>
+                    <span class="status-tag"
+                          [class.status-tag--warn]="step.status === 'PENDING'"
+                          [class.status-tag--ok]="step.status === 'APPROVED'"
+                          [class.status-tag--danger]="step.status === 'REJECTED'"
+                          [class.status-tag--neutral]="step.status === 'SKIPPED'">
+                      <span class="status-tag__dot" aria-hidden="true"></span>{{ step.status }}
+                    </span>
+                    <span class="mono text-muted small">{{ step.approverRoleCode }}</span>
+                    @if (step.resolvedBy) {
+                      <span class="text-muted small">by {{ step.resolvedBy }}</span>
+                    }
+                    @if (step.resolvedAt) {
+                      <span class="text-muted small">at {{ step.resolvedAt | date:'yyyy-MM-dd HH:mm' }}</span>
+                    }
+                  </div>
+
+                  <!-- Decision history per step -->
+                  @if (step.decisions.length > 0) {
+                    <ul class="list-unstyled ms-2 mb-0">
+                      @for (d of step.decisions; track d.uid) {
+                        <li class="small d-flex gap-2 align-items-start py-1 border-top border-light">
+                          <span class="status-tag"
+                                [class.status-tag--ok]="d.action === 'APPROVE'"
+                                [class.status-tag--danger]="d.action === 'REJECT'">
+                            {{ d.action }}
+                          </span>
+                          <span>{{ d.decidedBy }}</span>
+                          <span class="text-muted">{{ d.decidedAt | date:'yyyy-MM-dd HH:mm' }}</span>
+                          @if (d.comment) {
+                            <span class="text-muted fst-italic">"{{ d.comment }}"</span>
+                          }
+                        </li>
+                      }
+                    </ul>
                   }
                 </div>
-
-                <!-- Decision history per step -->
-                @if (step.decisions.length > 0) {
-                  <ul class="list-unstyled ms-2 mb-0">
-                    @for (d of step.decisions; track d.uid) {
-                      <li class="small d-flex gap-2 align-items-start py-1 border-top border-light">
-                        <span class="badge"
-                              [class]="d.action === 'APPROVE' ? 'text-bg-success' : 'text-bg-danger'">
-                          {{ d.action }}
-                        </span>
-                        <span>{{ d.decidedBy }}</span>
-                        <span class="text-muted">{{ d.decidedAt | date:'yyyy-MM-dd HH:mm' }}</span>
-                        @if (d.comment) {
-                          <span class="text-muted fst-italic">"{{ d.comment }}"</span>
-                        }
-                      </li>
-                    }
-                  </ul>
-                }
-              </div>
+              }
             }
-          }
+          </div>
         </div>
       }
     }

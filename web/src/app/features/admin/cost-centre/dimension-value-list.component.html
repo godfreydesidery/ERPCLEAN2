@@ -1,10 +1,12 @@
 <section class="admin-page">
-  <header class="page-head">
-    <h1 class="h4 mb-1">Dimension Values</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
-      <i class="bi bi-tags me-1" aria-hidden="true"></i>
-      Cost centres, departments, and other dimension values used to tag journal lines.
-    </p>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>Dimension Values</h1>
+      <p class="subtitle">
+        <i class="bi bi-tags me-1" aria-hidden="true"></i>
+        Cost centres, departments, and other dimension values used to tag journal lines.
+      </p>
+    </div>
   </header>
 
   <!-- Company selector -->
@@ -64,15 +66,16 @@
     }
 
     <!-- Toolbar -->
-    <div class="d-flex flex-wrap gap-2 mb-3 align-items-end">
+    <div class="erp-toolbar mb-3">
       <a class="btn btn-sm btn-outline-secondary"
          routerLink="/admin/cost-centre/dimensions"
          aria-label="View dimension types">
         <i class="bi bi-diagram-3 me-1" aria-hidden="true"></i>
         Dimension Types
       </a>
+      <span class="erp-toolbar__spacer"></span>
       @if (canManage() && selectedDimensionUid()) {
-        <button type="button" class="btn btn-primary ms-auto"
+        <button type="button" class="btn btn-primary"
                 (click)="toggleCreateForm()"
                 [attr.aria-expanded]="showCreateForm()"
                 aria-controls="createValueForm">
@@ -84,82 +87,88 @@
 
     <!-- Create form -->
     @if (showCreateForm()) {
-      <form id="createValueForm" class="create-form card card-body mb-3"
+      <form id="createValueForm" class="erp-card mb-3"
             (ngSubmit)="create()" aria-label="Create dimension value">
-        <h2 class="h6 mb-3">New Dimension Value</h2>
-        <div class="row g-2 mb-2">
-          <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="newValCode">
-              Code <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="newValCode" name="newValCode" type="text" class="form-control"
-                   placeholder="e.g. CC001"
-                   [ngModel]="newCode()" (ngModelChange)="newCode.set($event)"
-                   [disabled]="saving()" autocomplete="off" />
-          </div>
-          <div class="col-sm-5">
-            <label class="form-label small text-muted mb-1" for="newValName">
-              Name <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="newValName" name="newValName" type="text" class="form-control"
-                   placeholder="e.g. Head Office"
-                   [ngModel]="newName()" (ngModelChange)="newName.set($event)"
-                   [disabled]="saving()" autocomplete="off" />
-          </div>
-          <div class="col-sm-4">
-            <label class="form-label small text-muted mb-1" for="newParentUid">
-              Parent UID (optional — leave blank for root)
-            </label>
-            <input id="newParentUid" name="newParentUid" type="text" class="form-control"
-                   placeholder="Parent value UID"
-                   [ngModel]="newParentUid()" (ngModelChange)="newParentUid.set($event)"
-                   [disabled]="saving()" autocomplete="off" />
-          </div>
+        <div class="erp-card__head">
+          <h2>New Dimension Value</h2>
         </div>
-        <div class="d-flex gap-2 align-items-center">
-          <button type="submit" class="btn btn-primary" [disabled]="saving()">
-            @if (saving()) {
-              <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-              Saving…
-            } @else {
-              Create Value
-            }
-          </button>
-          <button type="button" class="btn btn-outline-secondary" (click)="toggleCreateForm()">
-            Cancel
-          </button>
+        <div class="erp-card__body">
+          <div class="erp-form-grid">
+            <div class="erp-field">
+              <label class="form-label" for="newValCode">
+                Code <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="newValCode" name="newValCode" type="text" class="form-control"
+                     placeholder="e.g. CC001"
+                     [ngModel]="newCode()" (ngModelChange)="newCode.set($event)"
+                     [disabled]="saving()" autocomplete="off" />
+            </div>
+            <div class="erp-field">
+              <label class="form-label" for="newValName">
+                Name <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="newValName" name="newValName" type="text" class="form-control"
+                     placeholder="e.g. Head Office"
+                     [ngModel]="newName()" (ngModelChange)="newName.set($event)"
+                     [disabled]="saving()" autocomplete="off" />
+            </div>
+            <div class="erp-field full">
+              <label class="form-label" for="newParentUid">
+                Parent UID (optional — leave blank for root)
+              </label>
+              <input id="newParentUid" name="newParentUid" type="text" class="form-control"
+                     placeholder="Parent value UID"
+                     [ngModel]="newParentUid()" (ngModelChange)="newParentUid.set($event)"
+                     [disabled]="saving()" autocomplete="off" />
+            </div>
+          </div>
+          <div class="d-flex gap-2 align-items-center mt-3">
+            <button type="submit" class="btn btn-primary" [disabled]="saving()">
+              @if (saving()) {
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                Saving…
+              } @else {
+                Create Value
+              }
+            </button>
+            <button type="button" class="btn btn-outline-secondary" (click)="toggleCreateForm()">
+              Cancel
+            </button>
+          </div>
+          @if (formError(); as msg) {
+            <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+          }
         </div>
-        @if (formError(); as msg) {
-          <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-        }
       </form>
     }
 
     <!-- List states -->
     @switch (state()) {
       @case ('loading') {
-        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading values…
         </p>
       }
       @case ('error') {
-        <p class="state text-danger" role="alert">
+        <p class="text-danger" role="alert">
           <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
           Could not load dimension values.
         </p>
       }
       @case ('forbidden') {
-        <p class="state text-muted d-flex align-items-center gap-2">
-          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock"></i>
           You don't have permission to view dimension values.
-        </p>
+        </div>
       }
       @default {
         @if (isEmpty()) {
-          <p class="state text-muted">No values yet for this dimension. Create one above.</p>
+          <div class="erp-empty">
+            <i class="bi bi-tags"></i> No values yet for this dimension. Create one above.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Dimension values</caption>
               <thead>
                 <tr>
@@ -175,14 +184,20 @@
               <tbody>
                 @for (val of rows(); track val.uid) {
                   <tr>
-                    <td class="font-monospace">{{ val.code }}</td>
+                    <td class="mono">{{ val.code }}</td>
                     <td>
                       <a [routerLink]="['/admin/cost-centre/values/uid', val.uid]"
                          [attr.aria-label]="'Open ' + val.name">{{ val.name }}</a>
                     </td>
-                    <td><span class="badge text-bg-info">{{ val.slot }}</span></td>
                     <td>
-                      <span class="badge" [class]="statusBadgeClass(val.status)">{{ val.status }}</span>
+                      <span class="status-tag status-tag--info">{{ val.slot }}</span>
+                    </td>
+                    <td>
+                      <span class="status-tag"
+                            [class.status-tag--ok]="val.status === 'ACTIVE'"
+                            [class.status-tag--neutral]="val.status === 'INACTIVE' || val.status === 'ARCHIVED'">
+                        {{ val.status }}
+                      </span>
                     </td>
                     <td>
                       @if (val.active) {

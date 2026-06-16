@@ -1,7 +1,7 @@
 <section class="admin-page">
   <header class="page-head">
     <h1 class="h4 mb-1">Purchase Orders</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
+    <p class="subtitle">
       <i class="bi bi-cart me-1" aria-hidden="true"></i>
       Manage purchase orders with suppliers.
     </p>
@@ -38,9 +38,9 @@
 
   @if (selectedCompanyId()) {
     <!-- Search + filter + create -->
-    <div class="d-flex flex-wrap gap-2 mb-3 align-items-end">
+    <div class="erp-toolbar mb-3">
       <form class="d-flex gap-2" (ngSubmit)="load(0)" aria-label="Search purchase orders">
-        <div>
+        <div class="erp-toolbar__search">
           <label class="form-label small text-muted mb-1" for="poSearch">Search</label>
           <input id="poSearch" name="poSearch" type="search"
                  class="form-control" placeholder="Supplier, order number…"
@@ -68,136 +68,142 @@
         </select>
       </div>
 
+      <div class="erp-toolbar__spacer"></div>
+
       @if (canCreate()) {
-        <div class="ms-auto align-self-end">
-          <button type="button" class="btn btn-primary"
-                  (click)="toggleCreateForm()"
-                  [attr.aria-expanded]="showCreateForm()"
-                  aria-controls="createPoForm">
-            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
-            New Order
-          </button>
-        </div>
+        <button type="button" class="btn btn-primary"
+                (click)="toggleCreateForm()"
+                [attr.aria-expanded]="showCreateForm()"
+                aria-controls="createPoForm">
+          <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+          New Order
+        </button>
       }
     </div>
 
     <!-- Create form -->
     @if (showCreateForm()) {
-      <form id="createPoForm" class="create-form card card-body mb-3"
-            (ngSubmit)="create()" aria-label="Create purchase order">
-        <h2 class="h6 mb-3">New Purchase Order</h2>
-        <div class="row g-2 align-items-start mb-2">
-          <!-- Supplier picker -->
-          <div class="col-sm-5 position-relative">
-            <label class="form-label small text-muted mb-1" for="supplierSearch">
-              Supplier <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="supplierSearch" name="supplierSearch" type="search"
-                   class="form-control"
-                   placeholder="Search by name or code…"
-                   [ngModel]="supplierSearchQ()"
-                   (ngModelChange)="onSupplierSearchChange($event)"
-                   [disabled]="saving()"
-                   autocomplete="off"
-                   [attr.aria-expanded]="supplierResults().length > 0"
-                   aria-haspopup="listbox"
-                   aria-autocomplete="list"
-                   [attr.aria-label]="selectedSupplier() ? 'Supplier: ' + selectedSupplier()!.label : 'Search supplier'" />
-            @if (selectedSupplier()) {
-              <div class="d-flex align-items-center gap-1 mt-1">
-                <i class="bi bi-check-circle-fill text-success small" aria-hidden="true"></i>
-                <span class="small text-muted">{{ selectedSupplier()!.label }}</span>
-              </div>
-            }
-            @if (supplierResults().length > 0) {
-              <ul class="list-group position-absolute shadow-sm mt-1 w-100" role="listbox"
-                  aria-label="Supplier suggestions" style="z-index:1050;max-height:220px;overflow-y:auto;">
-                @for (s of supplierResults(); track s.uid) {
-                  <li class="list-group-item list-group-item-action small py-2"
-                      role="option"
-                      style="cursor:pointer"
-                      (click)="selectSupplier(s)"
-                      (keydown.enter)="selectSupplier(s)"
-                      tabindex="0"
-                      [attr.aria-label]="s.code + ' — ' + s.displayName">
-                    <strong>{{ s.code }}</strong> — {{ s.displayName }}
-                  </li>
+      <div class="erp-card mb-3">
+        <div class="erp-card__head">
+          <h2>New Purchase Order</h2>
+        </div>
+        <div class="erp-card__body">
+          <form id="createPoForm" (ngSubmit)="create()" aria-label="Create purchase order">
+            <div class="erp-form-grid mb-2">
+              <!-- Supplier picker -->
+              <div class="erp-field position-relative" style="grid-column:span 2">
+                <label class="form-label small text-muted mb-1" for="supplierSearch">
+                  Supplier <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="supplierSearch" name="supplierSearch" type="search"
+                       class="form-control"
+                       placeholder="Search by name or code…"
+                       [ngModel]="supplierSearchQ()"
+                       (ngModelChange)="onSupplierSearchChange($event)"
+                       [disabled]="saving()"
+                       autocomplete="off"
+                       [attr.aria-expanded]="supplierResults().length > 0"
+                       aria-haspopup="listbox"
+                       aria-autocomplete="list"
+                       [attr.aria-label]="selectedSupplier() ? 'Supplier: ' + selectedSupplier()!.label : 'Search supplier'" />
+                @if (selectedSupplier()) {
+                  <div class="d-flex align-items-center gap-1 mt-1">
+                    <i class="bi bi-check-circle-fill text-success small" aria-hidden="true"></i>
+                    <span class="small text-muted">{{ selectedSupplier()!.label }}</span>
+                  </div>
                 }
-              </ul>
-            }
-          </div>
+                @if (supplierResults().length > 0) {
+                  <ul class="list-group position-absolute shadow-sm mt-1 w-100" role="listbox"
+                      aria-label="Supplier suggestions" style="z-index:1050;max-height:220px;overflow-y:auto;">
+                    @for (s of supplierResults(); track s.uid) {
+                      <li class="list-group-item list-group-item-action small py-2"
+                          role="option"
+                          style="cursor:pointer"
+                          (click)="selectSupplier(s)"
+                          (keydown.enter)="selectSupplier(s)"
+                          tabindex="0"
+                          [attr.aria-label]="s.code + ' — ' + s.displayName">
+                        <strong>{{ s.code }}</strong> — {{ s.displayName }}
+                      </li>
+                    }
+                  </ul>
+                }
+              </div>
 
-          <!-- Currency -->
-          <div class="col-sm-2">
-            <label class="form-label small text-muted mb-1" for="newCurrency">
-              Currency <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="newCurrency" name="newCurrency" type="text" class="form-control"
-                   placeholder="TZS"
-                   [ngModel]="newCurrency()" (ngModelChange)="newCurrency.set($event)"
-                   [disabled]="saving()" autocomplete="off" />
-          </div>
+              <!-- Currency -->
+              <div class="erp-field">
+                <label class="form-label small text-muted mb-1" for="newCurrency">
+                  Currency <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="newCurrency" name="newCurrency" type="text" class="form-control"
+                       placeholder="TZS"
+                       [ngModel]="newCurrency()" (ngModelChange)="newCurrency.set($event)"
+                       [disabled]="saving()" autocomplete="off" />
+              </div>
 
-          <!-- Expected date -->
-          <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="newExpectedDate">Expected Date</label>
-            <input id="newExpectedDate" name="newExpectedDate" type="date" class="form-control"
-                   [ngModel]="newExpectedDate()" (ngModelChange)="newExpectedDate.set($event)"
-                   [disabled]="saving()" />
-          </div>
-        </div>
+              <!-- Expected date -->
+              <div class="erp-field">
+                <label class="form-label small text-muted mb-1" for="newExpectedDate">Expected Date</label>
+                <input id="newExpectedDate" name="newExpectedDate" type="date" class="form-control"
+                       [ngModel]="newExpectedDate()" (ngModelChange)="newExpectedDate.set($event)"
+                       [disabled]="saving()" />
+              </div>
 
-        <!-- Notes + submit -->
-        <div class="row g-2 mb-2">
-          <div class="col-sm-8">
-            <label class="form-label small text-muted mb-1" for="newNotes">Notes</label>
-            <input id="newNotes" name="newNotes" type="text" class="form-control"
-                   [ngModel]="newNotes()" (ngModelChange)="newNotes.set($event)"
-                   [disabled]="saving()" autocomplete="off" />
-          </div>
-          <div class="col-sm-4 d-flex align-items-end">
-            <button type="submit" class="btn btn-primary w-100" [disabled]="saving()">
-              @if (saving()) {
-                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                Saving…
-              } @else {
-                Create Order
+              <!-- Notes -->
+              <div class="erp-field full">
+                <label class="form-label small text-muted mb-1" for="newNotes">Notes</label>
+                <input id="newNotes" name="newNotes" type="text" class="form-control"
+                       [ngModel]="newNotes()" (ngModelChange)="newNotes.set($event)"
+                       [disabled]="saving()" autocomplete="off" />
+              </div>
+            </div>
+
+            <div class="d-flex gap-2 align-items-center">
+              <button type="submit" class="btn btn-primary" [disabled]="saving()">
+                @if (saving()) {
+                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  Saving…
+                } @else {
+                  Create Order
+                }
+              </button>
+              @if (formError(); as msg) {
+                <p class="text-danger small mb-0" role="alert">{{ msg }}</p>
               }
-            </button>
-          </div>
+            </div>
+          </form>
         </div>
-
-        @if (formError(); as msg) {
-          <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-        }
-      </form>
+      </div>
     }
 
     <!-- List states -->
     @switch (state()) {
       @case ('loading') {
-        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading orders…
         </p>
       }
       @case ('error') {
-        <p class="state text-danger" role="alert">
+        <p class="text-danger" role="alert">
           <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
           Could not load purchase orders. Please try again.
         </p>
       }
       @case ('forbidden') {
-        <p class="state text-muted d-flex align-items-center gap-2">
-          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock"></i>
           You don't have permission to view purchase orders.
-        </p>
+        </div>
       }
       @default {
         @if (isEmpty()) {
-          <p class="state text-muted">No purchase orders yet. Create one above.</p>
+          <div class="erp-empty">
+            <i class="bi bi-cart"></i>
+            No purchase orders yet. Create one above.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Purchase orders</caption>
               <thead>
                 <tr>
@@ -205,7 +211,7 @@
                   <th scope="col">Supplier</th>
                   <th scope="col">Status</th>
                   <th scope="col">Currency</th>
-                  <th scope="col" class="text-end">Total</th>
+                  <th scope="col" class="num">Total</th>
                   <th scope="col">Created</th>
                   <th scope="col"><span class="visually-hidden">Actions</span></th>
                 </tr>
@@ -213,13 +219,19 @@
               <tbody>
                 @for (po of rows(); track po.uid) {
                   <tr>
-                    <td class="font-monospace">{{ orderLabel(po) }}</td>
+                    <td class="mono">{{ orderLabel(po) }}</td>
                     <td>{{ po.supplierName }}</td>
                     <td>
-                      <span class="badge" [class]="statusBadgeClass(po.status)">{{ po.status }}</span>
+                      <span class="status-tag"
+                        [class.status-tag--warn]="po.status === 'DRAFT'"
+                        [class.status-tag--info]="po.status === 'ORDERED' || po.status === 'PARTIALLY_RECEIVED'"
+                        [class.status-tag--ok]="po.status === 'RECEIVED'"
+                        [class.status-tag--neutral]="po.status === 'CLOSED' || po.status === 'VOID'">
+                        {{ po.status }}
+                      </span>
                     </td>
                     <td class="small">{{ po.currency }}</td>
-                    <td class="text-end font-monospace">{{ po.orderTotalAmount }}</td>
+                    <td class="num">{{ po.orderTotalAmount }}</td>
                     <td class="small text-muted">{{ po.createdAt | date:'dd/MM/yyyy' }}</td>
                     <td>
                       <a class="btn btn-sm btn-outline-primary"

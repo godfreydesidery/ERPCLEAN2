@@ -298,8 +298,8 @@ describe('DashboardComponent', () => {
     expect(comp.trendBarWidth('100000', 200000)).toBe(50);
   });
 
-  // 8. healthPrefix / healthBadgeClass
-  it('healthPrefix returns [OK] when ties', () => {
+  // 8. healthPrefix — drives the text label inside every health status-tag
+  it('healthPrefix returns [OK] when ties, [!] when not', () => {
     vi.useFakeTimers();
     makeBed();
     const comp = TestBed.createComponent(DashboardComponent).componentInstance as any;
@@ -307,12 +307,20 @@ describe('DashboardComponent', () => {
     expect(comp.healthPrefix(false)).toBe('[!]');
   });
 
-  it('healthBadgeClass returns text-bg-success when ties, text-bg-danger when not', () => {
+  it('health strip renders status-tag--ok for a balanced indicator, status-tag--danger for imbalance', () => {
     vi.useFakeTimers();
-    makeBed();
-    const comp = TestBed.createComponent(DashboardComponent).componentInstance as any;
-    expect(comp.healthBadgeClass(true)).toBe('text-bg-success');
-    expect(comp.healthBadgeClass(false)).toBe('text-bg-danger');
+    makeBed(of(MOCK_DTO));
+    const fixture = TestBed.createComponent(DashboardComponent);
+    TestBed.flushEffects();
+    fixture.detectChanges();
+    // MOCK_DTO.health = [{label:'AR-GL', ties:true}, {label:'AP-GL', ties:false}]
+    const tags: NodeListOf<HTMLElement> =
+      fixture.nativeElement.querySelectorAll('output .status-tag');
+    expect(tags.length).toBeGreaterThanOrEqual(2);
+    const arTag = Array.from(tags).find((el) => el.textContent?.includes('AR-GL'));
+    const apTag = Array.from(tags).find((el) => el.textContent?.includes('AP-GL'));
+    expect(arTag?.classList).toContain('status-tag--ok');
+    expect(apTag?.classList).toContain('status-tag--danger');
   });
 
   // 9. Full DTO: panels all populate correctly on success

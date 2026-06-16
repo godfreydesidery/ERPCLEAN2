@@ -1,24 +1,8 @@
-/* Audit list — Bootstrap-themed (Orbix). Mirrors the role-list layout conventions. */
-
-.admin-page {
-  max-width: 1200px;
-}
-
-.page-head {
-  margin-bottom: 1rem;
-}
+/* Audit list — relies on global ERP kit (.admin-page, .page-head, .erp-table, .status-tag, .erp-empty).
+   Only component-specific touches remain here. */
 
 .state {
   padding: 1rem 0;
-}
-
-.grid {
-  th {
-    font-size: 0.78rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: #6b7280;
-  }
 }
 
 .detail-cell {
@@ -35,8 +19,4 @@
   word-break: break-all;
   max-height: 120px;
   overflow-y: auto;
-}
-
-.paging {
-  padding-bottom: 1rem;
 }

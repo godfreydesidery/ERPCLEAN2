@@ -4,7 +4,7 @@ import { Component, computed, inject, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AlertService } from '../../../../core/feedback/alert.service';
 import { SessionStore } from '../../../../core/auth/session.store';
-import { StockTransferDto, StockTransferStatus } from './stock-transfer.model';
+import { StockTransferDto } from './stock-transfer.model';
 import { StockTransferService } from './stock-transfer.service';
 import { StockLocationService } from '../locations/stock-location.service';
 
@@ -136,23 +136,6 @@ export class StockTransferDetailComponent {
         this.actionBusy.set(false);
       },
     });
-  }
-
-  statusBadgeClass(status: StockTransferStatus): string {
-    switch (status) {
-      case 'DRAFT':
-        return 'text-bg-warning';
-      case 'DISPATCHED':
-        return 'text-bg-info';
-      case 'RECEIVED':
-        return 'text-bg-primary';
-      case 'COMPLETED':
-        return 'text-bg-success';
-      case 'CANCELLED':
-        return 'text-bg-danger';
-      default:
-        return 'text-bg-secondary';
-    }
   }
 
   private messageFrom(err: unknown, fallback: string): string {

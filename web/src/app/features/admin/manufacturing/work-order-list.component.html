@@ -1,10 +1,12 @@
 <section class="admin-page">
-  <header class="page-head">
-    <h1 class="h4 mb-1">Work Orders</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
-      <i class="bi bi-gear me-1" aria-hidden="true"></i>
-      Manage manufacturing work orders — plan, release, issue, complete and close production runs.
-    </p>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>Work Orders</h1>
+      <p class="subtitle">
+        <i class="bi bi-gear me-1" aria-hidden="true"></i>
+        Manage manufacturing work orders — plan, release, issue, complete and close production runs.
+      </p>
+    </div>
   </header>
 
   <!-- Company selector -->
@@ -38,10 +40,10 @@
 
   @if (selectedCompanyId()) {
     <!-- Toolbar -->
-    <div class="d-flex flex-wrap gap-2 mb-3 align-items-end">
+    <div class="erp-toolbar">
       <!-- Status filter -->
-      <div style="max-width:200px">
-        <label class="form-label small text-muted mb-1" for="statusFilter">Status</label>
+      <div class="erp-field" style="max-width:200px">
+        <label for="statusFilter">Status</label>
         <select id="statusFilter" name="statusFilter" class="form-select form-select-sm"
                 [ngModel]="statusFilter()"
                 (ngModelChange)="onStatusChange($event)">
@@ -51,173 +53,190 @@
         </select>
       </div>
 
+      <span class="erp-toolbar__spacer"></span>
+
       @if (canCreate()) {
-        <div class="ms-auto align-self-end">
-          <button type="button" class="btn btn-primary"
-                  (click)="toggleCreateForm()"
-                  [attr.aria-expanded]="showCreateForm()"
-                  aria-controls="createWorkOrderForm">
-            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
-            New Work Order
-          </button>
-        </div>
+        <button type="button" class="btn btn-primary"
+                (click)="toggleCreateForm()"
+                [attr.aria-expanded]="showCreateForm()"
+                aria-controls="createWorkOrderForm">
+          <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+          New Work Order
+        </button>
       }
     </div>
 
     <!-- Create form -->
     @if (showCreateForm()) {
-      <form id="createWorkOrderForm" class="create-form card card-body mb-3"
-            (ngSubmit)="create()" aria-label="Create work order">
-        <h2 class="h6 mb-3">New Work Order</h2>
-        <div class="row g-2 align-items-start mb-2">
-          <!-- Finished product -->
-          <div class="col-sm-4">
-            <label class="form-label small text-muted mb-1">
-              Finished Product <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <app-uid-picker [(ngModel)]="newProductUid" [options]="productOptions()"
-                            placeholder="Select finished product" [required]="true"
-                            name="newProductUid" />
-          </div>
-
-          <!-- Planned qty -->
-          <div class="col-sm-2">
-            <label class="form-label small text-muted mb-1" for="newPlannedQty">
-              Planned Qty <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="newPlannedQty" name="newPlannedQty" type="number" class="form-control"
-                   placeholder="0.000000" min="0.000001" step="0.000001"
-                   [ngModel]="newPlannedQty()" (ngModelChange)="newPlannedQty.set($event)"
-                   [disabled]="saving()" />
-          </div>
-
-          <!-- Branch -->
-          <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1">
-              Branch <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <app-uid-picker [(ngModel)]="newBranchUid" [options]="branchOptions()"
-                            placeholder="Select branch" [required]="true"
-                            name="newBranchUid" />
-          </div>
-
-          <!-- BOM UID — no BOM list endpoint yet; leave as text pending BOM list service -->
-          <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="newBomUid">BOM UID (optional)</label>
-            <input id="newBomUid" name="newBomUid" type="text" class="form-control"
-                   placeholder="pin specific BOM…"
-                   [ngModel]="newBomUid()" (ngModelChange)="newBomUid.set($event)"
-                   [disabled]="saving()" autocomplete="off" />
-          </div>
-
-          <!-- Planned date -->
-          <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="newPlannedDate">Planned Date</label>
-            <input id="newPlannedDate" name="newPlannedDate" type="date" class="form-control"
-                   [ngModel]="newPlannedDate()" (ngModelChange)="newPlannedDate.set($event)"
-                   [disabled]="saving()" />
-          </div>
-
-          <!-- Notes -->
-          <div class="col-sm-6">
-            <label class="form-label small text-muted mb-1" for="newNotes">Notes</label>
-            <input id="newNotes" name="newNotes" type="text" class="form-control"
-                   [ngModel]="newNotes()" (ngModelChange)="newNotes.set($event)"
-                   [disabled]="saving()" autocomplete="off" />
-          </div>
-
-          <!-- Submit -->
-          <div class="col-sm-3 d-flex align-items-end">
-            <button type="submit" class="btn btn-primary w-100" [disabled]="saving()">
-              @if (saving()) {
-                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                Saving…
-              } @else {
-                Create Work Order
-              }
-            </button>
-          </div>
+      <div class="erp-card mb-3">
+        <div class="erp-card__head">
+          <h2>New Work Order</h2>
         </div>
+        <div class="erp-card__body">
+          <form id="createWorkOrderForm" (ngSubmit)="create()" aria-label="Create work order">
+            <div class="erp-form-grid">
+              <!-- Finished product: picker carries its own aria-label via placeholder -->
+              <div class="erp-field">
+                <span class="erp-field__label">
+                  Finished Product <span class="text-danger" aria-hidden="true">*</span>
+                </span>
+                <app-uid-picker [(ngModel)]="newProductUid" [options]="productOptions()"
+                                placeholder="Select finished product" [required]="true"
+                                name="newProductUid" />
+              </div>
 
-        @if (formError(); as msg) {
-          <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-        }
-      </form>
+              <!-- Planned qty -->
+              <div class="erp-field">
+                <label for="newPlannedQty">
+                  Planned Qty <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="newPlannedQty" name="newPlannedQty" type="number" class="form-control"
+                       placeholder="0.000000" min="0.000001" step="0.000001"
+                       [ngModel]="newPlannedQty()" (ngModelChange)="newPlannedQty.set($event)"
+                       [disabled]="saving()" />
+              </div>
+
+              <!-- Branch: picker carries its own aria-label via placeholder -->
+              <div class="erp-field">
+                <span class="erp-field__label">
+                  Branch <span class="text-danger" aria-hidden="true">*</span>
+                </span>
+                <app-uid-picker [(ngModel)]="newBranchUid" [options]="branchOptions()"
+                                placeholder="Select branch" [required]="true"
+                                name="newBranchUid" />
+              </div>
+
+              <!-- BOM UID -->
+              <div class="erp-field">
+                <label for="newBomUid">BOM UID (optional)</label>
+                <input id="newBomUid" name="newBomUid" type="text" class="form-control"
+                       placeholder="pin specific BOM…"
+                       [ngModel]="newBomUid()" (ngModelChange)="newBomUid.set($event)"
+                       [disabled]="saving()" autocomplete="off" />
+              </div>
+
+              <!-- Planned date -->
+              <div class="erp-field">
+                <label for="newPlannedDate">Planned Date</label>
+                <input id="newPlannedDate" name="newPlannedDate" type="date" class="form-control"
+                       [ngModel]="newPlannedDate()" (ngModelChange)="newPlannedDate.set($event)"
+                       [disabled]="saving()" />
+              </div>
+
+              <!-- Notes -->
+              <div class="erp-field">
+                <label for="newNotes">Notes</label>
+                <input id="newNotes" name="newNotes" type="text" class="form-control"
+                       [ngModel]="newNotes()" (ngModelChange)="newNotes.set($event)"
+                       [disabled]="saving()" autocomplete="off" />
+              </div>
+            </div>
+
+            <div class="mt-3 d-flex gap-2">
+              <button type="submit" class="btn btn-primary" [disabled]="saving()">
+                @if (saving()) {
+                  <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                  Saving…
+                } @else {
+                  Create Work Order
+                }
+              </button>
+            </div>
+
+            @if (formError(); as msg) {
+              <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+            }
+          </form>
+        </div>
+      </div>
     }
 
     <!-- List states -->
     @switch (state()) {
       @case ('loading') {
-        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading work orders…
         </p>
       }
       @case ('error') {
-        <p class="state text-danger" role="alert">
+        <p class="text-danger" role="alert">
           <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
           Could not load work orders. Please try again.
         </p>
       }
       @case ('forbidden') {
-        <p class="state text-muted d-flex align-items-center gap-2">
+        <p class="text-muted d-flex align-items-center gap-2">
           <i class="bi bi-shield-lock" aria-hidden="true"></i>
           You don't have permission to view work orders.
         </p>
       }
       @default {
         @if (isEmpty()) {
-          <p class="state text-muted">No work orders yet. Create one above.</p>
+          <div class="erp-empty">
+            <i class="bi bi-gear" aria-hidden="true"></i>
+            No work orders yet. Create one above.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
-              <caption class="visually-hidden">Work Orders</caption>
-              <thead>
-                <tr>
-                  <th scope="col">WO #</th>
-                  <th scope="col">Finished Product</th>
-                  <th scope="col">Planned Qty</th>
-                  <th scope="col">Good Qty</th>
-                  <th scope="col">Status</th>
-                  <th scope="col" class="text-end">WIP Debit</th>
-                  <th scope="col" class="text-end">WIP Credit</th>
-                  <th scope="col" class="text-end">Unit Cost</th>
-                  <th scope="col"><span class="visually-hidden">Actions</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (wo of rows(); track wo.uid) {
+          <div class="erp-card">
+            <div class="erp-table-wrap">
+              <table class="erp-table">
+                <caption class="visually-hidden">Work Orders</caption>
+                <thead>
                   <tr>
-                    <td class="font-monospace small">{{ wo.woNumber }}</td>
-                    <td class="small">
-                      <div class="fw-semibold">{{ wo.finishedProductCode }}</div>
-                      <div class="text-muted" style="font-size:0.8rem">{{ wo.finishedProductName }}</div>
-                    </td>
-                    <td class="font-monospace small text-end">{{ +wo.plannedQty | number:'1.2-6' }}</td>
-                    <td class="font-monospace small text-end">{{ +wo.goodQty | number:'1.2-6' }}</td>
-                    <td>
-                      <span class="badge" [class]="statusBadgeClass(wo.status)">{{ wo.status }}</span>
-                      @if (wo.incompleteCost) {
-                        <span class="badge text-bg-warning ms-1" title="Incomplete cost — components issued with no average cost">
-                          <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
-                        </span>
-                      }
-                    </td>
-                    <td class="font-monospace small text-end">{{ +wo.wipDebitTotal | number:'1.2-4' }}</td>
-                    <td class="font-monospace small text-end">{{ +wo.wipCreditTotal | number:'1.2-4' }}</td>
-                    <td class="font-monospace small text-end">
-                      @if (wo.computedUnitCost) { {{ +wo.computedUnitCost | number:'1.2-4' }} }
-                    </td>
-                    <td>
-                      <a class="btn btn-sm btn-outline-primary"
-                         [routerLink]="['/admin/work-orders/uid', wo.uid]"
-                         [attr.aria-label]="'Open work order ' + wo.woNumber">
-                        <i class="bi bi-eye me-1" aria-hidden="true"></i>Open
-                      </a>
-                    </td>
+                    <th scope="col">WO #</th>
+                    <th scope="col">Finished Product</th>
+                    <th scope="col" class="text-end">Planned Qty</th>
+                    <th scope="col" class="text-end">Good Qty</th>
+                    <th scope="col">Status</th>
+                    <th scope="col" class="text-end">WIP Debit</th>
+                    <th scope="col" class="text-end">WIP Credit</th>
+                    <th scope="col" class="text-end">Unit Cost</th>
+                    <th scope="col"><span class="visually-hidden">Actions</span></th>
                   </tr>
-                }
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  @for (wo of rows(); track wo.uid) {
+                    <tr>
+                      <td class="mono">{{ wo.woNumber }}</td>
+                      <td>
+                        <div class="fw-semibold">{{ wo.finishedProductCode }}</div>
+                        <div class="text-muted" style="font-size:0.8rem">{{ wo.finishedProductName }}</div>
+                      </td>
+                      <td class="num">{{ +wo.plannedQty | number:'1.2-6' }}</td>
+                      <td class="num">{{ +wo.goodQty | number:'1.2-6' }}</td>
+                      <td>
+                        <span class="status-tag"
+                              [class.status-tag--warn]="wo.status === 'PLANNED' || wo.status === 'IN_PROGRESS'"
+                              [class.status-tag--info]="wo.status === 'RELEASED'"
+                              [class.status-tag--ok]="wo.status === 'COMPLETED'"
+                              [class.status-tag--neutral]="wo.status === 'CLOSED'"
+                              [class.status-tag--danger]="wo.status === 'CANCELLED'">
+                          <span class="status-tag__dot"></span>{{ wo.status }}
+                        </span>
+                        @if (wo.incompleteCost) {
+                          <span class="status-tag status-tag--warn ms-1"
+                                title="Incomplete cost — components issued with no average cost">
+                            <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
+                          </span>
+                        }
+                      </td>
+                      <td class="num">{{ +wo.wipDebitTotal | number:'1.2-4' }}</td>
+                      <td class="num">{{ +wo.wipCreditTotal | number:'1.2-4' }}</td>
+                      <td class="num">
+                        @if (wo.computedUnitCost) { {{ +wo.computedUnitCost | number:'1.2-4' }} }
+                      </td>
+                      <td>
+                        <a class="btn btn-sm btn-outline-primary"
+                           [routerLink]="['/admin/work-orders/uid', wo.uid]"
+                           [attr.aria-label]="'Open work order ' + wo.woNumber">
+                          <i class="bi bi-eye me-1" aria-hidden="true"></i>Open
+                        </a>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
           </div>
 
           <!-- Pagination -->

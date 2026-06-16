@@ -1,7 +1,7 @@
 <section class="admin-page">
   <header class="page-head">
     <h1 class="h4 mb-1">RFQs / Sourcing</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
+    <p class="subtitle">
       <i class="bi bi-search me-1" aria-hidden="true"></i>
       Request for Quotation — invite suppliers and compare quotes.
     </p>
@@ -37,9 +37,10 @@
   }
 
   @if (selectedCompanyId()) {
-    <div class="d-flex mb-3">
+    <div class="erp-toolbar mb-3">
+      <div class="erp-toolbar__spacer"></div>
       @if (canCreate()) {
-        <a class="btn btn-primary ms-auto" routerLink="/admin/rfqs/create">
+        <a class="btn btn-primary" routerLink="/admin/rfqs/create">
           <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>New RFQ
         </a>
       }
@@ -47,28 +48,31 @@
 
     @switch (state()) {
       @case ('loading') {
-        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading RFQs…
         </p>
       }
       @case ('error') {
-        <p class="state text-danger" role="alert">
+        <p class="text-danger" role="alert">
           <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
           Could not load RFQs. Please try again.
         </p>
       }
       @case ('forbidden') {
-        <p class="state text-muted d-flex align-items-center gap-2">
-          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock"></i>
           You don't have permission to view RFQs.
-        </p>
+        </div>
       }
       @default {
         @if (isEmpty()) {
-          <p class="state text-muted">No RFQs yet. Create one above.</p>
+          <div class="erp-empty">
+            <i class="bi bi-search"></i>
+            No RFQs yet. Create one above.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Requests for Quotation</caption>
               <thead>
                 <tr>
@@ -83,9 +87,15 @@
               <tbody>
                 @for (rfq of rows(); track rfq.uid) {
                   <tr>
-                    <td class="font-monospace">{{ rfq.rfqNumber }}</td>
+                    <td class="mono">{{ rfq.rfqNumber }}</td>
                     <td>
-                      <span class="badge" [class]="statusBadgeClass(rfq.status)">{{ rfq.status }}</span>
+                      <span class="status-tag"
+                        [class.status-tag--warn]="rfq.status === 'DRAFT'"
+                        [class.status-tag--info]="rfq.status === 'SENT' || rfq.status === 'QUOTES_RECEIVED'"
+                        [class.status-tag--ok]="rfq.status === 'AWARDED'"
+                        [class.status-tag--neutral]="rfq.status === 'CANCELLED'">
+                        {{ rfq.status }}
+                      </span>
                     </td>
                     <td class="small text-muted">{{ rfq.supplierUids.length }} supplier(s)</td>
                     <td class="small">{{ rfq.responseDueDate ?? '—' }}</td>

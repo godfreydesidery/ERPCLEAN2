@@ -10,7 +10,6 @@ import {
   CashBankAccountDto,
   CashGlReconciliationDto,
   CashTransactionDto,
-  CashTxnDirection,
 } from './models/cashbank.model';
 import { CashbankService } from './cashbank.service';
 
@@ -164,7 +163,4 @@ export class CashAccountStatementComponent {
     return Number.isFinite(n) ? n.toFixed(2) : '0.00';
   }
 
-  directionBadgeClass(direction: CashTxnDirection): string {
-    return direction === 'IN' ? 'text-bg-success' : 'text-bg-danger';
-  }
 }

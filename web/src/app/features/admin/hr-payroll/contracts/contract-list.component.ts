@@ -210,16 +210,6 @@ export class ContractListComponent {
     });
   }
 
-  contractTypeBadgeClass(ct: ContractType): string {
-    switch (ct) {
-      case 'PERMANENT': return 'text-bg-success';
-      case 'FIXED_TERM': return 'text-bg-info';
-      case 'CASUAL': return 'text-bg-warning';
-      case 'PROBATION': return 'text-bg-secondary';
-      default: return 'text-bg-secondary';
-    }
-  }
-
   private messageFrom(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {
       const errors = (err.error as { errors?: string[] })?.errors;

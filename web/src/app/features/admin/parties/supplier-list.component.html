@@ -1,7 +1,7 @@
 <section class="admin-page">
   <header class="page-head">
     <h1 class="h4 mb-1">Suppliers</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
+    <p class="subtitle mb-0">
       <i class="bi bi-truck me-1" aria-hidden="true"></i>
       Manage supplier accounts and branch associations.
     </p>
@@ -36,9 +36,9 @@
   }
 
   @if (selectedCompanyId()) {
-    <div class="d-flex flex-wrap gap-2 mb-3 align-items-end">
+    <div class="erp-toolbar">
       <form class="d-flex gap-2" (ngSubmit)="applySearch()" aria-label="Search suppliers">
-        <div>
+        <div class="erp-toolbar__search">
           <label class="form-label small text-muted mb-1" for="supplierSearch">Search</label>
           <input id="supplierSearch" name="supplierSearch" type="search"
                  class="form-control" placeholder="Name, code…"
@@ -48,7 +48,7 @@
         <div class="align-self-end">
           <button type="submit" class="btn btn-outline-secondary">
             <i class="bi bi-search" aria-hidden="true"></i>
-            <span class="sr-only">Search</span>
+            <span class="visually-hidden">Search</span>
           </button>
         </div>
         @if (searchQ()) {
@@ -57,150 +57,156 @@
           </div>
         }
       </form>
+      <span class="erp-toolbar__spacer"></span>
       @if (canManage()) {
-        <div class="ms-auto align-self-end">
-          <button type="button" class="btn btn-primary"
-                  (click)="toggleCreateForm()"
-                  [attr.aria-expanded]="showCreateForm()"
-                  aria-controls="createSupplierForm">
-            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
-            New Supplier
-          </button>
-        </div>
+        <button type="button" class="btn btn-primary"
+                (click)="toggleCreateForm()"
+                [attr.aria-expanded]="showCreateForm()"
+                aria-controls="createSupplierForm">
+          <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+          New Supplier
+        </button>
       }
     </div>
 
     @if (showCreateForm()) {
-      <form id="createSupplierForm" class="create-form card card-body mb-3"
+      <form id="createSupplierForm" class="erp-card mb-3"
             (ngSubmit)="create()" aria-label="Create supplier">
-        <h2 class="h6 mb-3">New Supplier</h2>
-        <!-- Row 1: core fields -->
-        <div class="row g-2 align-items-end mb-2">
-          <div class="col-sm-4">
-            <label class="form-label small text-muted mb-1" for="newDisplayName">Display name</label>
-            <input id="newDisplayName" name="newDisplayName" type="text" class="form-control"
-                   [ngModel]="newDisplayName()" (ngModelChange)="newDisplayName.set($event)"
-                   required [disabled]="saving()" autocomplete="off" />
-          </div>
-          <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="newPartyType">Party type</label>
-            <select id="newPartyType" name="newPartyType" class="form-select"
-                    [ngModel]="newPartyType()" (ngModelChange)="newPartyType.set($event)"
-                    [disabled]="saving()">
-              <option value="INDIVIDUAL">Individual</option>
-              <option value="BUSINESS">Business</option>
-            </select>
-          </div>
-          <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="newSupplierKind">Kind</label>
-            <select id="newSupplierKind" name="newSupplierKind" class="form-select"
-                    [ngModel]="newSupplierKind()" (ngModelChange)="newSupplierKind.set($event)"
-                    [disabled]="saving()">
-              <option value="GOODS">Goods</option>
-              <option value="SERVICE">Service</option>
-            </select>
-          </div>
-          <div class="col-sm-2">
-            <button type="submit" class="btn btn-primary w-100" [disabled]="saving()">
-              @if (saving()) {
-                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                Saving…
-              } @else {
-                Create
-              }
-            </button>
-          </div>
+        <div class="erp-card__head">
+          <h2>New Supplier</h2>
         </div>
-
-        <!-- Row 2: identity fields — BUSINESS shows required TIN + VAT/VRN/regNo/legalName;
-             INDIVIDUAL shows optional TIN only. -->
-        @if (newPartyType() === 'BUSINESS') {
+        <div class="erp-card__body">
+          <!-- Row 1: core fields -->
           <div class="row g-2 align-items-end mb-2">
-            <div class="col-sm-3">
-              <label class="form-label small text-muted mb-1" for="newTin">
-                TIN <span class="text-danger" aria-hidden="true">*</span>
-                <span class="sr-only">(required for business)</span>
-              </label>
-              <input id="newTin" name="newTin" type="text" class="form-control"
-                     [ngModel]="newTin()" (ngModelChange)="newTin.set($event)"
-                     [disabled]="saving()" autocomplete="off"
-                     aria-required="true" />
+            <div class="col-sm-4">
+              <label class="form-label small text-muted mb-1" for="newDisplayName">Display name</label>
+              <input id="newDisplayName" name="newDisplayName" type="text" class="form-control"
+                     [ngModel]="newDisplayName()" (ngModelChange)="newDisplayName.set($event)"
+                     required [disabled]="saving()" autocomplete="off" />
             </div>
             <div class="col-sm-3">
-              <label class="form-label small text-muted mb-1" for="newLegalName">Legal name</label>
-              <input id="newLegalName" name="newLegalName" type="text" class="form-control"
-                     [ngModel]="newLegalName()" (ngModelChange)="newLegalName.set($event)"
-                     [disabled]="saving()" autocomplete="off" />
+              <label class="form-label small text-muted mb-1" for="newPartyType">Party type</label>
+              <select id="newPartyType" name="newPartyType" class="form-select"
+                      [ngModel]="newPartyType()" (ngModelChange)="newPartyType.set($event)"
+                      [disabled]="saving()">
+                <option value="INDIVIDUAL">Individual</option>
+                <option value="BUSINESS">Business</option>
+              </select>
             </div>
             <div class="col-sm-3">
-              <label class="form-label small text-muted mb-1" for="newBusinessRegNo">Business reg. no.</label>
-              <input id="newBusinessRegNo" name="newBusinessRegNo" type="text" class="form-control"
-                     [ngModel]="newBusinessRegNo()" (ngModelChange)="newBusinessRegNo.set($event)"
-                     [disabled]="saving()" autocomplete="off" />
+              <label class="form-label small text-muted mb-1" for="newSupplierKind">Kind</label>
+              <select id="newSupplierKind" name="newSupplierKind" class="form-select"
+                      [ngModel]="newSupplierKind()" (ngModelChange)="newSupplierKind.set($event)"
+                      [disabled]="saving()">
+                <option value="GOODS">Goods</option>
+                <option value="SERVICE">Service</option>
+              </select>
             </div>
-            <div class="col-sm-3 align-self-end">
-              <div class="form-check mb-1">
-                <input id="newVatRegistered" name="newVatRegistered" type="checkbox" class="form-check-input"
-                       [ngModel]="newVatRegistered()"
-                       (ngModelChange)="onNewVatRegisteredChange($event)"
-                       [disabled]="saving()" />
-                <label class="form-check-label small" for="newVatRegistered">VAT registered</label>
+            <div class="col-sm-2">
+              <button type="submit" class="btn btn-primary w-100" [disabled]="saving()">
+                @if (saving()) {
+                  <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                  Saving…
+                } @else {
+                  Create
+                }
+              </button>
+            </div>
+          </div>
+
+          <!-- Row 2: identity fields — BUSINESS shows required TIN + VAT/VRN/regNo/legalName;
+               INDIVIDUAL shows optional TIN only. -->
+          @if (newPartyType() === 'BUSINESS') {
+            <div class="row g-2 align-items-end mb-2">
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="newTin">
+                  TIN <span class="text-danger" aria-hidden="true">*</span>
+                  <span class="visually-hidden">(required for business)</span>
+                </label>
+                <input id="newTin" name="newTin" type="text" class="form-control"
+                       [ngModel]="newTin()" (ngModelChange)="newTin.set($event)"
+                       [disabled]="saving()" autocomplete="off"
+                       aria-required="true" />
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="newLegalName">Legal name</label>
+                <input id="newLegalName" name="newLegalName" type="text" class="form-control"
+                       [ngModel]="newLegalName()" (ngModelChange)="newLegalName.set($event)"
+                       [disabled]="saving()" autocomplete="off" />
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="newBusinessRegNo">Business reg. no.</label>
+                <input id="newBusinessRegNo" name="newBusinessRegNo" type="text" class="form-control"
+                       [ngModel]="newBusinessRegNo()" (ngModelChange)="newBusinessRegNo.set($event)"
+                       [disabled]="saving()" autocomplete="off" />
+              </div>
+              <div class="col-sm-3 align-self-end">
+                <div class="form-check mb-1">
+                  <input id="newVatRegistered" name="newVatRegistered" type="checkbox" class="form-check-input"
+                         [ngModel]="newVatRegistered()"
+                         (ngModelChange)="onNewVatRegisteredChange($event)"
+                         [disabled]="saving()" />
+                  <label class="form-check-label small" for="newVatRegistered">VAT registered</label>
+                </div>
               </div>
             </div>
-          </div>
-          @if (newVatRegistered()) {
+            @if (newVatRegistered()) {
+              <div class="row g-2 mb-2">
+                <div class="col-sm-3">
+                  <label class="form-label small text-muted mb-1" for="newVrn">VRN</label>
+                  <input id="newVrn" name="newVrn" type="text" class="form-control"
+                         [ngModel]="newVrn()" (ngModelChange)="newVrn.set($event)"
+                         [disabled]="saving()" autocomplete="off" />
+                </div>
+              </div>
+            }
+          } @else {
+            <!-- INDIVIDUAL: TIN is optional -->
             <div class="row g-2 mb-2">
               <div class="col-sm-3">
-                <label class="form-label small text-muted mb-1" for="newVrn">VRN</label>
-                <input id="newVrn" name="newVrn" type="text" class="form-control"
-                       [ngModel]="newVrn()" (ngModelChange)="newVrn.set($event)"
+                <label class="form-label small text-muted mb-1" for="newTin">TIN <span class="text-muted">(optional)</span></label>
+                <input id="newTin" name="newTin" type="text" class="form-control"
+                       [ngModel]="newTin()" (ngModelChange)="newTin.set($event)"
                        [disabled]="saving()" autocomplete="off" />
               </div>
             </div>
           }
-        } @else {
-          <!-- INDIVIDUAL: TIN is optional -->
-          <div class="row g-2 mb-2">
-            <div class="col-sm-3">
-              <label class="form-label small text-muted mb-1" for="newTin">TIN <span class="text-muted">(optional)</span></label>
-              <input id="newTin" name="newTin" type="text" class="form-control"
-                     [ngModel]="newTin()" (ngModelChange)="newTin.set($event)"
-                     [disabled]="saving()" autocomplete="off" />
-            </div>
-          </div>
-        }
 
-        @if (formError(); as msg) {
-          <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-        }
+          @if (formError(); as msg) {
+            <output class="d-block text-danger small mt-2" aria-live="polite" aria-atomic="true">{{ msg }}</output>
+          }
+        </div>
       </form>
     }
 
     @switch (state()) {
       @case ('loading') {
-        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <p class="text-muted d-flex align-items-center gap-2 py-3" aria-live="polite">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading suppliers…
         </p>
       }
       @case ('error') {
-        <p class="state text-danger" role="alert">
+        <p class="text-danger py-2" role="alert">
           <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
           Could not load suppliers. Please try again.
         </p>
       }
       @case ('forbidden') {
-        <p class="state text-muted d-flex align-items-center gap-2">
+        <div class="erp-empty">
           <i class="bi bi-shield-lock" aria-hidden="true"></i>
           You don't have permission to view suppliers.
-        </p>
+        </div>
       }
       @default {
         @if (isEmpty()) {
-          <p class="state text-muted">No suppliers yet. Add one above.</p>
+          <div class="erp-empty">
+            <i class="bi bi-truck" aria-hidden="true"></i>
+            No suppliers yet. Add one above.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
-              <caption class="sr-only">Suppliers in this company</caption>
+          <div class="erp-table-wrap">
+            <table class="erp-table">
+              <caption class="visually-hidden">Suppliers in this company</caption>
               <thead>
                 <tr>
                   <th scope="col">Code</th>
@@ -208,18 +214,26 @@
                   <th scope="col">Type</th>
                   <th scope="col">Kind</th>
                   <th scope="col">Status</th>
-                  <th scope="col"><span class="sr-only">Actions</span></th>
+                  <th scope="col"><span class="visually-hidden">Actions</span></th>
                 </tr>
               </thead>
               <tbody>
                 @for (s of rows(); track s.uid) {
                   <tr>
-                    <td class="font-monospace">{{ s.code }}</td>
+                    <td class="mono">{{ s.code }}</td>
                     <td>{{ s.displayName }}</td>
-                    <td><span class="badge text-bg-light border">{{ s.partyType }}</span></td>
-                    <td><span class="badge text-bg-light border">{{ s.supplierKind }}</span></td>
                     <td>
-                      <span class="badge" [class]="statusBadgeClass(s.status)">{{ s.status }}</span>
+                      <span class="status-tag status-tag--neutral">{{ s.partyType }}</span>
+                    </td>
+                    <td>
+                      <span class="status-tag status-tag--neutral">{{ s.supplierKind }}</span>
+                    </td>
+                    <td>
+                      <span class="status-tag"
+                            [class.status-tag--ok]="s.status === 'ACTIVE'"
+                            [class.status-tag--neutral]="s.status === 'ARCHIVED'">
+                        {{ s.status }}
+                      </span>
                     </td>
                     <td>
                       <a class="btn btn-sm btn-outline-primary"

@@ -12,7 +12,6 @@ import { FxService } from './fx.service';
 import {
   FxRevaluationPreviewDto,
   FxRevaluationRunDto,
-  FxRevaluationRunStatus,
   PostFxRevaluationRequest,
 } from './models/fx.model';
 import { PageMeta } from '../../../core/api/api-response.model';
@@ -274,15 +273,6 @@ export class FxRevaluationListComponent {
   }
 
   // ── Display helpers ────────────────────────────────────────────────────────
-
-  statusBadgeClass(status: FxRevaluationRunStatus): string {
-    switch (status) {
-      case 'PREVIEWED': return 'text-bg-warning';
-      case 'POSTED':    return 'text-bg-success';
-      case 'REVERSED':  return 'text-bg-secondary';
-      default:          return 'text-bg-secondary';
-    }
-  }
 
   fmtAmt(v: string | null | undefined): string {
     const n = +(v ?? 0);

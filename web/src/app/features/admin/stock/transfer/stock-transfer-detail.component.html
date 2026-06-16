@@ -1,72 +1,90 @@
 <section class="admin-page">
-  <div class="page-head">
-    <h1>Stock Transfer</h1>
-    <a routerLink="/admin/stock-transfers" class="btn btn-outline-secondary btn-sm">
-      <i class="bi bi-arrow-left" aria-hidden="true"></i> Back to list
-    </a>
+  <div class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>Stock Transfer</h1>
+    </div>
+    <div class="erp-page-head__actions">
+      <a routerLink="/admin/stock-transfers" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left" aria-hidden="true"></i> Back to list
+      </a>
+    </div>
   </div>
 
   @switch (state()) {
     @case ('loading') {
-      <p aria-live="polite" class="state">Loading transfer…</p>
+      <div class="erp-empty" aria-live="polite">
+        <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Loading transfer…
+      </div>
     }
     @case ('forbidden') {
-      <p role="alert" class="state text-danger">You do not have permission to view this transfer.</p>
+      <div class="erp-empty" role="alert">
+        <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>
+        You do not have permission to view this transfer.
+      </div>
     }
     @case ('error') {
-      <p role="alert" class="state text-danger">Failed to load transfer. Please try again.</p>
+      <div class="erp-empty" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Failed to load transfer. Please try again.
+      </div>
     }
     @default {
       @if (entity(); as t) {
         <!-- Header card -->
-        <div class="card mb-3">
-          <div class="card-body">
-            <div class="row g-3">
+        <div class="erp-card mb-3">
+          <div class="erp-card__head">
+            <h2 class="h6 mb-0">Transfer Details</h2>
+            <span class="spacer"></span>
+            <span class="status-tag"
+                  [class.status-tag--warn]="t.status === 'DRAFT'"
+                  [class.status-tag--info]="t.status === 'DISPATCHED' || t.status === 'RECEIVED'"
+                  [class.status-tag--ok]="t.status === 'COMPLETED'"
+                  [class.status-tag--danger]="t.status === 'CANCELLED'"
+                  [class.status-tag--neutral]="t.status !== 'DRAFT' && t.status !== 'DISPATCHED' && t.status !== 'RECEIVED' && t.status !== 'COMPLETED' && t.status !== 'CANCELLED'">
+              <span class="status-tag__dot" aria-hidden="true"></span>{{ t.status }}
+            </span>
+          </div>
+          <div class="erp-card__body">
+            <dl class="row g-3 mb-0">
               <div class="col-sm-6 col-lg-3">
                 <dt class="text-muted small mb-1">Transfer #</dt>
-                <dd class="fw-semibold">{{ t.transferNumber }}</dd>
-              </div>
-              <div class="col-sm-6 col-lg-3">
-                <dt class="text-muted small mb-1">Status</dt>
-                <dd>
-                  <span class="badge" [class]="statusBadgeClass(t.status)">{{ t.status }}</span>
-                </dd>
+                <dd class="fw-semibold mono mb-0">{{ t.transferNumber }}</dd>
               </div>
               <div class="col-sm-6 col-lg-3">
                 <dt class="text-muted small mb-1">Mode</dt>
-                <dd>{{ t.transferMode }}</dd>
+                <dd class="mb-0">{{ t.transferMode }}</dd>
               </div>
               <div class="col-sm-6 col-lg-3">
                 <dt class="text-muted small mb-1">Transfer Date</dt>
-                <dd>{{ t.transferDate | date:'yyyy-MM-dd' }}</dd>
+                <dd class="mb-0">{{ t.transferDate | date:'yyyy-MM-dd' }}</dd>
               </div>
               <div class="col-sm-6 col-lg-3">
                 <dt class="text-muted small mb-1">Source Location</dt>
-                <dd>{{ locationLabel(t.sourceLocationId) }}</dd>
+                <dd class="mb-0">{{ locationLabel(t.sourceLocationId) }}</dd>
               </div>
               <div class="col-sm-6 col-lg-3">
                 <dt class="text-muted small mb-1">Destination Location</dt>
-                <dd>{{ locationLabel(t.destLocationId) }}</dd>
+                <dd class="mb-0">{{ locationLabel(t.destLocationId) }}</dd>
               </div>
               @if (t.dispatchedAt) {
                 <div class="col-sm-6 col-lg-3">
                   <dt class="text-muted small mb-1">Dispatched At</dt>
-                  <dd>{{ t.dispatchedAt | date:'yyyy-MM-dd HH:mm' }}</dd>
+                  <dd class="mb-0">{{ t.dispatchedAt | date:'yyyy-MM-dd HH:mm' }}</dd>
                 </div>
               }
               @if (t.receivedAt) {
                 <div class="col-sm-6 col-lg-3">
                   <dt class="text-muted small mb-1">Received At</dt>
-                  <dd>{{ t.receivedAt | date:'yyyy-MM-dd HH:mm' }}</dd>
+                  <dd class="mb-0">{{ t.receivedAt | date:'yyyy-MM-dd HH:mm' }}</dd>
                 </div>
               }
               @if (t.notes) {
                 <div class="col-12">
                   <dt class="text-muted small mb-1">Notes</dt>
-                  <dd>{{ t.notes }}</dd>
+                  <dd class="mb-0">{{ t.notes }}</dd>
                 </div>
               }
-            </div>
+            </dl>
           </div>
         </div>
 
@@ -87,7 +105,7 @@
             </button>
           }
           @if (canReceiveTransfer()) {
-            <button type="button" class="btn btn-info btn-sm"
+            <button type="button" class="btn btn-outline-primary btn-sm"
                     [disabled]="actionBusy()"
                     (click)="receive()">
               <i class="bi bi-box-arrow-in-down" aria-hidden="true"></i> Receive
@@ -106,16 +124,16 @@
         </div>
 
         @if (actionError()) {
-          <p role="alert" class="form-error">{{ actionError() }}</p>
+          <p role="alert" class="text-danger small mb-3">{{ actionError() }}</p>
         }
 
         <!-- Lines table -->
-        <h2 class="h6 mt-4">Line Items</h2>
+        <h2 class="erp-section-title">Line Items</h2>
         @if (t.lines.length === 0) {
-          <p class="text-muted">No lines.</p>
+          <div class="erp-empty"><i class="bi bi-list-ul"></i> No lines.</div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Transfer line items</caption>
               <thead>
                 <tr>
@@ -123,8 +141,8 @@
                   <th scope="col">Code</th>
                   <th scope="col">Product</th>
                   <th scope="col">Unit</th>
-                  <th scope="col" class="text-end">Qty</th>
-                  <th scope="col" class="text-end">Value</th>
+                  <th scope="col" class="num">Qty</th>
+                  <th scope="col" class="num">Value</th>
                   <th scope="col">Currency</th>
                 </tr>
               </thead>
@@ -132,11 +150,11 @@
                 @for (line of t.lines; track line.uid) {
                   <tr>
                     <td>{{ line.lineNo }}</td>
-                    <td>{{ line.productCode }}</td>
+                    <td class="mono">{{ line.productCode }}</td>
                     <td>{{ line.productName }}</td>
                     <td>{{ line.unitName }}</td>
-                    <td class="text-end">{{ +line.qtyTransferred | number:'1.0-4' }}</td>
-                    <td class="text-end">{{ +line.valueAmount | number:'1.2-2' }}</td>
+                    <td class="num">{{ +line.qtyTransferred | number:'1.0-4' }}</td>
+                    <td class="num">{{ +line.valueAmount | number:'1.2-2' }}</td>
                     <td>{{ line.currency }}</td>
                   </tr>
                 }

@@ -1,21 +1,19 @@
 <section class="admin-page">
-  <header class="page-head">
-    <h1 class="h4 mb-1">
-      <i class="bi bi-calculator me-2" aria-hidden="true"></i>Trial Balance
-    </h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
-      Verify that total debits equal total credits across all accounts.
-    </p>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1><i class="bi bi-calculator me-2" aria-hidden="true"></i>Trial Balance</h1>
+      <p class="subtitle">Verify that total debits equal total credits across all accounts.</p>
+    </div>
   </header>
 
   @if (!canView()) {
-    <p class="text-muted d-flex align-items-center gap-2 mt-3" role="alert">
-      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+    <div class="erp-empty mt-3" role="alert">
+      <i class="bi bi-shield-lock"></i>
       You don't have permission to view the trial balance.
-    </p>
+    </div>
   } @else {
 
-    <!-- Company selector -->
+    <!-- Company + period selectors -->
     @switch (companyState()) {
       @case ('loading') {
         <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
@@ -29,9 +27,9 @@
         </p>
       }
       @default {
-        <div class="d-flex flex-wrap gap-3 mb-3 align-items-end">
+        <div class="erp-toolbar mb-3">
           @if (companies().length > 1) {
-            <div style="min-width:220px">
+            <div class="erp-field" style="min-width:220px">
               <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
               <select id="companyPicker" name="companyPicker" class="form-select"
                       [ngModel]="selectedCompanyId()"
@@ -44,7 +42,7 @@
           }
 
           <!-- Period filter -->
-          <div style="min-width:220px">
+          <div class="erp-field" style="min-width:220px">
             <label class="form-label small text-muted mb-1" for="periodPicker">
               Period <span class="text-muted small">(all periods if blank)</span>
             </label>
@@ -87,27 +85,33 @@
     <!-- Trial balance states -->
     @switch (state()) {
       @case ('loading') {
-        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Calculating trial balance…
         </p>
       }
       @case ('error') {
-        <p class="state text-danger" role="alert">
+        <p class="text-danger" role="alert">
           <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
           Could not load trial balance. Please try again.
         </p>
       }
       @case ('forbidden') {
-        <p class="state text-muted d-flex align-items-center gap-2">
-          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock"></i>
           You don't have permission to view the trial balance.
-        </p>
+        </div>
       }
       @default {
         @if (tb() === null) {
-          <p class="state text-muted">Select a company to view the trial balance.</p>
+          <div class="erp-empty">
+            <i class="bi bi-calculator"></i>
+            Select a company to view the trial balance.
+          </div>
         } @else if (sortedRows().length === 0) {
-          <p class="state text-muted">No account activity to display.</p>
+          <div class="erp-empty">
+            <i class="bi bi-calculator"></i>
+            No account activity to display.
+          </div>
         } @else {
 
           <!-- Balanced indicator banner -->
@@ -123,47 +127,54 @@
             </div>
           }
 
-          <div class="table-responsive">
-            <table class="table table-sm align-middle bg-white tb-grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table tb-sticky">
               <caption class="visually-hidden">Trial balance</caption>
               <thead>
                 <tr>
                   <th scope="col">Code</th>
                   <th scope="col">Account Name</th>
                   <th scope="col">Type</th>
-                  <th scope="col" class="text-end">Debit</th>
-                  <th scope="col" class="text-end">Credit</th>
-                  <th scope="col" class="text-end">Net</th>
+                  <th scope="col" class="num">Debit</th>
+                  <th scope="col" class="num">Credit</th>
+                  <th scope="col" class="num">Net</th>
                 </tr>
               </thead>
               <tbody>
                 @for (type of groupedTypes(); track type) {
                   <!-- Group header row -->
-                  <tr class="table-light">
+                  <tr class="tb-group-row">
                     <td colspan="6" class="fw-semibold small">
-                      <span class="badge me-2" [class]="typeBadgeClass(type)">{{ type }}</span>
+                      <span class="status-tag me-2"
+                            [class.status-tag--info]="type === 'ASSET'"
+                            [class.status-tag--warn]="type === 'LIABILITY'"
+                            [class.status-tag--neutral]="type === 'EQUITY'"
+                            [class.status-tag--ok]="type === 'INCOME'"
+                            [class.status-tag--danger]="type === 'EXPENSE'">
+                        {{ type }}
+                      </span>
                     </td>
                   </tr>
                   @for (row of rowsForType(type); track row.accountCode) {
                     <tr>
-                      <td class="font-monospace small fw-semibold ps-4">{{ row.accountCode }}</td>
+                      <td class="mono small fw-semibold ps-4">{{ row.accountCode }}</td>
                       <td class="small">{{ row.accountName }}</td>
                       <td></td>
-                      <td class="text-end font-monospace small">
+                      <td class="num mono small">
                         @if (+row.totalDebit !== 0) {
                           {{ row.totalDebit }}
                         } @else {
                           <span class="text-muted">—</span>
                         }
                       </td>
-                      <td class="text-end font-monospace small">
+                      <td class="num mono small">
                         @if (+row.totalCredit !== 0) {
                           {{ row.totalCredit }}
                         } @else {
                           <span class="text-muted">—</span>
                         }
                       </td>
-                      <td class="text-end font-monospace small"
+                      <td class="num mono small"
                           [class.text-danger]="+row.net < 0">
                         {{ row.net }}
                       </td>
@@ -172,19 +183,19 @@
                 }
               </tbody>
               <!-- Totals footer -->
-              <tfoot class="table-dark fw-semibold">
+              <tfoot class="erp-tfoot fw-semibold">
                 <tr>
                   <td colspan="3">Totals</td>
-                  <td class="text-end font-monospace">{{ totalDebits() }}</td>
-                  <td class="text-end font-monospace">{{ totalCredits() }}</td>
-                  <td class="text-end">
+                  <td class="num mono">{{ totalDebits() }}</td>
+                  <td class="num mono">{{ totalCredits() }}</td>
+                  <td class="num">
                     @if (isBalanced()) {
-                      <span class="text-success">
-                        <i class="bi bi-check-circle-fill me-1" aria-hidden="true"></i>Balanced
+                      <span class="status-tag status-tag--ok">
+                        <span class="status-tag__dot"></span>Balanced
                       </span>
                     } @else {
-                      <span class="text-warning">
-                        <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>Unbalanced
+                      <span class="status-tag status-tag--danger">
+                        <span class="status-tag__dot"></span>Unbalanced
                       </span>
                     }
                   </td>

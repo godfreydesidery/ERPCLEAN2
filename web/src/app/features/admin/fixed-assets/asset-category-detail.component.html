@@ -1,121 +1,141 @@
 <section class="admin-page">
   <header class="page-head">
     <a class="btn btn-sm btn-outline-secondary me-2" routerLink="/admin/asset-categories"
-       aria-label="Back to Asset Categories">
+       aria-label="Back to Asset Categories list">
       <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Categories
     </a>
     <h1 class="h4 mb-1">
       Asset Category
       @if (category(); as cat) {
         — {{ cat.code }}: {{ cat.name }}
-        <span class="badge ms-2" [class]="statusBadgeClass(cat.status)">{{ cat.status }}</span>
+        <span class="status-tag ms-2"
+          [class.status-tag--ok]="cat.status === 'ACTIVE'"
+          [class.status-tag--neutral]="cat.status === 'INACTIVE'">
+          <span class="status-tag__dot" aria-hidden="true"></span>{{ cat.status }}
+        </span>
       }
     </h1>
   </header>
 
   @switch (state()) {
     @case ('loading') {
-      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+      <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
         <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
       </p>
     }
     @case ('error') {
-      <p class="state text-danger" role="alert">
+      <p class="text-danger" role="alert">
         <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load category.
       </p>
     }
     @default {
       @if (category(); as cat) {
-        <!-- Edit form (only when MANAGE perm) -->
         @if (canManage()) {
-          <form class="card card-body mb-4" (ngSubmit)="save()" aria-label="Edit asset category">
-            <h2 class="h6 mb-3">Edit Category</h2>
-            <div class="row g-2 mb-2">
-              <div class="col-sm-4">
-                <label class="form-label small text-muted mb-1" for="fName">Name <span class="text-danger" aria-hidden="true">*</span></label>
-                <input id="fName" name="fName" type="text" class="form-control"
-                       [ngModel]="fName()" (ngModelChange)="fName.set($event)"
-                       [disabled]="saving()" autocomplete="off" />
-              </div>
-              <div class="col-sm-3">
-                <label class="form-label small text-muted mb-1" for="fMethod">Method <span class="text-danger" aria-hidden="true">*</span></label>
-                <select id="fMethod" name="fMethod" class="form-select"
-                        [ngModel]="fMethod()" (ngModelChange)="fMethod.set($event)"
-                        [disabled]="saving()">
-                  @for (m of methodOptions; track m) {
-                    <option [value]="m">{{ m === 'STRAIGHT_LINE' ? 'Straight Line' : 'Reducing Balance' }}</option>
-                  }
-                </select>
-              </div>
-              <div class="col-sm-2">
-                <label class="form-label small text-muted mb-1" for="fLifePeriods">Life (periods) <span class="text-danger" aria-hidden="true">*</span></label>
-                <input id="fLifePeriods" name="fLifePeriods" type="number" min="1" class="form-control"
-                       [ngModel]="fLifePeriods()" (ngModelChange)="fLifePeriods.set($event)"
-                       [disabled]="saving()" />
-              </div>
-              @if (isReducingBalance()) {
-                <div class="col-sm-2">
-                  <label class="form-label small text-muted mb-1" for="fReducingRate">Rate % <span class="text-danger" aria-hidden="true">*</span></label>
-                  <input id="fReducingRate" name="fReducingRate" type="number" step="0.01" class="form-control"
-                         [ngModel]="fReducingRate()" (ngModelChange)="fReducingRate.set($event)"
-                         [disabled]="saving()" />
-                </div>
-              }
-            </div>
-            <div class="row g-2 mb-2">
-              <div class="col-sm-4">
-                <label class="form-label small text-muted mb-1" for="fAssetAccountId">Asset Account ID <span class="text-danger" aria-hidden="true">*</span></label>
-                <input id="fAssetAccountId" name="fAssetAccountId" type="text" class="form-control"
-                       [ngModel]="fAssetAccountId()" (ngModelChange)="fAssetAccountId.set($event)"
-                       [disabled]="saving()" autocomplete="off" />
-              </div>
-              <div class="col-sm-4">
-                <label class="form-label small text-muted mb-1" for="fAccumDepAccountId">Accum Dep Account ID <span class="text-danger" aria-hidden="true">*</span></label>
-                <input id="fAccumDepAccountId" name="fAccumDepAccountId" type="text" class="form-control"
-                       [ngModel]="fAccumDepAccountId()" (ngModelChange)="fAccumDepAccountId.set($event)"
-                       [disabled]="saving()" autocomplete="off" />
-              </div>
-              <div class="col-sm-4">
-                <label class="form-label small text-muted mb-1" for="fDepExpenseAccountId">Dep Expense Account ID <span class="text-danger" aria-hidden="true">*</span></label>
-                <input id="fDepExpenseAccountId" name="fDepExpenseAccountId" type="text" class="form-control"
-                       [ngModel]="fDepExpenseAccountId()" (ngModelChange)="fDepExpenseAccountId.set($event)"
-                       [disabled]="saving()" autocomplete="off" />
-              </div>
-            </div>
-            <div class="d-flex gap-2">
-              <button type="submit" class="btn btn-primary" [disabled]="saving()">
-                @if (saving()) {
-                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Saving…
-                } @else {
-                  Save
-                }
-              </button>
+          <!-- Edit form -->
+          <div class="erp-card mb-4">
+            <div class="erp-card__head">
+              <h2>Edit Category</h2>
+              <span class="spacer"></span>
               @if (isActive()) {
-                <button type="button" class="btn btn-outline-danger ms-auto"
+                <button type="button" class="btn btn-sm btn-outline-danger"
                         (click)="archive()" [disabled]="archiving()">
                   @if (archiving()) {
-                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Archiving…
+                    <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Archiving…
                   } @else {
                     <i class="bi bi-archive me-1" aria-hidden="true"></i>Archive
                   }
                 </button>
               }
             </div>
-            @if (saveError(); as msg) {
-              <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-            }
-          </form>
+            <div class="erp-card__body">
+              <form (ngSubmit)="save()" aria-label="Edit asset category">
+                <div class="erp-form-grid">
+                  <div class="erp-field full">
+                    <label class="form-label" for="fName">Name <span class="text-danger" aria-hidden="true">*</span></label>
+                    <input id="fName" name="fName" type="text" class="form-control"
+                           [ngModel]="fName()" (ngModelChange)="fName.set($event)"
+                           [disabled]="saving()" autocomplete="off" />
+                  </div>
+                  <div class="erp-field">
+                    <label class="form-label" for="fMethod">Method <span class="text-danger" aria-hidden="true">*</span></label>
+                    <select id="fMethod" name="fMethod" class="form-select"
+                            [ngModel]="fMethod()" (ngModelChange)="fMethod.set($event)"
+                            [disabled]="saving()">
+                      @for (m of methodOptions; track m) {
+                        <option [value]="m">{{ m === 'STRAIGHT_LINE' ? 'Straight Line' : 'Reducing Balance' }}</option>
+                      }
+                    </select>
+                  </div>
+                  <div class="erp-field">
+                    <label class="form-label" for="fLifePeriods">Life (periods) <span class="text-danger" aria-hidden="true">*</span></label>
+                    <input id="fLifePeriods" name="fLifePeriods" type="number" min="1" class="form-control"
+                           [ngModel]="fLifePeriods()" (ngModelChange)="fLifePeriods.set($event)"
+                           [disabled]="saving()" />
+                  </div>
+                  @if (isReducingBalance()) {
+                    <div class="erp-field">
+                      <label class="form-label" for="fReducingRate">Rate % <span class="text-danger" aria-hidden="true">*</span></label>
+                      <input id="fReducingRate" name="fReducingRate" type="number" step="0.01" class="form-control"
+                             [ngModel]="fReducingRate()" (ngModelChange)="fReducingRate.set($event)"
+                             [disabled]="saving()" />
+                    </div>
+                  }
+                  <div class="erp-field">
+                    <label class="form-label" for="fAssetAccountId">Asset Account ID <span class="text-danger" aria-hidden="true">*</span></label>
+                    <input id="fAssetAccountId" name="fAssetAccountId" type="text" class="form-control"
+                           [ngModel]="fAssetAccountId()" (ngModelChange)="fAssetAccountId.set($event)"
+                           [disabled]="saving()" autocomplete="off" />
+                  </div>
+                  <div class="erp-field">
+                    <label class="form-label" for="fAccumDepAccountId">Accum Dep Account ID <span class="text-danger" aria-hidden="true">*</span></label>
+                    <input id="fAccumDepAccountId" name="fAccumDepAccountId" type="text" class="form-control"
+                           [ngModel]="fAccumDepAccountId()" (ngModelChange)="fAccumDepAccountId.set($event)"
+                           [disabled]="saving()" autocomplete="off" />
+                  </div>
+                  <div class="erp-field">
+                    <label class="form-label" for="fDepExpenseAccountId">Dep Expense Account ID <span class="text-danger" aria-hidden="true">*</span></label>
+                    <input id="fDepExpenseAccountId" name="fDepExpenseAccountId" type="text" class="form-control"
+                           [ngModel]="fDepExpenseAccountId()" (ngModelChange)="fDepExpenseAccountId.set($event)"
+                           [disabled]="saving()" autocomplete="off" />
+                  </div>
+                </div>
+                <div class="d-flex gap-2 mt-3">
+                  <button type="submit" class="btn btn-primary" [disabled]="saving()">
+                    @if (saving()) {
+                      <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Saving…
+                    } @else {
+                      Save
+                    }
+                  </button>
+                </div>
+                @if (saveError(); as msg) {
+                  <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+                }
+              </form>
+            </div>
+          </div>
         } @else {
           <!-- Read-only view -->
-          <dl class="row small mb-4">
-            <dt class="col-sm-3">Code</dt><dd class="col-sm-9 font-monospace">{{ cat.code }}</dd>
-            <dt class="col-sm-3">Name</dt><dd class="col-sm-9">{{ cat.name }}</dd>
-            <dt class="col-sm-3">Method</dt><dd class="col-sm-9">{{ cat.defaultMethod }}</dd>
-            <dt class="col-sm-3">Life periods</dt><dd class="col-sm-9">{{ cat.defaultLifePeriods }}</dd>
-            <dt class="col-sm-3">Reducing rate</dt><dd class="col-sm-9">{{ cat.defaultReducingRate || '—' }}</dd>
-            <dt class="col-sm-3">Status</dt>
-            <dd class="col-sm-9"><span class="badge" [class]="statusBadgeClass(cat.status)">{{ cat.status }}</span></dd>
-          </dl>
+          <div class="erp-card mb-4">
+            <div class="erp-card__head"><h2>Category Details</h2></div>
+            <div class="erp-card__body">
+              <dl class="row small mb-0">
+                <dt class="col-sm-3">Code</dt><dd class="col-sm-9 mono">{{ cat.code }}</dd>
+                <dt class="col-sm-3">Name</dt><dd class="col-sm-9">{{ cat.name }}</dd>
+                <dt class="col-sm-3">Method</dt><dd class="col-sm-9">{{ cat.defaultMethod }}</dd>
+                <dt class="col-sm-3">Life periods</dt><dd class="col-sm-9">{{ cat.defaultLifePeriods }}</dd>
+                <dt class="col-sm-3">Reducing rate</dt><dd class="col-sm-9">{{ cat.defaultReducingRate || '—' }}</dd>
+                <dt class="col-sm-3">Status</dt>
+                <dd class="col-sm-9">
+                  <span class="status-tag"
+                    [class.status-tag--ok]="cat.status === 'ACTIVE'"
+                    [class.status-tag--neutral]="cat.status === 'INACTIVE'">
+                    <span class="status-tag__dot" aria-hidden="true"></span>{{ cat.status }}
+                  </span>
+                </dd>
+              </dl>
+            </div>
+          </div>
         }
       }
     }

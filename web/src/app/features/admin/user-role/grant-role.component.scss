@@ -1,18 +1,2 @@
-/* Grant-role screen — Bootstrap-themed (Orbix). Mirrors company-list layout conventions. */
-
-.admin-page {
-  max-width: 960px;
-}
-
-.page-head {
-  margin-bottom: 1rem;
-}
-
-.grid {
-  th {
-    font-size: 0.78rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: #6b7280;
-  }
-}
+/* Grant-role screen — relies on global ERP kit (.admin-page, .page-head, .erp-card, .erp-table).
+   No component-specific overrides needed. */

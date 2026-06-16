@@ -1,7 +1,7 @@
 <section class="admin-page">
   <header class="page-head">
     <h1 class="h4 mb-1">Landed Costs</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
+    <p class="subtitle">
       <i class="bi bi-box-arrow-in-right me-1" aria-hidden="true"></i>
       Freight, duty, clearing and other shipment charges.
     </p>
@@ -36,9 +36,10 @@
   }
 
   @if (selectedCompanyId()) {
-    <div class="d-flex mb-3">
+    <div class="erp-toolbar mb-3">
+      <div class="erp-toolbar__spacer"></div>
       @if (canCreate()) {
-        <a class="btn btn-primary ms-auto" routerLink="/admin/landed-costs/create">
+        <a class="btn btn-primary" routerLink="/admin/landed-costs/create">
           <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>New Landed Cost
         </a>
       }
@@ -46,28 +47,31 @@
 
     @switch (state()) {
       @case ('loading') {
-        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading landed costs…
         </p>
       }
       @case ('error') {
-        <p class="state text-danger" role="alert">
+        <p class="text-danger" role="alert">
           <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
           Could not load landed costs. Please try again.
         </p>
       }
       @case ('forbidden') {
-        <p class="state text-muted d-flex align-items-center gap-2">
-          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock"></i>
           You don't have permission to view landed costs.
-        </p>
+        </div>
       }
       @default {
         @if (isEmpty()) {
-          <p class="state text-muted">No landed costs yet.</p>
+          <div class="erp-empty">
+            <i class="bi bi-box-arrow-in-right"></i>
+            No landed costs yet.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Landed costs</caption>
               <thead>
                 <tr>
@@ -75,7 +79,7 @@
                   <th scope="col">Status</th>
                   <th scope="col">Basis</th>
                   <th scope="col">Currency</th>
-                  <th scope="col" class="text-end">Total Charge</th>
+                  <th scope="col" class="num">Total Charge</th>
                   <th scope="col">Created</th>
                   <th scope="col"><span class="visually-hidden">Actions</span></th>
                 </tr>
@@ -83,13 +87,17 @@
               <tbody>
                 @for (lc of rows(); track lc.uid) {
                   <tr>
-                    <td class="font-monospace">{{ lc.landedCostNumber }}</td>
+                    <td class="mono">{{ lc.landedCostNumber }}</td>
                     <td>
-                      <span class="badge" [class]="statusBadgeClass(lc.status)">{{ lc.status }}</span>
+                      <span class="status-tag"
+                        [class.status-tag--ok]="lc.status === 'CONFIRMED'"
+                        [class.status-tag--warn]="lc.status !== 'CONFIRMED'">
+                        {{ lc.status }}
+                      </span>
                     </td>
                     <td class="small">{{ lc.basis }}</td>
                     <td class="small">{{ lc.currency }}</td>
-                    <td class="text-end font-monospace">{{ +lc.totalChargeAmount | number:'1.2-2' }}</td>
+                    <td class="num">{{ +lc.totalChargeAmount | number:'1.2-2' }}</td>
                     <td class="small text-muted">{{ lc.createdAt | date:'dd/MM/yyyy' }}</td>
                     <td>
                       <a class="btn btn-sm btn-outline-primary"

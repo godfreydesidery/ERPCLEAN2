@@ -1,9 +1,5 @@
 @use '../admin.styles' as *;
 
-.admin-page {
-  max-width: 1100px;
-}
-
 .totals-bar {
-  background: #f8f9fa;
+  background: var(--erp-surface, #f8f9fa);
 }

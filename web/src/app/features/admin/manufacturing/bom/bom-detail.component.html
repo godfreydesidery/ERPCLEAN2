@@ -12,7 +12,7 @@
       </p>
     }
     @case ('error') {
-      <p class="text-danger state" role="alert">
+      <p class="text-danger" role="alert">
         <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
         Failed to load BOM. Please check the UID or try again.
       </p>
@@ -20,154 +20,171 @@
     @default {
       @if (bom(); as b) {
         <!-- Header -->
-        <header class="page-head">
-          <div class="d-flex align-items-center gap-3 flex-wrap">
-            <div>
-              <h1 class="h4 mb-1">
-                BOM — {{ productLabel(b.parentProductUid) }}
-                <span class="badge ms-2" [class]="statusBadgeClass(b.status)">{{ b.status }}</span>
-              </h1>
-              <p class="text-muted mb-0 small">
+        <header class="erp-page-head">
+          <div class="erp-page-head__titles">
+            <h1>
+              BOM — {{ productLabel(b.parentProductUid) }}
+            </h1>
+            <div class="d-flex align-items-center gap-2 mt-1">
+              <span class="status-tag"
+                    [class.status-tag--warn]="b.status === 'DRAFT'"
+                    [class.status-tag--ok]="b.status === 'ACTIVE'"
+                    [class.status-tag--neutral]="b.status === 'ARCHIVED'">
+                <span class="status-tag__dot"></span>{{ b.status }}
+              </span>
+              <span class="text-muted small">
                 Version {{ b.versionNo }}
                 @if (b.effectiveFrom) {
                   &nbsp;·&nbsp; Effective: {{ b.effectiveFrom }}
                 }
-              </p>
+              </span>
             </div>
-
-            <!-- Lifecycle actions -->
-            @if (canManage()) {
-              <div class="ms-auto d-flex gap-2 flex-wrap">
-                @if (isDraft()) {
-                  <button type="button" class="btn btn-sm btn-success"
-                          (click)="toggleActivateForm()"
-                          [attr.aria-expanded]="showActivateForm()"
-                          aria-controls="activateForm">
-                    <i class="bi bi-check-circle me-1" aria-hidden="true"></i>Activate
-                  </button>
-                }
-                @if (isActive()) {
-                  <button type="button" class="btn btn-sm btn-outline-secondary"
-                          (click)="archive()"
-                          [disabled]="archiving()">
-                    @if (archiving()) {
-                      <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
-                    } @else {
-                      <i class="bi bi-archive me-1" aria-hidden="true"></i>
-                    }
-                    Archive
-                  </button>
-                }
-              </div>
-            }
           </div>
+
+          <!-- Lifecycle actions -->
+          @if (canManage()) {
+            <div class="erp-page-head__actions">
+              @if (isDraft()) {
+                <button type="button" class="btn btn-sm btn-success"
+                        (click)="toggleActivateForm()"
+                        [attr.aria-expanded]="showActivateForm()"
+                        aria-controls="activateForm">
+                  <i class="bi bi-check-circle me-1" aria-hidden="true"></i>Activate
+                </button>
+              }
+              @if (isActive()) {
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="archive()"
+                        [disabled]="archiving()">
+                  @if (archiving()) {
+                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                  } @else {
+                    <i class="bi bi-archive me-1" aria-hidden="true"></i>
+                  }
+                  Archive
+                </button>
+              }
+            </div>
+          }
         </header>
 
         <!-- Activate form -->
         @if (showActivateForm()) {
-          <form id="activateForm" class="create-form card card-body mb-3 mt-2"
-                (ngSubmit)="activate()" aria-label="Activate BOM">
-            <h2 class="h6 mb-3">Activate BOM</h2>
-            <div class="row g-2 align-items-end">
-              <div class="col-sm-4">
-                <label class="form-label small text-muted mb-1" for="fEffectiveFrom">
-                  Effective From <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <input id="fEffectiveFrom" name="fEffectiveFrom" type="date"
-                       class="form-control form-control-sm"
-                       [(ngModel)]="fEffectiveFrom"
-                       required />
-              </div>
+          <div class="erp-card mb-3 mt-2">
+            <div class="erp-card__head">
+              <h2>Activate BOM</h2>
             </div>
-            @if (activateError()) {
-              <p class="form-error text-danger small mt-2 mb-0" role="alert">
-                <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ activateError() }}
-              </p>
-            }
-            <div class="d-flex gap-2 mt-2">
-              <button type="submit" class="btn btn-sm btn-success" [disabled]="activating()">
-                @if (activating()) {
-                  <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Activating…
-                } @else {
-                  <i class="bi bi-check-circle me-1" aria-hidden="true"></i>Confirm Activate
+            <div class="erp-card__body">
+              <form id="activateForm" (ngSubmit)="activate()" aria-label="Activate BOM">
+                <div class="erp-form-grid">
+                  <div class="erp-field">
+                    <label for="fEffectiveFrom">
+                      Effective From <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <input id="fEffectiveFrom" name="fEffectiveFrom" type="date"
+                           class="form-control"
+                           [(ngModel)]="fEffectiveFrom"
+                           required />
+                  </div>
+                </div>
+                @if (activateError()) {
+                  <p class="text-danger small mt-2 mb-0" role="alert">
+                    <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ activateError() }}
+                  </p>
                 }
-              </button>
-              <button type="button" class="btn btn-sm btn-outline-secondary" (click)="toggleActivateForm()">
-                Cancel
-              </button>
+                <div class="d-flex gap-2 mt-3">
+                  <button type="submit" class="btn btn-sm btn-success" [disabled]="activating()">
+                    @if (activating()) {
+                      <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Activating…
+                    } @else {
+                      <i class="bi bi-check-circle me-1" aria-hidden="true"></i>Confirm Activate
+                    }
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary" (click)="toggleActivateForm()">
+                    Cancel
+                  </button>
+                </div>
+              </form>
             </div>
-          </form>
+          </div>
         }
 
         <!-- Header edit form -->
-        <div class="card card-body mb-4 mt-2">
-          <h2 class="h6 mb-3">BOM Header</h2>
-          <form (ngSubmit)="save()" aria-label="Edit BOM header">
-            <div class="row g-2 align-items-start mb-2">
-              <!-- Parent product (read-only display) -->
-              <div class="col-sm-5">
-                <label class="form-label small text-muted mb-1">Parent Product</label>
-                <p class="form-control-plaintext small pt-0">
-                  <a [routerLink]="['/admin/products/uid', b.parentProductUid]">
-                    {{ productLabel(b.parentProductUid) }}
-                  </a>
+        <div class="erp-card mb-4 mt-2">
+          <div class="erp-card__head">
+            <h2>BOM Header</h2>
+          </div>
+          <div class="erp-card__body">
+            <form (ngSubmit)="save()" aria-label="Edit BOM header">
+              <div class="erp-form-grid">
+                <!-- Parent product (read-only display — not a form control, no label for) -->
+                <div class="erp-field full">
+                  <span class="erp-field__label">Parent Product</span>
+                  <p class="form-control-plaintext small pt-0">
+                    <a [routerLink]="['/admin/products/uid', b.parentProductUid]">
+                      {{ productLabel(b.parentProductUid) }}
+                    </a>
+                  </p>
+                </div>
+
+                <div class="erp-field">
+                  <label for="fOutputQty">
+                    Output Qty <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <input id="fOutputQty" name="fOutputQty" type="number"
+                         min="0.000001" step="any"
+                         class="form-control"
+                         [(ngModel)]="fOutputQty"
+                         [disabled]="!isDraft() || !canManage()"
+                         required />
+                </div>
+
+                <div class="erp-field">
+                  <label for="fYieldPercent">Yield %</label>
+                  <input id="fYieldPercent" name="fYieldPercent" type="number"
+                         min="0.0001" max="100" step="any"
+                         class="form-control"
+                         [(ngModel)]="fYieldPercent"
+                         [disabled]="!isDraft() || !canManage()" />
+                </div>
+
+                <div class="erp-field full">
+                  <label for="fNotes">Notes</label>
+                  <textarea id="fNotes" name="fNotes" rows="2" class="form-control"
+                            [(ngModel)]="fNotes"
+                            [disabled]="!canManage()"
+                            placeholder="Optional engineering notes"></textarea>
+                </div>
+              </div>
+
+              @if (saveError()) {
+                <p class="text-danger small mt-2 mb-0" role="alert">
+                  <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ saveError() }}
                 </p>
-              </div>
-              <!-- Output qty -->
-              <div class="col-sm-3">
-                <label class="form-label small text-muted mb-1" for="fOutputQty">
-                  Output Qty <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <input id="fOutputQty" name="fOutputQty" type="number"
-                       min="0.000001" step="any"
-                       class="form-control form-control-sm"
-                       [(ngModel)]="fOutputQty"
-                       [disabled]="!isDraft() || !canManage()"
-                       required />
-              </div>
-              <!-- Yield % -->
-              <div class="col-sm-2">
-                <label class="form-label small text-muted mb-1" for="fYieldPercent">Yield %</label>
-                <input id="fYieldPercent" name="fYieldPercent" type="number"
-                       min="0.0001" max="100" step="any"
-                       class="form-control form-control-sm"
-                       [(ngModel)]="fYieldPercent"
-                       [disabled]="!isDraft() || !canManage()" />
-              </div>
-            </div>
-            <!-- Notes -->
-            <div class="mb-2" style="max-width:520px">
-              <label class="form-label small text-muted mb-1" for="fNotes">Notes</label>
-              <textarea id="fNotes" name="fNotes" rows="2" class="form-control form-control-sm"
-                        [(ngModel)]="fNotes"
-                        [disabled]="!canManage()"
-                        placeholder="Optional engineering notes"></textarea>
-            </div>
+              }
 
-            @if (saveError()) {
-              <p class="form-error text-danger small mb-2" role="alert">
-                <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ saveError() }}
-              </p>
-            }
-
-            @if (canManage()) {
-              <button type="submit" class="btn btn-sm btn-primary" [disabled]="saving()">
-                @if (saving()) {
-                  <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Saving…
-                } @else {
-                  <i class="bi bi-floppy me-1" aria-hidden="true"></i>Save Header
-                }
-              </button>
-            }
-          </form>
+              @if (canManage()) {
+                <div class="mt-3">
+                  <button type="submit" class="btn btn-sm btn-primary" [disabled]="saving()">
+                    @if (saving()) {
+                      <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Saving…
+                    } @else {
+                      <i class="bi bi-floppy me-1" aria-hidden="true"></i>Save Header
+                    }
+                  </button>
+                </div>
+              }
+            </form>
+          </div>
         </div>
 
         <!-- Components section -->
-        <div class="card card-body">
-          <div class="d-flex align-items-center mb-3">
-            <h2 class="h6 mb-0">Components ({{ b.components.length }})</h2>
+        <div class="erp-card">
+          <div class="erp-card__head">
+            <h2>Components ({{ b.components.length }})</h2>
+            <span class="spacer"></span>
             @if (canManage() && isDraft()) {
-              <button type="button" class="btn btn-sm btn-outline-primary ms-auto"
+              <button type="button" class="btn btn-sm btn-outline-primary"
                       (click)="toggleAddComponent()"
                       [attr.aria-expanded]="showAddComponent()"
                       aria-controls="addComponentForm">
@@ -175,222 +192,231 @@
               </button>
             }
           </div>
+          <div class="erp-card__body">
 
-          <!-- Add component form -->
-          @if (showAddComponent()) {
-            <form id="addComponentForm" class="card card-body bg-light mb-3"
-                  (ngSubmit)="addComponent()" aria-label="Add BOM component">
-              <h3 class="h6 mb-3">Add Component Line</h3>
-              <div class="row g-2 align-items-start mb-2">
-                <!-- Component product -->
-                <div class="col-sm-4">
-                  <label class="form-label small text-muted mb-1" for="newComponentProductUid">
-                    Component Product <span class="text-danger" aria-hidden="true">*</span>
-                  </label>
-                  <app-uid-picker [(ngModel)]="newComponentProductUid"
-                                  [options]="productOptions()"
-                                  placeholder="Select component"
-                                  [required]="true"
-                                  name="newComponentProductUid" />
+            <!-- Add component form -->
+            @if (showAddComponent()) {
+              <div class="erp-card mb-3" style="background: var(--erp-canvas)">
+                <div class="erp-card__head">
+                  <h3>Add Component Line</h3>
                 </div>
-                <!-- Qty per -->
-                <div class="col-sm-2">
-                  <label class="form-label small text-muted mb-1" for="newComponentQtyPer">
-                    Qty / Run <span class="text-danger" aria-hidden="true">*</span>
-                  </label>
-                  <input id="newComponentQtyPer" name="newComponentQtyPer"
-                         type="number" min="0.000001" step="any"
-                         class="form-control form-control-sm"
-                         [(ngModel)]="newComponentQtyPer"
-                         required />
-                </div>
-                <!-- Sourcing -->
-                <div class="col-sm-2">
-                  <label class="form-label small text-muted mb-1" for="newComponentSourcing">Sourcing</label>
-                  <select id="newComponentSourcing" name="newComponentSourcing"
-                          class="form-select form-select-sm"
-                          [ngModel]="newComponentSourcing()"
-                          (ngModelChange)="newComponentSourcing.set($event)">
-                    @for (opt of sourcingOptions; track opt.value) {
-                      <option [value]="opt.value">{{ opt.label }}</option>
+                <div class="erp-card__body">
+                  <form id="addComponentForm" (ngSubmit)="addComponent()" aria-label="Add BOM component">
+                    <div class="erp-form-grid">
+                      <!-- Component product: picker self-labels via placeholder -->
+                      <div class="erp-field full">
+                        <span class="erp-field__label">
+                          Component Product <span class="text-danger" aria-hidden="true">*</span>
+                        </span>
+                        <app-uid-picker [(ngModel)]="newComponentProductUid"
+                                        [options]="productOptions()"
+                                        placeholder="Select component"
+                                        [required]="true"
+                                        name="newComponentProductUid" />
+                      </div>
+
+                      <div class="erp-field">
+                        <label for="newComponentQtyPer">
+                          Qty / Run <span class="text-danger" aria-hidden="true">*</span>
+                        </label>
+                        <input id="newComponentQtyPer" name="newComponentQtyPer"
+                               type="number" min="0.000001" step="any"
+                               class="form-control"
+                               [(ngModel)]="newComponentQtyPer"
+                               required />
+                      </div>
+
+                      <div class="erp-field">
+                        <label for="newComponentSourcing">Sourcing</label>
+                        <select id="newComponentSourcing" name="newComponentSourcing"
+                                class="form-select"
+                                [ngModel]="newComponentSourcing()"
+                                (ngModelChange)="newComponentSourcing.set($event)">
+                          @for (opt of sourcingOptions; track opt.value) {
+                            <option [value]="opt.value">{{ opt.label }}</option>
+                          }
+                        </select>
+                      </div>
+
+                      <div class="erp-field">
+                        <label for="newComponentScrapPercent">Scrap %</label>
+                        <input id="newComponentScrapPercent" name="newComponentScrapPercent"
+                               type="number" min="0" max="99.9999" step="any"
+                               class="form-control"
+                               [(ngModel)]="newComponentScrapPercent" />
+                      </div>
+
+                      <div class="erp-field">
+                        <label for="newComponentReference">Reference</label>
+                        <input id="newComponentReference" name="newComponentReference"
+                               type="text" class="form-control"
+                               [(ngModel)]="newComponentReference"
+                               placeholder="Optional" />
+                      </div>
+                    </div>
+
+                    @if (addComponentError()) {
+                      <p class="text-danger small mt-2 mb-0" role="alert">
+                        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ addComponentError() }}
+                      </p>
                     }
-                  </select>
-                </div>
-                <!-- Scrap % -->
-                <div class="col-sm-2">
-                  <label class="form-label small text-muted mb-1" for="newComponentScrapPercent">Scrap %</label>
-                  <input id="newComponentScrapPercent" name="newComponentScrapPercent"
-                         type="number" min="0" max="99.9999" step="any"
-                         class="form-control form-control-sm"
-                         [(ngModel)]="newComponentScrapPercent" />
-                </div>
-                <!-- Reference -->
-                <div class="col-sm-2">
-                  <label class="form-label small text-muted mb-1" for="newComponentReference">Reference</label>
-                  <input id="newComponentReference" name="newComponentReference"
-                         type="text" class="form-control form-control-sm"
-                         [(ngModel)]="newComponentReference"
-                         placeholder="Optional" />
+
+                    <div class="d-flex gap-2 mt-3">
+                      <button type="submit" class="btn btn-sm btn-primary" [disabled]="addingComponent()">
+                        @if (addingComponent()) {
+                          <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Adding…
+                        } @else {
+                          <i class="bi bi-check-lg me-1" aria-hidden="true"></i>Add
+                        }
+                      </button>
+                      <button type="button" class="btn btn-sm btn-outline-secondary"
+                              (click)="toggleAddComponent()">Cancel</button>
+                    </div>
+                  </form>
                 </div>
               </div>
+            }
 
-              @if (addComponentError()) {
-                <p class="form-error text-danger small mb-2" role="alert">
-                  <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ addComponentError() }}
-                </p>
-              }
+            @if (editComponentError() && editingComponentUid()) {
+              <p class="text-danger small mb-2" role="alert">
+                <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ editComponentError() }}
+              </p>
+            }
 
-              <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-sm btn-primary" [disabled]="addingComponent()">
-                  @if (addingComponent()) {
-                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Adding…
-                  } @else {
-                    <i class="bi bi-check-lg me-1" aria-hidden="true"></i>Add
-                  }
-                </button>
-                <button type="button" class="btn btn-sm btn-outline-secondary"
-                        (click)="toggleAddComponent()">Cancel</button>
+            @if (b.components.length === 0) {
+              <div class="erp-empty">
+                <i class="bi bi-inbox" aria-hidden="true"></i>
+                No components yet.
+                @if (canManage() && isDraft()) {
+                  Click <strong>Add Component</strong> to begin.
+                }
               </div>
-            </form>
-          }
-
-          @if (editComponentError() && editingComponentUid()) {
-            <p class="form-error text-danger small mb-2" role="alert">
-              <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ editComponentError() }}
-            </p>
-          }
-
-          @if (b.components.length === 0) {
-            <p class="text-muted small">
-              <i class="bi bi-inbox me-1" aria-hidden="true"></i>No components yet.
-              @if (canManage() && isDraft()) {
-                Click <strong>Add Component</strong> to begin.
-              }
-            </p>
-          } @else {
-            <div class="table-responsive">
-              <table class="table table-sm align-middle mb-0">
-                <caption class="visually-hidden">BOM component lines</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">#</th>
-                    <th scope="col">Product</th>
-                    <th scope="col">Qty / Run</th>
-                    <th scope="col">Sourcing</th>
-                    <th scope="col">Scrap %</th>
-                    <th scope="col">Reference</th>
-                    @if (canManage() && isDraft()) {
-                      <th scope="col" class="visually-hidden">Actions</th>
-                    }
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (c of b.components; track c.uid) {
-                    @if (editingComponentUid() === c.uid) {
-                      <!-- Inline edit row -->
-                      <tr class="table-active">
-                        <td>{{ c.lineNo }}</td>
-                        <td>
-                          <span class="fw-semibold">{{ c.componentProductCode }}</span>
-                          <span class="text-muted ms-1 small">{{ c.componentProductName }}</span>
-                        </td>
-                        <td>
-                          <input type="number" min="0.000001" step="any"
-                                 class="form-control form-control-sm" style="width:90px"
-                                 [attr.aria-label]="'Qty per for ' + c.componentProductCode"
-                                 [(ngModel)]="editQtyPer"
-                                 [name]="'editQtyPer_' + c.uid" />
-                        </td>
-                        <td>
-                          <select class="form-select form-select-sm" style="width:110px"
-                                  [attr.aria-label]="'Sourcing for ' + c.componentProductCode"
-                                  [ngModel]="editSourcing()"
-                                  (ngModelChange)="editSourcing.set($event)"
-                                  [name]="'editSourcing_' + c.uid">
-                            @for (opt of sourcingOptions; track opt.value) {
-                              <option [value]="opt.value">{{ opt.label }}</option>
-                            }
-                          </select>
-                        </td>
-                        <td>
-                          <input type="number" min="0" max="99.9999" step="any"
-                                 class="form-control form-control-sm" style="width:80px"
-                                 [attr.aria-label]="'Scrap % for ' + c.componentProductCode"
-                                 [(ngModel)]="editScrapPercent"
-                                 [name]="'editScrapPercent_' + c.uid" />
-                        </td>
-                        <td>
-                          <input type="text"
-                                 class="form-control form-control-sm" style="width:120px"
-                                 [attr.aria-label]="'Reference for ' + c.componentProductCode"
-                                 [(ngModel)]="editReference"
-                                 [name]="'editReference_' + c.uid" />
-                        </td>
-                        <td>
-                          <div class="d-flex gap-1">
-                            <button type="button" class="btn btn-sm btn-success"
-                                    [disabled]="editingComponent()"
-                                    (click)="saveComponent(c.uid)"
-                                    [attr.aria-label]="'Save changes for ' + c.componentProductCode">
-                              @if (editingComponent()) {
-                                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
-                              } @else {
-                                <i class="bi bi-check-lg" aria-hidden="true"></i>
+            } @else {
+              <div class="erp-table-wrap">
+                <table class="erp-table">
+                  <caption class="visually-hidden">BOM component lines</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">#</th>
+                      <th scope="col">Product</th>
+                      <th scope="col" class="text-end">Qty / Run</th>
+                      <th scope="col">Sourcing</th>
+                      <th scope="col" class="text-end">Scrap %</th>
+                      <th scope="col">Reference</th>
+                      @if (canManage() && isDraft()) {
+                        <th scope="col"><span class="visually-hidden">Actions</span></th>
+                      }
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (c of b.components; track c.uid) {
+                      @if (editingComponentUid() === c.uid) {
+                        <!-- Inline edit row -->
+                        <tr style="background: var(--erp-primary-soft)">
+                          <td>{{ c.lineNo }}</td>
+                          <td>
+                            <span class="fw-semibold">{{ c.componentProductCode }}</span>
+                            <span class="text-muted ms-1 small">{{ c.componentProductName }}</span>
+                          </td>
+                          <td class="text-end">
+                            <input type="number" min="0.000001" step="any"
+                                   class="form-control form-control-sm" style="width:90px"
+                                   [attr.aria-label]="'Qty per for ' + c.componentProductCode"
+                                   [(ngModel)]="editQtyPer"
+                                   [name]="'editQtyPer_' + c.uid" />
+                          </td>
+                          <td>
+                            <select class="form-select form-select-sm" style="width:110px"
+                                    [attr.aria-label]="'Sourcing for ' + c.componentProductCode"
+                                    [ngModel]="editSourcing()"
+                                    (ngModelChange)="editSourcing.set($event)"
+                                    [name]="'editSourcing_' + c.uid">
+                              @for (opt of sourcingOptions; track opt.value) {
+                                <option [value]="opt.value">{{ opt.label }}</option>
                               }
-                            </button>
-                            <button type="button" class="btn btn-sm btn-outline-secondary"
-                                    (click)="cancelEditComponent()"
-                                    aria-label="Cancel edit">
-                              <i class="bi bi-x-lg" aria-hidden="true"></i>
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    } @else {
-                      <!-- Read row -->
-                      <tr>
-                        <td>{{ c.lineNo }}</td>
-                        <td>
-                          <span class="fw-semibold">{{ c.componentProductCode }}</span>
-                          <span class="text-muted ms-1 small">{{ c.componentProductName }}</span>
-                        </td>
-                        <td>{{ +c.qtyPer | number:'1.0-6' }}</td>
-                        <td>
-                          <span class="badge"
-                                [class]="c.sourcing === 'MAKE' ? 'text-bg-info' : 'text-bg-light'">
-                            {{ c.sourcing }}
-                          </span>
-                        </td>
-                        <td>{{ +c.scrapPercent | number:'1.2-4' }}%</td>
-                        <td>{{ c.reference || '—' }}</td>
-                        @if (canManage() && isDraft()) {
+                            </select>
+                          </td>
+                          <td class="text-end">
+                            <input type="number" min="0" max="99.9999" step="any"
+                                   class="form-control form-control-sm" style="width:80px"
+                                   [attr.aria-label]="'Scrap % for ' + c.componentProductCode"
+                                   [(ngModel)]="editScrapPercent"
+                                   [name]="'editScrapPercent_' + c.uid" />
+                          </td>
+                          <td>
+                            <input type="text"
+                                   class="form-control form-control-sm" style="width:120px"
+                                   [attr.aria-label]="'Reference for ' + c.componentProductCode"
+                                   [(ngModel)]="editReference"
+                                   [name]="'editReference_' + c.uid" />
+                          </td>
                           <td>
                             <div class="d-flex gap-1">
-                              <button type="button" class="btn btn-sm btn-outline-secondary"
-                                      (click)="startEditComponent(c)"
-                                      [attr.aria-label]="'Edit component ' + c.componentProductCode">
-                                <i class="bi bi-pencil" aria-hidden="true"></i>
-                              </button>
-                              <button type="button" class="btn btn-sm btn-outline-danger"
-                                      [disabled]="removingComponentUid() === c.uid"
-                                      (click)="removeComponent(c.uid)"
-                                      [attr.aria-label]="'Remove component ' + c.componentProductCode">
-                                @if (removingComponentUid() === c.uid) {
+                              <button type="button" class="btn btn-sm btn-success"
+                                      [disabled]="editingComponent()"
+                                      (click)="saveComponent(c.uid)"
+                                      [attr.aria-label]="'Save changes for ' + c.componentProductCode">
+                                @if (editingComponent()) {
                                   <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
                                 } @else {
-                                  <i class="bi bi-trash" aria-hidden="true"></i>
+                                  <i class="bi bi-check-lg" aria-hidden="true"></i>
                                 }
+                              </button>
+                              <button type="button" class="btn btn-sm btn-outline-secondary"
+                                      (click)="cancelEditComponent()"
+                                      aria-label="Cancel edit">
+                                <i class="bi bi-x-lg" aria-hidden="true"></i>
                               </button>
                             </div>
                           </td>
-                        }
-                      </tr>
+                        </tr>
+                      } @else {
+                        <!-- Read row -->
+                        <tr>
+                          <td>{{ c.lineNo }}</td>
+                          <td>
+                            <span class="fw-semibold">{{ c.componentProductCode }}</span>
+                            <span class="text-muted ms-1 small">{{ c.componentProductName }}</span>
+                          </td>
+                          <td class="num">{{ +c.qtyPer | number:'1.0-6' }}</td>
+                          <td>
+                            <span class="status-tag"
+                                  [class.status-tag--info]="c.sourcing === 'MAKE'"
+                                  [class.status-tag--neutral]="c.sourcing !== 'MAKE'">
+                              {{ c.sourcing }}
+                            </span>
+                          </td>
+                          <td class="num">{{ +c.scrapPercent | number:'1.2-4' }}%</td>
+                          <td>{{ c.reference || '—' }}</td>
+                          @if (canManage() && isDraft()) {
+                            <td>
+                              <div class="d-flex gap-1">
+                                <button type="button" class="btn btn-sm btn-outline-secondary"
+                                        (click)="startEditComponent(c)"
+                                        [attr.aria-label]="'Edit component ' + c.componentProductCode">
+                                  <i class="bi bi-pencil" aria-hidden="true"></i>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-danger"
+                                        [disabled]="removingComponentUid() === c.uid"
+                                        (click)="removeComponent(c.uid)"
+                                        [attr.aria-label]="'Remove component ' + c.componentProductCode">
+                                  @if (removingComponentUid() === c.uid) {
+                                    <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                                  } @else {
+                                    <i class="bi bi-trash" aria-hidden="true"></i>
+                                  }
+                                </button>
+                              </div>
+                            </td>
+                          }
+                        </tr>
+                      }
                     }
-                  }
-                </tbody>
-              </table>
-            </div>
-          }
+                  </tbody>
+                </table>
+              </div>
+            }
+          </div>
         </div>
       }
     }

@@ -1,7 +1,7 @@
 <section class="admin-page">
   <header class="page-head">
-    <h1 class="h4 mb-1">Notification Types</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
+    <h1>Notification Types</h1>
+    <p class="subtitle">
       <i class="bi bi-toggles me-1" aria-hidden="true"></i>
       Enable or disable notification types company-wide. Disabling a type suppresses all deliveries
       for that type in the active company.
@@ -10,28 +10,31 @@
 
   @switch (state()) {
     @case ('loading') {
-      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
-        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading types…
+      <p class="erp-empty" aria-live="polite">
+        <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Loading types…
       </p>
     }
     @case ('error') {
-      <p class="state text-danger" role="alert">
-        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+      <p class="erp-empty" role="alert">
+        <i class="bi bi-exclamation-circle text-danger me-1" aria-hidden="true"></i>
         Could not load notification types. Please try again.
       </p>
     }
     @case ('forbidden') {
-      <p class="state text-muted d-flex align-items-center gap-2">
-        <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      <div class="erp-empty">
+        <i class="bi bi-shield-lock"></i>
         You don't have permission to administer notification types.
-      </p>
+      </div>
     }
     @default {
       @if (isEmpty()) {
-        <p class="state text-muted">No notification types configured for this company.</p>
+        <div class="erp-empty">
+          <i class="bi bi-toggles"></i>
+          No notification types configured for this company.
+        </div>
       } @else {
-        <div class="table-responsive">
-          <table class="table table-hover align-middle bg-white grid">
+        <div class="erp-table-wrap">
+          <table class="erp-table">
             <caption class="visually-hidden">Notification type catalogue</caption>
             <thead>
               <tr>
@@ -47,37 +50,48 @@
             <tbody>
               @for (t of rows(); track t.typeKey) {
                 <tr>
-                  <td class="small font-monospace">{{ t.typeKey }}</td>
-                  <td class="small">
+                  <td class="mono">{{ t.typeKey }}</td>
+                  <td>
                     <strong>{{ t.displayName }}</strong>
                     @if (t.description) {
                       <br /><span class="text-muted" style="font-size:0.8rem">{{ t.description }}</span>
                     }
                   </td>
                   <td>
-                    <span class="badge text-bg-secondary">{{ t.severity }}</span>
+                    <span class="status-tag"
+                          [class.status-tag--danger]="t.severity.toUpperCase() === 'CRITICAL'"
+                          [class.status-tag--warn]="t.severity.toUpperCase() === 'HIGH'"
+                          [class.status-tag--info]="t.severity.toUpperCase() === 'MEDIUM'"
+                          [class.status-tag--neutral]="t.severity.toUpperCase() !== 'CRITICAL' && t.severity.toUpperCase() !== 'HIGH' && t.severity.toUpperCase() !== 'MEDIUM'">
+                      {{ t.severity }}
+                    </span>
                   </td>
-                  <td class="small text-muted font-monospace">{{ t.defaultChannels }}</td>
+                  <td class="mono text-muted">{{ t.defaultChannels }}</td>
                   <td>
-                    <span class="badge" [class]="statusBadgeClass(t.status)">{{ t.status }}</span>
+                    <span class="status-tag"
+                          [class.status-tag--ok]="t.status === 'ACTIVE'"
+                          [class.status-tag--neutral]="t.status !== 'ACTIVE'">
+                      {{ t.status }}
+                    </span>
                   </td>
                   <td>
                     @if (t.companyEnabled) {
-                      <span class="badge text-bg-success">Enabled</span>
+                      <span class="status-tag status-tag--ok">Enabled</span>
                     } @else {
-                      <span class="badge text-bg-warning text-dark">Disabled</span>
+                      <span class="status-tag status-tag--warn">Disabled</span>
                     }
                   </td>
                   <td>
                     @if (canAdmin()) {
                       <button type="button"
                               class="btn btn-sm"
-                              [class]="t.companyEnabled ? 'btn-outline-danger' : 'btn-outline-success'"
+                              [class.btn-outline-danger]="t.companyEnabled"
+                              [class.btn-outline-primary]="!t.companyEnabled"
                               [disabled]="busyKey() === t.typeKey"
                               (click)="toggleEnabled(t)"
                               [attr.aria-label]="(t.companyEnabled ? 'Disable' : 'Enable') + ' type ' + t.typeKey">
                         @if (busyKey() === t.typeKey) {
-                          <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
                         } @else if (t.companyEnabled) {
                           <i class="bi bi-toggle-off me-1" aria-hidden="true"></i>Disable
                         } @else {

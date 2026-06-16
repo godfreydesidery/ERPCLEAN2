@@ -1,11 +1,21 @@
 <section class="admin-page">
-  <header class="page-head">
-    <h1 class="h4 mb-1">Price Lists</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
-      <i class="bi bi-tags me-1" aria-hidden="true"></i>
-      Manage price lists used to set product selling prices.
-    </p>
-  </header>
+  <div class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1><i class="bi bi-tags me-2" aria-hidden="true"></i>Price Lists</h1>
+      <p class="subtitle">Manage price lists used to set product selling prices.</p>
+    </div>
+    @if (canManage() && selectedCompanyId()) {
+      <div class="erp-page-head__actions">
+        <button type="button" class="btn btn-primary"
+                (click)="toggleCreateForm()"
+                [attr.aria-expanded]="showCreateForm()"
+                aria-controls="createPriceListForm">
+          <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+          New Price List
+        </button>
+      </div>
+    }
+  </div>
 
   <!-- Company selector -->
   @switch (companyState()) {
@@ -37,85 +47,80 @@
   }
 
   @if (selectedCompanyId()) {
-    <!-- Toolbar -->
-    <div class="d-flex mb-3">
-      @if (canManage()) {
-        <button type="button" class="btn btn-primary ms-auto"
-                (click)="toggleCreateForm()"
-                [attr.aria-expanded]="showCreateForm()"
-                aria-controls="createPriceListForm">
-          <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
-          New Price List
-        </button>
-      }
-    </div>
-
     <!-- Create form -->
     @if (showCreateForm()) {
-      <form id="createPriceListForm" class="create-form card card-body mb-3"
-            (ngSubmit)="create()" aria-label="Create price list">
-        <h2 class="h6 mb-3">New Price List</h2>
-        <div class="row g-2 align-items-end">
-          <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="newCode">
-              Code <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="newCode" name="newCode" type="text" class="form-control"
-                   placeholder="e.g. RETAIL"
-                   [ngModel]="newCode()" (ngModelChange)="newCode.set($event)"
-                   required [disabled]="saving()" autocomplete="off" />
-          </div>
-          <div class="col-sm-5">
-            <label class="form-label small text-muted mb-1" for="newName">
-              Name <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="newName" name="newName" type="text" class="form-control"
-                   placeholder="e.g. Retail Price List"
-                   [ngModel]="newName()" (ngModelChange)="newName.set($event)"
-                   required [disabled]="saving()" autocomplete="off" />
-          </div>
-          <div class="col-sm-4">
-            <button type="submit" class="btn btn-primary w-100" [disabled]="saving()">
-              @if (saving()) {
-                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                Saving…
-              } @else {
-                Create
-              }
-            </button>
-          </div>
+      <div class="erp-card mb-3">
+        <div class="erp-card__head">
+          <h2>New Price List</h2>
         </div>
-        @if (formError(); as msg) {
-          <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-        }
-      </form>
+        <div class="erp-card__body">
+          <form id="createPriceListForm" (ngSubmit)="create()" aria-label="Create price list">
+            <div class="row g-2 align-items-end">
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="newCode">
+                  Code <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="newCode" name="newCode" type="text" class="form-control"
+                       placeholder="e.g. RETAIL"
+                       [ngModel]="newCode()" (ngModelChange)="newCode.set($event)"
+                       required [disabled]="saving()" autocomplete="off" />
+              </div>
+              <div class="col-sm-5">
+                <label class="form-label small text-muted mb-1" for="newName">
+                  Name <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="newName" name="newName" type="text" class="form-control"
+                       placeholder="e.g. Retail Price List"
+                       [ngModel]="newName()" (ngModelChange)="newName.set($event)"
+                       required [disabled]="saving()" autocomplete="off" />
+              </div>
+              <div class="col-sm-4">
+                <button type="submit" class="btn btn-primary w-100" [disabled]="saving()">
+                  @if (saving()) {
+                    <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                    Saving…
+                  } @else {
+                    Create
+                  }
+                </button>
+              </div>
+            </div>
+            @if (formError(); as msg) {
+              <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+            }
+          </form>
+        </div>
+      </div>
     }
 
     <!-- List states -->
     @switch (state()) {
       @case ('loading') {
-        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <p class="text-muted d-flex align-items-center gap-2 py-3" aria-live="polite">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading price lists…
         </p>
       }
       @case ('error') {
-        <p class="state text-danger" role="alert">
+        <p class="text-danger py-3" role="alert">
           <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
           Could not load price lists. Please try again.
         </p>
       }
       @case ('forbidden') {
-        <p class="state text-muted d-flex align-items-center gap-2">
+        <p class="text-muted d-flex align-items-center gap-2 py-3" role="alert">
           <i class="bi bi-shield-lock" aria-hidden="true"></i>
           You don't have permission to view price lists.
         </p>
       }
       @default {
         @if (isEmpty()) {
-          <p class="state text-muted">No price lists yet. Add one above.</p>
+          <div class="erp-empty">
+            <i class="bi bi-tags" aria-hidden="true"></i>
+            No price lists yet. Add one above.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="sr-only">Price lists in this company</caption>
               <thead>
                 <tr>
@@ -130,7 +135,7 @@
               <tbody>
                 @for (pl of rows(); track pl.uid) {
                   <tr>
-                    <td class="font-monospace">{{ pl.code }}</td>
+                    <td class="mono">{{ pl.code }}</td>
                     <td>
                       @if (editingUid() === pl.uid) {
                         <form class="d-flex gap-2 align-items-center"
@@ -145,7 +150,7 @@
                                   [disabled]="editSaving()"
                                   [attr.aria-label]="'Save name for ' + pl.name">
                             @if (editSaving()) {
-                              <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                              <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
                             } @else {
                               <i class="bi bi-check-lg" aria-hidden="true"></i>
                             }
@@ -166,7 +171,11 @@
                       }
                     </td>
                     <td>
-                      <span class="badge" [class]="statusBadgeClass(pl.status)">{{ pl.status }}</span>
+                      <span class="status-tag"
+                            [class.status-tag--ok]="pl.status === 'ACTIVE'"
+                            [class.status-tag--neutral]="pl.status !== 'ACTIVE'">
+                        <span class="status-tag__dot" aria-hidden="true"></span>{{ pl.status }}
+                      </span>
                     </td>
                     @if (canManage()) {
                       <td>
@@ -186,7 +195,7 @@
                                     (click)="archive(pl)"
                                     [attr.aria-label]="'Archive ' + pl.name">
                               @if (rowBusyUid() === pl.uid) {
-                                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
                               }
                               Archive
                             </button>
@@ -196,7 +205,7 @@
                                     (click)="restore(pl)"
                                     [attr.aria-label]="'Restore ' + pl.name">
                               @if (rowBusyUid() === pl.uid) {
-                                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
                               }
                               Restore
                             </button>

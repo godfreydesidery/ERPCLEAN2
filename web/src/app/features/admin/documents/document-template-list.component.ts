@@ -142,14 +142,6 @@ export class DocumentTemplateListComponent {
     });
   }
 
-  statusBadgeClass(status: MasterStatus): string {
-    switch (status) {
-      case 'ACTIVE': return 'text-bg-success';
-      case 'INACTIVE': return 'text-bg-warning';
-      case 'ARCHIVED': return 'text-bg-secondary';
-    }
-  }
-
   private messageFrom(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {
       const errors = (err.error as { errors?: string[] })?.errors;

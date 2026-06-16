@@ -1,24 +1,26 @@
 <section class="admin-page">
-  <header class="page-head">
-    <h1 class="h4 mb-1">Leave Requests</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
-      <i class="bi bi-calendar-check me-1" aria-hidden="true"></i>
-      Manage and approve employee leave requests.
-    </p>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>Leave Requests</h1>
+      <p class="subtitle">
+        <i class="bi bi-calendar-check me-1" aria-hidden="true"></i>
+        Manage and approve employee leave requests.
+      </p>
+    </div>
   </header>
 
   <!-- Company selector -->
   @switch (companyState()) {
     @case ('loading') {
-      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+      <output class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
         <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
-      </p>
+      </output>
     }
     @case ('error') {
-      <p class="text-danger mb-3" role="alert">
+      <output class="d-block text-danger mb-3" role="alert">
         <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
         Could not load companies.
-      </p>
+      </output>
     }
     @default {
       @if (companies().length > 1) {
@@ -38,8 +40,9 @@
 
   @if (selectedCompanyId()) {
     @if (canManage()) {
-      <div class="d-flex mb-3">
-        <button type="button" class="btn btn-primary ms-auto"
+      <div class="erp-toolbar mb-3">
+        <span class="erp-toolbar__spacer"></span>
+        <button type="button" class="btn btn-primary"
                 (click)="toggleCreateForm()"
                 [attr.aria-expanded]="showCreateForm()"
                 aria-controls="submitLeaveForm">
@@ -50,61 +53,70 @@
     }
 
     @if (showCreateForm()) {
-      <form id="submitLeaveForm" class="create-form card card-body mb-3"
+      <form id="submitLeaveForm" class="erp-card mb-3"
             (ngSubmit)="submit()" aria-label="Submit leave request">
-        <h2 class="h6 mb-3">Submit Leave Request</h2>
-        <div class="row g-2 mb-2">
-          <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1">
-              Employee <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <app-uid-picker [(ngModel)]="fEmployeeUid" [options]="employeeOptions()"
-                            placeholder="Select employee" [required]="true"
-                            name="lrEmpUid" />
+        <div class="erp-card__head">
+          <h2>Submit Leave Request</h2>
+        </div>
+        <div class="erp-card__body">
+          <div class="erp-form-grid">
+            <div class="erp-field">
+              <span class="form-label d-block" id="lrEmpLabel" aria-hidden="true">
+                Employee <span class="text-danger" aria-hidden="true">*</span>
+              </span>
+              <app-uid-picker [(ngModel)]="fEmployeeUid" [options]="employeeOptions()"
+                              placeholder="Select employee" [required]="true"
+                              name="lrEmpUid" aria-labelledby="lrEmpLabel" />
+            </div>
+            <div class="erp-field">
+              <label class="form-label" for="lrLeaveTypeId">
+                Leave Type ID <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="lrLeaveTypeId" name="lrLeaveTypeId" type="text" class="form-control"
+                     placeholder="Numeric id"
+                     [ngModel]="fLeaveTypeId()" (ngModelChange)="fLeaveTypeId.set($event)"
+                     [disabled]="saving()" autocomplete="off" />
+            </div>
+            <div class="erp-field">
+              <label class="form-label" for="lrFrom">
+                From <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="lrFrom" name="lrFrom" type="date" class="form-control"
+                     [ngModel]="fFromDate()" (ngModelChange)="fFromDate.set($event)"
+                     [disabled]="saving()" />
+            </div>
+            <div class="erp-field">
+              <label class="form-label" for="lrTo">
+                To <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="lrTo" name="lrTo" type="date" class="form-control"
+                     [ngModel]="fToDate()" (ngModelChange)="fToDate.set($event)"
+                     [disabled]="saving()" />
+            </div>
+            <div class="erp-field">
+              <label class="form-label" for="lrDays">
+                Days <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="lrDays" name="lrDays" type="number" step="0.5" class="form-control"
+                     [ngModel]="fDays()" (ngModelChange)="fDays.set($event)"
+                     [disabled]="saving()" />
+            </div>
+            <div class="erp-field">
+              <label class="form-label" for="lrReason">Reason</label>
+              <input id="lrReason" name="lrReason" type="text" class="form-control"
+                     [ngModel]="fReason()" (ngModelChange)="fReason.set($event)"
+                     [disabled]="saving()" autocomplete="off" />
+            </div>
           </div>
-          <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="lrLeaveTypeId">
-              Leave Type ID <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="lrLeaveTypeId" name="lrLeaveTypeId" type="text" class="form-control"
-                   placeholder="Numeric id"
-                   [ngModel]="fLeaveTypeId()" (ngModelChange)="fLeaveTypeId.set($event)"
-                   [disabled]="saving()" autocomplete="off" />
-          </div>
-          <div class="col-sm-2">
-            <label class="form-label small text-muted mb-1" for="lrFrom">
-              From <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="lrFrom" name="lrFrom" type="date" class="form-control"
-                   [ngModel]="fFromDate()" (ngModelChange)="fFromDate.set($event)"
-                   [disabled]="saving()" />
-          </div>
-          <div class="col-sm-2">
-            <label class="form-label small text-muted mb-1" for="lrTo">
-              To <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="lrTo" name="lrTo" type="date" class="form-control"
-                   [ngModel]="fToDate()" (ngModelChange)="fToDate.set($event)"
-                   [disabled]="saving()" />
-          </div>
-          <div class="col-sm-2">
-            <label class="form-label small text-muted mb-1" for="lrDays">
-              Days <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="lrDays" name="lrDays" type="number" step="0.5" class="form-control"
-                   [ngModel]="fDays()" (ngModelChange)="fDays.set($event)"
-                   [disabled]="saving()" />
-          </div>
-          <div class="col-sm-4">
-            <label class="form-label small text-muted mb-1" for="lrReason">Reason</label>
-            <input id="lrReason" name="lrReason" type="text" class="form-control"
-                   [ngModel]="fReason()" (ngModelChange)="fReason.set($event)"
-                   [disabled]="saving()" autocomplete="off" />
-          </div>
-          <div class="col-sm-2 d-flex align-items-end">
-            <button type="submit" class="btn btn-primary w-100" [disabled]="saving()">
+
+          @if (formError(); as msg) {
+            <output class="d-block text-danger small mt-2 mb-0" role="alert">{{ msg }}</output>
+          }
+
+          <div class="mt-3">
+            <button type="submit" class="btn btn-primary" [disabled]="saving()">
               @if (saving()) {
-                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
                 Saving…
               } @else {
                 Submit
@@ -112,36 +124,36 @@
             </button>
           </div>
         </div>
-        @if (formError(); as msg) {
-          <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-        }
       </form>
     }
 
     @switch (state()) {
       @case ('loading') {
-        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <output class="text-muted d-flex align-items-center gap-2" aria-live="polite">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading leave requests…
-        </p>
+        </output>
       }
       @case ('error') {
-        <p class="state text-danger" role="alert">
+        <output class="d-block text-danger" role="alert">
           <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
           Could not load leave requests. Please try again.
-        </p>
+        </output>
       }
       @case ('forbidden') {
-        <p class="state text-muted d-flex align-items-center gap-2">
+        <p class="text-muted d-flex align-items-center gap-2">
           <i class="bi bi-shield-lock" aria-hidden="true"></i>
           You don't have permission to view leave requests.
         </p>
       }
       @default {
         @if (isEmpty()) {
-          <p class="state text-muted">No leave requests yet.</p>
+          <div class="erp-empty">
+            <i class="bi bi-calendar-check" aria-hidden="true"></i>
+            No leave requests yet.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Leave Requests</caption>
               <thead>
                 <tr>
@@ -149,7 +161,7 @@
                   <th scope="col">Leave Type</th>
                   <th scope="col">From</th>
                   <th scope="col">To</th>
-                  <th scope="col" class="text-end">Days</th>
+                  <th scope="col" class="num">Days</th>
                   <th scope="col">Status</th>
                   <th scope="col"><span class="visually-hidden">Actions</span></th>
                 </tr>
@@ -157,13 +169,19 @@
               <tbody>
                 @for (r of rows(); track r.uid) {
                   <tr>
-                    <td class="small">{{ r.employeeName }}</td>
-                    <td class="small">{{ r.leaveTypeName }}</td>
-                    <td class="small text-muted">{{ r.fromDate }}</td>
-                    <td class="small text-muted">{{ r.toDate }}</td>
-                    <td class="text-end small font-monospace">{{ r.days }}</td>
+                    <td>{{ r.employeeName }}</td>
+                    <td>{{ r.leaveTypeName }}</td>
+                    <td class="text-muted">{{ r.fromDate }}</td>
+                    <td class="text-muted">{{ r.toDate }}</td>
+                    <td class="num mono">{{ r.days }}</td>
                     <td>
-                      <span class="badge" [class]="statusBadgeClass(r.status)">{{ r.status }}</span>
+                      <span class="status-tag"
+                        [class.status-tag--ok]="r.status === 'APPROVED'"
+                        [class.status-tag--warn]="r.status === 'PENDING'"
+                        [class.status-tag--danger]="r.status === 'REJECTED' || r.status === 'CANCELLED'"
+                        [class.status-tag--neutral]="r.status !== 'APPROVED' && r.status !== 'PENDING' && r.status !== 'REJECTED' && r.status !== 'CANCELLED'">
+                        <span class="status-tag__dot" aria-hidden="true"></span>{{ r.status }}
+                      </span>
                     </td>
                     <td>
                       <a class="btn btn-sm btn-outline-primary"

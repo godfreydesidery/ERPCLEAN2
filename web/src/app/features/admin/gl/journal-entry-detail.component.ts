@@ -3,7 +3,7 @@ import { Component, computed, inject, input, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
-import { JournalEntryDto, JournalSourceType } from './models/gl.model';
+import { JournalEntryDto } from './models/gl.model';
 import { GlService } from './gl.service';
 
 type LoadState = 'loading' | 'idle' | 'error';
@@ -92,18 +92,6 @@ export class JournalEntryDetailComponent {
         this.reversing.set(false);
       },
     });
-  }
-
-  sourceBadgeClass(sourceType: JournalSourceType): string {
-    switch (sourceType) {
-      case 'MANUAL': return 'text-bg-primary';
-      case 'SALES': return 'text-bg-success';
-      case 'SALES_REVERSAL': return 'text-bg-warning';
-      case 'OPENING_BALANCE': return 'text-bg-info';
-      case 'PURCHASE': return 'text-bg-secondary';
-      case 'PURCHASE_REVERSAL': return 'text-bg-warning';
-      default: return 'text-bg-light border';
-    }
   }
 
   /** Expose Number.parseFloat to the template. */

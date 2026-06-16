@@ -303,24 +303,6 @@ export class DocumentListComponent {
     });
   }
 
-  // ── Display helpers ──────────────────────────────────────────────────────────
-
-  statusBadgeClass(_status: string): string {
-    return 'text-bg-secondary';
-  }
-
-  typeBadgeClass(type: DocumentType): string {
-    switch (type) {
-      case 'INVOICE': return 'text-bg-primary';
-      case 'AR_STATEMENT': return 'text-bg-info';
-      case 'PURCHASE_ORDER': return 'text-bg-warning';
-      case 'GOODS_RECEIPT': return 'text-bg-success';
-      case 'DELIVERY_NOTE': return 'text-bg-secondary';
-      case 'CREDIT_NOTE': return 'text-bg-danger';
-      default: return 'text-bg-secondary';
-    }
-  }
-
   private messageFrom(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {
       const errors = (err.error as { errors?: string[] })?.errors;

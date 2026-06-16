@@ -10,7 +10,7 @@ import { Company } from '../../models/company.model';
 import { CompanyService } from '../../company/company.service';
 import { OrganisationService } from '../../organisation/organisation.service';
 import { PaginatorComponent } from '../../../../shared/paginator/paginator.component';
-import { StandingOrderDto, StandingStatus } from './standing-order.model';
+import { StandingOrderDto } from './standing-order.model';
 import { StandingOrderService } from './standing-order.service';
 import type { StandingOrderPage } from './standing-order.service';
 
@@ -118,15 +118,6 @@ export class StandingOrderListComponent {
   goToPage(page: number): void { this.load(page); }
 
   // ── Display helpers ──────────────────────────────────────────────────────────
-
-  statusBadgeClass(status: StandingStatus): string {
-    switch (status) {
-      case 'ACTIVE': return 'text-bg-success';
-      case 'PAUSED': return 'text-bg-warning';
-      case 'CANCELLED': return 'text-bg-danger';
-      default: return 'text-bg-secondary';
-    }
-  }
 
   orderLabel(so: StandingOrderDto): string {
     return so.orderNumber ?? 'DRAFT';

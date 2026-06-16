@@ -5,7 +5,7 @@ import { RouterLink } from '@angular/router';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import { HrPayrollService } from './hr-payroll.service';
-import { DecideLeaveRequest, LeaveRequestDto, LeaveRequestStatus } from './models/hr-payroll.model';
+import { DecideLeaveRequest, LeaveRequestDto } from './models/hr-payroll.model';
 
 /**
  * Leave request detail screen with approve/reject lifecycle actions.
@@ -72,15 +72,6 @@ export class LeaveRequestDetailComponent {
         this.actionError.set(this.messageFrom(err, 'Could not process decision.'));
       },
     });
-  }
-
-  statusBadgeClass(status: LeaveRequestStatus): string {
-    switch (status) {
-      case 'APPROVED': return 'text-bg-success';
-      case 'REJECTED': return 'text-bg-danger';
-      case 'CANCELLED': return 'text-bg-secondary';
-      default: return 'text-bg-warning'; // PENDING
-    }
   }
 
   private messageFrom(err: unknown, fallback: string): string {

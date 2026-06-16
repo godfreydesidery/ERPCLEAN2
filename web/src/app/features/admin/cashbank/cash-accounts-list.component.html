@@ -1,48 +1,53 @@
-<section class="container-fluid py-3" aria-label="Cash and Bank Accounts">
-  <div class="d-flex align-items-center mb-3 gap-2 flex-wrap">
-    <h1 class="h4 mb-0 me-auto">Cash &amp; Bank Accounts</h1>
-
-    @if (companyState() === 'loading') {
-      <span class="spinner-border spinner-border-sm text-secondary" aria-label="Loading companies"></span>
-    }
-    @if (companies().length > 1) {
-      <label class="visually-hidden" for="cbAccCompany">Company</label>
-      <select id="cbAccCompany" class="form-select form-select-sm w-auto"
-              [ngModel]="selectedCompanyId()"
-              (ngModelChange)="onCompanyChange($event)">
-        @for (c of companies(); track c.id) {
-          <option [value]="c.id">{{ c.name }}</option>
-        }
-      </select>
-    }
-
-    @if (canManage()) {
-      <button type="button" class="btn btn-primary btn-sm"
-              (click)="openCreateForm()"
-              [disabled]="showCreateForm()">
-        <i class="bi bi-plus-lg" aria-hidden="true"></i> New Account
-      </button>
-    }
+<section class="admin-page" aria-label="Cash and Bank Accounts">
+  <div class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>Cash &amp; Bank Accounts</h1>
+      <p class="subtitle">Manage cash drawers and bank accounts.</p>
+    </div>
+    <div class="erp-page-head__actions">
+      @if (companyState() === 'loading') {
+        <span class="spinner-border spinner-border-sm text-secondary" aria-label="Loading companies"></span>
+      }
+      @if (companies().length > 1) {
+        <label class="visually-hidden" for="cbAccCompany">Company</label>
+        <select id="cbAccCompany" class="form-select form-select-sm w-auto"
+                [ngModel]="selectedCompanyId()"
+                (ngModelChange)="onCompanyChange($event)">
+          @for (c of companies(); track c.id) {
+            <option [value]="c.id">{{ c.name }}</option>
+          }
+        </select>
+      }
+      @if (canManage()) {
+        <button type="button" class="btn btn-primary btn-sm"
+                (click)="openCreateForm()"
+                [disabled]="showCreateForm()">
+          <i class="bi bi-plus-lg" aria-hidden="true"></i> New Account
+        </button>
+      }
+    </div>
   </div>
 
   <!-- Create form -->
   @if (showCreateForm()) {
-    <div class="card mb-3 border-primary" role="form" aria-label="Create cash/bank account">
-      <div class="card-header fw-semibold">New Cash / Bank Account</div>
-      <div class="card-body">
+    <div class="erp-card mb-3" aria-label="Create cash/bank account">
+      <div class="erp-card__head">
+        <h2>New Cash / Bank Account</h2>
+      </div>
+      <div class="erp-card__body">
         @if (createError()) {
-          <div class="alert alert-danger py-2" role="alert">{{ createError() }}</div>
+          <div class="alert alert-danger py-2 mb-3" role="alert">{{ createError() }}</div>
         }
-        <div class="row g-3">
-          <div class="col-12 col-md-4">
-            <label class="form-label" for="newAccName">Account Name <span aria-hidden="true">*</span></label>
+        <div class="erp-form-grid">
+          <div class="erp-field">
+            <label for="newAccName">Account Name <span aria-hidden="true">*</span></label>
             <input id="newAccName" type="text" class="form-control form-control-sm"
                    [ngModel]="newName()" (ngModelChange)="newName.set($event)"
                    placeholder="e.g. Main Cash Drawer" maxlength="120" required />
           </div>
 
-          <div class="col-12 col-md-3">
-            <label class="form-label" for="newAccType">Account Type <span aria-hidden="true">*</span></label>
+          <div class="erp-field">
+            <label for="newAccType">Account Type <span aria-hidden="true">*</span></label>
             <select id="newAccType" class="form-select form-select-sm"
                     [ngModel]="newType()" (ngModelChange)="newType.set($event)">
               <option value="CASH">CASH</option>
@@ -50,8 +55,8 @@
             </select>
           </div>
 
-          <div class="col-12 col-md-5">
-            <label class="form-label" for="newAccGl">GL Asset Account <span aria-hidden="true">*</span></label>
+          <div class="erp-field full">
+            <label for="newAccGl">GL Asset Account <span aria-hidden="true">*</span></label>
             <select id="newAccGl" class="form-select form-select-sm"
                     [ngModel]="newGlAccountUid()" (ngModelChange)="newGlAccountUid.set($event)"
                     required>
@@ -61,32 +66,32 @@
               }
             </select>
             @if (glAccountsState() === 'loading') {
-              <div class="form-text">Loading GL accounts…</div>
+              <span class="hint">Loading GL accounts…</span>
             }
           </div>
 
           @if (newType() === 'BANK') {
-            <div class="col-12 col-md-4">
-              <label class="form-label" for="newBankName">Bank Name <span aria-hidden="true">*</span></label>
+            <div class="erp-field">
+              <label for="newBankName">Bank Name <span aria-hidden="true">*</span></label>
               <input id="newBankName" type="text" class="form-control form-control-sm"
                      [ngModel]="newBankName()" (ngModelChange)="newBankName.set($event)"
                      placeholder="e.g. CRDB Bank" maxlength="100" />
             </div>
-            <div class="col-12 col-md-4">
-              <label class="form-label" for="newBankAccNo">Bank Account No.</label>
+            <div class="erp-field">
+              <label for="newBankAccNo">Bank Account No.</label>
               <input id="newBankAccNo" type="text" class="form-control form-control-sm"
                      [ngModel]="newBankAccountNo()" (ngModelChange)="newBankAccountNo.set($event)"
                      maxlength="50" />
             </div>
-            <div class="col-12 col-md-4">
-              <label class="form-label" for="newBankBranch">Bank Branch</label>
+            <div class="erp-field">
+              <label for="newBankBranch">Bank Branch</label>
               <input id="newBankBranch" type="text" class="form-control form-control-sm"
                      [ngModel]="newBankBranch()" (ngModelChange)="newBankBranch.set($event)"
                      maxlength="80" />
             </div>
           }
 
-          <div class="col-12">
+          <div class="erp-field full">
             <div class="form-check">
               <input class="form-check-input" type="checkbox" id="newSetDefault"
                      [ngModel]="newSetAsDefault()" (ngModelChange)="newSetAsDefault.set($event)" />
@@ -95,7 +100,7 @@
           </div>
         </div>
       </div>
-      <div class="card-footer d-flex gap-2">
+      <div class="d-flex gap-2 px-3 pb-3" style="border-top:1px solid var(--erp-border); padding-top:0.75rem">
         <button type="button" class="btn btn-primary btn-sm"
                 (click)="submitCreate()" [disabled]="creating()">
           @if (creating()) {
@@ -111,8 +116,8 @@
 
   <!-- States -->
   @if (state() === 'loading') {
-    <div class="text-center py-5" aria-busy="true" aria-label="Loading accounts">
-      <span class="spinner-border text-primary" role="status"></span>
+    <div class="text-center py-5" aria-busy="true" aria-live="polite">
+      <span class="spinner-border text-primary" aria-label="Loading accounts"></span>
     </div>
   } @else if (state() === 'forbidden') {
     <div class="alert alert-warning" role="alert">You do not have permission to view cash accounts (CASH.VIEW).</div>
@@ -123,12 +128,15 @@
       <button type="button" class="btn btn-sm btn-outline-danger ms-auto" (click)="load()">Retry</button>
     </div>
   } @else if (isEmpty()) {
-    <div class="alert alert-info" role="status">No cash or bank accounts found. Create one to get started.</div>
+    <div class="erp-empty">
+      <i class="bi bi-bank"></i>
+      No cash or bank accounts found. Create one to get started.
+    </div>
   } @else {
-    <div class="table-responsive">
-      <table class="table table-sm table-hover align-middle">
+    <div class="erp-table-wrap">
+      <table class="erp-table">
         <caption class="visually-hidden">Cash and bank accounts</caption>
-        <thead class="table-light">
+        <thead>
           <tr>
             <th scope="col">Code</th>
             <th scope="col">Name</th>
@@ -146,10 +154,12 @@
         <tbody>
           @for (acc of rows(); track acc.uid) {
             <tr>
-              <td class="font-monospace">{{ acc.code }}</td>
+              <td class="mono">{{ acc.code }}</td>
               <td>{{ acc.name }}</td>
               <td>
-                <span class="badge" [class]="typeBadgeClass(acc.accountType)">
+                <span class="status-tag"
+                      [class.status-tag--info]="acc.accountType === 'BANK'"
+                      [class.status-tag--ok]="acc.accountType === 'CASH'">
                   {{ acc.accountType }}
                 </span>
               </td>
@@ -157,26 +167,26 @@
                 @if (acc.bankName) {
                   <span>{{ acc.bankName }}</span>
                   @if (acc.bankAccountNo) {
-                    <br /><small class="text-muted font-monospace">{{ acc.bankAccountNo }}</small>
+                    <br /><small class="mono" style="color:var(--erp-text-2)">{{ acc.bankAccountNo }}</small>
                   }
                 } @else {
-                  <span class="text-muted">—</span>
+                  <span style="color:var(--erp-text-3)">—</span>
                 }
               </td>
-              <td class="font-monospace small">{{ glAccountLabel(acc.glAccountId) }}</td>
+              <td class="mono" style="font-size:0.8rem">{{ glAccountLabel(acc.glAccountId) }}</td>
               <td>{{ acc.currency }}</td>
               <td>
                 @if (acc.isDefault) {
-                  <span class="badge text-bg-success">Default</span>
+                  <span class="status-tag status-tag--ok">Default</span>
                 } @else {
-                  <span class="text-muted small">—</span>
+                  <span style="color:var(--erp-text-3)">—</span>
                 }
               </td>
               <td>
                 @if (acc.active) {
-                  <span role="img" aria-label="Active"><i class="bi bi-check-circle-fill text-success" aria-hidden="true"></i></span>
+                  <i class="bi bi-check-circle-fill" style="color:var(--erp-ok)" aria-label="Active" title="Active"></i>
                 } @else {
-                  <span role="img" aria-label="Inactive"><i class="bi bi-x-circle text-secondary" aria-hidden="true"></i></span>
+                  <i class="bi bi-x-circle" style="color:var(--erp-neutral)" aria-label="Inactive" title="Inactive"></i>
                 }
               </td>
               @if (canManage()) {

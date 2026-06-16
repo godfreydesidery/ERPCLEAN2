@@ -2,72 +2,97 @@
 
   @switch (state()) {
     @case ('loading') {
-      <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
-        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+      <div class="erp-empty" aria-live="polite">
+        <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
         Loading stock count…
-      </p>
+      </div>
     }
     @case ('forbidden') {
-      <p class="text-warning" role="alert">
+      <div class="erp-empty" role="alert">
         <i class="bi bi-lock me-1" aria-hidden="true"></i>
         You do not have permission to view this stock count.
-      </p>
+      </div>
     }
     @case ('error') {
-      <p class="text-danger" role="alert">
+      <div class="erp-empty" role="alert">
         <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
         Could not load stock count.
-      </p>
+      </div>
     }
     @default {
       @if (count(); as c) {
         <!-- Header -->
-        <header class="page-head d-flex flex-wrap align-items-start gap-2">
-          <div class="flex-grow-1">
-            <h1 class="h4 mb-1">
+        <div class="erp-page-head">
+          <div class="erp-page-head__titles">
+            <h1>
               <i class="bi bi-clipboard2-check me-1" aria-hidden="true"></i>
               Stock Count {{ c.countNumber }}
             </h1>
-            <p class="text-muted mb-0" style="font-size:0.9rem">
-              {{ c.countType }} &bull; {{ c.countDate }}
-            </p>
+            <p class="subtitle">{{ c.countType }} &bull; {{ c.countDate }}</p>
           </div>
-          <div>
-            <span class="badge fs-6" [class]="statusBadgeClass(c.status)">{{ c.status }}</span>
+          <div class="erp-page-head__actions">
+            <span class="status-tag fs-6"
+                  [class.status-tag--neutral]="c.status === 'DRAFT'"
+                  [class.status-tag--warn]="c.status === 'COUNTING'"
+                  [class.status-tag--ok]="c.status === 'POSTED'"
+                  [class.status-tag--danger]="c.status === 'CANCELLED'">
+              <span class="status-tag__dot" aria-hidden="true"></span>{{ c.status }}
+            </span>
+            <a routerLink="/admin/stock-counts" class="btn btn-outline-secondary btn-sm">
+              <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back
+            </a>
           </div>
-        </header>
+        </div>
 
         <!-- Meta info -->
-        <dl class="row mb-3" style="max-width:600px">
-          <dt class="col-sm-4 text-muted small">Count Date</dt>
-          <dd class="col-sm-8">{{ c.countDate }}</dd>
-          <dt class="col-sm-4 text-muted small">Type</dt>
-          <dd class="col-sm-8">{{ c.countType }}</dd>
-          @if (c.frozenAt) {
-            <dt class="col-sm-4 text-muted small">Frozen At</dt>
-            <dd class="col-sm-8">{{ c.frozenAt | date:'medium' }}</dd>
-          }
-          @if (c.postedAt) {
-            <dt class="col-sm-4 text-muted small">Posted At</dt>
-            <dd class="col-sm-8">{{ c.postedAt | date:'medium' }}</dd>
-          }
-          @if (c.cancelledAt) {
-            <dt class="col-sm-4 text-muted small">Cancelled At</dt>
-            <dd class="col-sm-8">{{ c.cancelledAt | date:'medium' }}</dd>
-          }
-          @if (c.varianceGlEntryUid) {
-            <dt class="col-sm-4 text-muted small">Variance GL Entry</dt>
-            <dd class="col-sm-8">
-              <a [routerLink]="['/admin/gl/journals/uid', c.varianceGlEntryUid]">
-                View Variance Journal
-              </a>
-            </dd>
-          }
-          @if (c.notes) {
-            <dt class="col-sm-4 text-muted small">Notes</dt>
-            <dd class="col-sm-8">{{ c.notes }}</dd>
-          }
-        </dl>
+        <div class="erp-card mb-3">
+          <div class="erp-card__body">
+            <dl class="row g-2 mb-0">
+              <div class="col-sm-4 col-md-3">
+                <dt class="text-muted small mb-1">Count Date</dt>
+                <dd class="mb-0">{{ c.countDate }}</dd>
+              </div>
+              <div class="col-sm-4 col-md-3">
+                <dt class="text-muted small mb-1">Type</dt>
+                <dd class="mb-0">{{ c.countType }}</dd>
+              </div>
+              @if (c.frozenAt) {
+                <div class="col-sm-4 col-md-3">
+                  <dt class="text-muted small mb-1">Frozen At</dt>
+                  <dd class="mb-0">{{ c.frozenAt | date:'medium' }}</dd>
+                </div>
+              }
+              @if (c.postedAt) {
+                <div class="col-sm-4 col-md-3">
+                  <dt class="text-muted small mb-1">Posted At</dt>
+                  <dd class="mb-0">{{ c.postedAt | date:'medium' }}</dd>
+                </div>
+              }
+              @if (c.cancelledAt) {
+                <div class="col-sm-4 col-md-3">
+                  <dt class="text-muted small mb-1">Cancelled At</dt>
+                  <dd class="mb-0">{{ c.cancelledAt | date:'medium' }}</dd>
+                </div>
+              }
+              @if (c.varianceGlEntryUid) {
+                <div class="col-sm-4 col-md-3">
+                  <dt class="text-muted small mb-1">Variance GL Entry</dt>
+                  <dd class="mb-0">
+                    <a [routerLink]="['/admin/gl/journals/uid', c.varianceGlEntryUid]">
+                      View Variance Journal
+                    </a>
+                  </dd>
+                </div>
+              }
+              @if (c.notes) {
+                <div class="col-12">
+                  <dt class="text-muted small mb-1">Notes</dt>
+                  <dd class="mb-0">{{ c.notes }}</dd>
+                </div>
+              }
+            </dl>
+          </div>
+        </div>
 
         <!-- Action bar (COUNTING only) -->
         @if (isCounting()) {
@@ -112,14 +137,14 @@
           </div>
 
           @if (enterError()) {
-            <p class="text-danger" role="alert">
+            <p class="text-danger small mb-2" role="alert">
               <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
               {{ enterError() }}
             </p>
           }
 
           @if (cancelError()) {
-            <p class="text-danger" role="alert">
+            <p class="text-danger small mb-2" role="alert">
               <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
               {{ cancelError() }}
             </p>
@@ -127,64 +152,68 @@
 
           <!-- Post form -->
           @if (showPostForm()) {
-            <form id="postForm" class="create-form card card-body mb-3"
+            <form id="postForm" class="erp-card mb-3"
                   (ngSubmit)="submitPost()" aria-label="Post stock count">
-              <h2 class="h6 mb-3">Post Count &amp; Record Variance</h2>
-              <p class="text-muted small mb-2">
-                Posting computes variance (counted − system), posts ADJUSTMENT movements, and creates a GL journal.
-                This action is irreversible.
-              </p>
-              <div class="mb-3" style="max-width:200px">
-                <label class="form-label" for="postingDate">
-                  Posting Date <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <input id="postingDate" name="postingDate" type="date"
-                       class="form-control"
-                       [ngModel]="postingDate()"
-                       (ngModelChange)="postingDate.set($event)"
-                       required />
+              <div class="erp-card__head">
+                <h2 class="h6 mb-0">Post Count &amp; Record Variance</h2>
               </div>
-              @if (postError()) {
-                <p class="text-danger" role="alert">
-                  <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
-                  {{ postError() }}
+              <div class="erp-card__body">
+                <p class="text-muted small mb-3">
+                  Posting computes variance (counted − system), posts ADJUSTMENT movements, and creates a GL journal.
+                  This action is irreversible.
                 </p>
-              }
-              <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-success" [disabled]="posting()">
-                  @if (posting()) {
-                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
-                    Posting…
-                  } @else {
-                    <i class="bi bi-check2-all me-1" aria-hidden="true"></i>
-                    Confirm Post
-                  }
-                </button>
-                <button type="button" class="btn btn-outline-secondary" (click)="togglePostForm()">
-                  Cancel
-                </button>
+                <div class="erp-field" style="max-width:200px">
+                  <label class="form-label" for="postingDate">
+                    Posting Date <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <input id="postingDate" name="postingDate" type="date"
+                         class="form-control"
+                         [ngModel]="postingDate()"
+                         (ngModelChange)="postingDate.set($event)"
+                         required />
+                </div>
+                @if (postError()) {
+                  <p class="text-danger small mt-2 mb-2" role="alert">
+                    <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+                    {{ postError() }}
+                  </p>
+                }
+                <div class="d-flex gap-2 mt-3">
+                  <button type="submit" class="btn btn-success" [disabled]="posting()">
+                    @if (posting()) {
+                      <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                      Posting…
+                    } @else {
+                      <i class="bi bi-check2-all me-1" aria-hidden="true"></i>
+                      Confirm Post
+                    }
+                  </button>
+                  <button type="button" class="btn btn-outline-secondary" (click)="togglePostForm()">
+                    Cancel
+                  </button>
+                </div>
               </div>
             </form>
           }
         }
 
         <!-- Lines table -->
-        <h2 class="h6 mt-3 mb-2">Count Lines</h2>
+        <h2 class="erp-section-title">Count Lines</h2>
         @if (c.lines && c.lines.length > 0) {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Stock Count Lines for {{ c.countNumber }}</caption>
               <thead>
                 <tr>
                   <th scope="col">#</th>
                   <th scope="col">Product</th>
                   <th scope="col">Unit</th>
-                  <th scope="col" class="text-end">System Qty</th>
-                  <th scope="col" class="text-end">Counted Qty</th>
+                  <th scope="col" class="num">System Qty</th>
+                  <th scope="col" class="num">Counted Qty</th>
                   @if (isPosted()) {
-                    <th scope="col" class="text-end">Variance Qty</th>
-                    <th scope="col" class="text-end">Unit Cost</th>
-                    <th scope="col" class="text-end">Variance Value</th>
+                    <th scope="col" class="num">Variance Qty</th>
+                    <th scope="col" class="num">Unit Cost</th>
+                    <th scope="col" class="num">Variance Value</th>
                   }
                   @if (isCounting() && canCreate()) {
                     <th scope="col">Reason</th>
@@ -196,14 +225,14 @@
                   <tr>
                     <td>{{ line.lineNo }}</td>
                     <td>
-                      <span class="fw-semibold">{{ line.productCode }}</span>
+                      <span class="fw-semibold mono">{{ line.productCode }}</span>
                       <span class="text-muted ms-1">{{ line.productName }}</span>
                     </td>
                     <td>{{ line.unitName }}</td>
-                    <td class="text-end">
+                    <td class="num">
                       {{ +line.systemQty | number:'1.0-4' }}
                     </td>
-                    <td class="text-end">
+                    <td class="num">
                       @if (isCounting() && canCreate()) {
                         <input type="number"
                                class="form-control form-control-sm text-end"
@@ -217,13 +246,13 @@
                       }
                     </td>
                     @if (isPosted()) {
-                      <td class="text-end" [class]="varianceClass(line.varianceQty)">
+                      <td class="num" [ngClass]="varianceClass(line.varianceQty)">
                         {{ line.varianceQty !== null ? (+line.varianceQty! | number:'1.0-4') : '—' }}
                       </td>
-                      <td class="text-end">
+                      <td class="num">
                         {{ line.currency }} {{ +line.unitCostAmount | number:'1.2-2' }}
                       </td>
-                      <td class="text-end" [class]="varianceClass(line.varianceValue)">
+                      <td class="num" [ngClass]="varianceClass(line.varianceValue)">
                         {{ line.varianceValue !== null ? (line.currency + ' ' + (+line.varianceValue! | number:'1.2-2')) : '—' }}
                       </td>
                     }
@@ -244,16 +273,8 @@
             </table>
           </div>
         } @else {
-          <p class="text-muted">No lines on this count.</p>
+          <div class="erp-empty"><i class="bi bi-clipboard2-x"></i> No lines on this count.</div>
         }
-
-        <!-- Back link -->
-        <div class="mt-3">
-          <a routerLink="/admin/stock-counts" class="btn btn-outline-secondary btn-sm">
-            <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>
-            Back to Stock Counts
-          </a>
-        </div>
       }
     }
   }

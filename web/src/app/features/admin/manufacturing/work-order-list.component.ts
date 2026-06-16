@@ -264,25 +264,6 @@ export class WorkOrderListComponent {
 
   // ── Display helpers ───────────────────────────────────────────────────────
 
-  statusBadgeClass(status: WorkOrderStatus): string {
-    switch (status) {
-      case 'PLANNED':
-        return 'text-bg-warning';
-      case 'RELEASED':
-        return 'text-bg-info';
-      case 'IN_PROGRESS':
-        return 'text-bg-primary';
-      case 'COMPLETED':
-        return 'text-bg-success';
-      case 'CLOSED':
-        return 'text-bg-secondary';
-      case 'CANCELLED':
-        return 'text-bg-danger';
-      default:
-        return 'text-bg-secondary';
-    }
-  }
-
   private messageFrom(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {
       const errors = (err.error as { errors?: string[] })?.errors;

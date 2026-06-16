@@ -1,49 +1,50 @@
 <section class="admin-page">
-  <header class="page-head">
-    <h1 class="h4 mb-1">Stock Counts</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
-      <i class="bi bi-clipboard2-check me-1" aria-hidden="true"></i>
-      Physical and cycle count documents. Post to record variances in the GL.
-    </p>
-  </header>
-
-  @if (canCreate()) {
-    <div class="mb-3">
-      <a class="btn btn-primary" routerLink="/admin/stock-counts/create">
-        <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
-        New Stock Count
-      </a>
+  <div class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>Stock Counts</h1>
+      <p class="subtitle">
+        <i class="bi bi-clipboard2-check me-1" aria-hidden="true"></i>
+        Physical and cycle count documents. Post to record variances in the GL.
+      </p>
     </div>
-  }
+    <div class="erp-page-head__actions">
+      @if (canCreate()) {
+        <a class="btn btn-primary" routerLink="/admin/stock-counts/create">
+          <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+          New Stock Count
+        </a>
+      }
+    </div>
+  </div>
 
   @switch (state()) {
     @case ('loading') {
-      <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
-        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+      <div class="erp-empty" aria-live="polite">
+        <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
         Loading stock counts…
-      </p>
+      </div>
     }
     @case ('forbidden') {
-      <p class="text-warning" role="alert">
+      <div class="erp-empty" role="alert">
         <i class="bi bi-lock me-1" aria-hidden="true"></i>
         You do not have permission to view stock counts.
-      </p>
+      </div>
     }
     @case ('error') {
-      <p class="text-danger" role="alert">
+      <div class="erp-empty" role="alert">
         <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
         Could not load stock counts. Is the API running?
-      </p>
+      </div>
     }
     @default {
       @if (isEmpty()) {
-        <p class="text-muted state">
-          <i class="bi bi-clipboard2-x me-1" aria-hidden="true"></i>
+        <div class="erp-empty">
+          <i class="bi bi-clipboard2-x"></i>
           No stock counts found. Create the first one.
-        </p>
+        </div>
       } @else {
-        <div class="table-responsive">
-          <table class="table table-hover align-middle bg-white grid">
+        <div class="erp-table-wrap">
+          <table class="erp-table">
             <caption class="visually-hidden">Stock Count Documents</caption>
             <thead>
               <tr>
@@ -58,11 +59,17 @@
             <tbody>
               @for (row of rows(); track row.uid) {
                 <tr>
-                  <td><code>{{ row.countNumber }}</code></td>
+                  <td class="mono">{{ row.countNumber }}</td>
                   <td>{{ row.countDate }}</td>
                   <td>{{ row.countType }}</td>
                   <td>
-                    <span class="badge" [class]="statusBadgeClass(row.status)">{{ row.status }}</span>
+                    <span class="status-tag"
+                          [class.status-tag--neutral]="row.status === 'DRAFT'"
+                          [class.status-tag--warn]="row.status === 'COUNTING'"
+                          [class.status-tag--ok]="row.status === 'POSTED'"
+                          [class.status-tag--danger]="row.status === 'CANCELLED'">
+                      <span class="status-tag__dot" aria-hidden="true"></span>{{ row.status }}
+                    </span>
                   </td>
                   <td>{{ row.lines ? row.lines.length : 0 }}</td>
                   <td class="text-end">

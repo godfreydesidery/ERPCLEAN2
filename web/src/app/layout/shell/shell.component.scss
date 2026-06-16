@@ -3,13 +3,15 @@
 :host {
   --sb-width: 248px;
   --tb-height: 56px;
-  --sb-bg: #0d2a5b;
-  --sb-bg-hover: rgba(255, 255, 255, 0.08);
-  --sb-bg-active: rgba(255, 255, 255, 0.14);
-  --sb-fg: rgba(255, 255, 255, 0.85);
-  --sb-fg-muted: rgba(255, 255, 255, 0.55);
-  --sb-accent: #4178d9;
-  --content-bg: #f5f7fb;
+  /* Sidebar surface — refined dark slate (template "charcoal" family).
+     Change just this one token to restore the previous navy (#0d2a5b). */
+  --sb-bg: #1f2937;
+  --sb-bg-hover: rgba(255, 255, 255, 0.07);
+  --sb-bg-active: rgba(255, 255, 255, 0.12);
+  --sb-fg: rgba(255, 255, 255, 0.86);
+  --sb-fg-muted: rgba(255, 255, 255, 0.56);
+  --sb-accent: var(--erp-primary, #2563eb);
+  --content-bg: var(--erp-canvas, #f4f6f9);
   display: block;
 }
 
@@ -84,21 +86,21 @@
   align-items: center;
   gap: 0.5rem;
   text-decoration: none;
-  color: #1a4fb5;
+  color: var(--erp-primary, #2563eb);
   font-weight: 700;
   letter-spacing: 0.1em;
   font-size: 0.95rem;
 }
 
 .topbar-brand:hover {
-  color: #0d2a5b;
+  color: var(--erp-primary-active, #1e40af);
 }
 
 .brand-mark-sm {
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  background: linear-gradient(135deg, #1a4fb5, #4178d9);
+  background: linear-gradient(135deg, var(--erp-primary, #2563eb), var(--erp-accent, #38bdf8));
   color: #fff;
   display: inline-flex;
   align-items: center;
@@ -106,7 +108,7 @@
   font-weight: 700;
   font-size: 1.1rem;
   letter-spacing: -1px;
-  box-shadow: 0 2px 8px rgba(26, 79, 181, 0.3);
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
 }
 
 .topbar-spacer {

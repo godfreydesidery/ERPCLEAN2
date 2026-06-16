@@ -1,16 +1,1 @@
-// Stock Transfer Create — component-scoped overrides
-// Global .admin-page, .page-head, .create-form, .form-error, .state from admin.styles.scss
-
-fieldset {
-  border: 1px solid #dee2e6;
-  border-radius: 0.375rem;
-  padding: 1rem;
-
-  legend {
-    float: none;
-    width: auto;
-    padding: 0 0.5rem;
-    font-size: 0.875rem;
-    font-weight: 600;
-  }
-}
+// Stock Transfer Create — no component-specific overrides; global erp-card + erp-form-grid handle layout.

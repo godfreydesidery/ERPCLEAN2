@@ -1,33 +1,42 @@
 <section class="admin-page">
-  <h1>Branches</h1>
+  <header class="page-head">
+    <h1 class="h4 mb-1">Branches</h1>
+  </header>
 
-  <form class="create-form" (ngSubmit)="create()" aria-label="Create branch">
-    <div class="field">
-      <label for="branchCode">Code</label>
-      <input id="branchCode" name="branchCode" type="text" [(ngModel)]="code" required />
+  <form class="card card-body mb-3" (ngSubmit)="create()" aria-label="Create branch">
+    <div class="row g-2 align-items-end">
+      <div class="col-sm-3">
+        <label class="form-label small text-muted mb-1" for="branchCode">Code</label>
+        <input id="branchCode" name="branchCode" type="text" class="form-control"
+               [(ngModel)]="code" required [disabled]="saving()" />
+      </div>
+      <div class="col-sm-5">
+        <label class="form-label small text-muted mb-1" for="branchName">Name</label>
+        <input id="branchName" name="branchName" type="text" class="form-control"
+               [(ngModel)]="name" required [disabled]="saving()" />
+      </div>
+      <div class="col-sm-2 d-flex align-items-end">
+        <div class="form-check mb-2">
+          <input id="makeDefault" name="makeDefault" type="checkbox" class="form-check-input"
+                 [(ngModel)]="makeDefault" />
+          <label class="form-check-label small" for="makeDefault">Set as default</label>
+        </div>
+      </div>
+      <div class="col-sm-2">
+        <button type="submit" class="btn btn-primary w-100" [disabled]="saving()">
+          @if (saving()) {
+            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+            Saving…
+          } @else {
+            Add branch
+          }
+        </button>
+      </div>
     </div>
-    <div class="field">
-      <label for="branchName">Name</label>
-      <input id="branchName" name="branchName" type="text" [(ngModel)]="name" required />
-    </div>
-    <div class="field check">
-      <label for="makeDefault">
-        <input id="makeDefault" name="makeDefault" type="checkbox" [(ngModel)]="makeDefault" />
-        Set as default
-      </label>
-    </div>
-    <button type="submit" class="btn btn-primary" [disabled]="saving()">
-      @if (saving()) {
-        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-        Saving…
-      } @else {
-        Add branch
-      }
-    </button>
+    @if (formError(); as msg) {
+      <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+    }
   </form>
-  @if (formError(); as msg) {
-    <p class="form-error" role="alert">{{ msg }}</p>
-  }
 
   @switch (state()) {
     @case ('loading') {
@@ -36,56 +45,72 @@
       </p>
     }
     @case ('error') {
-      <p class="state error" role="alert">Could not load branches. Please try again.</p>
+      <p class="state text-danger" role="alert">Could not load branches. Please try again.</p>
     }
     @default {
       @if (branches().length === 0) {
-        <p class="state empty">No branches yet. Add one above.</p>
+        <div class="erp-empty">
+          <i class="bi bi-diagram-2" aria-hidden="true"></i>
+          No branches yet. Add one above.
+        </div>
       } @else {
-        <table class="grid">
-          <caption class="visually-hidden">Branches in this company</caption>
-          <thead>
-            <tr>
-              <th scope="col">Code</th><th scope="col">Name</th><th scope="col">Default</th>
-              <th scope="col">Status</th><th scope="col">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (b of branches(); track b.uid) {
+        <div class="erp-table-wrap">
+          <table class="erp-table">
+            <caption class="visually-hidden">Branches in this company</caption>
+            <thead>
               <tr>
-                <td>{{ b.code }}</td>
-                <td>{{ b.name }}</td>
-                <td>
-                  @if (b.isDefault) {
-                    <span class="badge-default">Default</span>
-                  } @else {
-                    <button type="button" class="link"
-                            [disabled]="busyUid() !== null"
-                            (click)="setDefault(b)">
-                      @if (busyUid() === b.uid) {
-                        <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
-                      }
-                      Make default
-                    </button>
-                  }
-                </td>
-                <td>{{ b.status }}</td>
-                <td>
-                  @if (!b.isDefault) {
-                    <button type="button" class="link danger"
-                            [disabled]="busyUid() !== null"
-                            (click)="archive(b)">
-                      @if (busyUid() === b.uid) {
-                        <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
-                      }
-                      Archive
-                    </button>
-                  }
-                </td>
+                <th scope="col">Code</th>
+                <th scope="col">Name</th>
+                <th scope="col">Default</th>
+                <th scope="col">Status</th>
+                <th scope="col"><span class="sr-only">Actions</span></th>
               </tr>
-            }
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              @for (b of branches(); track b.uid) {
+                <tr>
+                  <td class="mono">{{ b.code }}</td>
+                  <td>{{ b.name }}</td>
+                  <td>
+                    @if (b.isDefault) {
+                      <span class="status-tag status-tag--ok">Default</span>
+                    } @else {
+                      <button type="button" class="btn btn-sm btn-outline-secondary"
+                              [disabled]="busyUid() !== null"
+                              (click)="setDefault(b)"
+                              [attr.aria-label]="'Set ' + b.name + ' as default branch'">
+                        @if (busyUid() === b.uid) {
+                          <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                        }
+                        Make default
+                      </button>
+                    }
+                  </td>
+                  <td>
+                    <span class="status-tag"
+                          [class.status-tag--ok]="b.status === 'ACTIVE'"
+                          [class.status-tag--neutral]="b.status !== 'ACTIVE'">
+                      {{ b.status }}
+                    </span>
+                  </td>
+                  <td>
+                    @if (!b.isDefault) {
+                      <button type="button" class="btn btn-sm btn-outline-danger"
+                              [disabled]="busyUid() !== null"
+                              (click)="archive(b)"
+                              [attr.aria-label]="'Archive branch ' + b.name">
+                        @if (busyUid() === b.uid) {
+                          <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                        }
+                        Archive
+                      </button>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
       }
     }
   }

@@ -1,24 +1,8 @@
-/* User list — Bootstrap-themed (Orbix). Mirrors the role-list layout conventions. */
-
-.admin-page {
-  max-width: 1100px;
-}
-
-.page-head {
-  margin-bottom: 1rem;
-}
+/* User list — relies on global ERP kit (.admin-page, .page-head, .erp-table, .status-tag).
+   Only component-specific touches remain here. */
 
 .state {
   padding: 1rem 0;
-}
-
-.grid {
-  th {
-    font-size: 0.78rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: #6b7280;
-  }
 }
 
 .pwd-inline {

@@ -1,40 +1,44 @@
 <section class="admin-page">
   <header class="page-head">
-    <h1 class="h4 mb-1">Purchase Return</h1>
-    <a routerLink="/admin/purchase-returns" class="btn btn-sm btn-outline-secondary">
-      <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back
+    <a class="back-link text-muted small" routerLink="/admin/purchase-returns">
+      <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Returns
     </a>
+    <h1 class="h4 mb-1 mt-1">Purchase Return</h1>
   </header>
 
   @switch (state()) {
     @case ('loading') {
-      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+      <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
         <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
       </p>
     }
     @case ('error') {
-      <p class="state text-danger" role="alert">
+      <p class="text-danger" role="alert">
         <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
         Could not load purchase return.
       </p>
     }
     @default {
       @if (entity(); as r) {
-        <div class="card mb-3">
-          <div class="card-body">
+        <div class="erp-card mb-3">
+          <div class="erp-card__body">
             <div class="row g-3">
               <div class="col-sm-3">
                 <div class="small text-muted">Return Number</div>
-                <div class="fw-semibold font-monospace">{{ r.returnNumber }}</div>
+                <div class="fw-semibold mono">{{ r.returnNumber }}</div>
               </div>
               <div class="col-sm-3">
                 <div class="small text-muted">Status</div>
-                <span class="badge" [class]="statusBadgeClass(r.status)">{{ r.status }}</span>
+                <span class="status-tag"
+                  [class.status-tag--ok]="r.status === 'CONFIRMED'"
+                  [class.status-tag--warn]="r.status !== 'CONFIRMED'">
+                  {{ r.status }}
+                </span>
               </div>
               <div class="col-sm-3">
                 <div class="small text-muted">Supplier</div>
                 <div>{{ r.supplierName }}</div>
-                <div class="small text-muted font-monospace">{{ r.supplierCode }}</div>
+                <div class="small text-muted mono">{{ r.supplierCode }}</div>
               </div>
               <div class="col-sm-3">
                 <div class="small text-muted">Created</div>
@@ -50,7 +54,7 @@
               </div>
               <div class="col-sm-3">
                 <div class="small text-muted">Gross Amount</div>
-                <div class="fw-semibold font-monospace">{{ +r.grossAmount | number:'1.2-2' }}</div>
+                <div class="fw-semibold mono">{{ +r.grossAmount | number:'1.2-2' }}</div>
               </div>
               @if (r.confirmedAt) {
                 <div class="col-sm-3">
@@ -88,7 +92,7 @@
                 </button>
               </div>
               @if (confirmError(); as msg) {
-                <p class="form-error text-danger small mt-2" role="alert">{{ msg }}</p>
+                <p class="text-danger small mt-2" role="alert">{{ msg }}</p>
               }
             }
           </div>
@@ -96,18 +100,18 @@
 
         <!-- Lines -->
         @if (r.lines && r.lines.length > 0) {
-          <h2 class="h6 mb-2">Return Lines</h2>
-          <div class="table-responsive">
-            <table class="table table-sm align-middle bg-white grid">
+          <h2 class="erp-section-title">Return Lines</h2>
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Return lines</caption>
               <thead>
                 <tr>
                   <th scope="col">#</th>
                   <th scope="col">Product</th>
                   <th scope="col">Unit</th>
-                  <th scope="col" class="text-end">Returned Qty</th>
-                  <th scope="col" class="text-end">Unit Cost</th>
-                  <th scope="col" class="text-end">Line Value</th>
+                  <th scope="col" class="num">Returned Qty</th>
+                  <th scope="col" class="num">Unit Cost</th>
+                  <th scope="col" class="num">Line Value</th>
                   <th scope="col">Currency</th>
                 </tr>
               </thead>
@@ -116,13 +120,13 @@
                   <tr>
                     <td class="small text-muted">{{ line.lineNo }}</td>
                     <td>
-                      <div class="fw-semibold small">{{ line.productCode }}</div>
+                      <div class="fw-semibold small mono">{{ line.productCode }}</div>
                       <div class="text-muted small">{{ line.productName }}</div>
                     </td>
                     <td class="small">{{ line.unitName }}</td>
-                    <td class="text-end font-monospace small">{{ +line.returnedQty | number:'1.3-3' }}</td>
-                    <td class="text-end font-monospace small">{{ +line.unitCostAmount | number:'1.2-2' }}</td>
-                    <td class="text-end font-monospace small">{{ +line.lineValueAmount | number:'1.2-2' }}</td>
+                    <td class="num small">{{ +line.returnedQty | number:'1.3-3' }}</td>
+                    <td class="num small">{{ +line.unitCostAmount | number:'1.2-2' }}</td>
+                    <td class="num small">{{ +line.lineValueAmount | number:'1.2-2' }}</td>
                     <td class="small">{{ line.currency }}</td>
                   </tr>
                 }

@@ -353,16 +353,6 @@ export class EnterBillComponent {
     return Number.isFinite(n) ? n.toFixed(2) + '%' : '0.00%';
   }
 
-  matchLineBadgeClass(line: LineMatchDto): string {
-    switch (line.matchStatus) {
-      case 'MATCHED': return 'text-bg-success';
-      case 'HELD_PRICE_VARIANCE': return 'text-bg-danger';
-      case 'HELD_QTY_VARIANCE': return 'text-bg-warning';
-      case 'VARIANCE_ACCEPTED': return 'text-bg-info';
-      default: return 'text-bg-secondary';
-    }
-  }
-
   isHeld(line: LineMatchDto): boolean {
     return line.matchStatus === 'HELD_PRICE_VARIANCE' || line.matchStatus === 'HELD_QTY_VARIANCE';
   }

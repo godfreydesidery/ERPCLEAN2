@@ -4,7 +4,7 @@ import { Component, computed, inject, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AlertService } from '../../../../core/feedback/alert.service';
 import { SessionStore } from '../../../../core/auth/session.store';
-import { StandingOrderDto, StandingStatus } from './standing-order.model';
+import { StandingOrderDto } from './standing-order.model';
 import { StandingOrderService } from './standing-order.service';
 
 type LoadState = 'loading' | 'idle' | 'error';
@@ -163,15 +163,6 @@ export class StandingOrderDetailComponent {
   }
 
   // ── Display helpers ───────────────────────────────────────────────────────────
-
-  statusBadgeClass(status: StandingStatus): string {
-    switch (status) {
-      case 'ACTIVE': return 'text-bg-success';
-      case 'PAUSED': return 'text-bg-warning';
-      case 'CANCELLED': return 'text-bg-danger';
-      default: return 'text-bg-secondary';
-    }
-  }
 
   private messageFrom(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {

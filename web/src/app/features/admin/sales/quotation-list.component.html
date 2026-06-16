@@ -1,11 +1,11 @@
 <section class="admin-page">
-  <header class="page-head">
-    <h1 class="h4 mb-1">Quotations</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
+  <div class="page-head">
+    <h1>Quotations</h1>
+    <p class="subtitle">
       <i class="bi bi-file-earmark-text me-1" aria-hidden="true"></i>
       Manage sales quotations and convert them to orders.
     </p>
-  </header>
+  </div>
 
   <!-- Company selector -->
   @switch (companyState()) {
@@ -22,8 +22,8 @@
     }
     @default {
       @if (companies().length > 1) {
-        <div class="mb-3" style="max-width:320px">
-          <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+        <div class="mb-3 erp-field" style="max-width:320px">
+          <label for="companyPicker">Company</label>
           <select id="companyPicker" name="companyPicker" class="form-select"
                   [ngModel]="selectedCompanyId()"
                   (ngModelChange)="onCompanyChange($event)">
@@ -38,186 +38,192 @@
 
   @if (selectedCompanyId()) {
     <!-- Toolbar -->
-    <div class="d-flex flex-wrap gap-2 mb-3 align-items-end">
+    <div class="erp-toolbar">
+      <span class="erp-toolbar__spacer"></span>
       @if (canCreate()) {
-        <div class="ms-auto align-self-end">
-          <button type="button" class="btn btn-primary"
-                  (click)="toggleCreateForm()"
-                  [attr.aria-expanded]="showCreateForm()"
-                  aria-controls="createQuoteForm">
-            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
-            New Quotation
-          </button>
-        </div>
+        <button type="button" class="btn btn-primary"
+                (click)="toggleCreateForm()"
+                [attr.aria-expanded]="showCreateForm()"
+                aria-controls="createQuoteForm">
+          <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+          New Quotation
+        </button>
       }
     </div>
 
     <!-- Create form -->
     @if (showCreateForm()) {
-      <form id="createQuoteForm" class="create-form card card-body mb-3"
-            (ngSubmit)="create()" aria-label="Create quotation">
-        <h2 class="h6 mb-3">New Quotation</h2>
-        <div class="row g-2 align-items-start mb-2">
-          <!-- Customer picker -->
-          <div class="col-sm-4 position-relative">
-            <label class="form-label small text-muted mb-1" for="customerSearch">
-              Customer <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="customerSearch" name="customerSearch" type="search"
-                   class="form-control"
-                   placeholder="Search by name or code…"
-                   [ngModel]="customerSearchQ()"
-                   (ngModelChange)="onCustomerSearchChange($event)"
-                   [disabled]="saving()"
-                   autocomplete="off"
-                   [attr.aria-expanded]="customerResults().length > 0"
-                   aria-haspopup="listbox"
-                   aria-autocomplete="list" />
-            @if (selectedCustomer()) {
-              <div class="d-flex align-items-center gap-1 mt-1">
-                <i class="bi bi-check-circle-fill text-success small" aria-hidden="true"></i>
-                <span class="small text-muted">{{ selectedCustomer()!.label }}</span>
-              </div>
-            }
-            @if (customerResults().length > 0) {
-              <ul class="list-group position-absolute shadow-sm mt-1 w-100" role="listbox"
-                  aria-label="Customer suggestions" style="z-index:1050;max-height:220px;overflow-y:auto;">
-                @for (c of customerResults(); track c.uid) {
-                  <li class="list-group-item list-group-item-action small py-2"
-                      role="option" style="cursor:pointer"
-                      (click)="selectCustomer(c)"
-                      (keydown.enter)="selectCustomer(c)"
-                      tabindex="0"
-                      [attr.aria-label]="c.code + ' — ' + c.displayName">
-                    <strong>{{ c.code }}</strong> — {{ c.displayName }}
-                  </li>
-                }
-              </ul>
-            }
-          </div>
-
-          <!-- Currency -->
-          <div class="col-sm-2">
-            <label class="form-label small text-muted mb-1" for="newCurrency">
-              Currency <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="newCurrency" name="newCurrency" type="text" class="form-control"
-                   placeholder="TZS"
-                   [ngModel]="newCurrency()" (ngModelChange)="newCurrency.set($event)"
-                   [disabled]="saving()" autocomplete="off" />
-          </div>
-
-          <!-- Quote date -->
-          <div class="col-sm-2">
-            <label class="form-label small text-muted mb-1" for="newQuoteDate">
-              Quote Date <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="newQuoteDate" name="newQuoteDate" type="date" class="form-control"
-                   [ngModel]="newQuoteDate()" (ngModelChange)="newQuoteDate.set($event)"
-                   [disabled]="saving()" />
-          </div>
-
-          <!-- Valid until -->
-          <div class="col-sm-2">
-            <label class="form-label small text-muted mb-1" for="newValidUntil">
-              Valid Until <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="newValidUntil" name="newValidUntil" type="date" class="form-control"
-                   [ngModel]="newValidUntil()" (ngModelChange)="newValidUntil.set($event)"
-                   [disabled]="saving()" />
-          </div>
-
-          <!-- Agent picker (optional) -->
-          <div class="col-sm-4 position-relative">
-            <label class="form-label small text-muted mb-1" for="agentSearch">Agent (optional)</label>
-            <input id="agentSearch" name="agentSearch" type="search"
-                   class="form-control"
-                   placeholder="Search by name or code…"
-                   [ngModel]="agentSearchQ()"
-                   (ngModelChange)="onAgentSearchChange($event)"
-                   [disabled]="saving()"
-                   autocomplete="off"
-                   [attr.aria-expanded]="agentResults().length > 0"
-                   aria-haspopup="listbox"
-                   aria-autocomplete="list" />
-            @if (selectedAgent()) {
-              <div class="d-flex align-items-center gap-1 mt-1">
-                <i class="bi bi-check-circle-fill text-success small" aria-hidden="true"></i>
-                <span class="small text-muted">{{ selectedAgent()!.label }}</span>
-                <button type="button" class="btn btn-link btn-sm p-0 ms-1 text-danger"
-                        (click)="clearAgent()" aria-label="Clear agent selection">
-                  <i class="bi bi-x" aria-hidden="true"></i>
-                </button>
-              </div>
-            }
-            @if (agentResults().length > 0) {
-              <ul class="list-group position-absolute shadow-sm mt-1 w-100" role="listbox"
-                  aria-label="Agent suggestions" style="z-index:1050;max-height:220px;overflow-y:auto;">
-                @for (a of agentResults(); track a.uid) {
-                  <li class="list-group-item list-group-item-action small py-2"
-                      role="option" style="cursor:pointer"
-                      (click)="selectAgent(a)"
-                      (keydown.enter)="selectAgent(a)"
-                      tabindex="0">
-                    <strong>{{ a.code }}</strong> — {{ a.displayName }}
-                  </li>
-                }
-              </ul>
-            }
-          </div>
+      <div class="erp-card mb-3">
+        <div class="erp-card__head">
+          <h2>New Quotation</h2>
         </div>
+        <div class="erp-card__body">
+          <form id="createQuoteForm" (ngSubmit)="create()" aria-label="Create quotation">
+            <div class="erp-form-grid">
+              <!-- Customer picker -->
+              <div class="erp-field position-relative">
+                <label for="customerSearch">
+                  Customer <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="customerSearch" name="customerSearch" type="search"
+                       class="form-control"
+                       placeholder="Search by name or code…"
+                       [ngModel]="customerSearchQ()"
+                       (ngModelChange)="onCustomerSearchChange($event)"
+                       [disabled]="saving()"
+                       autocomplete="off"
+                       [attr.aria-expanded]="customerResults().length > 0"
+                       aria-haspopup="listbox"
+                       aria-autocomplete="list" />
+                @if (selectedCustomer()) {
+                  <div class="d-flex align-items-center gap-1 mt-1">
+                    <i class="bi bi-check-circle-fill text-success small" aria-hidden="true"></i>
+                    <span class="small text-muted">{{ selectedCustomer()!.label }}</span>
+                  </div>
+                }
+                @if (customerResults().length > 0) {
+                  <ul class="list-group position-absolute shadow-sm mt-1 w-100" role="listbox"
+                      aria-label="Customer suggestions" style="z-index:1050;max-height:220px;overflow-y:auto;">
+                    @for (c of customerResults(); track c.uid) {
+                      <li class="list-group-item list-group-item-action small py-2"
+                          role="option" style="cursor:pointer"
+                          (click)="selectCustomer(c)"
+                          (keydown.enter)="selectCustomer(c)"
+                          tabindex="0"
+                          [attr.aria-label]="c.code + ' — ' + c.displayName">
+                        <strong>{{ c.code }}</strong> — {{ c.displayName }}
+                      </li>
+                    }
+                  </ul>
+                }
+              </div>
 
-        <!-- Notes + submit -->
-        <div class="row g-2 mb-2">
-          <div class="col-sm-8">
-            <label class="form-label small text-muted mb-1" for="newNotes">Notes</label>
-            <input id="newNotes" name="newNotes" type="text" class="form-control"
-                   [ngModel]="newNotes()" (ngModelChange)="newNotes.set($event)"
-                   [disabled]="saving()" autocomplete="off" />
-          </div>
-          <div class="col-sm-4 d-flex align-items-end">
-            <button type="submit" class="btn btn-primary w-100" [disabled]="saving()">
-              @if (saving()) {
-                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                Saving…
-              } @else {
-                Create Quotation
-              }
-            </button>
-          </div>
+              <!-- Currency -->
+              <div class="erp-field">
+                <label for="newCurrency">
+                  Currency <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="newCurrency" name="newCurrency" type="text" class="form-control"
+                       placeholder="TZS"
+                       [ngModel]="newCurrency()" (ngModelChange)="newCurrency.set($event)"
+                       [disabled]="saving()" autocomplete="off" />
+              </div>
+
+              <!-- Quote date -->
+              <div class="erp-field">
+                <label for="newQuoteDate">
+                  Quote Date <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="newQuoteDate" name="newQuoteDate" type="date" class="form-control"
+                       [ngModel]="newQuoteDate()" (ngModelChange)="newQuoteDate.set($event)"
+                       [disabled]="saving()" />
+              </div>
+
+              <!-- Valid until -->
+              <div class="erp-field">
+                <label for="newValidUntil">
+                  Valid Until <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="newValidUntil" name="newValidUntil" type="date" class="form-control"
+                       [ngModel]="newValidUntil()" (ngModelChange)="newValidUntil.set($event)"
+                       [disabled]="saving()" />
+              </div>
+
+              <!-- Agent picker (optional) -->
+              <div class="erp-field position-relative">
+                <label for="agentSearch">Agent (optional)</label>
+                <input id="agentSearch" name="agentSearch" type="search"
+                       class="form-control"
+                       placeholder="Search by name or code…"
+                       [ngModel]="agentSearchQ()"
+                       (ngModelChange)="onAgentSearchChange($event)"
+                       [disabled]="saving()"
+                       autocomplete="off"
+                       [attr.aria-expanded]="agentResults().length > 0"
+                       aria-haspopup="listbox"
+                       aria-autocomplete="list" />
+                @if (selectedAgent()) {
+                  <div class="d-flex align-items-center gap-1 mt-1">
+                    <i class="bi bi-check-circle-fill text-success small" aria-hidden="true"></i>
+                    <span class="small text-muted">{{ selectedAgent()!.label }}</span>
+                    <button type="button" class="btn btn-link btn-sm p-0 ms-1 text-danger"
+                            (click)="clearAgent()" aria-label="Clear agent selection">
+                      <i class="bi bi-x" aria-hidden="true"></i>
+                    </button>
+                  </div>
+                }
+                @if (agentResults().length > 0) {
+                  <ul class="list-group position-absolute shadow-sm mt-1 w-100" role="listbox"
+                      aria-label="Agent suggestions" style="z-index:1050;max-height:220px;overflow-y:auto;">
+                    @for (a of agentResults(); track a.uid) {
+                      <li class="list-group-item list-group-item-action small py-2"
+                          role="option" style="cursor:pointer"
+                          (click)="selectAgent(a)"
+                          (keydown.enter)="selectAgent(a)"
+                          tabindex="0">
+                        <strong>{{ a.code }}</strong> — {{ a.displayName }}
+                      </li>
+                    }
+                  </ul>
+                }
+              </div>
+
+              <!-- Notes -->
+              <div class="erp-field">
+                <label for="newNotes">Notes</label>
+                <input id="newNotes" name="newNotes" type="text" class="form-control"
+                       [ngModel]="newNotes()" (ngModelChange)="newNotes.set($event)"
+                       [disabled]="saving()" autocomplete="off" />
+              </div>
+            </div>
+
+            <div class="d-flex gap-2 align-items-center mt-3">
+              <button type="submit" class="btn btn-primary" [disabled]="saving()">
+                @if (saving()) {
+                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  Saving…
+                } @else {
+                  Create Quotation
+                }
+              </button>
+            </div>
+
+            @if (formError(); as msg) {
+              <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+            }
+          </form>
         </div>
-
-        @if (formError(); as msg) {
-          <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-        }
-      </form>
+      </div>
     }
 
     <!-- List states -->
     @switch (state()) {
       @case ('loading') {
-        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading quotations…
         </p>
       }
       @case ('error') {
-        <p class="state text-danger" role="alert">
+        <p class="text-danger" role="alert">
           <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
           Could not load quotations. Please try again.
         </p>
       }
       @case ('forbidden') {
-        <p class="state text-muted d-flex align-items-center gap-2">
-          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock"></i>
           You don't have permission to view quotations.
-        </p>
+        </div>
       }
       @default {
         @if (isEmpty()) {
-          <p class="state text-muted">No quotations yet. Create one above.</p>
+          <div class="erp-empty">
+            <i class="bi bi-file-earmark-text"></i>
+            No quotations yet. Create one above.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Quotations</caption>
               <thead>
                 <tr>
@@ -225,20 +231,27 @@
                   <th scope="col">Status</th>
                   <th scope="col">Quote Date</th>
                   <th scope="col">Valid Until</th>
-                  <th scope="col" class="text-end">Total (gross)</th>
+                  <th scope="col" class="num">Total (gross)</th>
                   <th scope="col"><span class="visually-hidden">Actions</span></th>
                 </tr>
               </thead>
               <tbody>
                 @for (q of rows(); track q.uid) {
                   <tr>
-                    <td class="font-monospace">{{ quoteLabel(q) }}</td>
+                    <td class="mono">{{ quoteLabel(q) }}</td>
                     <td>
-                      <span class="badge" [class]="statusBadgeClass(q.status)">{{ q.status }}</span>
+                      <span class="status-tag"
+                            [class.status-tag--ok]="q.status === 'ACCEPTED'"
+                            [class.status-tag--info]="q.status === 'SENT'"
+                            [class.status-tag--warn]="q.status === 'DRAFT'"
+                            [class.status-tag--danger]="q.status === 'REJECTED'"
+                            [class.status-tag--neutral]="q.status === 'EXPIRED'">
+                        {{ q.status }}
+                      </span>
                     </td>
-                    <td class="small text-muted">{{ q.quoteDate }}</td>
-                    <td class="small text-muted">{{ q.validUntil }}</td>
-                    <td class="text-end font-monospace">{{ q.currency }} {{ +q.grossTotalAmount | number:'1.2-2' }}</td>
+                    <td>{{ q.quoteDate }}</td>
+                    <td>{{ q.validUntil }}</td>
+                    <td class="num">{{ q.currency }} {{ +q.grossTotalAmount | number:'1.2-2' }}</td>
                     <td>
                       <a class="btn btn-sm btn-outline-primary"
                          [routerLink]="['/admin/quotations/uid', q.uid]"

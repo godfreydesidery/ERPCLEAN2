@@ -4,7 +4,7 @@ import { Component, computed, inject, input, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
-import { DeliveryDto, DeliveryStatus, SalesReturnDto } from '../models/sales-orders.model';
+import { DeliveryDto, SalesReturnDto } from '../models/sales-orders.model';
 import { SalesInvoiceDto } from '../models/sales.model';
 import { SalesOrdersService } from './sales-orders.service';
 
@@ -134,14 +134,6 @@ export class DeliveryDetailComponent {
         this.invoicing.set(false);
       },
     });
-  }
-
-  // ── Display helpers ────────────────────────────────────────────────────────────
-
-  statusBadgeClass(status: DeliveryStatus): string {
-    if (status === 'CONFIRMED') return 'text-bg-success';
-    if (status === 'CANCELLED') return 'text-bg-danger';
-    return 'text-bg-warning'; // DRAFT
   }
 
   private messageFrom(err: unknown, fallback: string): string {

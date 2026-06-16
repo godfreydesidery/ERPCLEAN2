@@ -109,16 +109,6 @@ export class AuditListComponent {
     return uid ? uid.slice(0, 8) + '…' : '—';
   }
 
-  actionBadgeClass(action: string): string {
-    if (action.startsWith('LOGIN.'))   return 'text-bg-info';
-    if (action.startsWith('USER.'))    return 'text-bg-primary';
-    if (action.startsWith('ROLE.'))    return 'text-bg-warning';
-    if (action.startsWith('BRANCH.'))  return 'text-bg-secondary';
-    if (action.startsWith('ACCOUNT.')) return 'text-bg-danger';
-    if (action.startsWith('ROOT.'))    return 'text-bg-dark';
-    return 'text-bg-light border';
-  }
-
   // ── Private ───────────────────────────────────────────────────────────────
 
   private load(page: number): void {

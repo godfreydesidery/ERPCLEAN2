@@ -1,7 +1,7 @@
 <section class="admin-page">
   <header class="page-head">
-    <h1 class="h4 mb-1">Tax Rates</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
+    <h1>Tax Rates</h1>
+    <p class="subtitle">
       <i class="bi bi-percent me-1" aria-hidden="true"></i>
       Manage VAT rates for each tax band.
     </p>
@@ -22,8 +22,8 @@
     }
     @default {
       @if (companies().length > 1) {
-        <div class="mb-3" style="max-width:320px">
-          <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+        <div class="mb-3 erp-field" style="max-width:320px">
+          <label for="companyPicker">Company</label>
           <select id="companyPicker" name="companyPicker" class="form-select"
                   [ngModel]="selectedCompanyId()"
                   (ngModelChange)="onCompanyChange($event)">
@@ -37,36 +37,38 @@
   }
 
   @if (selectedCompanyId()) {
-    <!-- List states -->
     @switch (state()) {
       @case ('loading') {
-        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading tax rates…
         </p>
       }
       @case ('error') {
-        <p class="state text-danger" role="alert">
+        <p class="text-danger" role="alert">
           <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
           Could not load tax rates. Please try again.
         </p>
       }
       @case ('forbidden') {
-        <p class="state text-muted d-flex align-items-center gap-2">
-          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock"></i>
           You don't have permission to view tax rates.
-        </p>
+        </div>
       }
       @default {
         @if (isEmpty()) {
-          <p class="state text-muted">No tax rates found for this company.</p>
+          <div class="erp-empty">
+            <i class="bi bi-percent"></i>
+            No tax rates found for this company.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="sr-only">Tax rates in this company</caption>
               <thead>
                 <tr>
                   <th scope="col">VAT Band</th>
-                  <th scope="col" class="text-end">Rate (%)</th>
+                  <th scope="col" class="num">Rate (%)</th>
                   @if (canManage()) {
                     <th scope="col"><span class="sr-only">Actions</span></th>
                   }
@@ -76,17 +78,19 @@
                 @for (tr of rows(); track tr.uid) {
                   <tr>
                     <td>
-                      <span class="badge" [class]="vatStatusBadgeClass(tr.vatStatus)">
+                      <span class="status-tag"
+                            [class.status-tag--info]="tr.vatStatus === 'STANDARD' || tr.vatStatus === 'ZERO_RATED'"
+                            [class.status-tag--neutral]="tr.vatStatus === 'EXEMPT'">
                         {{ vatStatusLabel(tr.vatStatus) }}
                       </span>
                     </td>
-                    <td class="text-end">
+                    <td class="num">
                       @if (editingUid() === tr.uid) {
                         <form class="d-flex gap-2 align-items-center justify-content-end"
                               (ngSubmit)="saveEdit(tr)" aria-label="Edit tax rate">
                           <label class="sr-only" [for]="'editRate-' + tr.uid">Rate</label>
                           <input [id]="'editRate-' + tr.uid" name="editRate" type="text"
-                                 class="form-control form-control-sm text-end"
+                                 class="form-control form-control-sm"
                                  [ngModel]="editRate()" (ngModelChange)="editRate.set($event)"
                                  [disabled]="editSaving()" style="max-width:100px"
                                  autocomplete="off"
@@ -112,7 +116,7 @@
                           <p class="text-danger small mt-1 mb-0 text-end" role="alert">{{ msg }}</p>
                         }
                       } @else {
-                        <span class="font-monospace">{{ tr.rate }}</span>
+                        <span class="mono">{{ tr.rate }}</span>
                       }
                     </td>
                     @if (canManage()) {

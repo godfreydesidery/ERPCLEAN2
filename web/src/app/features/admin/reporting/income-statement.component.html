@@ -1,18 +1,18 @@
 <section class="admin-page">
   <header class="page-head">
-    <h1 class="h4 mb-1">
+    <h1>
       <i class="bi bi-bar-chart-line me-2" aria-hidden="true"></i>Income Statement / P&amp;L
     </h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
+    <p class="subtitle">
       Revenue, gross profit, and net profit for a selected period — with a comparative.
     </p>
   </header>
 
   @if (!canView()) {
-    <p class="text-muted d-flex align-items-center gap-2 mt-3" role="alert">
+    <div class="erp-empty" role="alert">
       <i class="bi bi-shield-lock" aria-hidden="true"></i>
       You don't have permission to view the Income Statement.
-    </p>
+    </div>
   } @else {
 
     <!-- Company selector + period form -->
@@ -28,8 +28,11 @@
         </p>
       }
       @default {
-        <div class="card mb-3">
-          <div class="card-body">
+        <div class="erp-card mb-3">
+          <div class="erp-card__head">
+            <h2>Filters</h2>
+          </div>
+          <div class="erp-card__body">
             <div class="row g-3 align-items-end">
 
               @if (companies().length > 1) {
@@ -101,27 +104,29 @@
         </p>
       }
       @case ('forbidden') {
-        <p class="text-muted d-flex align-items-center gap-2">
+        <div class="erp-empty">
           <i class="bi bi-shield-lock" aria-hidden="true"></i>
           You don't have permission to view this statement.
-        </p>
+        </div>
       }
       @default {
         @if (isEmpty()) {
-          <p class="text-muted">Select a company and period, then click Run.</p>
+          <div class="erp-empty">
+            <i class="bi bi-bar-chart-line" aria-hidden="true"></i>
+            Select a company and period, then click Run.
+          </div>
         }
 
         @if (statement(); as s) {
 
           <!-- Header + export toolbar -->
-          <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
-            <div>
-              <div class="fw-semibold">{{ s.header.companyName }}</div>
-              <div class="text-muted small">{{ s.header.periodLabel }}</div>
-              <div class="text-muted small">Currency: {{ s.header.currency }}</div>
+          <div class="erp-page-head mb-3">
+            <div class="erp-page-head__titles">
+              <h1>{{ s.header.companyName }}</h1>
+              <p class="subtitle">{{ s.header.periodLabel }} · {{ s.header.currency }}</p>
             </div>
             @if (canExport()) {
-              <div class="d-flex gap-2">
+              <div class="erp-page-head__actions">
                 <button type="button" class="btn btn-sm btn-outline-secondary"
                         (click)="export('PDF')" [disabled]="exporting()">
                   <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>PDF
@@ -138,45 +143,51 @@
             }
           </div>
 
-          <!-- Reconciliation bar -->
+          <!-- Reconciliation indicator -->
           @if (s.reconciliation.ties) {
-            <div class="alert alert-success d-flex align-items-center gap-2 mb-3" role="status">
-              <i class="bi bi-check-circle-fill fs-5" aria-hidden="true"></i>
-              <strong>Reconciled</strong> — net profit equals the period INCOME − EXPENSE GL movement.
-            </div>
+            <output class="d-flex align-items-center gap-2 mb-3">
+              <span class="status-tag status-tag--ok">
+                <span class="status-tag__dot"></span>Reconciled
+              </span>
+              <span class="text-muted small">Net profit equals the period INCOME − EXPENSE GL movement.</span>
+            </output>
           } @else {
-            <div class="alert alert-danger d-flex align-items-center gap-2 mb-3" role="alert">
-              <i class="bi bi-exclamation-triangle-fill fs-5" aria-hidden="true"></i>
-              <strong>Data integrity alarm</strong> — {{ s.reconciliation.label }}
-              (difference: {{ fmtMoney(s.reconciliation.difference.current) }}).
-              Investigate the books.
+            <div class="d-flex align-items-center gap-2 mb-3" role="alert">
+              <span class="status-tag status-tag--danger">
+                <span class="status-tag__dot"></span>Data Integrity Alarm
+              </span>
+              <span class="text-muted small">
+                {{ s.reconciliation.label }}
+                (difference: {{ fmtMoney(s.reconciliation.difference.current) }}).
+                Investigate the books.
+              </span>
             </div>
           }
 
           <!-- Statement table -->
-          <div class="table-responsive">
-            <table class="table table-sm align-middle bg-white stmt-grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table stmt-grid">
               <caption class="visually-hidden">Income Statement</caption>
               <thead>
                 <tr>
                   <th scope="col" class="col-code">Code</th>
                   <th scope="col">Account</th>
-                  <th scope="col" class="text-end">{{ s.header.periodLabel }}</th>
-                  <th scope="col" class="text-end text-muted">{{ s.header.comparativeLabel }}</th>
+                  <th scope="col" class="num">{{ s.header.periodLabel }}</th>
+                  <th scope="col" class="num text-muted">{{ s.header.comparativeLabel }}</th>
                 </tr>
               </thead>
               <tbody>
 
                 @for (section of s.sections; track section.sectionKey) {
                   <!-- Section header -->
-                  <tr class="table-light">
+                  <tr class="section-head-row">
                     <td colspan="4" class="fw-semibold small text-uppercase text-muted">
                       {{ section.title }}
                     </td>
                   </tr>
                   @for (line of section.lines; track (line.accountCode ?? line.accountName)) {
                     <tr>
-                      <td class="font-monospace small ps-4">{{ line.accountCode ?? '' }}</td>
+                      <td class="mono small ps-4">{{ line.accountCode ?? '' }}</td>
                       <td class="small">
                         @if (line.accountUid) {
                           <a [routerLink]="['/admin/reporting/account-ledger']"
@@ -188,14 +199,14 @@
                           {{ line.accountName }}
                         }
                       </td>
-                      <td class="text-end font-monospace small">
+                      <td class="num small">
                         @if (+(line.amounts.current ?? 0) !== 0) {
                           {{ fmtMoney(line.amounts.current) }}
                         } @else {
                           <span class="text-muted">—</span>
                         }
                       </td>
-                      <td class="text-end font-monospace small text-muted">
+                      <td class="num small text-muted">
                         @if (+(line.amounts.comparative ?? 0) !== 0) {
                           {{ fmtMoney(line.amounts.comparative) }}
                         } @else {
@@ -205,29 +216,29 @@
                     </tr>
                   }
                   <!-- Section subtotal -->
-                  <tr class="fw-semibold border-top">
+                  <tr class="subtotal-row fw-semibold">
                     <td colspan="2" class="ps-4 small">{{ section.title }} total</td>
-                    <td class="text-end font-monospace small">{{ fmtMoney(section.subtotal.current) }}</td>
-                    <td class="text-end font-monospace small text-muted">{{ fmtMoney(section.subtotal.comparative) }}</td>
+                    <td class="num small">{{ fmtMoney(section.subtotal.current) }}</td>
+                    <td class="num small text-muted">{{ fmtMoney(section.subtotal.comparative) }}</td>
                   </tr>
                 }
 
               </tbody>
               <tfoot>
                 <!-- Gross profit -->
-                <tr class="table-secondary fw-semibold">
+                <tr class="total-row fw-semibold">
                   <td colspan="2">Gross Profit</td>
-                  <td class="text-end font-monospace">{{ fmtMoney(s.grossProfit.current) }}</td>
-                  <td class="text-end font-monospace text-muted">{{ fmtMoney(s.grossProfit.comparative) }}</td>
+                  <td class="num">{{ fmtMoney(s.grossProfit.current) }}</td>
+                  <td class="num text-muted">{{ fmtMoney(s.grossProfit.comparative) }}</td>
                 </tr>
                 <!-- Net profit -->
-                <tr class="table-dark fw-bold">
+                <tr class="grand-total-row fw-bold">
                   <td colspan="2">Net Profit</td>
-                  <td class="text-end font-monospace"
+                  <td class="num"
                       [class.text-danger]="+(s.netProfit.current ?? 0) < 0">
                     {{ fmtMoney(s.netProfit.current) }}
                   </td>
-                  <td class="text-end font-monospace text-muted"
+                  <td class="num text-muted"
                       [class.text-danger]="+(s.netProfit.comparative ?? 0) < 0">
                     {{ fmtMoney(s.netProfit.comparative) }}
                   </td>

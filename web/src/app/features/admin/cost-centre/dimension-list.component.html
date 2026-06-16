@@ -1,10 +1,12 @@
 <section class="admin-page">
-  <header class="page-head">
-    <h1 class="h4 mb-1">Cost Centre Dimensions</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
-      <i class="bi bi-diagram-3 me-1" aria-hidden="true"></i>
-      Dimension types (Cost Centre, Department, etc.) seeded per company. Toggle mandatory to require a value on every posting.
-    </p>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>Cost Centre Dimensions</h1>
+      <p class="subtitle">
+        <i class="bi bi-diagram-3 me-1" aria-hidden="true"></i>
+        Dimension types (Cost Centre, Department, etc.) seeded per company. Toggle mandatory to require a value on every posting.
+      </p>
+    </div>
   </header>
 
   <!-- Company selector -->
@@ -37,8 +39,9 @@
   }
 
   @if (selectedCompanyId()) {
-    <div class="d-flex mb-3">
-      <a class="btn btn-sm btn-outline-secondary ms-auto"
+    <div class="erp-toolbar mb-3">
+      <span class="erp-toolbar__spacer"></span>
+      <a class="btn btn-sm btn-outline-secondary"
          routerLink="/admin/cost-centre/values"
          aria-label="Go to dimension values">
         <i class="bi bi-list-ul me-1" aria-hidden="true"></i>
@@ -48,28 +51,30 @@
 
     @switch (state()) {
       @case ('loading') {
-        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading dimensions…
         </p>
       }
       @case ('error') {
-        <p class="state text-danger" role="alert">
+        <p class="text-danger" role="alert">
           <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
           Could not load dimensions. Please try again.
         </p>
       }
       @case ('forbidden') {
-        <p class="state text-muted d-flex align-items-center gap-2">
-          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock"></i>
           You don't have permission to view dimensions.
-        </p>
+        </div>
       }
       @default {
         @if (isEmpty()) {
-          <p class="state text-muted">No dimensions found for this company.</p>
+          <div class="erp-empty">
+            <i class="bi bi-diagram-3"></i> No dimensions found for this company.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Dimension types</caption>
               <thead>
                 <tr>
@@ -85,22 +90,29 @@
               <tbody>
                 @for (dim of rows(); track dim.uid) {
                   <tr>
-                    <td class="font-monospace">{{ dim.code }}</td>
+                    <td class="mono">{{ dim.code }}</td>
                     <td>{{ dim.name }}</td>
-                    <td><span class="badge text-bg-info">{{ dim.slot }}</span></td>
                     <td>
-                      <span class="badge" [class]="statusBadgeClass(dim.status)">{{ dim.status }}</span>
+                      <span class="status-tag status-tag--info">{{ dim.slot }}</span>
+                    </td>
+                    <td>
+                      <span class="status-tag"
+                            [class.status-tag--ok]="dim.status === 'ACTIVE'"
+                            [class.status-tag--neutral]="dim.status === 'INACTIVE' || dim.status === 'ARCHIVED'"
+                            [class.status-tag--warn]="dim.status !== 'ACTIVE' && dim.status !== 'INACTIVE' && dim.status !== 'ARCHIVED'">
+                        {{ dim.status }}
+                      </span>
                     </td>
                     <td>
                       @if (dim.mandatory) {
-                        <span class="badge text-bg-warning">Mandatory</span>
+                        <span class="status-tag status-tag--warn">Mandatory</span>
                       } @else {
                         <span class="text-muted small">Optional</span>
                       }
                     </td>
                     <td>
                       @if (dim.builtIn) {
-                        <span role="img" aria-label="Built-in" title="Built-in"><i class="bi bi-lock text-muted" aria-hidden="true"></i></span>
+                        <i class="bi bi-lock text-muted" aria-label="Built-in" title="Built-in"></i>
                       }
                     </td>
                     <td>

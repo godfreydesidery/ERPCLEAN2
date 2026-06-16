@@ -1,13 +1,17 @@
 <section class="admin-page">
-  <header class="page-head">
-    <h1 class="h4 mb-1">
-      <i class="bi bi-receipt me-2" aria-hidden="true"></i>
-      AR Receipt
-      @if (entity(); as r) { — {{ r.receiptNumber }} }
-    </h1>
-    <a routerLink="/admin/ar/receipts" class="btn btn-outline-secondary btn-sm mt-2">
-      <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Receipts
-    </a>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>
+        <i class="bi bi-receipt me-2" aria-hidden="true"></i>
+        AR Receipt
+        @if (entity(); as r) { — {{ r.receiptNumber }} }
+      </h1>
+    </div>
+    <div class="erp-page-head__actions">
+      <a routerLink="/admin/ar/receipts" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Receipts
+      </a>
+    </div>
   </header>
 
   @switch (state()) {
@@ -29,41 +33,53 @@
     }
     @default {
       @if (entity(); as r) {
-        <dl class="row mt-3">
-          <dt class="col-sm-3">Receipt Number</dt><dd class="col-sm-9">{{ r.receiptNumber }}</dd>
-          <dt class="col-sm-3">Date</dt><dd class="col-sm-9">{{ r.receiptDate }}</dd>
-          <dt class="col-sm-3">Amount</dt>
-          <dd class="col-sm-9 font-monospace">{{ r.currency }} {{ fmtMoney(r.amount) }}</dd>
-          <dt class="col-sm-3">Unallocated</dt>
-          <dd class="col-sm-9 font-monospace">{{ fmtMoney(r.unallocatedAmount) }}</dd>
-          <dt class="col-sm-3">Tender Type</dt><dd class="col-sm-9">{{ r.tenderType }}</dd>
-        </dl>
+        <div class="erp-card mt-3" style="max-width:560px">
+          <div class="erp-card__head">
+            <h2>Receipt Details</h2>
+          </div>
+          <div class="erp-card__body">
+            <dl class="row mb-0">
+              <dt class="col-sm-4">Receipt Number</dt>
+              <dd class="col-sm-8 mono fw-semibold">{{ r.receiptNumber }}</dd>
+              <dt class="col-sm-4">Date</dt>
+              <dd class="col-sm-8">{{ r.receiptDate }}</dd>
+              <dt class="col-sm-4">Amount</dt>
+              <dd class="col-sm-8 mono">{{ r.currency }} {{ fmtMoney(r.amount) }}</dd>
+              <dt class="col-sm-4">Unallocated</dt>
+              <dd class="col-sm-8 mono">{{ fmtMoney(r.unallocatedAmount) }}</dd>
+              <dt class="col-sm-4">Tender Type</dt>
+              <dd class="col-sm-8">{{ r.tenderType }}</dd>
+            </dl>
+          </div>
+        </div>
 
         @if (r.allocations.length > 0) {
-          <h2 class="h6 mt-3">Allocations</h2>
-          <table class="table table-sm table-bordered align-middle">
-            <caption class="visually-hidden">Receipt allocations</caption>
-            <thead class="table-light">
-              <tr>
-                <th scope="col">Invoice</th>
-                <th scope="col" class="text-end">Allocated Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (a of r.allocations; track a.arInvoiceUid) {
+          <h2 class="erp-section-title mt-4">Allocations</h2>
+          <div class="erp-table-wrap" style="max-width:560px">
+            <table class="erp-table">
+              <caption class="visually-hidden">Receipt allocations</caption>
+              <thead>
                 <tr>
-                  <td>
-                    <a [routerLink]="['/admin/ar/invoices']"
-                       [queryParams]="{ invoiceUid: a.arInvoiceUid }"
-                       class="text-decoration-none small">
-                      <i class="bi bi-cash-coin me-1" aria-hidden="true"></i>View Invoice
-                    </a>
-                  </td>
-                  <td class="text-end font-monospace">{{ fmtMoney(a.allocatedAmount) }}</td>
+                  <th scope="col">Invoice</th>
+                  <th scope="col" class="num">Allocated Amount</th>
                 </tr>
-              }
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                @for (a of r.allocations; track a.arInvoiceUid) {
+                  <tr>
+                    <td>
+                      <a [routerLink]="['/admin/ar/invoices']"
+                         [queryParams]="{ invoiceUid: a.arInvoiceUid }"
+                         class="text-decoration-none small">
+                        <i class="bi bi-cash-coin me-1" aria-hidden="true"></i>View Invoice
+                      </a>
+                    </td>
+                    <td class="num">{{ fmtMoney(a.allocatedAmount) }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
         }
       }
     }

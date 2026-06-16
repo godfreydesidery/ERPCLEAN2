@@ -1,73 +1,86 @@
 <section class="admin-page">
-  <header class="page-head">
-    <h1 class="h4 mb-1">POS Session</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
-      <i class="bi bi-shop me-1" aria-hidden="true"></i>
-      Session details, payouts, close and reconcile.
-    </p>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>POS Session</h1>
+      <p class="subtitle">
+        <i class="bi bi-shop me-1" aria-hidden="true"></i>
+        Session details, payouts, close and reconcile.
+      </p>
+    </div>
   </header>
 
   @switch (state()) {
     @case ('loading') {
-      <output class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+      <output class="text-muted d-flex align-items-center gap-2">
         <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading session…
       </output>
     }
     @case ('error') {
-      <p class="state text-danger" role="alert">
+      <p class="text-danger" role="alert">
         <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
         Could not load session. Please try again.
       </p>
     }
     @case ('forbidden') {
-      <p class="state text-muted">
+      <p class="text-muted">
         <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>
         You don't have permission to view this session.
       </p>
     }
     @default {
       @if (entity(); as s) {
-        <!-- Session header -->
-        <div class="card mb-3">
-          <div class="card-body">
-            <div class="d-flex flex-wrap gap-3 align-items-start">
-              <div>
-                <p class="small text-muted mb-0">Status</p>
-                <span class="badge fs-6" [class]="statusBadgeClass(s.status)">{{ s.status }}</span>
+
+        <!-- Session KPI header -->
+        <div class="erp-card mb-3">
+          <div class="erp-card__head">
+            <h2>Session Overview</h2>
+            <span class="spacer"></span>
+            <span class="status-tag"
+                  [class.status-tag--ok]="s.status === 'OPEN' || s.status === 'RECONCILED'"
+                  [class.status-tag--neutral]="s.status === 'CLOSED'">
+              <span class="status-tag__dot"></span>{{ s.status }}
+            </span>
+          </div>
+          <div class="erp-card__body">
+            <div class="d-flex flex-wrap gap-3">
+              <div class="erp-kpi">
+                <span class="erp-kpi__label">Opened At</span>
+                <span class="erp-kpi__value">{{ s.openedAt ?? '—' }}</span>
               </div>
-              <div>
-                <p class="small text-muted mb-0">Opened At</p>
-                <p class="mb-0">{{ s.openedAt ?? '—' }}</p>
+              <div class="erp-kpi">
+                <span class="erp-kpi__label">Closed At</span>
+                <span class="erp-kpi__value">{{ s.closedAt ?? '—' }}</span>
               </div>
-              <div>
-                <p class="small text-muted mb-0">Closed At</p>
-                <p class="mb-0">{{ s.closedAt ?? '—' }}</p>
+              <div class="erp-kpi">
+                <span class="erp-kpi__label">Reconciled At</span>
+                <span class="erp-kpi__value">{{ s.reconciledAt ?? '—' }}</span>
               </div>
-              <div>
-                <p class="small text-muted mb-0">Reconciled At</p>
-                <p class="mb-0">{{ s.reconciledAt ?? '—' }}</p>
-              </div>
-              <div>
-                <p class="small text-muted mb-0">Opening Float</p>
-                <p class="mb-0 font-monospace">{{ +s.openingFloatAmount | number:'1.2-2' }}</p>
+              <div class="erp-kpi">
+                <span class="erp-kpi__label">Opening Float</span>
+                <span class="erp-kpi__value">{{ +s.openingFloatAmount | number:'1.2-2' }}</span>
               </div>
               @if (s.countedCashAmount) {
-                <div>
-                  <p class="small text-muted mb-0">Counted Cash</p>
-                  <p class="mb-0 font-monospace">{{ +s.countedCashAmount | number:'1.2-2' }}</p>
+                <div class="erp-kpi">
+                  <span class="erp-kpi__label">Counted Cash</span>
+                  <span class="erp-kpi__value">{{ +s.countedCashAmount | number:'1.2-2' }}</span>
                 </div>
               }
               @if (s.expectedCashAmount) {
-                <div>
-                  <p class="small text-muted mb-0">Expected Cash</p>
-                  <p class="mb-0 font-monospace">{{ +s.expectedCashAmount | number:'1.2-2' }}</p>
+                <div class="erp-kpi">
+                  <span class="erp-kpi__label">Expected Cash</span>
+                  <span class="erp-kpi__value">{{ +s.expectedCashAmount | number:'1.2-2' }}</span>
                 </div>
               }
               @if (s.varianceAmount) {
-                <div>
-                  <p class="small text-muted mb-0">Variance</p>
-                  <span class="badge" [class]="varianceBadgeClass(s.varianceAmount)">
-                    {{ +s.varianceAmount | number:'1.2-2' }}
+                <div class="erp-kpi">
+                  <span class="erp-kpi__label">Variance</span>
+                  <span class="erp-kpi__value">
+                    <span class="status-tag"
+                          [class.status-tag--ok]="+s.varianceAmount === 0"
+                          [class.status-tag--info]="+s.varianceAmount > 0"
+                          [class.status-tag--danger]="+s.varianceAmount < 0">
+                      {{ +s.varianceAmount | number:'1.2-2' }}
+                    </span>
                   </span>
                 </div>
               }
@@ -79,20 +92,19 @@
         </div>
 
         <!-- X-Read panel -->
-        <div class="card mb-3">
-          <div class="card-header d-flex justify-content-between align-items-center">
-            <h2 class="h6 mb-0">
-              <i class="bi bi-receipt me-1" aria-hidden="true"></i>X-Read (Live Totals)
-            </h2>
+        <div class="erp-card mb-3">
+          <div class="erp-card__head">
+            <h2><i class="bi bi-receipt me-1" aria-hidden="true"></i>X-Read (Live Totals)</h2>
+            <span class="spacer"></span>
             <button type="button" class="btn btn-sm btn-outline-secondary"
                     (click)="loadXRead(s.uid)" aria-label="Refresh X-read">
               <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
             </button>
           </div>
-          <div class="card-body">
+          <div class="erp-card__body">
             @switch (xReadState()) {
               @case ('loading') {
-                <output class="text-muted small d-flex gap-2 align-items-center" aria-live="polite">
+                <output class="text-muted small d-flex gap-2 align-items-center">
                   <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
                 </output>
               }
@@ -119,13 +131,13 @@
 
         <!-- Z-Read panel (shown after reconcile) -->
         @if (zRead(); as z) {
-          <div class="card mb-3 border-secondary">
-            <div class="card-header bg-secondary text-white">
-              <h2 class="h6 mb-0">
-                <i class="bi bi-check2-circle me-1" aria-hidden="true"></i>Z-Read (Reconciliation)
-              </h2>
+          <div class="erp-card mb-3">
+            <div class="erp-card__head">
+              <h2><i class="bi bi-check2-circle me-1" aria-hidden="true"></i>Z-Read (Reconciliation)</h2>
+              <span class="spacer"></span>
+              <span class="status-tag status-tag--neutral">Final</span>
             </div>
-            <div class="card-body">
+            <div class="erp-card__body">
               <dl class="row mb-0">
                 <dt class="col-sm-4 text-muted">Opening Float</dt>
                 <dd class="col-sm-8 font-monospace">{{ +z.openingFloatAmount | number:'1.2-2' }}</dd>
@@ -139,7 +151,10 @@
                 <dd class="col-sm-8 font-monospace">{{ +z.countedCashAmount | number:'1.2-2' }}</dd>
                 <dt class="col-sm-4 text-muted">Variance</dt>
                 <dd class="col-sm-8">
-                  <span class="badge" [class]="varianceBadgeClass(z.varianceAmount)">
+                  <span class="status-tag"
+                        [class.status-tag--ok]="+z.varianceAmount === 0"
+                        [class.status-tag--info]="+z.varianceAmount > 0"
+                        [class.status-tag--danger]="+z.varianceAmount < 0">
                     {{ +z.varianceAmount | number:'1.2-2' }}
                   </span>
                 </dd>
@@ -154,7 +169,7 @@
         <div class="d-flex flex-wrap gap-2 mb-3">
           @if (s.status === 'OPEN') {
             <!-- Payout -->
-            <button type="button" class="btn btn-outline-warning"
+            <button type="button" class="btn btn-outline-secondary"
                     (click)="togglePayoutForm()"
                     [attr.aria-expanded]="showPayoutForm()"
                     aria-controls="payoutForm">
@@ -173,7 +188,7 @@
           }
 
           @if (s.status === 'CLOSED' && canReconcile()) {
-            <button type="button" class="btn btn-outline-secondary"
+            <button type="button" class="btn btn-outline-primary"
                     (click)="toggleReconcileForm()"
                     [attr.aria-expanded]="showReconcileForm()"
                     aria-controls="reconcileForm">
@@ -184,123 +199,132 @@
 
         <!-- Payout form -->
         @if (showPayoutForm()) {
-          <form id="payoutForm" class="create-form card card-body mb-3"
-                (ngSubmit)="recordPayout()" aria-label="Record payout">
-            <h2 class="h6 mb-3">Record Payout</h2>
-            <div class="row g-2 align-items-end mb-2">
-              <div class="col-sm-3">
-                <label class="form-label small text-muted mb-1" for="payoutTypeField">
-                  Type <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <select id="payoutTypeField" name="payoutTypeField" class="form-select"
-                        [ngModel]="payoutType()" (ngModelChange)="payoutType.set($event)"
-                        [disabled]="paying()">
-                  @for (pt of payoutTypes; track pt) {
-                    <option [value]="pt">{{ pt }}</option>
-                  }
-                </select>
-              </div>
-              <div class="col-sm-3">
-                <label class="form-label small text-muted mb-1" for="payoutAmountField">
-                  Amount <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <input id="payoutAmountField" name="payoutAmountField" type="number"
-                       class="form-control" min="0.01" step="0.01"
-                       [ngModel]="payoutAmount()" (ngModelChange)="payoutAmount.set($event)"
-                       [disabled]="paying()" />
-              </div>
-              <div class="col-sm-4">
-                <label class="form-label small text-muted mb-1" for="payoutReasonField">
-                  Reason <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <input id="payoutReasonField" name="payoutReasonField" type="text"
-                       class="form-control"
-                       [ngModel]="payoutReason()" (ngModelChange)="payoutReason.set($event)"
-                       [disabled]="paying()" autocomplete="off" />
-              </div>
-              <div class="col-sm-2 d-flex align-items-end">
-                <button type="submit" class="btn btn-warning w-100" [disabled]="paying()">
+          <div class="erp-card mb-3">
+            <div class="erp-card__head">
+              <h2>Record Payout</h2>
+            </div>
+            <div class="erp-card__body">
+              <form id="payoutForm" (ngSubmit)="recordPayout()" aria-label="Record payout">
+                <div class="erp-form-grid">
+                  <div class="erp-field">
+                    <label class="form-label" for="payoutTypeField">
+                      Type <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <select id="payoutTypeField" name="payoutTypeField" class="form-select"
+                            [ngModel]="payoutType()" (ngModelChange)="payoutType.set($event)"
+                            [disabled]="paying()">
+                      @for (pt of payoutTypes; track pt) {
+                        <option [value]="pt">{{ pt }}</option>
+                      }
+                    </select>
+                  </div>
+                  <div class="erp-field">
+                    <label class="form-label" for="payoutAmountField">
+                      Amount <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <input id="payoutAmountField" name="payoutAmountField" type="number"
+                           class="form-control" min="0.01" step="0.01"
+                           [ngModel]="payoutAmount()" (ngModelChange)="payoutAmount.set($event)"
+                           [disabled]="paying()" />
+                  </div>
+                  <div class="erp-field full">
+                    <label class="form-label" for="payoutReasonField">
+                      Reason <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <input id="payoutReasonField" name="payoutReasonField" type="text"
+                           class="form-control"
+                           [ngModel]="payoutReason()" (ngModelChange)="payoutReason.set($event)"
+                           [disabled]="paying()" autocomplete="off" />
+                  </div>
+                </div>
+                @if (payoutError(); as msg) {
+                  <p class="text-danger small mt-2 mb-2" role="alert">{{ msg }}</p>
+                }
+                <button type="submit" class="btn btn-primary" [disabled]="paying()">
                   @if (paying()) {
-                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
                   } @else {
                     Record
                   }
                 </button>
-              </div>
+              </form>
             </div>
-            @if (payoutError(); as msg) {
-              <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-            }
-          </form>
+          </div>
         }
 
         <!-- Close form -->
         @if (showCloseForm()) {
-          <form id="closeForm" class="create-form card card-body mb-3"
-                (ngSubmit)="closeSession()" aria-label="Close session">
-            <h2 class="h6 mb-3">Close Session</h2>
-            <div class="row g-2 align-items-end mb-2">
-              <div class="col-sm-3">
-                <label class="form-label small text-muted mb-1" for="countedCashField">
-                  Counted Cash <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <input id="countedCashField" name="countedCashField" type="number"
-                       class="form-control" min="0" step="0.01"
-                       [ngModel]="countedCash()" (ngModelChange)="countedCash.set($event)"
-                       [disabled]="closing()" />
-              </div>
-              <div class="col-sm-5">
-                <label class="form-label small text-muted mb-1" for="closeNotesField">Notes</label>
-                <input id="closeNotesField" name="closeNotesField" type="text"
-                       class="form-control"
-                       [ngModel]="closeNotes()" (ngModelChange)="closeNotes.set($event)"
-                       [disabled]="closing()" autocomplete="off" />
-              </div>
-              <div class="col-sm-4 d-flex align-items-end">
-                <button type="submit" class="btn btn-danger w-100" [disabled]="closing()">
+          <div class="erp-card mb-3">
+            <div class="erp-card__head">
+              <h2>Close Session</h2>
+            </div>
+            <div class="erp-card__body">
+              <form id="closeForm" (ngSubmit)="closeSession()" aria-label="Close session">
+                <div class="erp-form-grid">
+                  <div class="erp-field">
+                    <label class="form-label" for="countedCashField">
+                      Counted Cash <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <input id="countedCashField" name="countedCashField" type="number"
+                           class="form-control" min="0" step="0.01"
+                           [ngModel]="countedCash()" (ngModelChange)="countedCash.set($event)"
+                           [disabled]="closing()" />
+                  </div>
+                  <div class="erp-field">
+                    <label class="form-label" for="closeNotesField">Notes</label>
+                    <input id="closeNotesField" name="closeNotesField" type="text"
+                           class="form-control"
+                           [ngModel]="closeNotes()" (ngModelChange)="closeNotes.set($event)"
+                           [disabled]="closing()" autocomplete="off" />
+                  </div>
+                </div>
+                @if (closeError(); as msg) {
+                  <p class="text-danger small mt-2 mb-2" role="alert">{{ msg }}</p>
+                }
+                <button type="submit" class="btn btn-danger" [disabled]="closing()">
                   @if (closing()) {
-                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
                     Closing…
                   } @else {
                     Close Session
                   }
                 </button>
-              </div>
+              </form>
             </div>
-            @if (closeError(); as msg) {
-              <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-            }
-          </form>
+          </div>
         }
 
         <!-- Reconcile form -->
         @if (showReconcileForm()) {
-          <form id="reconcileForm" class="create-form card card-body mb-3"
-                (ngSubmit)="reconcile()" aria-label="Reconcile session">
-            <h2 class="h6 mb-3">Reconcile Session</h2>
-            <div class="row g-2 align-items-end mb-2">
-              <div class="col-sm-8">
-                <label class="form-label small text-muted mb-1" for="reconcileNotesField">Notes</label>
-                <input id="reconcileNotesField" name="reconcileNotesField" type="text"
-                       class="form-control"
-                       [ngModel]="reconcileNotes()" (ngModelChange)="reconcileNotes.set($event)"
-                       [disabled]="reconciling()" autocomplete="off" />
-              </div>
-              <div class="col-sm-4 d-flex align-items-end">
-                <button type="submit" class="btn btn-secondary w-100" [disabled]="reconciling()">
+          <div class="erp-card mb-3">
+            <div class="erp-card__head">
+              <h2>Reconcile Session</h2>
+            </div>
+            <div class="erp-card__body">
+              <form id="reconcileForm" (ngSubmit)="reconcile()" aria-label="Reconcile session">
+                <div class="erp-form-grid">
+                  <div class="erp-field full">
+                    <label class="form-label" for="reconcileNotesField">Notes</label>
+                    <input id="reconcileNotesField" name="reconcileNotesField" type="text"
+                           class="form-control"
+                           [ngModel]="reconcileNotes()" (ngModelChange)="reconcileNotes.set($event)"
+                           [disabled]="reconciling()" autocomplete="off" />
+                  </div>
+                </div>
+                @if (reconcileError(); as msg) {
+                  <p class="text-danger small mt-2 mb-2" role="alert">{{ msg }}</p>
+                }
+                <button type="submit" class="btn btn-primary" [disabled]="reconciling()">
                   @if (reconciling()) {
-                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
                     Reconciling…
                   } @else {
                     Reconcile
                   }
                 </button>
-              </div>
+              </form>
             </div>
-            @if (reconcileError(); as msg) {
-              <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-            }
-          </form>
+          </div>
         }
       }
     }

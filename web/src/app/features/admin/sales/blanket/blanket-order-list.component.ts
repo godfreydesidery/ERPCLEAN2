@@ -12,7 +12,7 @@ import { CompanyService } from '../../company/company.service';
 import { OrganisationService } from '../../organisation/organisation.service';
 import { BlanketOrderService } from './blanket-order.service';
 import type { BlanketOrderPage } from './blanket-order.service';
-import { BlanketOrderDto, BlanketStatus } from './blanket-order.model';
+import { BlanketOrderDto } from './blanket-order.model';
 import { PaginatorComponent } from '../../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
@@ -118,14 +118,5 @@ export class BlanketOrderListComponent {
 
   goToPage(page: number): void { this.load(page); }
 
-  // ── Display helpers ───────────────────────────────────────────────────────
-
-  statusBadgeClass(status: BlanketStatus): string {
-    switch (status) {
-      case 'ACTIVE':    return 'text-bg-success';
-      case 'EXHAUSTED': return 'text-bg-warning';
-      case 'CANCELLED': return 'text-bg-danger';
-      default:          return 'text-bg-secondary';
-    }
-  }
 }
+

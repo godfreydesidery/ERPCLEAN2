@@ -1,11 +1,9 @@
 <section class="admin-page">
-  <header class="page-head">
-    <h1 class="h4 mb-1">
-      <i class="bi bi-cash-coin me-2" aria-hidden="true"></i>Receivables — Open Items
-    </h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
-      AR invoices. Filter by customer or status; write off or credit from each row.
-    </p>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1><i class="bi bi-cash-coin me-2" aria-hidden="true"></i>Receivables — Open Items</h1>
+      <p class="subtitle">AR invoices. Filter by customer or status; write off or credit from each row.</p>
+    </div>
   </header>
 
   @if (!canView()) {
@@ -64,7 +62,7 @@
                   aria-label="Customer suggestions" style="top:100%; left:0">
                 @for (c of customerFilterResults(); track c.uid) {
                   <li class="list-group-item list-group-item-action py-1 small"
-                      role="option" style="cursor:pointer"
+                      role="option" aria-selected="false" style="cursor:pointer"
                       (click)="selectFilterCustomer(c)"
                       (keydown.enter)="selectFilterCustomer(c)"
                       tabindex="0">
@@ -95,28 +93,30 @@
     <!-- List states -->
     @switch (state()) {
       @case ('loading') {
-        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading invoices…
         </p>
       }
       @case ('error') {
-        <p class="state text-danger" role="alert">
+        <p class="text-danger" role="alert">
           <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
           Could not load AR invoices. Please try again.
         </p>
       }
       @case ('forbidden') {
-        <p class="state text-muted d-flex align-items-center gap-2">
+        <p class="text-muted d-flex align-items-center gap-2">
           <i class="bi bi-shield-lock" aria-hidden="true"></i>
           You don't have permission to view AR invoices.
         </p>
       }
       @default {
         @if (isEmpty()) {
-          <p class="state text-muted">No invoices found.</p>
+          <div class="erp-empty">
+            <i class="bi bi-inbox"></i> No invoices found.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">AR invoices</caption>
               <thead>
                 <tr>
@@ -124,8 +124,8 @@
                   <th scope="col">Customer</th>
                   <th scope="col">Invoice Date</th>
                   <th scope="col">Due Date</th>
-                  <th scope="col" class="text-end">Original</th>
-                  <th scope="col" class="text-end">Outstanding</th>
+                  <th scope="col" class="num">Original</th>
+                  <th scope="col" class="num">Outstanding</th>
                   <th scope="col">Currency</th>
                   <th scope="col">Status</th>
                   <th scope="col">Source</th>
@@ -135,23 +135,27 @@
               <tbody>
                 @for (inv of rows(); track inv.uid) {
                   <tr>
-                    <td class="font-monospace small fw-semibold">{{ inv.documentNo }}</td>
-                    <td class="small">{{ customerDisplay(inv.customerId) }}</td>
-                    <td class="small">{{ inv.invoiceDate }}</td>
-                    <td class="small">{{ inv.dueDate ?? '—' }}</td>
-                    <td class="text-end font-monospace small">{{ fmtMoney(inv.originalAmount) }}</td>
-                    <td class="text-end font-monospace small fw-semibold"
+                    <td class="mono fw-semibold">{{ inv.documentNo }}</td>
+                    <td>{{ customerDisplay(inv.customerId) }}</td>
+                    <td>{{ inv.invoiceDate }}</td>
+                    <td>{{ inv.dueDate ?? '—' }}</td>
+                    <td class="num">{{ fmtMoney(inv.originalAmount) }}</td>
+                    <td class="num fw-semibold"
                         [class.text-danger]="+(inv.outstandingAmount) > 0">
                       {{ fmtMoney(inv.outstandingAmount) }}
                     </td>
-                    <td class="small">{{ inv.currency }}</td>
+                    <td>{{ inv.currency }}</td>
                     <td>
-                      <span class="badge" [class]="statusBadgeClass(inv.status)">
+                      <span class="status-tag"
+                            [class.status-tag--warn]="inv.status === 'OPEN'"
+                            [class.status-tag--info]="inv.status === 'PARTIAL'"
+                            [class.status-tag--ok]="inv.status === 'PAID'"
+                            [class.status-tag--neutral]="inv.status === 'WRITTEN_OFF'">
                         {{ inv.status }}
                       </span>
                     </td>
-                    <td class="small text-muted">{{ inv.source }}</td>
-                    <td class="d-flex gap-1 flex-nowrap">
+                    <td class="text-muted">{{ inv.source }}</td>
+                    <td class="text-end text-nowrap">
                       @if (canWriteOff() && (inv.status === 'OPEN' || inv.status === 'PARTIAL')) {
                         <button type="button"
                                 class="btn btn-sm btn-outline-warning"

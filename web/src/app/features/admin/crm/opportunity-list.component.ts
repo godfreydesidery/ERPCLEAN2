@@ -14,7 +14,6 @@ import { OrganisationService } from '../organisation/organisation.service';
 import { CrmService, OpportunityPage } from './crm.service';
 import {
   OpportunityDto,
-  OpportunityStatus,
   PipelineStageDto,
 } from './models/crm.model';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
@@ -142,11 +141,4 @@ export class OpportunityListComponent {
     return this.stages().find((s) => s.id === stageId)?.name ?? stageId;
   }
 
-  statusBadgeClass(status: OpportunityStatus): string {
-    switch (status) {
-      case 'WON': return 'text-bg-success';
-      case 'LOST': return 'text-bg-danger';
-      default: return 'text-bg-primary'; // OPEN
-    }
-  }
 }

@@ -6,7 +6,7 @@ import { RouterLink } from '@angular/router';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import { HrPayrollService } from './hr-payroll.service';
-import { DisburseRequest, PayrollLineDto, PayrollRunDto, PayrollRunStatus } from './models/hr-payroll.model';
+import { DisburseRequest, PayrollLineDto, PayrollRunDto } from './models/hr-payroll.model';
 
 /**
  * Payroll run detail screen with full lifecycle actions:
@@ -206,17 +206,6 @@ export class PayrollRunDetailComponent {
         this.actionError.set(this.messageFrom(err, 'Could not reverse payroll.'));
       },
     });
-  }
-
-  statusBadgeClass(status: PayrollRunStatus): string {
-    switch (status) {
-      case 'CALCULATED': return 'text-bg-info';
-      case 'APPROVED': return 'text-bg-primary';
-      case 'POSTED': return 'text-bg-warning';
-      case 'PAID': return 'text-bg-success';
-      case 'REVERSED': return 'text-bg-danger';
-      default: return 'text-bg-secondary';
-    }
   }
 
   private messageFrom(err: unknown, fallback: string): string {

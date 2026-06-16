@@ -1,7 +1,7 @@
 <section class="admin-page">
   <header class="page-head">
-    <h1 class="h4 mb-1">Standing Orders</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
+    <h1>Standing Orders</h1>
+    <p class="subtitle">
       <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>
       Manage recurring sales orders.
     </p>
@@ -22,8 +22,8 @@
     }
     @default {
       @if (companies().length > 1) {
-        <div class="mb-3" style="max-width:320px">
-          <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+        <div class="mb-3 erp-field" style="max-width:320px">
+          <label for="companyPicker">Company</label>
           <select id="companyPicker" name="companyPicker" class="form-select"
                   [ngModel]="selectedCompanyId()"
                   (ngModelChange)="onCompanyChange($event)">
@@ -38,46 +38,46 @@
 
   @if (selectedCompanyId()) {
     <!-- Toolbar -->
-    <div class="d-flex flex-wrap gap-2 mb-3 align-items-end">
+    <div class="erp-toolbar mb-3">
+      <span class="erp-toolbar__spacer"></span>
       @if (canCreate()) {
-        <div class="ms-auto align-self-end">
-          <a class="btn btn-primary" [routerLink]="['/admin/standing-orders/create']">
-            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
-            New Standing Order
-          </a>
-        </div>
+        <a class="btn btn-primary" [routerLink]="['/admin/standing-orders/create']">
+          <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+          New Standing Order
+        </a>
       }
     </div>
 
-    <!-- List states -->
     @switch (state()) {
       @case ('loading') {
-        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading standing orders…
         </p>
       }
       @case ('error') {
-        <p class="state text-danger" role="alert">
+        <p class="text-danger" role="alert">
           <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
           Could not load standing orders. Please try again.
         </p>
       }
       @case ('forbidden') {
-        <p class="state text-muted d-flex align-items-center gap-2">
-          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock"></i>
           You don't have permission to view standing orders.
-        </p>
+        </div>
       }
       @default {
         @if (isEmpty()) {
-          <p class="state text-muted">No standing orders yet.
+          <div class="erp-empty">
+            <i class="bi bi-arrow-repeat"></i>
+            No standing orders yet.
             @if (canCreate()) {
               <a [routerLink]="['/admin/standing-orders/create']">Create the first one.</a>
             }
-          </p>
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Standing Orders</caption>
               <thead>
                 <tr>
@@ -93,10 +93,16 @@
               <tbody>
                 @for (so of rows(); track so.uid) {
                   <tr>
-                    <td class="font-monospace">{{ orderLabel(so) }}</td>
+                    <td class="mono">{{ orderLabel(so) }}</td>
                     <td class="small">{{ so.frequency }}</td>
                     <td>
-                      <span class="badge" [class]="statusBadgeClass(so.status)">{{ so.status }}</span>
+                      <span class="status-tag"
+                            [class.status-tag--ok]="so.status === 'ACTIVE'"
+                            [class.status-tag--warn]="so.status === 'PAUSED'"
+                            [class.status-tag--danger]="so.status === 'CANCELLED'"
+                            [class.status-tag--neutral]="so.status !== 'ACTIVE' && so.status !== 'PAUSED' && so.status !== 'CANCELLED'">
+                        {{ so.status }}
+                      </span>
                     </td>
                     <td class="small text-muted">{{ so.startDate }}</td>
                     <td class="small text-muted">{{ so.nextRunDate ?? '—' }}</td>
@@ -114,7 +120,6 @@
             </table>
           </div>
 
-          <!-- Pagination -->
           <app-paginator [meta]="meta()" [label]="'Standing Orders'" (pageChange)="goToPage($event)" />
         }
       }

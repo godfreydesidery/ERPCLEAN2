@@ -6,7 +6,7 @@ import { merge, Subject, switchMap } from 'rxjs';
 import { PageMeta } from '../../../../core/api/api-response.model';
 import { SessionStore } from '../../../../core/auth/session.store';
 import { PaginatorComponent } from '../../../../shared/paginator/paginator.component';
-import { StockCountDto, StockCountStatus } from './stock-count.model';
+import { StockCountDto } from './stock-count.model';
 import { StockCountService } from './stock-count.service';
 
 const DEFAULT_SIZE = 20;
@@ -68,15 +68,4 @@ export class StockCountListComponent {
 
   goToPage(page: number): void { this.load(page); }
 
-  // ── Display helpers ───────────────────────────────────────────────────────────
-
-  statusBadgeClass(status: StockCountStatus): string {
-    switch (status) {
-      case 'DRAFT':     return 'text-bg-secondary';
-      case 'COUNTING':  return 'text-bg-primary';
-      case 'POSTED':    return 'text-bg-success';
-      case 'CANCELLED': return 'text-bg-danger';
-      default:          return 'text-bg-secondary';
-    }
-  }
 }

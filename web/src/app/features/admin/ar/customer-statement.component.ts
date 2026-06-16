@@ -189,22 +189,16 @@ export class CustomerStatementComponent {
     return Number.isFinite(n) ? n.toFixed(2) : '0.00';
   }
 
-  /** Ageing bucket badge class. */
-  bucketBadgeClass(bucket: AgeingBucket): string {
+  /** Ageing bar segment colour — returns a CSS variable string for [style.background]. */
+  bucketBarColor(bucket: AgeingBucket): string {
     switch (bucket) {
-      case 'CURRENT': return 'text-bg-success';
-      case 'DAYS_1_30': return 'text-bg-warning';
-      case 'DAYS_31_60': return 'text-bg-orange';
-      case 'DAYS_61_90': return 'text-bg-danger';
-      case 'DAYS_91_PLUS': return 'text-bg-dark';
-      default: return 'text-bg-secondary';
+      case 'CURRENT':    return 'var(--erp-ok)';
+      case 'DAYS_1_30':  return 'var(--erp-warn)';
+      case 'DAYS_31_60': return 'var(--erp-warn)';
+      case 'DAYS_61_90': return 'var(--erp-danger)';
+      case 'DAYS_91_PLUS': return 'var(--erp-danger)';
+      default:           return 'var(--erp-neutral)';
     }
   }
 
-  invoiceStatusBadgeClass(status: string): string {
-    if (status === 'OPEN') return 'text-bg-warning';
-    if (status === 'PARTIAL') return 'text-bg-info';
-    if (status === 'PAID') return 'text-bg-success';
-    return 'text-bg-secondary';
-  }
 }

@@ -1,39 +1,44 @@
-<div class="container-fluid py-3">
-  <!-- ── Header ─────────────────────────────────────────────────────────── -->
-  <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
-    <h1 class="h4 mb-0">Routes</h1>
-    @if (canManage()) {
-      <button class="btn btn-primary btn-sm" type="button" (click)="toggleCreateForm()"
-              [attr.aria-expanded]="showCreateForm()">
-        <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
-        @if (showCreateForm()) { Cancel } @else { New Route }
-      </button>
-    }
-  </div>
+<section class="admin-page">
+  <!-- ── Page header ─────────────────────────────────────────────────────── -->
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1 class="h4 mb-0">Routes</h1>
+      <p class="subtitle">Delivery route master</p>
+    </div>
+    <div class="erp-page-head__actions">
+      <!-- Company selector -->
+      @if (companyState() === 'loading') {
+        <span class="text-muted small">Loading companies…</span>
+      } @else if (companyState() === 'error') {
+        <span class="text-danger small">Failed to load companies.</span>
+      } @else {
+        <label for="route-company-select" class="visually-hidden">Company</label>
+        <select id="route-company-select" class="form-select form-select-sm w-auto"
+                [ngModel]="selectedCompanyId()"
+                (ngModelChange)="onCompanyChange($event)">
+          @for (co of companies(); track co.id) {
+            <option [value]="co.id">{{ co.name }}</option>
+          }
+        </select>
+      }
 
-  <!-- ── Company selector ───────────────────────────────────────────────── -->
-  <div class="mb-3">
-    @if (companyState() === 'loading') {
-      <span class="text-muted small">Loading companies…</span>
-    } @else if (companyState() === 'error') {
-      <span class="text-danger small">Failed to load companies.</span>
-    } @else {
-      <label for="route-company-select" class="form-label visually-hidden">Company</label>
-      <select id="route-company-select" class="form-select form-select-sm w-auto"
-              [ngModel]="selectedCompanyId()"
-              (ngModelChange)="onCompanyChange($event)">
-        @for (co of companies(); track co.id) {
-          <option [value]="co.id">{{ co.name }}</option>
-        }
-      </select>
-    }
-  </div>
+      @if (canManage()) {
+        <button class="btn btn-primary btn-sm" type="button" (click)="toggleCreateForm()"
+                [attr.aria-expanded]="showCreateForm()">
+          <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+          @if (showCreateForm()) { Cancel } @else { New Route }
+        </button>
+      }
+    </div>
+  </header>
 
   <!-- ── Inline create form ─────────────────────────────────────────────── -->
   @if (showCreateForm()) {
-    <div class="card mb-3">
-      <div class="card-body">
-        <h2 class="h6 card-title mb-3">New Route</h2>
+    <div class="erp-card mb-3">
+      <div class="erp-card__head">
+        <h2 class="h6 mb-0">New Route</h2>
+      </div>
+      <div class="erp-card__body">
         @if (formError()) {
           <div class="alert alert-danger py-2" role="alert">{{ formError() }}</div>
         }
@@ -66,13 +71,15 @@
     </div>
   }
 
-  <!-- ── Search bar ──────────────────────────────────────────────────────── -->
-  <div class="d-flex gap-2 mb-3 flex-wrap">
-    <label for="route-search" class="visually-hidden">Search routes</label>
-    <input id="route-search" type="search" class="form-control form-control-sm w-auto"
-           placeholder="Search…"
-           [ngModel]="searchQ()" (ngModelChange)="searchQ.set($event)"
-           (keydown.enter)="applySearch()" />
+  <!-- ── Search / filter toolbar ────────────────────────────────────────── -->
+  <div class="erp-toolbar mb-3">
+    <div class="erp-toolbar__search">
+      <label for="route-search" class="visually-hidden">Search routes</label>
+      <input id="route-search" type="search" class="form-control form-control-sm"
+             placeholder="Search…"
+             [ngModel]="searchQ()" (ngModelChange)="searchQ.set($event)"
+             (keydown.enter)="applySearch()" />
+    </div>
     <button class="btn btn-outline-secondary btn-sm" type="button" (click)="applySearch()">
       <i class="bi bi-search" aria-hidden="true"></i>
       <span class="visually-hidden">Search</span>
@@ -87,7 +94,7 @@
 
   <!-- ── States ─────────────────────────────────────────────────────────── -->
   @if (state() === 'loading') {
-    <div class="d-flex align-items-center gap-2 text-muted py-4">
+    <div class="d-flex align-items-center gap-2 text-muted py-4" aria-live="polite">
       <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
       <span>Loading routes…</span>
     </div>
@@ -101,11 +108,14 @@
       Failed to load routes. <button class="btn btn-link btn-sm p-0 ms-1" type="button" (click)="load(currentPage())">Retry</button>
     </div>
   } @else if (isEmpty()) {
-    <p class="text-muted py-4">No routes found.</p>
+    <div class="erp-empty">
+      <i class="bi bi-signpost-split" aria-hidden="true"></i>
+      No routes found.
+    </div>
   } @else {
-    <!-- ── Table ──────────────────────────────────────────────────────────── -->
-    <div class="table-responsive">
-      <table class="table table-sm table-hover align-middle">
+    <!-- ── Table ─────────────────────────────────────────────────────────── -->
+    <div class="erp-table-wrap">
+      <table class="erp-table">
         <caption class="visually-hidden">Routes list</caption>
         <thead>
           <tr>
@@ -119,15 +129,21 @@
         <tbody>
           @for (row of rows(); track row.uid) {
             <tr>
-              <td>{{ row.code }}</td>
+              <td class="mono">{{ row.code }}</td>
               <td>{{ row.name }}</td>
               <td>{{ row.locationIdentifier ?? '—' }}</td>
               <td>
-                <span class="badge" [class]="statusBadgeClass(row.status)">{{ row.status }}</span>
+                <span class="status-tag"
+                      [class.status-tag--ok]="row.status === 'ACTIVE'"
+                      [class.status-tag--neutral]="row.status === 'ARCHIVED'"
+                      [class.status-tag--warn]="row.status !== 'ACTIVE' && row.status !== 'ARCHIVED'">
+                  {{ row.status }}
+                </span>
               </td>
               <td>
                 <a class="btn btn-outline-secondary btn-sm"
-                   [routerLink]="['/admin/routes/uid', row.uid]">
+                   [routerLink]="['/admin/routes/uid', row.uid]"
+                   [attr.aria-label]="'Edit ' + row.name">
                   <i class="bi bi-pencil" aria-hidden="true"></i>
                   <span class="visually-hidden">Edit {{ row.name }}</span>
                 </a>
@@ -141,4 +157,4 @@
     <!-- Pagination -->
     <app-paginator [meta]="meta()" [label]="'Routes'" (pageChange)="goToPage($event)" />
   }
-</div>
+</section>

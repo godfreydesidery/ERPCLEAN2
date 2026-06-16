@@ -8,7 +8,7 @@ import { PageMeta } from '../../../core/api/api-response.model';
 import { SessionStore } from '../../../core/auth/session.store';
 import { ApprovalsService } from './approvals.service';
 import type { ApprovalRequestPage } from './approvals.service';
-import { ApprovalRequestDto, ApprovalRequestStatus } from './models/approvals.model';
+import { ApprovalRequestDto } from './models/approvals.model';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
@@ -71,13 +71,4 @@ export class ApprovalInboxComponent {
   prevPage(): void { if (this.currentPage() > 0) this.load(this.currentPage() - 1); }
   nextPage(): void { if (this.meta().hasNext) this.load(this.currentPage() + 1); }
 
-  statusBadgeClass(status: ApprovalRequestStatus): string {
-    switch (status) {
-      case 'PENDING': return 'text-bg-warning';
-      case 'APPROVED': return 'text-bg-success';
-      case 'REJECTED': return 'text-bg-danger';
-      case 'RECALLED': return 'text-bg-secondary';
-      case 'CANCELLED': return 'text-bg-secondary';
-    }
-  }
 }

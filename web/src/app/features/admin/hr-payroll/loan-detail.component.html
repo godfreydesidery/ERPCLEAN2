@@ -1,66 +1,76 @@
 <section class="admin-page">
-  <header class="page-head">
-    <nav aria-label="breadcrumb">
-      <ol class="breadcrumb small mb-1">
-        <li class="breadcrumb-item"><a routerLink="/admin/hr/loans">Loans</a></li>
-        <li class="breadcrumb-item active" aria-current="page">
-          @if (loan(); as l) { {{ l.loanNumber }} } @else { Loading… }
-        </li>
-      </ol>
-    </nav>
-    <div class="d-flex align-items-center gap-3">
-      <h1 class="h4 mb-0">
-        @if (loan(); as l) { {{ l.loanNumber }} — {{ l.employeeName }} } @else { Loan Detail }
-      </h1>
-      @if (loan(); as l) {
-        <span class="badge" [class]="statusBadgeClass(l.status)">{{ l.status }}</span>
-      }
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <nav aria-label="breadcrumb">
+        <ol class="breadcrumb small mb-1">
+          <li class="breadcrumb-item"><a routerLink="/admin/hr/loans">Loans</a></li>
+          <li class="breadcrumb-item active" aria-current="page">
+            @if (loan(); as l) { {{ l.loanNumber }} } @else { Loading… }
+          </li>
+        </ol>
+      </nav>
+      <div class="d-flex align-items-center gap-3">
+        <h1>
+          @if (loan(); as l) { {{ l.loanNumber }} — {{ l.employeeName }} } @else { Loan Detail }
+        </h1>
+        @if (loan(); as l) {
+          <span class="status-tag"
+            [class.status-tag--ok]="l.status === 'ACTIVE'"
+            [class.status-tag--neutral]="l.status === 'SETTLED'"
+            [class.status-tag--danger]="l.status === 'CANCELLED'">
+            <span class="status-tag__dot" aria-hidden="true"></span>{{ l.status }}
+          </span>
+        }
+      </div>
     </div>
   </header>
 
   @switch (state()) {
     @case ('loading') {
-      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+      <output class="text-muted d-flex align-items-center gap-2" aria-live="polite">
         <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
-      </p>
+      </output>
     }
     @case ('error') {
-      <p class="state text-danger" role="alert">
+      <output class="d-block text-danger" role="alert">
         <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
         Could not load loan. Please try again.
-      </p>
+      </output>
     }
     @default {
       @if (loan(); as l) {
-        <div class="card mb-3">
-          <div class="card-body">
+        <div class="erp-card mb-3">
+          <div class="erp-card__head">
+            <h2>Loan Summary</h2>
+          </div>
+          <div class="erp-card__body">
             <dl class="row small mb-0">
               <dt class="col-sm-3">Employee</dt><dd class="col-sm-3">{{ l.employeeName }}</dd>
               <dt class="col-sm-3">Start Date</dt><dd class="col-sm-3">{{ l.startDate }}</dd>
               <dt class="col-sm-3">Principal</dt>
-              <dd class="col-sm-3 font-monospace">{{ l.currency }} {{ +l.principalAmount | number:'1.2-2' }}</dd>
+              <dd class="col-sm-3 mono">{{ l.currency }} {{ +l.principalAmount | number:'1.2-2' }}</dd>
               <dt class="col-sm-3">Installment / Month</dt>
-              <dd class="col-sm-3 font-monospace">{{ l.currency }} {{ +l.installmentAmount | number:'1.2-2' }}</dd>
+              <dd class="col-sm-3 mono">{{ l.currency }} {{ +l.installmentAmount | number:'1.2-2' }}</dd>
               <dt class="col-sm-3">Outstanding</dt>
-              <dd class="col-sm-3 font-monospace">{{ l.currency }} {{ +l.outstandingAmount | number:'1.2-2' }}</dd>
+              <dd class="col-sm-3 mono">{{ l.currency }} {{ +l.outstandingAmount | number:'1.2-2' }}</dd>
               <dt class="col-sm-3">GL Account</dt><dd class="col-sm-3">{{ glAccountLabel(l.glAccountId) }}</dd>
             </dl>
           </div>
         </div>
 
         @if (actionError(); as msg) {
-          <p class="text-danger small mb-3" role="alert">
+          <output class="d-block text-danger small mb-3" role="alert">
             <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ msg }}
-          </p>
+          </output>
         }
 
-        <!-- Approve action — status is PENDING (anything not yet ACTIVE) and user has MANAGE perm -->
+        <!-- Approve action — status is PENDING and user has MANAGE perm -->
         @if (canManage() && canApproveAction()) {
           <button type="button" class="btn btn-success"
                   (click)="approve()"
                   [disabled]="approving()">
             @if (approving()) {
-              <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+              <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
               Approving…
             } @else {
               <i class="bi bi-check2 me-1" aria-hidden="true"></i>

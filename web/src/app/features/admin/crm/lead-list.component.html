@@ -1,7 +1,7 @@
 <section class="admin-page">
   <header class="page-head">
     <h1 class="h4 mb-1">Leads</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
+    <p class="subtitle">
       <i class="bi bi-person-lines-fill me-1" aria-hidden="true"></i>
       Manage CRM leads from first contact to qualification.
     </p>
@@ -38,129 +38,133 @@
 
   @if (selectedCompanyId()) {
     <!-- Toolbar -->
-    <div class="d-flex flex-wrap gap-2 mb-3 align-items-end">
+    <div class="erp-toolbar mb-3">
+      <span class="erp-toolbar__spacer"></span>
       @if (canManage()) {
-        <div class="ms-auto">
-          <button type="button" class="btn btn-primary"
-                  (click)="toggleCreateForm()"
-                  [attr.aria-expanded]="showCreateForm()"
-                  aria-controls="createLeadForm">
-            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
-            New Lead
-          </button>
-        </div>
+        <button type="button" class="btn btn-primary"
+                (click)="toggleCreateForm()"
+                [attr.aria-expanded]="showCreateForm()"
+                aria-controls="createLeadForm">
+          <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+          New Lead
+        </button>
       }
     </div>
 
     <!-- Create form -->
     @if (showCreateForm()) {
-      <form id="createLeadForm" class="create-form card card-body mb-3"
+      <form id="createLeadForm" class="erp-card mb-3"
             (ngSubmit)="create()" aria-label="Create lead">
-        <h2 class="h6 mb-3">New Lead</h2>
-        <div class="row g-2 mb-2">
-          <div class="col-sm-4">
-            <label class="form-label small text-muted mb-1" for="newDisplayName">
-              Name <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="newDisplayName" name="newDisplayName" type="text" class="form-control"
-                   placeholder="Lead / contact name"
-                   [ngModel]="newDisplayName()" (ngModelChange)="newDisplayName.set($event)"
-                   [disabled]="saving()" autocomplete="off" />
-          </div>
-
-          <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="newLeadSource">
-              Source <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <select id="newLeadSource" name="newLeadSource" class="form-select"
-                    [ngModel]="newLeadSource()" (ngModelChange)="newLeadSource.set($event)"
-                    [disabled]="saving()">
-              @for (opt of leadSourceOptions; track opt.value) {
-                <option [value]="opt.value">{{ opt.label }}</option>
-              }
-            </select>
-          </div>
-
-          <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="newCompanyName">Company / Org</label>
-            <input id="newCompanyName" name="newCompanyName" type="text" class="form-control"
-                   placeholder="Optional"
-                   [ngModel]="newCompanyName()" (ngModelChange)="newCompanyName.set($event)"
-                   [disabled]="saving()" autocomplete="off" />
-          </div>
-
-          <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="newContactPerson">Contact Person</label>
-            <input id="newContactPerson" name="newContactPerson" type="text" class="form-control"
-                   placeholder="Optional"
-                   [ngModel]="newContactPerson()" (ngModelChange)="newContactPerson.set($event)"
-                   [disabled]="saving()" autocomplete="off" />
-          </div>
-
-          <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="newPhone">Phone</label>
-            <input id="newPhone" name="newPhone" type="tel" class="form-control"
-                   [ngModel]="newPhone()" (ngModelChange)="newPhone.set($event)"
-                   [disabled]="saving()" autocomplete="off" />
-          </div>
-
-          <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="newEmail">Email</label>
-            <input id="newEmail" name="newEmail" type="email" class="form-control"
-                   [ngModel]="newEmail()" (ngModelChange)="newEmail.set($event)"
-                   [disabled]="saving()" autocomplete="off" />
-          </div>
-
-          <div class="col-sm-5">
-            <label class="form-label small text-muted mb-1" for="newNotes">Notes</label>
-            <input id="newNotes" name="newNotes" type="text" class="form-control"
-                   [ngModel]="newNotes()" (ngModelChange)="newNotes.set($event)"
-                   [disabled]="saving()" autocomplete="off" />
-          </div>
-
-          <div class="col-sm-3 d-flex align-items-end">
-            <button type="submit" class="btn btn-primary w-100" [disabled]="saving()">
-              @if (saving()) {
-                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                Saving…
-              } @else {
-                Create Lead
-              }
-            </button>
-          </div>
+        <div class="erp-card__head">
+          <h2 class="h6 mb-0">New Lead</h2>
         </div>
+        <div class="erp-card__body">
+          <div class="row g-2 mb-2">
+            <div class="col-sm-4">
+              <label class="form-label small text-muted mb-1" for="newDisplayName">
+                Name <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="newDisplayName" name="newDisplayName" type="text" class="form-control"
+                     placeholder="Lead / contact name"
+                     [ngModel]="newDisplayName()" (ngModelChange)="newDisplayName.set($event)"
+                     [disabled]="saving()" autocomplete="off" />
+            </div>
 
-        @if (formError(); as msg) {
-          <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-        }
+            <div class="col-sm-3">
+              <label class="form-label small text-muted mb-1" for="newLeadSource">
+                Source <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <select id="newLeadSource" name="newLeadSource" class="form-select"
+                      [ngModel]="newLeadSource()" (ngModelChange)="newLeadSource.set($event)"
+                      [disabled]="saving()">
+                @for (opt of leadSourceOptions; track opt.value) {
+                  <option [value]="opt.value">{{ opt.label }}</option>
+                }
+              </select>
+            </div>
+
+            <div class="col-sm-3">
+              <label class="form-label small text-muted mb-1" for="newCompanyName">Company / Org</label>
+              <input id="newCompanyName" name="newCompanyName" type="text" class="form-control"
+                     placeholder="Optional"
+                     [ngModel]="newCompanyName()" (ngModelChange)="newCompanyName.set($event)"
+                     [disabled]="saving()" autocomplete="off" />
+            </div>
+
+            <div class="col-sm-3">
+              <label class="form-label small text-muted mb-1" for="newContactPerson">Contact Person</label>
+              <input id="newContactPerson" name="newContactPerson" type="text" class="form-control"
+                     placeholder="Optional"
+                     [ngModel]="newContactPerson()" (ngModelChange)="newContactPerson.set($event)"
+                     [disabled]="saving()" autocomplete="off" />
+            </div>
+
+            <div class="col-sm-3">
+              <label class="form-label small text-muted mb-1" for="newPhone">Phone</label>
+              <input id="newPhone" name="newPhone" type="tel" class="form-control"
+                     [ngModel]="newPhone()" (ngModelChange)="newPhone.set($event)"
+                     [disabled]="saving()" autocomplete="off" />
+            </div>
+
+            <div class="col-sm-3">
+              <label class="form-label small text-muted mb-1" for="newEmail">Email</label>
+              <input id="newEmail" name="newEmail" type="email" class="form-control"
+                     [ngModel]="newEmail()" (ngModelChange)="newEmail.set($event)"
+                     [disabled]="saving()" autocomplete="off" />
+            </div>
+
+            <div class="col-sm-5">
+              <label class="form-label small text-muted mb-1" for="newNotes">Notes</label>
+              <input id="newNotes" name="newNotes" type="text" class="form-control"
+                     [ngModel]="newNotes()" (ngModelChange)="newNotes.set($event)"
+                     [disabled]="saving()" autocomplete="off" />
+            </div>
+
+            <div class="col-sm-3 d-flex align-items-end">
+              <button type="submit" class="btn btn-primary w-100" [disabled]="saving()">
+                @if (saving()) {
+                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  Saving…
+                } @else {
+                  Create Lead
+                }
+              </button>
+            </div>
+          </div>
+
+          @if (formError(); as msg) {
+            <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+          }
+        </div>
       </form>
     }
 
     <!-- List states -->
     @switch (state()) {
       @case ('loading') {
-        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading leads…
         </p>
       }
       @case ('error') {
-        <p class="state text-danger" role="alert">
+        <p class="text-danger" role="alert">
           <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
           Could not load leads. Please try again.
         </p>
       }
       @case ('forbidden') {
-        <p class="state text-muted d-flex align-items-center gap-2">
-          <i class="bi bi-shield-lock" aria-hidden="true"></i>
-          You don't have permission to view leads.
-        </p>
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock"></i> You don't have permission to view leads.
+        </div>
       }
       @default {
         @if (isEmpty()) {
-          <p class="state text-muted">No leads yet. Create one above.</p>
+          <div class="erp-empty">
+            <i class="bi bi-person-lines-fill"></i> No leads yet. Create one above.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Leads</caption>
               <thead>
                 <tr>
@@ -177,12 +181,18 @@
               <tbody>
                 @for (row of rows(); track row.uid) {
                   <tr>
-                    <td class="font-monospace">{{ row.leadNumber }}</td>
+                    <td class="mono">{{ row.leadNumber }}</td>
                     <td>{{ row.displayName }}</td>
                     <td class="small text-muted">{{ row.companyName ?? '—' }}</td>
                     <td class="small">{{ row.leadSource }}</td>
                     <td>
-                      <span class="badge" [class]="statusBadgeClass(row.leadStatus)">{{ row.leadStatus }}</span>
+                      <span class="status-tag"
+                            [class.status-tag--warn]="row.leadStatus === 'NEW'"
+                            [class.status-tag--info]="row.leadStatus === 'CONTACTED'"
+                            [class.status-tag--ok]="row.leadStatus === 'QUALIFIED' || row.leadStatus === 'CONVERTED'"
+                            [class.status-tag--danger]="row.leadStatus === 'DISQUALIFIED'">
+                        {{ row.leadStatus }}
+                      </span>
                     </td>
                     <td class="small text-muted">{{ row.phone ?? '—' }}</td>
                     <td class="small text-muted">{{ row.email ?? '—' }}</td>

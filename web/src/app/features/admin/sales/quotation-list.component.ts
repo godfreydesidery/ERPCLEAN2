@@ -291,16 +291,6 @@ export class QuotationListComponent {
     return q.quoteNumber ?? 'DRAFT';
   }
 
-  statusBadgeClass(status: QuotationStatus): string {
-    switch (status) {
-      case 'SENT': return 'text-bg-info';
-      case 'ACCEPTED': return 'text-bg-success';
-      case 'REJECTED': return 'text-bg-danger';
-      case 'EXPIRED': return 'text-bg-secondary';
-      default: return 'text-bg-warning'; // DRAFT
-    }
-  }
-
   private messageFrom(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {
       const errors = (err.error as { errors?: string[] })?.errors;

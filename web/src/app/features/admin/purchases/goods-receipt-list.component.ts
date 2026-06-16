@@ -8,7 +8,7 @@ import { debounceTime, distinctUntilChanged, map, merge, skip, Subject, switchMa
 import { PageMeta } from '../../../core/api/api-response.model';
 import { SessionStore } from '../../../core/auth/session.store';
 import { Company } from '../models/company.model';
-import { GoodsReceiptDto, GoodsReceiptStatus } from '../models/purchases.model';
+import { GoodsReceiptDto } from '../models/purchases.model';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { PurchasesService } from './purchases.service';
@@ -122,13 +122,4 @@ export class GoodsReceiptListComponent {
   prevPage(): void { if (this.currentPage() > 0) this.load(this.currentPage() - 1); }
   nextPage(): void { if (this.meta().hasNext) this.load(this.currentPage() + 1); }
 
-  // ── Display helpers ────────────────────────────────────────────────────────
-
-  statusBadgeClass(status: GoodsReceiptStatus): string {
-    switch (status) {
-      case 'RECEIVED': return 'text-bg-success';
-      case 'VOID': return 'text-bg-secondary';
-      default: return 'text-bg-warning'; // DRAFT
-    }
-  }
 }

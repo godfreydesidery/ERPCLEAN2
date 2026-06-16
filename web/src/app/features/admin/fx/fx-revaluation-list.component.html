@@ -1,132 +1,144 @@
-<section class="container-fluid py-3" aria-label="FX Revaluation Runs">
-  <div class="d-flex align-items-center mb-3 gap-2 flex-wrap">
-    <h1 class="h4 mb-0 me-auto">FX Revaluation Runs</h1>
+<div class="admin-page" aria-label="FX Revaluation Runs">
 
-    @if (companyState() === 'loading') {
-      <span class="spinner-border spinner-border-sm text-secondary" aria-label="Loading companies"></span>
-    }
-    @if (companies().length > 1) {
-      <label class="visually-hidden" for="fxRunCompany">Company</label>
-      <select id="fxRunCompany" class="form-select form-select-sm w-auto"
-              [ngModel]="selectedCompanyId()"
-              (ngModelChange)="onCompanyChange($event)">
-        @for (c of companies(); track c.id) {
-          <option [value]="c.id">{{ c.name }}</option>
-        }
-      </select>
-    }
-
-    @if (canRevalue()) {
-      <button type="button" class="btn btn-primary btn-sm"
-              (click)="openPreviewPanel()"
-              [disabled]="showPreviewPanel()">
-        <i class="bi bi-calculator" aria-hidden="true"></i> Preview / Run Revaluation
-      </button>
-    }
+  <!-- Page header -->
+  <div class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>FX Revaluation Runs</h1>
+      <p class="subtitle">Period-end foreign-currency revaluation and GL posting</p>
+    </div>
+    <div class="erp-page-head__actions">
+      @if (companyState() === 'loading') {
+        <span class="spinner-border spinner-border-sm text-secondary" aria-label="Loading companies"></span>
+      }
+      @if (companies().length > 1) {
+        <label class="visually-hidden" for="fxRunCompany">Company</label>
+        <select id="fxRunCompany" class="form-select form-select-sm w-auto"
+                [ngModel]="selectedCompanyId()"
+                (ngModelChange)="onCompanyChange($event)">
+          @for (c of companies(); track c.id) {
+            <option [value]="c.id">{{ c.name }}</option>
+          }
+        </select>
+      }
+      @if (canRevalue()) {
+        <button type="button" class="btn btn-primary btn-sm"
+                (click)="openPreviewPanel()"
+                [disabled]="showPreviewPanel()">
+          <i class="bi bi-calculator" aria-hidden="true"></i> Preview / Run Revaluation
+        </button>
+      }
+    </div>
   </div>
 
   <!-- Preview + Post panel -->
   @if (showPreviewPanel()) {
-    <div class="card mb-4 border-primary" role="region" aria-label="Revaluation preview">
-      <div class="card-header d-flex align-items-center gap-2 fw-semibold">
-        <i class="bi bi-calculator" aria-hidden="true"></i>
-        Preview Revaluation (Dry Run)
-        <button type="button" class="btn-close ms-auto" aria-label="Close preview" (click)="closePreviewPanel()"></button>
+    <section class="erp-card mb-4" aria-label="Revaluation preview">
+      <div class="erp-card__head">
+        <h2><i class="bi bi-calculator" aria-hidden="true"></i> Preview Revaluation (Dry Run)</h2>
+        <span class="spacer"></span>
+        <button type="button" class="btn-close" aria-label="Close preview" (click)="closePreviewPanel()"></button>
       </div>
-      <div class="card-body">
-        <div class="row g-3 mb-3">
-          <div class="col-12 col-md-5">
-            <label class="form-label" for="previewPeriod">
-              Fiscal Period <span aria-hidden="true">*</span>
-            </label>
-            @if (fiscalPeriods().length > 0) {
-              <select id="previewPeriod" class="form-select form-select-sm"
-                      [ngModel]="previewFiscalPeriodUid()"
-                      (ngModelChange)="previewFiscalPeriodUid.set($event)"
-                      required>
-                <option value="">— select a period —</option>
-                @for (p of fiscalPeriods(); track p.uid) {
-                  <option [value]="p.uid">
-                    Period {{ p.periodNo }} — {{ p.startDate }} to {{ p.endDate }}
-                    ({{ p.status }})
-                  </option>
-                }
-              </select>
-            } @else {
-              <input id="previewPeriod" type="text" class="form-control form-control-sm"
-                     [ngModel]="previewFiscalPeriodUid()"
-                     (ngModelChange)="previewFiscalPeriodUid.set($event)"
-                     placeholder="Fiscal period UID" required />
-            }
-          </div>
-          <div class="col-12 col-md-3">
-            <label class="form-label" for="previewSpotDate">Spot Rate Date <small class="text-muted">(optional)</small></label>
-            <input id="previewSpotDate" type="date" class="form-control form-control-sm"
-                   [ngModel]="previewSpotRateDate()"
-                   (ngModelChange)="previewSpotRateDate.set($event)" />
-            <div class="form-text">Defaults to period end date.</div>
-          </div>
-          <div class="col-12 col-md-2 d-flex align-items-end">
-            <button type="button" class="btn btn-outline-primary btn-sm w-100"
-                    (click)="runPreview()"
-                    [disabled]="previewState() === 'loading'">
-              @if (previewState() === 'loading') {
-                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+      <div class="erp-card__body">
+        <form aria-label="Revaluation preview parameters" (ngSubmit)="runPreview()">
+          <div class="erp-form-grid">
+            <div class="erp-field full">
+              <label class="form-label" for="previewPeriod">
+                Fiscal Period <span aria-hidden="true">*</span>
+              </label>
+              @if (fiscalPeriods().length > 0) {
+                <select id="previewPeriod" class="form-select form-select-sm"
+                        [ngModel]="previewFiscalPeriodUid()"
+                        (ngModelChange)="previewFiscalPeriodUid.set($event)"
+                        name="previewPeriod" required>
+                  <option value="">— select a period —</option>
+                  @for (p of fiscalPeriods(); track p.uid) {
+                    <option [value]="p.uid">
+                      Period {{ p.periodNo }} — {{ p.startDate }} to {{ p.endDate }}
+                      ({{ p.status }})
+                    </option>
+                  }
+                </select>
+              } @else {
+                <input id="previewPeriod" type="text" class="form-control form-control-sm"
+                       [ngModel]="previewFiscalPeriodUid()"
+                       (ngModelChange)="previewFiscalPeriodUid.set($event)"
+                       name="previewPeriod" placeholder="Fiscal period UID" required />
               }
-              Preview
-            </button>
+            </div>
+            <div class="erp-field">
+              <label class="form-label" for="previewSpotDate">
+                Spot Rate Date <small class="text-muted">(optional)</small>
+              </label>
+              <input id="previewSpotDate" type="date" class="form-control form-control-sm"
+                     [ngModel]="previewSpotRateDate()"
+                     (ngModelChange)="previewSpotRateDate.set($event)"
+                     name="previewSpotDate" />
+              <span class="hint">Defaults to period end date.</span>
+            </div>
+            <div class="erp-field d-flex align-items-end">
+              <button type="submit" class="btn btn-outline-primary btn-sm"
+                      [disabled]="previewState() === 'loading'">
+                @if (previewState() === 'loading') {
+                  <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                }
+                Preview
+              </button>
+            </div>
           </div>
-        </div>
+        </form>
 
         @if (previewError()) {
-          <div class="alert alert-danger py-2" role="alert">{{ previewError() }}</div>
+          <div class="alert alert-danger py-2 mt-3" role="alert">{{ previewError() }}</div>
         }
 
         <!-- Preview results -->
         @if (previewState() === 'done' && previewResult(); as pr) {
-          <div class="alert alert-info d-flex gap-4 flex-wrap mb-3" role="status">
-            <span>
-              <strong>Total Gain:</strong>
-              <span class="text-success ms-1">{{ fmtAmt(pr.totalGainAmount) }}</span>
-            </span>
-            <span>
-              <strong>Total Loss:</strong>
-              <span class="text-danger ms-1">{{ fmtAmt(pr.totalLossAmount) }}</span>
-            </span>
-            <span>
-              <strong>Net Adjustment:</strong>
-              <span class="ms-1" [class]="netAdjClass(pr.netAdjustmentAmount)">
+          <!-- KPI summary row -->
+          <div class="d-flex gap-3 flex-wrap mt-3 mb-3">
+            <div class="erp-kpi">
+              <div class="erp-kpi__label">Total Gain</div>
+              <div class="erp-kpi__value text-success">{{ fmtAmt(pr.totalGainAmount) }}</div>
+            </div>
+            <div class="erp-kpi">
+              <div class="erp-kpi__label">Total Loss</div>
+              <div class="erp-kpi__value text-danger">{{ fmtAmt(pr.totalLossAmount) }}</div>
+            </div>
+            <div class="erp-kpi">
+              <div class="erp-kpi__label">Net Adjustment</div>
+              <div class="erp-kpi__value" [class]="netAdjClass(pr.netAdjustmentAmount)">
                 {{ fmtAmt(pr.netAdjustmentAmount) }}
-              </span>
-            </span>
-            <span class="badge text-bg-warning align-self-center">DRY RUN — not posted</span>
+              </div>
+            </div>
+            <div class="erp-kpi d-flex align-items-center">
+              <span class="status-tag status-tag--warn align-self-center">DRY RUN — not posted</span>
+            </div>
           </div>
 
           @if (pr.lines.length > 0) {
-            <div class="table-responsive mb-3">
-              <table class="table table-sm align-middle">
+            <div class="erp-table-wrap mb-3">
+              <table class="erp-table">
                 <caption class="visually-hidden">Preview revaluation lines</caption>
-                <thead class="table-light">
+                <thead>
                   <tr>
                     <th scope="col">Source</th>
                     <th scope="col">Currency</th>
-                    <th scope="col" class="text-end">Outstanding Txn</th>
-                    <th scope="col" class="text-end">Carrying Base</th>
-                    <th scope="col" class="text-end">Spot Rate</th>
-                    <th scope="col" class="text-end">Revalued Base</th>
-                    <th scope="col" class="text-end">Adjustment</th>
+                    <th scope="col" class="num">Outstanding Txn</th>
+                    <th scope="col" class="num">Carrying Base</th>
+                    <th scope="col" class="num">Spot Rate</th>
+                    <th scope="col" class="num">Revalued Base</th>
+                    <th scope="col" class="num">Adjustment</th>
                   </tr>
                 </thead>
                 <tbody>
                   @for (line of pr.lines; track line.currency + line.sourceType) {
                     <tr>
                       <td>{{ line.sourceType }}</td>
-                      <td class="font-monospace">{{ line.currency }}</td>
-                      <td class="text-end font-monospace">{{ fmtAmt(line.outstandingTxnAmount) }}</td>
-                      <td class="text-end font-monospace">{{ fmtAmt(line.carryingBaseAmount) }}</td>
-                      <td class="text-end font-monospace">{{ fmtAmt(line.spotRate) }}</td>
-                      <td class="text-end font-monospace">{{ fmtAmt(line.revaluedBaseAmount) }}</td>
-                      <td class="text-end font-monospace" [class]="deltaClass(line.adjustmentAmount)">
+                      <td class="mono">{{ line.currency }}</td>
+                      <td class="num">{{ fmtAmt(line.outstandingTxnAmount) }}</td>
+                      <td class="num">{{ fmtAmt(line.carryingBaseAmount) }}</td>
+                      <td class="num">{{ fmtAmt(line.spotRate) }}</td>
+                      <td class="num">{{ fmtAmt(line.revaluedBaseAmount) }}</td>
+                      <td class="num" [class]="deltaClass(line.adjustmentAmount)">
                         {{ fmtAmt(line.adjustmentAmount) }}
                       </td>
                     </tr>
@@ -138,43 +150,50 @@
 
           <!-- Post form — gated by FX.REVALUE -->
           @if (canRevalue()) {
-            <div class="border rounded p-3 bg-light">
-              <h2 class="h6 mb-3">Post this Revaluation Run</h2>
-              @if (postError()) {
-                <div class="alert alert-danger py-2" role="alert">{{ postError() }}</div>
-              }
-              <div class="row g-2 align-items-end">
-                <div class="col-12 col-md-4">
-                  <label class="form-label" for="postDate">
-                    Posting Date <span aria-hidden="true">*</span>
-                  </label>
-                  <input id="postDate" type="date" class="form-control form-control-sm"
-                         [ngModel]="postingDate()"
-                         (ngModelChange)="postingDate.set($event)" required />
-                </div>
-                <div class="col-auto">
-                  <button type="button" class="btn btn-success btn-sm"
-                          (click)="postRun()" [disabled]="posting()">
-                    @if (posting()) {
-                      <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
-                    }
-                    <i class="bi bi-check2-circle me-1" aria-hidden="true"></i>
-                    Post to GL
-                  </button>
-                </div>
+            <div class="erp-card">
+              <div class="erp-card__head">
+                <h3>Post this Revaluation Run</h3>
+              </div>
+              <div class="erp-card__body">
+                <form aria-label="Post revaluation run" (ngSubmit)="postRun()">
+                  @if (postError()) {
+                    <div class="alert alert-danger py-2" role="alert">{{ postError() }}</div>
+                  }
+                  <div class="erp-form-grid">
+                    <div class="erp-field">
+                      <label class="form-label" for="postDate">
+                        Posting Date <span aria-hidden="true">*</span>
+                      </label>
+                      <input id="postDate" type="date" class="form-control form-control-sm"
+                             [ngModel]="postingDate()"
+                             (ngModelChange)="postingDate.set($event)"
+                             name="postDate" required />
+                    </div>
+                    <div class="erp-field d-flex align-items-end">
+                      <button type="submit" class="btn btn-success btn-sm"
+                              [disabled]="posting()">
+                        @if (posting()) {
+                          <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                        }
+                        <i class="bi bi-check2-circle me-1" aria-hidden="true"></i>
+                        Post to GL
+                      </button>
+                    </div>
+                  </div>
+                </form>
               </div>
             </div>
           }
         }
       </div>
-    </div>
+    </section>
   }
 
   <!-- Runs list — four-state switch -->
   @switch (state()) {
     @case ('loading') {
-      <div class="text-center py-5" aria-busy="true" aria-label="Loading revaluation runs">
-        <span class="spinner-border text-primary" role="status"></span>
+      <div class="text-center py-5" aria-busy="true" aria-live="polite" aria-label="Loading revaluation runs">
+        <span class="spinner-border text-primary" aria-label="Loading"></span>
       </div>
     }
     @case ('forbidden') {
@@ -193,22 +212,23 @@
     }
     @default {
       @if (isEmpty()) {
-        <div class="alert alert-info" role="status">
+        <div class="erp-empty" aria-live="polite">
+          <i class="bi bi-arrow-repeat"></i>
           No revaluation runs found. Use the Preview / Run button above to create one.
         </div>
       } @else {
-        <div class="table-responsive">
-          <table class="table table-sm table-hover align-middle bg-white">
+        <div class="erp-table-wrap">
+          <table class="erp-table">
             <caption class="visually-hidden">FX revaluation runs list</caption>
-            <thead class="table-light">
+            <thead>
               <tr>
                 <th scope="col">Run #</th>
                 <th scope="col">Posting Date</th>
                 <th scope="col">Spot Rate Date</th>
                 <th scope="col">Status</th>
-                <th scope="col" class="text-end">Net Adjustment</th>
-                <th scope="col" class="text-end">Gain</th>
-                <th scope="col" class="text-end">Loss</th>
+                <th scope="col" class="num">Net Adjustment</th>
+                <th scope="col" class="num">Gain</th>
+                <th scope="col" class="num">Loss</th>
                 <th scope="col"><span class="visually-hidden">Actions</span></th>
               </tr>
             </thead>
@@ -216,7 +236,7 @@
               @for (run of rows(); track run.uid) {
                 <tr>
                   <td>
-                    <button type="button" class="btn btn-link btn-sm p-0 font-monospace"
+                    <button type="button" class="btn btn-link btn-sm p-0 mono"
                             (click)="toggleDetail(run.uid)"
                             [attr.aria-expanded]="expandedUid() === run.uid"
                             [attr.aria-label]="'Toggle details for run ' + run.runNumber">
@@ -230,17 +250,20 @@
                   <td>{{ run.postingDate }}</td>
                   <td>{{ run.spotRateDate }}</td>
                   <td>
-                    <span class="badge" [class]="statusBadgeClass(run.status)">
-                      {{ run.status }}
+                    <span class="status-tag"
+                          [class.status-tag--warn]="run.status === 'PREVIEWED'"
+                          [class.status-tag--ok]="run.status === 'POSTED'"
+                          [class.status-tag--neutral]="run.status === 'REVERSED'">
+                      <span class="status-tag__dot" aria-hidden="true"></span>{{ run.status }}
                     </span>
                   </td>
-                  <td class="text-end font-monospace" [class]="netAdjClass(run.netAdjustmentAmount)">
+                  <td class="num" [class]="netAdjClass(run.netAdjustmentAmount)">
                     {{ fmtAmt(run.netAdjustmentAmount) }}
                   </td>
-                  <td class="text-end font-monospace text-success">
+                  <td class="num text-success">
                     {{ fmtAmt(run.totalGainAmount) }}
                   </td>
-                  <td class="text-end font-monospace text-danger">
+                  <td class="num text-danger">
                     {{ fmtAmt(run.totalLossAmount) }}
                   </td>
                   <td>
@@ -252,20 +275,22 @@
                                  class="form-control form-control-sm"
                                  [ngModel]="reversalDate()"
                                  (ngModelChange)="reversalDate.set($event)"
+                                 [name]="'revDate-' + run.uid"
                                  style="width:9rem" />
                           <button type="button" class="btn btn-warning btn-sm"
                                   (click)="confirmReverse(run)"
-                                  [disabled]="reversingUid() === run.uid"
-                                  [attr.aria-label]="'Confirm reverse run ' + run.runNumber">
+                                  [disabled]="reversingUid() === run.uid">
                             @if (reversingUid() === run.uid) {
                               <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                              <span class="visually-hidden">Reversing {{ run.runNumber }}</span>
                             } @else {
-                              Reverse
+                              Reverse {{ run.runNumber }}
                             }
                           </button>
                           <button type="button" class="btn btn-outline-secondary btn-sm"
-                                  (click)="cancelReverse()" aria-label="Cancel reverse">
+                                  (click)="cancelReverse()">
                             <i class="bi bi-x-lg" aria-hidden="true"></i>
+                            <span class="visually-hidden">Cancel reverse</span>
                           </button>
                         </span>
                         @if (reverseError()) {
@@ -273,10 +298,9 @@
                         }
                       } @else {
                         <button type="button" class="btn btn-outline-warning btn-sm"
-                                (click)="openReverseForm(run.uid)"
-                                [attr.aria-label]="'Reverse run ' + run.runNumber">
+                                (click)="openReverseForm(run.uid)">
                           <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
-                          Reverse
+                          Reverse {{ run.runNumber }}
                         </button>
                       }
                     }
@@ -288,31 +312,31 @@
                   <tr>
                     <td colspan="8" class="p-0">
                       <div class="border-start border-primary ps-3 ms-2 py-2 bg-light">
-                        <h3 class="h6 mb-2">Run {{ run.runNumber }} — Lines</h3>
-                        <div class="table-responsive">
-                          <table class="table table-sm align-middle mb-0">
+                        <h3 class="erp-section-title mb-2">Run {{ run.runNumber }} — Lines</h3>
+                        <div class="erp-table-wrap">
+                          <table class="erp-table">
                             <caption class="visually-hidden">Lines for run {{ run.runNumber }}</caption>
-                            <thead class="table-light">
+                            <thead>
                               <tr>
                                 <th scope="col">Source</th>
                                 <th scope="col">Currency</th>
-                                <th scope="col" class="text-end">Outstanding Txn</th>
-                                <th scope="col" class="text-end">Carrying Base</th>
-                                <th scope="col" class="text-end">Spot Rate</th>
-                                <th scope="col" class="text-end">Revalued Base</th>
-                                <th scope="col" class="text-end">Adjustment</th>
+                                <th scope="col" class="num">Outstanding Txn</th>
+                                <th scope="col" class="num">Carrying Base</th>
+                                <th scope="col" class="num">Spot Rate</th>
+                                <th scope="col" class="num">Revalued Base</th>
+                                <th scope="col" class="num">Adjustment</th>
                               </tr>
                             </thead>
                             <tbody>
                               @for (line of run.lines; track line.uid) {
                                 <tr>
                                   <td>{{ line.sourceType }}</td>
-                                  <td class="font-monospace">{{ line.currency }}</td>
-                                  <td class="text-end font-monospace">{{ fmtAmt(line.outstandingTxnAmount) }}</td>
-                                  <td class="text-end font-monospace">{{ fmtAmt(line.carryingBaseAmount) }}</td>
-                                  <td class="text-end font-monospace">{{ fmtAmt(line.spotRate) }}</td>
-                                  <td class="text-end font-monospace">{{ fmtAmt(line.revaluedBaseAmount) }}</td>
-                                  <td class="text-end font-monospace" [class]="deltaClass(line.adjustmentAmount)">
+                                  <td class="mono">{{ line.currency }}</td>
+                                  <td class="num">{{ fmtAmt(line.outstandingTxnAmount) }}</td>
+                                  <td class="num">{{ fmtAmt(line.carryingBaseAmount) }}</td>
+                                  <td class="num">{{ fmtAmt(line.spotRate) }}</td>
+                                  <td class="num">{{ fmtAmt(line.revaluedBaseAmount) }}</td>
+                                  <td class="num" [class]="deltaClass(line.adjustmentAmount)">
                                     {{ fmtAmt(line.adjustmentAmount) }}
                                   </td>
                                 </tr>
@@ -330,8 +354,8 @@
         </div>
 
         <!-- Pagination -->
-          <app-paginator [meta]="meta()" [label]="'FX revaluations'" (pageChange)="goToPage($event)" />
+        <app-paginator [meta]="meta()" [label]="'FX revaluations'" (pageChange)="goToPage($event)" />
       }
     }
   }
-</section>
+</div>

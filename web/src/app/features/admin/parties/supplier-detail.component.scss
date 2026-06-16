@@ -1,4 +1,2 @@
-.admin-page { max-width: 960px; }
-.page-head { margin-bottom: 1rem; }
-.back-link { display: inline-block; margin-bottom: 0.5rem; }
-.grid th { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: #6b7280; }
+// Global kit handles page chrome, cards, table density, and status pills.
+.back-link { text-decoration: none; &:hover { text-decoration: underline; } }

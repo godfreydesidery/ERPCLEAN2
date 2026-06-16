@@ -1,16 +1,18 @@
 <section class="admin-page">
-  <header class="page-head">
-    <h1 class="h4 mb-1">Notification Delivery Log</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
-      <i class="bi bi-journal-text me-1" aria-hidden="true"></i>
-      Audit trail of every dispatch attempt — filter by channel or outcome.
-    </p>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>Notification Delivery Log</h1>
+      <p class="subtitle">
+        <i class="bi bi-journal-text me-1" aria-hidden="true"></i>
+        Audit trail of every dispatch attempt — filter by channel or outcome.
+      </p>
+    </div>
   </header>
 
   <!-- Filters -->
-  <div class="d-flex flex-wrap gap-2 mb-3 align-items-end">
-    <div style="min-width:160px">
-      <label class="form-label small text-muted mb-1" for="filterChannel">Channel</label>
+  <div class="erp-toolbar">
+    <div class="erp-field" style="min-width:160px">
+      <label for="filterChannel">Channel</label>
       <select id="filterChannel" name="filterChannel" class="form-select form-select-sm"
               [ngModel]="filterChannel()"
               (ngModelChange)="filterChannel.set($event)">
@@ -21,8 +23,8 @@
         <option value="PUSH">PUSH</option>
       </select>
     </div>
-    <div style="min-width:160px">
-      <label class="form-label small text-muted mb-1" for="filterOutcome">Outcome</label>
+    <div class="erp-field" style="min-width:160px">
+      <label for="filterOutcome">Outcome</label>
       <select id="filterOutcome" name="filterOutcome" class="form-select form-select-sm"
               [ngModel]="filterOutcome()"
               (ngModelChange)="filterOutcome.set($event)">
@@ -38,35 +40,38 @@
   <!-- List states -->
   @switch (state()) {
     @case ('loading') {
-      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
-        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading delivery log…
+      <p class="erp-empty" aria-live="polite">
+        <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Loading delivery log…
       </p>
     }
     @case ('error') {
-      <p class="state text-danger" role="alert">
-        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+      <p class="erp-empty" role="alert">
+        <i class="bi bi-exclamation-circle text-danger me-1" aria-hidden="true"></i>
         Could not load delivery log. Please try again.
       </p>
     }
     @case ('forbidden') {
-      <p class="state text-muted d-flex align-items-center gap-2">
-        <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      <div class="erp-empty">
+        <i class="bi bi-shield-lock"></i>
         You don't have permission to view the delivery log.
-      </p>
+      </div>
     }
     @default {
       @if (isEmpty()) {
-        <p class="state text-muted">No delivery log entries for the selected filters.</p>
+        <div class="erp-empty">
+          <i class="bi bi-journal-text"></i>
+          No delivery log entries for the selected filters.
+        </div>
       } @else {
-        <div class="table-responsive">
-          <table class="table table-hover align-middle bg-white grid">
+        <div class="erp-table-wrap">
+          <table class="erp-table">
             <caption class="visually-hidden">Notification delivery log</caption>
             <thead>
               <tr>
                 <th scope="col">Type Key</th>
                 <th scope="col">Channel</th>
                 <th scope="col">Outcome</th>
-                <th scope="col">Attempt</th>
+                <th scope="col" class="num">Attempt</th>
                 <th scope="col">Suppression Reason</th>
                 <th scope="col">Recipient User</th>
                 <th scope="col">Trigger Key</th>
@@ -76,20 +81,24 @@
             </thead>
             <tbody>
               @for (d of rows(); track d.uid) {
-                <tr [class.table-danger]="d.outcome === 'FAILED'">
-                  <td class="small font-monospace">{{ d.typeKey }}</td>
-                  <td class="small font-monospace">{{ d.channel }}</td>
+                <tr>
+                  <td class="mono">{{ d.typeKey }}</td>
+                  <td class="mono">{{ d.channel }}</td>
                   <td>
-                    <span class="badge" [class]="outcomeBadgeClass(d.outcome)">{{ d.outcome }}</span>
+                    <span class="status-tag"
+                          [class.status-tag--ok]="d.outcome.toUpperCase() === 'SENT' || d.outcome.toUpperCase() === 'DELIVERED'"
+                          [class.status-tag--danger]="d.outcome.toUpperCase() === 'FAILED'"
+                          [class.status-tag--warn]="d.outcome.toUpperCase() === 'PENDING'"
+                          [class.status-tag--neutral]="d.outcome.toUpperCase() !== 'SENT' && d.outcome.toUpperCase() !== 'DELIVERED' && d.outcome.toUpperCase() !== 'FAILED' && d.outcome.toUpperCase() !== 'PENDING'">
+                      {{ d.outcome }}
+                    </span>
                   </td>
-                  <td class="small text-center">{{ d.attemptNo }}</td>
-                  <td class="small text-muted">{{ d.suppressionReason ?? '—' }}</td>
-                  <td class="small text-muted">{{ d.recipientUserId ? 'User #' + d.recipientUserId : '—' }}</td>
-                  <td class="small text-muted font-monospace">{{ shortTriggerKey(d.triggerKey) }}</td>
-                  <td class="small text-muted">{{ d.attemptedAt | slice:0:16 }}</td>
-                  <td class="small" [class.text-danger]="d.error">
-                    {{ d.error ?? '—' }}
-                  </td>
+                  <td class="num">{{ d.attemptNo }}</td>
+                  <td class="text-muted">{{ d.suppressionReason ?? '—' }}</td>
+                  <td class="text-muted">{{ d.recipientUserId ? 'User #' + d.recipientUserId : '—' }}</td>
+                  <td class="mono text-muted">{{ shortTriggerKey(d.triggerKey) }}</td>
+                  <td class="text-muted">{{ d.attemptedAt | slice:0:16 }}</td>
+                  <td [class.text-danger]="d.error">{{ d.error ?? '—' }}</td>
                 </tr>
               }
             </tbody>
@@ -97,7 +106,7 @@
         </div>
 
         <!-- Pagination -->
-          <app-paginator [meta]="meta()" [label]="'Delivery log'" (pageChange)="goToPage($event)" />
+        <app-paginator [meta]="meta()" [label]="'Delivery log'" (pageChange)="goToPage($event)" />
       }
     }
   }

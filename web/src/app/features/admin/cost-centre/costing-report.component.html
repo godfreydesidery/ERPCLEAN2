@@ -1,18 +1,20 @@
 <section class="admin-page">
-  <header class="page-head">
-    <h1 class="h4 mb-1">Dimension-Sliced Trial Balance</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
-      <i class="bi bi-bar-chart-steps me-1" aria-hidden="true"></i>
-      View debits, credits, and net per account broken down by cost centre or department dimension.
-      Requires COSTING.VIEW + GL.VIEW. Note: dimension slices do not net to zero.
-    </p>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>Dimension-Sliced Trial Balance</h1>
+      <p class="subtitle">
+        <i class="bi bi-bar-chart-steps me-1" aria-hidden="true"></i>
+        View debits, credits, and net per account broken down by cost centre or department dimension.
+        Requires COSTING.VIEW + GL.VIEW. Note: dimension slices do not net to zero.
+      </p>
+    </div>
   </header>
 
   @if (!canView()) {
-    <p class="state text-muted d-flex align-items-center gap-2">
-      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+    <div class="erp-empty">
+      <i class="bi bi-shield-lock"></i>
       You need both COSTING.VIEW and GL.VIEW permissions to access this report.
-    </p>
+    </div>
   } @else {
     <!-- Company selector -->
     @switch (companyState()) {
@@ -41,59 +43,63 @@
     }
 
     @if (selectedCompanyId()) {
-      <!-- Filters -->
-      <form class="card card-body mb-3" (ngSubmit)="loadReport()" aria-label="Report filters">
-        <div class="row g-3 align-items-end">
-          <!-- Slot -->
-          <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="slotPicker">
-              Dimension slot <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <select id="slotPicker" name="slotPicker" class="form-select"
-                    [ngModel]="selectedSlot()"
-                    (ngModelChange)="onSlotChange($event)">
-              @for (opt of slotOptions; track opt.value) {
-                <option [value]="opt.value">{{ opt.label }}</option>
-              }
-            </select>
-          </div>
-
-          <!-- Period (optional) -->
-          <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="periodPicker">
-              Period (optional — all-time if blank)
-            </label>
-            @switch (periodsState()) {
-              @case ('loading') {
-                <p class="text-muted small" aria-live="polite">Loading…</p>
-              }
-              @default {
-                <select id="periodPicker" name="periodPicker" class="form-select"
-                        [ngModel]="selectedPeriodId()"
-                        (ngModelChange)="selectedPeriodId.set($event)">
-                  <option value="">All periods</option>
-                  @for (p of periods(); track p.uid) {
-                    <option [value]="p.id">Period {{ p.periodNo }} ({{ p.startDate }} – {{ p.endDate }})</option>
-                  }
-                </select>
-              }
-            }
-          </div>
-
-          <!-- Roll-up -->
-          <div class="col-sm-3">
-            <div class="form-check mt-4">
-              <input class="form-check-input" type="checkbox" id="rollUpCheck" name="rollUpCheck"
-                     [ngModel]="rollUp()" (ngModelChange)="rollUp.set($event)" />
-              <label class="form-check-label" for="rollUpCheck">
-                Roll up (include descendant values)
+      <!-- Filters form -->
+      <form class="erp-card mb-3" (ngSubmit)="loadReport()" aria-label="Report filters">
+        <div class="erp-card__head">
+          <h2>Report Filters</h2>
+        </div>
+        <div class="erp-card__body">
+          <div class="erp-form-grid">
+            <!-- Slot -->
+            <div class="erp-field">
+              <label class="form-label" for="slotPicker">
+                Dimension slot <span class="text-danger" aria-hidden="true">*</span>
               </label>
+              <select id="slotPicker" name="slotPicker" class="form-select"
+                      [ngModel]="selectedSlot()"
+                      (ngModelChange)="onSlotChange($event)">
+                @for (opt of slotOptions; track opt.value) {
+                  <option [value]="opt.value">{{ opt.label }}</option>
+                }
+              </select>
+            </div>
+
+            <!-- Period (optional) -->
+            <div class="erp-field">
+              <label class="form-label" for="periodPicker">
+                Period (optional — all-time if blank)
+              </label>
+              @switch (periodsState()) {
+                @case ('loading') {
+                  <p class="text-muted small" aria-live="polite">Loading…</p>
+                }
+                @default {
+                  <select id="periodPicker" name="periodPicker" class="form-select"
+                          [ngModel]="selectedPeriodId()"
+                          (ngModelChange)="selectedPeriodId.set($event)">
+                    <option value="">All periods</option>
+                    @for (p of periods(); track p.uid) {
+                      <option [value]="p.id">Period {{ p.periodNo }} ({{ p.startDate }} – {{ p.endDate }})</option>
+                    }
+                  </select>
+                }
+              }
+            </div>
+
+            <!-- Roll-up -->
+            <div class="erp-field">
+              <div class="form-check mt-4">
+                <input class="form-check-input" type="checkbox" id="rollUpCheck" name="rollUpCheck"
+                       [ngModel]="rollUp()" (ngModelChange)="rollUp.set($event)" />
+                <label class="form-check-label" for="rollUpCheck">
+                  Roll up (include descendant values)
+                </label>
+              </div>
             </div>
           </div>
 
-          <!-- Run button -->
-          <div class="col-sm-3">
-            <button type="submit" class="btn btn-primary w-100"
+          <div class="mt-3">
+            <button type="submit" class="btn btn-primary"
                     [disabled]="state() === 'loading'">
               @if (state() === 'loading') {
                 <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
@@ -110,78 +116,91 @@
       <!-- Report states -->
       @switch (state()) {
         @case ('loading') {
-          <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
             <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading report…
           </p>
         }
         @case ('error') {
-          <p class="state text-danger" role="alert">
+          <p class="text-danger" role="alert">
             <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
             Could not load the report. Please try again.
           </p>
         }
         @case ('forbidden') {
-          <p class="state text-muted d-flex align-items-center gap-2">
-            <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          <div class="erp-empty">
+            <i class="bi bi-shield-lock"></i>
             You don't have permission to run this report.
-          </p>
+          </div>
         }
         @default {
           @if (isEmpty()) {
-            <p class="state text-muted">Set filters and click Run Report.</p>
+            <div class="erp-empty">
+              <i class="bi bi-bar-chart-steps"></i> Set filters and click Run Report.
+            </div>
           } @else if (report(); as rpt) {
-            <div class="mb-2 d-flex gap-2 align-items-center flex-wrap">
-              <span class="badge text-bg-info">{{ rpt.dimensionSlot }}</span>
+            <!-- Report meta chips -->
+            <div class="erp-toolbar mb-2">
+              <span class="status-tag status-tag--info">{{ rpt.dimensionSlot }}</span>
               @if (rpt.rollUp) {
-                <span class="badge text-bg-secondary">Roll-up on</span>
+                <span class="status-tag status-tag--neutral">Roll-up on</span>
               }
-              <span class="text-muted small ms-auto">{{ rows().length }} rows</span>
+              <span class="erp-toolbar__spacer"></span>
+              <span class="text-muted small">{{ rows().length }} rows</span>
             </div>
 
             @if (rows().length === 0) {
-              <p class="state text-muted">No postings found for these filters.</p>
+              <div class="erp-empty">
+                <i class="bi bi-bar-chart-steps"></i> No postings found for these filters.
+              </div>
             } @else {
-              <div class="table-responsive">
-                <table class="table table-hover align-middle bg-white grid table-sm">
+              <div class="erp-table-wrap">
+                <table class="erp-table">
                   <caption class="visually-hidden">Dimension-sliced trial balance</caption>
                   <thead>
                     <tr>
                       <th scope="col">Value</th>
                       <th scope="col">Account</th>
                       <th scope="col">Type</th>
-                      <th scope="col" class="text-end">Debit</th>
-                      <th scope="col" class="text-end">Credit</th>
-                      <th scope="col" class="text-end">Net (Dr − Cr)</th>
+                      <th scope="col" class="num">Debit</th>
+                      <th scope="col" class="num">Credit</th>
+                      <th scope="col" class="num">Net (Dr − Cr)</th>
                     </tr>
                   </thead>
                   <tbody>
                     @for (row of rows(); track row.accountUid + '-' + row.valueUid) {
                       <tr>
                         <td class="small">
-                          <span class="font-monospace text-muted">{{ row.valueCode }}</span>
+                          <span class="mono text-muted">{{ row.valueCode }}</span>
                           {{ row.valueName }}
                         </td>
                         <td class="small">
-                          <span class="font-monospace text-muted">{{ row.accountCode }}</span>
+                          <span class="mono text-muted">{{ row.accountCode }}</span>
                           {{ row.accountName }}
                         </td>
                         <td>
-                          <span class="badge" [class]="accountTypeBadge(row.accountType)">{{ row.accountType }}</span>
+                          <span class="status-tag"
+                                [class.status-tag--ok]="row.accountType === 'INCOME'"
+                                [class.status-tag--danger]="row.accountType === 'EXPENSE'"
+                                [class.status-tag--info]="row.accountType === 'ASSET' || row.accountType === 'EQUITY'"
+                                [class.status-tag--warn]="row.accountType === 'LIABILITY'"
+                                [class.status-tag--neutral]="row.accountType !== 'INCOME' && row.accountType !== 'EXPENSE' && row.accountType !== 'ASSET' && row.accountType !== 'EQUITY' && row.accountType !== 'LIABILITY'">
+                            {{ row.accountType }}
+                          </span>
                         </td>
-                        <td class="text-end font-monospace">{{ +row.totalDebit | number:'1.2-2' }}</td>
-                        <td class="text-end font-monospace">{{ +row.totalCredit | number:'1.2-2' }}</td>
-                        <td class="text-end font-monospace fw-semibold" [class]="netClass(row.net)">
+                        <td class="num mono">{{ +row.totalDebit | number:'1.2-2' }}</td>
+                        <td class="num mono">{{ +row.totalCredit | number:'1.2-2' }}</td>
+                        <td class="num mono fw-semibold" [class.text-danger]="netClass(row.net) === 'text-danger'">
                           {{ +row.net | number:'1.2-2' }}
                         </td>
                       </tr>
                     }
                   </tbody>
-                  <tfoot>
-                    <tr class="table-light fw-semibold">
+                  <tfoot class="erp-tfoot">
+                    <tr class="fw-semibold">
                       <td colspan="3">Total</td>
-                      <td class="text-end font-monospace">{{ totalDebit() | number:'1.2-2' }}</td>
-                      <td class="text-end font-monospace">{{ totalCredit() | number:'1.2-2' }}</td>
-                      <td class="text-end font-monospace" [class]="netClass(totalNet().toString())">
+                      <td class="num mono">{{ totalDebit() | number:'1.2-2' }}</td>
+                      <td class="num mono">{{ totalCredit() | number:'1.2-2' }}</td>
+                      <td class="num mono" [class.text-danger]="netClass(totalNet().toString()) === 'text-danger'">
                         {{ totalNet() | number:'1.2-2' }}
                       </td>
                     </tr>

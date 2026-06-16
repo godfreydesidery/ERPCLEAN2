@@ -5,7 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { AlertService } from '../../../../core/feedback/alert.service';
 import { SessionStore } from '../../../../core/auth/session.store';
-import { PurchaseRequisitionDto, RequisitionStatus } from './purchase-requisition.model';
+import { PurchaseRequisitionDto } from './purchase-requisition.model';
 import { PurchaseRequisitionService } from './purchase-requisition.service';
 
 @Component({
@@ -161,17 +161,6 @@ export class RequisitionDetailComponent {
   }
 
   // ── Display helpers ────────────────────────────────────────────────────────
-
-  statusBadgeClass(status: RequisitionStatus): string {
-    switch (status) {
-      case 'SUBMITTED': return 'text-bg-primary';
-      case 'APPROVED': return 'text-bg-success';
-      case 'REJECTED': return 'text-bg-danger';
-      case 'CONVERTED': return 'text-bg-info';
-      case 'CANCELLED': return 'text-bg-secondary';
-      default: return 'text-bg-warning'; // DRAFT
-    }
-  }
 
   convertedRouteBase(): string {
     const r = this.entity();

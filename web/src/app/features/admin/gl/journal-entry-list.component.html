@@ -1,11 +1,17 @@
 <section class="admin-page">
-  <header class="page-head">
-    <h1 class="h4 mb-1">
-      <i class="bi bi-journal-text me-2" aria-hidden="true"></i>Journal Entries
-    </h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
-      Posted journal entries. SALES entries are auto-posted and read-only.
-    </p>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1><i class="bi bi-journal-text me-2" aria-hidden="true"></i>Journal Entries</h1>
+      <p class="subtitle">Posted journal entries. SALES entries are auto-posted and read-only.</p>
+    </div>
+    <div class="erp-page-head__actions">
+      @if (canPost() && selectedCompanyId()) {
+        <a class="btn btn-primary" routerLink="/admin/gl/journals/post">
+          <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+          Post Manual Journal
+        </a>
+      }
+    </div>
   </header>
 
   <!-- Company selector -->
@@ -38,41 +44,34 @@
   }
 
   @if (selectedCompanyId()) {
-    <!-- Actions bar -->
-    <div class="d-flex justify-content-end mb-3">
-      @if (canPost()) {
-        <a class="btn btn-primary" routerLink="/admin/gl/journals/post">
-          <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
-          Post Manual Journal
-        </a>
-      }
-    </div>
-
     <!-- List states -->
     @switch (state()) {
       @case ('loading') {
-        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading journals…
         </p>
       }
       @case ('error') {
-        <p class="state text-danger" role="alert">
+        <p class="text-danger" role="alert">
           <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
           Could not load journal entries. Please try again.
         </p>
       }
       @case ('forbidden') {
-        <p class="state text-muted d-flex align-items-center gap-2">
-          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock"></i>
           You don't have permission to view journal entries.
-        </p>
+        </div>
       }
       @default {
         @if (isEmpty()) {
-          <p class="state text-muted">No journal entries yet.</p>
+          <div class="erp-empty">
+            <i class="bi bi-journal-text"></i>
+            No journal entries yet.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Journal entries for this company</caption>
               <thead>
                 <tr>
@@ -81,23 +80,27 @@
                   <th scope="col">Description</th>
                   <th scope="col">Source</th>
                   <th scope="col">Ref</th>
-                  <th scope="col" class="text-end">Total Debits</th>
+                  <th scope="col" class="num">Total Debits</th>
                   <th scope="col"><span class="visually-hidden">View</span></th>
                 </tr>
               </thead>
               <tbody>
                 @for (e of rows(); track e.uid) {
                   <tr>
-                    <td class="font-monospace small">{{ e.batchNumber }}</td>
+                    <td class="mono small">{{ e.batchNumber }}</td>
                     <td class="small">{{ e.postingDate }}</td>
                     <td>{{ e.description }}</td>
                     <td>
-                      <span class="badge" [class]="sourceBadgeClass(e.sourceType)">
+                      <span class="status-tag"
+                            [class.status-tag--info]="e.sourceType === 'MANUAL'"
+                            [class.status-tag--ok]="e.sourceType === 'SALES'"
+                            [class.status-tag--warn]="e.sourceType === 'SALES_REVERSAL' || e.sourceType === 'PURCHASE_REVERSAL'"
+                            [class.status-tag--neutral]="e.sourceType === 'PURCHASE' || e.sourceType === 'OPENING_BALANCE'">
                         {{ e.sourceType }}
                       </span>
                     </td>
-                    <td class="small text-muted">{{ e.sourceRef ? (e.sourceRef.length > 12 ? (e.sourceRef.slice(0, 12) + '…') : e.sourceRef) : '—' }}</td>
-                    <td class="text-end font-monospace small">{{ entryTotal(e) }}</td>
+                    <td class="small text-muted mono">{{ e.sourceRef ? (e.sourceRef.length > 12 ? (e.sourceRef.slice(0, 12) + '…') : e.sourceRef) : '—' }}</td>
+                    <td class="num mono small">{{ entryTotal(e) }}</td>
                     <td>
                       <a class="btn btn-sm btn-outline-primary"
                          [routerLink]="['/admin/gl/journals/uid', e.uid]"

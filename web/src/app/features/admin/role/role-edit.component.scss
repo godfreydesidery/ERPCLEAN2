@@ -1,12 +1,5 @@
-/* Role edit — Bootstrap-themed (Orbix). Mirrors company-list layout conventions. */
-
-.admin-page {
-  max-width: 960px;
-}
-
-.page-head {
-  margin-bottom: 1rem;
-}
+/* Role edit — relies on global ERP kit (.admin-page, .page-head, .erp-card).
+   Component-specific: back-link, system-note, perm-grid layout. */
 
 .back-link {
   text-decoration: none;
@@ -24,6 +17,7 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 1.25rem;
+  margin-bottom: 0.5rem;
 }
 
 .perm-group {

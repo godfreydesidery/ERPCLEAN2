@@ -9,7 +9,7 @@
  *  4. submitRender() validation: sourceParams required for AR_STATEMENT.
  *  5. submitRender() calls docService.render with correct payload.
  *  6. 403 response sets state to 'forbidden'.
- *  7. typeBadgeClass returns correct class per type.
+ *  7. Document type renders correct status-tag modifier class in the table row.
  */
 import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -180,33 +180,57 @@ describe('DocumentListComponent — 403 forbidden', () => {
   });
 });
 
-// ── typeBadgeClass ─────────────────────────────────────────────────────────────
+// ── document type status-tag rendering ────────────────────────────────────────
 
-describe('DocumentListComponent — typeBadgeClass', () => {
-  beforeEach(() => { vi.useFakeTimers(); makeBed(); });
+describe('DocumentListComponent — document type status-tag classes', () => {
+  const makePageWith = (documentType: string): GeneratedDocumentPage => ({
+    rows: [{ ...stubDoc, documentType: documentType as any }],
+    meta: { page: 0, size: 20, totalElements: 1, totalPages: 1, hasNext: false },
+  });
+
   afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
 
-  it('INVOICE → text-bg-primary', async () => {
-    const comp = TestBed.createComponent(DocumentListComponent).componentInstance;
+  it('INVOICE row renders status-tag--ok', async () => {
+    vi.useFakeTimers();
+    makeBed({ listImpl: () => of(makePageWith('INVOICE')) });
+    const fixture = TestBed.createComponent(DocumentListComponent);
     await vi.runAllTimersAsync();
-    expect(comp.typeBadgeClass('INVOICE')).toBe('text-bg-primary');
+    fixture.detectChanges();
+    const tag = fixture.nativeElement.querySelector('tbody .status-tag') as HTMLElement;
+    expect(tag).toBeTruthy();
+    expect(tag.classList.contains('status-tag--ok')).toBe(true);
   });
 
-  it('PURCHASE_ORDER → text-bg-warning', async () => {
-    const comp = TestBed.createComponent(DocumentListComponent).componentInstance;
+  it('PURCHASE_ORDER row renders status-tag--warn', async () => {
+    vi.useFakeTimers();
+    makeBed({ listImpl: () => of(makePageWith('PURCHASE_ORDER')) });
+    const fixture = TestBed.createComponent(DocumentListComponent);
     await vi.runAllTimersAsync();
-    expect(comp.typeBadgeClass('PURCHASE_ORDER')).toBe('text-bg-warning');
+    fixture.detectChanges();
+    const tag = fixture.nativeElement.querySelector('tbody .status-tag') as HTMLElement;
+    expect(tag).toBeTruthy();
+    expect(tag.classList.contains('status-tag--warn')).toBe(true);
   });
 
-  it('GOODS_RECEIPT → text-bg-success', async () => {
-    const comp = TestBed.createComponent(DocumentListComponent).componentInstance;
+  it('CREDIT_NOTE row renders status-tag--danger', async () => {
+    vi.useFakeTimers();
+    makeBed({ listImpl: () => of(makePageWith('CREDIT_NOTE')) });
+    const fixture = TestBed.createComponent(DocumentListComponent);
     await vi.runAllTimersAsync();
-    expect(comp.typeBadgeClass('GOODS_RECEIPT')).toBe('text-bg-success');
+    fixture.detectChanges();
+    const tag = fixture.nativeElement.querySelector('tbody .status-tag') as HTMLElement;
+    expect(tag).toBeTruthy();
+    expect(tag.classList.contains('status-tag--danger')).toBe(true);
   });
 
-  it('CREDIT_NOTE → text-bg-danger', async () => {
-    const comp = TestBed.createComponent(DocumentListComponent).componentInstance;
+  it('GOODS_RECEIPT row renders status-tag--ok', async () => {
+    vi.useFakeTimers();
+    makeBed({ listImpl: () => of(makePageWith('GOODS_RECEIPT')) });
+    const fixture = TestBed.createComponent(DocumentListComponent);
     await vi.runAllTimersAsync();
-    expect(comp.typeBadgeClass('CREDIT_NOTE')).toBe('text-bg-danger');
+    fixture.detectChanges();
+    const tag = fixture.nativeElement.querySelector('tbody .status-tag') as HTMLElement;
+    expect(tag).toBeTruthy();
+    expect(tag.classList.contains('status-tag--ok')).toBe(true);
   });
 });

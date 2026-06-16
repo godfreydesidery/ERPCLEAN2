@@ -15,7 +15,6 @@ import {
   ApPaymentDto,
   PaymentRunRequest,
   SupplierBillDto,
-  SupplierBillStatus,
   TenderType,
 } from './models/ap.model';
 import { ApService } from './ap.service';
@@ -293,15 +292,6 @@ export class RecordPaymentComponent {
   fmtMoney(v: number | string | null | undefined): string {
     const n = +(v ?? 0);
     return Number.isFinite(n) ? n.toFixed(2) : '0.00';
-  }
-
-  statusBadgeClass(status: SupplierBillStatus): string {
-    switch (status) {
-      case 'MATCHED':        return 'text-bg-info';
-      case 'APPROVED':       return 'text-bg-primary';
-      case 'PARTIALLY_PAID': return 'text-bg-warning';
-      default:               return 'text-bg-secondary';
-    }
   }
 
   private messageFrom(err: unknown, fallback: string): string {

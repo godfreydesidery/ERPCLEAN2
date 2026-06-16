@@ -192,12 +192,6 @@ export class RouteListComponent {
     });
   }
 
-  statusBadgeClass(status: string): string {
-    if (status === 'ACTIVE') return 'text-bg-success';
-    if (status === 'ARCHIVED') return 'text-bg-secondary';
-    return 'text-bg-warning'; // INACTIVE
-  }
-
   private messageFrom(err: unknown): string {
     const errors = (err as { error?: { errors?: string[] } })?.error?.errors;
     return errors?.length ? errors[0] : 'Could not save the route.';

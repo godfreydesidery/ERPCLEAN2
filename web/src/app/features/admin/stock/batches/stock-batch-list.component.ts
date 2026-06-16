@@ -209,7 +209,4 @@ export class StockBatchListComponent {
     return d.toISOString().slice(0, 10);
   }
 
-  expiryBadgeClass(expired: boolean): string {
-    return expired ? 'text-bg-danger' : 'text-bg-warning';
-  }
 }

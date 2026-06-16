@@ -1,13 +1,15 @@
 <section class="admin-page">
-  <header class="page-head">
-    <h1 class="h4 mb-1">
-      <i class="bi bi-receipt me-2" aria-hidden="true"></i>AR Receipts
-    </h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">Recorded cash receipts from customers.</p>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1><i class="bi bi-receipt me-2" aria-hidden="true"></i>AR Receipts</h1>
+      <p class="subtitle">Recorded cash receipts from customers.</p>
+    </div>
     @if (session.hasPermission('AR.RECEIPT.RECORD')) {
-      <a routerLink="/admin/ar/receipts/record" class="btn btn-primary btn-sm mt-2">
-        <i class="bi bi-plus-circle me-1" aria-hidden="true"></i>Record Receipt
-      </a>
+      <div class="erp-page-head__actions">
+        <a routerLink="/admin/ar/receipts/record" class="btn btn-primary btn-sm">
+          <i class="bi bi-plus-circle me-1" aria-hidden="true"></i>Record Receipt
+        </a>
+      </div>
     }
   </header>
 
@@ -98,17 +100,19 @@
       }
       @default {
         @if (isEmpty()) {
-          <p class="text-muted fst-italic">No receipts found for the selected filters.</p>
+          <div class="erp-empty">
+            <i class="bi bi-inbox"></i> No receipts found for the selected filters.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">AR Receipts</caption>
-              <thead class="table-light">
+              <thead>
                 <tr>
                   <th scope="col">Receipt #</th>
                   <th scope="col">Date</th>
-                  <th scope="col">Amount</th>
-                  <th scope="col">Unallocated</th>
+                  <th scope="col" class="num">Amount</th>
+                  <th scope="col" class="num">Unallocated</th>
                   <th scope="col">Tender</th>
                   <th scope="col"><span class="visually-hidden">Actions</span></th>
                 </tr>
@@ -116,10 +120,10 @@
               <tbody>
                 @for (row of rows(); track row.uid) {
                   <tr>
-                    <td>{{ row.receiptNumber }}</td>
+                    <td class="mono fw-semibold">{{ row.receiptNumber }}</td>
                     <td>{{ row.receiptDate }}</td>
-                    <td class="text-end font-monospace">{{ row.currency }} {{ fmtMoney(row.amount) }}</td>
-                    <td class="text-end font-monospace">{{ fmtMoney(row.unallocatedAmount) }}</td>
+                    <td class="num">{{ row.currency }} {{ fmtMoney(row.amount) }}</td>
+                    <td class="num">{{ fmtMoney(row.unallocatedAmount) }}</td>
                     <td>{{ row.tenderType }}</td>
                     <td class="text-end">
                       <a [routerLink]="['/admin/ar/receipts/uid', row.uid]"

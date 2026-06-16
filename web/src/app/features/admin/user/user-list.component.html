@@ -60,10 +60,13 @@
     }
     @default {
       @if (!hasUsers()) {
-        <p class="state text-muted">No users yet. Add one above.</p>
+        <div class="erp-empty">
+          <i class="bi bi-people" aria-hidden="true"></i>
+          No users yet. Add one above.
+        </div>
       } @else {
-        <div class="table-responsive">
-          <table class="table table-hover align-middle bg-white grid">
+        <div class="erp-table-wrap">
+          <table class="erp-table">
             <caption class="sr-only">User accounts in this system</caption>
             <thead>
               <tr>
@@ -78,25 +81,25 @@
             <tbody>
               @for (u of users(); track u.uid) {
                 <tr>
-                  <td class="font-monospace">{{ u.username }}</td>
+                  <td class="mono">{{ u.username }}</td>
                   <td>{{ u.displayName }}</td>
                   <td>
-                    <span class="badge"
-                          [class.text-bg-success]="u.status === 'ACTIVE'"
-                          [class.text-bg-secondary]="u.status !== 'ACTIVE'">
+                    <span class="status-tag"
+                          [class.status-tag--ok]="u.status === 'ACTIVE'"
+                          [class.status-tag--neutral]="u.status !== 'ACTIVE'">
                       {{ u.status }}
                     </span>
                   </td>
                   <td>
                     @if (u.locked) {
-                      <span class="badge text-bg-warning">locked</span>
+                      <span class="status-tag status-tag--warn">locked</span>
                     } @else {
                       <span class="text-muted small">—</span>
                     }
                   </td>
                   <td>
                     @if (u.isRoot) {
-                      <span class="badge text-bg-danger">root</span>
+                      <span class="status-tag status-tag--danger">root</span>
                     } @else {
                       <span class="text-muted small">—</span>
                     }

@@ -8,7 +8,7 @@
  *  4. openSession() validation: requires valid opening float.
  *  5. openSession() calls posService.openSession with correct payload.
  *  6. 403 response sets state to 'forbidden'.
- *  7. statusBadgeClass: key status values.
+ *  7. status pill rendering: statuses map to the correct status-tag modifier in the DOM.
  */
 import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -176,27 +176,36 @@ describe('PosSessionListComponent — 403 forbidden', () => {
   });
 });
 
-// ── statusBadgeClass ───────────────────────────────────────────────────────────
+// ── status pill rendering ──────────────────────────────────────────────────────
+// The legacy statusBadgeClass() helper was removed in the UI revamp; status colour
+// now lives in the template as inline status-tag bindings. Assert the rendered DOM.
 
-describe('PosSessionListComponent — statusBadgeClass', () => {
-  beforeEach(() => { vi.useFakeTimers(); makeBed(); });
+describe('PosSessionListComponent — status pill rendering', () => {
+  beforeEach(() => { vi.useFakeTimers(); });
   afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
 
-  it('OPEN → text-bg-success', async () => {
-    const comp = TestBed.createComponent(PosSessionListComponent).componentInstance;
+  it('maps each session status to the correct status-tag modifier', async () => {
+    const row = (uid: string, status: 'OPEN' | 'CLOSED' | 'RECONCILED') => ({
+      ...stubSession, id: uid, uid, status,
+    });
+    makeBed({
+      listImpl: () => of({
+        rows: [row('S1', 'OPEN'), row('S2', 'CLOSED'), row('S3', 'RECONCILED')],
+        meta: { page: 0, size: 20, totalElements: 3, totalPages: 1, hasNext: false },
+      }),
+    });
+    const fixture = TestBed.createComponent(PosSessionListComponent);
     await vi.runAllTimersAsync();
-    expect(comp.statusBadgeClass('OPEN')).toBe('text-bg-success');
-  });
+    fixture.detectChanges();
 
-  it('CLOSED → text-bg-warning', async () => {
-    const comp = TestBed.createComponent(PosSessionListComponent).componentInstance;
-    await vi.runAllTimersAsync();
-    expect(comp.statusBadgeClass('CLOSED')).toBe('text-bg-warning');
-  });
+    const tags = Array.from(
+      fixture.nativeElement.querySelectorAll('.status-tag'),
+    ) as HTMLElement[];
+    const byText = (label: string) => tags.find((el) => el.textContent?.includes(label));
 
-  it('RECONCILED → text-bg-secondary', async () => {
-    const comp = TestBed.createComponent(PosSessionListComponent).componentInstance;
-    await vi.runAllTimersAsync();
-    expect(comp.statusBadgeClass('RECONCILED')).toBe('text-bg-secondary');
+    // OPEN and RECONCILED are "ok" (active / settled); CLOSED is neutral.
+    expect(byText('OPEN')?.classList.contains('status-tag--ok')).toBe(true);
+    expect(byText('CLOSED')?.classList.contains('status-tag--neutral')).toBe(true);
+    expect(byText('RECONCILED')?.classList.contains('status-tag--ok')).toBe(true);
   });
 });

@@ -1,76 +1,91 @@
-<section class="container-fluid py-3" aria-label="WHT Register">
-  <div class="d-flex align-items-center mb-3 gap-2 flex-wrap">
-    <h1 class="h4 mb-0 me-auto">WHT Register</h1>
+<div class="admin-page" aria-label="WHT Register">
 
-    @if (companyState() === 'loading') {
-      <span class="spinner-border spinner-border-sm text-secondary" aria-label="Loading companies"></span>
-    }
-    @if (companies().length > 1) {
-      <label class="visually-hidden" for="whtRegCompany">Company</label>
-      <select id="whtRegCompany" class="form-select form-select-sm w-auto"
-              [ngModel]="selectedCompanyId()"
-              (ngModelChange)="onCompanyChange($event)">
-        @for (c of companies(); track c.id) {
-          <option [value]="c.id">{{ c.name }}</option>
-        }
-      </select>
-    }
+  <!-- Page header -->
+  <div class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>WHT Register</h1>
+      <p class="subtitle">Withholding tax certificates by period</p>
+    </div>
+    <div class="erp-page-head__actions">
+      @if (companyState() === 'loading') {
+        <span class="spinner-border spinner-border-sm text-secondary" aria-label="Loading companies"></span>
+      }
+      @if (companies().length > 1) {
+        <label class="visually-hidden" for="whtRegCompany">Company</label>
+        <select id="whtRegCompany" class="form-select form-select-sm w-auto"
+                [ngModel]="selectedCompanyId()"
+                (ngModelChange)="onCompanyChange($event)">
+          @for (c of companies(); track c.id) {
+            <option [value]="c.id">{{ c.name }}</option>
+          }
+        </select>
+      }
+    </div>
   </div>
 
   <!-- Period selector -->
-  <div class="card mb-3">
-    <div class="card-body">
-      <div class="row g-3 align-items-end">
-        <div class="col-12 col-md-2">
-          <label class="form-label" for="whtPeriodMode">Period type</label>
-          <select id="whtPeriodMode" class="form-select form-select-sm"
-                  [ngModel]="periodMode()" (ngModelChange)="periodMode.set($event)">
-            <option value="month">Year &amp; Month</option>
-            <option value="range">Date Range</option>
-          </select>
-        </div>
-
-        @if (periodMode() === 'month') {
-          <div class="col-12 col-md-2">
-            <label class="form-label" for="whtYear">Year</label>
-            <input id="whtYear" type="number" class="form-control form-control-sm"
-                   [ngModel]="periodYear()" (ngModelChange)="periodYear.set(+$event)"
-                   min="2000" max="2100" />
-          </div>
-          <div class="col-12 col-md-3">
-            <label class="form-label" for="whtMonth">Month</label>
-            <select id="whtMonth" class="form-select form-select-sm"
-                    [ngModel]="periodMonth()" (ngModelChange)="periodMonth.set(+$event)">
-              @for (m of months; track m.value) {
-                <option [value]="m.value">{{ m.label }}</option>
-              }
+  <div class="erp-card mb-3">
+    <div class="erp-card__head">
+      <h2 class="erp-section-title">Select Period</h2>
+    </div>
+    <div class="erp-card__body">
+      <form aria-label="WHT period filter" (ngSubmit)="load()">
+        <div class="erp-form-grid">
+          <div class="erp-field">
+            <label class="form-label" for="whtPeriodMode">Period type</label>
+            <select id="whtPeriodMode" class="form-select form-select-sm"
+                    [ngModel]="periodMode()" (ngModelChange)="periodMode.set($event)"
+                    name="whtPeriodMode">
+              <option value="month">Year &amp; Month</option>
+              <option value="range">Date Range</option>
             </select>
           </div>
-        } @else {
-          <div class="col-12 col-md-2">
-            <label class="form-label" for="whtStart">From</label>
-            <input id="whtStart" type="date" class="form-control form-control-sm"
-                   [ngModel]="periodStart()" (ngModelChange)="periodStart.set($event)" />
-          </div>
-          <div class="col-12 col-md-2">
-            <label class="form-label" for="whtEnd">To</label>
-            <input id="whtEnd" type="date" class="form-control form-control-sm"
-                   [ngModel]="periodEnd()" (ngModelChange)="periodEnd.set($event)" />
-          </div>
-        }
 
-        <div class="col-auto">
-          <button type="button" class="btn btn-primary btn-sm"
-                  (click)="load()" [disabled]="state() === 'loading' || !selectedCompanyId()">
-            @if (state() === 'loading') {
-              <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
-            } @else {
-              <i class="bi bi-search" aria-hidden="true"></i>
-            }
-            Load
-          </button>
+          @if (periodMode() === 'month') {
+            <div class="erp-field">
+              <label class="form-label" for="whtYear">Year</label>
+              <input id="whtYear" type="number" class="form-control form-control-sm"
+                     [ngModel]="periodYear()" (ngModelChange)="periodYear.set(+$event)"
+                     name="whtYear" min="2000" max="2100" />
+            </div>
+            <div class="erp-field">
+              <label class="form-label" for="whtMonth">Month</label>
+              <select id="whtMonth" class="form-select form-select-sm"
+                      [ngModel]="periodMonth()" (ngModelChange)="periodMonth.set(+$event)"
+                      name="whtMonth">
+                @for (m of months; track m.value) {
+                  <option [value]="m.value">{{ m.label }}</option>
+                }
+              </select>
+            </div>
+          } @else {
+            <div class="erp-field">
+              <label class="form-label" for="whtStart">From</label>
+              <input id="whtStart" type="date" class="form-control form-control-sm"
+                     [ngModel]="periodStart()" (ngModelChange)="periodStart.set($event)"
+                     name="whtStart" />
+            </div>
+            <div class="erp-field">
+              <label class="form-label" for="whtEnd">To</label>
+              <input id="whtEnd" type="date" class="form-control form-control-sm"
+                     [ngModel]="periodEnd()" (ngModelChange)="periodEnd.set($event)"
+                     name="whtEnd" />
+            </div>
+          }
+
+          <div class="erp-field d-flex align-items-end">
+            <button type="submit" class="btn btn-primary btn-sm"
+                    [disabled]="state() === 'loading' || !selectedCompanyId()">
+              @if (state() === 'loading') {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+              } @else {
+                <i class="bi bi-search" aria-hidden="true"></i>
+              }
+              Load
+            </button>
+          </div>
         </div>
-      </div>
+      </form>
     </div>
   </div>
 
@@ -86,47 +101,53 @@
   } @else if (register()) {
 
     <!-- Payable section (WHT_ON_PAYMENT) -->
-    <div class="card mb-4">
-      <div class="card-header fw-semibold text-danger">
-        <i class="bi bi-arrow-up-circle" aria-hidden="true"></i>
-        WHT Payable to TRA (on payments made to suppliers)
+    <div class="erp-card mb-4">
+      <div class="erp-card__head">
+        <h2>
+          <i class="bi bi-arrow-up-circle text-danger me-1" aria-hidden="true"></i>
+          WHT Payable to TRA
+          <small class="text-muted fw-normal ms-1">(on payments made to suppliers)</small>
+        </h2>
       </div>
       @if (register()!.payableRows.length === 0) {
-        <div class="card-body">
-          <p class="text-muted small mb-0">No payable WHT records for this period.</p>
+        <div class="erp-card__body">
+          <div class="erp-empty py-2">
+            <i class="bi bi-inbox"></i> No payable WHT records for this period.
+          </div>
         </div>
       } @else {
-        <div class="table-responsive">
-          <table class="table table-sm table-hover mb-0 align-middle" aria-label="WHT payable rows">
-            <thead class="table-light">
+        <div class="erp-table-wrap">
+          <table class="erp-table" aria-label="WHT payable rows">
+            <caption class="visually-hidden">WHT payable to TRA — certificates for selected period</caption>
+            <thead>
               <tr>
                 <th scope="col">WHT Certificate No.</th>
                 <th scope="col">Party</th>
                 <th scope="col">Source Ref</th>
-                <th scope="col" class="text-end">Taxable Base</th>
-                <th scope="col" class="text-end">WHT Amount</th>
+                <th scope="col" class="num">Taxable Base</th>
+                <th scope="col" class="num">WHT Amount</th>
                 <th scope="col">Date</th>
               </tr>
             </thead>
             <tbody>
               @for (row of register()!.payableRows; track row.whtNumber) {
                 <tr>
-                  <td class="font-monospace">{{ row.whtNumber }}</td>
+                  <td class="mono">{{ row.whtNumber }}</td>
                   <td>
                     <div class="fw-semibold">{{ row.partyName }}</div>
                     <small class="text-muted">{{ row.partyKind }}</small>
                   </td>
-                  <td class="font-monospace small">{{ row.sourceRef ? (row.sourceRef.length > 12 ? (row.sourceRef.slice(0, 12) + '…') : row.sourceRef) : '—' }}</td>
-                  <td class="text-end font-monospace">{{ fmtMoney(row.taxableBase) }}</td>
-                  <td class="text-end font-monospace text-danger fw-semibold">{{ fmtMoney(row.whtAmount) }}</td>
+                  <td class="mono small">{{ row.sourceRef ? (row.sourceRef.length > 12 ? (row.sourceRef.slice(0, 12) + '…') : row.sourceRef) : '—' }}</td>
+                  <td class="num">{{ fmtMoney(row.taxableBase) }}</td>
+                  <td class="num text-danger fw-semibold">{{ fmtMoney(row.whtAmount) }}</td>
                   <td>{{ row.certificateDate }}</td>
                 </tr>
               }
             </tbody>
-            <tfoot class="table-light fw-bold">
+            <tfoot class="erp-tfoot fw-bold">
               <tr>
                 <td colspan="4" class="text-end">Total Payable</td>
-                <td class="text-end font-monospace text-danger">{{ fmtMoney(register()!.totalPayable) }}</td>
+                <td class="num text-danger">{{ fmtMoney(register()!.totalPayable) }}</td>
                 <td></td>
               </tr>
             </tfoot>
@@ -136,47 +157,53 @@
     </div>
 
     <!-- Receivable section (WHT_ON_RECEIPT) -->
-    <div class="card mb-4">
-      <div class="card-header fw-semibold text-success">
-        <i class="bi bi-arrow-down-circle" aria-hidden="true"></i>
-        WHT Receivable (withheld by customers on receipts)
+    <div class="erp-card mb-4">
+      <div class="erp-card__head">
+        <h2>
+          <i class="bi bi-arrow-down-circle text-success me-1" aria-hidden="true"></i>
+          WHT Receivable
+          <small class="text-muted fw-normal ms-1">(withheld by customers on receipts)</small>
+        </h2>
       </div>
       @if (register()!.receivableRows.length === 0) {
-        <div class="card-body">
-          <p class="text-muted small mb-0">No receivable WHT records for this period.</p>
+        <div class="erp-card__body">
+          <div class="erp-empty py-2">
+            <i class="bi bi-inbox"></i> No receivable WHT records for this period.
+          </div>
         </div>
       } @else {
-        <div class="table-responsive">
-          <table class="table table-sm table-hover mb-0 align-middle" aria-label="WHT receivable rows">
-            <thead class="table-light">
+        <div class="erp-table-wrap">
+          <table class="erp-table" aria-label="WHT receivable rows">
+            <caption class="visually-hidden">WHT receivable from customers — certificates for selected period</caption>
+            <thead>
               <tr>
                 <th scope="col">WHT Certificate No.</th>
                 <th scope="col">Party</th>
                 <th scope="col">Source Ref</th>
-                <th scope="col" class="text-end">Taxable Base</th>
-                <th scope="col" class="text-end">WHT Amount</th>
+                <th scope="col" class="num">Taxable Base</th>
+                <th scope="col" class="num">WHT Amount</th>
                 <th scope="col">Date</th>
               </tr>
             </thead>
             <tbody>
               @for (row of register()!.receivableRows; track row.whtNumber) {
                 <tr>
-                  <td class="font-monospace">{{ row.whtNumber }}</td>
+                  <td class="mono">{{ row.whtNumber }}</td>
                   <td>
                     <div class="fw-semibold">{{ row.partyName }}</div>
                     <small class="text-muted">{{ row.partyKind }}</small>
                   </td>
-                  <td class="font-monospace small">{{ row.sourceRef ? (row.sourceRef.length > 12 ? (row.sourceRef.slice(0, 12) + '…') : row.sourceRef) : '—' }}</td>
-                  <td class="text-end font-monospace">{{ fmtMoney(row.taxableBase) }}</td>
-                  <td class="text-end font-monospace text-success fw-semibold">{{ fmtMoney(row.whtAmount) }}</td>
+                  <td class="mono small">{{ row.sourceRef ? (row.sourceRef.length > 12 ? (row.sourceRef.slice(0, 12) + '…') : row.sourceRef) : '—' }}</td>
+                  <td class="num">{{ fmtMoney(row.taxableBase) }}</td>
+                  <td class="num text-success fw-semibold">{{ fmtMoney(row.whtAmount) }}</td>
                   <td>{{ row.certificateDate }}</td>
                 </tr>
               }
             </tbody>
-            <tfoot class="table-light fw-bold">
+            <tfoot class="erp-tfoot fw-bold">
               <tr>
                 <td colspan="4" class="text-end">Total Receivable</td>
-                <td class="text-end font-monospace text-success">{{ fmtMoney(register()!.totalReceivable) }}</td>
+                <td class="num text-success">{{ fmtMoney(register()!.totalReceivable) }}</td>
                 <td></td>
               </tr>
             </tfoot>
@@ -185,19 +212,24 @@
       }
     </div>
 
-    <!-- Net summary -->
-    <div class="card">
-      <div class="card-body">
-        <dl class="row mb-0">
-          <dt class="col-sm-4">Total WHT Payable to TRA</dt>
-          <dd class="col-sm-2 text-end font-monospace text-danger">{{ fmtMoney(register()!.totalPayable) }}</dd>
-          <dt class="col-sm-4">Total WHT Receivable (credit)</dt>
-          <dd class="col-sm-2 text-end font-monospace text-success">{{ fmtMoney(register()!.totalReceivable) }}</dd>
-        </dl>
+    <!-- Net summary KPIs -->
+    <div class="erp-card">
+      <div class="erp-card__body d-flex gap-4 flex-wrap">
+        <div class="erp-kpi">
+          <div class="erp-kpi__label">Total WHT Payable to TRA</div>
+          <div class="erp-kpi__value text-danger">{{ fmtMoney(register()!.totalPayable) }}</div>
+        </div>
+        <div class="erp-kpi">
+          <div class="erp-kpi__label">Total WHT Receivable (credit)</div>
+          <div class="erp-kpi__value text-success">{{ fmtMoney(register()!.totalReceivable) }}</div>
+        </div>
       </div>
     </div>
 
   } @else if (state() === 'idle' && !register()) {
-    <div class="alert alert-info" role="status">Select a period and click Load to view the WHT register.</div>
+    <div class="erp-empty" aria-live="polite">
+      <i class="bi bi-calendar-range"></i>
+      Select a period and click Load to view the WHT register.
+    </div>
   }
-</section>
+</div>

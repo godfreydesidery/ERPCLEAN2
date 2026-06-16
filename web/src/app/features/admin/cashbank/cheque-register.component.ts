@@ -12,7 +12,6 @@ import { OrganisationService } from '../organisation/organisation.service';
 import {
   CashBankAccountDto,
   ChequeDto,
-  ChequeStatus,
   RegisterChequeRequest,
 } from './models/cashbank.model';
 import { CashbankService } from './cashbank.service';
@@ -260,15 +259,6 @@ export class ChequeRegisterComponent {
   }
 
   // ── Display helpers ────────────────────────────────────────────────────────
-
-  statusBadgeClass(status: ChequeStatus): string {
-    switch (status) {
-      case 'PENDING':   return 'text-bg-warning';
-      case 'CLEARED':   return 'text-bg-success';
-      case 'CANCELLED': return 'text-bg-secondary';
-      default:          return 'text-bg-light border';
-    }
-  }
 
   fmtMoney(v: number | string | null | undefined): string {
     const n = +(v ?? 0);

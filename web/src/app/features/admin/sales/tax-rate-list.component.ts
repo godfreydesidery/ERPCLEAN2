@@ -133,12 +133,6 @@ export class TaxRateListComponent {
     return 'Exempt';
   }
 
-  vatStatusBadgeClass(status: VatStatus): string {
-    if (status === 'STANDARD') return 'text-bg-primary';
-    if (status === 'ZERO_RATED') return 'text-bg-info';
-    return 'text-bg-secondary';
-  }
-
   private messageFrom(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {
       const errors = (err.error as { errors?: string[] })?.errors;

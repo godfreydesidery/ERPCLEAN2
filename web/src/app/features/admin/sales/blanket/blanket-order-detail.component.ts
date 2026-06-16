@@ -15,7 +15,6 @@ import { BlanketOrderService } from './blanket-order.service';
 import {
   BlanketOrderDto,
   BlanketOrderLineDto,
-  BlanketStatus,
   DrawBlanketRequest,
   DrawLineRequest,
 } from './blanket-order.model';
@@ -277,17 +276,6 @@ export class BlanketOrderDetailComponent {
         this.cancelling.set(false);
       },
     });
-  }
-
-  // ── Display helpers ───────────────────────────────────────────────────────
-
-  statusBadgeClass(status: BlanketStatus): string {
-    switch (status) {
-      case 'ACTIVE':    return 'text-bg-success';
-      case 'EXHAUSTED': return 'text-bg-warning';
-      case 'CANCELLED': return 'text-bg-danger';
-      default:          return 'text-bg-secondary';
-    }
   }
 
   private messageFrom(err: unknown, fallback: string): string {

@@ -8,7 +8,6 @@ import { SessionStore } from '../../../core/auth/session.store';
 import {
   GoodsReceiptDto,
   GoodsReceiptLineDto,
-  GoodsReceiptStatus,
   VoidGoodsReceiptRequest,
 } from '../models/purchases.model';
 import { PurchasesService } from './purchases.service';
@@ -84,14 +83,6 @@ export class GoodsReceiptDetailComponent {
         this.voiding.set(false);
       },
     });
-  }
-
-  statusBadgeClass(status: GoodsReceiptStatus): string {
-    switch (status) {
-      case 'RECEIVED': return 'text-bg-success';
-      case 'VOID': return 'text-bg-secondary';
-      default: return 'text-bg-warning';
-    }
   }
 
   lines(gr: GoodsReceiptDto): GoodsReceiptLineDto[] {

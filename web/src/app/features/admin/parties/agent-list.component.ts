@@ -249,10 +249,6 @@ export class AgentListComponent {
     });
   }
 
-  statusBadgeClass(status: string): string {
-    return status === 'ACTIVE' ? 'text-bg-success' : 'text-bg-secondary';
-  }
-
   private messageFrom(err: unknown): string {
     const errors = (err as { error?: { errors?: string[] } })?.error?.errors;
     return errors?.length ? errors[0] : 'Could not save the agent.';

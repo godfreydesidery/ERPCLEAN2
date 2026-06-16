@@ -11,7 +11,7 @@
   padding: 1rem;
   padding-top: max(1rem, env(safe-area-inset-top));
   padding-bottom: max(1rem, env(safe-area-inset-bottom));
-  background: linear-gradient(135deg, #0d2a5b 0%, #1a4fb5 55%, #4178d9 100%);
+  background: linear-gradient(135deg, var(--erp-primary-active) 0%, var(--erp-primary) 55%, var(--erp-accent) 100%);
   position: relative;
   overflow: hidden;
 }
@@ -42,7 +42,7 @@
   width: 60px;
   height: 60px;
   border-radius: 16px;
-  background: linear-gradient(135deg, #1a4fb5, #4178d9);
+  background: linear-gradient(135deg, var(--erp-primary), var(--erp-accent));
   color: #fff;
   display: flex;
   align-items: center;
@@ -50,19 +50,19 @@
   font-size: 1.75rem;
   font-weight: 700;
   letter-spacing: -1px;
-  box-shadow: 0 6px 20px rgba(26, 79, 181, 0.35);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.35);
 }
 
 .brand-title {
   letter-spacing: 0.12em;
-  color: #1a4fb5;
+  color: var(--erp-primary);
 }
 
 .input-group-premium {
   .input-group-text {
     background: #f8f9fb;
     border-right: 0;
-    color: #6c757d;
+    color: var(--erp-text-3);
   }
 
   .form-control {
@@ -73,19 +73,19 @@
 
   .form-control:focus {
     box-shadow: none;
-    border-color: #1a4fb5;
+    border-color: var(--erp-primary);
   }
 
   &:focus-within .input-group-text {
-    border-color: #1a4fb5;
-    color: #1a4fb5;
+    border-color: var(--erp-primary);
+    color: var(--erp-primary);
   }
 
   .btn-outline-secondary {
     background: #f8f9fb;
-    border-color: #ced4da;
+    border-color: var(--erp-border);
     border-left: 0;
-    color: #6c757d;
+    color: var(--erp-text-3);
     /* Larger touch target on mobile. */
     min-width: 44px;
   }
@@ -93,7 +93,7 @@
   .btn-outline-secondary:hover,
   .btn-outline-secondary:focus {
     background: #eef0f3;
-    color: #1a4fb5;
+    color: var(--erp-primary);
   }
 }
 
@@ -102,13 +102,13 @@
   min-height: 44px;
   padding: 0.6rem 1rem;
   letter-spacing: 0.02em;
-  box-shadow: 0 4px 14px rgba(26, 79, 181, 0.25);
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25);
   transition: transform 0.08s ease, box-shadow 0.15s ease;
 }
 
 .login-cta:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(26, 79, 181, 0.35);
+  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.35);
 }
 
 .login-cta:active:not(:disabled) {

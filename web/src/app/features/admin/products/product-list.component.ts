@@ -12,7 +12,6 @@ import {
   CreateProductRequest,
   Money,
   ProductModel,
-  ProductStatus,
   ProductType,
   UnitOfMeasureDto,
   VatStatus,
@@ -306,12 +305,6 @@ export class ProductListComponent {
         this.saving.set(false);
       },
     });
-  }
-
-  statusBadgeClass(status: ProductStatus): string {
-    if (status === 'ACTIVE') return 'text-bg-success';
-    if (status === 'ARCHIVED') return 'text-bg-secondary';
-    return 'text-bg-warning';
   }
 
   private messageFrom(err: unknown): string {

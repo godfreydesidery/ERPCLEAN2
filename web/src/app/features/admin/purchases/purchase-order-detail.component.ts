@@ -12,7 +12,6 @@ import {
   AddPurchaseOrderLineRequest,
   PurchaseOrderDto,
   PurchaseOrderLineDto,
-  PurchaseOrderStatus,
   VoidPurchaseOrderRequest,
 } from '../models/purchases.model';
 import { ProductService } from '../products/product.service';
@@ -334,19 +333,6 @@ export class PurchaseOrderDetailComponent {
         this.voiding.set(false);
       },
     });
-  }
-
-  // ── Display helpers ────────────────────────────────────────────────────────
-
-  statusBadgeClass(status: PurchaseOrderStatus): string {
-    switch (status) {
-      case 'ORDERED': return 'text-bg-primary';
-      case 'PARTIALLY_RECEIVED': return 'text-bg-info';
-      case 'RECEIVED': return 'text-bg-success';
-      case 'CLOSED': return 'text-bg-secondary';
-      case 'VOID': return 'text-bg-secondary';
-      default: return 'text-bg-warning'; // DRAFT
-    }
   }
 
   private messageFrom(err: unknown, fallback: string): string {

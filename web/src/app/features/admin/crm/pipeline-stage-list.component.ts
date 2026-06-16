@@ -10,7 +10,6 @@ import { OrganisationService } from '../organisation/organisation.service';
 import { CrmService } from './crm.service';
 import {
   CreatePipelineStageRequest,
-  MasterStatus,
   PipelineStageDto,
   UpdatePipelineStageRequest,
 } from './models/crm.model';
@@ -224,14 +223,6 @@ export class PipelineStageListComponent {
   }
 
   // ── Display helpers ────────────────────────────────────────────────────────
-
-  statusBadgeClass(status: MasterStatus): string {
-    switch (status) {
-      case 'INACTIVE': return 'text-bg-secondary';
-      case 'ARCHIVED': return 'text-bg-danger';
-      default: return 'text-bg-success';
-    }
-  }
 
   private messageFrom(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {

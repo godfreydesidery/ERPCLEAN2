@@ -223,10 +223,6 @@ export class CashAccountsListComponent {
 
   // ── Display helpers ───────────────────────────────────────────────────────
 
-  typeBadgeClass(type: CashBankAccountType): string {
-    return type === 'BANK' ? 'text-bg-primary' : 'text-bg-success';
-  }
-
   glAccountLabel(glAccountId: string): string {
     const acc = this.glAccounts().find((a) => String(a.id) === String(glAccountId));
     return acc ? `${acc.accountCode} — ${acc.name}` : String(glAccountId ?? '');
