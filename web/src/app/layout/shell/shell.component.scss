@@ -374,8 +374,8 @@
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: var(--erp-primary-soft);
-  color: var(--erp-primary);
+  background: var(--erp-primary);   /* solid brand-blue avatar, white initials — not light-blue */
+  color: #fff;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -493,7 +493,10 @@
 
 .nav-item-icon {
   font-size: 1.05rem;
-  opacity: 0.9;
+  /* OPAQUE white: a translucent fill lets the blue-grey slate bleed through solid
+     glyphs (building/people/truck/…) and read as light-blue. Full alpha kills that. */
+  opacity: 1;
+  color: #fff;
 }
 
 .nav-item:hover {

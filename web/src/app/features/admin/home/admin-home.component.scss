@@ -19,8 +19,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--erp-primary-soft);
-  color: var(--erp-primary);
+  background: var(--erp-neutral-bg);   /* neutral grey tile — not a light-blue tint */
+  color: var(--erp-primary);           /* brand-blue glyph */
   font-size: 1.15rem;
 }
 
