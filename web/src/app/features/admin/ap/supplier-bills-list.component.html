@@ -153,7 +153,7 @@
                     <td class="mono fw-semibold">
                       <a [routerLink]="['/admin/ap/supplier-bills/uid', bill.uid]"
                          class="text-decoration-none">
-                        {{ bill.billNumber }}
+                        {{ bill.billNumber || bill.supplierInvoiceNo || '(draft — no number)' }}
                       </a>
                     </td>
                     <td class="mono text-muted">{{ bill.supplierInvoiceNo }}</td>
