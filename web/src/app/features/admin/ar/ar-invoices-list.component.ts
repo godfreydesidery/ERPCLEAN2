@@ -11,7 +11,7 @@ import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { CustomerModel } from '../models/party.model';
 import { CustomerService } from '../parties/customer.service';
-import { ArInvoiceDto, ArInvoiceStatus, WriteOffRequest, RaiseCreditNoteRequest } from './models/ar.model';
+import { ArInvoiceDto, WriteOffRequest, RaiseCreditNoteRequest } from './models/ar.model';
 import { ArService } from './ar.service';
 import { debounceTime, distinctUntilChanged, Subject as RxSubject } from 'rxjs';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
@@ -350,16 +350,6 @@ export class ArInvoicesListComponent {
 
   customerDisplay(customerId: string): string {
     return this.customerMap().get(String(customerId)) ?? String(customerId);
-  }
-
-  statusBadgeClass(status: ArInvoiceStatus): string {
-    switch (status) {
-      case 'OPEN': return 'text-bg-warning';
-      case 'PARTIAL': return 'text-bg-info';
-      case 'PAID': return 'text-bg-success';
-      case 'WRITTEN_OFF': return 'text-bg-secondary';
-      default: return 'text-bg-light border';
-    }
   }
 
   /** Coerce money to display string — handles both number and string on the wire. */

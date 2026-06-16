@@ -13,7 +13,6 @@ import { SupplierModel } from '../models/party.model';
 import {
   CreatePurchaseOrderRequest,
   PurchaseOrderDto,
-  PurchaseOrderStatus,
 } from '../models/purchases.model';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
@@ -245,17 +244,6 @@ export class PurchaseOrderListComponent {
 
   orderLabel(po: PurchaseOrderDto): string {
     return po.orderNumber ?? 'DRAFT';
-  }
-
-  statusBadgeClass(status: PurchaseOrderStatus): string {
-    switch (status) {
-      case 'ORDERED': return 'text-bg-primary';
-      case 'PARTIALLY_RECEIVED': return 'text-bg-info';
-      case 'RECEIVED': return 'text-bg-success';
-      case 'CLOSED': return 'text-bg-secondary';
-      case 'VOID': return 'text-bg-secondary';
-      default: return 'text-bg-warning'; // DRAFT
-    }
   }
 
   private messageFrom(err: unknown, fallback: string): string {

@@ -4,7 +4,7 @@
       <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Goods Receipts
     </a>
     <h1 class="h4 mb-1 mt-1">Receive Goods</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
+    <p class="subtitle">
       Record stock received against a purchase order.
     </p>
   </header>
@@ -58,9 +58,9 @@
                     (click)="selectPo(p)"
                     (keydown.enter)="selectPo(p)"
                     tabindex="0">
-                  <strong class="font-monospace">{{ p.orderNumber ?? 'DRAFT' }}</strong>
+                  <strong class="mono">{{ p.orderNumber ?? 'DRAFT' }}</strong>
                   — {{ p.supplierName }}
-                  <span class="badge text-bg-light border ms-1">{{ p.status }}</span>
+                  <span class="status-tag status-tag--info ms-1">{{ p.status }}</span>
                 </li>
               }
             </ul>
@@ -84,17 +84,19 @@
   }
 
   @if (po(); as p) {
-    <div class="card card-body mb-3 bg-light border-0">
-      <dl class="row g-1 mb-0" style="font-size:0.875rem">
-        <dt class="col-sm-2 text-muted fw-normal">PO #</dt>
-        <dd class="col-sm-10 mb-0 font-monospace">{{ p.orderNumber ?? 'DRAFT' }}</dd>
-        <dt class="col-sm-2 text-muted fw-normal">Supplier</dt>
-        <dd class="col-sm-10 mb-0">{{ p.supplierCode }} — {{ p.supplierName }}</dd>
-        <dt class="col-sm-2 text-muted fw-normal">Currency</dt>
-        <dd class="col-sm-10 mb-0">{{ p.currency }}</dd>
-        <dt class="col-sm-2 text-muted fw-normal">Status</dt>
-        <dd class="col-sm-10 mb-0">{{ p.status }}</dd>
-      </dl>
+    <div class="erp-card mb-3">
+      <div class="erp-card__body">
+        <dl class="row g-1 mb-0" style="font-size:0.875rem">
+          <dt class="col-sm-2 text-muted fw-normal">PO #</dt>
+          <dd class="col-sm-10 mb-0 mono">{{ p.orderNumber ?? 'DRAFT' }}</dd>
+          <dt class="col-sm-2 text-muted fw-normal">Supplier</dt>
+          <dd class="col-sm-10 mb-0">{{ p.supplierCode }} — {{ p.supplierName }}</dd>
+          <dt class="col-sm-2 text-muted fw-normal">Currency</dt>
+          <dd class="col-sm-10 mb-0">{{ p.currency }}</dd>
+          <dt class="col-sm-2 text-muted fw-normal">Status</dt>
+          <dd class="col-sm-10 mb-0">{{ p.status }}</dd>
+        </dl>
+      </div>
     </div>
 
     <!-- Lines to receive -->
@@ -115,25 +117,25 @@
           </div>
         } @else {
           <form (ngSubmit)="submit()" aria-label="Create goods receipt">
-            <h2 class="h6 mb-2">Lines to Receive</h2>
+            <h2 class="erp-section-title">Lines to Receive</h2>
             <p class="small text-muted mb-2">
               Quantities default to the outstanding amount. Adjust as needed.
               Uncheck lines you are not receiving in this delivery.
             </p>
 
-            <div class="table-responsive mb-3">
-              <table class="table table-sm table-bordered align-middle">
+            <div class="erp-table-wrap mb-3">
+              <table class="erp-table">
                 <caption class="visually-hidden">Lines to receive</caption>
-                <thead class="table-light">
+                <thead>
                   <tr>
                     <th scope="col" style="width:40px">
                       <span class="visually-hidden">Include</span>
                     </th>
                     <th scope="col">Product</th>
                     <th scope="col">Unit</th>
-                    <th scope="col" class="text-end">Ordered</th>
-                    <th scope="col" class="text-end">Previously Received</th>
-                    <th scope="col" class="text-end">Outstanding</th>
+                    <th scope="col" class="num">Ordered</th>
+                    <th scope="col" class="num">Previously Received</th>
+                    <th scope="col" class="num">Outstanding</th>
                     <th scope="col" style="width:140px">Receive Qty</th>
                   </tr>
                 </thead>
@@ -153,13 +155,13 @@
                         </div>
                       </td>
                       <td>
-                        <span class="font-monospace small">{{ entry.line.productCode }}</span>
+                        <span class="mono small">{{ entry.line.productCode }}</span>
                         <br /><span class="small text-muted">{{ entry.line.productName }}</span>
                       </td>
                       <td class="small">{{ entry.line.unitName }}</td>
-                      <td class="text-end font-monospace">{{ entry.line.orderedQty }}</td>
-                      <td class="text-end font-monospace">{{ entry.line.receivedQtyInBase }}</td>
-                      <td class="text-end font-monospace fw-semibold">{{ entry.line.outstandingQtyInBase }}</td>
+                      <td class="num">{{ entry.line.orderedQty }}</td>
+                      <td class="num">{{ entry.line.receivedQtyInBase }}</td>
+                      <td class="num fw-semibold">{{ entry.line.outstandingQtyInBase }}</td>
                       <td>
                         <div>
                           <label class="visually-hidden"
@@ -203,7 +205,7 @@
 
             <!-- Submit -->
             <div class="d-flex gap-2">
-              <button type="submit" class="btn btn-success"
+              <button type="submit" class="btn btn-primary"
                       [disabled]="submitting() || !hasIncludedLines()">
                 @if (submitting()) {
                   <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>

@@ -7,7 +7,6 @@ import { SessionStore } from '../../../core/auth/session.store';
 import {
   AssetCategoryDto,
   DepreciationMethod,
-  MasterStatus,
   UpdateAssetCategoryRequest,
 } from './models/fixed-assets.model';
 import { FixedAssetsService } from './fixed-assets.service';
@@ -134,14 +133,6 @@ export class AssetCategoryDetailComponent {
         this.saveError.set(this.messageFrom(err, 'Could not archive category.'));
       },
     });
-  }
-
-  statusBadgeClass(status: MasterStatus): string {
-    switch (status) {
-      case 'ACTIVE': return 'text-bg-success';
-      case 'ARCHIVED': return 'text-bg-secondary';
-      default: return 'text-bg-warning';
-    }
   }
 
   private messageFrom(err: unknown, fallback: string): string {

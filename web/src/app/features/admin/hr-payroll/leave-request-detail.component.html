@@ -1,34 +1,42 @@
 <section class="admin-page">
-  <header class="page-head">
-    <nav aria-label="breadcrumb">
-      <ol class="breadcrumb small mb-1">
-        <li class="breadcrumb-item"><a routerLink="/admin/hr/leave-requests">Leave Requests</a></li>
-        <li class="breadcrumb-item active" aria-current="page">
-          @if (request(); as r) { {{ r.employeeName }} } @else { Loading… }
-        </li>
-      </ol>
-    </nav>
-    <div class="d-flex align-items-center gap-3">
-      <h1 class="h4 mb-0">
-        @if (request(); as r) { Leave — {{ r.employeeName }} } @else { Leave Request Detail }
-      </h1>
-      @if (request(); as r) {
-        <span class="badge" [class]="statusBadgeClass(r.status)">{{ r.status }}</span>
-      }
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <nav aria-label="breadcrumb">
+        <ol class="breadcrumb small mb-1">
+          <li class="breadcrumb-item"><a routerLink="/admin/hr/leave-requests">Leave Requests</a></li>
+          <li class="breadcrumb-item active" aria-current="page">
+            @if (request(); as r) { {{ r.employeeName }} } @else { Loading… }
+          </li>
+        </ol>
+      </nav>
+      <div class="d-flex align-items-center gap-3">
+        <h1>
+          @if (request(); as r) { Leave — {{ r.employeeName }} } @else { Leave Request Detail }
+        </h1>
+        @if (request(); as r) {
+          <span class="status-tag"
+            [class.status-tag--ok]="r.status === 'APPROVED'"
+            [class.status-tag--warn]="r.status === 'PENDING'"
+            [class.status-tag--danger]="r.status === 'REJECTED' || r.status === 'CANCELLED'"
+            [class.status-tag--neutral]="r.status !== 'APPROVED' && r.status !== 'PENDING' && r.status !== 'REJECTED' && r.status !== 'CANCELLED'">
+            <span class="status-tag__dot" aria-hidden="true"></span>{{ r.status }}
+          </span>
+        }
+      </div>
     </div>
   </header>
 
   @switch (state()) {
     @case ('loading') {
-      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+      <output class="text-muted d-flex align-items-center gap-2" aria-live="polite">
         <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
-      </p>
+      </output>
     }
     @case ('error') {
-      <p class="state text-danger" role="alert">
+      <output class="d-block text-danger" role="alert">
         <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
         Could not load leave request. Please try again.
-      </p>
+      </output>
     }
     @default {
       @if (request(); as r) {
@@ -37,7 +45,7 @@
           <dt class="col-sm-2">Leave Type</dt><dd class="col-sm-4">{{ r.leaveTypeName }}</dd>
           <dt class="col-sm-2">From</dt><dd class="col-sm-4">{{ r.fromDate }}</dd>
           <dt class="col-sm-2">To</dt><dd class="col-sm-4">{{ r.toDate }}</dd>
-          <dt class="col-sm-2">Days</dt><dd class="col-sm-4 font-monospace">{{ r.days }}</dd>
+          <dt class="col-sm-2">Days</dt><dd class="col-sm-4 mono">{{ r.days }}</dd>
           <dt class="col-sm-2">Reason</dt><dd class="col-sm-4">{{ r.reason || '—' }}</dd>
           @if (r.decidedBy) {
             <dt class="col-sm-2">Decided By</dt><dd class="col-sm-4">{{ r.decidedBy }}</dd>
@@ -48,40 +56,44 @@
         </dl>
 
         @if (actionError(); as msg) {
-          <p class="text-danger small mb-3" role="alert">
+          <output class="d-block text-danger small mb-3" role="alert">
             <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ msg }}
-          </p>
+          </output>
         }
 
         <!-- Decide actions — only for PENDING + HR.LEAVE.APPROVE -->
         @if (canApprove() && canDecide()) {
-          <div class="card card-body" style="max-width:480px">
-            <h2 class="h6 mb-3">Decision</h2>
-            <form (ngSubmit)="decide()" aria-label="Decide leave request">
-              <div class="mb-2">
-                <label class="form-label small text-muted mb-1" for="lrDecision">Decision</label>
-                <select id="lrDecision" name="lrDecision" class="form-select"
-                        [ngModel]="fDecision()" (ngModelChange)="fDecision.set($event)"
-                        [disabled]="deciding()">
-                  <option value="APPROVED">Approve</option>
-                  <option value="REJECTED">Reject</option>
-                </select>
-              </div>
-              <div class="mb-3">
-                <label class="form-label small text-muted mb-1" for="lrNote">Decision Note</label>
-                <input id="lrNote" name="lrNote" type="text" class="form-control"
-                       [ngModel]="fDecisionNote()" (ngModelChange)="fDecisionNote.set($event)"
-                       [disabled]="deciding()" autocomplete="off" />
-              </div>
-              <button type="submit" class="btn btn-primary" [disabled]="deciding()">
-                @if (deciding()) {
-                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                  Submitting…
-                } @else {
-                  Submit Decision
-                }
-              </button>
-            </form>
+          <div class="erp-card" style="max-width:480px">
+            <div class="erp-card__head">
+              <h2>Decision</h2>
+            </div>
+            <div class="erp-card__body">
+              <form (ngSubmit)="decide()" aria-label="Decide leave request">
+                <div class="erp-field mb-2">
+                  <label class="form-label" for="lrDecision">Decision</label>
+                  <select id="lrDecision" name="lrDecision" class="form-select"
+                          [ngModel]="fDecision()" (ngModelChange)="fDecision.set($event)"
+                          [disabled]="deciding()">
+                    <option value="APPROVED">Approve</option>
+                    <option value="REJECTED">Reject</option>
+                  </select>
+                </div>
+                <div class="erp-field mb-3">
+                  <label class="form-label" for="lrNote">Decision Note</label>
+                  <input id="lrNote" name="lrNote" type="text" class="form-control"
+                         [ngModel]="fDecisionNote()" (ngModelChange)="fDecisionNote.set($event)"
+                         [disabled]="deciding()" autocomplete="off" />
+                </div>
+                <button type="submit" class="btn btn-primary" [disabled]="deciding()">
+                  @if (deciding()) {
+                    <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                    Submitting…
+                  } @else {
+                    Submit Decision
+                  }
+                </button>
+              </form>
+            </div>
           </div>
         }
       }

@@ -22,10 +22,16 @@
           <div class="d-flex flex-wrap align-items-start gap-3 mt-1">
             <div>
               <h1 class="h4 mb-0">
-                <span class="font-monospace text-primary">{{ orderLabel() }}</span>
+                <span class="mono text-primary">{{ orderLabel() }}</span>
               </h1>
               <div class="d-flex gap-2 mt-1 flex-wrap align-items-center">
-                <span class="badge" [class]="statusBadgeClass(p.status)">{{ p.status }}</span>
+                <span class="status-tag"
+                  [class.status-tag--warn]="p.status === 'DRAFT'"
+                  [class.status-tag--info]="p.status === 'ORDERED' || p.status === 'PARTIALLY_RECEIVED'"
+                  [class.status-tag--ok]="p.status === 'RECEIVED'"
+                  [class.status-tag--neutral]="p.status === 'CLOSED' || p.status === 'VOID'">
+                  {{ p.status }}
+                </span>
               </div>
             </div>
 
@@ -57,18 +63,10 @@
               }
             </dl>
 
-            <!-- Totals card -->
-            <div class="card border-0 bg-light" style="min-width:200px">
-              <div class="card-body py-2 px-3">
-                <table class="table table-sm table-borderless mb-0" style="font-size:0.875rem">
-                  <tbody>
-                    <tr class="fw-bold">
-                      <td class="px-0">Order Total</td>
-                      <td class="text-end font-monospace px-0">{{ p.currency }} {{ p.orderTotalAmount }}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+            <!-- Totals KPI -->
+            <div class="erp-kpi">
+              <span class="erp-kpi__label">Order Total</span>
+              <span class="erp-kpi__value">{{ p.currency }} {{ p.orderTotalAmount }}</span>
             </div>
           </div>
 
@@ -131,32 +129,34 @@
 
           <!-- Void form -->
           @if (showVoidForm()) {
-            <form class="card card-body mt-2 mb-3" style="max-width:480px"
+            <form class="erp-card mt-2 mb-3" style="max-width:480px"
                   (ngSubmit)="submitVoid()" aria-label="Void purchase order">
-              <h2 class="h6 mb-2">Void Order</h2>
-              <div class="mb-2">
-                <label class="form-label small text-muted mb-1" for="voidReason">
-                  Reason <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <input id="voidReason" name="voidReason" type="text" class="form-control"
-                       [ngModel]="voidReason()" (ngModelChange)="voidReason.set($event)"
-                       [disabled]="voiding()" autocomplete="off" />
+              <div class="erp-card__head"><h2>Void Order</h2></div>
+              <div class="erp-card__body">
+                <div class="erp-field mb-2">
+                  <label class="form-label small text-muted mb-1" for="voidReason">
+                    Reason <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <input id="voidReason" name="voidReason" type="text" class="form-control"
+                         [ngModel]="voidReason()" (ngModelChange)="voidReason.set($event)"
+                         [disabled]="voiding()" autocomplete="off" />
+                </div>
+                <div class="d-flex gap-2">
+                  <button type="submit" class="btn btn-danger" [disabled]="voiding()">
+                    @if (voiding()) {
+                      <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                    }
+                    Confirm Void
+                  </button>
+                  <button type="button" class="btn btn-outline-secondary"
+                          (click)="toggleVoidForm()" [disabled]="voiding()">
+                    Cancel
+                  </button>
+                </div>
+                @if (voidError(); as msg) {
+                  <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+                }
               </div>
-              <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-danger" [disabled]="voiding()">
-                  @if (voiding()) {
-                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-                  }
-                  Confirm Void
-                </button>
-                <button type="button" class="btn btn-outline-secondary"
-                        (click)="toggleVoidForm()" [disabled]="voiding()">
-                  Cancel
-                </button>
-              </div>
-              @if (voidError(); as msg) {
-                <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-              }
             </form>
           }
         }
@@ -166,7 +166,7 @@
 
   <!-- Lines panel -->
   <div class="mt-4">
-    <h2 class="h5 mb-2">Order Lines</h2>
+    <h2 class="erp-section-title">Order Lines</h2>
 
     @switch (linesState()) {
       @case ('loading') {
@@ -180,121 +180,126 @@
       @default {
         <!-- Add-line form (DRAFT only + PURCHASE.ORDER.CREATE) -->
         @if (isDraft() && canCreate()) {
-          <form class="card card-body mb-3" (ngSubmit)="addLine()" aria-label="Add line to order">
-            <h3 class="h6 mb-2">Add Line</h3>
-            <div class="row g-2 align-items-start">
-              <!-- Product picker -->
-              <div class="col-sm-4 position-relative">
-                <label class="form-label small text-muted mb-1" for="lineProductSearch">
-                  Product <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <input id="lineProductSearch" name="lineProductSearch" type="search"
-                       class="form-control form-control-sm"
-                       placeholder="Search by name or code…"
-                       [ngModel]="productSearchQ()"
-                       (ngModelChange)="onProductSearchChange($event)"
-                       [disabled]="addingLine()"
-                       autocomplete="off"
-                       [attr.aria-expanded]="productResults().length > 0"
-                       aria-haspopup="listbox"
-                       aria-autocomplete="list" />
-                @if (selectedProduct()) {
-                  <div class="d-flex align-items-center gap-1 mt-1">
-                    <i class="bi bi-check-circle-fill text-success small" aria-hidden="true"></i>
-                    <span class="small text-muted">{{ selectedProduct()!.label }}</span>
-                  </div>
-                }
-                @if (productResults().length > 0) {
-                  <ul class="list-group position-absolute shadow-sm mt-1 w-100" role="listbox"
-                      aria-label="Product suggestions" style="z-index:1050;max-height:200px;overflow-y:auto;">
-                    @for (p of productResults(); track p.uid) {
-                      <li class="list-group-item list-group-item-action small py-1"
-                          role="option" style="cursor:pointer"
-                          (click)="selectProduct(p)"
-                          (keydown.enter)="selectProduct(p)"
-                          tabindex="0">
-                        <strong>{{ p.code }}</strong> — {{ p.name }}
-                      </li>
+          <form class="erp-card mb-3" (ngSubmit)="addLine()" aria-label="Add line to order">
+            <div class="erp-card__head"><h3>Add Line</h3></div>
+            <div class="erp-card__body">
+              <div class="row g-2 align-items-start">
+                <!-- Product picker -->
+                <div class="col-sm-4 position-relative">
+                  <label class="form-label small text-muted mb-1" for="lineProductSearch">
+                    Product <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <input id="lineProductSearch" name="lineProductSearch" type="search"
+                         class="form-control form-control-sm"
+                         placeholder="Search by name or code…"
+                         [ngModel]="productSearchQ()"
+                         (ngModelChange)="onProductSearchChange($event)"
+                         [disabled]="addingLine()"
+                         autocomplete="off"
+                         [attr.aria-expanded]="productResults().length > 0"
+                         aria-haspopup="listbox"
+                         aria-autocomplete="list" />
+                  @if (selectedProduct()) {
+                    <div class="d-flex align-items-center gap-1 mt-1">
+                      <i class="bi bi-check-circle-fill text-success small" aria-hidden="true"></i>
+                      <span class="small text-muted">{{ selectedProduct()!.label }}</span>
+                    </div>
+                  }
+                  @if (productResults().length > 0) {
+                    <ul class="list-group position-absolute shadow-sm mt-1 w-100" role="listbox"
+                        aria-label="Product suggestions" style="z-index:1050;max-height:200px;overflow-y:auto;">
+                      @for (p of productResults(); track p.uid) {
+                        <li class="list-group-item list-group-item-action small py-1"
+                            role="option" style="cursor:pointer"
+                            (click)="selectProduct(p)"
+                            (keydown.enter)="selectProduct(p)"
+                            tabindex="0">
+                          <strong>{{ p.code }}</strong> — {{ p.name }}
+                        </li>
+                      }
+                    </ul>
+                  }
+                </div>
+                <!-- Unit -->
+                <div class="col-sm-2">
+                  <label class="form-label small text-muted mb-1" for="lineUnit">
+                    Unit <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <select id="lineUnit" name="lineUnit" class="form-select form-select-sm"
+                          [ngModel]="newLineUnitUid()"
+                          (ngModelChange)="newLineUnitUid.set($event)"
+                          [disabled]="addingLine() || lineUnitsState() !== 'idle'">
+                    <option value="">— select —</option>
+                    @for (u of lineUnits(); track u.uid) {
+                      <option [value]="u.uid">{{ u.name }}</option>
                     }
-                  </ul>
-                }
+                  </select>
+                </div>
+                <!-- Qty -->
+                <div class="col-sm-1">
+                  <label class="form-label small text-muted mb-1" for="lineQty">
+                    Qty <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <input id="lineQty" name="lineQty" type="number" min="0.001" step="any"
+                         class="form-control form-control-sm"
+                         [ngModel]="newLineQty()" (ngModelChange)="newLineQty.set($event)"
+                         [disabled]="addingLine()" />
+                </div>
+                <!-- Unit cost -->
+                <div class="col-sm-2">
+                  <label class="form-label small text-muted mb-1" for="lineUnitCost">
+                    Unit Cost <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <input id="lineUnitCost" name="lineUnitCost" type="number" min="0" step="any"
+                         class="form-control form-control-sm"
+                         [ngModel]="newLineUnitCost()" (ngModelChange)="newLineUnitCost.set($event)"
+                         [disabled]="addingLine()" />
+                </div>
+                <!-- Note -->
+                <div class="col-sm-2">
+                  <label class="form-label small text-muted mb-1" for="lineNote">Note</label>
+                  <input id="lineNote" name="lineNote" type="text" class="form-control form-control-sm"
+                         [ngModel]="newLineNote()" (ngModelChange)="newLineNote.set($event)"
+                         [disabled]="addingLine()" autocomplete="off" />
+                </div>
+                <!-- Add button -->
+                <div class="col-sm-1 d-flex align-items-end">
+                  <button type="submit" class="btn btn-sm btn-primary w-100" [disabled]="addingLine()">
+                    @if (addingLine()) {
+                      <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    } @else {
+                      <i class="bi bi-plus-lg" aria-hidden="true"></i>
+                    }
+                    <span class="visually-hidden">Add line</span>
+                  </button>
+                </div>
               </div>
-              <!-- Unit -->
-              <div class="col-sm-2">
-                <label class="form-label small text-muted mb-1" for="lineUnit">
-                  Unit <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <select id="lineUnit" name="lineUnit" class="form-select form-select-sm"
-                        [ngModel]="newLineUnitUid()"
-                        (ngModelChange)="newLineUnitUid.set($event)"
-                        [disabled]="addingLine() || lineUnitsState() !== 'idle'">
-                  <option value="">— select —</option>
-                  @for (u of lineUnits(); track u.uid) {
-                    <option [value]="u.uid">{{ u.name }}</option>
-                  }
-                </select>
-              </div>
-              <!-- Qty -->
-              <div class="col-sm-1">
-                <label class="form-label small text-muted mb-1" for="lineQty">
-                  Qty <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <input id="lineQty" name="lineQty" type="number" min="0.001" step="any"
-                       class="form-control form-control-sm"
-                       [ngModel]="newLineQty()" (ngModelChange)="newLineQty.set($event)"
-                       [disabled]="addingLine()" />
-              </div>
-              <!-- Unit cost -->
-              <div class="col-sm-2">
-                <label class="form-label small text-muted mb-1" for="lineUnitCost">
-                  Unit Cost <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <input id="lineUnitCost" name="lineUnitCost" type="number" min="0" step="any"
-                       class="form-control form-control-sm"
-                       [ngModel]="newLineUnitCost()" (ngModelChange)="newLineUnitCost.set($event)"
-                       [disabled]="addingLine()" />
-              </div>
-              <!-- Note -->
-              <div class="col-sm-2">
-                <label class="form-label small text-muted mb-1" for="lineNote">Note</label>
-                <input id="lineNote" name="lineNote" type="text" class="form-control form-control-sm"
-                       [ngModel]="newLineNote()" (ngModelChange)="newLineNote.set($event)"
-                       [disabled]="addingLine()" autocomplete="off" />
-              </div>
-              <!-- Add button -->
-              <div class="col-sm-1 d-flex align-items-end">
-                <button type="submit" class="btn btn-sm btn-primary w-100" [disabled]="addingLine()">
-                  @if (addingLine()) {
-                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                  } @else {
-                    <i class="bi bi-plus-lg" aria-hidden="true"></i>
-                  }
-                  <span class="visually-hidden">Add line</span>
-                </button>
-              </div>
+              @if (lineFormError(); as msg) {
+                <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+              }
             </div>
-            @if (lineFormError(); as msg) {
-              <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-            }
           </form>
         }
 
         @if (lines().length === 0) {
-          <p class="text-muted small">No lines yet.@if (isDraft() && canCreate()) { Add a line above.}</p>
+          <div class="erp-empty">
+            <i class="bi bi-list-ul"></i>
+            No lines yet.@if (isDraft() && canCreate()) { Add a line above.}
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-sm table-hover align-middle bg-white">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Purchase order lines</caption>
               <thead>
                 <tr>
                   <th scope="col">#</th>
                   <th scope="col">Product</th>
                   <th scope="col">Unit</th>
-                  <th scope="col" class="text-end">Ordered Qty</th>
-                  <th scope="col" class="text-end">Received</th>
-                  <th scope="col" class="text-end">Outstanding</th>
-                  <th scope="col" class="text-end">Unit Cost</th>
-                  <th scope="col" class="text-end">Line Total</th>
+                  <th scope="col" class="num">Ordered Qty</th>
+                  <th scope="col" class="num">Received</th>
+                  <th scope="col" class="num">Outstanding</th>
+                  <th scope="col" class="num">Unit Cost</th>
+                  <th scope="col" class="num">Line Total</th>
                   <th scope="col">Status</th>
                   @if (isDraft() && canCreate()) {
                     <th scope="col"><span class="visually-hidden">Actions</span></th>
@@ -306,23 +311,23 @@
                   <tr>
                     <td class="small text-muted">{{ line.lineNo }}</td>
                     <td>
-                      <span class="font-monospace small">{{ line.productCode }}</span>
+                      <span class="mono small">{{ line.productCode }}</span>
                       <br /><span class="small text-muted">{{ line.productName }}</span>
                     </td>
                     <td class="small">{{ line.unitName }}</td>
-                    <td class="text-end font-monospace">{{ line.orderedQty }}</td>
-                    <td class="text-end font-monospace">{{ line.receivedQtyInBase }}</td>
-                    <td class="text-end font-monospace"
+                    <td class="num">{{ line.orderedQty }}</td>
+                    <td class="num">{{ line.receivedQtyInBase }}</td>
+                    <td class="num"
                         [class.text-danger]="!line.fullyReceived && !isDraft()">
                       {{ line.outstandingQtyInBase }}
                     </td>
-                    <td class="text-end font-monospace">{{ line.unitCostAmount }}</td>
-                    <td class="text-end font-monospace">{{ line.lineTotalAmount }}</td>
+                    <td class="num">{{ line.unitCostAmount }}</td>
+                    <td class="num">{{ line.lineTotalAmount }}</td>
                     <td>
                       @if (line.fullyReceived) {
-                        <span class="badge text-bg-success">Received</span>
+                        <span class="status-tag status-tag--ok">Received</span>
                       } @else {
-                        <span class="badge text-bg-warning">Pending</span>
+                        <span class="status-tag status-tag--warn">Pending</span>
                       }
                     </td>
                     @if (isDraft() && canCreate()) {

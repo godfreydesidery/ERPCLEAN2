@@ -1,18 +1,18 @@
 <section class="admin-page">
   <header class="page-head">
     <a class="btn btn-sm btn-outline-secondary me-2" routerLink="/admin/depreciation-runs"
-       aria-label="Back to Depreciation Runs">
+       aria-label="Back to Depreciation Runs list">
       <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Runs
     </a>
     <h1 class="h4 mb-1">Run Depreciation</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
+    <p class="subtitle">
       Preview the planned charges for a fiscal period, then post the run.
       Posting is idempotent — re-posting an already-run period returns the existing run.
     </p>
   </header>
 
   @if (!canDepreciate()) {
-    <p class="state text-muted">
+    <p class="text-muted">
       <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>You don't have permission to run depreciation.
     </p>
   } @else {
@@ -46,57 +46,59 @@
     }
 
     <!-- Preview + post form -->
-    <div class="card card-body mb-4">
-      <h2 class="h6 mb-3">Fiscal Period</h2>
-      <div class="row g-2 mb-2">
-        <div class="col-sm-4">
-          <label class="form-label small text-muted mb-1" for="fFiscalPeriodUid">
-            Fiscal Period UID <span class="text-danger" aria-hidden="true">*</span>
-          </label>
-          <input id="fFiscalPeriodUid" name="fFiscalPeriodUid" type="text" class="form-control"
-                 placeholder="e.g. abc123"
-                 [ngModel]="fFiscalPeriodUid()" (ngModelChange)="fFiscalPeriodUid.set($event)"
-                 [disabled]="previewing() || posting()" autocomplete="off" />
+    <div class="erp-card mb-4">
+      <div class="erp-card__head"><h2>Fiscal Period</h2></div>
+      <div class="erp-card__body">
+        <div class="erp-form-grid">
+          <div class="erp-field">
+            <label class="form-label" for="fFiscalPeriodUid">
+              Fiscal Period UID <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="fFiscalPeriodUid" name="fFiscalPeriodUid" type="text" class="form-control"
+                   placeholder="e.g. abc123"
+                   [ngModel]="fFiscalPeriodUid()" (ngModelChange)="fFiscalPeriodUid.set($event)"
+                   [disabled]="previewing() || posting()" autocomplete="off" />
+          </div>
+          <div class="erp-field">
+            <label class="form-label" for="fPostingDate">
+              Posting Date <span class="text-danger" aria-hidden="true">*</span>
+              <span class="hint text-muted">(for posting only)</span>
+            </label>
+            <input id="fPostingDate" name="fPostingDate" type="date" class="form-control"
+                   [ngModel]="fPostingDate()" (ngModelChange)="fPostingDate.set($event)"
+                   [disabled]="previewing() || posting()" />
+          </div>
         </div>
-        <div class="col-sm-3">
-          <label class="form-label small text-muted mb-1" for="fPostingDate">
-            Posting Date <span class="text-danger" aria-hidden="true">*</span>
-            <span class="text-muted">(for posting only)</span>
-          </label>
-          <input id="fPostingDate" name="fPostingDate" type="date" class="form-control"
-                 [ngModel]="fPostingDate()" (ngModelChange)="fPostingDate.set($event)"
-                 [disabled]="previewing() || posting()" />
+        <div class="d-flex gap-2 mt-3">
+          <button type="button" class="btn btn-outline-primary" (click)="runPreview()"
+                  [disabled]="previewing() || posting()">
+            @if (previewing()) {
+              <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Previewing…
+            } @else {
+              <i class="bi bi-eye me-1" aria-hidden="true"></i>Preview
+            }
+          </button>
+          <button type="button" class="btn btn-primary" (click)="postRun()"
+                  [disabled]="previewing() || posting()">
+            @if (posting()) {
+              <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Posting…
+            } @else {
+              <i class="bi bi-play-circle me-1" aria-hidden="true"></i>Post Run
+            }
+          </button>
         </div>
+        @if (previewError(); as msg) {
+          <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+        }
+        @if (postError(); as msg) {
+          <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+        }
       </div>
-      <div class="d-flex gap-2">
-        <button type="button" class="btn btn-outline-primary" (click)="runPreview()"
-                [disabled]="previewing() || posting()">
-          @if (previewing()) {
-            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Previewing…
-          } @else {
-            <i class="bi bi-eye me-1" aria-hidden="true"></i>Preview
-          }
-        </button>
-        <button type="button" class="btn btn-primary" (click)="postRun()"
-                [disabled]="previewing() || posting()">
-          @if (posting()) {
-            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Posting…
-          } @else {
-            <i class="bi bi-play-circle me-1" aria-hidden="true"></i>Post Run
-          }
-        </button>
-      </div>
-      @if (previewError(); as msg) {
-        <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-      }
-      @if (postError(); as msg) {
-        <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-      }
     </div>
 
     <!-- Posted run result -->
     @if (postedRun(); as run) {
-      <div class="alert alert-success mb-4" role="status">
+      <div class="alert alert-success mb-4" aria-live="polite">
         <strong>Run posted:</strong> {{ run.runNumber }} | Period: {{ periodLabel(run.fiscalPeriodId) }} |
         Total: {{ run.currency }} {{ +run.totalChargeAmount | number:'1.2-2' }} | Assets: {{ run.assetCount }}
         <button type="button" class="btn btn-sm btn-outline-success ms-3" (click)="goToRun()">
@@ -108,31 +110,33 @@
     <!-- Preview result -->
     @if (preview(); as p) {
       <section aria-labelledby="previewHeading">
-        <h2 id="previewHeading" class="h6 mb-2">
+        <h2 id="previewHeading" class="erp-section-title">
           Preview — {{ p.assetCount }} assets — Total planned charge:
-          <span class="font-monospace">{{ +p.totalChargeAmount | number:'1.2-2' }}</span>
+          <span class="mono">{{ +p.totalChargeAmount | number:'1.2-2' }}</span>
         </h2>
         @if (p.lines.length === 0) {
-          <p class="text-muted small">No assets with pending charges in this period.</p>
+          <div class="erp-empty">
+            <i class="bi bi-calendar3" aria-hidden="true"></i>No assets with pending charges in this period.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-sm table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Depreciation preview lines</caption>
               <thead>
                 <tr>
                   <th scope="col">Asset #</th>
                   <th scope="col">Asset Name</th>
-                  <th scope="col">Period Seq</th>
-                  <th scope="col" class="text-end">Planned Charge</th>
+                  <th scope="col" class="num">Period Seq</th>
+                  <th scope="col" class="num">Planned Charge</th>
                 </tr>
               </thead>
               <tbody>
                 @for (line of p.lines; track line.fixedAssetUid) {
                   <tr>
-                    <td class="font-monospace small">{{ line.assetNumber }}</td>
+                    <td class="mono">{{ line.assetNumber }}</td>
                     <td class="small">{{ line.assetName }}</td>
-                    <td class="text-end small">{{ line.periodSeq }}</td>
-                    <td class="text-end font-monospace small">{{ +line.plannedCharge | number:'1.2-2' }}</td>
+                    <td class="num">{{ line.periodSeq }}</td>
+                    <td class="num mono">{{ +line.plannedCharge | number:'1.2-2' }}</td>
                   </tr>
                 }
               </tbody>

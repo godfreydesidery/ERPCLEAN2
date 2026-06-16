@@ -5,13 +5,11 @@
     </a>
   </div>
 
-  <header class="page-head">
-    <h1 class="h4 mb-1">
-      <i class="bi bi-database-add me-2" aria-hidden="true"></i>Set Opening Balance
-    </h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
-      Create an opening AR balance for a customer (used during initial data migration).
-    </p>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1><i class="bi bi-database-add me-2" aria-hidden="true"></i>Set Opening Balance</h1>
+      <p class="subtitle">Create an opening AR balance for a customer (used during initial data migration).</p>
+    </div>
   </header>
 
   @if (!canSet()) {
@@ -58,9 +56,11 @@
       </div>
     }
 
-    <form (ngSubmit)="submit()" aria-label="Set opening balance" class="card" style="max-width:560px">
-      <div class="card-header small fw-semibold text-muted">Opening Balance Details</div>
-      <div class="card-body">
+    <form (ngSubmit)="submit()" aria-label="Set opening balance" class="erp-card" style="max-width:560px">
+      <div class="erp-card__head">
+        <h2>Opening Balance Details</h2>
+      </div>
+      <div class="erp-card__body">
 
         <!-- Customer picker -->
         <div class="mb-3" style="position:relative">
@@ -79,7 +79,7 @@
                 style="top:100%; left:0; max-height:200px; overflow-y:auto">
               @for (c of customerResults(); track c.uid) {
                 <li class="list-group-item list-group-item-action py-1 small"
-                    role="option" style="cursor:pointer"
+                    role="option" aria-selected="false" style="cursor:pointer"
                     (click)="selectCustomer(c)"
                     (keydown.enter)="selectCustomer(c)"
                     tabindex="0">
@@ -163,18 +163,18 @@
             <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ msg }}
           </p>
         }
-      </div>
 
-      <div class="card-footer d-flex gap-2">
-        <button type="submit" class="btn btn-primary" [disabled]="submitDisabled()">
-          @if (saving()) {
-            <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
-            Saving…
-          } @else {
-            <i class="bi bi-check-lg me-1" aria-hidden="true"></i>Set Opening Balance
-          }
-        </button>
-        <a routerLink="/admin/ar/invoices" class="btn btn-outline-secondary">Cancel</a>
+        <div class="d-flex gap-2 mt-4">
+          <button type="submit" class="btn btn-primary" [disabled]="submitDisabled()">
+            @if (saving()) {
+              <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+              Saving…
+            } @else {
+              <i class="bi bi-check-lg me-1" aria-hidden="true"></i>Set Opening Balance
+            }
+          </button>
+          <a routerLink="/admin/ar/invoices" class="btn btn-outline-secondary">Cancel</a>
+        </div>
       </div>
     </form>
   }

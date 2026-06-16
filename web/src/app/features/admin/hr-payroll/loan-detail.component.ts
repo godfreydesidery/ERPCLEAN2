@@ -9,7 +9,7 @@ import { OrganisationService } from '../organisation/organisation.service';
 import { AccountDto } from '../gl/models/gl.model';
 import { GlService } from '../gl/gl.service';
 import { HrPayrollService } from './hr-payroll.service';
-import { EmployeeLoanDto, LoanStatus } from './models/hr-payroll.model';
+import { EmployeeLoanDto } from './models/hr-payroll.model';
 
 /**
  * Loan detail screen with approve action.
@@ -101,15 +101,6 @@ export class LoanDetailComponent {
         this.actionError.set(this.messageFrom(err, 'Could not approve loan.'));
       },
     });
-  }
-
-  statusBadgeClass(status: LoanStatus): string {
-    switch (status) {
-      case 'ACTIVE': return 'text-bg-success';
-      case 'SETTLED': return 'text-bg-info';
-      case 'CANCELLED': return 'text-bg-danger';
-      default: return 'text-bg-secondary';
-    }
   }
 
   private messageFrom(err: unknown, fallback: string): string {

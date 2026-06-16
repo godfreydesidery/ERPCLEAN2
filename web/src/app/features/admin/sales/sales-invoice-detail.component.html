@@ -1,6 +1,6 @@
 <section class="admin-page">
   <header class="page-head">
-    <a class="back-link text-muted small" routerLink="/admin/sales-invoices">
+    <a class="text-muted small" routerLink="/admin/sales-invoices">
       <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Invoices
     </a>
 
@@ -22,11 +22,16 @@
           <div class="d-flex flex-wrap align-items-start gap-3 mt-1">
             <div>
               <h1 class="h4 mb-0">
-                <span class="font-monospace text-primary">{{ invoiceLabel() }}</span>
+                <span class="mono text-primary">{{ invoiceLabel() }}</span>
               </h1>
               <div class="d-flex gap-2 mt-1 flex-wrap align-items-center">
-                <span class="badge" [class]="statusBadgeClass(inv.status)">{{ inv.status }}</span>
-                <span class="badge text-bg-light border">{{ inv.documentType }}</span>
+                <span class="status-tag"
+                      [class.status-tag--ok]="inv.status === 'FINALISED'"
+                      [class.status-tag--warn]="inv.status === 'DRAFT'"
+                      [class.status-tag--neutral]="inv.status === 'VOID'">
+                  {{ inv.status }}
+                </span>
+                <span class="status-tag status-tag--neutral">{{ inv.documentType }}</span>
               </div>
             </div>
 
@@ -60,21 +65,25 @@
             </dl>
 
             <!-- Totals card -->
-            <div class="card border-0 bg-light" style="min-width:220px">
-              <div class="card-body py-2 px-3">
-                <table class="table table-sm table-borderless mb-0" style="font-size:0.875rem">
+            <div class="erp-card" style="min-width:220px">
+              <div class="erp-card__body">
+                <table class="erp-table" style="font-size:0.875rem">
+                  <caption class="visually-hidden">Invoice totals</caption>
+                  <thead class="visually-hidden">
+                    <tr><th scope="col">Label</th><th scope="col" class="num">Amount</th></tr>
+                  </thead>
                   <tbody>
                     <tr>
-                      <td class="text-muted px-0">Net</td>
-                      <td class="text-end font-monospace px-0">{{ inv.currency }} {{ inv.netTotalAmount }}</td>
+                      <td class="text-muted">Net</td>
+                      <td class="num">{{ inv.currency }} {{ inv.netTotalAmount }}</td>
                     </tr>
                     <tr>
-                      <td class="text-muted px-0">VAT</td>
-                      <td class="text-end font-monospace px-0">{{ inv.currency }} {{ inv.vatTotalAmount }}</td>
+                      <td class="text-muted">VAT</td>
+                      <td class="num">{{ inv.currency }} {{ inv.vatTotalAmount }}</td>
                     </tr>
-                    <tr class="fw-bold border-top">
-                      <td class="px-0">Gross</td>
-                      <td class="text-end font-monospace px-0">{{ inv.currency }} {{ inv.grossTotalAmount }}</td>
+                    <tr class="fw-bold">
+                      <td>Gross</td>
+                      <td class="num">{{ inv.currency }} {{ inv.grossTotalAmount }}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -114,35 +123,39 @@
 
           <!-- Void form -->
           @if (showVoidForm()) {
-            <form class="card card-body mt-3 border-danger" (ngSubmit)="submitVoid()" aria-label="Void invoice">
-              <h2 class="h6 mb-2 text-danger">Void Invoice</h2>
-              <div class="row g-2 align-items-end">
-                <div class="col-sm-7">
-                  <label class="form-label small text-muted mb-1" for="voidReason">
-                    Reason <span class="text-danger" aria-hidden="true">*</span>
-                  </label>
-                  <input id="voidReason" name="voidReason" type="text" class="form-control"
-                         [ngModel]="voidReason()" (ngModelChange)="voidReason.set($event)"
-                         [disabled]="voiding()" required autocomplete="off" />
-                </div>
-                <div class="col-sm-3">
-                  <button type="submit" class="btn btn-danger w-100" [disabled]="voiding()">
-                    @if (voiding()) {
-                      <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                    }
-                    Confirm Void
-                  </button>
-                </div>
-                <div class="col-sm-2">
-                  <button type="button" class="btn btn-outline-secondary w-100" (click)="toggleVoidForm()">
-                    Cancel
-                  </button>
-                </div>
+            <div class="erp-card mt-3">
+              <div class="erp-card__head"><h2 class="text-danger">Void Invoice</h2></div>
+              <div class="erp-card__body">
+                <form (ngSubmit)="submitVoid()" aria-label="Void invoice">
+                  <div class="row g-2 align-items-end">
+                    <div class="col-sm-7">
+                      <label class="form-label small text-muted mb-1" for="voidReason">
+                        Reason <span class="text-danger" aria-hidden="true">*</span>
+                      </label>
+                      <input id="voidReason" name="voidReason" type="text" class="form-control"
+                             [ngModel]="voidReason()" (ngModelChange)="voidReason.set($event)"
+                             [disabled]="voiding()" required autocomplete="off" />
+                    </div>
+                    <div class="col-sm-3">
+                      <button type="submit" class="btn btn-danger w-100" [disabled]="voiding()">
+                        @if (voiding()) {
+                          <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        }
+                        Confirm Void
+                      </button>
+                    </div>
+                    <div class="col-sm-2">
+                      <button type="button" class="btn btn-outline-secondary w-100" (click)="toggleVoidForm()">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                  @if (voidError(); as msg) {
+                    <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+                  }
+                </form>
               </div>
-              @if (voidError(); as msg) {
-                <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-              }
-            </form>
+            </div>
           }
         }
       }
@@ -150,335 +163,345 @@
   </header>
 
   @if (invoiceState() !== 'loading' && invoice()) {
-    <!-- ── Lines panel ──────────────────────────────────────────────────── -->
-    <div class="card card-body mb-3">
-      <h2 class="h6 mb-3">Invoice Lines</h2>
+    <!-- Lines panel -->
+    <div class="erp-card mb-3">
+      <div class="erp-card__head"><h2>Invoice Lines</h2></div>
+      <div class="erp-card__body">
 
-      @switch (linesState()) {
-        @case ('loading') {
-          <p class="text-muted small d-flex align-items-center gap-2" aria-live="polite">
-            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading lines…
-          </p>
-        }
-        @case ('error') {
-          <p class="text-danger small" role="alert">
-            <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
-            Could not load lines.
-          </p>
-        }
-        @default {
-          @if (lines().length === 0) {
-            <p class="text-muted small">No lines yet.</p>
-          } @else {
-            <div class="table-responsive mb-3">
-              <table class="table table-hover align-middle bg-white" style="font-size:0.875rem">
-                <caption class="sr-only">Invoice lines</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Product</th>
-                    <th scope="col">Unit</th>
-                    <th scope="col" class="text-end">Qty</th>
-                    <th scope="col" class="text-end">Unit Price</th>
-                    <th scope="col" class="text-end">Discount</th>
-                    <th scope="col">VAT</th>
-                    <th scope="col" class="text-end">Net</th>
-                    <th scope="col" class="text-end">VAT Amt</th>
-                    <th scope="col" class="text-end">Gross</th>
-                    @if (isDraft() && canCreate()) {
-                      <th scope="col"><span class="sr-only">Remove</span></th>
-                    }
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (line of lines(); track line.uid) {
+        @switch (linesState()) {
+          @case ('loading') {
+            <p class="text-muted small d-flex align-items-center gap-2" aria-live="polite">
+              <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading lines…
+            </p>
+          }
+          @case ('error') {
+            <p class="text-danger small" role="alert">
+              <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+              Could not load lines.
+            </p>
+          }
+          @default {
+            @if (lines().length === 0) {
+              <div class="erp-empty">
+                <i class="bi bi-list-ul"></i>
+                No lines yet.
+              </div>
+            } @else {
+              <div class="erp-table-wrap mb-3">
+                <table class="erp-table">
+                  <caption class="sr-only">Invoice lines</caption>
+                  <thead>
                     <tr>
-                      <td>
-                        <strong class="font-monospace">{{ line.productCode }}</strong><br>
-                        <span class="text-muted small">{{ line.productName }}</span>
-                      </td>
-                      <td class="small text-muted">{{ line.unitName }}</td>
-                      <td class="text-end font-monospace">{{ line.quantity }}</td>
-                      <td class="text-end font-monospace">{{ line.unitPriceAmount }}</td>
-                      <td class="text-end small">
-                        @if (line.lineDiscountAmount) {
-                          {{ line.lineDiscountAmount }}
-                        } @else if (line.lineDiscountPercent) {
-                          {{ line.lineDiscountPercent }}%
-                        } @else {
-                          —
-                        }
-                      </td>
-                      <td class="small">
-                        <span class="badge text-bg-light border">{{ line.vatStatus }}</span>
-                        <span class="text-muted ms-1">{{ line.vatRate }}%</span>
-                      </td>
-                      <td class="text-end font-monospace">{{ line.netAmount }}</td>
-                      <td class="text-end font-monospace">{{ line.vatAmount }}</td>
-                      <td class="text-end font-monospace fw-semibold">{{ line.grossAmount }}</td>
+                      <th scope="col">Product</th>
+                      <th scope="col">Unit</th>
+                      <th scope="col" class="num">Qty</th>
+                      <th scope="col" class="num">Unit Price</th>
+                      <th scope="col" class="num">Discount</th>
+                      <th scope="col">VAT</th>
+                      <th scope="col" class="num">Net</th>
+                      <th scope="col" class="num">VAT Amt</th>
+                      <th scope="col" class="num">Gross</th>
                       @if (isDraft() && canCreate()) {
-                        <td>
-                          <button type="button" class="btn btn-sm btn-outline-danger"
-                                  [disabled]="rowBusyLineUid() !== null"
-                                  (click)="removeLine(line)"
-                                  [attr.aria-label]="'Remove line for ' + line.productName">
-                            @if (rowBusyLineUid() === line.uid) {
-                              <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                            } @else {
-                              <i class="bi bi-trash" aria-hidden="true"></i>
-                            }
-                          </button>
-                        </td>
+                        <th scope="col"><span class="sr-only">Remove</span></th>
                       }
                     </tr>
-                  }
-                </tbody>
-              </table>
-            </div>
-          }
-        }
-      }
-
-      <!-- Add line form (DRAFT only, requires SALES.INVOICE.CREATE) -->
-      @if (isDraft() && canCreate()) {
-        <form (ngSubmit)="addLine()" aria-label="Add invoice line">
-          <h3 class="h6 mb-2 text-muted" style="font-size:0.875rem">Add Line</h3>
-          <div class="row g-2 align-items-start mb-2">
-            <!-- Product picker -->
-            <div class="col-sm-4">
-              <label class="form-label small text-muted mb-1" for="lineProductSearch">
-                Product <span class="text-danger" aria-hidden="true">*</span>
-              </label>
-              <input id="lineProductSearch" name="lineProductSearch" type="search"
-                     class="form-control form-control-sm"
-                     placeholder="Search product…"
-                     [ngModel]="productSearchQ()"
-                     (ngModelChange)="onProductSearchChange($event)"
-                     [disabled]="addingLine()"
-                     autocomplete="off"
-                     [attr.aria-expanded]="productResults().length > 0"
-                     aria-haspopup="listbox"
-                     aria-autocomplete="list" />
-              @if (selectedProduct()) {
-                <div class="d-flex align-items-center gap-1 mt-1">
-                  <i class="bi bi-check-circle-fill text-success small" aria-hidden="true"></i>
-                  <span class="small text-muted">{{ selectedProduct()!.label }}</span>
-                </div>
-              }
-              @if (productResults().length > 0) {
-                <ul class="list-group position-absolute shadow-sm mt-1" role="listbox"
-                    aria-label="Product suggestions" style="z-index:1050;max-height:200px;overflow-y:auto;">
-                  @for (p of productResults(); track p.uid) {
-                    <li class="list-group-item list-group-item-action small py-2"
-                        role="option"
-                        style="cursor:pointer"
-                        (click)="selectProduct(p)"
-                        (keydown.enter)="selectProduct(p)"
-                        tabindex="0"
-                        [attr.aria-label]="p.code + ' — ' + p.name">
-                      <strong>{{ p.code }}</strong> — {{ p.name }}
-                    </li>
-                  }
-                </ul>
-              }
-            </div>
-
-            <!-- Unit select -->
-            <div class="col-sm-2">
-              <label class="form-label small text-muted mb-1" for="lineUnit">
-                Unit <span class="text-danger" aria-hidden="true">*</span>
-              </label>
-              @if (lineUnitsState() === 'loading') {
-                <div class="form-control form-control-sm d-flex align-items-center gap-1 text-muted small">
-                  <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
-                </div>
-              } @else {
-                <select id="lineUnit" name="lineUnit" class="form-select form-select-sm"
-                        [ngModel]="newLineUnitUid()" (ngModelChange)="newLineUnitUid.set($event)"
-                        [disabled]="addingLine()">
-                  <option value="">— unit —</option>
-                  @for (u of lineUnits(); track u.uid) {
-                    <option [value]="u.uid">{{ u.code }}</option>
-                  }
-                </select>
-              }
-            </div>
-
-            <!-- Quantity -->
-            <div class="col-sm-2">
-              <label class="form-label small text-muted mb-1" for="lineQty">
-                Quantity <span class="text-danger" aria-hidden="true">*</span>
-              </label>
-              <input id="lineQty" name="lineQty" type="text" class="form-control form-control-sm"
-                     placeholder="e.g. 1"
-                     [ngModel]="newLineQty()" (ngModelChange)="newLineQty.set($event)"
-                     [disabled]="addingLine()" autocomplete="off" />
-            </div>
-
-            <!-- Discount amount (optional) -->
-            <div class="col-sm-2">
-              <label class="form-label small text-muted mb-1" for="lineDiscAmt">Disc. amount</label>
-              <input id="lineDiscAmt" name="lineDiscAmt" type="text" class="form-control form-control-sm"
-                     placeholder="e.g. 100"
-                     [ngModel]="newLineDiscountAmount()" (ngModelChange)="newLineDiscountAmount.set($event)"
-                     [disabled]="addingLine()" autocomplete="off" />
-            </div>
-
-            <!-- Discount percent (optional) -->
-            <div class="col-sm-2">
-              <label class="form-label small text-muted mb-1" for="lineDiscPct">Disc. %</label>
-              <input id="lineDiscPct" name="lineDiscPct" type="text" class="form-control form-control-sm"
-                     placeholder="e.g. 5"
-                     [ngModel]="newLineDiscountPercent()" (ngModelChange)="newLineDiscountPercent.set($event)"
-                     [disabled]="addingLine()" autocomplete="off" />
-            </div>
-          </div>
-
-          <div class="d-flex gap-2 align-items-center">
-            <button type="submit" class="btn btn-sm btn-primary" [disabled]="addingLine()">
-              @if (addingLine()) {
-                <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-              }
-              <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add Line
-            </button>
-          </div>
-
-          @if (lineFormError(); as msg) {
-            <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-          }
-        </form>
-      }
-    </div>
-
-    <!-- ── Payments panel ─────────────────────────────────────────────────── -->
-    <div class="card card-body mb-3">
-      <h2 class="h6 mb-1">Payments</h2>
-
-      @if (invoice(); as inv) {
-        <div class="d-flex gap-4 mb-3" style="font-size:0.875rem">
-          <span>Gross: <strong class="font-monospace">{{ inv.currency }} {{ inv.grossTotalAmount }}</strong></span>
-          <span>Paid: <strong class="font-monospace">{{ inv.currency }} {{ totalPaid() }}</strong></span>
-          <span>Remaining:
-            <strong class="font-monospace" [class.text-success]="remaining() === '0.00'" [class.text-danger]="remaining() !== '0.00'">
-              {{ inv.currency }} {{ remaining() }}
-            </strong>
-          </span>
-        </div>
-      }
-
-      @switch (paymentsState()) {
-        @case ('loading') {
-          <p class="text-muted small d-flex align-items-center gap-2" aria-live="polite">
-            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading payments…
-          </p>
-        }
-        @case ('error') {
-          <p class="text-danger small" role="alert">
-            <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
-            Could not load payments.
-          </p>
-        }
-        @default {
-          @if (payments().length === 0) {
-            <p class="text-muted small">No payments yet.</p>
-          } @else {
-            <div class="table-responsive mb-3">
-              <table class="table table-hover align-middle bg-white" style="font-size:0.875rem">
-                <caption class="sr-only">Payments for this invoice</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Tender</th>
-                    <th scope="col" class="text-end">Amount</th>
-                    <th scope="col" class="text-end">Change</th>
-                    <th scope="col">Reference</th>
-                    <th scope="col">Received</th>
-                    @if (isDraft() && canSettle()) {
-                      <th scope="col"><span class="sr-only">Remove</span></th>
+                  </thead>
+                  <tbody>
+                    @for (line of lines(); track line.uid) {
+                      <tr>
+                        <td>
+                          <strong class="mono">{{ line.productCode }}</strong><br>
+                          <span class="text-muted small">{{ line.productName }}</span>
+                        </td>
+                        <td class="small text-muted">{{ line.unitName }}</td>
+                        <td class="num">{{ line.quantity }}</td>
+                        <td class="num">{{ line.unitPriceAmount }}</td>
+                        <td class="num small">
+                          @if (line.lineDiscountAmount) {
+                            {{ line.lineDiscountAmount }}
+                          } @else if (line.lineDiscountPercent) {
+                            {{ line.lineDiscountPercent }}%
+                          } @else {
+                            —
+                          }
+                        </td>
+                        <td class="small">
+                          <span class="status-tag status-tag--neutral">{{ line.vatStatus }}</span>
+                          <span class="text-muted ms-1">{{ line.vatRate }}%</span>
+                        </td>
+                        <td class="num">{{ line.netAmount }}</td>
+                        <td class="num">{{ line.vatAmount }}</td>
+                        <td class="num fw-semibold">{{ line.grossAmount }}</td>
+                        @if (isDraft() && canCreate()) {
+                          <td>
+                            <button type="button" class="btn btn-sm btn-outline-danger"
+                                    [disabled]="rowBusyLineUid() !== null"
+                                    (click)="removeLine(line)"
+                                    [attr.aria-label]="'Remove line for ' + line.productName">
+                              @if (rowBusyLineUid() === line.uid) {
+                                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                              } @else {
+                                <i class="bi bi-trash" aria-hidden="true"></i>
+                              }
+                            </button>
+                          </td>
+                        }
+                      </tr>
                     }
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (pay of payments(); track pay.uid) {
-                    <tr>
-                      <td>
-                        <span class="badge"
-                              [class.text-bg-primary]="pay.tenderType === 'CASH'"
-                              [class.text-bg-info]="pay.tenderType === 'MOBILE_MONEY'">
-                          {{ pay.tenderType === 'MOBILE_MONEY' ? 'Mobile Money' : pay.tenderType }}
-                        </span>
-                      </td>
-                      <td class="text-end font-monospace">{{ pay.amount }}</td>
-                      <td class="text-end font-monospace">{{ pay.changeAmount }}</td>
-                      <td class="small text-muted">{{ pay.reference ?? '—' }}</td>
-                      <td class="small text-muted">{{ pay.receivedAt ?? pay.createdAt }}</td>
-                      @if (isDraft() && canSettle()) {
-                        <td>
-                          <button type="button" class="btn btn-sm btn-outline-danger"
-                                  [disabled]="rowBusyPaymentUid() !== null"
-                                  (click)="removePayment(pay)"
-                                  [attr.aria-label]="'Remove payment of ' + pay.amount">
-                            @if (rowBusyPaymentUid() === pay.uid) {
-                              <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                            } @else {
-                              <i class="bi bi-trash" aria-hidden="true"></i>
-                            }
-                          </button>
-                        </td>
-                      }
-                    </tr>
-                  }
-                </tbody>
-              </table>
-            </div>
+                  </tbody>
+                </table>
+              </div>
+            }
           }
         }
-      }
 
-      <!-- Add payment form (DRAFT only, SALES.INVOICE.SETTLE) -->
-      @if (isDraft() && canSettle()) {
-        <form (ngSubmit)="addPayment()" aria-label="Record payment">
-          <h3 class="h6 mb-2 text-muted" style="font-size:0.875rem">Record Payment</h3>
-          <div class="row g-2 align-items-end mb-2">
-            <div class="col-sm-3">
-              <label class="form-label small text-muted mb-1" for="payTender">
-                Tender type <span class="text-danger" aria-hidden="true">*</span>
-              </label>
-              <select id="payTender" name="payTender" class="form-select form-select-sm"
-                      [ngModel]="newPaymentTender()" (ngModelChange)="newPaymentTender.set($event)"
-                      [disabled]="addingPayment()">
-                <option value="CASH">Cash</option>
-                <option value="MOBILE_MONEY">Mobile Money</option>
-              </select>
+        <!-- Add line form (DRAFT only) -->
+        @if (isDraft() && canCreate()) {
+          <form (ngSubmit)="addLine()" aria-label="Add invoice line">
+            <h3 class="erp-section-title" style="font-size:0.875rem">Add Line</h3>
+            <div class="row g-2 align-items-start mb-2">
+              <!-- Product picker -->
+              <div class="col-sm-4">
+                <label class="form-label small text-muted mb-1" for="lineProductSearch">
+                  Product <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="lineProductSearch" name="lineProductSearch" type="search"
+                       class="form-control form-control-sm"
+                       placeholder="Search product…"
+                       [ngModel]="productSearchQ()"
+                       (ngModelChange)="onProductSearchChange($event)"
+                       [disabled]="addingLine()"
+                       autocomplete="off"
+                       [attr.aria-expanded]="productResults().length > 0"
+                       aria-haspopup="listbox"
+                       aria-autocomplete="list" />
+                @if (selectedProduct()) {
+                  <div class="d-flex align-items-center gap-1 mt-1">
+                    <i class="bi bi-check-circle-fill text-success small" aria-hidden="true"></i>
+                    <span class="small text-muted">{{ selectedProduct()!.label }}</span>
+                  </div>
+                }
+                @if (productResults().length > 0) {
+                  <ul class="list-group position-absolute shadow-sm mt-1" role="listbox"
+                      aria-label="Product suggestions" style="z-index:1050;max-height:200px;overflow-y:auto;">
+                    @for (p of productResults(); track p.uid) {
+                      <li class="list-group-item list-group-item-action small py-2"
+                          role="option"
+                          style="cursor:pointer"
+                          (click)="selectProduct(p)"
+                          (keydown.enter)="selectProduct(p)"
+                          tabindex="0"
+                          [attr.aria-label]="p.code + ' — ' + p.name">
+                        <strong>{{ p.code }}</strong> — {{ p.name }}
+                      </li>
+                    }
+                  </ul>
+                }
+              </div>
+
+              <!-- Unit select -->
+              <div class="col-sm-2">
+                <label class="form-label small text-muted mb-1" for="lineUnit">
+                  Unit <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                @if (lineUnitsState() === 'loading') {
+                  <div class="form-control form-control-sm d-flex align-items-center gap-1 text-muted small">
+                    <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                  </div>
+                } @else {
+                  <select id="lineUnit" name="lineUnit" class="form-select form-select-sm"
+                          [ngModel]="newLineUnitUid()" (ngModelChange)="newLineUnitUid.set($event)"
+                          [disabled]="addingLine()">
+                    <option value="">— unit —</option>
+                    @for (u of lineUnits(); track u.uid) {
+                      <option [value]="u.uid">{{ u.code }}</option>
+                    }
+                  </select>
+                }
+              </div>
+
+              <!-- Quantity -->
+              <div class="col-sm-2">
+                <label class="form-label small text-muted mb-1" for="lineQty">
+                  Quantity <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="lineQty" name="lineQty" type="text" class="form-control form-control-sm"
+                       placeholder="e.g. 1"
+                       [ngModel]="newLineQty()" (ngModelChange)="newLineQty.set($event)"
+                       [disabled]="addingLine()" autocomplete="off" />
+              </div>
+
+              <!-- Discount amount (optional) -->
+              <div class="col-sm-2">
+                <label class="form-label small text-muted mb-1" for="lineDiscAmt">Disc. amount</label>
+                <input id="lineDiscAmt" name="lineDiscAmt" type="text" class="form-control form-control-sm"
+                       placeholder="e.g. 100"
+                       [ngModel]="newLineDiscountAmount()" (ngModelChange)="newLineDiscountAmount.set($event)"
+                       [disabled]="addingLine()" autocomplete="off" />
+              </div>
+
+              <!-- Discount percent (optional) -->
+              <div class="col-sm-2">
+                <label class="form-label small text-muted mb-1" for="lineDiscPct">Disc. %</label>
+                <input id="lineDiscPct" name="lineDiscPct" type="text" class="form-control form-control-sm"
+                       placeholder="e.g. 5"
+                       [ngModel]="newLineDiscountPercent()" (ngModelChange)="newLineDiscountPercent.set($event)"
+                       [disabled]="addingLine()" autocomplete="off" />
+              </div>
             </div>
-            <div class="col-sm-3">
-              <label class="form-label small text-muted mb-1" for="payAmount">
-                Amount <span class="text-danger" aria-hidden="true">*</span>
-              </label>
-              <input id="payAmount" name="payAmount" type="text" class="form-control form-control-sm"
-                     placeholder="e.g. 5000"
-                     [ngModel]="newPaymentAmount()" (ngModelChange)="newPaymentAmount.set($event)"
-                     [disabled]="addingPayment()" autocomplete="off" />
-            </div>
-            <div class="col-sm-3">
-              <label class="form-label small text-muted mb-1" for="payRef">Reference</label>
-              <input id="payRef" name="payRef" type="text" class="form-control form-control-sm"
-                     placeholder="e.g. MPESA ref"
-                     [ngModel]="newPaymentReference()" (ngModelChange)="newPaymentReference.set($event)"
-                     [disabled]="addingPayment()" autocomplete="off" />
-            </div>
-            <div class="col-sm-3">
-              <button type="submit" class="btn btn-sm btn-primary w-100" [disabled]="addingPayment()">
-                @if (addingPayment()) {
+
+            <div class="d-flex gap-2 align-items-center">
+              <button type="submit" class="btn btn-sm btn-primary" [disabled]="addingLine()">
+                @if (addingLine()) {
                   <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
                 }
-                <i class="bi bi-currency-dollar me-1" aria-hidden="true"></i>Record
+                <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add Line
               </button>
             </div>
+
+            @if (lineFormError(); as msg) {
+              <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+            }
+          </form>
+        }
+      </div>
+    </div>
+
+    <!-- Payments panel -->
+    <div class="erp-card mb-3">
+      <div class="erp-card__head"><h2>Payments</h2></div>
+      <div class="erp-card__body">
+
+        @if (invoice(); as inv) {
+          <div class="d-flex gap-4 mb-3" style="font-size:0.875rem">
+            <span>Gross: <strong class="mono">{{ inv.currency }} {{ inv.grossTotalAmount }}</strong></span>
+            <span>Paid: <strong class="mono">{{ inv.currency }} {{ totalPaid() }}</strong></span>
+            <span>Remaining:
+              <strong class="mono" [class.text-success]="remaining() === '0.00'" [class.text-danger]="remaining() !== '0.00'">
+                {{ inv.currency }} {{ remaining() }}
+              </strong>
+            </span>
           </div>
-          @if (paymentFormError(); as msg) {
-            <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+        }
+
+        @switch (paymentsState()) {
+          @case ('loading') {
+            <p class="text-muted small d-flex align-items-center gap-2" aria-live="polite">
+              <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading payments…
+            </p>
           }
-        </form>
-      }
+          @case ('error') {
+            <p class="text-danger small" role="alert">
+              <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+              Could not load payments.
+            </p>
+          }
+          @default {
+            @if (payments().length === 0) {
+              <div class="erp-empty">
+                <i class="bi bi-credit-card"></i>
+                No payments yet.
+              </div>
+            } @else {
+              <div class="erp-table-wrap mb-3">
+                <table class="erp-table">
+                  <caption class="sr-only">Payments for this invoice</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Tender</th>
+                      <th scope="col" class="num">Amount</th>
+                      <th scope="col" class="num">Change</th>
+                      <th scope="col">Reference</th>
+                      <th scope="col">Received</th>
+                      @if (isDraft() && canSettle()) {
+                        <th scope="col"><span class="sr-only">Remove</span></th>
+                      }
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (pay of payments(); track pay.uid) {
+                      <tr>
+                        <td>
+                          <span class="status-tag"
+                                [class.status-tag--info]="pay.tenderType === 'CASH'"
+                                [class.status-tag--ok]="pay.tenderType === 'MOBILE_MONEY'">
+                            {{ pay.tenderType === 'MOBILE_MONEY' ? 'Mobile Money' : pay.tenderType }}
+                          </span>
+                        </td>
+                        <td class="num">{{ pay.amount }}</td>
+                        <td class="num">{{ pay.changeAmount }}</td>
+                        <td class="small text-muted">{{ pay.reference ?? '—' }}</td>
+                        <td class="small text-muted">{{ pay.receivedAt ?? pay.createdAt }}</td>
+                        @if (isDraft() && canSettle()) {
+                          <td>
+                            <button type="button" class="btn btn-sm btn-outline-danger"
+                                    [disabled]="rowBusyPaymentUid() !== null"
+                                    (click)="removePayment(pay)"
+                                    [attr.aria-label]="'Remove payment of ' + pay.amount">
+                              @if (rowBusyPaymentUid() === pay.uid) {
+                                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                              } @else {
+                                <i class="bi bi-trash" aria-hidden="true"></i>
+                              }
+                            </button>
+                          </td>
+                        }
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          }
+        }
+
+        <!-- Add payment form (DRAFT only, SALES.INVOICE.SETTLE) -->
+        @if (isDraft() && canSettle()) {
+          <form (ngSubmit)="addPayment()" aria-label="Record payment">
+            <h3 class="erp-section-title" style="font-size:0.875rem">Record Payment</h3>
+            <div class="row g-2 align-items-end mb-2">
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="payTender">
+                  Tender type <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <select id="payTender" name="payTender" class="form-select form-select-sm"
+                        [ngModel]="newPaymentTender()" (ngModelChange)="newPaymentTender.set($event)"
+                        [disabled]="addingPayment()">
+                  <option value="CASH">Cash</option>
+                  <option value="MOBILE_MONEY">Mobile Money</option>
+                </select>
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="payAmount">
+                  Amount <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="payAmount" name="payAmount" type="text" class="form-control form-control-sm"
+                       placeholder="e.g. 5000"
+                       [ngModel]="newPaymentAmount()" (ngModelChange)="newPaymentAmount.set($event)"
+                       [disabled]="addingPayment()" autocomplete="off" />
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="payRef">Reference</label>
+                <input id="payRef" name="payRef" type="text" class="form-control form-control-sm"
+                       placeholder="e.g. MPESA ref"
+                       [ngModel]="newPaymentReference()" (ngModelChange)="newPaymentReference.set($event)"
+                       [disabled]="addingPayment()" autocomplete="off" />
+              </div>
+              <div class="col-sm-3">
+                <button type="submit" class="btn btn-sm btn-primary w-100" [disabled]="addingPayment()">
+                  @if (addingPayment()) {
+                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                  }
+                  <i class="bi bi-currency-dollar me-1" aria-hidden="true"></i>Record
+                </button>
+              </div>
+            </div>
+            @if (paymentFormError(); as msg) {
+              <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+            }
+          </form>
+        }
+      </div>
     </div>
   }
 </section>

@@ -22,10 +22,15 @@
           <div class="d-flex flex-wrap align-items-start gap-3 mt-1">
             <div>
               <h1 class="h4 mb-0">
-                <span class="font-monospace text-primary">{{ g.receiptNumber }}</span>
+                <span class="mono text-primary">{{ g.receiptNumber }}</span>
               </h1>
               <div class="d-flex gap-2 mt-1">
-                <span class="badge" [class]="statusBadgeClass(g.status)">{{ g.status }}</span>
+                <span class="status-tag"
+                  [class.status-tag--ok]="g.status === 'RECEIVED'"
+                  [class.status-tag--neutral]="g.status === 'VOID'"
+                  [class.status-tag--warn]="g.status !== 'RECEIVED' && g.status !== 'VOID'">
+                  {{ g.status }}
+                </span>
               </div>
             </div>
 
@@ -69,30 +74,32 @@
           }
 
           @if (showVoidForm()) {
-            <form class="card card-body mt-2 mb-3" style="max-width:480px"
+            <form class="erp-card mt-2 mb-3" style="max-width:480px"
                   (ngSubmit)="submitVoid()" aria-label="Void goods receipt">
-              <h2 class="h6 mb-2">Void Receipt</h2>
-              <div class="mb-2">
-                <label class="form-label small text-muted mb-1" for="voidReason">
-                  Reason <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <input id="voidReason" name="voidReason" type="text" class="form-control"
-                       [ngModel]="voidReason()" (ngModelChange)="voidReason.set($event)"
-                       [disabled]="voiding()" autocomplete="off" />
+              <div class="erp-card__head"><h2>Void Receipt</h2></div>
+              <div class="erp-card__body">
+                <div class="erp-field mb-2">
+                  <label class="form-label small text-muted mb-1" for="voidReason">
+                    Reason <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <input id="voidReason" name="voidReason" type="text" class="form-control"
+                         [ngModel]="voidReason()" (ngModelChange)="voidReason.set($event)"
+                         [disabled]="voiding()" autocomplete="off" />
+                </div>
+                <div class="d-flex gap-2">
+                  <button type="submit" class="btn btn-danger" [disabled]="voiding()">
+                    @if (voiding()) {
+                      <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                    }
+                    Confirm Void
+                  </button>
+                  <button type="button" class="btn btn-outline-secondary"
+                          (click)="toggleVoidForm()" [disabled]="voiding()">Cancel</button>
+                </div>
+                @if (voidError(); as msg) {
+                  <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+                }
               </div>
-              <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-danger" [disabled]="voiding()">
-                  @if (voiding()) {
-                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-                  }
-                  Confirm Void
-                </button>
-                <button type="button" class="btn btn-outline-secondary"
-                        (click)="toggleVoidForm()" [disabled]="voiding()">Cancel</button>
-              </div>
-              @if (voidError(); as msg) {
-                <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-              }
             </form>
           }
         }
@@ -103,21 +110,24 @@
   <!-- Lines -->
   @if (gr(); as g) {
     <div class="mt-4">
-      <h2 class="h5 mb-2">Receipt Lines</h2>
+      <h2 class="erp-section-title">Receipt Lines</h2>
       @if (lines(g).length === 0) {
-        <p class="text-muted small">No lines recorded.</p>
+        <div class="erp-empty">
+          <i class="bi bi-list-ul"></i>
+          No lines recorded.
+        </div>
       } @else {
-        <div class="table-responsive">
-          <table class="table table-sm table-hover align-middle bg-white">
+        <div class="erp-table-wrap">
+          <table class="erp-table">
             <caption class="visually-hidden">Goods receipt lines</caption>
             <thead>
               <tr>
                 <th scope="col">#</th>
                 <th scope="col">Product</th>
                 <th scope="col">Unit</th>
-                <th scope="col" class="text-end">Received Qty</th>
-                <th scope="col" class="text-end">Unit Cost</th>
-                <th scope="col" class="text-end">Line Cost</th>
+                <th scope="col" class="num">Received Qty</th>
+                <th scope="col" class="num">Unit Cost</th>
+                <th scope="col" class="num">Line Cost</th>
                 <th scope="col">Currency</th>
               </tr>
             </thead>
@@ -126,13 +136,13 @@
                 <tr>
                   <td class="small text-muted">{{ line.lineNo }}</td>
                   <td>
-                    <span class="font-monospace small">{{ line.productCode }}</span>
+                    <span class="mono small">{{ line.productCode }}</span>
                     <br /><span class="small text-muted">{{ line.productName }}</span>
                   </td>
                   <td class="small">{{ line.unitName }}</td>
-                  <td class="text-end font-monospace">{{ line.receivedQty }}</td>
-                  <td class="text-end font-monospace">{{ line.unitCostAmount }}</td>
-                  <td class="text-end font-monospace fw-semibold">{{ line.lineCostAmount }}</td>
+                  <td class="num">{{ line.receivedQty }}</td>
+                  <td class="num">{{ line.unitCostAmount }}</td>
+                  <td class="num fw-semibold">{{ line.lineCostAmount }}</td>
                   <td class="small">{{ line.currency }}</td>
                 </tr>
               }

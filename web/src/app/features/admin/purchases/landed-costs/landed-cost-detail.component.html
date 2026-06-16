@@ -1,35 +1,39 @@
 <section class="admin-page">
   <header class="page-head">
-    <h1 class="h4 mb-1">Landed Cost</h1>
-    <a routerLink="/admin/landed-costs" class="btn btn-sm btn-outline-secondary">
-      <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back
+    <a class="back-link text-muted small" routerLink="/admin/landed-costs">
+      <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Landed Costs
     </a>
+    <h1 class="h4 mb-1 mt-1">Landed Cost</h1>
   </header>
 
   @switch (state()) {
     @case ('loading') {
-      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+      <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
         <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
       </p>
     }
     @case ('error') {
-      <p class="state text-danger" role="alert">
+      <p class="text-danger" role="alert">
         <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
         Could not load landed cost.
       </p>
     }
     @default {
       @if (entity(); as lc) {
-        <div class="card mb-3">
-          <div class="card-body">
+        <div class="erp-card mb-3">
+          <div class="erp-card__body">
             <div class="row g-3">
               <div class="col-sm-3">
                 <div class="small text-muted">LC Number</div>
-                <div class="fw-semibold font-monospace">{{ lc.landedCostNumber }}</div>
+                <div class="fw-semibold mono">{{ lc.landedCostNumber }}</div>
               </div>
               <div class="col-sm-3">
                 <div class="small text-muted">Status</div>
-                <span class="badge" [class]="statusBadgeClass(lc.status)">{{ lc.status }}</span>
+                <span class="status-tag"
+                  [class.status-tag--ok]="lc.status === 'CONFIRMED'"
+                  [class.status-tag--warn]="lc.status !== 'CONFIRMED'">
+                  {{ lc.status }}
+                </span>
               </div>
               <div class="col-sm-3">
                 <div class="small text-muted">Basis</div>
@@ -41,7 +45,7 @@
               </div>
               <div class="col-sm-3">
                 <div class="small text-muted">Total Charge</div>
-                <div class="fw-semibold font-monospace">{{ +lc.totalChargeAmount | number:'1.2-2' }}</div>
+                <div class="fw-semibold mono">{{ +lc.totalChargeAmount | number:'1.2-2' }}</div>
               </div>
               <div class="col-sm-3">
                 <div class="small text-muted">Created</div>
@@ -75,7 +79,7 @@
                 <div class="small text-muted mb-1">Goods Receipts Covered</div>
                 <div class="d-flex flex-wrap gap-2">
                   @for (uid of lc.receiptUids; track uid; let i = $index) {
-                    <a class="badge text-bg-secondary text-decoration-none"
+                    <a class="status-tag status-tag--info text-decoration-none"
                        [routerLink]="['/admin/goods-receipts/uid', uid]"
                        [attr.aria-label]="'View goods receipt ' + (i + 1)">GR {{ i + 1 }}</a>
                   }
@@ -92,12 +96,12 @@
                     <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
                     Confirming…
                   } @else {
-                    <i class="bi bi-check-lg me-1" aria-hidden="true"></i>Confirm & Allocate
+                    <i class="bi bi-check-lg me-1" aria-hidden="true"></i>Confirm &amp; Allocate
                   }
                 </button>
               </div>
               @if (confirmError(); as msg) {
-                <p class="form-error text-danger small mt-2" role="alert">{{ msg }}</p>
+                <p class="text-danger small mt-2" role="alert">{{ msg }}</p>
               }
             }
           </div>
@@ -105,15 +109,15 @@
 
         <!-- Charge lines -->
         @if (lc.charges && lc.charges.length > 0) {
-          <h2 class="h6 mb-2">Charges</h2>
-          <div class="table-responsive">
-            <table class="table table-sm align-middle bg-white grid">
+          <h2 class="erp-section-title">Charges</h2>
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Landed cost charges</caption>
               <thead>
                 <tr>
                   <th scope="col">#</th>
                   <th scope="col">Charge Type</th>
-                  <th scope="col" class="text-end">Amount</th>
+                  <th scope="col" class="num">Amount</th>
                   <th scope="col">Currency</th>
                   <th scope="col">Billed</th>
                   <th scope="col">Supplier Bill</th>
@@ -124,13 +128,13 @@
                   <tr>
                     <td class="small text-muted">{{ charge.lineNo }}</td>
                     <td>{{ charge.chargeType }}</td>
-                    <td class="text-end font-monospace small">{{ +charge.amount | number:'1.2-2' }}</td>
+                    <td class="num small">{{ +charge.amount | number:'1.2-2' }}</td>
                     <td class="small">{{ charge.currency }}</td>
                     <td>
                       @if (charge.billed) {
-                        <span class="badge text-bg-success">Billed</span>
+                        <span class="status-tag status-tag--ok">Billed</span>
                       } @else {
-                        <span class="badge text-bg-secondary">Unbilled</span>
+                        <span class="status-tag status-tag--neutral">Unbilled</span>
                       }
                     </td>
                     <td class="small">

@@ -243,15 +243,6 @@ export class StockSerialListComponent {
 
   // ── Display helpers ────────────────────────────────────────────────────────
 
-  statusBadgeClass(status: string): string {
-    switch (status) {
-      case 'IN_STOCK': return 'text-bg-success';
-      case 'ISSUED': return 'text-bg-warning';
-      case 'RETURNED': return 'text-bg-secondary';
-      default: return 'text-bg-light';
-    }
-  }
-
   private messageFrom(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {
       const errors = (err.error as { errors?: string[] })?.errors;

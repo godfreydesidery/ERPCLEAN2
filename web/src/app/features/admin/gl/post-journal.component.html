@@ -5,20 +5,18 @@
     </a>
   </div>
 
-  <header class="page-head">
-    <h1 class="h4 mb-1">
-      <i class="bi bi-pencil-square me-2" aria-hidden="true"></i>Post Manual Journal Entry
-    </h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
-      Enter balanced debit/credit lines. The entry will be posted immediately.
-    </p>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1><i class="bi bi-pencil-square me-2" aria-hidden="true"></i>Post Manual Journal Entry</h1>
+      <p class="subtitle">Enter balanced debit/credit lines. The entry will be posted immediately.</p>
+    </div>
   </header>
 
   @if (!canPost()) {
-    <p class="text-muted d-flex align-items-center gap-2 mt-3" role="alert">
-      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+    <div class="erp-empty mt-3" role="alert">
+      <i class="bi bi-shield-lock"></i>
       You don't have permission to post journal entries.
-    </p>
+    </div>
   } @else {
 
     <!-- Company selector -->
@@ -54,11 +52,13 @@
       <form (ngSubmit)="post()" aria-label="Post manual journal entry">
 
         <!-- Header fields -->
-        <div class="card mb-3">
-          <div class="card-header small fw-semibold text-muted">Entry Header</div>
-          <div class="card-body">
-            <div class="row g-3">
-              <div class="col-sm-3">
+        <div class="erp-card mb-3">
+          <div class="erp-card__head">
+            <h2>Entry Header</h2>
+          </div>
+          <div class="erp-card__body">
+            <div class="erp-form-grid">
+              <div class="erp-field">
                 <label class="form-label" for="postingDate">
                   Posting Date <span class="text-danger" aria-hidden="true">*</span>
                 </label>
@@ -68,7 +68,7 @@
                        (ngModelChange)="postingDate.set($event)"
                        required [disabled]="posting()" />
               </div>
-              <div class="col-sm-5">
+              <div class="erp-field">
                 <label class="form-label" for="description">
                   Description <span class="text-danger" aria-hidden="true">*</span>
                 </label>
@@ -78,7 +78,7 @@
                        (ngModelChange)="description.set($event)"
                        required [disabled]="posting()" autocomplete="off" />
               </div>
-              <div class="col-sm-4">
+              <div class="erp-field">
                 <label class="form-label" for="sourceRef">
                   Source Reference <span class="text-muted small">(optional)</span>
                 </label>
@@ -93,18 +93,19 @@
         </div>
 
         <!-- Lines editor -->
-        <div class="card mb-3">
-          <div class="card-header d-flex justify-content-between align-items-center">
-            <span class="small fw-semibold text-muted">
+        <div class="erp-card mb-3">
+          <div class="erp-card__head">
+            <h2>
               <i class="bi bi-list-ul me-1" aria-hidden="true"></i>
               Lines ({{ lines().length }})
-            </span>
+            </h2>
+            <span class="spacer"></span>
             <button type="button" class="btn btn-sm btn-outline-primary"
                     (click)="addLine()" [disabled]="posting()">
               <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add Line
             </button>
           </div>
-          <div class="card-body p-0">
+          <div class="erp-card__body p-0">
 
             @if (accountsState() === 'loading') {
               <p class="text-muted small p-3 mb-0 d-flex align-items-center gap-2">
@@ -117,13 +118,13 @@
               </p>
             } @else {
 
-              <div class="table-responsive">
-                <table class="table table-sm align-middle mb-0" aria-label="Journal entry lines">
-                  <thead class="table-light">
+              <div class="erp-table-wrap">
+                <table class="erp-table" aria-label="Journal entry lines">
+                  <thead>
                     <tr>
                       <th scope="col" style="min-width:260px">Account <span class="text-danger" aria-hidden="true">*</span></th>
-                      <th scope="col" style="min-width:140px" class="text-end">Debit</th>
-                      <th scope="col" style="min-width:140px" class="text-end">Credit</th>
+                      <th scope="col" class="num" style="min-width:140px">Debit</th>
+                      <th scope="col" class="num" style="min-width:140px">Credit</th>
                       <th scope="col" style="min-width:180px">Memo</th>
                       <th scope="col" style="width:48px"><span class="visually-hidden">Remove</span></th>
                     </tr>
@@ -150,7 +151,7 @@
                             }
                           </select>
                         </td>
-                        <td>
+                        <td class="num">
                           <label [for]="'lineDebit_' + line.localId" class="visually-hidden">
                             Line {{ i + 1 }} debit amount
                           </label>
@@ -164,7 +165,7 @@
                                  [disabled]="posting()"
                                  autocomplete="off" />
                         </td>
-                        <td>
+                        <td class="num">
                           <label [for]="'lineCreditAmt_' + line.localId" class="visually-hidden">
                             Line {{ i + 1 }} credit amount
                           </label>
@@ -227,11 +228,11 @@
                   </span>
                 </div>
                 @if (isBalanced()) {
-                  <span class="badge text-bg-success ms-auto">
-                    <i class="bi bi-check-circle me-1" aria-hidden="true"></i>Balanced
+                  <span class="status-tag status-tag--ok ms-auto">
+                    <span class="status-tag__dot"></span>Balanced
                   </span>
                 } @else {
-                  <span class="badge text-bg-warning ms-auto" aria-live="polite">
+                  <span class="status-tag status-tag--warn ms-auto" aria-live="polite">
                     <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
                     Not balanced
                   </span>

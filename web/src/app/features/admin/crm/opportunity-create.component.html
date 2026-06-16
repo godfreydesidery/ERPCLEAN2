@@ -37,108 +37,113 @@
     }
   }
 
-  <form class="create-form card card-body mb-4" (ngSubmit)="create()" aria-label="Create opportunity">
-    <div class="row g-2 mb-2">
-      <div class="col-sm-6">
-        <label class="form-label small text-muted mb-1" for="fTitle">
-          Title <span class="text-danger" aria-hidden="true">*</span>
-        </label>
-        <input id="fTitle" name="fTitle" type="text" class="form-control"
-               placeholder="Short description of the opportunity"
-               [ngModel]="fTitle()" (ngModelChange)="fTitle.set($event)"
-               [disabled]="saving()" autocomplete="off" />
-      </div>
-
-      <div class="col-sm-4">
-        <label class="form-label small text-muted mb-1" for="fCustomerUid">
-          Customer <span class="text-danger" aria-hidden="true">*</span>
-        </label>
-        <app-uid-picker id="fCustomerUid" name="fCustomerUid"
-                        [(ngModel)]="fCustomerUid"
-                        [options]="customerOptions()"
-                        placeholder="Select customer"
-                        [required]="true" />
-      </div>
-
-      <div class="col-sm-4">
-        <label class="form-label small text-muted mb-1" for="fPipelineStageUid">
-          Pipeline Stage <span class="text-danger" aria-hidden="true">*</span>
-        </label>
-        <select id="fPipelineStageUid" name="fPipelineStageUid" class="form-select"
-                [ngModel]="fPipelineStageUid()" (ngModelChange)="fPipelineStageUid.set($event)"
-                [disabled]="saving()">
-          @if (stages().length === 0) {
-            <option value="">— no active stages —</option>
-          }
-          @for (s of stages(); track s.uid) {
-            <option [value]="s.uid">{{ s.name }}</option>
-          }
-        </select>
-      </div>
-
-      <div class="col-sm-2">
-        <label class="form-label small text-muted mb-1" for="fCurrency">
-          Currency <span class="text-danger" aria-hidden="true">*</span>
-        </label>
-        <input id="fCurrency" name="fCurrency" type="text" class="form-control"
-               placeholder="TZS"
-               [ngModel]="fCurrency()" (ngModelChange)="fCurrency.set($event)"
-               [disabled]="saving()" autocomplete="off" />
-      </div>
-
-      <div class="col-sm-3">
-        <label class="form-label small text-muted mb-1" for="fEstimatedValue">Est. Value</label>
-        <input id="fEstimatedValue" name="fEstimatedValue" type="number" class="form-control"
-               placeholder="0.00" min="0" step="0.01"
-               [ngModel]="fEstimatedValue()" (ngModelChange)="fEstimatedValue.set($event)"
-               [disabled]="saving()" />
-      </div>
-
-      <div class="col-sm-2">
-        <label class="form-label small text-muted mb-1" for="fWinProbability">Win % (0–100)</label>
-        <input id="fWinProbability" name="fWinProbability" type="number" class="form-control"
-               placeholder="uses stage default" min="0" max="100" step="1"
-               [ngModel]="fWinProbability()" (ngModelChange)="fWinProbability.set($event)"
-               [disabled]="saving()" />
-      </div>
-
-      <div class="col-sm-3">
-        <label class="form-label small text-muted mb-1" for="fExpectedCloseDate">Expected Close Date</label>
-        <input id="fExpectedCloseDate" name="fExpectedCloseDate" type="date" class="form-control"
-               [ngModel]="fExpectedCloseDate()" (ngModelChange)="fExpectedCloseDate.set($event)"
-               [disabled]="saving()" />
-      </div>
-
-      <div class="col-sm-4">
-        <label class="form-label small text-muted mb-1" for="fSourceLeadUid">Source Lead (optional)</label>
-        <app-uid-picker id="fSourceLeadUid" name="fSourceLeadUid"
-                        [(ngModel)]="fSourceLeadUid"
-                        [options]="sourceLeadOptions()"
-                        placeholder="Select qualified lead" />
-      </div>
-
-      <div class="col-sm-6">
-        <label class="form-label small text-muted mb-1" for="fNotes">Notes</label>
-        <input id="fNotes" name="fNotes" type="text" class="form-control"
-               [ngModel]="fNotes()" (ngModelChange)="fNotes.set($event)"
-               [disabled]="saving()" autocomplete="off" />
-      </div>
+  <form class="erp-card mb-4" (ngSubmit)="create()" aria-label="Create opportunity">
+    <div class="erp-card__head">
+      <h2 class="h6 mb-0">Opportunity Details</h2>
     </div>
+    <div class="erp-card__body">
+      <div class="row g-2 mb-2">
+        <div class="col-sm-6">
+          <label class="form-label small text-muted mb-1" for="fTitle">
+            Title <span class="text-danger" aria-hidden="true">*</span>
+          </label>
+          <input id="fTitle" name="fTitle" type="text" class="form-control"
+                 placeholder="Short description of the opportunity"
+                 [ngModel]="fTitle()" (ngModelChange)="fTitle.set($event)"
+                 [disabled]="saving()" autocomplete="off" />
+        </div>
 
-    @if (formError(); as msg) {
-      <p class="form-error text-danger small mt-2 mb-2" role="alert">{{ msg }}</p>
-    }
+        <div class="col-sm-4">
+          <label class="form-label small text-muted mb-1" for="fCustomerUid">
+            Customer <span class="text-danger" aria-hidden="true">*</span>
+          </label>
+          <app-uid-picker id="fCustomerUid" name="fCustomerUid"
+                          [(ngModel)]="fCustomerUid"
+                          [options]="customerOptions()"
+                          placeholder="Select customer"
+                          [required]="true" />
+        </div>
 
-    <div class="d-flex gap-2 mt-2">
-      <button type="submit" class="btn btn-primary" [disabled]="saving()">
-        @if (saving()) {
-          <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-          Saving…
-        } @else {
-          Create Opportunity
-        }
-      </button>
-      <a [routerLink]="['/admin/crm/opportunities']" class="btn btn-outline-secondary">Cancel</a>
+        <div class="col-sm-4">
+          <label class="form-label small text-muted mb-1" for="fPipelineStageUid">
+            Pipeline Stage <span class="text-danger" aria-hidden="true">*</span>
+          </label>
+          <select id="fPipelineStageUid" name="fPipelineStageUid" class="form-select"
+                  [ngModel]="fPipelineStageUid()" (ngModelChange)="fPipelineStageUid.set($event)"
+                  [disabled]="saving()">
+            @if (stages().length === 0) {
+              <option value="">— no active stages —</option>
+            }
+            @for (s of stages(); track s.uid) {
+              <option [value]="s.uid">{{ s.name }}</option>
+            }
+          </select>
+        </div>
+
+        <div class="col-sm-2">
+          <label class="form-label small text-muted mb-1" for="fCurrency">
+            Currency <span class="text-danger" aria-hidden="true">*</span>
+          </label>
+          <input id="fCurrency" name="fCurrency" type="text" class="form-control"
+                 placeholder="TZS"
+                 [ngModel]="fCurrency()" (ngModelChange)="fCurrency.set($event)"
+                 [disabled]="saving()" autocomplete="off" />
+        </div>
+
+        <div class="col-sm-3">
+          <label class="form-label small text-muted mb-1" for="fEstimatedValue">Est. Value</label>
+          <input id="fEstimatedValue" name="fEstimatedValue" type="number" class="form-control"
+                 placeholder="0.00" min="0" step="0.01"
+                 [ngModel]="fEstimatedValue()" (ngModelChange)="fEstimatedValue.set($event)"
+                 [disabled]="saving()" />
+        </div>
+
+        <div class="col-sm-2">
+          <label class="form-label small text-muted mb-1" for="fWinProbability">Win % (0–100)</label>
+          <input id="fWinProbability" name="fWinProbability" type="number" class="form-control"
+                 placeholder="uses stage default" min="0" max="100" step="1"
+                 [ngModel]="fWinProbability()" (ngModelChange)="fWinProbability.set($event)"
+                 [disabled]="saving()" />
+        </div>
+
+        <div class="col-sm-3">
+          <label class="form-label small text-muted mb-1" for="fExpectedCloseDate">Expected Close Date</label>
+          <input id="fExpectedCloseDate" name="fExpectedCloseDate" type="date" class="form-control"
+                 [ngModel]="fExpectedCloseDate()" (ngModelChange)="fExpectedCloseDate.set($event)"
+                 [disabled]="saving()" />
+        </div>
+
+        <div class="col-sm-4">
+          <label class="form-label small text-muted mb-1" for="fSourceLeadUid">Source Lead (optional)</label>
+          <app-uid-picker id="fSourceLeadUid" name="fSourceLeadUid"
+                          [(ngModel)]="fSourceLeadUid"
+                          [options]="sourceLeadOptions()"
+                          placeholder="Select qualified lead" />
+        </div>
+
+        <div class="col-sm-6">
+          <label class="form-label small text-muted mb-1" for="fNotes">Notes</label>
+          <input id="fNotes" name="fNotes" type="text" class="form-control"
+                 [ngModel]="fNotes()" (ngModelChange)="fNotes.set($event)"
+                 [disabled]="saving()" autocomplete="off" />
+        </div>
+      </div>
+
+      @if (formError(); as msg) {
+        <p class="text-danger small mt-2 mb-2" role="alert">{{ msg }}</p>
+      }
+
+      <div class="d-flex gap-2 mt-2">
+        <button type="submit" class="btn btn-primary" [disabled]="saving()">
+          @if (saving()) {
+            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+            Saving…
+          } @else {
+            Create Opportunity
+          }
+        </button>
+        <a [routerLink]="['/admin/crm/opportunities']" class="btn btn-outline-secondary">Cancel</a>
+      </div>
     </div>
   </form>
 </section>

@@ -347,7 +347,7 @@ export class ShellComponent {
       items: [
         { label: 'Point of Sale', route: '/admin/pos/sell', icon: 'bi-cart-check', available: true, permission: 'POS.SALE.CREATE' },
         { label: 'POS Sessions', route: '/admin/pos/sessions', icon: 'bi-shop', available: true, permission: 'POS.SESSION.VIEW' },
-        { label: 'POS Tills', route: '/admin/pos/tills', icon: 'bi-cash-register', available: true, permission: 'POS.TILL.VIEW' },
+        { label: 'POS Tills', route: '/admin/pos/tills', icon: 'bi-safe2', available: true, permission: 'POS.TILL.VIEW' },
       ],
     },
   ];

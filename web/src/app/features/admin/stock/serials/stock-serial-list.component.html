@@ -1,6 +1,8 @@
 <div class="admin-page">
-  <div class="page-head">
-    <h1>Serial Numbers</h1>
+  <div class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>Serial Numbers</h1>
+    </div>
   </div>
 
   <!-- Company selector -->
@@ -18,7 +20,7 @@
   }
 
   <!-- View mode tabs -->
-  <ul class="nav nav-tabs mb-3" role="tablist">
+  <ul class="nav nav-tabs mb-3" role="tablist" aria-label="Serial number view mode">
     <li class="nav-item" role="presentation">
       <button type="button" class="nav-link" [class.active]="viewMode() === 'location'"
               (click)="switchToLocation()" role="tab"
@@ -36,10 +38,10 @@
   </ul>
 
   <!-- Filters -->
-  <div class="row g-3 mb-3">
+  <div class="erp-toolbar mb-3">
     @if (viewMode() === 'location') {
-      <div class="col-md-3">
-        <label class="form-label" for="serialLocationPicker">Location <span aria-hidden="true">*</span></label>
+      <div>
+        <label class="form-label mb-1" for="serialLocationPicker">Location <span aria-hidden="true">*</span></label>
         <app-uid-picker id="serialLocationPicker"
                         [ngModel]="selectedLocationUid()"
                         (ngModelChange)="selectedLocationUid.set($event); onFilterChange()"
@@ -47,8 +49,8 @@
                         placeholder="Select location" />
       </div>
     }
-    <div class="col-md-3">
-      <label class="form-label" for="serialProductPicker">Product <span aria-hidden="true">*</span></label>
+    <div>
+      <label class="form-label mb-1" for="serialProductPicker">Product <span aria-hidden="true">*</span></label>
       <app-uid-picker id="serialProductPicker"
                       [ngModel]="selectedProductUid()"
                       (ngModelChange)="selectedProductUid.set($event); onFilterChange()"
@@ -56,8 +58,8 @@
                       placeholder="Select product" />
     </div>
     @if (viewMode() === 'location') {
-      <div class="col-md-2">
-        <label for="serialStatusFilter" class="form-label">Status</label>
+      <div>
+        <label for="serialStatusFilter" class="form-label mb-1">Status</label>
         <select id="serialStatusFilter" class="form-select form-select-sm"
                 [ngModel]="statusFilter()" (ngModelChange)="statusFilter.set($event); onFilterChange()">
           <option value="">All</option>
@@ -70,14 +72,14 @@
   </div>
 
   @if (viewMode() === 'location' && (!selectedLocationId() || !selectedProductId())) {
-    <p class="text-muted">Select a location and product to view serials.</p>
+    <div class="erp-empty"><i class="bi bi-upc-scan"></i> Select a location and product to view serials.</div>
   } @else if (viewMode() === 'product' && !selectedProductUid()) {
-    <p class="text-muted">Select a product to view its serial history.</p>
+    <div class="erp-empty"><i class="bi bi-upc-scan"></i> Select a product to view its serial history.</div>
   } @else {
     <!-- Lookup panel (location mode) -->
     @if (viewMode() === 'location' && selectedProductId()) {
-      <div class="card mb-3">
-        <div class="card-body py-2">
+      <div class="erp-card mb-3">
+        <div class="erp-card__body py-2">
           <div class="d-flex gap-2 align-items-center flex-wrap">
             <label for="lookupInput" class="form-label mb-0 fw-semibold">Lookup by serial #</label>
             <input id="lookupInput" type="text" class="form-control form-control-sm w-auto"
@@ -93,18 +95,21 @@
             }
           </div>
           @if (lookupState() === 'loading') {
-            <p class="text-muted mt-2">Searching…</p>
+            <p class="text-muted mt-2 mb-0" aria-live="polite">Searching…</p>
           } @else if (lookupState() === 'not-found') {
-            <p class="text-warning mt-2" role="alert">Serial number not found for this product.</p>
+            <p class="text-warning mt-2 mb-0" role="alert">Serial number not found for this product.</p>
           } @else if (lookupState() === 'error') {
-            <p class="text-danger mt-2" role="alert">Lookup failed. Try again.</p>
+            <p class="text-danger mt-2 mb-0" role="alert">Lookup failed. Try again.</p>
           } @else if (lookupResult()) {
             <div class="mt-2 d-flex gap-3 flex-wrap">
-              <span><strong>Serial:</strong> {{ lookupResult()!.serialNumber }}</span>
+              <span><strong>Serial:</strong> <span class="mono">{{ lookupResult()!.serialNumber }}</span></span>
               <span>
                 <strong>Status:</strong>
-                <span class="badge ms-1" [class]="statusBadgeClass(lookupResult()!.serialStatus)">
-                  {{ lookupResult()!.serialStatus }}
+                <span class="status-tag ms-1"
+                      [class.status-tag--ok]="lookupResult()!.serialStatus === 'IN_STOCK'"
+                      [class.status-tag--warn]="lookupResult()!.serialStatus === 'RETURNED'"
+                      [class.status-tag--neutral]="lookupResult()!.serialStatus === 'ISSUED'">
+                  <span class="status-tag__dot" aria-hidden="true"></span>{{ lookupResult()!.serialStatus }}
                 </span>
               </span>
               @if (lookupResult()!.receivedDocumentUid) {
@@ -122,31 +127,32 @@
     <!-- Four-state switch -->
     @switch (state()) {
       @case ('loading') {
-        <div class="state" aria-live="polite" aria-busy="true">
-          <div class="spinner-border spinner-border-sm text-secondary" role="status">
+        <div class="erp-empty" aria-live="polite" aria-busy="true">
+          <div class="spinner-border spinner-border-sm text-secondary me-2" role="status">
             <span class="visually-hidden">Loading serials…</span>
           </div>
-          <span class="ms-2 text-muted">Loading…</span>
+          Loading…
         </div>
       }
       @case ('forbidden') {
-        <div class="state" role="alert">
-          <i class="bi bi-shield-x text-danger" aria-hidden="true"></i>
+        <div class="erp-empty" role="alert">
+          <i class="bi bi-shield-x me-1" aria-hidden="true"></i>
           You do not have permission to view serial numbers.
         </div>
       }
       @case ('error') {
-        <div class="state" role="alert">
-          <i class="bi bi-exclamation-triangle text-danger" aria-hidden="true"></i>
-          Could not load serials. <button class="btn btn-sm btn-link" (click)="load(currentPage())">Retry</button>
+        <div class="erp-empty" role="alert">
+          <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
+          Could not load serials.
+          <button class="btn btn-sm btn-link ms-1" (click)="load(currentPage())">Retry</button>
         </div>
       }
       @default {
         @if (isEmpty()) {
-          <div class="state text-muted">No serial numbers found for the selected filters.</div>
+          <div class="erp-empty"><i class="bi bi-upc-scan"></i> No serial numbers found for the selected filters.</div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Stock serial numbers</caption>
               <thead>
                 <tr>
@@ -160,10 +166,13 @@
               <tbody>
                 @for (row of rows(); track row.uid) {
                   <tr>
-                    <td class="fw-semibold font-monospace">{{ row.serialNumber }}</td>
+                    <td class="fw-semibold mono">{{ row.serialNumber }}</td>
                     <td>
-                      <span class="badge" [class]="statusBadgeClass(row.serialStatus)">
-                        {{ row.serialStatus }}
+                      <span class="status-tag"
+                            [class.status-tag--ok]="row.serialStatus === 'IN_STOCK'"
+                            [class.status-tag--warn]="row.serialStatus === 'RETURNED'"
+                            [class.status-tag--neutral]="row.serialStatus === 'ISSUED'">
+                        <span class="status-tag__dot" aria-hidden="true"></span>{{ row.serialStatus }}
                       </span>
                     </td>
                     <td>{{ row.receivedDocumentUid ? 'Yes' : '—' }}</td>

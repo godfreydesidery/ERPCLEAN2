@@ -1,48 +1,56 @@
 <section class="admin-page">
-  <header class="page-head d-flex align-items-center gap-2">
-    <a routerLink="/admin/documents" class="btn btn-sm btn-outline-secondary"
-       aria-label="Back to documents list">
-      <i class="bi bi-arrow-left" aria-hidden="true"></i>
-    </a>
-    <div>
-      <h1 class="h4 mb-0">Generated Document</h1>
-      <p class="text-muted mb-0" style="font-size:0.9rem">Render-log record details and PDF download.</p>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>Generated Document</h1>
+      <p class="subtitle">Render-log record details and PDF download.</p>
+    </div>
+    <div class="erp-page-head__actions">
+      <a routerLink="/admin/documents" class="btn btn-sm btn-outline-secondary"
+         aria-label="Back to documents list">
+        <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back
+      </a>
     </div>
   </header>
 
   @switch (state()) {
     @case ('loading') {
-      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+      <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
         <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
       </p>
     }
     @case ('error') {
-      <p class="state text-danger" role="alert">
+      <p class="text-danger" role="alert">
         <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
         Could not load the document record. Please try again.
       </p>
     }
     @case ('forbidden') {
-      <p class="state text-muted d-flex align-items-center gap-2">
+      <div class="erp-empty">
         <i class="bi bi-shield-lock" aria-hidden="true"></i>
         You don't have permission to view this document.
-      </p>
+      </div>
     }
     @default {
       @if (entity(); as doc) {
-        <div class="card mb-3">
-          <div class="card-header d-flex align-items-center justify-content-between">
-            <div class="d-flex align-items-center gap-2">
-              <span class="badge" [class]="typeBadgeClass(doc.documentType)">{{ doc.documentType }}</span>
-              <span class="font-monospace fw-semibold">{{ doc.documentNumber }}</span>
-            </div>
+        <div class="erp-card mb-3">
+          <div class="erp-card__head">
+            <span class="status-tag"
+                  [class.status-tag--ok]="doc.documentType === 'INVOICE' || doc.documentType === 'GOODS_RECEIPT'"
+                  [class.status-tag--info]="doc.documentType === 'AR_STATEMENT' || doc.documentType === 'DELIVERY_NOTE'"
+                  [class.status-tag--warn]="doc.documentType === 'PURCHASE_ORDER'"
+                  [class.status-tag--danger]="doc.documentType === 'CREDIT_NOTE'"
+                  [class.status-tag--neutral]="doc.documentType !== 'INVOICE' && doc.documentType !== 'GOODS_RECEIPT' && doc.documentType !== 'AR_STATEMENT' && doc.documentType !== 'DELIVERY_NOTE' && doc.documentType !== 'PURCHASE_ORDER' && doc.documentType !== 'CREDIT_NOTE'">
+              {{ doc.documentType }}
+            </span>
+            <span class="mono fw-semibold ms-2">{{ doc.documentNumber }}</span>
+            <span class="spacer"></span>
             @if (canRender()) {
               <button type="button" class="btn btn-primary btn-sm"
                       (click)="download()"
                       [disabled]="downloading()"
-                      aria-label="Download PDF">
+                      aria-live="polite">
                 @if (downloading()) {
-                  <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                  <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
                   Downloading…
                 } @else {
                   <i class="bi bi-download me-1" aria-hidden="true"></i>Download PDF
@@ -50,38 +58,45 @@
               </button>
             }
           </div>
-          <div class="card-body">
+          <div class="erp-card__body">
             <dl class="row mb-0">
               <dt class="col-sm-3">Document Number</dt>
-              <dd class="col-sm-9 font-monospace">{{ doc.documentNumber }}</dd>
+              <dd class="col-sm-9 mono">{{ doc.documentNumber }}</dd>
 
               <dt class="col-sm-3">Type</dt>
               <dd class="col-sm-9">
-                <span class="badge" [class]="typeBadgeClass(doc.documentType)">{{ doc.documentType }}</span>
+                <span class="status-tag"
+                      [class.status-tag--ok]="doc.documentType === 'INVOICE' || doc.documentType === 'GOODS_RECEIPT'"
+                      [class.status-tag--info]="doc.documentType === 'AR_STATEMENT' || doc.documentType === 'DELIVERY_NOTE'"
+                      [class.status-tag--warn]="doc.documentType === 'PURCHASE_ORDER'"
+                      [class.status-tag--danger]="doc.documentType === 'CREDIT_NOTE'"
+                      [class.status-tag--neutral]="doc.documentType !== 'INVOICE' && doc.documentType !== 'GOODS_RECEIPT' && doc.documentType !== 'AR_STATEMENT' && doc.documentType !== 'DELIVERY_NOTE' && doc.documentType !== 'PURCHASE_ORDER' && doc.documentType !== 'CREDIT_NOTE'">
+                  {{ doc.documentType }}
+                </span>
               </dd>
 
               <dt class="col-sm-3">Source Type</dt>
-              <dd class="col-sm-9 small">{{ doc.sourceType }}</dd>
+              <dd class="col-sm-9 text-muted">{{ doc.sourceType }}</dd>
 
               @if (doc.sourceParams) {
                 <dt class="col-sm-3">Source Params</dt>
-                <dd class="col-sm-9 small font-monospace">{{ doc.sourceParams }}</dd>
+                <dd class="col-sm-9 mono text-muted">{{ doc.sourceParams }}</dd>
               }
 
               <dt class="col-sm-3">Generated At</dt>
-              <dd class="col-sm-9 small">{{ doc.generatedAt | slice:0:19 }}</dd>
+              <dd class="col-sm-9 text-muted">{{ doc.generatedAt | slice:0:19 }}</dd>
 
               <dt class="col-sm-3">Generated By</dt>
-              <dd class="col-sm-9 small">{{ doc.generatedBy }}</dd>
+              <dd class="col-sm-9 text-muted">{{ doc.generatedBy }}</dd>
 
               <dt class="col-sm-3">MIME Type</dt>
-              <dd class="col-sm-9 small">{{ doc.mimeType }}</dd>
+              <dd class="col-sm-9 text-muted">{{ doc.mimeType }}</dd>
 
               <dt class="col-sm-3">Size (bytes)</dt>
-              <dd class="col-sm-9 small font-monospace">{{ doc.byteSize }}</dd>
+              <dd class="col-sm-9 mono num">{{ doc.byteSize }}</dd>
 
               <dt class="col-sm-3">Content Hash</dt>
-              <dd class="col-sm-9 small font-monospace text-truncate" style="max-width:100%">{{ doc.contentHash }}</dd>
+              <dd class="col-sm-9 mono text-truncate" style="max-width:100%">{{ doc.contentHash }}</dd>
             </dl>
           </div>
         </div>

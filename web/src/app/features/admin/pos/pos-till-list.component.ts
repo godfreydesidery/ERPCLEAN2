@@ -201,14 +201,6 @@ export class PosTillListComponent {
     return this.branches().find((b) => b.id === branchId)?.name ?? branchId;
   }
 
-  statusBadgeClass(status: string): string {
-    switch (status) {
-      case 'ACTIVE': return 'text-bg-success';
-      case 'ARCHIVED': return 'text-bg-secondary';
-      default: return 'text-bg-warning';
-    }
-  }
-
   private messageFrom(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {
       const errors = (err.error as { errors?: string[] })?.errors;

@@ -3,7 +3,7 @@ import { DecimalPipe } from '@angular/common';
 import { Component, computed, inject, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { SessionStore } from '../../../core/auth/session.store';
-import { SalesReturnDto, SalesReturnStatus } from '../models/sales-orders.model';
+import { SalesReturnDto } from '../models/sales-orders.model';
 import { SalesOrdersService } from './sales-orders.service';
 
 type LoadState = 'loading' | 'idle' | 'error';
@@ -45,11 +45,6 @@ export class SalesReturnDetailComponent {
   }
 
   // ── Display helpers ────────────────────────────────────────────────────────
-
-  statusBadgeClass(status: SalesReturnStatus): string {
-    if (status === 'CONFIRMED') return 'text-bg-success';
-    return 'text-bg-warning'; // DRAFT
-  }
 
   /** Coerce money: handles both number and string on the wire. */
   fmtMoney(v: number | string | null | undefined): string {

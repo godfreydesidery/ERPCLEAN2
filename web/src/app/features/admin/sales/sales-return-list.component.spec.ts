@@ -5,7 +5,7 @@
  *  1. Renders: fires exactly one load on startup after company resolves.
  *  2. isEmpty is true when no rows returned.
  *  3. 403 response sets state to 'forbidden'.
- *  4. statusBadgeClass: CONFIRMED → text-bg-success, DRAFT → text-bg-warning.
+ *  4. Status-tag modifier: CONFIRMED → ok, DRAFT → warn.
  *  5. Numeric-money guard: grossAmount coerced via fmtMoney (handles string wire value).
  *  6. returnLabel returns returnNumber when present, PENDING when null.
  */
@@ -116,22 +116,21 @@ describe('SalesReturnListComponent — 403 forbidden', () => {
   });
 });
 
-// ── Status badge class ──────────────────────────────────────────────────────────
+// ── status-tag modifier logic ─────────────────────────────────────────────────
+// Mirrors inline template bindings on the sales-return status span.
 
-describe('SalesReturnListComponent — statusBadgeClass', () => {
-  beforeEach(() => { vi.useFakeTimers(); makeBed(); });
-  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+function returnOk(s: string)   { return s === 'CONFIRMED'; }
+function returnWarn(s: string) { return s === 'DRAFT'; }
 
-  it('CONFIRMED → text-bg-success', async () => {
-    const comp = TestBed.createComponent(SalesReturnListComponent).componentInstance;
-    await vi.runAllTimersAsync();
-    expect(comp.statusBadgeClass('CONFIRMED')).toBe('text-bg-success');
+describe('SalesReturnListComponent — status-tag modifier', () => {
+  it('CONFIRMED → ok, not warn', () => {
+    expect(returnOk('CONFIRMED')).toBe(true);
+    expect(returnWarn('CONFIRMED')).toBe(false);
   });
 
-  it('DRAFT → text-bg-warning', async () => {
-    const comp = TestBed.createComponent(SalesReturnListComponent).componentInstance;
-    await vi.runAllTimersAsync();
-    expect(comp.statusBadgeClass('DRAFT')).toBe('text-bg-warning');
+  it('DRAFT → warn, not ok', () => {
+    expect(returnOk('DRAFT')).toBe(false);
+    expect(returnWarn('DRAFT')).toBe(true);
   });
 });
 

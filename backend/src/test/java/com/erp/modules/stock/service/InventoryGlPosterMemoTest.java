@@ -66,12 +66,13 @@ class InventoryGlPosterMemoTest {
     // -------------------------------------------------------------------------
 
     @Test
-    void postReceiptInNewTx_descriptionContainsGrnNumber_notUlid() {
+    void postReceiptInNewTx_headerAndLineMemos_useGrnNumber_notUlid() {
         String receiptUid    = "01JZZZZZZZZZZZZZZZZZZZZZZ1"; // 26-char ULID
         String receiptNumber = "GRN-0042";
+        String grLineUid     = "01JZGRLINE0123456789ABCDEF"; // 26-char ULID — must NOT leak into the memo
 
         List<InventoryGlPoster.ReceiptLeg> legs = List.of(
-                new InventoryGlPoster.ReceiptLeg("LINE-UID", "RICE-5KG", new BigDecimal("500.00")));
+                new InventoryGlPoster.ReceiptLeg(grLineUid, "RICE-5KG", new BigDecimal("500.00")));
 
         poster.postReceiptInNewTx(COMPANY_ID, BRANCH_ID, LocalDate.now(),
                 receiptUid, receiptNumber, "TZS", legs);
@@ -80,6 +81,7 @@ class InventoryGlPosterMemoTest {
         org.mockito.Mockito.verify(glPostingService).post(draftCaptor.capture());
         JournalEntryDraft draft = draftCaptor.getValue();
 
+        // Header description: GRN number, no ULID (existing guarantee).
         assertThat(draft.description())
                 .as("journal description should contain GRN number")
                 .contains(receiptNumber);
@@ -87,6 +89,21 @@ class InventoryGlPosterMemoTest {
                 .as("journal description must NOT contain the raw 26-char ULID")
                 .doesNotContain(receiptUid);
         assertNoUlidIn("journal description", draft.description());
+
+        // LINE memos: this was the FOLLOW-001 gap — the GR-line uid was rendered as
+        // "GR line <uid> — <code>". Memos must now use product code + GRN number, no uid.
+        assertThat(draft.lines()).as("receipt posts INVENTORY + GRNI legs").isNotEmpty();
+        for (JournalEntryDraft.LineDraft line : draft.lines()) {
+            assertThat(line.lineMemo())
+                    .as("line memo should be human-readable (product code + GRN number)")
+                    .contains("RICE-5KG")
+                    .contains(receiptNumber);
+            assertThat(line.lineMemo())
+                    .as("line memo must NOT contain the raw GR-line uid")
+                    .doesNotContain(grLineUid)
+                    .doesNotContain(receiptUid);
+            assertNoUlidIn("receipt line memo", line.lineMemo());
+        }
     }
 
     @Test

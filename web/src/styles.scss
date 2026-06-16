@@ -1,49 +1,381 @@
-/* Global styles — theme adopted from the Orbix Engine reference app.
-   Bootstrap 5 + bootstrap-icons are loaded via angular.json before this file, so component
-   markup can use Bootstrap utility/component classes; these tokens layer the brand on top. */
+/* ============================================================================
+   ERP global design system  ·  "Aurora" theme
+   ----------------------------------------------------------------------------
+   Bootstrap 5 + bootstrap-icons load (via angular.json) BEFORE this file, so
+   markup can use Bootstrap utility/component classes; this file layers the brand
+   tokens + a small, reusable ERP UI kit on top.
+
+   Design language (adopted from the approved admin template):
+     • Neutral-blue PRIMARY for actions/links.
+     • Green / amber / red reserved for STATUS only (never decoration).
+     • Dense, tabular data tables; AA-contrast text; consistent page chrome.
+     • One source of truth — retheme the whole app from the :root tokens below.
+
+   Strategy: most components already use `.admin-page` / `.page-head` as semantic
+   hooks, and Bootstrap `.btn` / `.card` / `.badge` / `.table`. Styling those here
+   gives an app-wide refresh for free; component-scoped styles keep winning where
+   they exist (Angular emulated encapsulation has higher specificity).
+   ========================================================================== */
 
 :root {
-  --orbix-primary: #1a4fb5;
-  --orbix-primary-deep: #0d2a5b;
-  --orbix-accent: #4178d9;
-  --orbix-secondary: #6c757d;
-  --orbix-surface: #f5f7fb;
-  --orbix-on-surface: #1f2933;
+  /* ---- Brand (neutral-blue primary, per template) ---- */
+  --erp-primary:        #2563eb;
+  --erp-primary-hover:  #1d4ed8;
+  --erp-primary-active: #1e40af;
+  --erp-primary-soft:   #eff4ff;   /* tinted backgrounds, active rows */
+  --erp-accent:         #1d4ed8;   /* gradient partner for the brand mark — a BLUE (not cyan) so chrome stays on-palette */
 
-  /* Map Bootstrap's primary onto the brand colour so default .btn-primary / links match. */
-  --bs-primary: #1a4fb5;
-  --bs-primary-rgb: 26, 79, 181;
-  --bs-link-color: #1a4fb5;
-  --bs-link-color-rgb: 26, 79, 181;
-  --bs-link-hover-color: #0d2a5b;
+  /* ---- Semantic STATUS palette (status only — not decoration) ---- */
+  --erp-ok:        #16a34a;  --erp-ok-bg:     #dcfce7;  --erp-ok-fg:     #166534;
+  --erp-warn:      #b45309;  --erp-warn-bg:   #fef3c7;  --erp-warn-fg:   #92400e;
+  --erp-danger:    #dc2626;  --erp-danger-bg: #fee2e2;  --erp-danger-fg: #991b1b;
+  --erp-info:      #2563eb;  --erp-info-bg:   #eff4ff;  --erp-info-fg:   #1e40af;
+  --erp-neutral:   #64748b;  --erp-neutral-bg:#eef1f5;  --erp-neutral-fg:#475569;
+
+  /* ---- Surfaces & text (AA-contrast) ---- */
+  --erp-canvas:    #f4f6f9;   /* app background           */
+  --erp-card:      #ffffff;
+  --erp-border:    #e3e7ee;
+  --erp-border-strong: #cdd4df;
+
+  /* Dark slate chrome — ONE source of truth for the sidebar AND the login background,
+     so the app shell and the sign-in screen share a single identity. */
+  --erp-sidebar:      #1f2937;
+  --erp-sidebar-deep: #111827;
+  --erp-text:      #14181d;   /* near-black headings/body */
+  --erp-text-2:    #4b5563;   /* AA-safe secondary        */
+  --erp-text-3:    #6b7280;   /* AA-safe muted (≥4.5 on white) */
+
+  /* ---- Density / shape ---- */
+  --erp-row-h:     40px;
+  --erp-radius:    10px;
+  --erp-radius-sm: 7px;
+  --erp-shadow:    0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
+  --erp-shadow-md: 0 4px 14px rgba(16, 24, 40, 0.08);
+
+  /* ---- Legacy aliases kept for back-compat (only referenced in a couple files) ---- */
+  --orbix-primary:      var(--erp-primary);
+  --orbix-primary-deep: var(--erp-primary-active);
+  --orbix-accent:       var(--erp-accent);
+  --orbix-secondary:    #64748b;
+  --orbix-surface:      var(--erp-canvas);
+  --orbix-on-surface:   var(--erp-text);
+
+  /* ---- Map Bootstrap onto the brand so default components/links match ---- */
+  --bs-primary: var(--erp-primary);
+  --bs-primary-rgb: 37, 99, 235;
+  --bs-link-color: var(--erp-primary);
+  --bs-link-color-rgb: 37, 99, 235;
+  --bs-link-hover-color: var(--erp-primary-active);
+  --bs-border-color: var(--erp-border);
+  --bs-body-color: var(--erp-text);
+  --bs-secondary-color: var(--erp-text-2);
+
+  /* Bootstrap's "info" defaults to cyan (#0dcaf0), which clashes with the system blue.
+     Remap the whole info ramp to the brand blue so alert-info / text-info / text-bg-info
+     read as on-palette informational, not light-blue/cyan. */
+  --bs-info: var(--erp-primary);
+  --bs-info-rgb: 37, 99, 235;
+  --bs-info-text-emphasis: var(--erp-primary-active);
+  --bs-info-bg-subtle: var(--erp-primary-soft);
+  --bs-info-border-subtle: #c7d7fe;
 }
 
 body {
   margin: 0;
-  font-family: 'Segoe UI', 'Inter', system-ui, sans-serif;
-  background: var(--orbix-surface);
-  color: var(--orbix-on-surface);
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--erp-canvas);
+  color: var(--erp-text);
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Brand the Bootstrap primary button to the deep-blue gradient feel. */
+/* Tabular figures everywhere numbers matter (Bootstrap's monospace helper is used widely). */
+.font-monospace,
+.num,
+.erp-table .num,
+.erp-table td.text-end,
+.erp-kpi__value { font-variant-numeric: tabular-nums; }
+
+/* ---- Brand the Bootstrap primary button to the template blue ---- */
 .btn-primary {
-  --bs-btn-bg: #1a4fb5;
-  --bs-btn-border-color: #1a4fb5;
-  --bs-btn-hover-bg: #163f93;
-  --bs-btn-hover-border-color: #163f93;
-  --bs-btn-active-bg: #0d2a5b;
-  --bs-btn-active-border-color: #0d2a5b;
+  --bs-btn-bg: var(--erp-primary);
+  --bs-btn-border-color: var(--erp-primary);
+  --bs-btn-hover-bg: var(--erp-primary-hover);
+  --bs-btn-hover-border-color: var(--erp-primary-hover);
+  --bs-btn-active-bg: var(--erp-primary-active);
+  --bs-btn-active-border-color: var(--erp-primary-active);
+}
+.btn-outline-primary {
+  --bs-btn-color: var(--erp-primary);
+  --bs-btn-border-color: var(--erp-primary);
+  --bs-btn-hover-bg: var(--erp-primary);
+  --bs-btn-hover-border-color: var(--erp-primary);
+  --bs-btn-active-bg: var(--erp-primary-active);
+}
+/* Info button → solid brand blue with white text (Bootstrap's cyan btn-info clashes). */
+.btn-info {
+  --bs-btn-color: #fff;
+  --bs-btn-bg: var(--erp-primary);
+  --bs-btn-border-color: var(--erp-primary);
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: var(--erp-primary-hover);
+  --bs-btn-hover-border-color: var(--erp-primary-hover);
+  --bs-btn-active-color: #fff;
+  --bs-btn-active-bg: var(--erp-primary-active);
+  --bs-btn-active-border-color: var(--erp-primary-active);
 }
 
-/* Screen-reader-only helper (used by table captions). Mirrors Bootstrap's .visually-hidden. */
+/* ============================================================================
+   1 · Page chrome  (global hooks already used across ~150 components)
+   ========================================================================== */
+.admin-page {
+  max-width: 1280px;
+}
+
+/* Title block at the top of a screen. */
+.page-head {
+  margin-bottom: 1.25rem;
+}
+.page-head h1,
+.admin-page > h1:first-child {
+  font-size: 1.45rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--erp-text);
+  margin-bottom: 0.25rem;
+}
+.page-head .subtitle,
+.page-head p { color: var(--erp-text-2); }
+
+/* A header row that carries a title on the left and actions on the right. */
+.erp-page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+.erp-page-head__titles h1 { font-size: 1.45rem; font-weight: 700; margin: 0 0 0.15rem; }
+.erp-page-head__titles .subtitle { color: var(--erp-text-2); font-size: 0.9rem; margin: 0; }
+.erp-page-head__actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+/* Section sub-heading inside a page. */
+.erp-section-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--erp-text);
+  margin: 1.25rem 0 0.6rem;
+}
+
+/* ============================================================================
+   2 · Cards
+   ========================================================================== */
+.erp-card {
+  background: var(--erp-card);
+  border: 1px solid var(--erp-border);
+  border-radius: var(--erp-radius);
+  box-shadow: var(--erp-shadow);
+  overflow: clip;
+}
+.erp-card + .erp-card { margin-top: 1rem; }
+.erp-card__head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--erp-border);
+}
+.erp-card__head h2,
+.erp-card__head h3 { font-size: 1rem; font-weight: 600; margin: 0; }
+.erp-card__head .spacer { flex: 1; }
+.erp-card__body { padding: 1rem; }
+
+/* Gently lift Bootstrap cards to the same shadow/border language. */
+.card { border-color: var(--erp-border); border-radius: var(--erp-radius); }
+
+/* ============================================================================
+   3 · Toolbar + filter chips  (list-screen header)
+   ========================================================================== */
+.erp-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.65rem 0.25rem 0.9rem;
+}
+.erp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid var(--erp-border);
+  background: var(--erp-card);
+  border-radius: var(--erp-radius-sm);
+  padding: 0.4rem 0.7rem;
+  font-size: 0.82rem;
+  color: var(--erp-text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.erp-chip:hover { border-color: var(--erp-border-strong); background: #fafbfc; }
+.erp-chip.is-active { border-color: var(--erp-primary); background: var(--erp-primary-soft); color: var(--erp-primary-active); }
+.erp-toolbar__search { flex: 1 1 220px; min-width: 180px; }
+.erp-toolbar__spacer { flex: 1; }
+
+/* ============================================================================
+   4 · Dense data table
+   ----------------------------------------------------------------------------
+   Use on a <table class="erp-table">. Also gently densifies the legacy
+   `table.grid` and bare tables inside `.admin-page` so existing lists improve
+   without per-file edits.
+   ========================================================================== */
+.erp-table,
+.admin-page table.grid {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--erp-card);
+  font-size: 0.875rem;
+}
+.erp-table thead th,
+.admin-page table.grid thead th {
+  text-align: left;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.045em;
+  color: var(--erp-text-3);
+  background: #fafbfc;
+  padding: 0.5rem 0.85rem;
+  border-bottom: 1px solid var(--erp-border);
+  white-space: nowrap;
+}
+.erp-table tbody td,
+.admin-page table.grid tbody td {
+  padding: 0 0.85rem;
+  height: var(--erp-row-h);
+  border-bottom: 1px solid var(--erp-border);
+  color: var(--erp-text);
+  vertical-align: middle;
+}
+.erp-table tbody tr:hover,
+.admin-page table.grid tbody tr:hover { background: #f8fafc; }
+.erp-table tbody tr:last-child td,
+.admin-page table.grid tbody tr:last-child td { border-bottom: 0; }
+.erp-table .num,
+.erp-table td.text-end,
+.erp-table th.text-end { text-align: right; }
+.erp-table .mono { font-variant-numeric: tabular-nums; color: var(--erp-text-2); }
+
+/* Wrap any table in <div class="erp-table-wrap"> for horizontal scroll on phones. */
+.erp-table-wrap { width: 100%; overflow-x: auto; border-radius: var(--erp-radius); }
+
+/* Table footer / pagination. */
+.erp-tfoot {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  font-size: 0.8rem;
+  color: var(--erp-text-2);
+  border-top: 1px solid var(--erp-border);
+}
+.erp-pager { margin-left: auto; display: flex; gap: 0.25rem; }
+.erp-pager .pg {
+  border: 1px solid var(--erp-border);
+  background: var(--erp-card);
+  border-radius: var(--erp-radius-sm);
+  min-width: 30px; height: 30px;
+  display: grid; place-items: center;
+  cursor: pointer; font-size: 0.8rem; color: var(--erp-text);
+}
+.erp-pager .pg.is-active { background: var(--erp-primary); color: #fff; border-color: var(--erp-primary); }
+
+/* ============================================================================
+   5 · Status tags / pills
+   ----------------------------------------------------------------------------
+   <span class="status-tag status-tag--ok">Paid</span>
+   Variants: --ok --warn --danger --info --neutral
+   ========================================================================== */
+.status-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1;
+  padding: 0.28rem 0.6rem;
+  border-radius: 999px;
+  white-space: nowrap;
+  background: var(--erp-neutral-bg);
+  color: var(--erp-neutral-fg);
+}
+.status-tag--ok      { background: var(--erp-ok-bg);     color: var(--erp-ok-fg); }
+.status-tag--warn    { background: var(--erp-warn-bg);   color: var(--erp-warn-fg); }
+.status-tag--danger  { background: var(--erp-danger-bg); color: var(--erp-danger-fg); }
+.status-tag--info    { background: var(--erp-info-bg);   color: var(--erp-info-fg); }
+.status-tag--neutral { background: var(--erp-neutral-bg);color: var(--erp-neutral-fg); }
+.status-tag__dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+/* ============================================================================
+   6 · KPI / stat tiles
+   ========================================================================== */
+.erp-kpi {
+  background: var(--erp-card);
+  border: 1px solid var(--erp-border);
+  border-radius: var(--erp-radius);
+  box-shadow: var(--erp-shadow);
+  padding: 0.9rem 1rem;
+}
+.erp-kpi__label { color: var(--erp-text-2); font-size: 0.8rem; }
+.erp-kpi__value { font-size: 1.5rem; font-weight: 700; margin-top: 0.2rem; letter-spacing: -0.01em; }
+.erp-kpi__delta { font-size: 0.78rem; margin-top: 0.35rem; font-weight: 600; }
+.erp-kpi__delta--up   { color: var(--erp-ok); }
+.erp-kpi__delta--down { color: var(--erp-danger); }
+.erp-kpi__delta--warn { color: var(--erp-warn); }
+
+/* ============================================================================
+   7 · Forms
+   ========================================================================== */
+.erp-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem 1.25rem;
+}
+.erp-form-grid .full { grid-column: 1 / -1; }
+.erp-field { display: flex; flex-direction: column; gap: 0.35rem; }
+.erp-field > label { font-size: 0.8rem; font-weight: 600; color: var(--erp-text); }
+.erp-field .hint { font-size: 0.75rem; color: var(--erp-text-3); }
+
+/* ============================================================================
+   8 · Empty / loading states
+   ========================================================================== */
+.erp-empty {
+  text-align: center;
+  color: var(--erp-text-2);
+  padding: 2.5rem 1rem;
+}
+.erp-empty .bi { font-size: 1.6rem; color: var(--erp-text-3); display: block; margin-bottom: 0.5rem; }
+
+/* ============================================================================
+   9 · Helpers
+   ========================================================================== */
 .sr-only {
   position: absolute !important;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0);
+  white-space: nowrap; border: 0;
+}
+
+/* Respect reduced-motion globally for any kit transitions. */
+@media (prefers-reduced-motion: reduce) {
+  * { scroll-behavior: auto !important; }
+}
+
+/* Phone: let dense tables scroll instead of crushing columns. */
+@media (max-width: 575.98px) {
+  .erp-form-grid { grid-template-columns: 1fr; }
+  .erp-table,
+  .admin-page table.grid { min-width: 560px; }
+  .admin-page table.grid { display: block; overflow-x: auto; }
 }

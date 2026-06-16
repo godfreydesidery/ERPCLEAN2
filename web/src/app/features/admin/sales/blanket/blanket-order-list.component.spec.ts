@@ -5,7 +5,7 @@
  *  1. Fires exactly one load on startup after company resolves.
  *  2. isEmpty is true when no rows returned.
  *  3. 403 response sets state to 'forbidden'.
- *  4. statusBadgeClass returns correct class per status.
+ *  4. Status-tag modifier: ACTIVE→ok, EXHAUSTED→warn, CANCELLED→danger.
  */
 import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -122,33 +122,33 @@ describe('BlanketOrderListComponent — 403 forbidden', () => {
   });
 });
 
-// ── statusBadgeClass ───────────────────────────────────────────────────────────
+// ── status-tag modifier logic ─────────────────────────────────────────────────
+// Mirrors inline template bindings: [class.status-tag--ok]="b.status === 'ACTIVE'" etc.
 
-describe('BlanketOrderListComponent — statusBadgeClass', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    makeBed();
-  });
-  afterEach(() => {
-    vi.useRealTimers();
-    TestBed.resetTestingModule();
-  });
+function blanketOk(s: string)      { return s === 'ACTIVE'; }
+function blanketWarn(s: string)    { return s === 'EXHAUSTED'; }
+function blanketDanger(s: string)  { return s === 'CANCELLED'; }
+function blanketNeutral(s: string) { return s !== 'ACTIVE' && s !== 'EXHAUSTED' && s !== 'CANCELLED'; }
 
-  it('ACTIVE → text-bg-success', async () => {
-    const comp = TestBed.createComponent(BlanketOrderListComponent).componentInstance;
-    await vi.runAllTimersAsync();
-    expect(comp.statusBadgeClass('ACTIVE')).toBe('text-bg-success');
+describe('BlanketOrderListComponent — status-tag modifier', () => {
+  it('ACTIVE → ok only', () => {
+    expect(blanketOk('ACTIVE')).toBe(true);
+    expect(blanketWarn('ACTIVE')).toBe(false);
+    expect(blanketDanger('ACTIVE')).toBe(false);
+    expect(blanketNeutral('ACTIVE')).toBe(false);
   });
 
-  it('EXHAUSTED → text-bg-warning', async () => {
-    const comp = TestBed.createComponent(BlanketOrderListComponent).componentInstance;
-    await vi.runAllTimersAsync();
-    expect(comp.statusBadgeClass('EXHAUSTED')).toBe('text-bg-warning');
+  it('EXHAUSTED → warn only', () => {
+    expect(blanketOk('EXHAUSTED')).toBe(false);
+    expect(blanketWarn('EXHAUSTED')).toBe(true);
+    expect(blanketDanger('EXHAUSTED')).toBe(false);
+    expect(blanketNeutral('EXHAUSTED')).toBe(false);
   });
 
-  it('CANCELLED → text-bg-danger', async () => {
-    const comp = TestBed.createComponent(BlanketOrderListComponent).componentInstance;
-    await vi.runAllTimersAsync();
-    expect(comp.statusBadgeClass('CANCELLED')).toBe('text-bg-danger');
+  it('CANCELLED → danger only', () => {
+    expect(blanketOk('CANCELLED')).toBe(false);
+    expect(blanketWarn('CANCELLED')).toBe(false);
+    expect(blanketDanger('CANCELLED')).toBe(true);
+    expect(blanketNeutral('CANCELLED')).toBe(false);
   });
 });

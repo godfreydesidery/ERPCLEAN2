@@ -1,11 +1,11 @@
 <section class="admin-page">
-  <header class="page-head">
-    <h1 class="h4 mb-1">
-      <i class="bi bi-cart-check me-1" aria-hidden="true"></i>Point of Sale — Checkout
-    </h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
-      Select a session, add products, and record the sale.
-    </p>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>
+        <i class="bi bi-cart-check me-1" aria-hidden="true"></i>Point of Sale — Checkout
+      </h1>
+      <p class="subtitle">Select a session, add products, and record the sale.</p>
+    </div>
   </header>
 
   <!-- Company selector -->
@@ -23,10 +23,10 @@
     }
     @default {
       @if (!canSell()) {
-        <p class="state text-muted">
-          <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
           You don't have permission to create POS sales.
-        </p>
+        </div>
       } @else {
 
         @if (companies().length > 1) {
@@ -45,234 +45,264 @@
 
         <!-- Success receipt -->
         @if (savedInvoice(); as inv) {
-          <div class="alert alert-success d-flex flex-column gap-1 mb-3" role="status">
-            <strong><i class="bi bi-check-circle-fill me-1" aria-hidden="true"></i>Sale recorded!</strong>
-            <span>Invoice: <span class="font-monospace">{{ inv.invoiceNumber ?? 'DRAFT' }}</span></span>
-            <span>Total: {{ inv.currency }} {{ +inv.grossTotalAmount | number:'1.2-2' }}</span>
-            <a [routerLink]="['/admin/sales-invoices/uid', inv.uid]"
-               class="btn btn-sm btn-outline-success mt-1 align-self-start">
-              <i class="bi bi-eye me-1" aria-hidden="true"></i>View Invoice
-            </a>
-            <button type="button" class="btn btn-sm btn-primary mt-1 align-self-start"
-                    (click)="resetSale()">
-              <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>New Sale
-            </button>
+          <div class="erp-card mb-3">
+            <div class="erp-card__head">
+              <h2><i class="bi bi-check-circle-fill me-1 text-success" aria-hidden="true"></i>Sale Recorded</h2>
+            </div>
+            <div class="erp-card__body">
+              <div class="d-flex flex-wrap gap-3 mb-3">
+                <div class="erp-kpi">
+                  <span class="erp-kpi__label">Invoice</span>
+                  <span class="erp-kpi__value mono">{{ inv.invoiceNumber ?? 'DRAFT' }}</span>
+                </div>
+                <div class="erp-kpi">
+                  <span class="erp-kpi__label">Total</span>
+                  <span class="erp-kpi__value">{{ inv.currency }} {{ +inv.grossTotalAmount | number:'1.2-2' }}</span>
+                </div>
+              </div>
+              <div class="d-flex gap-2">
+                <a [routerLink]="['/admin/sales-invoices/uid', inv.uid]"
+                   class="btn btn-sm btn-outline-primary">
+                  <i class="bi bi-eye me-1" aria-hidden="true"></i>View Invoice
+                </a>
+                <button type="button" class="btn btn-sm btn-primary"
+                        (click)="resetSale()">
+                  <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>New Sale
+                </button>
+              </div>
+            </div>
           </div>
         } @else {
           <form (ngSubmit)="submit()" aria-label="POS checkout">
 
-            <!-- Header fields row -->
-            <div class="row g-2 mb-3">
-              <div class="col-sm-4">
-                <label class="form-label small text-muted mb-1" for="saleSession">
-                  Session <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <app-uid-picker id="saleSession"
-                                [ngModel]="selectedSessionUid()"
-                                (ngModelChange)="selectedSessionUid.set($event)"
-                                [options]="sessionOptions()"
-                                placeholder="Select open session"
-                                [required]="true"
-                                name="saleSession"
-                                [disabled]="submitting()" />
+            <!-- Header fields -->
+            <div class="erp-card mb-3">
+              <div class="erp-card__head">
+                <h2>Sale Details</h2>
               </div>
-              <div class="col-sm-4">
-                <label class="form-label small text-muted mb-1" for="saleCustomer">
-                  Customer <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <input type="search" class="form-control form-control-sm mb-1"
-                       placeholder="Type to search customers…"
-                       aria-label="Search customers"
-                       [disabled]="submitting()"
-                       (input)="onCustomerSearch($any($event.target).value)" />
-                <app-uid-picker id="saleCustomer"
-                                [ngModel]="selectedCustomerUid()"
-                                (ngModelChange)="selectedCustomerUid.set($event)"
-                                [options]="customerOptions()"
-                                placeholder="Select customer"
-                                [required]="true"
-                                name="saleCustomer"
-                                [disabled]="submitting()" />
-              </div>
-              <div class="col-sm-4">
-                <label class="form-label small text-muted mb-1" for="saleAgent">
-                  Agent <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <input type="search" class="form-control form-control-sm mb-1"
-                       placeholder="Type to search agents…"
-                       aria-label="Search agents"
-                       [disabled]="submitting()"
-                       (input)="onAgentSearch($any($event.target).value)" />
-                <app-uid-picker id="saleAgent"
-                                [ngModel]="selectedAgentUid()"
-                                (ngModelChange)="selectedAgentUid.set($event)"
-                                [options]="agentOptions()"
-                                placeholder="Select agent"
-                                [required]="true"
-                                name="saleAgent"
-                                [disabled]="submitting()" />
-              </div>
-            </div>
-
-            <div class="row g-2 mb-3">
-              <div class="col-sm-3">
-                <label class="form-label small text-muted mb-1" for="saleCurrency">
-                  Currency <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <input id="saleCurrency" name="saleCurrency" type="text" class="form-control"
-                       placeholder="TZS"
-                       [ngModel]="currency()" (ngModelChange)="currency.set($event)"
-                       [disabled]="submitting()" autocomplete="off" />
-              </div>
-              <div class="col-sm-5">
-                <label class="form-label small text-muted mb-1" for="saleNotes">Notes</label>
-                <input id="saleNotes" name="saleNotes" type="text" class="form-control"
-                       [ngModel]="saleNotes()" (ngModelChange)="saleNotes.set($event)"
-                       [disabled]="submitting()" autocomplete="off" />
+              <div class="erp-card__body">
+                <div class="erp-form-grid">
+                  <div class="erp-field">
+                    <label class="form-label" for="saleSession">
+                      Session <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <app-uid-picker id="saleSession"
+                                    [ngModel]="selectedSessionUid()"
+                                    (ngModelChange)="selectedSessionUid.set($event)"
+                                    [options]="sessionOptions()"
+                                    placeholder="Select open session"
+                                    [required]="true"
+                                    name="saleSession"
+                                    [disabled]="submitting()" />
+                  </div>
+                  <div class="erp-field">
+                    <label class="form-label" for="saleCustomer">
+                      Customer <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <input type="search" class="form-control form-control-sm mb-1"
+                           placeholder="Type to search customers…"
+                           aria-label="Search customers"
+                           [disabled]="submitting()"
+                           (input)="onCustomerSearch($any($event.target).value)" />
+                    <app-uid-picker id="saleCustomer"
+                                    [ngModel]="selectedCustomerUid()"
+                                    (ngModelChange)="selectedCustomerUid.set($event)"
+                                    [options]="customerOptions()"
+                                    placeholder="Select customer"
+                                    [required]="true"
+                                    name="saleCustomer"
+                                    [disabled]="submitting()" />
+                  </div>
+                  <div class="erp-field">
+                    <label class="form-label" for="saleAgent">
+                      Agent <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <input type="search" class="form-control form-control-sm mb-1"
+                           placeholder="Type to search agents…"
+                           aria-label="Search agents"
+                           [disabled]="submitting()"
+                           (input)="onAgentSearch($any($event.target).value)" />
+                    <app-uid-picker id="saleAgent"
+                                    [ngModel]="selectedAgentUid()"
+                                    (ngModelChange)="selectedAgentUid.set($event)"
+                                    [options]="agentOptions()"
+                                    placeholder="Select agent"
+                                    [required]="true"
+                                    name="saleAgent"
+                                    [disabled]="submitting()" />
+                  </div>
+                  <div class="erp-field">
+                    <label class="form-label" for="saleCurrency">
+                      Currency <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <input id="saleCurrency" name="saleCurrency" type="text" class="form-control"
+                           placeholder="TZS"
+                           [ngModel]="currency()" (ngModelChange)="currency.set($event)"
+                           [disabled]="submitting()" autocomplete="off" />
+                  </div>
+                  <div class="erp-field full">
+                    <label class="form-label" for="saleNotes">Notes</label>
+                    <input id="saleNotes" name="saleNotes" type="text" class="form-control"
+                           [ngModel]="saleNotes()" (ngModelChange)="saleNotes.set($event)"
+                           [disabled]="submitting()" autocomplete="off" />
+                  </div>
+                </div>
               </div>
             </div>
 
             <!-- Line items -->
-            <div class="mb-3">
-              <div class="d-flex align-items-center justify-content-between mb-2">
-                <h2 class="h6 mb-0">Line Items</h2>
+            <div class="erp-card mb-3">
+              <div class="erp-card__head">
+                <h2>Line Items</h2>
+                <span class="spacer"></span>
                 <button type="button" class="btn btn-sm btn-outline-primary"
                         (click)="addLine()" [disabled]="submitting()">
                   <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add Line
                 </button>
               </div>
+              <div class="erp-card__body">
+                @if (lines().length > 0) {
+                  <!-- Shared product search filter -->
+                  <div class="mb-2" style="max-width:340px">
+                    <label class="visually-hidden" for="productSearch">Search products</label>
+                    <input id="productSearch" type="search" class="form-control form-control-sm"
+                           placeholder="Search products to populate pickers…"
+                           aria-label="Search products"
+                           [disabled]="submitting()"
+                           (input)="onProductSearch($any($event.target).value)" />
+                  </div>
 
-              @if (lines().length > 0) {
-                <!-- Product search once for shared filter -->
-                <div class="mb-2" style="max-width:340px">
-                  <input type="search" class="form-control form-control-sm"
-                         placeholder="Search products to populate pickers…"
-                         aria-label="Search products"
-                         [disabled]="submitting()"
-                         (input)="onProductSearch($any($event.target).value)" />
-                </div>
-
-                <div class="table-responsive">
-                  <table class="table table-sm align-middle bg-white grid">
-                    <caption class="visually-hidden">Sale line items</caption>
-                    <thead>
-                      <tr>
-                        <th scope="col">Product</th>
-                        <th scope="col">Unit</th>
-                        <th scope="col" style="width:90px">Qty</th>
-                        <th scope="col" style="width:110px">Unit Price</th>
-                        <th scope="col" style="width:110px">Discount</th>
-                        <th scope="col" class="text-end" style="width:110px">Subtotal</th>
-                        <th scope="col"><span class="visually-hidden">Remove</span></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      @for (l of lines(); track l.id) {
+                  <div class="erp-table-wrap">
+                    <table class="erp-table">
+                      <caption class="visually-hidden">Sale line items</caption>
+                      <thead>
                         <tr>
-                          <td>
-                            <app-uid-picker
-                              [ngModel]="l.productUid"
-                              (ngModelChange)="onLineProductChange(l.id, $event)"
-                              [options]="productOptions()"
-                              placeholder="Select product"
-                              [required]="true"
-                              [name]="'prod-' + l.id"
-                              [disabled]="submitting()" />
-                          </td>
-                          <td>
-                            <app-uid-picker
-                              [ngModel]="l.unitUid"
-                              (ngModelChange)="onLineUnitChange(l.id, $event)"
-                              [options]="unitOptions()"
-                              placeholder="Unit"
-                              [required]="true"
-                              [name]="'unit-' + l.id"
-                              [disabled]="submitting()" />
-                          </td>
-                          <td>
-                            <input type="number" class="form-control form-control-sm"
-                                   min="0.001" step="0.001"
-                                   [ngModel]="l.quantity"
-                                   (ngModelChange)="onLineFieldChange(l.id, 'quantity', $event)"
-                                   [disabled]="submitting()"
-                                   [attr.aria-label]="'Quantity for line ' + l.id" />
-                          </td>
-                          <td>
-                            <input type="number" class="form-control form-control-sm"
-                                   min="0" step="0.01"
-                                   [ngModel]="l.unitPrice"
-                                   (ngModelChange)="onLineFieldChange(l.id, 'unitPrice', $event)"
-                                   [disabled]="submitting()"
-                                   [attr.aria-label]="'Unit price for line ' + l.id" />
-                          </td>
-                          <td>
-                            <input type="number" class="form-control form-control-sm"
-                                   min="0" step="0.01"
-                                   [ngModel]="l.lineDiscountAmount"
-                                   (ngModelChange)="onLineFieldChange(l.id, 'lineDiscountAmount', $event)"
-                                   [disabled]="submitting()"
-                                   [attr.aria-label]="'Line discount for line ' + l.id" />
-                          </td>
-                          <td class="text-end font-monospace">
-                            {{ lineSubtotal(l) | number:'1.2-2' }}
-                          </td>
-                          <td>
-                            <button type="button" class="btn btn-sm btn-outline-danger"
-                                    (click)="removeLine(l.id)"
-                                    [disabled]="submitting()"
-                                    [attr.aria-label]="'Remove line ' + l.id">
-                              <i class="bi bi-x-lg" aria-hidden="true"></i>
-                            </button>
-                          </td>
+                          <th scope="col">Product</th>
+                          <th scope="col">Unit</th>
+                          <th scope="col" class="text-end" style="width:90px">Qty</th>
+                          <th scope="col" class="text-end" style="width:110px">Unit Price</th>
+                          <th scope="col" class="text-end" style="width:110px">Discount</th>
+                          <th scope="col" class="text-end" style="width:110px">Subtotal</th>
+                          <th scope="col"><span class="visually-hidden">Remove</span></th>
                         </tr>
-                      }
-                    </tbody>
-                    <tfoot>
-                      <tr>
-                        <td colspan="5" class="text-end fw-semibold">Total</td>
-                        <td class="text-end font-monospace fw-bold">
-                          {{ currency() }} {{ subtotal() | number:'1.2-2' }}
-                        </td>
-                        <td></td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              } @else {
-                <p class="text-muted small">No lines yet — click "Add Line" above.</p>
-              }
+                      </thead>
+                      <tbody>
+                        @for (l of lines(); track l.id) {
+                          <tr>
+                            <td>
+                              <app-uid-picker
+                                [ngModel]="l.productUid"
+                                (ngModelChange)="onLineProductChange(l.id, $event)"
+                                [options]="productOptions()"
+                                placeholder="Select product"
+                                [required]="true"
+                                [name]="'prod-' + l.id"
+                                [disabled]="submitting()" />
+                            </td>
+                            <td>
+                              <app-uid-picker
+                                [ngModel]="l.unitUid"
+                                (ngModelChange)="onLineUnitChange(l.id, $event)"
+                                [options]="unitOptions()"
+                                placeholder="Unit"
+                                [required]="true"
+                                [name]="'unit-' + l.id"
+                                [disabled]="submitting()" />
+                            </td>
+                            <td class="num">
+                              <input type="number" class="form-control form-control-sm"
+                                     min="0.001" step="0.001"
+                                     [ngModel]="l.quantity"
+                                     (ngModelChange)="onLineFieldChange(l.id, 'quantity', $event)"
+                                     [disabled]="submitting()"
+                                     [attr.aria-label]="'Quantity for line ' + l.id" />
+                            </td>
+                            <td class="num">
+                              <input type="number" class="form-control form-control-sm"
+                                     min="0" step="0.01"
+                                     [ngModel]="l.unitPrice"
+                                     (ngModelChange)="onLineFieldChange(l.id, 'unitPrice', $event)"
+                                     [disabled]="submitting()"
+                                     [attr.aria-label]="'Unit price for line ' + l.id" />
+                            </td>
+                            <td class="num">
+                              <input type="number" class="form-control form-control-sm"
+                                     min="0" step="0.01"
+                                     [ngModel]="l.lineDiscountAmount"
+                                     (ngModelChange)="onLineFieldChange(l.id, 'lineDiscountAmount', $event)"
+                                     [disabled]="submitting()"
+                                     [attr.aria-label]="'Line discount for line ' + l.id" />
+                            </td>
+                            <td class="num">
+                              {{ lineSubtotal(l) | number:'1.2-2' }}
+                            </td>
+                            <td>
+                              <button type="button" class="btn btn-sm btn-outline-danger"
+                                      (click)="removeLine(l.id)"
+                                      [disabled]="submitting()"
+                                      [attr.aria-label]="'Remove line ' + l.id">
+                                <i class="bi bi-x-lg" aria-hidden="true"></i>
+                              </button>
+                            </td>
+                          </tr>
+                        }
+                      </tbody>
+                      <tfoot class="erp-tfoot">
+                        <tr>
+                          <td colspan="5" class="text-end fw-semibold">Total</td>
+                          <td class="num fw-bold">
+                            {{ currency() }} {{ subtotal() | number:'1.2-2' }}
+                          </td>
+                          <td></td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                } @else {
+                  <div class="erp-empty">
+                    <i class="bi bi-cart" aria-hidden="true"></i> No lines yet — click "Add Line" above.
+                  </div>
+                }
+              </div>
             </div>
 
             <!-- Tender + change -->
-            <div class="row g-2 align-items-end mb-3">
-              <div class="col-sm-3">
-                <label class="form-label small text-muted mb-1" for="tenderedAmount">
-                  Tendered Amount <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <input id="tenderedAmount" name="tenderedAmount" type="number"
-                       class="form-control" min="0" step="0.01"
-                       [ngModel]="tenderedAmount()" (ngModelChange)="tenderedAmount.set($event)"
-                       [disabled]="submitting()" />
+            <div class="erp-card mb-3">
+              <div class="erp-card__head">
+                <h2>Payment</h2>
               </div>
-              @if (tenderedAmount() && subtotal() > 0) {
-                <div class="col-sm-3">
-                  <p class="small text-muted mb-1">Change</p>
-                  <p class="mb-0 fw-semibold font-monospace"
-                     [class.text-danger]="change() < 0"
-                     [class.text-success]="change() >= 0">
-                    {{ currency() }} {{ change() | number:'1.2-2' }}
-                  </p>
+              <div class="erp-card__body">
+                <div class="erp-form-grid">
+                  <div class="erp-field">
+                    <label class="form-label" for="tenderedAmount">
+                      Tendered Amount <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <input id="tenderedAmount" name="tenderedAmount" type="number"
+                           class="form-control" min="0" step="0.01"
+                           [ngModel]="tenderedAmount()" (ngModelChange)="tenderedAmount.set($event)"
+                           [disabled]="submitting()" />
+                  </div>
+                  @if (tenderedAmount() && subtotal() > 0) {
+                    <div class="erp-field">
+                      <span class="form-label">Change</span>
+                      <p class="mb-0 fw-semibold font-monospace"
+                         [class.text-danger]="change() < 0"
+                         [class.text-success]="change() >= 0">
+                        {{ currency() }} {{ change() | number:'1.2-2' }}
+                      </p>
+                    </div>
+                  }
                 </div>
-              }
+              </div>
             </div>
 
             @if (formError(); as msg) {
-              <p class="form-error text-danger small mb-2" role="alert">{{ msg }}</p>
+              <p class="text-danger small mb-3" role="alert">{{ msg }}</p>
             }
 
-            <button type="submit" class="btn btn-success btn-lg" [disabled]="submitting()">
+            <button type="submit" class="btn btn-primary btn-lg" [disabled]="submitting()">
               @if (submitting()) {
-                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
                 Processing…
               } @else {
                 <i class="bi bi-bag-check me-1" aria-hidden="true"></i>

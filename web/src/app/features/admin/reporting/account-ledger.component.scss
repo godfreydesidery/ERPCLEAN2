@@ -1,11 +1,16 @@
-.ledger-grid {
-  th,
-  td {
-    white-space: nowrap;
-  }
+// Ledger-specific overrides — the global erp-table handles density/hover/borders.
+// Only the memo column and opening/closing row highlights are local concerns.
 
-  td:nth-child(4) {
+.ledger-grid {
+  // Memo column wraps; all others stay nowrap (set via text-nowrap on the cell or global erp-table min-width).
+  .memo-col {
     white-space: normal;
     max-width: 20rem;
+    min-width: 8rem;
+  }
+
+  .opening-row td,
+  .closing-row td {
+    background: var(--erp-primary-soft);
   }
 }

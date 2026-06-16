@@ -4,7 +4,7 @@
  * Covers:
  *  1. Fires one load on startup; rows and state=idle.
  *  2. isEmpty is true when no rows returned.
- *  3. statusBadgeClass for each StockTransferStatus.
+ *  3. Status pill: each StockTransferStatus renders the correct status-tag--* class.
  *  4. 403 response sets state = 'forbidden'.
  *  5. goToPage triggers a reload with the given page.
  */
@@ -103,23 +103,31 @@ describe('StockTransferListComponent — init', () => {
   });
 });
 
-// ── statusBadgeClass ──────────────────────────────────────────────────────────
+// ── Status pill rendering ─────────────────────────────────────────────────────
 
-describe('StockTransferListComponent — statusBadgeClass', () => {
+describe('StockTransferListComponent — status pill', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
 
   it.each([
-    ['DRAFT', 'text-bg-warning'],
-    ['DISPATCHED', 'text-bg-info'],
-    ['RECEIVED', 'text-bg-primary'],
-    ['COMPLETED', 'text-bg-success'],
-    ['CANCELLED', 'text-bg-danger'],
-  ] as const)('%s → %s', async (status, expected) => {
-    makeBed();
-    const comp = TestBed.createComponent(StockTransferListComponent).componentInstance;
+    ['DRAFT',      'status-tag--warn'],
+    ['DISPATCHED', 'status-tag--info'],
+    ['RECEIVED',   'status-tag--info'],
+    ['COMPLETED',  'status-tag--ok'],
+    ['CANCELLED',  'status-tag--danger'],
+  ] as const)('status %s renders %s on the pill element', async (status, expectedClass) => {
+    const page = (): StockTransferPage => ({
+      rows: [{ ...STUB_TRANSFER, status }],
+      meta: { page: 0, size: 20, totalElements: 1, totalPages: 1, hasNext: false },
+    });
+    makeBed({ listImpl: () => of(page()) });
+    const fixture = TestBed.createComponent(StockTransferListComponent);
     await vi.runAllTimersAsync();
-    expect(comp.statusBadgeClass(status)).toBe(expected);
+    fixture.detectChanges();
+
+    const pill: HTMLElement | null = fixture.nativeElement.querySelector('.status-tag');
+    expect(pill).not.toBeNull();
+    expect(pill!.classList).toContain(expectedClass);
   });
 });
 

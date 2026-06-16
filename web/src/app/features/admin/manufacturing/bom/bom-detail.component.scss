@@ -1,1 +1,7 @@
-// BOM detail inherits layout from admin.styles.scss via the admin-page class.
+// Picker / read-only field label helper: matches .erp-field > label visuals for
+// fields where a <label for> is not applicable (uid-picker or read-only display).
+.erp-field__label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--erp-text);
+}

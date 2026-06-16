@@ -13,7 +13,7 @@ import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { ProjectsService } from './projects.service';
 import type { ProjectPage } from './projects.service';
-import { CreateProjectRequest, ProjectDto, ProjectStatus } from './models/projects.model';
+import { CreateProjectRequest, ProjectDto } from './models/projects.model';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
@@ -180,18 +180,6 @@ export class ProjectListComponent {
         this.saving.set(false);
       },
     });
-  }
-
-  // ── Display helpers ───────────────────────────────────────────────────────────
-
-  statusBadgeClass(status: ProjectStatus): string {
-    switch (status) {
-      case 'ACTIVE': return 'text-bg-success';
-      case 'ON_HOLD': return 'text-bg-warning';
-      case 'COMPLETED': return 'text-bg-primary';
-      case 'CANCELLED': return 'text-bg-danger';
-      default: return 'text-bg-secondary'; // DRAFT
-    }
   }
 
   private messageFrom(err: unknown, fallback: string): string {

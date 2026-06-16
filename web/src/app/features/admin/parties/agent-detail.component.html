@@ -24,18 +24,18 @@
             <span class="text-muted fw-normal ms-2">— {{ a.displayName }}</span>
           </h1>
           <div class="d-flex gap-2 mt-1 flex-wrap align-items-center">
-            <span class="badge"
-                  [class.text-bg-success]="a.status === 'ACTIVE'"
-                  [class.text-bg-secondary]="a.status !== 'ACTIVE'">
+            <span class="status-tag"
+                  [class.status-tag--ok]="a.status === 'ACTIVE'"
+                  [class.status-tag--neutral]="a.status === 'ARCHIVED'">
               {{ a.status }}
             </span>
-            <span class="badge text-bg-light border">{{ a.agentKind }}</span>
+            <span class="status-tag status-tag--neutral">{{ a.agentKind }}</span>
             @if (canManage()) {
               @if (a.status === 'ACTIVE') {
                 <button type="button" class="btn btn-sm btn-outline-secondary ms-2"
                         [disabled]="archiving()" (click)="archive()">
                   @if (archiving()) {
-                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
                   }
                   Archive
                 </button>
@@ -43,7 +43,7 @@
                 <button type="button" class="btn btn-sm btn-outline-success ms-2"
                         [disabled]="archiving()" (click)="restore()">
                   @if (archiving()) {
-                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
                   }
                   Restore
                 </button>
@@ -56,291 +56,302 @@
   </header>
 
   @if (agentState() !== 'loading' && agent()) {
-    <div class="card card-body mb-3">
-      <h2 class="h6 mb-3">Details</h2>
-      <form (ngSubmit)="save()" aria-label="Edit agent">
-        <div class="row g-3">
-          <div class="col-sm-6">
-            <label class="form-label small text-muted mb-1" for="fDisplayName">Display name <span aria-hidden="true" class="text-danger">*</span></label>
-            <input id="fDisplayName" name="fDisplayName" type="text" class="form-control"
-                   [ngModel]="fDisplayName()" (ngModelChange)="fDisplayName.set($event)"
-                   required [disabled]="saving() || !canManage()" />
-          </div>
-          <div class="col-sm-6">
-            <label class="form-label small text-muted mb-1" for="fLegalName">Legal name</label>
-            <input id="fLegalName" name="fLegalName" type="text" class="form-control"
-                   [ngModel]="fLegalName()" (ngModelChange)="fLegalName.set($event)"
-                   [disabled]="saving() || !canManage()" />
-          </div>
-          <div class="col-sm-4">
-            <fieldset>
-              <legend class="form-label small text-muted mb-1">Party type <span aria-hidden="true" class="text-danger">*</span></legend>
-              <div class="d-flex gap-3">
-                <div class="form-check">
-                  <input class="form-check-input" type="radio" id="ptIndividual" name="fPartyType"
-                         value="INDIVIDUAL"
-                         [ngModel]="fPartyType()" (ngModelChange)="fPartyType.set($event)"
-                         [disabled]="saving() || !canManage()" />
-                  <label class="form-check-label" for="ptIndividual">Individual</label>
-                </div>
-                <div class="form-check">
-                  <input class="form-check-input" type="radio" id="ptBusiness" name="fPartyType"
-                         value="BUSINESS"
-                         [ngModel]="fPartyType()" (ngModelChange)="fPartyType.set($event)"
-                         [disabled]="saving() || !canManage()" />
-                  <label class="form-check-label" for="ptBusiness">Business</label>
-                </div>
-              </div>
-            </fieldset>
-          </div>
-          <div class="col-sm-4">
-            <label class="form-label small text-muted mb-1" for="fAgentKind">Agent kind <span aria-hidden="true" class="text-danger">*</span></label>
-            <select id="fAgentKind" name="fAgentKind" class="form-select"
-                    [ngModel]="fAgentKind()" (ngModelChange)="fAgentKind.set($event)"
-                    [disabled]="saving() || !canManage()">
-              <option value="EXTERNAL">External</option>
-              <option value="INTERNAL">Internal (IAM user)</option>
-            </select>
-          </div>
-
-          <!-- User selector — only for INTERNAL agents -->
-          @if (isInternal()) {
-            <div class="col-sm-8">
-              <label class="form-label small text-muted mb-1" for="fAppUserId">
-                IAM User <span aria-hidden="true" class="text-danger">*</span>
-                <span class="text-muted small">(required for internal agents)</span>
-              </label>
-              @switch (usersState()) {
-                @case ('loading') {
-                  <div class="form-control d-flex align-items-center gap-2 text-muted small">
-                    <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading users…
+    <div class="erp-card mb-3">
+      <div class="erp-card__head">
+        <h2>Details</h2>
+      </div>
+      <div class="erp-card__body">
+        <form (ngSubmit)="save()" aria-label="Edit agent">
+          <div class="row g-3">
+            <div class="col-sm-6">
+              <label class="form-label small text-muted mb-1" for="fDisplayName">Display name <span aria-hidden="true" class="text-danger">*</span></label>
+              <input id="fDisplayName" name="fDisplayName" type="text" class="form-control"
+                     [ngModel]="fDisplayName()" (ngModelChange)="fDisplayName.set($event)"
+                     required [disabled]="saving() || !canManage()" />
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label small text-muted mb-1" for="fLegalName">Legal name</label>
+              <input id="fLegalName" name="fLegalName" type="text" class="form-control"
+                     [ngModel]="fLegalName()" (ngModelChange)="fLegalName.set($event)"
+                     [disabled]="saving() || !canManage()" />
+            </div>
+            <div class="col-sm-4">
+              <fieldset>
+                <legend class="form-label small text-muted mb-1">Party type <span aria-hidden="true" class="text-danger">*</span></legend>
+                <div class="d-flex gap-3">
+                  <div class="form-check">
+                    <input class="form-check-input" type="radio" id="ptIndividual" name="fPartyType"
+                           value="INDIVIDUAL"
+                           [ngModel]="fPartyType()" (ngModelChange)="fPartyType.set($event)"
+                           [disabled]="saving() || !canManage()" />
+                    <label class="form-check-label" for="ptIndividual">Individual</label>
                   </div>
-                }
-                @case ('error') {
-                  <p class="text-danger small mt-1 mb-0" role="alert">Could not load users.</p>
-                }
-                @default {
-                  <select id="fAppUserId" name="fAppUserId" class="form-select"
-                          [ngModel]="fAppUserId()" (ngModelChange)="fAppUserId.set($event)"
-                          [disabled]="saving() || !canManage()"
-                          [attr.aria-required]="isInternal()">
-                    <option value="">— select user —</option>
-                    @for (u of users(); track u.uid) {
-                      <option [value]="u.id">{{ u.username }} — {{ u.displayName }}</option>
-                    }
-                  </select>
-                }
-              }
-            </div>
-          }
-
-          <div class="col-sm-4">
-            <label class="form-label small text-muted mb-1" for="fTin">TIN</label>
-            <input id="fTin" name="fTin" type="text" class="form-control"
-                   [ngModel]="fTin()" (ngModelChange)="fTin.set($event)"
-                   [disabled]="saving() || !canManage()" />
-          </div>
-          <div class="col-sm-4">
-            <div class="form-check mt-4">
-              <input class="form-check-input" type="checkbox" id="fVatRegistered"
-                     [ngModel]="fVatRegistered()" (ngModelChange)="fVatRegistered.set($event)"
-                     name="fVatRegistered" [disabled]="saving() || !canManage()" />
-              <label class="form-check-label" for="fVatRegistered">VAT registered</label>
-            </div>
-          </div>
-          <div class="col-sm-4">
-            <label class="form-label small text-muted mb-1" for="fVrn">
-              VRN
-              @if (!fVatRegistered()) { <span class="text-muted small">(requires VAT registered)</span> }
-            </label>
-            <input id="fVrn" name="fVrn" type="text" class="form-control"
-                   [ngModel]="fVrn()" (ngModelChange)="fVrn.set($event)"
-                   [disabled]="saving() || !canManage() || !fVatRegistered()"
-                   [attr.aria-disabled]="!fVatRegistered()" />
-          </div>
-          <div class="col-sm-4">
-            <label class="form-label small text-muted mb-1" for="fBusinessRegNo">Business reg. no.</label>
-            <input id="fBusinessRegNo" name="fBusinessRegNo" type="text" class="form-control"
-                   [ngModel]="fBusinessRegNo()" (ngModelChange)="fBusinessRegNo.set($event)"
-                   [disabled]="saving() || !canManage()" />
-          </div>
-          <div class="col-sm-4">
-            <label class="form-label small text-muted mb-1" for="fPhone">Phone</label>
-            <input id="fPhone" name="fPhone" type="tel" class="form-control"
-                   [ngModel]="fPhone()" (ngModelChange)="fPhone.set($event)"
-                   [disabled]="saving() || !canManage()" />
-          </div>
-          <div class="col-sm-4">
-            <label class="form-label small text-muted mb-1" for="fMobileMoneyNo">Mobile money no.</label>
-            <input id="fMobileMoneyNo" name="fMobileMoneyNo" type="text" class="form-control"
-                   [ngModel]="fMobileMoneyNo()" (ngModelChange)="fMobileMoneyNo.set($event)"
-                   [disabled]="saving() || !canManage()" />
-          </div>
-          <div class="col-sm-4">
-            <label class="form-label small text-muted mb-1" for="fEmail">Email</label>
-            <input id="fEmail" name="fEmail" type="email" class="form-control"
-                   [ngModel]="fEmail()" (ngModelChange)="fEmail.set($event)"
-                   [disabled]="saving() || !canManage()" />
-          </div>
-          <div class="col-sm-6">
-            <label class="form-label small text-muted mb-1" for="fPhysicalAddress">Physical address</label>
-            <input id="fPhysicalAddress" name="fPhysicalAddress" type="text" class="form-control"
-                   [ngModel]="fPhysicalAddress()" (ngModelChange)="fPhysicalAddress.set($event)"
-                   [disabled]="saving() || !canManage()" />
-          </div>
-          <div class="col-sm-6">
-            <label class="form-label small text-muted mb-1" for="fPostalAddress">Postal address</label>
-            <input id="fPostalAddress" name="fPostalAddress" type="text" class="form-control"
-                   [ngModel]="fPostalAddress()" (ngModelChange)="fPostalAddress.set($event)"
-                   [disabled]="saving() || !canManage()" />
-          </div>
-          <div class="col-sm-4">
-            <label class="form-label small text-muted mb-1" for="fRegion">Region</label>
-            <input id="fRegion" name="fRegion" type="text" class="form-control"
-                   [ngModel]="fRegion()" (ngModelChange)="fRegion.set($event)"
-                   [disabled]="saving() || !canManage()" />
-          </div>
-          <div class="col-sm-4">
-            <label class="form-label small text-muted mb-1" for="fDistrict">District</label>
-            <input id="fDistrict" name="fDistrict" type="text" class="form-control"
-                   [ngModel]="fDistrict()" (ngModelChange)="fDistrict.set($event)"
-                   [disabled]="saving() || !canManage()" />
-          </div>
-        </div>
-
-        @if (saveError(); as msg) {
-          <p class="text-danger small mt-3 mb-0" role="alert">{{ msg }}</p>
-        }
-        @if (canManage()) {
-          <div class="mt-3">
-            <button type="submit" class="btn btn-primary" [disabled]="saving()">
-              @if (saving()) {
-                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                Saving…
-              } @else {
-                Save changes
-              }
-            </button>
-          </div>
-        }
-      </form>
-    </div>
-
-    <div class="card card-body mb-3">
-      <h2 class="h6 mb-3">Branch Associations</h2>
-
-      @switch (branchesState()) {
-        @case ('loading') {
-          <p class="text-muted small d-flex align-items-center gap-2" aria-live="polite">
-            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
-          </p>
-        }
-        @case ('error') {
-          <p class="text-danger small" role="alert">Could not load branch associations.</p>
-        }
-        @default {
-          @if (!hasBranches()) {
-            <p class="text-muted small">No branches associated yet.</p>
-          } @else {
-            <div class="table-responsive mb-3">
-              <table class="table table-hover align-middle bg-white grid">
-                <caption class="sr-only">Branch associations for this agent</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Branch</th>
-                    <th scope="col">Assigned at</th>
-                    @if (canAssign()) { <th scope="col"><span class="sr-only">Actions</span></th> }
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (pb of branches(); track pb.branchId) {
-                    <tr>
-                      <td>{{ branchDisplay(pb.branchId) }}</td>
-                      <td class="small text-muted">{{ pb.assignedAt ?? '—' }}</td>
-                      @if (canAssign()) {
-                        <td>
-                          <button type="button" class="btn btn-sm btn-outline-danger"
-                                  [disabled]="rowBusyBranchId() !== null"
-                                  (click)="removeBranch(pb)"
-                                  [attr.aria-label]="'Remove branch ' + branchDisplay(pb.branchId)">
-                            @if (rowBusyBranchId() === pb.branchId) {
-                              <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-                            }
-                            Remove
-                          </button>
-                        </td>
-                      }
-                    </tr>
-                  }
-                </tbody>
-              </table>
-            </div>
-          }
-        }
-      }
-
-      @if (canAssign()) {
-        <form class="assign-form border-top pt-3" (ngSubmit)="assign()" aria-label="Associate a branch with this agent">
-          <h3 class="h6 mb-3">Associate Branch</h3>
-          @switch (companiesState()) {
-            @case ('loading') {
-              <p class="text-muted small d-flex align-items-center gap-2" aria-live="polite">
-                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
-              </p>
-            }
-            @case ('error') {
-              <p class="text-danger small" role="alert">Could not load companies.</p>
-            }
-            @default {
-              <div class="row g-2 align-items-end">
-                <div class="col-sm-4">
-                  <label class="form-label small text-muted mb-1" for="assignCompany">Company</label>
-                  <select id="assignCompany" name="assignCompany" class="form-select"
-                          [ngModel]="selectedCompanyUid()" (ngModelChange)="onCompanyChange($event)"
-                          [disabled]="assigning()">
-                    <option value="">— select company —</option>
-                    @for (c of companies(); track c.uid) { <option [value]="c.uid">{{ c.name }}</option> }
-                  </select>
+                  <div class="form-check">
+                    <input class="form-check-input" type="radio" id="ptBusiness" name="fPartyType"
+                           value="BUSINESS"
+                           [ngModel]="fPartyType()" (ngModelChange)="fPartyType.set($event)"
+                           [disabled]="saving() || !canManage()" />
+                    <label class="form-check-label" for="ptBusiness">Business</label>
+                  </div>
                 </div>
-                <div class="col-sm-4">
-                  <label class="form-label small text-muted mb-1" for="assignBranch">Branch</label>
-                  @if (companyBranchesState() === 'loading') {
+              </fieldset>
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label small text-muted mb-1" for="fAgentKind">Agent kind <span aria-hidden="true" class="text-danger">*</span></label>
+              <select id="fAgentKind" name="fAgentKind" class="form-select"
+                      [ngModel]="fAgentKind()" (ngModelChange)="fAgentKind.set($event)"
+                      [disabled]="saving() || !canManage()">
+                <option value="EXTERNAL">External</option>
+                <option value="INTERNAL">Internal (IAM user)</option>
+              </select>
+            </div>
+
+            <!-- User selector — only for INTERNAL agents -->
+            @if (isInternal()) {
+              <div class="col-sm-8">
+                <label class="form-label small text-muted mb-1" for="fAppUserId">
+                  IAM User <span aria-hidden="true" class="text-danger">*</span>
+                  <span class="text-muted small">(required for internal agents)</span>
+                </label>
+                @switch (usersState()) {
+                  @case ('loading') {
                     <div class="form-control d-flex align-items-center gap-2 text-muted small">
-                      <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+                      <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading users…
                     </div>
-                  } @else {
-                    <select id="assignBranch" name="assignBranch" class="form-select"
-                            [ngModel]="selectedBranchUid()" (ngModelChange)="selectedBranchUid.set($event)"
-                            [disabled]="assigning() || !selectedCompanyUid()">
-                      <option value="">— select branch —</option>
-                      @for (b of companyBranches(); track b.uid) {
-                        <option [value]="b.uid">{{ b.code }} — {{ b.name }}</option>
+                  }
+                  @case ('error') {
+                    <p class="text-danger small mt-1 mb-0" role="alert">Could not load users.</p>
+                  }
+                  @default {
+                    <select id="fAppUserId" name="fAppUserId" class="form-select"
+                            [ngModel]="fAppUserId()" (ngModelChange)="fAppUserId.set($event)"
+                            [disabled]="saving() || !canManage()"
+                            [attr.aria-required]="isInternal()">
+                      <option value="">— select user —</option>
+                      @for (u of users(); track u.uid) {
+                        <option [value]="u.id">{{ u.username }} — {{ u.displayName }}</option>
                       }
                     </select>
                   }
-                  @if (companyBranchesState() === 'error') {
-                    <p class="text-danger small mt-1 mb-0" role="alert">Could not load branches.</p>
-                  }
-                </div>
-                <div class="col-sm-4">
-                  <button type="submit" class="btn btn-primary w-100"
-                          [disabled]="assigning() || !selectedBranchUid()">
-                    @if (assigning()) {
-                      <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                      Assigning…
-                    } @else {
-                      Assign
+                }
+              </div>
+            }
+
+            <div class="col-sm-4">
+              <label class="form-label small text-muted mb-1" for="fTin">TIN</label>
+              <input id="fTin" name="fTin" type="text" class="form-control"
+                     [ngModel]="fTin()" (ngModelChange)="fTin.set($event)"
+                     [disabled]="saving() || !canManage()" />
+            </div>
+            <div class="col-sm-4">
+              <div class="form-check mt-4">
+                <input class="form-check-input" type="checkbox" id="fVatRegistered"
+                       [ngModel]="fVatRegistered()" (ngModelChange)="fVatRegistered.set($event)"
+                       name="fVatRegistered" [disabled]="saving() || !canManage()" />
+                <label class="form-check-label" for="fVatRegistered">VAT registered</label>
+              </div>
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label small text-muted mb-1" for="fVrn">
+                VRN
+                @if (!fVatRegistered()) { <span class="text-muted small">(requires VAT registered)</span> }
+              </label>
+              <input id="fVrn" name="fVrn" type="text" class="form-control"
+                     [ngModel]="fVrn()" (ngModelChange)="fVrn.set($event)"
+                     [disabled]="saving() || !canManage() || !fVatRegistered()"
+                     [attr.aria-disabled]="!fVatRegistered()" />
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label small text-muted mb-1" for="fBusinessRegNo">Business reg. no.</label>
+              <input id="fBusinessRegNo" name="fBusinessRegNo" type="text" class="form-control"
+                     [ngModel]="fBusinessRegNo()" (ngModelChange)="fBusinessRegNo.set($event)"
+                     [disabled]="saving() || !canManage()" />
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label small text-muted mb-1" for="fPhone">Phone</label>
+              <input id="fPhone" name="fPhone" type="tel" class="form-control"
+                     [ngModel]="fPhone()" (ngModelChange)="fPhone.set($event)"
+                     [disabled]="saving() || !canManage()" />
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label small text-muted mb-1" for="fMobileMoneyNo">Mobile money no.</label>
+              <input id="fMobileMoneyNo" name="fMobileMoneyNo" type="text" class="form-control"
+                     [ngModel]="fMobileMoneyNo()" (ngModelChange)="fMobileMoneyNo.set($event)"
+                     [disabled]="saving() || !canManage()" />
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label small text-muted mb-1" for="fEmail">Email</label>
+              <input id="fEmail" name="fEmail" type="email" class="form-control"
+                     [ngModel]="fEmail()" (ngModelChange)="fEmail.set($event)"
+                     [disabled]="saving() || !canManage()" />
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label small text-muted mb-1" for="fPhysicalAddress">Physical address</label>
+              <input id="fPhysicalAddress" name="fPhysicalAddress" type="text" class="form-control"
+                     [ngModel]="fPhysicalAddress()" (ngModelChange)="fPhysicalAddress.set($event)"
+                     [disabled]="saving() || !canManage()" />
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label small text-muted mb-1" for="fPostalAddress">Postal address</label>
+              <input id="fPostalAddress" name="fPostalAddress" type="text" class="form-control"
+                     [ngModel]="fPostalAddress()" (ngModelChange)="fPostalAddress.set($event)"
+                     [disabled]="saving() || !canManage()" />
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label small text-muted mb-1" for="fRegion">Region</label>
+              <input id="fRegion" name="fRegion" type="text" class="form-control"
+                     [ngModel]="fRegion()" (ngModelChange)="fRegion.set($event)"
+                     [disabled]="saving() || !canManage()" />
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label small text-muted mb-1" for="fDistrict">District</label>
+              <input id="fDistrict" name="fDistrict" type="text" class="form-control"
+                     [ngModel]="fDistrict()" (ngModelChange)="fDistrict.set($event)"
+                     [disabled]="saving() || !canManage()" />
+            </div>
+          </div>
+
+          @if (saveError(); as msg) {
+            <output class="d-block text-danger small mt-3" aria-live="polite" aria-atomic="true">{{ msg }}</output>
+          }
+          @if (canManage()) {
+            <div class="mt-3">
+              <button type="submit" class="btn btn-primary" [disabled]="saving()">
+                @if (saving()) {
+                  <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                  Saving…
+                } @else {
+                  Save changes
+                }
+              </button>
+            </div>
+          }
+        </form>
+      </div>
+    </div>
+
+    <div class="erp-card mb-3">
+      <div class="erp-card__head">
+        <h2>Branch Associations</h2>
+      </div>
+      <div class="erp-card__body">
+
+        @switch (branchesState()) {
+          @case ('loading') {
+            <p class="text-muted small d-flex align-items-center gap-2" aria-live="polite">
+              <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+            </p>
+          }
+          @case ('error') {
+            <p class="text-danger small" role="alert">Could not load branch associations.</p>
+          }
+          @default {
+            @if (!hasBranches()) {
+              <div class="erp-empty">
+                <i class="bi bi-diagram-3" aria-hidden="true"></i>
+                No branches associated yet.
+              </div>
+            } @else {
+              <div class="erp-table-wrap mb-3">
+                <table class="erp-table">
+                  <caption class="visually-hidden">Branch associations for this agent</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Branch</th>
+                      <th scope="col">Assigned at</th>
+                      @if (canAssign()) { <th scope="col"><span class="visually-hidden">Actions</span></th> }
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (pb of branches(); track pb.branchId) {
+                      <tr>
+                        <td>{{ branchDisplay(pb.branchId) }}</td>
+                        <td class="small text-muted">{{ pb.assignedAt ?? '—' }}</td>
+                        @if (canAssign()) {
+                          <td>
+                            <button type="button" class="btn btn-sm btn-outline-danger"
+                                    [disabled]="rowBusyBranchId() !== null"
+                                    (click)="removeBranch(pb)"
+                                    [attr.aria-label]="'Remove branch ' + branchDisplay(pb.branchId)">
+                              @if (rowBusyBranchId() === pb.branchId) {
+                                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                              }
+                              Remove
+                            </button>
+                          </td>
+                        }
+                      </tr>
                     }
-                  </button>
-                </div>
+                  </tbody>
+                </table>
               </div>
             }
           }
-          @if (assignError(); as msg) {
-            <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-          }
-        </form>
-      }
+        }
+
+        @if (canAssign()) {
+          <form class="border-top pt-3" (ngSubmit)="assign()" aria-label="Associate a branch with this agent">
+            <p class="erp-section-title mb-2">Associate Branch</p>
+            @switch (companiesState()) {
+              @case ('loading') {
+                <p class="text-muted small d-flex align-items-center gap-2" aria-live="polite">
+                  <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+                </p>
+              }
+              @case ('error') {
+                <p class="text-danger small" role="alert">Could not load companies.</p>
+              }
+              @default {
+                <div class="row g-2 align-items-end">
+                  <div class="col-sm-4">
+                    <label class="form-label small text-muted mb-1" for="assignCompany">Company</label>
+                    <select id="assignCompany" name="assignCompany" class="form-select"
+                            [ngModel]="selectedCompanyUid()" (ngModelChange)="onCompanyChange($event)"
+                            [disabled]="assigning()">
+                      <option value="">— select company —</option>
+                      @for (c of companies(); track c.uid) { <option [value]="c.uid">{{ c.name }}</option> }
+                    </select>
+                  </div>
+                  <div class="col-sm-4">
+                    <label class="form-label small text-muted mb-1" for="assignBranch">Branch</label>
+                    @if (companyBranchesState() === 'loading') {
+                      <div class="form-control d-flex align-items-center gap-2 text-muted small">
+                        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+                      </div>
+                    } @else {
+                      <select id="assignBranch" name="assignBranch" class="form-select"
+                              [ngModel]="selectedBranchUid()" (ngModelChange)="selectedBranchUid.set($event)"
+                              [disabled]="assigning() || !selectedCompanyUid()">
+                        <option value="">— select branch —</option>
+                        @for (b of companyBranches(); track b.uid) {
+                          <option [value]="b.uid">{{ b.code }} — {{ b.name }}</option>
+                        }
+                      </select>
+                    }
+                    @if (companyBranchesState() === 'error') {
+                      <p class="text-danger small mt-1 mb-0" role="alert">Could not load branches.</p>
+                    }
+                  </div>
+                  <div class="col-sm-4">
+                    <button type="submit" class="btn btn-primary w-100"
+                            [disabled]="assigning() || !selectedBranchUid()">
+                      @if (assigning()) {
+                        <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                        Assigning…
+                      } @else {
+                        Assign
+                      }
+                    </button>
+                  </div>
+                </div>
+              }
+            }
+            @if (assignError(); as msg) {
+              <output class="d-block text-danger small mt-2" aria-live="polite" aria-atomic="true">{{ msg }}</output>
+            }
+          </form>
+        }
+      </div>
     </div>
   }
 </section>

@@ -8,7 +8,7 @@ import { SessionStore } from '../../../../core/auth/session.store';
 import { Company } from '../../models/company.model';
 import { CompanyService } from '../../company/company.service';
 import { OrganisationService } from '../../organisation/organisation.service';
-import { FiscalYearDto, PeriodStatus } from '../models/gl.model';
+import { FiscalYearDto } from '../models/gl.model';
 import { GlService } from '../gl.service';
 import { YearEndCloseService } from './year-end-close.service';
 
@@ -153,10 +153,6 @@ export class YearEndCloseComponent {
   }
 
   // ── Display helpers ────────────────────────────────────────────────────────
-
-  statusBadgeClass(status: PeriodStatus): string {
-    return status === 'OPEN' ? 'text-bg-success' : 'text-bg-secondary';
-  }
 
   /** Replace the updated row in the local signal — avoids full reload. */
   private reloadRow(updated: FiscalYearDto): void {

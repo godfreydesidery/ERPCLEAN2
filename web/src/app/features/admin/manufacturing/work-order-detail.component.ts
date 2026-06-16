@@ -468,36 +468,6 @@ export class WorkOrderDetailComponent {
 
   // ── Display helpers ───────────────────────────────────────────────────────
 
-  statusBadgeClass(status: WorkOrderStatus): string {
-    switch (status) {
-      case 'PLANNED':
-        return 'text-bg-warning';
-      case 'RELEASED':
-        return 'text-bg-info';
-      case 'IN_PROGRESS':
-        return 'text-bg-primary';
-      case 'COMPLETED':
-        return 'text-bg-success';
-      case 'CLOSED':
-        return 'text-bg-secondary';
-      case 'CANCELLED':
-        return 'text-bg-danger';
-      default:
-        return 'text-bg-secondary';
-    }
-  }
-
-  componentBadgeClass(status: string): string {
-    switch (status) {
-      case 'ISSUED':
-        return 'text-bg-success';
-      case 'PARTIAL':
-        return 'text-bg-warning';
-      default:
-        return 'text-bg-secondary';
-    }
-  }
-
   trackByUid(_: number, item: WorkOrderComponentDto | WorkOrderOperationDto): string {
     return item.uid;
   }

@@ -1,22 +1,24 @@
 <section class="admin-page">
-  <header class="page-head">
-    <a [routerLink]="['/admin/budgets']" class="btn btn-sm btn-outline-secondary me-2">
-      <i class="bi bi-arrow-left" aria-hidden="true"></i>
-      <span class="visually-hidden">Back to budgets</span>
-    </a>
-    <h1 class="h4 mb-1 d-inline">
-      @if (budget(); as b) { {{ b.name }} } @else { Budget }
-    </h1>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>
+        <a [routerLink]="['/admin/budgets']" class="btn btn-sm btn-outline-secondary me-2">
+          <i class="bi bi-arrow-left" aria-hidden="true"></i>
+          <span class="visually-hidden">Back to budgets</span>
+        </a>
+        @if (budget(); as b) { {{ b.name }} } @else { Budget }
+      </h1>
+    </div>
   </header>
 
   @switch (budgetState()) {
     @case ('loading') {
-      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+      <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
         <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading budget…
       </p>
     }
     @case ('error') {
-      <p class="state text-danger" role="alert">
+      <p class="text-danger" role="alert">
         <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
         Could not load budget.
       </p>
@@ -24,11 +26,11 @@
     @default {
       @if (budget(); as b) {
         <!-- Budget header card -->
-        <div class="card mb-3">
-          <div class="card-body">
+        <div class="erp-card mb-3">
+          <div class="erp-card__body">
             <dl class="row mb-0">
               <dt class="col-sm-3 text-muted small">Budget #</dt>
-              <dd class="col-sm-9 font-monospace">{{ b.budgetNumber }}</dd>
+              <dd class="col-sm-9 mono">{{ b.budgetNumber }}</dd>
               <dt class="col-sm-3 text-muted small">Name</dt>
               <dd class="col-sm-9">{{ b.name }}</dd>
               <dt class="col-sm-3 text-muted small">Fiscal Year</dt>
@@ -52,7 +54,7 @@
 
         <!-- Versions section -->
         <div class="d-flex align-items-center mb-2 gap-2">
-          <h2 class="h5 mb-0">Budget Versions</h2>
+          <h2 class="erp-section-title mb-0">Budget Versions</h2>
           @if (canManage()) {
             <button type="button" class="btn btn-sm btn-outline-primary ms-auto"
                     (click)="toggleNewVersionForm()"
@@ -65,50 +67,64 @@
 
         <!-- New version form -->
         @if (showNewVersionForm()) {
-          <form id="newVersionForm" class="create-form card card-body mb-3"
+          <form id="newVersionForm" class="erp-card mb-3"
                 (ngSubmit)="createVersion()" aria-label="Create new budget version">
-            <h3 class="h6 mb-2">New Draft Version</h3>
-            <div class="row g-2">
-              <div class="col-sm-5">
-                <label class="form-label small text-muted mb-1" for="fVersionLabel">Version label (optional)</label>
-                <input id="fVersionLabel" name="fVersionLabel" type="text" class="form-control"
-                       placeholder="e.g. Revised Q3"
-                       [ngModel]="fVersionLabel()" (ngModelChange)="fVersionLabel.set($event)"
-                       [disabled]="creatingVersion()" autocomplete="off" maxlength="120" />
+            <div class="erp-card__head">
+              <h3>New Draft Version</h3>
+            </div>
+            <div class="erp-card__body">
+              <div class="erp-form-grid">
+                <div class="erp-field">
+                  <label class="form-label" for="fVersionLabel">Version label (optional)</label>
+                  <input id="fVersionLabel" name="fVersionLabel" type="text" class="form-control"
+                         placeholder="e.g. Revised Q3"
+                         [ngModel]="fVersionLabel()" (ngModelChange)="fVersionLabel.set($event)"
+                         [disabled]="creatingVersion()" autocomplete="off" maxlength="120" />
+                </div>
+                <div class="erp-field">
+                  <label class="form-label" for="fSeedFromUid">Seed from version (optional)</label>
+                  <app-uid-picker [(ngModel)]="fSeedFromUid" [options]="budgetVersionOptions()"
+                                  placeholder="Leave blank for empty version"
+                                  name="fSeedFromUid" inputId="fSeedFromUid" />
+                </div>
               </div>
-              <div class="col-sm-5">
-                <label class="form-label small text-muted mb-1">Seed from version (optional)</label>
-                <app-uid-picker [(ngModel)]="fSeedFromUid" [options]="budgetVersionOptions()"
-                                placeholder="Leave blank for empty version"
-                                name="fSeedFromUid" />
-              </div>
-              <div class="col-sm-2 d-flex align-items-end">
-                <button type="submit" class="btn btn-primary w-100" [disabled]="creatingVersion()">
+              <div class="d-flex gap-2 mt-3 align-items-center">
+                <button type="submit" class="btn btn-primary" [disabled]="creatingVersion()">
                   @if (creatingVersion()) {
                     <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
                   }
                   Create
                 </button>
+                <button type="button" class="btn btn-outline-secondary" (click)="toggleNewVersionForm()">Cancel</button>
               </div>
+              @if (newVersionError(); as msg) {
+                <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+              }
             </div>
-            @if (newVersionError(); as msg) {
-              <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-            }
           </form>
         }
 
         @if (!b.versions || b.versions.length === 0) {
-          <p class="text-muted small">No versions yet.</p>
+          <div class="erp-empty">
+            <i class="bi bi-collection"></i> No versions yet.
+          </div>
         } @else {
           @for (v of b.versions; track v.uid) {
-            <div class="card mb-3">
-              <div class="card-header d-flex align-items-center gap-2 flex-wrap">
+            <div class="erp-card mb-3">
+              <div class="erp-card__head">
                 <span class="fw-semibold">Version {{ v.versionNo }}</span>
-                @if (v.label) { <span class="text-muted small">— {{ v.label }}</span> }
-                <span class="badge ms-1" [class]="statusBadgeClass(v.status)">{{ v.status }}</span>
-                <span class="ms-auto small text-muted">{{ totalLines(v) }} line(s)</span>
+                @if (v.label) { <span class="text-muted small ms-1">— {{ v.label }}</span> }
+                <span class="status-tag ms-2"
+                      [class.status-tag--ok]="v.status === 'APPROVED'"
+                      [class.status-tag--warn]="v.status === 'DRAFT' || v.status === 'SUBMITTED'"
+                      [class.status-tag--danger]="v.status === 'REJECTED'"
+                      [class.status-tag--neutral]="v.status === 'SUPERSEDED'">
+                  {{ v.status }}
+                </span>
+                <span class="spacer"></span>
+                <span class="small text-muted">{{ totalLines(v) }} line(s)</span>
               </div>
-              <div class="card-body">
+              <div class="erp-card__body">
 
                 <!-- Version metadata -->
                 <dl class="row mb-2 small">

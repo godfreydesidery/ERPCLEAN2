@@ -144,12 +144,4 @@ export class FixedAssetListComponent {
   prevPage(): void { if (this.currentPage() > 0) this.load(this.currentPage() - 1); }
   nextPage(): void { if (this.meta().hasNext) this.load(this.currentPage() + 1); }
 
-  statusBadgeClass(status: FixedAssetStatus): string {
-    switch (status) {
-      case 'IN_SERVICE': return 'text-bg-success';
-      case 'DISPOSED': return 'text-bg-secondary';
-      case 'WRITTEN_OFF': return 'text-bg-dark';
-      default: return 'text-bg-warning'; // DRAFT
-    }
-  }
 }

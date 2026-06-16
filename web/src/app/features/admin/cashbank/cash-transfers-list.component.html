@@ -1,23 +1,23 @@
 <section class="admin-page">
-  <header class="page-head d-flex align-items-start justify-content-between flex-wrap gap-2">
-    <div>
-      <h1 class="h4 mb-1">
-        <i class="bi bi-arrow-left-right me-2" aria-hidden="true"></i>Cash Transfers
-      </h1>
-      <p class="text-muted mb-0" style="font-size:0.9rem">Recorded inter-account transfers.</p>
+  <div class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1><i class="bi bi-arrow-left-right me-2" aria-hidden="true"></i>Cash Transfers</h1>
+      <p class="subtitle">Recorded inter-account transfers.</p>
     </div>
-    @if (session.hasPermission('CASH.TRANSFER')) {
-      <a routerLink="/admin/cash/transfers/record" class="btn btn-primary btn-sm">
-        <i class="bi bi-plus-circle me-1" aria-hidden="true"></i>Record Transfer
-      </a>
-    }
-  </header>
+    <div class="erp-page-head__actions">
+      @if (session.hasPermission('CASH.TRANSFER')) {
+        <a routerLink="/admin/cash/transfers/record" class="btn btn-primary btn-sm">
+          <i class="bi bi-plus-circle me-1" aria-hidden="true"></i>Record Transfer
+        </a>
+      }
+    </div>
+  </div>
 
   @if (!canView()) {
-    <p class="text-muted d-flex align-items-center gap-2 mt-3" role="alert">
-      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+    <div class="alert alert-warning" role="alert">
+      <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>
       You don't have permission to view cash transfers.
-    </p>
+    </div>
   } @else {
 
     <!-- Company selector -->
@@ -67,18 +67,21 @@
       }
       @default {
         @if (isEmpty()) {
-          <p class="text-muted fst-italic">No transfers recorded yet.</p>
+          <div class="erp-empty">
+            <i class="bi bi-arrow-left-right"></i>
+            No transfers recorded yet.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Cash transfers</caption>
-              <thead class="table-light">
+              <thead>
                 <tr>
                   <th scope="col">Transfer #</th>
                   <th scope="col">Date</th>
                   <th scope="col">From Account</th>
                   <th scope="col">To Account</th>
-                  <th scope="col" class="text-end">Amount</th>
+                  <th scope="col" class="num">Amount</th>
                   <th scope="col">Ref</th>
                   <th scope="col"><span class="visually-hidden">Actions</span></th>
                 </tr>
@@ -86,19 +89,19 @@
               <tbody>
                 @for (row of rows(); track row.uid) {
                   <tr>
-                    <td class="font-monospace small">{{ row.transferNumber }}</td>
+                    <td class="mono">{{ row.transferNumber }}</td>
                     <td>{{ row.transferDate }}</td>
-                    <td class="small">
+                    <td>
                       <a [routerLink]="['/admin/cash/accounts/uid', row.sourceAccountUid]"
                          class="text-decoration-none">{{ accountName(row.sourceAccountUid) }}</a>
                     </td>
-                    <td class="small">
+                    <td>
                       <a [routerLink]="['/admin/cash/accounts/uid', row.destinationAccountUid]"
                          class="text-decoration-none">{{ accountName(row.destinationAccountUid) }}</a>
                     </td>
-                    <td class="text-end font-monospace">{{ row.currency }} {{ fmtMoney(row.amount) }}</td>
-                    <td class="small">{{ row.reference ?? '—' }}</td>
-                    <td class="text-end">
+                    <td class="num mono">{{ row.currency }} {{ fmtMoney(row.amount) }}</td>
+                    <td>{{ row.reference ?? '—' }}</td>
+                    <td>
                       <a [routerLink]="['/admin/cash/transfers/uid', row.uid]"
                          class="btn btn-outline-secondary btn-sm"
                          [attr.aria-label]="'View transfer ' + row.transferNumber">

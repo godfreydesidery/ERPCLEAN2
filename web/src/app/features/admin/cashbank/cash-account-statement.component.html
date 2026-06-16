@@ -1,49 +1,48 @@
-<section class="container-fluid py-3" aria-label="Cash Account Statement">
-  <h1 class="h4 mb-3">Cash Account Statement</h1>
+<section class="admin-page" aria-label="Cash Account Statement">
+  <div class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>Cash Account Statement</h1>
+      <p class="subtitle">Running transaction history with balance.</p>
+    </div>
+  </div>
 
   @if (!canView()) {
     <div class="alert alert-warning" role="alert">You do not have permission to view statements (CASH.VIEW).</div>
   } @else {
 
     <!-- Selectors -->
-    <div class="row g-3 mb-3">
+    <div class="erp-toolbar">
       @if (companies().length > 1) {
-        <div class="col-12 col-md-4">
-          <label class="form-label" for="stmtCompany">Company</label>
-          <select id="stmtCompany" class="form-select"
-                  [ngModel]="selectedCompanyId()" (ngModelChange)="onCompanyChange($event)">
-            @for (c of companies(); track c.id) {
-              <option [value]="c.id">{{ c.name }}</option>
-            }
-          </select>
-        </div>
-      }
-
-      <div class="col-12 col-md-5">
-        <label class="form-label" for="stmtAccount">Account</label>
-        <select id="stmtAccount" class="form-select"
-                [ngModel]="selectedAccountUid()" (ngModelChange)="onAccountChange($event)">
-          <option value="">— select account —</option>
-          @for (acc of accounts(); track acc.uid) {
-            <option [value]="acc.uid">{{ acc.code }} — {{ acc.name }} ({{ acc.accountType }})</option>
+        <label class="visually-hidden" for="stmtCompany">Company</label>
+        <select id="stmtCompany" class="form-select form-select-sm erp-toolbar__search"
+                [ngModel]="selectedCompanyId()" (ngModelChange)="onCompanyChange($event)">
+          @for (c of companies(); track c.id) {
+            <option [value]="c.id">{{ c.name }}</option>
           }
         </select>
-      </div>
+      }
+
+      <label class="visually-hidden" for="stmtAccount">Account</label>
+      <select id="stmtAccount" class="form-select form-select-sm erp-toolbar__search"
+              [ngModel]="selectedAccountUid()" (ngModelChange)="onAccountChange($event)">
+        <option value="">— select account —</option>
+        @for (acc of accounts(); track acc.uid) {
+          <option [value]="acc.uid">{{ acc.code }} — {{ acc.name }} ({{ acc.accountType }})</option>
+        }
+      </select>
 
       @if (selectedAccountUid()) {
-        <div class="col-auto d-flex align-items-end">
-          <button type="button" class="btn btn-outline-secondary" (click)="refresh()"
-                  [disabled]="state() === 'loading'" aria-label="Refresh statement">
-            <i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Refresh
-          </button>
-        </div>
+        <button type="button" class="btn btn-outline-secondary btn-sm" (click)="refresh()"
+                [disabled]="state() === 'loading'" aria-label="Refresh statement">
+          <i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Refresh
+        </button>
       }
     </div>
 
     <!-- States -->
     @if (state() === 'loading') {
-      <div class="text-center py-5" aria-busy="true">
-        <span class="spinner-border text-primary" role="status" aria-label="Loading statement"></span>
+      <div class="text-center py-5" aria-live="polite">
+        <span class="spinner-border text-primary" aria-label="Loading statement"></span>
       </div>
     } @else if (state() === 'forbidden') {
       <div class="alert alert-warning" role="alert">You do not have permission to view this statement.</div>
@@ -54,66 +53,62 @@
         <button type="button" class="btn btn-sm btn-outline-danger ms-auto" (click)="refresh()">Retry</button>
       </div>
     } @else if (isEmpty()) {
-      <div class="alert alert-info" role="status">Select an account to view its statement.</div>
+      <div class="erp-empty">
+        <i class="bi bi-journal-text"></i>
+        Select an account to view its statement.
+      </div>
     } @else {
 
-      <!-- Balance headline -->
-      <div class="row g-3 mb-3">
-        <div class="col-auto">
-          <div class="card border-0 bg-light">
-            <div class="card-body py-2 px-3">
-              <div class="small text-muted">Current Book Balance</div>
-              <div class="fs-4 fw-bold font-monospace">
-                {{ statement()!.currency }} {{ fmtMoney(currentBalance()) }}
-              </div>
-              <div class="small text-muted">{{ statement()!.accountName }}</div>
-            </div>
-          </div>
+      <!-- Balance KPIs -->
+      <div class="d-flex flex-wrap gap-3 mb-3">
+        <div class="erp-kpi" style="min-width:200px">
+          <div class="erp-kpi__label">Current Book Balance</div>
+          <div class="erp-kpi__value">{{ statement()!.currency }} {{ fmtMoney(currentBalance()) }}</div>
+          <div class="erp-kpi__label" style="margin-top:0.2rem">{{ statement()!.accountName }}</div>
         </div>
 
         <!-- GL Reconciliation indicator -->
-        <div class="col-auto">
-          <div class="card border-0 bg-light">
-            <div class="card-body py-2 px-3">
-              <div class="small text-muted">GL Reconciliation</div>
-              @if (glReconState() === 'loading') {
-                <span class="spinner-border spinner-border-sm text-secondary" aria-label="Loading GL recon"></span>
-              } @else if (glReconState() === 'error') {
-                <span class="badge text-bg-secondary">Unavailable</span>
-              } @else if (glRecon()) {
-                <div class="d-flex align-items-center gap-2">
-                  @if (glReconciled()) {
-                    <span class="badge text-bg-success" role="status" aria-label="Book balance matches GL">
-                      <i class="bi bi-check-circle-fill me-1" aria-hidden="true"></i> In sync
-                    </span>
-                  } @else {
-                    <span class="badge text-bg-danger" role="status" aria-label="Book balance differs from GL">
-                      <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i> Out of sync
-                    </span>
-                  }
-                  <span class="small font-monospace text-muted">Diff: {{ fmtMoney(glDifference()) }}</span>
-                </div>
-                <div class="small text-muted">GL {{ glRecon()!.linkedGlAccountCode }}</div>
+        <div class="erp-kpi" style="min-width:200px">
+          <div class="erp-kpi__label">GL Reconciliation</div>
+          @if (glReconState() === 'loading') {
+            <span class="spinner-border spinner-border-sm text-secondary mt-1" aria-label="Loading GL reconciliation"></span>
+          } @else if (glReconState() === 'error') {
+            <span class="status-tag status-tag--neutral mt-1">Unavailable</span>
+          } @else if (glRecon()) {
+            <div class="d-flex align-items-center gap-2 mt-1">
+              @if (glReconciled()) {
+                <span class="status-tag status-tag--ok" aria-label="Book balance matches GL">
+                  <span class="status-tag__dot"></span>In sync
+                </span>
+              } @else {
+                <span class="status-tag status-tag--danger" aria-label="Book balance differs from GL">
+                  <span class="status-tag__dot"></span>Out of sync
+                </span>
               }
+              <span class="mono" style="font-size:0.8rem;color:var(--erp-text-2)">Diff: {{ fmtMoney(glDifference()) }}</span>
             </div>
-          </div>
+            <div class="erp-kpi__label mt-1">GL {{ glRecon()!.linkedGlAccountCode }}</div>
+          }
         </div>
       </div>
 
       <!-- Transaction list -->
       @if (txnsWithRunning().length === 0) {
-        <div class="alert alert-info" role="status">No transactions on this account.</div>
+        <div class="erp-empty">
+          <i class="bi bi-inbox"></i>
+          No transactions on this account.
+        </div>
       } @else {
-        <div class="table-responsive">
-          <table class="table table-sm align-middle">
+        <div class="erp-table-wrap">
+          <table class="erp-table">
             <caption class="visually-hidden">Account transactions</caption>
-            <thead class="table-light">
+            <thead>
               <tr>
                 <th scope="col">Txn No.</th>
                 <th scope="col">Date</th>
                 <th scope="col">Direction</th>
-                <th scope="col" class="text-end">Amount</th>
-                <th scope="col" class="text-end">Running Balance</th>
+                <th scope="col" class="num">Amount</th>
+                <th scope="col" class="num">Running Balance</th>
                 <th scope="col">Type</th>
                 <th scope="col">Cleared</th>
                 <th scope="col">Memo</th>
@@ -122,25 +117,29 @@
             <tbody>
               @for (txn of txnsWithRunning(); track txn.uid) {
                 <tr>
-                  <td class="font-monospace small">{{ txn.txnNumber }}</td>
-                  <td class="small">{{ txn.txnDate }}</td>
+                  <td class="mono">{{ txn.txnNumber }}</td>
+                  <td>{{ txn.txnDate }}</td>
                   <td>
-                    <span class="badge" [class]="directionBadgeClass(txn.direction)">{{ txn.direction }}</span>
+                    <span class="status-tag"
+                          [class.status-tag--ok]="txn.direction === 'IN'"
+                          [class.status-tag--danger]="txn.direction === 'OUT'">
+                      {{ txn.direction }}
+                    </span>
                   </td>
-                  <td class="text-end font-monospace">{{ fmtMoney(txn.amount) }}</td>
-                  <td class="text-end font-monospace fw-semibold"
-                      [class]="txn.runningBalance >= 0 ? 'text-success' : 'text-danger'">
+                  <td class="num mono">{{ fmtMoney(txn.amount) }}</td>
+                  <td class="num mono fw-semibold"
+                      [style.color]="txn.runningBalance >= 0 ? 'var(--erp-ok)' : 'var(--erp-danger)'">
                     {{ fmtMoney(txn.runningBalance) }}
                   </td>
-                  <td class="small">{{ txn.txnType }}</td>
+                  <td style="font-size:0.82rem">{{ txn.txnType }}</td>
                   <td>
                     @if (txn.cleared) {
-                      <i class="bi bi-check-circle-fill text-success" aria-label="Cleared"></i>
+                      <i role="img" class="bi bi-check-circle-fill" style="color:var(--erp-ok)" aria-label="Cleared" title="Cleared"></i>
                     } @else {
-                      <span class="text-muted small">—</span>
+                      <span style="color:var(--erp-text-3)">—</span>
                     }
                   </td>
-                  <td class="small text-muted">{{ txn.memo ?? '—' }}</td>
+                  <td style="font-size:0.82rem;color:var(--erp-text-2)">{{ txn.memo ?? '—' }}</td>
                 </tr>
               }
             </tbody>

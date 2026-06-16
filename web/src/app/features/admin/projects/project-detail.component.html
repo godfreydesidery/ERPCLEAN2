@@ -1,190 +1,205 @@
 <section class="admin-page">
-  <header class="page-head">
-    <a class="back-link text-muted small" routerLink="/admin/projects">
-      <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Projects
-    </a>
+  <div class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <a class="text-muted small d-block mb-1" routerLink="/admin/projects">
+        <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Projects
+      </a>
 
-    @switch (projectState()) {
-      @case ('loading') {
-        <h1 class="h4 mb-0 mt-1 d-flex align-items-center gap-2" aria-live="polite">
-          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading project…
-        </h1>
-      }
-      @case ('error') {
-        <h1 class="h4 mb-0 mt-1">Project Detail</h1>
-        <p class="text-danger mt-2" role="alert">
-          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
-          Could not load project.
-        </p>
-      }
-      @default {
-        @if (project(); as p) {
-          <h1 class="h4 mb-0 mt-1">
-            <span class="font-monospace text-primary">{{ p.projectNumber }}</span>
-            <span class="text-muted fw-normal ms-2">— {{ p.name }}</span>
+      @switch (projectState()) {
+        @case ('loading') {
+          <h1 class="d-flex align-items-center gap-2" aria-live="polite">
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading project…
           </h1>
-          <div class="d-flex gap-2 mt-2 flex-wrap align-items-center">
-            <span class="badge" [class]="projectStatusBadgeClass(p.projectStatus)">{{ p.projectStatus }}</span>
-            <span class="badge" [class]="masterStatusBadgeClass(p.status)">{{ p.status }}</span>
-
-            @if (canManage()) {
-              <!-- Lifecycle action buttons — only shown when preconditions are met -->
-
-              @if (p.projectStatus === 'DRAFT') {
-                <button type="button" class="btn btn-sm btn-success ms-1"
-                        [disabled]="transitioning()"
-                        (click)="transition('ACTIVE')"
-                        aria-label="Activate project">
-                  @if (transitioning()) {
-                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-                  }
-                  Activate
-                </button>
-              }
-
-              @if (p.projectStatus === 'ACTIVE') {
-                <button type="button" class="btn btn-sm btn-warning ms-1"
-                        [disabled]="transitioning()"
-                        (click)="transition('ON_HOLD')"
-                        aria-label="Put project on hold">
-                  @if (transitioning()) {
-                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-                  }
-                  Hold
-                </button>
-              }
-
-              @if (p.projectStatus === 'ON_HOLD') {
-                <button type="button" class="btn btn-sm btn-success ms-1"
-                        [disabled]="transitioning()"
-                        (click)="transition('ACTIVE')"
-                        aria-label="Resume project">
-                  @if (transitioning()) {
-                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-                  }
-                  Resume
-                </button>
-              }
-
-              @if (p.projectStatus === 'ACTIVE' || p.projectStatus === 'ON_HOLD') {
-                <button type="button" class="btn btn-sm btn-primary ms-1"
-                        [disabled]="transitioning()"
-                        (click)="transition('COMPLETED')"
-                        aria-label="Complete project">
-                  @if (transitioning()) {
-                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-                  }
-                  Complete
-                </button>
-              }
-
-              @if (!isTerminal()) {
-                <button type="button" class="btn btn-sm btn-outline-danger ms-1"
-                        [disabled]="transitioning()"
-                        (click)="transition('CANCELLED')"
-                        aria-label="Cancel project">
-                  @if (transitioning()) {
-                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-                  }
-                  Cancel
-                </button>
-              }
-
-              @if (p.status !== 'ARCHIVED') {
-                <button type="button" class="btn btn-sm btn-outline-secondary ms-1"
-                        [disabled]="archiving()"
-                        (click)="archive()"
-                        aria-label="Archive project">
-                  @if (archiving()) {
-                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-                  }
-                  Archive
-                </button>
-              }
-            }
-          </div>
-
-          @if (saveError(); as msg) {
-            <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+        }
+        @case ('error') {
+          <h1>Project Detail</h1>
+          <p class="text-danger mt-2 mb-0" role="alert">
+            <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+            Could not load project.
+          </p>
+        }
+        @default {
+          @if (project(); as p) {
+            <h1>
+              <span class="mono text-primary">{{ p.projectNumber }}</span>
+              <span class="text-muted fw-normal ms-2">— {{ p.name }}</span>
+            </h1>
           }
         }
       }
+    </div>
+
+    @if (project(); as p) {
+      <div class="erp-page-head__actions flex-wrap align-items-center">
+        <!-- Status pills -->
+        <span class="status-tag"
+          [class.status-tag--warn]="p.projectStatus === 'DRAFT'"
+          [class.status-tag--ok]="p.projectStatus === 'ACTIVE'"
+          [class.status-tag--info]="p.projectStatus === 'ON_HOLD'"
+          [class.status-tag--neutral]="p.projectStatus === 'COMPLETED'"
+          [class.status-tag--danger]="p.projectStatus === 'CANCELLED'">
+          <span class="status-tag__dot" aria-hidden="true"></span>{{ p.projectStatus }}
+        </span>
+        <span class="status-tag"
+          [class.status-tag--ok]="p.status === 'ACTIVE'"
+          [class.status-tag--neutral]="p.status === 'ARCHIVED'"
+          [class.status-tag--warn]="p.status === 'INACTIVE'">
+          {{ p.status }}
+        </span>
+
+        @if (canManage()) {
+          @if (p.projectStatus === 'DRAFT') {
+            <button type="button" class="btn btn-sm btn-success"
+                    [disabled]="transitioning()"
+                    (click)="transition('ACTIVE')">
+              @if (transitioning()) {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+              }
+              Activate
+            </button>
+          }
+
+          @if (p.projectStatus === 'ACTIVE') {
+            <button type="button" class="btn btn-sm btn-warning"
+                    [disabled]="transitioning()"
+                    (click)="transition('ON_HOLD')">
+              @if (transitioning()) {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+              }
+              Hold
+            </button>
+          }
+
+          @if (p.projectStatus === 'ON_HOLD') {
+            <button type="button" class="btn btn-sm btn-success"
+                    [disabled]="transitioning()"
+                    (click)="transition('ACTIVE')">
+              @if (transitioning()) {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+              }
+              Resume
+            </button>
+          }
+
+          @if (p.projectStatus === 'ACTIVE' || p.projectStatus === 'ON_HOLD') {
+            <button type="button" class="btn btn-sm btn-primary"
+                    [disabled]="transitioning()"
+                    (click)="transition('COMPLETED')">
+              @if (transitioning()) {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+              }
+              Complete
+            </button>
+          }
+
+          @if (!isTerminal()) {
+            <button type="button" class="btn btn-sm btn-outline-danger"
+                    [disabled]="transitioning()"
+                    (click)="transition('CANCELLED')">
+              @if (transitioning()) {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+              }
+              Cancel
+            </button>
+          }
+
+          @if (p.status !== 'ARCHIVED') {
+            <button type="button" class="btn btn-sm btn-outline-secondary"
+                    [disabled]="archiving()"
+                    (click)="archive()">
+              @if (archiving()) {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+              }
+              Archive
+            </button>
+          }
+        }
+      </div>
     }
-  </header>
+  </div>
+
+  @if (saveError(); as msg) {
+    <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
+  }
 
   @if (projectState() !== 'loading' && project()) {
     <!-- ── Edit form ─────────────────────────────────────────────────────────── -->
-    <div class="card card-body mb-3">
-      <h2 class="h6 mb-3">Project Details</h2>
-      <form (ngSubmit)="save()" aria-label="Edit project">
-        <div class="row g-3">
-          <div class="col-sm-6">
-            <label class="form-label small text-muted mb-1" for="fName">
-              Name <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="fName" name="fName" type="text" class="form-control"
-                   [ngModel]="fName()" (ngModelChange)="fName.set($event)"
-                   [disabled]="saving() || !canManage()" />
+    <div class="erp-card mb-3">
+      <div class="erp-card__head">
+        <h2>Project Details</h2>
+      </div>
+      <div class="erp-card__body">
+        <form (ngSubmit)="save()" aria-label="Edit project">
+          <div class="erp-form-grid">
+            <div class="erp-field full">
+              <label for="fName">
+                Name <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="fName" name="fName" type="text" class="form-control"
+                     [ngModel]="fName()" (ngModelChange)="fName.set($event)"
+                     [disabled]="saving() || !canManage()" />
+            </div>
+            <div class="erp-field">
+              <label for="fBudget">Budget Amount</label>
+              <input id="fBudget" name="fBudget" type="text" class="form-control"
+                     [ngModel]="fBudget()" (ngModelChange)="fBudget.set($event)"
+                     [disabled]="saving() || !canManage()" autocomplete="off" />
+            </div>
+            <div class="erp-field">
+              <label for="fPlannedStart">Start Date</label>
+              <input id="fPlannedStart" name="fPlannedStart" type="date" class="form-control"
+                     [ngModel]="fPlannedStart()" (ngModelChange)="fPlannedStart.set($event)"
+                     [disabled]="saving() || !canManage()" />
+            </div>
+            <div class="erp-field">
+              <label for="fPlannedEnd">End Date</label>
+              <input id="fPlannedEnd" name="fPlannedEnd" type="date" class="form-control"
+                     [ngModel]="fPlannedEnd()" (ngModelChange)="fPlannedEnd.set($event)"
+                     [disabled]="saving() || !canManage()" />
+            </div>
+            <div class="erp-field full">
+              <label for="fNotes">Notes</label>
+              <input id="fNotes" name="fNotes" type="text" class="form-control"
+                     [ngModel]="fNotes()" (ngModelChange)="fNotes.set($event)"
+                     [disabled]="saving() || !canManage()" autocomplete="off" />
+            </div>
+            <div class="erp-field">
+              <label for="fCustomerUid">Customer (optional)</label>
+              <app-uid-picker id="fCustomerUid" name="fCustomerUid"
+                              [(ngModel)]="fCustomerUid"
+                              [options]="customerOptions()"
+                              placeholder="Select customer" />
+            </div>
+            <div class="erp-field">
+              <label for="fManagerUid">Manager (optional)</label>
+              <app-uid-picker id="fManagerUid" name="fManagerUid"
+                              [(ngModel)]="fManagerUid"
+                              [options]="userOptions()"
+                              placeholder="Select user" />
+            </div>
           </div>
-          <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="fBudget">Budget Amount</label>
-            <input id="fBudget" name="fBudget" type="text" class="form-control"
-                   [ngModel]="fBudget()" (ngModelChange)="fBudget.set($event)"
-                   [disabled]="saving() || !canManage()" autocomplete="off" />
-          </div>
-          <div class="col-sm-2">
-            <label class="form-label small text-muted mb-1" for="fPlannedStart">Start Date</label>
-            <input id="fPlannedStart" name="fPlannedStart" type="date" class="form-control"
-                   [ngModel]="fPlannedStart()" (ngModelChange)="fPlannedStart.set($event)"
-                   [disabled]="saving() || !canManage()" />
-          </div>
-          <div class="col-sm-2">
-            <label class="form-label small text-muted mb-1" for="fPlannedEnd">End Date</label>
-            <input id="fPlannedEnd" name="fPlannedEnd" type="date" class="form-control"
-                   [ngModel]="fPlannedEnd()" (ngModelChange)="fPlannedEnd.set($event)"
-                   [disabled]="saving() || !canManage()" />
-          </div>
-          <div class="col-sm-6">
-            <label class="form-label small text-muted mb-1" for="fNotes">Notes</label>
-            <input id="fNotes" name="fNotes" type="text" class="form-control"
-                   [ngModel]="fNotes()" (ngModelChange)="fNotes.set($event)"
-                   [disabled]="saving() || !canManage()" autocomplete="off" />
-          </div>
-          <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="fCustomerUid">Customer (optional)</label>
-            <app-uid-picker id="fCustomerUid" name="fCustomerUid"
-                            [(ngModel)]="fCustomerUid"
-                            [options]="customerOptions()"
-                            placeholder="Select customer" />
-          </div>
-          <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="fManagerUid">Manager (optional)</label>
-            <app-uid-picker id="fManagerUid" name="fManagerUid"
-                            [(ngModel)]="fManagerUid"
-                            [options]="userOptions()"
-                            placeholder="Select user" />
-          </div>
-        </div>
 
-        @if (canManage()) {
-          <div class="mt-3 d-flex gap-2 align-items-center">
-            <button type="submit" class="btn btn-primary" [disabled]="saving()">
-              @if (saving()) {
-                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                Saving…
-              } @else {
-                Save Changes
-              }
-            </button>
-          </div>
-        }
-      </form>
+          @if (canManage()) {
+            <div class="mt-3 d-flex gap-2 align-items-center">
+              <button type="submit" class="btn btn-primary" [disabled]="saving()">
+                @if (saving()) {
+                  <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                  Saving…
+                } @else {
+                  Save Changes
+                }
+              </button>
+            </div>
+          }
+        </form>
+      </div>
     </div>
 
     <!-- ── Tasks panel ──────────────────────────────────────────────────────── -->
-    <div class="card card-body mb-3">
-      <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 class="h6 mb-0">Tasks</h2>
+    <div class="erp-card mb-3">
+      <div class="erp-card__head">
+        <h2>Tasks</h2>
+        <span class="spacer"></span>
         @if (canTaskManage()) {
           <button type="button" class="btn btn-sm btn-outline-primary"
                   (click)="toggleTaskForm()"
@@ -196,140 +211,158 @@
         }
       </div>
 
-      @if (showTaskForm()) {
-        <form id="taskForm" class="create-form border rounded p-3 mb-3 bg-light"
-              (ngSubmit)="saveTask()" aria-label="Task form">
-          <h3 class="h6 mb-2">{{ editingTaskUid() ? 'Edit Task' : 'New Task' }}</h3>
-          <div class="row g-2 mb-2">
-            <div class="col-sm-3">
-              <label class="form-label small text-muted mb-1" for="tCode">
-                Code <span class="text-danger" aria-hidden="true">*</span>
-              </label>
-              <input id="tCode" name="tCode" type="text" class="form-control form-control-sm"
-                     [ngModel]="tCode()" (ngModelChange)="tCode.set($event)"
-                     [disabled]="savingTask()" autocomplete="off" />
+      <div class="erp-card__body">
+        @if (showTaskForm()) {
+          <form id="taskForm" class="erp-card mb-3"
+                style="background:var(--erp-primary-soft);border-color:var(--erp-primary)"
+                (ngSubmit)="saveTask()" aria-label="Task form">
+            <div class="erp-card__head">
+              <h3>{{ editingTaskUid() ? 'Edit Task' : 'New Task' }}</h3>
             </div>
-            <div class="col-sm-5">
-              <label class="form-label small text-muted mb-1" for="tName">
-                Name <span class="text-danger" aria-hidden="true">*</span>
-              </label>
-              <input id="tName" name="tName" type="text" class="form-control form-control-sm"
-                     [ngModel]="tName()" (ngModelChange)="tName.set($event)"
-                     [disabled]="savingTask()" autocomplete="off" />
-            </div>
-            <div class="col-sm-2">
-              <label class="form-label small text-muted mb-1" for="tHours">Planned Hours</label>
-              <input id="tHours" name="tHours" type="text" class="form-control form-control-sm"
-                     [ngModel]="tHours()" (ngModelChange)="tHours.set($event)"
-                     [disabled]="savingTask()" autocomplete="off" />
-            </div>
-            <div class="col-sm-2 d-flex align-items-end">
-              <div class="form-check mb-1">
-                <input class="form-check-input" type="checkbox" id="tBillable" name="tBillable"
-                       [ngModel]="tBillable()" (ngModelChange)="tBillable.set($event)"
-                       [disabled]="savingTask()" />
-                <label class="form-check-label small" for="tBillable">Billable</label>
+            <div class="erp-card__body">
+              <div class="erp-form-grid">
+                <div class="erp-field">
+                  <label for="tCode">
+                    Code <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <input id="tCode" name="tCode" type="text" class="form-control form-control-sm"
+                         [ngModel]="tCode()" (ngModelChange)="tCode.set($event)"
+                         [disabled]="savingTask()" autocomplete="off" />
+                </div>
+                <div class="erp-field">
+                  <label for="tName">
+                    Name <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <input id="tName" name="tName" type="text" class="form-control form-control-sm"
+                         [ngModel]="tName()" (ngModelChange)="tName.set($event)"
+                         [disabled]="savingTask()" autocomplete="off" />
+                </div>
+                <div class="erp-field">
+                  <label for="tHours">Planned Hours</label>
+                  <input id="tHours" name="tHours" type="text" class="form-control form-control-sm"
+                         [ngModel]="tHours()" (ngModelChange)="tHours.set($event)"
+                         [disabled]="savingTask()" autocomplete="off" />
+                </div>
+                <div class="erp-field" style="justify-content:flex-end">
+                  <div class="form-check mb-1">
+                    <input class="form-check-input" type="checkbox" id="tBillable" name="tBillable"
+                           [ngModel]="tBillable()" (ngModelChange)="tBillable.set($event)"
+                           [disabled]="savingTask()" />
+                    <label class="form-check-label small" for="tBillable">Billable</label>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-          <div class="d-flex gap-2 align-items-center">
-            <button type="submit" class="btn btn-sm btn-primary" [disabled]="savingTask()">
-              @if (savingTask()) {
-                <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-              }
-              {{ editingTaskUid() ? 'Update Task' : 'Create Task' }}
-            </button>
-            <button type="button" class="btn btn-sm btn-outline-secondary"
-                    (click)="toggleTaskForm()">Cancel</button>
-          </div>
-          @if (taskFormError(); as msg) {
-            <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-          }
-        </form>
-      }
-
-      @switch (tasksState()) {
-        @case ('loading') {
-          <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
-            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading tasks…
-          </p>
-        }
-        @case ('error') {
-          <p class="text-danger" role="alert">
-            <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
-            Could not load tasks.
-          </p>
-        }
-        @default {
-          @if (tasks().length === 0) {
-            <p class="text-muted small">No tasks yet.</p>
-          } @else {
-            <div class="table-responsive">
-              <table class="table table-sm table-hover align-middle mb-0">
-                <caption class="visually-hidden">Project tasks</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Code</th>
-                    <th scope="col">Name</th>
-                    <th scope="col" class="text-end">Planned Hours</th>
-                    <th scope="col">Billable</th>
-                    <th scope="col">Status</th>
-                    <th scope="col"><span class="visually-hidden">Actions</span></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (t of tasks(); track t.uid) {
-                    <tr>
-                      <td class="font-monospace small">{{ t.taskCode }}</td>
-                      <td>{{ t.name }}</td>
-                      <td class="text-end small">{{ +t.plannedHours | number:'1.2-2' }}</td>
-                      <td>
-                        @if (t.billable) {
-                          <span class="badge text-bg-info">Billable</span>
-                        } @else {
-                          <span class="badge text-bg-light border">Non-billable</span>
-                        }
-                      </td>
-                      <td><span class="badge" [class]="masterStatusBadgeClass(t.status)">{{ t.status }}</span></td>
-                      <td>
-                        @if (canTaskManage()) {
-                          <div class="d-flex gap-1">
-                            <button type="button" class="btn btn-sm btn-outline-secondary"
-                                    (click)="startEditTask(t)"
-                                    [attr.aria-label]="'Edit task ' + t.taskCode"
-                                    [disabled]="taskRowBusy() === t.uid">
-                              <i class="bi bi-pencil" aria-hidden="true"></i>
-                            </button>
-                            @if (t.status === 'ACTIVE') {
-                              <button type="button" class="btn btn-sm btn-outline-danger"
-                                      (click)="deactivateTask(t)"
-                                      [attr.aria-label]="'Deactivate task ' + t.taskCode"
-                                      [disabled]="taskRowBusy() !== null">
-                                @if (taskRowBusy() === t.uid) {
-                                  <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                                } @else {
-                                  <i class="bi bi-x-lg" aria-hidden="true"></i>
-                                }
-                              </button>
-                            }
-                          </div>
-                        }
-                      </td>
-                    </tr>
+              <div class="mt-3 d-flex gap-2 align-items-center">
+                <button type="submit" class="btn btn-sm btn-primary" [disabled]="savingTask()">
+                  @if (savingTask()) {
+                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
                   }
-                </tbody>
-              </table>
+                  {{ editingTaskUid() ? 'Update Task' : 'Create Task' }}
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="toggleTaskForm()">Cancel</button>
+              </div>
+              @if (taskFormError(); as msg) {
+                <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+              }
             </div>
+          </form>
+        }
+
+        @switch (tasksState()) {
+          @case ('loading') {
+            <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+              <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading tasks…
+            </p>
+          }
+          @case ('error') {
+            <p class="text-danger" role="alert">
+              <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+              Could not load tasks.
+            </p>
+          }
+          @default {
+            @if (tasks().length === 0) {
+              <div class="erp-empty">
+                <i class="bi bi-list-task"></i>
+                No tasks yet.
+              </div>
+            } @else {
+              <div class="erp-table-wrap">
+                <table class="erp-table">
+                  <caption class="visually-hidden">Project tasks</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Code</th>
+                      <th scope="col">Name</th>
+                      <th scope="col" class="num">Planned Hours</th>
+                      <th scope="col">Billable</th>
+                      <th scope="col">Status</th>
+                      <th scope="col"><span class="visually-hidden">Actions</span></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (t of tasks(); track t.uid) {
+                      <tr>
+                        <td class="mono">{{ t.taskCode }}</td>
+                        <td>{{ t.name }}</td>
+                        <td class="num">{{ +t.plannedHours | number:'1.2-2' }}</td>
+                        <td>
+                          @if (t.billable) {
+                            <span class="status-tag status-tag--info">Billable</span>
+                          } @else {
+                            <span class="status-tag status-tag--neutral">Non-billable</span>
+                          }
+                        </td>
+                        <td>
+                          <span class="status-tag"
+                            [class.status-tag--ok]="t.status === 'ACTIVE'"
+                            [class.status-tag--neutral]="t.status === 'ARCHIVED'"
+                            [class.status-tag--warn]="t.status === 'INACTIVE'">
+                            {{ t.status }}
+                          </span>
+                        </td>
+                        <td>
+                          @if (canTaskManage()) {
+                            <div class="d-flex gap-1">
+                              <button type="button" class="btn btn-sm btn-outline-secondary"
+                                      (click)="startEditTask(t)"
+                                      [attr.aria-label]="'Edit task ' + t.taskCode"
+                                      [disabled]="taskRowBusy() === t.uid">
+                                <i class="bi bi-pencil" aria-hidden="true"></i>
+                              </button>
+                              @if (t.status === 'ACTIVE') {
+                                <button type="button" class="btn btn-sm btn-outline-danger"
+                                        (click)="deactivateTask(t)"
+                                        [attr.aria-label]="'Deactivate task ' + t.taskCode"
+                                        [disabled]="taskRowBusy() !== null">
+                                  @if (taskRowBusy() === t.uid) {
+                                    <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                                  } @else {
+                                    <i class="bi bi-x-lg" aria-hidden="true"></i>
+                                  }
+                                </button>
+                              }
+                            </div>
+                          }
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
           }
         }
-      }
+      </div>
     </div>
 
     <!-- ── Timesheets panel ─────────────────────────────────────────────────── -->
     @if (canTimesheetView()) {
-      <div class="card card-body mb-3">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-          <h2 class="h6 mb-0">Timesheets</h2>
+      <div class="erp-card mb-3">
+        <div class="erp-card__head">
+          <h2>Timesheets</h2>
+          <span class="spacer"></span>
           @if (canTimesheetRecord()) {
             <button type="button" class="btn btn-sm btn-outline-primary"
                     (click)="toggleTimesheetForm()"
@@ -341,139 +374,152 @@
           }
         </div>
 
-        @if (showTimesheetForm()) {
-          <form id="timesheetForm" class="create-form border rounded p-3 mb-3 bg-light"
-                (ngSubmit)="recordTimesheet()" aria-label="Record timesheet">
-            <h3 class="h6 mb-2">Record Timesheet</h3>
-            <div class="row g-2 mb-2">
-              <div class="col-sm-3">
-                <label class="form-label small text-muted mb-1" for="tsUserId">
-                  User ID <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <input id="tsUserId" name="tsUserId" type="text" class="form-control form-control-sm"
-                       placeholder="Numeric user ID"
-                       [ngModel]="tsUserId()" (ngModelChange)="tsUserId.set($event)"
-                       [disabled]="savingTs()" autocomplete="off" />
+        <div class="erp-card__body">
+          @if (showTimesheetForm()) {
+            <form id="timesheetForm" class="erp-card mb-3"
+                  style="background:var(--erp-primary-soft);border-color:var(--erp-primary)"
+                  (ngSubmit)="recordTimesheet()" aria-label="Record timesheet">
+              <div class="erp-card__head">
+                <h3>Record Timesheet</h3>
               </div>
-              <div class="col-sm-2">
-                <label class="form-label small text-muted mb-1" for="tsWorkDate">
-                  Work Date <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <input id="tsWorkDate" name="tsWorkDate" type="date" class="form-control form-control-sm"
-                       [ngModel]="tsWorkDate()" (ngModelChange)="tsWorkDate.set($event)"
-                       [disabled]="savingTs()" />
-              </div>
-              <div class="col-sm-2">
-                <label class="form-label small text-muted mb-1" for="tsHours">
-                  Hours <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <input id="tsHours" name="tsHours" type="text" class="form-control form-control-sm"
-                       placeholder="0.00"
-                       [ngModel]="tsHours()" (ngModelChange)="tsHours.set($event)"
-                       [disabled]="savingTs()" autocomplete="off" />
-              </div>
-              <div class="col-sm-2">
-                <label class="form-label small text-muted mb-1" for="tsRate">Rate (optional)</label>
-                <input id="tsRate" name="tsRate" type="text" class="form-control form-control-sm"
-                       placeholder="0.00"
-                       [ngModel]="tsRate()" (ngModelChange)="tsRate.set($event)"
-                       [disabled]="savingTs()" autocomplete="off" />
-              </div>
-              <div class="col-sm-3">
-                <label class="form-label small text-muted mb-1" for="tsTaskUid">Task (optional)</label>
-                <app-uid-picker id="tsTaskUid" name="tsTaskUid"
-                                [(ngModel)]="tsTaskUid"
-                                [options]="taskOptions()"
-                                placeholder="Select task" />
-              </div>
-              <div class="col-sm-4">
-                <label class="form-label small text-muted mb-1" for="tsNotes">Notes</label>
-                <input id="tsNotes" name="tsNotes" type="text" class="form-control form-control-sm"
-                       [ngModel]="tsNotes()" (ngModelChange)="tsNotes.set($event)"
-                       [disabled]="savingTs()" autocomplete="off" />
-              </div>
-              <div class="col-sm-2 d-flex align-items-end">
-                <div class="form-check mb-1">
-                  <input class="form-check-input" type="checkbox" id="tsBillable" name="tsBillable"
-                         [ngModel]="tsBillable()" (ngModelChange)="tsBillable.set($event)"
-                         [disabled]="savingTs()" />
-                  <label class="form-check-label small" for="tsBillable">Billable</label>
+              <div class="erp-card__body">
+                <div class="erp-form-grid">
+                  <div class="erp-field">
+                    <label for="tsUserId">
+                      User ID <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <input id="tsUserId" name="tsUserId" type="text" class="form-control form-control-sm"
+                           placeholder="Numeric user ID"
+                           [ngModel]="tsUserId()" (ngModelChange)="tsUserId.set($event)"
+                           [disabled]="savingTs()" autocomplete="off" />
+                  </div>
+                  <div class="erp-field">
+                    <label for="tsWorkDate">
+                      Work Date <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <input id="tsWorkDate" name="tsWorkDate" type="date" class="form-control form-control-sm"
+                           [ngModel]="tsWorkDate()" (ngModelChange)="tsWorkDate.set($event)"
+                           [disabled]="savingTs()" />
+                  </div>
+                  <div class="erp-field">
+                    <label for="tsHours">
+                      Hours <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <input id="tsHours" name="tsHours" type="text" class="form-control form-control-sm"
+                           placeholder="0.00"
+                           [ngModel]="tsHours()" (ngModelChange)="tsHours.set($event)"
+                           [disabled]="savingTs()" autocomplete="off" />
+                  </div>
+                  <div class="erp-field">
+                    <label for="tsRate">Rate (optional)</label>
+                    <input id="tsRate" name="tsRate" type="text" class="form-control form-control-sm"
+                           placeholder="0.00"
+                           [ngModel]="tsRate()" (ngModelChange)="tsRate.set($event)"
+                           [disabled]="savingTs()" autocomplete="off" />
+                  </div>
+                  <div class="erp-field">
+                    <label for="tsTaskUid">Task (optional)</label>
+                    <app-uid-picker id="tsTaskUid" name="tsTaskUid"
+                                    [(ngModel)]="tsTaskUid"
+                                    [options]="taskOptions()"
+                                    placeholder="Select task" />
+                  </div>
+                  <div class="erp-field">
+                    <label for="tsNotes">Notes</label>
+                    <input id="tsNotes" name="tsNotes" type="text" class="form-control form-control-sm"
+                           [ngModel]="tsNotes()" (ngModelChange)="tsNotes.set($event)"
+                           [disabled]="savingTs()" autocomplete="off" />
+                  </div>
+                  <div class="erp-field" style="justify-content:flex-end">
+                    <div class="form-check mb-1">
+                      <input class="form-check-input" type="checkbox" id="tsBillable" name="tsBillable"
+                             [ngModel]="tsBillable()" (ngModelChange)="tsBillable.set($event)"
+                             [disabled]="savingTs()" />
+                      <label class="form-check-label small" for="tsBillable">Billable</label>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-            <div class="d-flex gap-2">
-              <button type="submit" class="btn btn-sm btn-primary" [disabled]="savingTs()">
-                @if (savingTs()) {
-                  <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-                }
-                Record
-              </button>
-              <button type="button" class="btn btn-sm btn-outline-secondary"
-                      (click)="toggleTimesheetForm()">Cancel</button>
-            </div>
-            @if (tsFormError(); as msg) {
-              <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-            }
-          </form>
-        }
-
-        @switch (tsState()) {
-          @case ('loading') {
-            <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
-              <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading timesheets…
-            </p>
-          }
-          @case ('error') {
-            <p class="text-danger" role="alert">
-              <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
-              Could not load timesheets.
-            </p>
-          }
-          @default {
-            @if (timesheets().length === 0) {
-              <p class="text-muted small">No timesheets recorded.</p>
-            } @else {
-              <div class="table-responsive">
-                <table class="table table-sm table-hover align-middle mb-0">
-                  <caption class="visually-hidden">Project timesheets</caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">Date</th>
-                      <th scope="col">User</th>
-                      <th scope="col" class="text-end">Hours</th>
-                      <th scope="col">Billable</th>
-                      <th scope="col">Notes</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    @for (ts of timesheets(); track ts.uid) {
-                      <tr>
-                        <td class="small">{{ ts.workDate }}</td>
-                        <td class="small">{{ userDisplayName(ts.userId) }}</td>
-                        <td class="text-end small">{{ +ts.hours | number:'1.2-2' }}</td>
-                        <td>
-                          @if (ts.billable) {
-                            <span class="badge text-bg-info">Billable</span>
-                          }
-                        </td>
-                        <td class="small text-muted">{{ ts.notes }}</td>
-                      </tr>
+                <div class="mt-3 d-flex gap-2">
+                  <button type="submit" class="btn btn-sm btn-primary" [disabled]="savingTs()">
+                    @if (savingTs()) {
+                      <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
                     }
-                  </tbody>
-                </table>
+                    Record
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary"
+                          (click)="toggleTimesheetForm()">Cancel</button>
+                </div>
+                @if (tsFormError(); as msg) {
+                  <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+                }
               </div>
-              <app-paginator [meta]="tsMeta()" [label]="'Timesheets'" (pageChange)="goToTsPage($event)" />
+            </form>
+          }
+
+          @switch (tsState()) {
+            @case ('loading') {
+              <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading timesheets…
+              </p>
+            }
+            @case ('error') {
+              <p class="text-danger" role="alert">
+                <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+                Could not load timesheets.
+              </p>
+            }
+            @default {
+              @if (timesheets().length === 0) {
+                <div class="erp-empty">
+                  <i class="bi bi-clock-history"></i>
+                  No timesheets recorded.
+                </div>
+              } @else {
+                <div class="erp-table-wrap">
+                  <table class="erp-table">
+                    <caption class="visually-hidden">Project timesheets</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Date</th>
+                        <th scope="col">User</th>
+                        <th scope="col" class="num">Hours</th>
+                        <th scope="col">Billable</th>
+                        <th scope="col">Notes</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (ts of timesheets(); track ts.uid) {
+                        <tr>
+                          <td class="small">{{ ts.workDate }}</td>
+                          <td class="small">{{ userDisplayName(ts.userId) }}</td>
+                          <td class="num">{{ +ts.hours | number:'1.2-2' }}</td>
+                          <td>
+                            @if (ts.billable) {
+                              <span class="status-tag status-tag--info">Billable</span>
+                            }
+                          </td>
+                          <td class="small text-muted">{{ ts.notes }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+                <div class="erp-tfoot">
+                  <app-paginator [meta]="tsMeta()" [label]="'Timesheets'" (pageChange)="goToTsPage($event)" />
+                </div>
+              }
             }
           }
-        }
+        </div>
       </div>
     }
 
     <!-- ── Issue to Job panel ────────────────────────────────────────────────── -->
     @if (canIssue() && isTaggable()) {
-      <div class="card card-body mb-3">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-          <h2 class="h6 mb-0">Issue Materials to Job</h2>
+      <div class="erp-card mb-3">
+        <div class="erp-card__head">
+          <h2>Issue Materials to Job</h2>
+          <span class="spacer"></span>
           <button type="button" class="btn btn-sm btn-outline-warning"
                   (click)="toggleIssueForm()"
                   [attr.aria-expanded]="showIssueForm()"
@@ -483,107 +529,115 @@
           </button>
         </div>
 
-        @if (lastIssueResult(); as result) {
-          <div class="alert alert-success d-flex align-items-start gap-2 mb-3" role="status">
-            <i class="bi bi-check-circle-fill mt-1" aria-hidden="true"></i>
-            <div>
-              <strong>Issued: {{ result.issueNumber }}</strong>
-              — Total value: {{ result.currency }} {{ +result.totalValue | number:'1.2-2' }}
-              — <a [routerLink]="['/admin/gl/journals/uid', result.cogsGlEntryUid]">View COGS Entry</a>
-            </div>
-          </div>
-        }
-
-        @if (showIssueForm()) {
-          <form id="issueForm" class="create-form border rounded p-3 mb-3 bg-light"
-                (ngSubmit)="submitIssue()" aria-label="Issue materials to project">
-            <h3 class="h6 mb-2">Issue Lines</h3>
-            @for (line of issueLines(); track $index; let i = $index) {
-              <div class="row g-2 mb-2 align-items-end">
-                <div class="col-sm-5">
-                  <label class="form-label small text-muted mb-1" [for]="'lineProduct' + i">
-                    Product <span class="text-danger" aria-hidden="true">*</span>
-                  </label>
-                  <app-uid-picker [id]="'lineProduct' + i" [name]="'lineProduct' + i"
-                                  [ngModel]="line.productUid"
-                                  (ngModelChange)="updateIssueLine(i, 'productUid', $event)"
-                                  [options]="productOptions()"
-                                  placeholder="Select product"
-                                  [required]="true" />
-                </div>
-                <div class="col-sm-3">
-                  <label class="form-label small text-muted mb-1" [for]="'lineQty' + i">
-                    Qty <span class="text-danger" aria-hidden="true">*</span>
-                  </label>
-                  <input [id]="'lineQty' + i" [name]="'lineQty' + i" type="text"
-                         class="form-control form-control-sm"
-                         [ngModel]="line.qty"
-                         (ngModelChange)="updateIssueLine(i, 'qty', $event)"
-                         [disabled]="issuingToJob()" autocomplete="off" />
-                </div>
-                <div class="col-sm-2">
-                  @if (issueLines().length > 1) {
-                    <button type="button" class="btn btn-sm btn-outline-danger w-100"
-                            (click)="removeIssueLine(i)"
-                            [attr.aria-label]="'Remove line ' + (i + 1)"
-                            [disabled]="issuingToJob()">
-                      <i class="bi bi-dash-lg" aria-hidden="true"></i>
-                    </button>
-                  }
-                </div>
-              </div>
-            }
-            <button type="button" class="btn btn-sm btn-outline-secondary mb-3"
-                    (click)="addIssueLine()" [disabled]="issuingToJob()">
-              <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add Line
-            </button>
-
-            <div class="row g-2 mb-2">
-              <div class="col-sm-3">
-                <label class="form-label small text-muted mb-1" for="issueDate">Issue Date (optional)</label>
-                <input id="issueDate" name="issueDate" type="date" class="form-control form-control-sm"
-                       [ngModel]="issueDate()" (ngModelChange)="issueDate.set($event)"
-                       [disabled]="issuingToJob()" />
-              </div>
-              <div class="col-sm-5">
-                <label class="form-label small text-muted mb-1" for="issueReason">Reason (optional)</label>
-                <input id="issueReason" name="issueReason" type="text" class="form-control form-control-sm"
-                       [ngModel]="issueReason()" (ngModelChange)="issueReason.set($event)"
-                       [disabled]="issuingToJob()" autocomplete="off" />
+        <div class="erp-card__body">
+          @if (lastIssueResult(); as result) {
+            <div class="alert alert-success d-flex align-items-start gap-2 mb-3" aria-live="polite">
+              <i class="bi bi-check-circle-fill mt-1" aria-hidden="true"></i>
+              <div>
+                <strong>Issued: {{ result.issueNumber }}</strong>
+                — Total value: {{ result.currency }} {{ +result.totalValue | number:'1.2-2' }}
+                — <a [routerLink]="['/admin/gl/journals/uid', result.cogsGlEntryUid]">View COGS Entry</a>
               </div>
             </div>
+          }
 
-            <div class="d-flex gap-2">
-              <button type="submit" class="btn btn-sm btn-warning" [disabled]="issuingToJob()">
-                @if (issuingToJob()) {
-                  <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-                  Issuing…
-                } @else {
-                  Issue to Job
+          @if (showIssueForm()) {
+            <form id="issueForm" class="erp-card mb-3"
+                  style="background:var(--erp-warn-bg);border-color:var(--erp-warn)"
+                  (ngSubmit)="submitIssue()" aria-label="Issue materials to project">
+              <div class="erp-card__head">
+                <h3>Issue Lines</h3>
+              </div>
+              <div class="erp-card__body">
+                @for (line of issueLines(); track $index; let i = $index) {
+                  <div class="erp-form-grid mb-2">
+                    <div class="erp-field">
+                      <label [for]="'lineProduct' + i">
+                        Product <span class="text-danger" aria-hidden="true">*</span>
+                      </label>
+                      <app-uid-picker [id]="'lineProduct' + i" [name]="'lineProduct' + i"
+                                      [ngModel]="line.productUid"
+                                      (ngModelChange)="updateIssueLine(i, 'productUid', $event)"
+                                      [options]="productOptions()"
+                                      placeholder="Select product"
+                                      [required]="true" />
+                    </div>
+                    <div class="erp-field">
+                      <label [for]="'lineQty' + i">
+                        Qty <span class="text-danger" aria-hidden="true">*</span>
+                      </label>
+                      <div class="d-flex gap-2">
+                        <input [id]="'lineQty' + i" [name]="'lineQty' + i" type="text"
+                               class="form-control form-control-sm"
+                               [ngModel]="line.qty"
+                               (ngModelChange)="updateIssueLine(i, 'qty', $event)"
+                               [disabled]="issuingToJob()" autocomplete="off" />
+                        @if (issueLines().length > 1) {
+                          <button type="button" class="btn btn-sm btn-outline-danger"
+                                  (click)="removeIssueLine(i)"
+                                  [attr.aria-label]="'Remove line ' + (i + 1)"
+                                  [disabled]="issuingToJob()">
+                            <i class="bi bi-dash-lg" aria-hidden="true"></i>
+                          </button>
+                        }
+                      </div>
+                    </div>
+                  </div>
                 }
-              </button>
-              <button type="button" class="btn btn-sm btn-outline-secondary"
-                      (click)="toggleIssueForm()">Cancel</button>
-            </div>
-            @if (issueFormError(); as msg) {
-              <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-            }
-          </form>
-        }
+
+                <button type="button" class="btn btn-sm btn-outline-secondary mb-3"
+                        (click)="addIssueLine()" [disabled]="issuingToJob()">
+                  <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add Line
+                </button>
+
+                <div class="erp-form-grid mb-3">
+                  <div class="erp-field">
+                    <label for="issueDate">Issue Date (optional)</label>
+                    <input id="issueDate" name="issueDate" type="date" class="form-control form-control-sm"
+                           [ngModel]="issueDate()" (ngModelChange)="issueDate.set($event)"
+                           [disabled]="issuingToJob()" />
+                  </div>
+                  <div class="erp-field">
+                    <label for="issueReason">Reason (optional)</label>
+                    <input id="issueReason" name="issueReason" type="text" class="form-control form-control-sm"
+                           [ngModel]="issueReason()" (ngModelChange)="issueReason.set($event)"
+                           [disabled]="issuingToJob()" autocomplete="off" />
+                  </div>
+                </div>
+
+                <div class="d-flex gap-2">
+                  <button type="submit" class="btn btn-sm btn-warning" [disabled]="issuingToJob()">
+                    @if (issuingToJob()) {
+                      <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                      Issuing…
+                    } @else {
+                      Issue to Job
+                    }
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary"
+                          (click)="toggleIssueForm()">Cancel</button>
+                </div>
+                @if (issueFormError(); as msg) {
+                  <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+                }
+              </div>
+            </form>
+          }
+        </div>
       </div>
     }
 
     <!-- ── P&L Report ───────────────────────────────────────────────────────── -->
     @if (canCosting()) {
-      <div class="card card-body mb-3">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-          <h2 class="h6 mb-0">Project P&amp;L Report</h2>
-          <button type="button" class="btn btn-sm btn-outline-info"
+      <div class="erp-card mb-3">
+        <div class="erp-card__head">
+          <h2>Project P&amp;L Report</h2>
+          <span class="spacer"></span>
+          <button type="button" class="btn btn-sm btn-outline-primary"
                   (click)="loadPnl()"
-                  [disabled]="pnlState() === 'loading'"
-                  aria-label="Load P&L report">
+                  [disabled]="pnlState() === 'loading'">
             @if (pnlState() === 'loading') {
-              <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+              <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
               Loading…
             } @else {
               <i class="bi bi-graph-up me-1" aria-hidden="true"></i>Load P&amp;L
@@ -591,115 +645,125 @@
           </button>
         </div>
 
-        @if (pnlState() === 'error') {
-          <p class="text-danger" role="alert">
-            <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
-            Could not load P&amp;L report.
-          </p>
-        }
-
-        @if (pnl(); as data) {
-          <div class="row g-3 mb-3">
-            <div class="col-sm-3">
-              <div class="border rounded p-2 text-center">
-                <div class="small text-muted">Revenue</div>
-                <div class="fw-bold font-monospace">{{ data.currency }} {{ +data.revenue | number:'1.2-2' }}</div>
-              </div>
-            </div>
-            <div class="col-sm-3">
-              <div class="border rounded p-2 text-center">
-                <div class="small text-muted">Total Cost</div>
-                <div class="fw-bold font-monospace">{{ data.currency }} {{ +data.totalCost | number:'1.2-2' }}</div>
-              </div>
-            </div>
-            <div class="col-sm-3">
-              <div class="border rounded p-2 text-center">
-                <div class="small text-muted">Margin</div>
-                <div class="fw-bold font-monospace"
-                     [class.text-success]="+data.margin >= 0"
-                     [class.text-danger]="+data.margin < 0">
-                  {{ data.currency }} {{ +data.margin | number:'1.2-2' }}
-                </div>
-              </div>
-            </div>
-            <div class="col-sm-3">
-              <div class="border rounded p-2 text-center">
-                <div class="small text-muted">WIP (unbooked)</div>
-                <div class="fw-bold font-monospace">{{ data.currency }} {{ +data.wip | number:'1.2-2' }}</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Budget variance -->
-          <div class="row g-3 mb-3">
-            <div class="col-sm-4">
-              <div class="border rounded p-2 text-center">
-                <div class="small text-muted">Budget</div>
-                <div class="fw-bold font-monospace">{{ data.currency }} {{ +data.budget | number:'1.2-2' }}</div>
-              </div>
-            </div>
-            <div class="col-sm-4">
-              <div class="border rounded p-2 text-center">
-                <div class="small text-muted">Budget Variance</div>
-                <div class="fw-bold font-monospace"
-                     [class.text-success]="+data.budgetVariance >= 0"
-                     [class.text-danger]="+data.budgetVariance < 0">
-                  {{ data.currency }} {{ +data.budgetVariance | number:'1.2-2' }}
-                </div>
-              </div>
-            </div>
-            <div class="col-sm-4">
-              <div class="border rounded p-2 text-center">
-                <div class="small text-muted">Margin %</div>
-                <div class="fw-bold">{{ +data.marginPct | number:'1.2-2' }}%</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Cost by type -->
-          @if (data.costByType.length > 0) {
-            <h3 class="h6 mb-2">Cost by Type</h3>
-            <div class="table-responsive mb-3">
-              <table class="table table-sm align-middle mb-0">
-                <caption class="visually-hidden">Cost breakdown by type</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Cost Type</th>
-                    <th scope="col" class="text-end">Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (row of data.costByType; track row.costType) {
-                    <tr>
-                      <td><span class="badge" [class]="costTypeBadgeClass(row.costType)">{{ row.costType }}</span></td>
-                      <td class="text-end font-monospace small">{{ data.currency }} {{ +row.amount | number:'1.2-2' }}</td>
-                    </tr>
-                  }
-                </tbody>
-              </table>
-            </div>
+        <div class="erp-card__body">
+          @if (pnlState() === 'error') {
+            <p class="text-danger" role="alert">
+              <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+              Could not load P&amp;L report.
+            </p>
           }
 
-          <!-- Reconciliation check -->
-          <div class="alert d-flex align-items-start gap-2"
-               [class.alert-success]="data.recon.balanced"
-               [class.alert-danger]="!data.recon.balanced"
-               role="status">
-            @if (data.recon.balanced) {
-              <i class="bi bi-check-circle-fill mt-1" aria-hidden="true"></i>
-              <div><strong>Reconciliation OK</strong> — GL figures match computed figures.</div>
-            } @else {
-              <i class="bi bi-exclamation-triangle-fill mt-1" aria-hidden="true"></i>
-              <div>
-                <strong>Reconciliation MISMATCH</strong> — computed revenue {{ data.currency }} {{ +data.recon.computedRevenue | number:'1.2-2' }}
-                vs GL revenue {{ data.currency }} {{ +data.recon.glRevenue | number:'1.2-2' }};
-                computed cost {{ data.currency }} {{ +data.recon.computedCost | number:'1.2-2' }}
-                vs GL cost {{ data.currency }} {{ +data.recon.glCost | number:'1.2-2' }}.
-                This is a system defect — please contact support.
+          @if (pnl(); as data) {
+            <!-- KPI row 1: revenue / cost / margin / WIP -->
+            <div class="row g-3 mb-3">
+              <div class="col-sm-3">
+                <div class="erp-kpi">
+                  <div class="erp-kpi__label">Revenue</div>
+                  <div class="erp-kpi__value">{{ data.currency }} {{ +data.revenue | number:'1.2-2' }}</div>
+                </div>
+              </div>
+              <div class="col-sm-3">
+                <div class="erp-kpi">
+                  <div class="erp-kpi__label">Total Cost</div>
+                  <div class="erp-kpi__value">{{ data.currency }} {{ +data.totalCost | number:'1.2-2' }}</div>
+                </div>
+              </div>
+              <div class="col-sm-3">
+                <div class="erp-kpi">
+                  <div class="erp-kpi__label">Margin</div>
+                  <div class="erp-kpi__value"
+                       [class.text-success]="+data.margin >= 0"
+                       [class.text-danger]="+data.margin < 0">
+                    {{ data.currency }} {{ +data.margin | number:'1.2-2' }}
+                  </div>
+                  <div class="erp-kpi__delta"
+                       [class.erp-kpi__delta--up]="+data.marginPct >= 0"
+                       [class.erp-kpi__delta--down]="+data.marginPct < 0">
+                    {{ +data.marginPct | number:'1.2-2' }}%
+                  </div>
+                </div>
+              </div>
+              <div class="col-sm-3">
+                <div class="erp-kpi">
+                  <div class="erp-kpi__label">WIP (unbooked)</div>
+                  <div class="erp-kpi__value">{{ data.currency }} {{ +data.wip | number:'1.2-2' }}</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- KPI row 2: budget / variance -->
+            <div class="row g-3 mb-3">
+              <div class="col-sm-4">
+                <div class="erp-kpi">
+                  <div class="erp-kpi__label">Budget</div>
+                  <div class="erp-kpi__value">{{ data.currency }} {{ +data.budget | number:'1.2-2' }}</div>
+                </div>
+              </div>
+              <div class="col-sm-4">
+                <div class="erp-kpi">
+                  <div class="erp-kpi__label">Budget Variance</div>
+                  <div class="erp-kpi__value"
+                       [class.text-success]="+data.budgetVariance >= 0"
+                       [class.text-danger]="+data.budgetVariance < 0">
+                    {{ data.currency }} {{ +data.budgetVariance | number:'1.2-2' }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Cost by type -->
+            @if (data.costByType.length > 0) {
+              <p class="erp-section-title">Cost by Type</p>
+              <div class="erp-table-wrap mb-3">
+                <table class="erp-table">
+                  <caption class="visually-hidden">Cost breakdown by type</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Cost Type</th>
+                      <th scope="col" class="num">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (row of data.costByType; track row.costType) {
+                      <tr>
+                        <td>
+                          <span class="status-tag"
+                            [class.status-tag--info]="row.costType === 'MATERIAL'"
+                            [class.status-tag--ok]="row.costType === 'LABOUR'"
+                            [class.status-tag--warn]="row.costType === 'SUBCONTRACT'"
+                            [class.status-tag--neutral]="row.costType === 'OVERHEAD' || row.costType === 'OTHER'">
+                            {{ row.costType }}
+                          </span>
+                        </td>
+                        <td class="num">{{ data.currency }} {{ +row.amount | number:'1.2-2' }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
               </div>
             }
-          </div>
-        }
+
+            <!-- Reconciliation check -->
+            <div class="alert d-flex align-items-start gap-2"
+                 [class.alert-success]="data.recon.balanced"
+                 [class.alert-danger]="!data.recon.balanced"
+                 role="alert">
+              @if (data.recon.balanced) {
+                <i class="bi bi-check-circle-fill mt-1" aria-hidden="true"></i>
+                <div><strong>Reconciliation OK</strong> — GL figures match computed figures.</div>
+              } @else {
+                <i class="bi bi-exclamation-triangle-fill mt-1" aria-hidden="true"></i>
+                <div>
+                  <strong>Reconciliation MISMATCH</strong> — computed revenue {{ data.currency }} {{ +data.recon.computedRevenue | number:'1.2-2' }}
+                  vs GL revenue {{ data.currency }} {{ +data.recon.glRevenue | number:'1.2-2' }};
+                  computed cost {{ data.currency }} {{ +data.recon.computedCost | number:'1.2-2' }}
+                  vs GL cost {{ data.currency }} {{ +data.recon.glCost | number:'1.2-2' }}.
+                  This is a system defect — please contact support.
+                </div>
+              }
+            </div>
+          }
+        </div>
       </div>
     }
   }

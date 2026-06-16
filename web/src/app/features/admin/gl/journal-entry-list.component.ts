@@ -9,7 +9,7 @@ import { SessionStore } from '../../../core/auth/session.store';
 import { Company } from '../models/company.model';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
-import { JournalEntryDto, JournalSourceType } from './models/gl.model';
+import { JournalEntryDto } from './models/gl.model';
 import { GlService } from './gl.service';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
@@ -120,15 +120,4 @@ export class JournalEntryListComponent {
     return total.toFixed(2);
   }
 
-  sourceBadgeClass(sourceType: JournalSourceType): string {
-    switch (sourceType) {
-      case 'MANUAL': return 'text-bg-primary';
-      case 'SALES': return 'text-bg-success';
-      case 'SALES_REVERSAL': return 'text-bg-warning';
-      case 'OPENING_BALANCE': return 'text-bg-info';
-      case 'PURCHASE': return 'text-bg-secondary';
-      case 'PURCHASE_REVERSAL': return 'text-bg-warning';
-      default: return 'text-bg-light border';
-    }
-  }
 }

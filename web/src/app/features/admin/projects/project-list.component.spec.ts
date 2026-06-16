@@ -7,7 +7,7 @@
  *  3. create() validation: requires name.
  *  4. create() calls projectsService.create with correct payload.
  *  5. 403 response sets state to 'forbidden'.
- *  6. statusBadgeClass returns correct badge class per ProjectStatus.
+ *  6. Template renders correct status-tag--* class per ProjectStatus value.
  */
 import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -158,47 +158,60 @@ describe('ProjectListComponent — create form validation', () => {
   });
 });
 
-// ── Status badge class ──────────────────────────────────────────────────────────
+// ── Status-tag class per ProjectStatus (template binding) ─────────────────────
+//
+// statusBadgeClass() was removed; coverage is now on the template's additive
+// [class.status-tag--*] bindings.  Each case loads one row with the target
+// projectStatus and asserts the pill element carries the expected modifier class.
 
-describe('ProjectListComponent — statusBadgeClass', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    makeBed();
-  });
+type ProjectStatus = 'DRAFT' | 'ACTIVE' | 'ON_HOLD' | 'COMPLETED' | 'CANCELLED';
+
+function makeProjectRow(projectStatus: ProjectStatus) {
+  return {
+    uid: 'P1', id: '1', companyId: '10', branchId: '1',
+    projectNumber: 'PRJ-0001', name: 'Test Project',
+    customerId: '', managerUserId: '',
+    projectStatus,
+    plannedStartDate: '2025-01-01', plannedEndDate: '2025-12-31',
+    budgetAmount: '100000', currency: 'TZS',
+    notes: '', status: 'ACTIVE' as const,
+    activatedAt: null, completedAt: null, cancelledAt: null,
+  };
+}
+
+const statusTagCases: Array<{ projectStatus: ProjectStatus; expectedClass: string }> = [
+  { projectStatus: 'DRAFT',     expectedClass: 'status-tag--warn'    },
+  { projectStatus: 'ACTIVE',    expectedClass: 'status-tag--ok'      },
+  { projectStatus: 'ON_HOLD',   expectedClass: 'status-tag--info'    },
+  { projectStatus: 'COMPLETED', expectedClass: 'status-tag--neutral' },
+  { projectStatus: 'CANCELLED', expectedClass: 'status-tag--danger'  },
+];
+
+describe('ProjectListComponent — status-tag template bindings', () => {
   afterEach(() => {
     vi.useRealTimers();
     TestBed.resetTestingModule();
   });
 
-  it('DRAFT → text-bg-secondary', async () => {
-    const comp = TestBed.createComponent(ProjectListComponent).componentInstance;
-    await vi.runAllTimersAsync();
-    expect(comp.statusBadgeClass('DRAFT')).toBe('text-bg-secondary');
-  });
+  for (const { projectStatus, expectedClass } of statusTagCases) {
+    it(`${projectStatus} → .${expectedClass} on status-tag span`, async () => {
+      vi.useFakeTimers();
+      makeBed({
+        listImpl: () => of({
+          rows: [makeProjectRow(projectStatus)],
+          meta: { page: 0, size: 20, totalElements: 1, totalPages: 1, hasNext: false },
+        }),
+      });
 
-  it('ACTIVE → text-bg-success', async () => {
-    const comp = TestBed.createComponent(ProjectListComponent).componentInstance;
-    await vi.runAllTimersAsync();
-    expect(comp.statusBadgeClass('ACTIVE')).toBe('text-bg-success');
-  });
+      const fixture = TestBed.createComponent(ProjectListComponent);
+      await vi.runAllTimersAsync();
+      fixture.detectChanges();
 
-  it('ON_HOLD → text-bg-warning', async () => {
-    const comp = TestBed.createComponent(ProjectListComponent).componentInstance;
-    await vi.runAllTimersAsync();
-    expect(comp.statusBadgeClass('ON_HOLD')).toBe('text-bg-warning');
-  });
-
-  it('COMPLETED → text-bg-primary', async () => {
-    const comp = TestBed.createComponent(ProjectListComponent).componentInstance;
-    await vi.runAllTimersAsync();
-    expect(comp.statusBadgeClass('COMPLETED')).toBe('text-bg-primary');
-  });
-
-  it('CANCELLED → text-bg-danger', async () => {
-    const comp = TestBed.createComponent(ProjectListComponent).componentInstance;
-    await vi.runAllTimersAsync();
-    expect(comp.statusBadgeClass('CANCELLED')).toBe('text-bg-danger');
-  });
+      const pill: HTMLElement | null = fixture.nativeElement.querySelector('.status-tag');
+      expect(pill).not.toBeNull();
+      expect(pill!.classList.contains(expectedClass)).toBe(true);
+    });
+  }
 });
 
 // ── 403 forbidden ──────────────────────────────────────────────────────────────

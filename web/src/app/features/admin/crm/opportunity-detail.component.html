@@ -7,20 +7,25 @@
     </nav>
     @if (opp(); as o) {
       <h1 class="h4 mb-1 mt-1">{{ o.title }}
-        <span class="badge ms-2 align-middle" [class]="statusBadgeClass(o.opportunityStatus)">{{ o.opportunityStatus }}</span>
+        <span class="status-tag ms-2 align-middle"
+              [class.status-tag--warn]="o.opportunityStatus === 'OPEN'"
+              [class.status-tag--ok]="o.opportunityStatus === 'WON'"
+              [class.status-tag--danger]="o.opportunityStatus === 'LOST'">
+          {{ o.opportunityStatus }}
+        </span>
       </h1>
-      <p class="text-muted mb-0 small">{{ o.opportunityNumber }} · Stage: {{ stageName(o.pipelineStageId) }} · {{ o.currency }} {{ +o.estimatedValueAmount | number:'1.2-2' }}</p>
+      <p class="subtitle">{{ o.opportunityNumber }} · Stage: {{ stageName(o.pipelineStageId) }} · {{ o.currency }} {{ +o.estimatedValueAmount | number:'1.2-2' }}</p>
     }
   </header>
 
   @switch (oppState()) {
     @case ('loading') {
-      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+      <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
         <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading opportunity…
       </p>
     }
     @case ('error') {
-      <p class="state text-danger" role="alert">
+      <p class="text-danger" role="alert">
         <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
         Could not load opportunity.
       </p>
@@ -73,149 +78,165 @@
 
         <!-- Advance Stage form -->
         @if (showAdvanceForm()) {
-          <div id="advanceForm" class="card card-body mb-4">
-            <h2 class="h6 mb-3">Advance Pipeline Stage</h2>
-            <div class="row g-2 mb-2">
-              <div class="col-sm-4">
-                <label class="form-label small text-muted mb-1" for="advanceStageUid">
-                  Target Stage <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <select id="advanceStageUid" name="advanceStageUid" class="form-select"
-                        [ngModel]="advanceStageUid()" (ngModelChange)="advanceStageUid.set($event)"
-                        [disabled]="advancing()">
-                  @if (stages().length === 0) {
-                    <option value="">— no active stages —</option>
-                  }
-                  @for (s of stages(); track s.uid) {
-                    <option [value]="s.uid">{{ s.name }}</option>
-                  }
-                </select>
-              </div>
-              <div class="col-sm-3">
-                <label class="form-label small text-muted mb-1" for="advanceProbOverride">Win % override (optional)</label>
-                <input id="advanceProbOverride" name="advanceProbOverride" type="number" class="form-control"
-                       placeholder="uses stage default" min="0" max="100" step="1"
-                       [ngModel]="advanceProbOverride()" (ngModelChange)="advanceProbOverride.set($event)"
-                       [disabled]="advancing()" />
-              </div>
+          <div id="advanceForm" class="erp-card mb-4">
+            <div class="erp-card__head">
+              <h2 class="h6 mb-0">Advance Pipeline Stage</h2>
             </div>
-            @if (advanceError(); as msg) {
-              <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
-            }
-            <div class="d-flex gap-2">
-              <button type="button" class="btn btn-primary" [disabled]="advancing()" (click)="advanceStage()">
-                @if (advancing()) {
-                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                }
-                Advance Stage
-              </button>
-              <button type="button" class="btn btn-outline-secondary" (click)="toggleAdvanceForm()">Cancel</button>
+            <div class="erp-card__body">
+              <div class="row g-2 mb-2">
+                <div class="col-sm-4">
+                  <label class="form-label small text-muted mb-1" for="advanceStageUid">
+                    Target Stage <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <select id="advanceStageUid" name="advanceStageUid" class="form-select"
+                          [ngModel]="advanceStageUid()" (ngModelChange)="advanceStageUid.set($event)"
+                          [disabled]="advancing()">
+                    @if (stages().length === 0) {
+                      <option value="">— no active stages —</option>
+                    }
+                    @for (s of stages(); track s.uid) {
+                      <option [value]="s.uid">{{ s.name }}</option>
+                    }
+                  </select>
+                </div>
+                <div class="col-sm-3">
+                  <label class="form-label small text-muted mb-1" for="advanceProbOverride">Win % override (optional)</label>
+                  <input id="advanceProbOverride" name="advanceProbOverride" type="number" class="form-control"
+                         placeholder="uses stage default" min="0" max="100" step="1"
+                         [ngModel]="advanceProbOverride()" (ngModelChange)="advanceProbOverride.set($event)"
+                         [disabled]="advancing()" />
+                </div>
+              </div>
+              @if (advanceError(); as msg) {
+                <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
+              }
+              <div class="d-flex gap-2">
+                <button type="button" class="btn btn-primary" [disabled]="advancing()" (click)="advanceStage()">
+                  @if (advancing()) {
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  }
+                  Advance Stage
+                </button>
+                <button type="button" class="btn btn-outline-secondary" (click)="toggleAdvanceForm()">Cancel</button>
+              </div>
             </div>
           </div>
         }
 
         <!-- Win form -->
         @if (showWinForm()) {
-          <div id="winForm" class="card card-body mb-4 border-success">
-            <h2 class="h6 mb-3 text-success">Mark Opportunity Won</h2>
-            <div class="mb-3" style="max-width:280px">
-              <label class="form-label small text-muted mb-1" for="winWonAt">Won At (defaults to now)</label>
-              <input id="winWonAt" name="winWonAt" type="datetime-local" class="form-control"
-                     [ngModel]="winWonAt()" (ngModelChange)="winWonAt.set($event)"
-                     [disabled]="winning()" />
+          <div id="winForm" class="erp-card mb-4 border-success">
+            <div class="erp-card__head">
+              <h2 class="h6 mb-0 text-success">Mark Opportunity Won</h2>
             </div>
-            @if (winError(); as msg) {
-              <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
-            }
-            <div class="d-flex gap-2">
-              <button type="button" class="btn btn-success" [disabled]="winning()" (click)="win()">
-                @if (winning()) {
-                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                }
-                Confirm Won
-              </button>
-              <button type="button" class="btn btn-outline-secondary" (click)="toggleWinForm()">Cancel</button>
+            <div class="erp-card__body">
+              <div class="mb-3" style="max-width:280px">
+                <label class="form-label small text-muted mb-1" for="winWonAt">Won At (defaults to now)</label>
+                <input id="winWonAt" name="winWonAt" type="datetime-local" class="form-control"
+                       [ngModel]="winWonAt()" (ngModelChange)="winWonAt.set($event)"
+                       [disabled]="winning()" />
+              </div>
+              @if (winError(); as msg) {
+                <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
+              }
+              <div class="d-flex gap-2">
+                <button type="button" class="btn btn-success" [disabled]="winning()" (click)="win()">
+                  @if (winning()) {
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  }
+                  Confirm Won
+                </button>
+                <button type="button" class="btn btn-outline-secondary" (click)="toggleWinForm()">Cancel</button>
+              </div>
             </div>
           </div>
         }
 
         <!-- Lose form -->
         @if (showLoseForm()) {
-          <div id="loseForm" class="card card-body mb-4 border-danger">
-            <h2 class="h6 mb-3 text-danger">Mark Opportunity Lost</h2>
-            <div class="mb-3" style="max-width:480px">
-              <label class="form-label small text-muted mb-1" for="loseLossReason">
-                Loss Reason <span class="text-danger" aria-hidden="true">*</span>
-              </label>
-              <input id="loseLossReason" name="loseLossReason" type="text" class="form-control"
-                     placeholder="Why was this opportunity lost?"
-                     [ngModel]="loseLossReason()" (ngModelChange)="loseLossReason.set($event)"
-                     [disabled]="losing()" autocomplete="off" />
+          <div id="loseForm" class="erp-card mb-4 border-danger">
+            <div class="erp-card__head">
+              <h2 class="h6 mb-0 text-danger">Mark Opportunity Lost</h2>
             </div>
-            @if (loseError(); as msg) {
-              <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
-            }
-            <div class="d-flex gap-2">
-              <button type="button" class="btn btn-danger" [disabled]="losing()" (click)="lose()">
-                @if (losing()) {
-                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                }
-                Confirm Lost
-              </button>
-              <button type="button" class="btn btn-outline-secondary" (click)="toggleLoseForm()">Cancel</button>
+            <div class="erp-card__body">
+              <div class="mb-3" style="max-width:480px">
+                <label class="form-label small text-muted mb-1" for="loseLossReason">
+                  Loss Reason <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="loseLossReason" name="loseLossReason" type="text" class="form-control"
+                       placeholder="Why was this opportunity lost?"
+                       [ngModel]="loseLossReason()" (ngModelChange)="loseLossReason.set($event)"
+                       [disabled]="losing()" autocomplete="off" />
+              </div>
+              @if (loseError(); as msg) {
+                <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
+              }
+              <div class="d-flex gap-2">
+                <button type="button" class="btn btn-danger" [disabled]="losing()" (click)="lose()">
+                  @if (losing()) {
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  }
+                  Confirm Lost
+                </button>
+                <button type="button" class="btn btn-outline-secondary" (click)="toggleLoseForm()">Cancel</button>
+              </div>
             </div>
           </div>
         }
 
         <!-- Convert form -->
         @if (showConvertForm()) {
-          <div id="convertForm" class="card card-body mb-4 border-success">
-            <h2 class="h6 mb-3">Convert to Sales Document</h2>
-            @if (convertResult(); as result) {
-              <div class="alert alert-success d-flex align-items-center gap-2">
-                <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
-                Converted to {{ result.convertedDocumentKind }}
-                @if (result.convertedDocumentNumber) {
-                  <strong>{{ result.convertedDocumentNumber }}</strong>
-                }
-                <button type="button" class="btn btn-sm btn-outline-success ms-2"
-                        (click)="navigateToDocument(result)">
-                  View Document
-                </button>
-              </div>
-            } @else {
-              <div class="row g-2 mb-3">
-                <div class="col-sm-3">
-                  <label class="form-label small text-muted mb-1" for="convertTarget">Convert To</label>
-                  <select id="convertTarget" name="convertTarget" class="form-select"
-                          [ngModel]="convertTarget()" (ngModelChange)="convertTarget.set($event)"
-                          [disabled]="converting()">
-                    <option value="QUOTATION">Quotation</option>
-                    <option value="SALES_ORDER">Sales Order (requires WON)</option>
-                  </select>
-                </div>
-                @if (convertTarget() === 'QUOTATION') {
-                  <div class="col-sm-3">
-                    <label class="form-label small text-muted mb-1" for="convertValidUntil">Valid Until (optional)</label>
-                    <input id="convertValidUntil" name="convertValidUntil" type="date" class="form-control"
-                           [ngModel]="convertValidUntil()" (ngModelChange)="convertValidUntil.set($event)"
-                           [disabled]="converting()" />
-                  </div>
-                }
-              </div>
-              @if (convertError(); as msg) {
-                <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
-              }
-              <div class="d-flex gap-2">
-                <button type="button" class="btn btn-success" [disabled]="converting()" (click)="convert()">
-                  @if (converting()) {
-                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+          <div id="convertForm" class="erp-card mb-4 border-success">
+            <div class="erp-card__head">
+              <h2 class="h6 mb-0">Convert to Sales Document</h2>
+            </div>
+            <div class="erp-card__body">
+              @if (convertResult(); as result) {
+                <div class="alert alert-success d-flex align-items-center gap-2">
+                  <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
+                  Converted to {{ result.convertedDocumentKind }}
+                  @if (result.convertedDocumentNumber) {
+                    <strong>{{ result.convertedDocumentNumber }}</strong>
                   }
-                  Convert
-                </button>
-                <button type="button" class="btn btn-outline-secondary" (click)="toggleConvertForm()">Cancel</button>
-              </div>
-            }
+                  <button type="button" class="btn btn-sm btn-outline-success ms-2"
+                          (click)="navigateToDocument(result)">
+                    View Document
+                  </button>
+                </div>
+              } @else {
+                <div class="row g-2 mb-3">
+                  <div class="col-sm-3">
+                    <label class="form-label small text-muted mb-1" for="convertTarget">Convert To</label>
+                    <select id="convertTarget" name="convertTarget" class="form-select"
+                            [ngModel]="convertTarget()" (ngModelChange)="convertTarget.set($event)"
+                            [disabled]="converting()">
+                      <option value="QUOTATION">Quotation</option>
+                      <option value="SALES_ORDER">Sales Order (requires WON)</option>
+                    </select>
+                  </div>
+                  @if (convertTarget() === 'QUOTATION') {
+                    <div class="col-sm-3">
+                      <label class="form-label small text-muted mb-1" for="convertValidUntil">Valid Until (optional)</label>
+                      <input id="convertValidUntil" name="convertValidUntil" type="date" class="form-control"
+                             [ngModel]="convertValidUntil()" (ngModelChange)="convertValidUntil.set($event)"
+                             [disabled]="converting()" />
+                    </div>
+                  }
+                </div>
+                @if (convertError(); as msg) {
+                  <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
+                }
+                <div class="d-flex gap-2">
+                  <button type="button" class="btn btn-success" [disabled]="converting()" (click)="convert()">
+                    @if (converting()) {
+                      <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    }
+                    Convert
+                  </button>
+                  <button type="button" class="btn btn-outline-secondary" (click)="toggleConvertForm()">Cancel</button>
+                </div>
+              }
+            </div>
           </div>
         }
 
@@ -242,56 +263,60 @@
 
         <!-- Edit form (OPEN only) -->
         @if (canEdit()) {
-          <form class="card card-body mb-4" (ngSubmit)="save()" aria-label="Edit opportunity">
-            <h2 class="h6 mb-3">Opportunity Details</h2>
-            <div class="row g-2 mb-2">
-              <div class="col-sm-6">
-                <label class="form-label small text-muted mb-1" for="fTitle">
-                  Title <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <input id="fTitle" name="fTitle" type="text" class="form-control"
-                       [ngModel]="fTitle()" (ngModelChange)="fTitle.set($event)"
-                       [disabled]="saving()" autocomplete="off" />
-              </div>
-              <div class="col-sm-3">
-                <label class="form-label small text-muted mb-1" for="fEstimatedValue">Est. Value</label>
-                <input id="fEstimatedValue" name="fEstimatedValue" type="number" class="form-control"
-                       placeholder="0.00" min="0" step="0.01"
-                       [ngModel]="fEstimatedValue()" (ngModelChange)="fEstimatedValue.set($event)"
-                       [disabled]="saving()" />
-              </div>
-              <div class="col-sm-2">
-                <label class="form-label small text-muted mb-1" for="fWinProbability">Win % (0–100)</label>
-                <input id="fWinProbability" name="fWinProbability" type="number" class="form-control"
-                       min="0" max="100" step="1"
-                       [ngModel]="fWinProbability()" (ngModelChange)="fWinProbability.set($event)"
-                       [disabled]="saving()" />
-              </div>
-              <div class="col-sm-3">
-                <label class="form-label small text-muted mb-1" for="fExpectedCloseDate">Expected Close Date</label>
-                <input id="fExpectedCloseDate" name="fExpectedCloseDate" type="date" class="form-control"
-                       [ngModel]="fExpectedCloseDate()" (ngModelChange)="fExpectedCloseDate.set($event)"
-                       [disabled]="saving()" />
-              </div>
-              <div class="col-sm-6">
-                <label class="form-label small text-muted mb-1" for="fNotes">Notes</label>
-                <input id="fNotes" name="fNotes" type="text" class="form-control"
-                       [ngModel]="fNotes()" (ngModelChange)="fNotes.set($event)"
-                       [disabled]="saving()" autocomplete="off" />
-              </div>
+          <form class="erp-card mb-4" (ngSubmit)="save()" aria-label="Edit opportunity">
+            <div class="erp-card__head">
+              <h2 class="h6 mb-0">Opportunity Details</h2>
             </div>
-            @if (saveError(); as msg) {
-              <p class="form-error text-danger small mt-2 mb-2" role="alert">{{ msg }}</p>
-            }
-            <div>
-              <button type="submit" class="btn btn-primary" [disabled]="saving()">
-                @if (saving()) {
-                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                  Saving…
-                } @else {
-                  Save Changes
-                }
-              </button>
+            <div class="erp-card__body">
+              <div class="row g-2 mb-2">
+                <div class="col-sm-6">
+                  <label class="form-label small text-muted mb-1" for="fTitle">
+                    Title <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <input id="fTitle" name="fTitle" type="text" class="form-control"
+                         [ngModel]="fTitle()" (ngModelChange)="fTitle.set($event)"
+                         [disabled]="saving()" autocomplete="off" />
+                </div>
+                <div class="col-sm-3">
+                  <label class="form-label small text-muted mb-1" for="fEstimatedValue">Est. Value</label>
+                  <input id="fEstimatedValue" name="fEstimatedValue" type="number" class="form-control"
+                         placeholder="0.00" min="0" step="0.01"
+                         [ngModel]="fEstimatedValue()" (ngModelChange)="fEstimatedValue.set($event)"
+                         [disabled]="saving()" />
+                </div>
+                <div class="col-sm-2">
+                  <label class="form-label small text-muted mb-1" for="fWinProbability">Win % (0–100)</label>
+                  <input id="fWinProbability" name="fWinProbability" type="number" class="form-control"
+                         min="0" max="100" step="1"
+                         [ngModel]="fWinProbability()" (ngModelChange)="fWinProbability.set($event)"
+                         [disabled]="saving()" />
+                </div>
+                <div class="col-sm-3">
+                  <label class="form-label small text-muted mb-1" for="fExpectedCloseDate">Expected Close Date</label>
+                  <input id="fExpectedCloseDate" name="fExpectedCloseDate" type="date" class="form-control"
+                         [ngModel]="fExpectedCloseDate()" (ngModelChange)="fExpectedCloseDate.set($event)"
+                         [disabled]="saving()" />
+                </div>
+                <div class="col-sm-6">
+                  <label class="form-label small text-muted mb-1" for="fNotes">Notes</label>
+                  <input id="fNotes" name="fNotes" type="text" class="form-control"
+                         [ngModel]="fNotes()" (ngModelChange)="fNotes.set($event)"
+                         [disabled]="saving()" autocomplete="off" />
+                </div>
+              </div>
+              @if (saveError(); as msg) {
+                <p class="text-danger small mt-2 mb-2" role="alert">{{ msg }}</p>
+              }
+              <div>
+                <button type="submit" class="btn btn-primary" [disabled]="saving()">
+                  @if (saving()) {
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    Saving…
+                  } @else {
+                    Save Changes
+                  }
+                </button>
+              </div>
             </div>
           </form>
         } @else {
@@ -312,153 +337,159 @@
         }
 
         <!-- Lines panel -->
-        <div class="card card-body mb-4">
-          <h2 class="h6 mb-3">Opportunity Lines</h2>
+        <div class="erp-card mb-4">
+          <div class="erp-card__head">
+            <h2 class="h6 mb-0">Opportunity Lines</h2>
+          </div>
+          <div class="erp-card__body">
 
-          @if (canAddLine()) {
-            <!-- Add line form -->
-            <div class="row g-2 mb-3 align-items-start">
-              <div class="col-sm-4 position-relative">
-                <label class="form-label small text-muted mb-1" for="productSearch">Product</label>
-                <input id="productSearch" name="productSearch" type="search" class="form-control"
-                       placeholder="Search by name or code…"
-                       [ngModel]="productSearchQ()"
-                       (ngModelChange)="onProductSearchChange($event)"
-                       [disabled]="addingLine()"
-                       autocomplete="off"
-                       [attr.aria-expanded]="productResults().length > 0"
-                       aria-haspopup="listbox"
-                       aria-autocomplete="list" />
-                @if (selectedProduct()) {
-                  <div class="d-flex align-items-center gap-1 mt-1">
-                    <i class="bi bi-check-circle-fill text-success small" aria-hidden="true"></i>
-                    <span class="small text-muted">{{ selectedProduct()!.label }}</span>
-                  </div>
-                }
-                @if (productResults().length > 0) {
-                  <ul class="list-group position-absolute shadow-sm mt-1 w-100" role="listbox"
-                      aria-label="Product suggestions" style="z-index:1050;max-height:220px;overflow-y:auto;">
-                    @for (p of productResults(); track p.uid) {
-                      <li class="list-group-item list-group-item-action small py-2"
-                          role="option" style="cursor:pointer"
-                          (click)="selectProduct(p)"
-                          (keydown.enter)="selectProduct(p)"
-                          tabindex="0"
-                          [attr.aria-label]="p.code + ' — ' + p.name">
-                        <strong>{{ p.code }}</strong> — {{ p.name }}
-                      </li>
+            @if (canAddLine()) {
+              <!-- Add line form -->
+              <div class="row g-2 mb-3 align-items-start">
+                <div class="col-sm-4 position-relative">
+                  <label class="form-label small text-muted mb-1" for="productSearch">Product</label>
+                  <input id="productSearch" name="productSearch" type="search" class="form-control"
+                         placeholder="Search by name or code…"
+                         [ngModel]="productSearchQ()"
+                         (ngModelChange)="onProductSearchChange($event)"
+                         [disabled]="addingLine()"
+                         autocomplete="off"
+                         [attr.aria-expanded]="productResults().length > 0"
+                         aria-haspopup="listbox"
+                         aria-autocomplete="list" />
+                  @if (selectedProduct()) {
+                    <div class="d-flex align-items-center gap-1 mt-1">
+                      <i class="bi bi-check-circle-fill text-success small" aria-hidden="true"></i>
+                      <span class="small text-muted">{{ selectedProduct()!.label }}</span>
+                    </div>
+                  }
+                  @if (productResults().length > 0) {
+                    <ul class="list-group position-absolute shadow-sm mt-1 w-100" role="listbox"
+                        aria-label="Product suggestions" style="z-index:1050;max-height:220px;overflow-y:auto;">
+                      @for (p of productResults(); track p.uid) {
+                        <li class="list-group-item list-group-item-action small py-2"
+                            role="option" aria-selected="false" style="cursor:pointer"
+                            (click)="selectProduct(p)"
+                            (keydown.enter)="selectProduct(p)"
+                            tabindex="0"
+                            [attr.aria-label]="p.code + ' — ' + p.name">
+                          <strong>{{ p.code }}</strong> — {{ p.name }}
+                        </li>
+                      }
+                    </ul>
+                  }
+                </div>
+
+                <div class="col-sm-2">
+                  <label class="form-label small text-muted mb-1" for="newLineUnitUid">Unit</label>
+                  <select id="newLineUnitUid" name="newLineUnitUid" class="form-select"
+                          [ngModel]="newLineUnitUid()" (ngModelChange)="newLineUnitUid.set($event)"
+                          [disabled]="addingLine()">
+                    @if (lineUnits().length === 0) {
+                      <option value="">— no units —</option>
                     }
-                  </ul>
-                }
+                    @for (u of lineUnits(); track u.uid) {
+                      <option [value]="u.uid">{{ u.name }}</option>
+                    }
+                  </select>
+                </div>
+
+                <div class="col-sm-2">
+                  <label class="form-label small text-muted mb-1" for="newLineQty">
+                    Qty <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <input id="newLineQty" name="newLineQty" type="number" class="form-control"
+                         placeholder="0" min="0.000001" step="any"
+                         [ngModel]="newLineQty()" (ngModelChange)="newLineQty.set($event)"
+                         [disabled]="addingLine()" />
+                </div>
+
+                <div class="col-sm-2">
+                  <label class="form-label small text-muted mb-1" for="newLineUnitPrice">Unit Price</label>
+                  <input id="newLineUnitPrice" name="newLineUnitPrice" type="number" class="form-control"
+                         placeholder="0.00" min="0" step="0.01"
+                         [ngModel]="newLineUnitPrice()" (ngModelChange)="newLineUnitPrice.set($event)"
+                         [disabled]="addingLine()" />
+                </div>
+
+                <div class="col-sm-2">
+                  <label class="form-label small text-muted mb-1" for="newLineDiscountPct">Discount %</label>
+                  <input id="newLineDiscountPct" name="newLineDiscountPct" type="number" class="form-control"
+                         placeholder="0" min="0" max="100" step="0.01"
+                         [ngModel]="newLineDiscountPct()" (ngModelChange)="newLineDiscountPct.set($event)"
+                         [disabled]="addingLine()" />
+                </div>
+
+                <div class="col-sm-2 d-flex align-items-end">
+                  <button type="button" class="btn btn-outline-primary w-100"
+                          [disabled]="addingLine()" (click)="addLine()">
+                    @if (addingLine()) {
+                      <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    } @else {
+                      <i class="bi bi-plus-lg" aria-hidden="true"></i>
+                    }
+                    Add
+                  </button>
+                </div>
               </div>
 
-              <div class="col-sm-2">
-                <label class="form-label small text-muted mb-1" for="newLineUnitUid">Unit</label>
-                <select id="newLineUnitUid" name="newLineUnitUid" class="form-select"
-                        [ngModel]="newLineUnitUid()" (ngModelChange)="newLineUnitUid.set($event)"
-                        [disabled]="addingLine()">
-                  @if (lineUnits().length === 0) {
-                    <option value="">— no units —</option>
-                  }
-                  @for (u of lineUnits(); track u.uid) {
-                    <option [value]="u.uid">{{ u.name }}</option>
-                  }
-                </select>
-              </div>
-
-              <div class="col-sm-2">
-                <label class="form-label small text-muted mb-1" for="newLineQty">
-                  Qty <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <input id="newLineQty" name="newLineQty" type="number" class="form-control"
-                       placeholder="0" min="0.000001" step="any"
-                       [ngModel]="newLineQty()" (ngModelChange)="newLineQty.set($event)"
-                       [disabled]="addingLine()" />
-              </div>
-
-              <div class="col-sm-2">
-                <label class="form-label small text-muted mb-1" for="newLineUnitPrice">Unit Price</label>
-                <input id="newLineUnitPrice" name="newLineUnitPrice" type="number" class="form-control"
-                       placeholder="0.00" min="0" step="0.01"
-                       [ngModel]="newLineUnitPrice()" (ngModelChange)="newLineUnitPrice.set($event)"
-                       [disabled]="addingLine()" />
-              </div>
-
-              <div class="col-sm-2">
-                <label class="form-label small text-muted mb-1" for="newLineDiscountPct">Discount %</label>
-                <input id="newLineDiscountPct" name="newLineDiscountPct" type="number" class="form-control"
-                       placeholder="0" min="0" max="100" step="0.01"
-                       [ngModel]="newLineDiscountPct()" (ngModelChange)="newLineDiscountPct.set($event)"
-                       [disabled]="addingLine()" />
-              </div>
-
-              <div class="col-sm-2 d-flex align-items-end">
-                <button type="button" class="btn btn-outline-primary w-100"
-                        [disabled]="addingLine()" (click)="addLine()">
-                  @if (addingLine()) {
-                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                  } @else {
-                    <i class="bi bi-plus-lg" aria-hidden="true"></i>
-                  }
-                  Add
-                </button>
-              </div>
-            </div>
-
-            @if (lineFormError(); as msg) {
-              <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
+              @if (lineFormError(); as msg) {
+                <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
+              }
             }
-          }
 
-          <!-- Lines table -->
-          @if ((opp()?.lines ?? []).length === 0) {
-            <p class="text-muted small mb-0">No lines yet.</p>
-          } @else {
-            <div class="table-responsive">
-              <table class="table table-sm align-middle bg-white grid mb-0">
-                <caption class="visually-hidden">Opportunity lines</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">#</th>
-                    <th scope="col">Product</th>
-                    <th scope="col">Unit</th>
-                    <th scope="col" class="text-end">Qty</th>
-                    <th scope="col" class="text-end">Unit Price</th>
-                    <th scope="col" class="text-end">Discount %</th>
-                    @if (canAddLine()) {
-                      <th scope="col"><span class="visually-hidden">Remove</span></th>
-                    }
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (line of opp()?.lines ?? []; track line.uid) {
+            <!-- Lines table -->
+            @if ((opp()?.lines ?? []).length === 0) {
+              <div class="erp-empty">
+                <i class="bi bi-list-ul"></i> No lines yet.
+              </div>
+            } @else {
+              <div class="erp-table-wrap">
+                <table class="erp-table mb-0">
+                  <caption class="visually-hidden">Opportunity lines</caption>
+                  <thead>
                     <tr>
-                      <td class="small text-muted">{{ line.lineNo }}</td>
-                      <td>{{ line.productName }}</td>
-                      <td class="small text-muted">{{ line.unitName }}</td>
-                      <td class="text-end font-monospace small">{{ +line.estimatedQty | number:'1.2-2' }}</td>
-                      <td class="text-end font-monospace small">{{ line.currency }} {{ +line.estimatedUnitPriceAmount | number:'1.2-2' }}</td>
-                      <td class="text-end font-monospace small">{{ line.lineDiscountPercent ? (+line.lineDiscountPercent | number:'1.2-2') + '%' : '—' }}</td>
+                      <th scope="col">#</th>
+                      <th scope="col">Product</th>
+                      <th scope="col">Unit</th>
+                      <th scope="col" class="num">Qty</th>
+                      <th scope="col" class="num">Unit Price</th>
+                      <th scope="col" class="num">Discount %</th>
                       @if (canAddLine()) {
-                        <td>
-                          <button type="button" class="btn btn-sm btn-outline-danger"
-                                  [disabled]="rowBusyLineUid() === line.uid"
-                                  (click)="removeLine(line)"
-                                  [attr.aria-label]="'Remove line ' + line.lineNo">
-                            @if (rowBusyLineUid() === line.uid) {
-                              <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                            } @else {
-                              <i class="bi bi-trash3" aria-hidden="true"></i>
-                            }
-                          </button>
-                        </td>
+                        <th scope="col"><span class="visually-hidden">Remove</span></th>
                       }
                     </tr>
-                  }
-                </tbody>
-              </table>
-            </div>
-          }
+                  </thead>
+                  <tbody>
+                    @for (line of opp()?.lines ?? []; track line.uid) {
+                      <tr>
+                        <td class="small text-muted">{{ line.lineNo }}</td>
+                        <td>{{ line.productName }}</td>
+                        <td class="small text-muted">{{ line.unitName }}</td>
+                        <td class="num mono small">{{ +line.estimatedQty | number:'1.2-2' }}</td>
+                        <td class="num mono small">{{ line.currency }} {{ +line.estimatedUnitPriceAmount | number:'1.2-2' }}</td>
+                        <td class="num mono small">{{ line.lineDiscountPercent ? (+line.lineDiscountPercent | number:'1.2-2') + '%' : '—' }}</td>
+                        @if (canAddLine()) {
+                          <td>
+                            <button type="button" class="btn btn-sm btn-outline-danger"
+                                    [disabled]="rowBusyLineUid() === line.uid"
+                                    (click)="removeLine(line)"
+                                    [attr.aria-label]="'Remove line ' + line.lineNo">
+                              @if (rowBusyLineUid() === line.uid) {
+                                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                              } @else {
+                                <i class="bi bi-trash3" aria-hidden="true"></i>
+                              }
+                            </button>
+                          </td>
+                        }
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          </div>
         </div>
 
         <!-- Metadata -->

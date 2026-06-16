@@ -1,18 +1,18 @@
 <section class="admin-page">
   <header class="page-head">
-    <h1 class="h4 mb-1">
+    <h1>
       <i class="bi bi-journal-text me-2" aria-hidden="true"></i>Account Ledger
     </h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
+    <p class="subtitle">
       Running ledger for a GL account — opening balance, journal lines, closing balance.
     </p>
   </header>
 
   @if (!canView()) {
-    <p class="text-muted d-flex align-items-center gap-2 mt-3" role="alert">
+    <div class="erp-empty" role="alert">
       <i class="bi bi-shield-lock" aria-hidden="true"></i>
       You don't have permission to view the Account Ledger.
-    </p>
+    </div>
   } @else {
 
     @switch (companyState()) {
@@ -27,8 +27,11 @@
         </p>
       }
       @default {
-        <div class="card mb-3">
-          <div class="card-body">
+        <div class="erp-card mb-3">
+          <div class="erp-card__head">
+            <h2>Filters</h2>
+          </div>
+          <div class="erp-card__body">
             <div class="row g-3 align-items-end">
 
               @if (companies().length > 1) {
@@ -93,32 +96,36 @@
         </p>
       }
       @case ('forbidden') {
-        <p class="text-muted d-flex align-items-center gap-2">
+        <div class="erp-empty">
           <i class="bi bi-shield-lock" aria-hidden="true"></i>
           You don't have permission to view this ledger.
-        </p>
+        </div>
       }
       @default {
         @if (isEmpty()) {
-          <p class="text-muted">Enter an account UID and period, then click Load Ledger.</p>
+          <div class="erp-empty">
+            <i class="bi bi-journal-text" aria-hidden="true"></i>
+            Enter an account and period, then click Load Ledger.
+          </div>
         }
 
         @if (ledger(); as l) {
 
           <!-- Header + export toolbar -->
-          <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
-            <div>
-              <div class="fw-semibold">
-                <span class="font-monospace me-2">{{ l.accountCode }}</span>{{ l.accountName }}
-              </div>
-              <div class="text-muted small">{{ l.header.companyName }} · {{ l.header.periodLabel }}</div>
-              <div class="text-muted small">Currency: {{ l.header.currency }}</div>
-              <div class="text-muted small">
-                {{ l.totalElements }} journal line{{ l.totalElements !== 1 ? 's' : '' }}
-              </div>
+          <div class="erp-page-head mb-3">
+            <div class="erp-page-head__titles">
+              <h1>
+                <span class="mono me-2">{{ l.accountCode }}</span>{{ l.accountName }}
+              </h1>
+              <p class="subtitle">
+                {{ l.header.companyName }} · {{ l.header.periodLabel }} · {{ l.header.currency }}
+                <span class="ms-2 text-muted">
+                  {{ l.totalElements }} journal line{{ l.totalElements !== 1 ? 's' : '' }}
+                </span>
+              </p>
             </div>
             @if (canExport()) {
-              <div class="d-flex gap-2">
+              <div class="erp-page-head__actions">
                 <button type="button" class="btn btn-sm btn-outline-secondary"
                         (click)="export('PDF')" [disabled]="exporting()">
                   <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>PDF
@@ -135,50 +142,50 @@
             }
           </div>
 
-          <div class="table-responsive">
-            <table class="table table-sm align-middle bg-white ledger-grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table ledger-grid">
               <caption class="visually-hidden">Account Ledger for {{ l.accountCode }} {{ l.accountName }}</caption>
               <thead>
                 <tr>
                   <th scope="col">Date</th>
                   <th scope="col">Source</th>
                   <th scope="col">Reference</th>
-                  <th scope="col">Memo</th>
-                  <th scope="col" class="text-end">Debit</th>
-                  <th scope="col" class="text-end">Credit</th>
-                  <th scope="col" class="text-end">Balance</th>
+                  <th scope="col" class="memo-col">Memo</th>
+                  <th scope="col" class="num">Debit</th>
+                  <th scope="col" class="num">Credit</th>
+                  <th scope="col" class="num">Balance</th>
                 </tr>
               </thead>
               <tbody>
                 <!-- Opening balance row -->
-                <tr class="table-light fw-semibold">
-                  <td colspan="6">Opening balance</td>
-                  <td class="text-end font-monospace" [class]="runningBalanceClass(l.openingBalance)">
+                <tr class="opening-row">
+                  <td colspan="6" class="fw-semibold">Opening balance</td>
+                  <td class="num fw-semibold" [class.text-danger]="+(l.openingBalance ?? 0) < 0">
                     {{ fmtMoney(l.openingBalance) }}
                   </td>
                 </tr>
 
                 @for (row of l.rows; track row.entryUid + row.postingDate) {
                   <tr>
-                    <td class="small text-nowrap">{{ row.postingDate }}</td>
-                    <td class="small">{{ row.sourceType }}</td>
-                    <td class="small font-monospace">{{ row.sourceRef ? (row.sourceRef.length > 12 ? (row.sourceRef.slice(0, 12) + '…') : row.sourceRef) : '—' }}</td>
-                    <td class="small text-muted">{{ row.lineMemo ?? '' }}</td>
-                    <td class="text-end font-monospace small">
+                    <td class="text-nowrap">{{ row.postingDate }}</td>
+                    <td>{{ row.sourceType }}</td>
+                    <td class="mono">{{ row.sourceRef ? (row.sourceRef.length > 12 ? (row.sourceRef.slice(0, 12) + '…') : row.sourceRef) : '—' }}</td>
+                    <td class="text-muted">{{ row.lineMemo ?? '' }}</td>
+                    <td class="num">
                       @if (+(row.debit ?? 0) !== 0) {
                         {{ fmtMoney(row.debit) }}
                       } @else {
                         <span class="text-muted">—</span>
                       }
                     </td>
-                    <td class="text-end font-monospace small">
+                    <td class="num">
                       @if (+(row.credit ?? 0) !== 0) {
                         {{ fmtMoney(row.credit) }}
                       } @else {
                         <span class="text-muted">—</span>
                       }
                     </td>
-                    <td class="text-end font-monospace small" [class]="runningBalanceClass(row.runningBalance)">
+                    <td class="num" [class.text-danger]="+(row.runningBalance ?? 0) < 0">
                       {{ fmtMoney(row.runningBalance) }}
                     </td>
                   </tr>
@@ -186,16 +193,19 @@
 
                 @if (l.rows.length === 0) {
                   <tr>
-                    <td colspan="7" class="text-center text-muted small py-3">
-                      No journal lines in this period.
+                    <td colspan="7">
+                      <div class="erp-empty">
+                        <i class="bi bi-inbox" aria-hidden="true"></i>
+                        No journal lines in this period.
+                      </div>
                     </td>
                   </tr>
                 }
               </tbody>
               <tfoot>
-                <tr class="table-dark fw-bold">
+                <tr class="closing-row fw-bold">
                   <td colspan="6">Closing balance</td>
-                  <td class="text-end font-monospace" [class]="runningBalanceClass(l.closingBalance)">
+                  <td class="num" [class.text-danger]="+(l.closingBalance ?? 0) < 0">
                     {{ fmtMoney(l.closingBalance) }}
                   </td>
                 </tr>

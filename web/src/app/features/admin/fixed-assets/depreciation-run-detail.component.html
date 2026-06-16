@@ -1,69 +1,81 @@
 <section class="admin-page">
   <header class="page-head">
     <a class="btn btn-sm btn-outline-secondary me-2" routerLink="/admin/depreciation-runs"
-       aria-label="Back to Depreciation Runs">
+       aria-label="Back to Depreciation Runs list">
       <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Runs
     </a>
     <h1 class="h4 mb-1">
       Depreciation Run
       @if (run(); as r) {
         — {{ r.runNumber }}
-        <span class="badge ms-2 text-bg-success">{{ r.status }}</span>
+        <span class="status-tag status-tag--ok ms-2">
+          <span class="status-tag__dot" aria-hidden="true"></span>{{ r.status }}
+        </span>
       }
     </h1>
   </header>
 
   @switch (state()) {
     @case ('loading') {
-      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+      <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
         <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading run…
       </p>
     }
     @case ('error') {
-      <p class="state text-danger" role="alert">
+      <p class="text-danger" role="alert">
         <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load depreciation run.
       </p>
     }
     @default {
       @if (run(); as r) {
-        <!-- Header -->
-        <dl class="row small mb-4">
-          <dt class="col-sm-3">Run Number</dt><dd class="col-sm-9 font-monospace">{{ r.runNumber }}</dd>
-          <dt class="col-sm-3">Fiscal Period</dt><dd class="col-sm-9">{{ periodLabel(r.fiscalPeriodId) }}</dd>
-          <dt class="col-sm-3">Posting Date</dt><dd class="col-sm-9">{{ r.postingDate }}</dd>
-          <dt class="col-sm-3">Status</dt><dd class="col-sm-9"><span class="badge text-bg-success">{{ r.status }}</span></dd>
-          <dt class="col-sm-3">Total Charge</dt>
-          <dd class="col-sm-9 font-monospace fw-semibold">{{ r.currency }} {{ +r.totalChargeAmount | number:'1.2-2' }}</dd>
-          <dt class="col-sm-3">Assets</dt><dd class="col-sm-9">{{ r.assetCount }}</dd>
-          <dt class="col-sm-3">Executed</dt><dd class="col-sm-9 text-muted">{{ r.executedAt }}</dd>
-          @if (r.glEntryUid) {
-            <dt class="col-sm-3">GL Entry</dt><dd class="col-sm-9">
-              <a [routerLink]="['/admin/gl/journals/uid', r.glEntryUid]">View GL Entry</a>
-            </dd>
-          }
-        </dl>
+        <!-- Summary card -->
+        <div class="erp-card mb-4">
+          <div class="erp-card__head"><h2>Run Summary</h2></div>
+          <div class="erp-card__body">
+            <dl class="row small mb-0">
+              <dt class="col-sm-3">Run Number</dt><dd class="col-sm-9 mono">{{ r.runNumber }}</dd>
+              <dt class="col-sm-3">Fiscal Period</dt><dd class="col-sm-9">{{ periodLabel(r.fiscalPeriodId) }}</dd>
+              <dt class="col-sm-3">Posting Date</dt><dd class="col-sm-9">{{ r.postingDate }}</dd>
+              <dt class="col-sm-3">Status</dt>
+              <dd class="col-sm-9">
+                <span class="status-tag status-tag--ok"><span class="status-tag__dot" aria-hidden="true"></span>{{ r.status }}</span>
+              </dd>
+              <dt class="col-sm-3">Total Charge</dt>
+              <dd class="col-sm-9 mono fw-semibold">{{ r.currency }} {{ +r.totalChargeAmount | number:'1.2-2' }}</dd>
+              <dt class="col-sm-3">Assets</dt><dd class="col-sm-9">{{ r.assetCount }}</dd>
+              <dt class="col-sm-3">Executed</dt><dd class="col-sm-9 text-muted">{{ r.executedAt }}</dd>
+              @if (r.glEntryUid) {
+                <dt class="col-sm-3">GL Entry</dt><dd class="col-sm-9">
+                  <a [routerLink]="['/admin/gl/journals/uid', r.glEntryUid]">View GL Entry</a>
+                </dd>
+              }
+            </dl>
+          </div>
+        </div>
 
         <!-- Lines -->
-        <h2 class="h6 mb-2">Per-Asset Lines ({{ r.lines.length }})</h2>
+        <h2 class="erp-section-title">Per-Asset Lines ({{ r.lines.length }})</h2>
         @if (r.lines.length === 0) {
-          <p class="text-muted small">No lines in this run.</p>
+          <div class="erp-empty">
+            <i class="bi bi-list-ul" aria-hidden="true"></i>No lines in this run.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-sm table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Depreciation run lines</caption>
               <thead>
                 <tr>
-                  <th scope="col" class="text-end">Charge Amount</th>
-                  <th scope="col" class="text-end">Accum. Dep After</th>
-                  <th scope="col" class="text-end">NBV After</th>
+                  <th scope="col" class="num">Charge Amount</th>
+                  <th scope="col" class="num">Accum. Dep After</th>
+                  <th scope="col" class="num">NBV After</th>
                 </tr>
               </thead>
               <tbody>
                 @for (line of r.lines; track line.uid) {
                   <tr>
-                    <td class="text-end font-monospace small">{{ +line.chargeAmount | number:'1.2-2' }}</td>
-                    <td class="text-end font-monospace small">{{ +line.accumDepAfter | number:'1.2-2' }}</td>
-                    <td class="text-end font-monospace small">{{ +line.nbvAfter | number:'1.2-2' }}</td>
+                    <td class="num mono">{{ +line.chargeAmount | number:'1.2-2' }}</td>
+                    <td class="num mono">{{ +line.accumDepAfter | number:'1.2-2' }}</td>
+                    <td class="num mono">{{ +line.nbvAfter | number:'1.2-2' }}</td>
                   </tr>
                 }
               </tbody>

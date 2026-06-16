@@ -1,24 +1,26 @@
 <section class="admin-page">
-  <header class="page-head">
-    <h1 class="h4 mb-1">Employee Contracts</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
-      <i class="bi bi-file-earmark-person me-1" aria-hidden="true"></i>
-      View and manage employment contracts per employee.
-    </p>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>Employee Contracts</h1>
+      <p class="subtitle">
+        <i class="bi bi-file-earmark-person me-1" aria-hidden="true"></i>
+        View and manage employment contracts per employee.
+      </p>
+    </div>
   </header>
 
   <!-- Company selector -->
   @switch (companyState()) {
     @case ('loading') {
-      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+      <output class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
         <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
-      </p>
+      </output>
     }
     @case ('error') {
-      <p class="text-danger mb-3" role="alert">
+      <output class="d-block text-danger mb-3" role="alert">
         <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
         Could not load companies. Is the API running?
-      </p>
+      </output>
     }
     @default {
       @if (companies().length > 1) {
@@ -39,27 +41,28 @@
   <!-- Employee picker -->
   @if (selectedCompanyId()) {
     <div class="mb-3" style="max-width:400px">
-      <label class="form-label small text-muted mb-1" for="employeePicker">Employee</label>
+      <span class="form-label d-block small text-muted mb-1" id="employeePickerLabel" aria-hidden="true">Employee</span>
       @if (employeesState() === 'loading') {
-        <p class="text-muted small" aria-live="polite">
+        <output class="d-block text-muted small" aria-live="polite">
           <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Loading employees…
-        </p>
+        </output>
       } @else {
         <app-uid-picker
-          id="employeePicker"
           [options]="employeeOptions()"
           placeholder="Select employee"
           [ngModel]="selectedEmployeeUid()"
           (ngModelChange)="onEmployeePick($event)"
           [required]="false"
+          aria-labelledby="employeePickerLabel"
         />
       }
     </div>
 
     <!-- Toolbar for create -->
     @if (selectedEmployeeUid() && canManage()) {
-      <div class="d-flex mb-3">
-        <button type="button" class="btn btn-primary ms-auto"
+      <div class="erp-toolbar mb-3">
+        <span class="erp-toolbar__spacer"></span>
+        <button type="button" class="btn btn-primary"
                 (click)="toggleCreateForm()"
                 [attr.aria-expanded]="showCreateForm()"
                 aria-controls="createContractForm">
@@ -71,79 +74,74 @@
 
     <!-- Create form -->
     @if (showCreateForm()) {
-      <form id="createContractForm" class="create-form card card-body mb-3"
+      <form id="createContractForm" class="erp-card mb-3"
             (ngSubmit)="create()" aria-label="Create employment contract">
-        <h2 class="h6 mb-3">New Contract</h2>
-        <div class="row g-2 mb-2">
-          <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="fContractType">
-              Type <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <select id="fContractType" name="fContractType" class="form-select"
-                    [ngModel]="fContractType()" (ngModelChange)="fContractType.set($event)"
-                    [disabled]="saving()">
-              @for (ct of contractTypes; track ct) {
-                <option [value]="ct">{{ ct }}</option>
-              }
-            </select>
-          </div>
-          <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="fBaseSalary">
-              Base Salary <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="fBaseSalary" name="fBaseSalary" type="number" min="0" class="form-control"
-                   [ngModel]="fBaseSalary()" (ngModelChange)="fBaseSalary.set($event)"
-                   [disabled]="saving()" />
-          </div>
-          <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="fStartDate">
-              Start Date <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="fStartDate" name="fStartDate" type="date" class="form-control"
-                   [ngModel]="fStartDate()" (ngModelChange)="fStartDate.set($event)"
-                   [disabled]="saving()" />
-          </div>
-          <div class="col-sm-3">
-            <label class="form-label small text-muted mb-1" for="fEndDate">End Date</label>
-            <input id="fEndDate" name="fEndDate" type="date" class="form-control"
-                   [ngModel]="fEndDate()" (ngModelChange)="fEndDate.set($event)"
-                   [disabled]="saving()" />
-          </div>
+        <div class="erp-card__head">
+          <h2>New Contract</h2>
         </div>
-        <div class="row g-2 mb-3">
-          <div class="col-auto">
+        <div class="erp-card__body">
+          <div class="erp-form-grid">
+            <div class="erp-field">
+              <label class="form-label" for="fContractType">
+                Type <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <select id="fContractType" name="fContractType" class="form-select"
+                      [ngModel]="fContractType()" (ngModelChange)="fContractType.set($event)"
+                      [disabled]="saving()">
+                @for (ct of contractTypes; track ct) {
+                  <option [value]="ct">{{ ct }}</option>
+                }
+              </select>
+            </div>
+            <div class="erp-field">
+              <label class="form-label" for="fBaseSalary">
+                Base Salary <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="fBaseSalary" name="fBaseSalary" type="number" min="0" class="form-control"
+                     [ngModel]="fBaseSalary()" (ngModelChange)="fBaseSalary.set($event)"
+                     [disabled]="saving()" />
+            </div>
+            <div class="erp-field">
+              <label class="form-label" for="fStartDate">
+                Start Date <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="fStartDate" name="fStartDate" type="date" class="form-control"
+                     [ngModel]="fStartDate()" (ngModelChange)="fStartDate.set($event)"
+                     [disabled]="saving()" />
+            </div>
+            <div class="erp-field">
+              <label class="form-label" for="fEndDate">End Date</label>
+              <input id="fEndDate" name="fEndDate" type="date" class="form-control"
+                     [ngModel]="fEndDate()" (ngModelChange)="fEndDate.set($event)"
+                     [disabled]="saving()" />
+            </div>
+          </div>
+
+          <div class="d-flex flex-wrap gap-3 mt-2 mb-2">
             <div class="form-check">
               <input class="form-check-input" type="checkbox" id="fPayeResident"
                      [ngModel]="fPayeResident()" (ngModelChange)="fPayeResident.set($event)"
                      [disabled]="saving()" />
               <label class="form-check-label small" for="fPayeResident">PAYE Resident</label>
             </div>
-          </div>
-          <div class="col-auto">
             <div class="form-check">
               <input class="form-check-input" type="checkbox" id="fNssfMember"
                      [ngModel]="fNssfMember()" (ngModelChange)="fNssfMember.set($event)"
                      [disabled]="saving()" />
               <label class="form-check-label small" for="fNssfMember">NSSF Member</label>
             </div>
-          </div>
-          <div class="col-auto">
             <div class="form-check">
               <input class="form-check-input" type="checkbox" id="fHeslbBorrower"
                      [ngModel]="fHeslbBorrower()" (ngModelChange)="fHeslbBorrower.set($event)"
                      [disabled]="saving()" />
               <label class="form-check-label small" for="fHeslbBorrower">HESLB Borrower</label>
             </div>
-          </div>
-          <div class="col-auto">
             <div class="form-check">
               <input class="form-check-input" type="checkbox" id="fWcfCovered"
                      [ngModel]="fWcfCovered()" (ngModelChange)="fWcfCovered.set($event)"
                      [disabled]="saving()" />
               <label class="form-check-label small" for="fWcfCovered">WCF Covered</label>
             </div>
-          </div>
-          <div class="col-auto">
             <div class="form-check">
               <input class="form-check-input" type="checkbox" id="fSdlCounted"
                      [ngModel]="fSdlCounted()" (ngModelChange)="fSdlCounted.set($event)"
@@ -151,10 +149,15 @@
               <label class="form-check-label small" for="fSdlCounted">SDL Counted</label>
             </div>
           </div>
-          <div class="col-sm-3 ms-auto d-flex align-items-end">
-            <button type="submit" class="btn btn-primary w-100" [disabled]="saving()">
+
+          @if (formError(); as msg) {
+            <output class="d-block text-danger small mt-2 mb-0" role="alert">{{ msg }}</output>
+          }
+
+          <div class="mt-3">
+            <button type="submit" class="btn btn-primary" [disabled]="saving()">
               @if (saving()) {
-                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
                 Saving…
               } @else {
                 Create Contract
@@ -162,9 +165,6 @@
             </button>
           </div>
         </div>
-        @if (formError(); as msg) {
-          <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-        }
       </form>
     }
 
@@ -172,33 +172,36 @@
     @if (selectedEmployeeUid()) {
       @switch (state()) {
         @case ('loading') {
-          <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <output class="text-muted d-flex align-items-center gap-2" aria-live="polite">
             <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading contracts…
-          </p>
+          </output>
         }
         @case ('error') {
-          <p class="state text-danger" role="alert">
+          <output class="d-block text-danger" role="alert">
             <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
             Could not load contracts. Please try again.
-          </p>
+          </output>
         }
         @case ('forbidden') {
-          <p class="state text-muted d-flex align-items-center gap-2">
+          <p class="text-muted d-flex align-items-center gap-2">
             <i class="bi bi-shield-lock" aria-hidden="true"></i>
             You don't have permission to view contracts.
           </p>
         }
         @default {
           @if (isEmpty()) {
-            <p class="state text-muted">No contracts for this employee. Create one above.</p>
+            <div class="erp-empty">
+              <i class="bi bi-file-earmark-person" aria-hidden="true"></i>
+              No contracts for this employee. Create one above.
+            </div>
           } @else {
-            <div class="table-responsive">
-              <table class="table table-hover align-middle bg-white grid">
+            <div class="erp-table-wrap">
+              <table class="erp-table">
                 <caption class="visually-hidden">Employee Contracts</caption>
                 <thead>
                   <tr>
                     <th scope="col">Type</th>
-                    <th scope="col">Base Salary</th>
+                    <th scope="col" class="num">Base Salary</th>
                     <th scope="col">Start Date</th>
                     <th scope="col">End Date</th>
                     <th scope="col">Status</th>
@@ -211,15 +214,16 @@
                   @for (c of rows(); track c.uid) {
                     <tr>
                       <td>
-                        <span class="badge" [class]="contractTypeBadgeClass(c.contractType)">
-                          {{ c.contractType }}
-                        </span>
+                        <span class="status-tag status-tag--info">{{ c.contractType }}</span>
                       </td>
-                      <td class="font-monospace small">{{ c.currency }} {{ +c.baseSalaryAmount | number:'1.2-2' }}</td>
-                      <td class="small text-muted">{{ c.startDate }}</td>
-                      <td class="small text-muted">{{ c.endDate ?? '—' }}</td>
+                      <td class="num mono">{{ c.currency }} {{ +c.baseSalaryAmount | number:'1.2-2' }}</td>
+                      <td class="text-muted">{{ c.startDate }}</td>
+                      <td class="text-muted">{{ c.endDate ?? '—' }}</td>
                       <td>
-                        <span class="badge" [class]="c.active ? 'text-bg-success' : 'text-bg-secondary'">
+                        <span class="status-tag"
+                          [class.status-tag--ok]="c.active"
+                          [class.status-tag--neutral]="!c.active">
+                          <span class="status-tag__dot" aria-hidden="true"></span>
                           {{ c.active ? 'Active' : 'Terminated' }}
                         </span>
                       </td>

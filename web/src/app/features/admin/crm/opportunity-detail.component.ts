@@ -18,7 +18,6 @@ import {
   LoseOpportunityRequest,
   OpportunityDto,
   OpportunityLineDto,
-  OpportunityStatus,
   PipelineStageDto,
   UpdateOpportunityRequest,
   WinOpportunityRequest,
@@ -440,14 +439,6 @@ export class OpportunityDetailComponent {
 
   stageName(stageId: string): string {
     return this.stages().find((s) => s.id === stageId)?.name ?? stageId;
-  }
-
-  statusBadgeClass(status: OpportunityStatus): string {
-    switch (status) {
-      case 'WON': return 'text-bg-success';
-      case 'LOST': return 'text-bg-danger';
-      default: return 'text-bg-primary'; // OPEN
-    }
   }
 
   private messageFrom(err: unknown, fallback: string): string {

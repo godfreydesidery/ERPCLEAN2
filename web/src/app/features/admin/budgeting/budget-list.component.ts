@@ -201,18 +201,7 @@ export class BudgetListComponent {
     // prefer APPROVED, then latest by versionNo
     const approved = row.versions.find((v) => v.status === 'APPROVED');
     if (approved) return 'APPROVED';
-    return row.versions[row.versions.length - 1].status;
-  }
-
-  statusBadgeClass(status: BudgetVersionStatus | null): string {
-    switch (status) {
-      case 'APPROVED': return 'text-bg-success';
-      case 'SUBMITTED': return 'text-bg-primary';
-      case 'REJECTED': return 'text-bg-danger';
-      case 'SUPERSEDED': return 'text-bg-secondary';
-      case 'DRAFT': return 'text-bg-warning';
-      default: return 'text-bg-light';
-    }
+    return row.versions.at(-1)!.status;
   }
 
   private messageFrom(err: unknown, fallback: string): string {

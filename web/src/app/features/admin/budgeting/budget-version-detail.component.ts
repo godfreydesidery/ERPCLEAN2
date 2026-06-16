@@ -11,7 +11,6 @@ import { OrganisationService } from '../organisation/organisation.service';
 import {
   BudgetLineDto,
   BudgetVersionDto,
-  BudgetVersionStatus,
   EntryMode,
   LineInputDto,
   UpsertBudgetLineRequest,
@@ -227,16 +226,6 @@ export class BudgetVersionDetailComponent {
   }
 
   // ── Display helpers ───────────────────────────────────────────────────────
-
-  statusBadgeClass(status: BudgetVersionStatus): string {
-    switch (status) {
-      case 'APPROVED': return 'text-bg-success';
-      case 'SUBMITTED': return 'text-bg-primary';
-      case 'REJECTED': return 'text-bg-danger';
-      case 'SUPERSEDED': return 'text-bg-secondary';
-      default: return 'text-bg-warning';
-    }
-  }
 
   grandTotal(lines: BudgetLineDto[]): number {
     return lines.reduce((sum, l) => sum + (+l.amount), 0);

@@ -1,4 +1,4 @@
-<div class="container-fluid py-3">
+<section class="admin-page">
   <!-- ── Back link ──────────────────────────────────────────────────────── -->
   <a routerLink="/admin/routes" class="btn btn-link btn-sm ps-0 mb-3">
     <i class="bi bi-arrow-left" aria-hidden="true"></i> Routes
@@ -6,7 +6,7 @@
 
   <!-- ── Loading / error state for route header ───────────────────────── -->
   @if (routeState() === 'loading') {
-    <div class="d-flex align-items-center gap-2 text-muted py-4">
+    <div class="d-flex align-items-center gap-2 text-muted py-4" aria-live="polite">
       <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
       <span>Loading route…</span>
     </div>
@@ -14,20 +14,33 @@
     <div class="alert alert-danger" role="alert">Failed to load route.</div>
   } @else if (route(); as r) {
 
-    <!-- ── Header ─────────────────────────────────────────────────────── -->
-    <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
-      <h1 class="h4 mb-0">{{ r.code }} — {{ r.name }}</h1>
-      <span class="badge" [class]="statusBadgeClass(r.status)">{{ r.status }}</span>
-    </div>
-    @if (r.locationIdentifier) {
-      <p class="text-muted small mb-3">{{ r.locationIdentifier }}</p>
-    }
+    <!-- ── Page header ────────────────────────────────────────────────── -->
+    <header class="erp-page-head mb-3">
+      <div class="erp-page-head__titles">
+        <h1 class="h4 mb-0">
+          <span class="mono me-1">{{ r.code }}</span>— {{ r.name }}
+        </h1>
+        @if (r.locationIdentifier) {
+          <p class="subtitle">{{ r.locationIdentifier }}</p>
+        }
+      </div>
+      <div class="erp-page-head__actions">
+        <span class="status-tag"
+              [class.status-tag--ok]="r.status === 'ACTIVE'"
+              [class.status-tag--neutral]="r.status === 'ARCHIVED'"
+              [class.status-tag--warn]="r.status !== 'ACTIVE' && r.status !== 'ARCHIVED'">
+          <span class="status-tag__dot" aria-hidden="true"></span>{{ r.status }}
+        </span>
+      </div>
+    </header>
 
-    <!-- ── Edit form ──────────────────────────────────────────────────── -->
+    <!-- ── Edit form ─────────────────────────────────────────────────── -->
     @if (canManage()) {
-      <div class="card mb-4">
-        <div class="card-body">
-          <h2 class="h6 card-title mb-3">Edit Route</h2>
+      <div class="erp-card mb-4">
+        <div class="erp-card__head">
+          <h2 class="h6 mb-0">Edit Route</h2>
+        </div>
+        <div class="erp-card__body">
           @if (saveError()) {
             <div class="alert alert-danger py-2" role="alert">{{ saveError() }}</div>
           }
@@ -83,16 +96,16 @@
       </div>
     }
 
-    <!-- ================================================================= -->
-    <!-- ── Customers panel ──────────────────────────────────────────────── -->
-    <!-- ================================================================= -->
-    <div class="card mb-4">
-      <div class="card-header">
+    <!-- ============================================================== -->
+    <!-- ── Customers panel ─────────────────────────────────────────── -->
+    <!-- ============================================================== -->
+    <div class="erp-card mb-4">
+      <div class="erp-card__head">
         <h2 class="h6 mb-0">
           <i class="bi bi-people-fill me-2" aria-hidden="true"></i>Customers
         </h2>
       </div>
-      <div class="card-body">
+      <div class="erp-card__body">
 
         <!-- Add-customer form -->
         @if (canAssign()) {
@@ -107,20 +120,25 @@
                 <input id="customer-search-input" type="search" class="form-control form-control-sm"
                        placeholder="Search customers…"
                        [ngModel]="customerSearchQ()"
-                       (ngModelChange)="onCustomerSearchChange($event)" />
+                       (ngModelChange)="onCustomerSearchChange($event)"
+                       [attr.aria-expanded]="customerResults().length > 0"
+                       aria-controls="customer-suggestions"
+                       aria-autocomplete="list"
+                       role="combobox" />
                 @if (customerResults().length > 0) {
-                  <ul class="list-group position-absolute w-100 shadow-sm z-3" role="listbox"
-                      aria-label="Customer suggestions">
+                  <div id="customer-suggestions"
+                       class="list-group position-absolute w-100 shadow-sm z-3" role="listbox"
+                       aria-label="Customer suggestions">
                     @for (c of customerResults(); track c.uid) {
-                      <li class="list-group-item list-group-item-action py-1 small"
-                          role="option" style="cursor:pointer"
-                          (click)="selectCustomer(c)"
-                          (keydown.enter)="selectCustomer(c)"
-                          tabindex="0">
+                      <div class="list-group-item list-group-item-action py-1 small"
+                           role="option" aria-selected="false" style="cursor:pointer"
+                           (click)="selectCustomer(c)"
+                           (keydown.enter)="selectCustomer(c)"
+                           tabindex="0">
                         {{ c.code }} — {{ c.displayName }}
-                      </li>
+                      </div>
                     }
-                  </ul>
+                  </div>
                 }
               </div>
               <button class="btn btn-success btn-sm" type="button"
@@ -137,17 +155,20 @@
 
         <!-- Customers table -->
         @if (customersState() === 'loading') {
-          <div class="d-flex align-items-center gap-2 text-muted py-2">
+          <div class="d-flex align-items-center gap-2 text-muted py-2" aria-live="polite">
             <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
             <span>Loading…</span>
           </div>
         } @else if (customersState() === 'error') {
           <div class="alert alert-warning py-2 small" role="alert">Failed to load customers.</div>
         } @else if (!hasCustomers()) {
-          <p class="text-muted small mb-0">No customers assigned.</p>
+          <div class="erp-empty">
+            <i class="bi bi-people" aria-hidden="true"></i>
+            No customers assigned.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-sm align-middle mb-0">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Assigned customers</caption>
               <thead>
                 <tr>
@@ -161,7 +182,7 @@
               <tbody>
                 @for (rc of customers(); track rc.customerUid) {
                   <tr>
-                    <td>{{ rc.customerCode }}</td>
+                    <td class="mono">{{ rc.customerCode }}</td>
                     <td>{{ rc.customerName }}</td>
                     @if (canAssign()) {
                       <td>
@@ -187,17 +208,18 @@
       </div>
     </div>
 
-    <!-- ================================================================= -->
-    <!-- ── Agents panel ─────────────────────────────────────────────────── -->
-    <!-- ================================================================= -->
-    <div class="card mb-4">
-      <div class="card-header">
+    <!-- ============================================================== -->
+    <!-- ── Agents panel ────────────────────────────────────────────── -->
+    <!-- ============================================================== -->
+    <div class="erp-card mb-4">
+      <div class="erp-card__head">
         <h2 class="h6 mb-0">
           <i class="bi bi-person-badge me-2" aria-hidden="true"></i>Agents
-          <span class="badge text-bg-secondary ms-2 fw-normal small">EXTERNAL only</span>
         </h2>
+        <span class="spacer"></span>
+        <span class="status-tag status-tag--neutral">EXTERNAL only</span>
       </div>
-      <div class="card-body">
+      <div class="erp-card__body">
 
         <!-- Add-agent form -->
         @if (canAssign()) {
@@ -212,20 +234,25 @@
                 <input id="agent-search-input" type="search" class="form-control form-control-sm"
                        placeholder="Search EXTERNAL agents…"
                        [ngModel]="agentSearchQ()"
-                       (ngModelChange)="onAgentSearchChange($event)" />
+                       (ngModelChange)="onAgentSearchChange($event)"
+                       [attr.aria-expanded]="agentResults().length > 0"
+                       aria-controls="agent-suggestions"
+                       aria-autocomplete="list"
+                       role="combobox" />
                 @if (agentResults().length > 0) {
-                  <ul class="list-group position-absolute w-100 shadow-sm z-3" role="listbox"
-                      aria-label="Agent suggestions">
+                  <div id="agent-suggestions"
+                       class="list-group position-absolute w-100 shadow-sm z-3" role="listbox"
+                       aria-label="Agent suggestions">
                     @for (a of agentResults(); track a.uid) {
-                      <li class="list-group-item list-group-item-action py-1 small"
-                          role="option" style="cursor:pointer"
-                          (click)="selectAgent(a)"
-                          (keydown.enter)="selectAgent(a)"
-                          tabindex="0">
+                      <div class="list-group-item list-group-item-action py-1 small"
+                           role="option" aria-selected="false" style="cursor:pointer"
+                           (click)="selectAgent(a)"
+                           (keydown.enter)="selectAgent(a)"
+                           tabindex="0">
                         {{ a.code }} — {{ a.displayName }}
-                      </li>
+                      </div>
                     }
-                  </ul>
+                  </div>
                 }
               </div>
               <div class="form-check form-check-inline align-self-center mb-0">
@@ -248,17 +275,20 @@
 
         <!-- Agents table -->
         @if (agentsState() === 'loading') {
-          <div class="d-flex align-items-center gap-2 text-muted py-2">
+          <div class="d-flex align-items-center gap-2 text-muted py-2" aria-live="polite">
             <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
             <span>Loading…</span>
           </div>
         } @else if (agentsState() === 'error') {
           <div class="alert alert-warning py-2 small" role="alert">Failed to load agents.</div>
         } @else if (!hasAgents()) {
-          <p class="text-muted small mb-0">No agents assigned.</p>
+          <div class="erp-empty">
+            <i class="bi bi-person-badge" aria-hidden="true"></i>
+            No agents assigned.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-sm align-middle mb-0">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Assigned agents</caption>
               <thead>
                 <tr>
@@ -273,11 +303,11 @@
               <tbody>
                 @for (ra of agents(); track ra.agentUid) {
                   <tr>
-                    <td>{{ ra.agentCode }}</td>
+                    <td class="mono">{{ ra.agentCode }}</td>
                     <td>{{ ra.agentName }}</td>
                     <td>
                       @if (ra.isPrimary) {
-                        <span class="badge text-bg-primary">Primary</span>
+                        <span class="status-tag status-tag--info">Primary</span>
                       }
                     </td>
                     @if (canAssign()) {
@@ -304,16 +334,16 @@
       </div>
     </div>
 
-    <!-- ================================================================= -->
-    <!-- ── Branches panel ───────────────────────────────────────────────── -->
-    <!-- ================================================================= -->
-    <div class="card mb-4">
-      <div class="card-header">
+    <!-- ============================================================== -->
+    <!-- ── Branches panel ──────────────────────────────────────────── -->
+    <!-- ============================================================== -->
+    <div class="erp-card mb-4">
+      <div class="erp-card__head">
         <h2 class="h6 mb-0">
           <i class="bi bi-diagram-3 me-2" aria-hidden="true"></i>Branches
         </h2>
       </div>
-      <div class="card-body">
+      <div class="erp-card__body">
 
         <!-- Add-branch form -->
         @if (canAssign()) {
@@ -326,7 +356,7 @@
               <div class="col-sm-5">
                 <label for="branch-company-select" class="form-label form-label-sm">Company</label>
                 @if (companiesState() === 'loading') {
-                  <div class="text-muted small">Loading…</div>
+                  <div class="text-muted small" aria-live="polite">Loading…</div>
                 } @else {
                   <select id="branch-company-select" class="form-select form-select-sm"
                           [ngModel]="selectedCompanyUid()"
@@ -341,7 +371,7 @@
               <div class="col-sm-4">
                 <label for="branch-select" class="form-label form-label-sm">Branch</label>
                 @if (companyBranchesState() === 'loading') {
-                  <div class="text-muted small">Loading…</div>
+                  <div class="text-muted small" aria-live="polite">Loading…</div>
                 } @else {
                   <select id="branch-select" class="form-select form-select-sm"
                           [disabled]="companyBranches().length === 0"
@@ -370,17 +400,20 @@
 
         <!-- Branches table -->
         @if (routeBranchesState() === 'loading') {
-          <div class="d-flex align-items-center gap-2 text-muted py-2">
+          <div class="d-flex align-items-center gap-2 text-muted py-2" aria-live="polite">
             <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
             <span>Loading…</span>
           </div>
         } @else if (routeBranchesState() === 'error') {
           <div class="alert alert-warning py-2 small" role="alert">Failed to load branches.</div>
         } @else if (!hasRouteBranches()) {
-          <p class="text-muted small mb-0">No branches assigned.</p>
+          <div class="erp-empty">
+            <i class="bi bi-diagram-3" aria-hidden="true"></i>
+            No branches assigned.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-sm align-middle mb-0">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Assigned branches</caption>
               <thead>
                 <tr>
@@ -394,7 +427,7 @@
               <tbody>
                 @for (rb of routeBranches(); track rb.branchUid) {
                   <tr>
-                    <td>{{ rb.branchCode }}</td>
+                    <td class="mono">{{ rb.branchCode }}</td>
                     <td>{{ rb.branchName }}</td>
                     @if (canAssign()) {
                       <td>
@@ -421,4 +454,4 @@
     </div>
 
   }
-</div>
+</section>

@@ -5,13 +5,11 @@
     </a>
   </div>
 
-  <header class="page-head">
-    <h1 class="h4 mb-1">
-      <i class="bi bi-receipt me-2" aria-hidden="true"></i>Record Receipt
-    </h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
-      Select a customer, enter the receipt details, and allocate against open invoices.
-    </p>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1><i class="bi bi-receipt me-2" aria-hidden="true"></i>Record Receipt</h1>
+      <p class="subtitle">Select a customer, enter the receipt details, and allocate against open invoices.</p>
+    </div>
   </header>
 
   @if (!canRecord()) {
@@ -27,8 +25,8 @@
         <strong>Receipt recorded — {{ receipt.receiptNumber }}</strong>
       </div>
       <ul class="mb-0 small">
-        <li>Amount: <span class="font-monospace">{{ fmtMoney(receipt.amount) }} {{ receipt.currency }}</span></li>
-        <li>Unallocated (on-account): <span class="font-monospace">{{ fmtMoney(receipt.unallocatedAmount) }}</span></li>
+        <li>Amount: <span class="mono">{{ fmtMoney(receipt.amount) }} {{ receipt.currency }}</span></li>
+        <li>Unallocated (on-account): <span class="mono">{{ fmtMoney(receipt.unallocatedAmount) }}</span></li>
         <li>Date: {{ receipt.receiptDate }}</li>
         <li>Tender: {{ receipt.tenderType }}</li>
       </ul>
@@ -76,9 +74,11 @@
     <form (ngSubmit)="submit()" aria-label="Record receipt">
 
       <!-- ── Header card ──────────────────────────────────────────────────── -->
-      <div class="card mb-3">
-        <div class="card-header small fw-semibold text-muted">Receipt Details</div>
-        <div class="card-body">
+      <div class="erp-card mb-3">
+        <div class="erp-card__head">
+          <h2>Receipt Details</h2>
+        </div>
+        <div class="erp-card__body">
           <div class="row g-3">
 
             <!-- Customer picker -->
@@ -99,7 +99,7 @@
                       style="top:100%; left:0; max-height:220px; overflow-y:auto">
                     @for (c of customerResults(); track c.uid) {
                       <li class="list-group-item list-group-item-action py-1 small"
-                          role="option" style="cursor:pointer"
+                          role="option" aria-selected="false" style="cursor:pointer"
                           (click)="selectCustomer(c)"
                           (keydown.enter)="selectCustomer(c)"
                           tabindex="0">
@@ -186,12 +186,13 @@
 
       <!-- ── Withholding Tax (optional, WHT_ON_RECEIPT) ───────────────────── -->
       @if (whtTypes().length > 0) {
-        <div class="card mb-3">
-          <div class="card-header small fw-semibold text-muted">
-            <i class="bi bi-percent me-1" aria-hidden="true"></i>Withholding Tax
-            <span class="badge text-bg-secondary ms-1">Optional</span>
+        <div class="erp-card mb-3">
+          <div class="erp-card__head">
+            <h2><i class="bi bi-percent me-1" aria-hidden="true"></i>Withholding Tax</h2>
+            <span class="spacer"></span>
+            <span class="status-tag status-tag--neutral">Optional</span>
           </div>
-          <div class="card-body">
+          <div class="erp-card__body">
             <div class="row g-3">
               <div class="col-sm-6">
                 <label class="form-label" for="whtType">WHT Type (customer withholds)</label>
@@ -221,15 +222,16 @@
       }
 
       <!-- ── Allocation editor ────────────────────────────────────────────── -->
-      <div class="card mb-3">
-        <div class="card-header d-flex justify-content-between align-items-center">
-          <span class="small fw-semibold text-muted">
+      <div class="erp-card mb-3">
+        <div class="erp-card__head">
+          <h2>
             <i class="bi bi-list-check me-1" aria-hidden="true"></i>
             Allocate Against Open Invoices
             @if (allocationRows().length > 0) {
-              <span class="badge text-bg-secondary ms-1">{{ allocationRows().length }}</span>
+              <span class="status-tag status-tag--neutral ms-1">{{ allocationRows().length }}</span>
             }
-          </span>
+          </h2>
+          <span class="spacer"></span>
           @if (allocationRows().length > 0) {
             <div class="d-flex gap-2">
               <button type="button" class="btn btn-sm btn-outline-primary"
@@ -245,7 +247,7 @@
             </div>
           }
         </div>
-        <div class="card-body p-0">
+        <div class="erp-card__body p-0">
 
           @switch (openInvoicesState()) {
             @case ('loading') {
@@ -261,26 +263,25 @@
             }
             @default {
               @if (!selectedCustomer()) {
-                <p class="text-muted small p-3 mb-0">
-                  <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
-                  Select a customer to see their open invoices.
-                </p>
+                <div class="erp-empty">
+                  <i class="bi bi-info-circle"></i> Select a customer to see their open invoices.
+                </div>
               } @else if (allocationRows().length === 0) {
-                <p class="text-muted small p-3 mb-0">
-                  No open invoices for this customer. The full receipt will be held on-account.
-                </p>
+                <div class="erp-empty">
+                  <i class="bi bi-check-circle"></i> No open invoices for this customer. The full receipt will be held on-account.
+                </div>
               } @else {
-                <div class="table-responsive">
-                  <table class="table table-sm align-middle mb-0" aria-label="Open invoices for allocation">
-                    <thead class="table-light">
+                <div class="erp-table-wrap">
+                  <table class="erp-table" aria-label="Open invoices for allocation">
+                    <thead>
                       <tr>
                         <th scope="col">Document No.</th>
                         <th scope="col">Date</th>
                         <th scope="col">Due</th>
-                        <th scope="col" class="text-end">Original</th>
-                        <th scope="col" class="text-end">Outstanding</th>
+                        <th scope="col" class="num">Original</th>
+                        <th scope="col" class="num">Outstanding</th>
                         <th scope="col">Status</th>
-                        <th scope="col" style="min-width:140px" class="text-end">
+                        <th scope="col" class="num" style="min-width:140px">
                           Allocate <span class="text-danger" aria-hidden="true">*</span>
                         </th>
                       </tr>
@@ -288,14 +289,15 @@
                     <tbody>
                       @for (row of allocationRows(); track row.invoice.uid; let i = $index) {
                         <tr [class]="allocationRowClass(row)">
-                          <td class="font-monospace small fw-semibold">{{ row.invoice.documentNo }}</td>
-                          <td class="small">{{ row.invoice.invoiceDate }}</td>
-                          <td class="small">{{ row.invoice.dueDate ?? '—' }}</td>
-                          <td class="text-end font-monospace small">{{ fmtMoney(row.invoice.originalAmount) }}</td>
-                          <td class="text-end font-monospace small fw-semibold">{{ fmtMoney(row.invoice.outstandingAmount) }}</td>
+                          <td class="mono fw-semibold">{{ row.invoice.documentNo }}</td>
+                          <td>{{ row.invoice.invoiceDate }}</td>
+                          <td>{{ row.invoice.dueDate ?? '—' }}</td>
+                          <td class="num">{{ fmtMoney(row.invoice.originalAmount) }}</td>
+                          <td class="num fw-semibold">{{ fmtMoney(row.invoice.outstandingAmount) }}</td>
                           <td>
-                            <span class="badge"
-                                  [class]="row.invoice.status === 'OPEN' ? 'text-bg-warning' : 'text-bg-info'">
+                            <span class="status-tag"
+                                  [class.status-tag--warn]="row.invoice.status === 'OPEN'"
+                                  [class.status-tag--info]="row.invoice.status === 'PARTIAL'">
                               {{ row.invoice.status }}
                             </span>
                           </td>
@@ -323,33 +325,33 @@
                 <div class="totals-bar border-top p-3 d-flex flex-wrap gap-4 align-items-center">
                   <div class="d-flex gap-1 align-items-baseline">
                     <span class="small text-muted me-1">Receipt Amount:</span>
-                    <span class="fw-semibold font-monospace">{{ fmtMoney(receiptAmountNum()) }}</span>
+                    <span class="fw-semibold mono">{{ fmtMoney(receiptAmountNum()) }}</span>
                   </div>
                   <div class="d-flex gap-1 align-items-baseline">
                     <span class="small text-muted me-1">Allocated:</span>
-                    <span class="fw-semibold font-monospace"
+                    <span class="fw-semibold mono"
                           [class.text-danger]="overAllocated()">
                       {{ fmtMoney(allocatedTotal()) }}
                     </span>
                   </div>
                   <div class="d-flex gap-1 align-items-baseline">
                     <span class="small text-muted me-1">On-account:</span>
-                    <span class="fw-semibold font-monospace text-info">
+                    <span class="fw-semibold mono text-info">
                       {{ fmtMoney(unallocated()) }}
                     </span>
                   </div>
                   @if (overAllocated()) {
-                    <span class="badge text-bg-danger ms-auto" role="alert" aria-live="polite">
+                    <span class="status-tag status-tag--danger ms-auto" role="alert" aria-live="polite">
                       <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
                       Over-allocated — reduce allocations
                     </span>
                   } @else if (anyAllocationExceedsOutstanding()) {
-                    <span class="badge text-bg-danger ms-auto" role="alert" aria-live="polite">
+                    <span class="status-tag status-tag--danger ms-auto" role="alert" aria-live="polite">
                       <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
                       An allocation exceeds the invoice outstanding
                     </span>
                   } @else if (allocatedTotal() > 0) {
-                    <span class="badge text-bg-success ms-auto">
+                    <span class="status-tag status-tag--ok ms-auto">
                       <i class="bi bi-check-circle me-1" aria-hidden="true"></i>Allocations valid
                     </span>
                   }

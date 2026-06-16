@@ -288,10 +288,6 @@ export class DashboardComponent {
 
   // ── Health chip helper ────────────────────────────────────────────────────────
 
-  healthBadgeClass(ties: boolean): string {
-    return ties ? 'text-bg-success' : 'text-bg-danger';
-  }
-
   healthPrefix(ties: boolean): string {
     return ties ? '[OK]' : '[!]';
   }

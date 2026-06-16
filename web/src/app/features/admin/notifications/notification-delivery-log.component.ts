@@ -102,13 +102,4 @@ export class NotificationDeliveryLogComponent {
     return stripped || '—';
   }
 
-  outcomeBadgeClass(outcome: string): string {
-    switch (outcome?.toUpperCase()) {
-      case 'SENT': return 'text-bg-success';
-      case 'FAILED': return 'text-bg-danger';
-      case 'SUPPRESSED': return 'text-bg-warning text-dark';
-      case 'PENDING': return 'text-bg-info';
-      default: return 'text-bg-secondary';
-    }
-  }
 }

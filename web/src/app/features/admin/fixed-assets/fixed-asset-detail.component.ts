@@ -16,8 +16,6 @@ import {
   DepreciationScheduleLineDto,
   DisposeAssetRequest,
   FixedAssetDto,
-  FixedAssetStatus,
-  MasterStatus,
   PlaceInServiceRequest,
   RevalueAssetRequest,
   RevaluationDirection,
@@ -434,19 +432,6 @@ export class FixedAssetDetailComponent {
   }
 
   // ── Display helpers ───────────────────────────────────────────────────────────
-
-  statusBadgeClass(status: FixedAssetStatus): string {
-    switch (status) {
-      case 'IN_SERVICE': return 'text-bg-success';
-      case 'DISPOSED': return 'text-bg-secondary';
-      case 'WRITTEN_OFF': return 'text-bg-dark';
-      default: return 'text-bg-warning'; // DRAFT
-    }
-  }
-
-  categoryStatusBadgeClass(status: MasterStatus): string {
-    return status === 'ACTIVE' ? 'text-bg-success' : 'text-bg-secondary';
-  }
 
   branchDisplay(branchId: string): string {
     const b = this.branchById().get(branchId);

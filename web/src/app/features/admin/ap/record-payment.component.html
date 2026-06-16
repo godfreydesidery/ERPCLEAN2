@@ -5,24 +5,22 @@
     </a>
   </div>
 
-  <header class="page-head">
-    <h1 class="h4 mb-1">
-      <i class="bi bi-cash-stack me-2" aria-hidden="true"></i>Record Payment
-    </h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
-      Select a supplier, choose bills to pay, then submit the payment run.
-    </p>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1><i class="bi bi-cash-stack me-2" aria-hidden="true"></i>Record Payment</h1>
+      <p class="subtitle">Select a supplier, choose bills to pay, then submit the payment run.</p>
+    </div>
   </header>
 
   @if (!canPay()) {
-    <p class="text-muted d-flex align-items-center gap-2 mt-3" role="alert">
+    <div class="erp-empty mt-3" role="alert">
       <i class="bi bi-shield-lock" aria-hidden="true"></i>
       You don't have permission to record payments.
-    </p>
+    </div>
   } @else if (savedPayments(); as payments) {
 
     <!-- ── Success panel ──────────────────────────────────────────────────── -->
-    <div class="alert alert-success mt-3" role="status">
+    <section class="alert alert-success mt-3" aria-label="Payment run result">
       <div class="d-flex align-items-center gap-2 mb-2">
         <i class="bi bi-check-circle-fill fs-5" aria-hidden="true"></i>
         <strong>Payment run complete — {{ payments.length }} payment(s) recorded</strong>
@@ -30,7 +28,7 @@
       <ul class="mb-0 small">
         @for (p of payments; track p.uid) {
           <li>
-            <span class="font-monospace">{{ p.paymentNumber }}</span>
+            <span class="mono">{{ p.paymentNumber }}</span>
             — {{ fmtMoney(p.amount) }} {{ p.currency }}
             ({{ p.tenderType }}
             @if (p.bankReference) { · {{ p.bankReference }} }
@@ -38,7 +36,7 @@
           </li>
         }
       </ul>
-    </div>
+    </section>
     <div class="d-flex gap-2 mt-3">
       <button type="button" class="btn btn-primary" (click)="savedPayments.set(null)">
         <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Record Another
@@ -82,9 +80,11 @@
     <form (ngSubmit)="submit()" aria-label="Record payment run">
 
       <!-- ── Payment header ──────────────────────────────────────────────── -->
-      <div class="card mb-3">
-        <div class="card-header small fw-semibold text-muted">Payment Details</div>
-        <div class="card-body">
+      <div class="erp-card mb-3">
+        <div class="erp-card__head">
+          <h2 class="erp-section-title mb-0">Payment Details</h2>
+        </div>
+        <div class="erp-card__body">
           <div class="row g-3">
 
             <!-- Supplier picker -->
@@ -105,7 +105,7 @@
                       style="top:100%; left:0; max-height:220px; overflow-y:auto">
                     @for (s of supplierResults(); track s.uid) {
                       <li class="list-group-item list-group-item-action py-1 small"
-                          role="option" style="cursor:pointer"
+                          role="option" aria-selected="false" style="cursor:pointer"
                           (click)="selectSupplier(s)"
                           (keydown.enter)="selectSupplier(s)"
                           tabindex="0">
@@ -168,12 +168,15 @@
 
       <!-- ── Withholding Tax (optional, WHT_ON_PAYMENT) ───────────────────── -->
       @if (whtTypes().length > 0) {
-        <div class="card mb-3">
-          <div class="card-header small fw-semibold text-muted">
-            <i class="bi bi-percent me-1" aria-hidden="true"></i>Withholding Tax
-            <span class="badge text-bg-secondary ms-1">Optional</span>
+        <div class="erp-card mb-3">
+          <div class="erp-card__head">
+            <h2 class="erp-section-title mb-0">
+              <i class="bi bi-percent me-1" aria-hidden="true"></i>Withholding Tax
+            </h2>
+            <span class="spacer"></span>
+            <span class="status-tag status-tag--neutral">Optional</span>
           </div>
-          <div class="card-body">
+          <div class="erp-card__body">
             <div class="row g-3">
               <div class="col-sm-6">
                 <label class="form-label" for="whtType">WHT Type (we withhold from supplier)</label>
@@ -203,15 +206,16 @@
       }
 
       <!-- ── Bill selection ──────────────────────────────────────────────── -->
-      <div class="card mb-3">
-        <div class="card-header d-flex justify-content-between align-items-center">
-          <span class="small fw-semibold text-muted">
+      <div class="erp-card mb-3">
+        <div class="erp-card__head">
+          <h2 class="erp-section-title mb-0">
             <i class="bi bi-list-check me-1" aria-hidden="true"></i>
             Select Bills to Pay
             @if (bills().length > 0) {
-              <span class="badge text-bg-secondary ms-1">{{ bills().length }} payable</span>
+              <span class="text-muted fw-normal small ms-1">{{ bills().length }} payable</span>
             }
-          </span>
+          </h2>
+          <span class="spacer"></span>
           @if (bills().length > 0) {
             <div class="d-flex gap-2">
               <button type="button" class="btn btn-sm btn-outline-primary"
@@ -225,7 +229,7 @@
             </div>
           }
         </div>
-        <div class="card-body p-0">
+        <div class="erp-card__body p-0">
 
           @switch (billsState()) {
             @case ('loading') {
@@ -250,9 +254,10 @@
                   No payable bills found for this supplier (bills must be MATCHED, APPROVED, or PARTIALLY_PAID).
                 </p>
               } @else {
-                <div class="table-responsive">
-                  <table class="table table-sm align-middle mb-0" aria-label="Payable bills for selection">
-                    <thead class="table-light">
+                <div class="erp-table-wrap">
+                  <table class="erp-table">
+                    <caption class="visually-hidden">Payable bills — check rows to include in payment run</caption>
+                    <thead>
                       <tr>
                         <th scope="col" style="width:36px">
                           <span class="visually-hidden">Select</span>
@@ -261,8 +266,8 @@
                         <th scope="col">Supplier Inv. No.</th>
                         <th scope="col">Bill Date</th>
                         <th scope="col">Due Date</th>
-                        <th scope="col" class="text-end">Gross</th>
-                        <th scope="col" class="text-end fw-semibold">Outstanding</th>
+                        <th scope="col" class="num">Gross</th>
+                        <th scope="col" class="num">Outstanding</th>
                         <th scope="col">Status</th>
                       </tr>
                     </thead>
@@ -277,7 +282,7 @@
                                    [disabled]="submitting()"
                                    [attr.aria-label]="'Select bill ' + bill.billNumber" />
                           </td>
-                          <td class="font-monospace small fw-semibold">
+                          <td class="mono fw-semibold">
                             <label [for]="'bill_' + bill.uid" class="mb-0" style="cursor:pointer">
                               {{ bill.billNumber }}
                             </label>
@@ -285,12 +290,15 @@
                           <td class="small">{{ bill.supplierInvoiceNo || '—' }}</td>
                           <td class="small">{{ bill.billDate }}</td>
                           <td class="small">{{ bill.dueDate ?? '—' }}</td>
-                          <td class="text-end font-monospace small">{{ fmtMoney(bill.grossAmount) }}</td>
-                          <td class="text-end font-monospace small fw-semibold text-danger">
+                          <td class="num">{{ fmtMoney(bill.grossAmount) }}</td>
+                          <td class="num fw-semibold text-danger">
                             {{ fmtMoney(bill.outstandingAmount) }}
                           </td>
                           <td>
-                            <span class="badge" [class]="statusBadgeClass(bill.status)">
+                            <span class="status-tag"
+                                  [class.status-tag--info]="bill.status === 'MATCHED'"
+                                  [class.status-tag--ok]="bill.status === 'APPROVED'"
+                                  [class.status-tag--warn]="bill.status === 'PARTIALLY_PAID'">
                               {{ bill.status }}
                             </span>
                           </td>
@@ -308,19 +316,19 @@
                   </div>
                   <div class="d-flex gap-1 align-items-baseline">
                     <span class="small text-muted me-1">Total Outstanding:</span>
-                    <span class="fw-semibold font-monospace"
+                    <span class="fw-semibold mono"
                           [class.text-success]="selectedCount() > 0">
                       {{ fmtMoney(selectedTotal()) }}
                     </span>
                   </div>
                   @if (selectedCount() === 0) {
-                    <span class="badge text-bg-warning ms-auto" role="alert" aria-live="polite">
-                      <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
+                    <span class="status-tag status-tag--warn ms-auto" role="alert" aria-live="polite">
+                      <span class="status-tag__dot"></span>
                       Select at least one bill
                     </span>
                   } @else {
-                    <span class="badge text-bg-success ms-auto">
-                      <i class="bi bi-check-circle me-1" aria-hidden="true"></i>
+                    <span class="status-tag status-tag--ok ms-auto">
+                      <span class="status-tag__dot"></span>
                       {{ selectedCount() }} bill(s) selected
                     </span>
                   }
@@ -340,7 +348,7 @@
       }
 
       <div class="d-flex gap-2">
-        <button type="submit" class="btn btn-success" [disabled]="submitDisabled()">
+        <button type="submit" class="btn btn-primary" [disabled]="submitDisabled()">
           @if (submitting()) {
             <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
             Recording…

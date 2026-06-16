@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, input, OnInit, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { SessionStore } from '../../../core/auth/session.store';
-import { SupplierBillDto, SupplierBillStatus } from './models/ap.model';
+import { SupplierBillDto } from './models/ap.model';
 import { ApService } from './ap.service';
 
 type LoadState = 'loading' | 'idle' | 'error' | 'forbidden';
@@ -46,18 +46,6 @@ export class BillDetailComponent implements OnInit {
   fmtMoney(v: number | string | null | undefined): string {
     const n = +(v ?? 0);
     return Number.isFinite(n) ? n.toFixed(2) : '0.00';
-  }
-
-  statusBadgeClass(status: SupplierBillStatus): string {
-    switch (status) {
-      case 'DRAFT':          return 'text-bg-secondary';
-      case 'MATCHED':        return 'text-bg-info';
-      case 'HELD':           return 'text-bg-danger';
-      case 'APPROVED':       return 'text-bg-primary';
-      case 'PARTIALLY_PAID': return 'text-bg-warning';
-      case 'PAID':           return 'text-bg-success';
-      default:               return 'text-bg-light border';
-    }
   }
 
   canPayBill(bill: SupplierBillDto): boolean {

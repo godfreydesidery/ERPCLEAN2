@@ -4,7 +4,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Subject, switchMap } from 'rxjs';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
-import { NotificationTypeDto, NotificationTypeStatus } from './models/notifications.model';
+import { NotificationTypeDto } from './models/notifications.model';
 import { NotificationsService } from './notifications.service';
 
 /**
@@ -77,15 +77,6 @@ export class NotificationTypesComponent {
         );
       },
     });
-  }
-
-  statusBadgeClass(status: NotificationTypeStatus): string {
-    switch (status) {
-      case 'ACTIVE': return 'text-bg-success';
-      case 'INACTIVE': return 'text-bg-secondary';
-      case 'ARCHIVED': return 'text-bg-dark';
-      default: return 'text-bg-secondary';
-    }
   }
 
   private messageFrom(err: unknown, fallback: string): string {

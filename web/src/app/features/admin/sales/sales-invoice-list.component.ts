@@ -12,7 +12,6 @@ import { Company } from '../models/company.model';
 import { CustomerModel } from '../models/party.model';
 import {
   CreateSalesInvoiceRequest,
-  InvoiceStatus,
   SalesInvoiceDto,
 } from '../models/sales.model';
 import { CompanyService } from '../company/company.service';
@@ -342,12 +341,6 @@ export class SalesInvoiceListComponent {
   }
 
   // ── Display helpers ────────────────────────────────────────────────────────
-
-  statusBadgeClass(status: InvoiceStatus): string {
-    if (status === 'FINALISED') return 'text-bg-success';
-    if (status === 'VOID') return 'text-bg-secondary';
-    return 'text-bg-warning'; // DRAFT
-  }
 
   invoiceLabel(inv: SalesInvoiceDto): string {
     return inv.invoiceNumber ?? 'DRAFT';

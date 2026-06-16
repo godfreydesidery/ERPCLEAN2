@@ -1,32 +1,41 @@
 <section class="admin-page">
-  <header class="page-head d-flex align-items-start justify-content-between flex-wrap gap-2">
-    <div>
-      <h1 class="h4 mb-1">
-        <i class="bi bi-cash-stack me-2" aria-hidden="true"></i>AP Payments
-      </h1>
-      <p class="text-muted mb-0" style="font-size:0.9rem">Recorded supplier payments.</p>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1><i class="bi bi-cash-stack me-2" aria-hidden="true"></i>AP Payments</h1>
+      <p class="subtitle">Recorded supplier payments.</p>
     </div>
-    @if (canPay()) {
-      <button class="btn btn-primary btn-sm" type="button" (click)="openPayForm()">
-        <i class="bi bi-plus-circle me-1" aria-hidden="true"></i>Pay Single Bill
-      </button>
-    }
+    <div class="erp-page-head__actions">
+      @if (canPay()) {
+        <button class="btn btn-primary btn-sm" type="button" (click)="openPayForm()">
+          <i class="bi bi-plus-circle me-1" aria-hidden="true"></i>Pay Single Bill
+        </button>
+      }
+    </div>
   </header>
 
   @if (!canView()) {
-    <p class="text-muted d-flex align-items-center gap-2 mt-3" role="alert">
+    <div class="erp-empty mt-3" role="alert">
       <i class="bi bi-shield-lock" aria-hidden="true"></i>
       You don't have permission to view payments.
-    </p>
+    </div>
   } @else {
 
     <!-- Pay single bill inline form -->
     @if (showPayForm()) {
-      <div class="card mb-3 border-primary create-form">
-        <div class="card-header bg-primary text-white fw-semibold">Pay Single Bill</div>
-        <div class="card-body">
+      <div class="erp-card mb-3">
+        <div class="erp-card__head">
+          <h2 class="erp-section-title mb-0">Pay Single Bill</h2>
+          <span class="spacer"></span>
+          <button type="button" class="btn btn-sm btn-outline-secondary" (click)="closePayForm()"
+                  aria-label="Close pay form">
+            <i class="bi bi-x" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div class="erp-card__body">
           @if (payError()) {
-            <p class="form-error" role="alert">{{ payError() }}</p>
+            <p class="text-danger small mb-2" role="alert">
+              <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ payError() }}
+            </p>
           }
 
           <!-- Bill search -->
@@ -48,8 +57,8 @@
                       style="cursor:pointer">
                     <span class="fw-semibold">{{ b.billNumber }}</span>
                     — {{ b.supplierInvoiceNo }}
-                    <span class="badge text-bg-warning ms-1">{{ b.status }}</span>
-                    <span class="text-muted float-end font-monospace">{{ b.currency }} {{ fmtMoney(b.outstandingAmount) }}</span>
+                    <span class="status-tag status-tag--warn ms-1">{{ b.status }}</span>
+                    <span class="text-muted float-end mono">{{ b.currency }} {{ fmtMoney(b.outstandingAmount) }}</span>
                   </li>
                 }
               </ul>
@@ -136,34 +145,36 @@
     }
 
     <!-- Supplier filter -->
-    <div class="mb-3" style="max-width:400px;position:relative">
-      <label for="supplierFilter" class="form-label fw-semibold">Filter by Supplier</label>
-      <div class="input-group input-group-sm">
-        <input id="supplierFilter" type="text" class="form-control" placeholder="Search supplier…"
-               [ngModel]="supplierFilterQ()"
-               (ngModelChange)="onSupplierFilterChange($event)"
-               autocomplete="off" />
-        @if (selectedFilterSupplier()) {
-          <button class="btn btn-outline-secondary" type="button"
-                  (click)="clearSupplierFilter()" aria-label="Clear supplier filter">
-            <i class="bi bi-x" aria-hidden="true"></i>
-          </button>
+    <div class="erp-toolbar mb-3">
+      <div class="erp-field" style="max-width:400px;position:relative">
+        <label for="supplierFilter" class="form-label fw-semibold">Filter by Supplier</label>
+        <div class="input-group input-group-sm">
+          <input id="supplierFilter" type="text" class="form-control" placeholder="Search supplier…"
+                 [ngModel]="supplierFilterQ()"
+                 (ngModelChange)="onSupplierFilterChange($event)"
+                 autocomplete="off" />
+          @if (selectedFilterSupplier()) {
+            <button class="btn btn-outline-secondary" type="button"
+                    (click)="clearSupplierFilter()" aria-label="Clear supplier filter">
+              <i class="bi bi-x" aria-hidden="true"></i>
+            </button>
+          }
+        </div>
+        @if (supplierFilterResults().length > 0) {
+          <ul class="list-group position-absolute w-100 z-3 shadow-sm" role="listbox"
+              aria-label="Supplier suggestions">
+            @for (s of supplierFilterResults(); track s.uid) {
+              <li class="list-group-item list-group-item-action py-1" role="option"
+                  aria-selected="false" tabindex="0"
+                  (click)="selectFilterSupplier(s)"
+                  (keydown.enter)="selectFilterSupplier(s)"
+                  style="cursor:pointer">
+                <span class="fw-semibold">{{ s.code }}</span> — {{ s.displayName }}
+              </li>
+            }
+          </ul>
         }
       </div>
-      @if (supplierFilterResults().length > 0) {
-        <ul class="list-group position-absolute w-100 z-3 shadow-sm" role="listbox"
-            aria-label="Supplier suggestions">
-          @for (s of supplierFilterResults(); track s.uid) {
-            <li class="list-group-item list-group-item-action py-1" role="option"
-                aria-selected="false" tabindex="0"
-                (click)="selectFilterSupplier(s)"
-                (keydown.enter)="selectFilterSupplier(s)"
-                style="cursor:pointer">
-              <span class="fw-semibold">{{ s.code }}</span> — {{ s.displayName }}
-            </li>
-          }
-        </ul>
-      }
     </div>
 
     <!-- Payment list -->
@@ -179,24 +190,26 @@
         </p>
       }
       @case ('forbidden') {
-        <p class="text-muted" role="alert">
-          <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>No permission.
-        </p>
+        <div class="erp-empty" role="alert">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>No permission.
+        </div>
       }
       @default {
         @if (isEmpty()) {
-          <p class="text-muted fst-italic">No payments found.</p>
+          <div class="erp-empty">
+            <i class="bi bi-cash-stack"></i> No payments found.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">AP Payments</caption>
-              <thead class="table-light">
+              <thead>
                 <tr>
                   <th scope="col">Payment #</th>
                   <th scope="col">Date</th>
                   <th scope="col">Kind</th>
                   <th scope="col">Tender</th>
-                  <th scope="col" class="text-end">Amount</th>
+                  <th scope="col" class="num">Amount</th>
                   <th scope="col"><span class="visually-hidden">Actions</span></th>
                 </tr>
               </thead>
@@ -206,13 +219,14 @@
                     <td>{{ row.paymentNumber }}</td>
                     <td>{{ row.paymentDate }}</td>
                     <td>
-                      <span class="badge"
-                            [class]="row.kind === 'SINGLE' ? 'text-bg-info' : 'text-bg-primary'">
+                      <span class="status-tag"
+                            [class.status-tag--info]="row.kind === 'SINGLE'"
+                            [class.status-tag--ok]="row.kind !== 'SINGLE'">
                         {{ row.kind }}
                       </span>
                     </td>
                     <td>{{ row.tenderType }}</td>
-                    <td class="text-end font-monospace">{{ row.currency }} {{ fmtMoney(row.amount) }}</td>
+                    <td class="num">{{ row.currency }} {{ fmtMoney(row.amount) }}</td>
                     <td class="text-end">
                       <a [routerLink]="['/admin/ap/payments/uid', row.uid]"
                          class="btn btn-outline-secondary btn-sm"

@@ -1,11 +1,11 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { DatePipe, DecimalPipe } from '@angular/common';
+import { DatePipe, DecimalPipe, NgClass } from '@angular/common';
 import { Component, computed, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { AlertService } from '../../../../core/feedback/alert.service';
 import { SessionStore } from '../../../../core/auth/session.store';
-import { StockCountDto, StockCountLineDto, StockCountStatus } from './stock-count.model';
+import { StockCountDto } from './stock-count.model';
 import { StockCountService } from './stock-count.service';
 
 /**
@@ -19,7 +19,7 @@ import { StockCountService } from './stock-count.service';
  */
 @Component({
   selector: 'app-stock-count-detail',
-  imports: [FormsModule, RouterLink, DatePipe, DecimalPipe],
+  imports: [FormsModule, RouterLink, DatePipe, DecimalPipe, NgClass],
   templateUrl: './stock-count-detail.component.html',
   styleUrl: './stock-count-detail.component.scss',
 })
@@ -187,16 +187,6 @@ export class StockCountDetailComponent {
   }
 
   // ── Display helpers ───────────────────────────────────────────────────────────
-
-  statusBadgeClass(status: StockCountStatus): string {
-    switch (status) {
-      case 'DRAFT':     return 'text-bg-secondary';
-      case 'COUNTING':  return 'text-bg-primary';
-      case 'POSTED':    return 'text-bg-success';
-      case 'CANCELLED': return 'text-bg-danger';
-      default:          return 'text-bg-secondary';
-    }
-  }
 
   varianceClass(varianceQty: string | null): string {
     if (!varianceQty) return '';

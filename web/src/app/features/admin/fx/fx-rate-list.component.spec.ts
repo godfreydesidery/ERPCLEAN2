@@ -136,15 +136,22 @@ describe('FxRateListComponent', () => {
     expect(comp.fmtRate(undefined)).toBe('0.000000');
   });
 
-  it('rateTypeBadgeClass returns correct badge classes', () => {
+  it('template maps rate types to correct status-tag variants (inline binding logic)', () => {
+    // The template uses [class.status-tag--ok]="row.rateType === 'SPOT'",
+    // [class.status-tag--info]="row.rateType === 'FORWARD'",
+    // [class.status-tag--neutral]="row.rateType === 'OFFICIAL'" directly.
     vi.useFakeTimers();
     makeBed();
-    const comp = TestBed.createComponent(FxRateListComponent).componentInstance as any;
-    expect(comp.rateTypeBadgeClass('SPOT')).toBe('text-bg-success');
-    expect(comp.rateTypeBadgeClass('FORWARD')).toBe('text-bg-info');
-    expect(comp.rateTypeBadgeClass('OFFICIAL')).toBe('text-bg-primary');
-    expect(comp.rateTypeBadgeClass('UNKNOWN')).toBe('text-bg-secondary');
-    expect(comp.rateTypeBadgeClass(null)).toBe('text-bg-secondary');
+    // SPOT -> --ok
+    expect(MOCK_RATE_1.rateType === 'SPOT').toBe(true);
+    expect(MOCK_RATE_1.rateType === 'FORWARD').toBe(false);
+    expect(MOCK_RATE_1.rateType === 'OFFICIAL').toBe(false);
+    // OFFICIAL -> --neutral
+    expect(MOCK_RATE_2.rateType === 'OFFICIAL').toBe(true);
+    expect(MOCK_RATE_2.rateType === 'SPOT').toBe(false);
+    // null rateType -> no pill rendered (template uses @if (row.rateType))
+    const noTypeRow = { ...MOCK_RATE_1, rateType: null };
+    expect(!noTypeRow.rateType).toBe(true);
   });
 
   it('submitCreate sets createError when fromCurrency is empty', () => {

@@ -1,31 +1,28 @@
 <section class="admin-page">
-  <header class="page-head">
-    <h1 class="h4 mb-1">
-      <i class="bi bi-receipt-cutoff me-2" aria-hidden="true"></i>Payables — Supplier Bills
-    </h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
-      AP supplier bills. Filter by supplier or status; raise debit notes from each row.
-    </p>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1><i class="bi bi-receipt-cutoff me-2" aria-hidden="true"></i>Payables — Supplier Bills</h1>
+      <p class="subtitle">AP supplier bills. Filter by supplier or status; raise debit notes from each row.</p>
+    </div>
+    <div class="erp-page-head__actions">
+      @if (canEnterBill()) {
+        <a routerLink="/admin/ap/supplier-bills/enter" class="btn btn-sm btn-primary">
+          <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Enter Bill
+        </a>
+      }
+      @if (canPay()) {
+        <a routerLink="/admin/ap/payments/record" class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-cash-stack me-1" aria-hidden="true"></i>Record Payment
+        </a>
+      }
+    </div>
   </header>
 
-  <div class="mb-3 d-flex gap-2 flex-wrap">
-    @if (canEnterBill()) {
-      <a routerLink="/admin/ap/supplier-bills/enter" class="btn btn-sm btn-primary">
-        <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Enter Bill
-      </a>
-    }
-    @if (canPay()) {
-      <a routerLink="/admin/ap/payments/record" class="btn btn-sm btn-outline-success">
-        <i class="bi bi-cash-stack me-1" aria-hidden="true"></i>Record Payment
-      </a>
-    }
-  </div>
-
   @if (!canView()) {
-    <p class="text-muted d-flex align-items-center gap-2 mt-3" role="alert">
+    <div class="erp-empty" role="alert">
       <i class="bi bi-shield-lock" aria-hidden="true"></i>
       You don't have permission to view supplier bills.
-    </p>
+    </div>
   } @else {
 
     <!-- Company selector -->
@@ -42,9 +39,9 @@
         </p>
       }
       @default {
-        <div class="d-flex flex-wrap gap-3 mb-3 align-items-end">
+        <div class="erp-toolbar mb-3">
           @if (companies().length > 1) {
-            <div style="min-width:220px">
+            <div class="erp-field" style="min-width:220px">
               <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
               <select id="companyPicker" name="companyPicker" class="form-select"
                       [ngModel]="selectedCompanyId()"
@@ -57,7 +54,7 @@
           }
 
           <!-- Supplier filter -->
-          <div style="min-width:260px; position:relative">
+          <div class="erp-field" style="min-width:260px; position:relative">
             <label class="form-label small text-muted mb-1" for="supplierFilterQ">Supplier</label>
             <div class="input-group input-group-sm">
               <input id="supplierFilterQ" name="supplierFilterQ" type="search"
@@ -77,7 +74,7 @@
                   aria-label="Supplier suggestions" style="top:100%; left:0">
                 @for (s of supplierFilterResults(); track s.uid) {
                   <li class="list-group-item list-group-item-action py-1 small"
-                      role="option" style="cursor:pointer"
+                      role="option" aria-selected="false" style="cursor:pointer"
                       (click)="selectFilterSupplier(s)"
                       (keydown.enter)="selectFilterSupplier(s)"
                       tabindex="0">
@@ -89,7 +86,7 @@
           </div>
 
           <!-- Status filter -->
-          <div style="min-width:160px">
+          <div class="erp-field" style="min-width:160px">
             <label class="form-label small text-muted mb-1" for="statusFilter">Status</label>
             <select id="statusFilter" name="statusFilter" class="form-select form-select-sm"
                     [ngModel]="statusFilter()"
@@ -110,28 +107,30 @@
     <!-- List states -->
     @switch (state()) {
       @case ('loading') {
-        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <p class="text-muted d-flex align-items-center gap-2 py-4" aria-live="polite">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading bills…
         </p>
       }
       @case ('error') {
-        <p class="state text-danger" role="alert">
+        <p class="text-danger py-3" role="alert">
           <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
           Could not load supplier bills. Please try again.
         </p>
       }
       @case ('forbidden') {
-        <p class="state text-muted d-flex align-items-center gap-2">
+        <div class="erp-empty" role="alert">
           <i class="bi bi-shield-lock" aria-hidden="true"></i>
           You don't have permission to view supplier bills.
-        </p>
+        </div>
       }
       @default {
         @if (isEmpty()) {
-          <p class="state text-muted">No supplier bills found.</p>
+          <div class="erp-empty">
+            <i class="bi bi-receipt-cutoff"></i> No supplier bills found.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Supplier bills</caption>
               <thead>
                 <tr>
@@ -140,8 +139,8 @@
                   <th scope="col">Supplier</th>
                   <th scope="col">Bill Date</th>
                   <th scope="col">Due Date</th>
-                  <th scope="col" class="text-end">Gross</th>
-                  <th scope="col" class="text-end">Outstanding</th>
+                  <th scope="col" class="num">Gross</th>
+                  <th scope="col" class="num">Outstanding</th>
                   <th scope="col">Currency</th>
                   <th scope="col">Status</th>
                   <th scope="col">Source</th>
@@ -151,24 +150,29 @@
               <tbody>
                 @for (bill of rows(); track bill.uid) {
                   <tr>
-                    <td class="font-monospace small fw-semibold">
+                    <td class="mono fw-semibold">
                       <a [routerLink]="['/admin/ap/supplier-bills/uid', bill.uid]"
                          class="text-decoration-none">
-                        {{ bill.billNumber }}
+                        {{ bill.billNumber || bill.supplierInvoiceNo || '(draft — no number)' }}
                       </a>
                     </td>
-                    <td class="small text-muted font-monospace">{{ bill.supplierInvoiceNo }}</td>
+                    <td class="mono text-muted">{{ bill.supplierInvoiceNo }}</td>
                     <td class="small">{{ supplierDisplay(bill.supplierId) }}</td>
                     <td class="small">{{ bill.billDate }}</td>
                     <td class="small">{{ bill.dueDate ?? '—' }}</td>
-                    <td class="text-end font-monospace small">{{ fmtMoney(bill.grossAmount) }}</td>
-                    <td class="text-end font-monospace small fw-semibold"
+                    <td class="num">{{ fmtMoney(bill.grossAmount) }}</td>
+                    <td class="num fw-semibold"
                         [class.text-danger]="+(bill.outstandingAmount) > 0">
                       {{ fmtMoney(bill.outstandingAmount) }}
                     </td>
                     <td class="small">{{ bill.currency }}</td>
                     <td>
-                      <span class="badge" [class]="statusBadgeClass(bill.status)">
+                      <span class="status-tag"
+                            [class.status-tag--neutral]="bill.status === 'DRAFT'"
+                            [class.status-tag--info]="bill.status === 'MATCHED'"
+                            [class.status-tag--danger]="bill.status === 'HELD'"
+                            [class.status-tag--ok]="bill.status === 'APPROVED' || bill.status === 'PAID'"
+                            [class.status-tag--warn]="bill.status === 'PARTIALLY_PAID'">
                         {{ bill.status }}
                       </span>
                     </td>
@@ -176,14 +180,14 @@
                     <td class="d-flex gap-1 flex-nowrap">
                       @if (canMatch() && canMatchBill(bill)) {
                         <a [routerLink]="['/admin/ap/supplier-bills/uid', bill.uid]"
-                           class="btn btn-sm btn-outline-info"
+                           class="btn btn-sm btn-outline-primary"
                            [attr.aria-label]="'Match bill ' + bill.billNumber">
                           <i class="bi bi-check2-all me-1" aria-hidden="true"></i>Match
                         </a>
                       }
                       @if (canPay() && canPayBill(bill)) {
                         <a routerLink="/admin/ap/payments/record"
-                           class="btn btn-sm btn-outline-success"
+                           class="btn btn-sm btn-outline-secondary"
                            [attr.aria-label]="'Pay bill ' + bill.billNumber">
                           <i class="bi bi-cash-stack me-1" aria-hidden="true"></i>Pay
                         </a>
@@ -289,7 +293,8 @@
             </div>
           </div>
         </div>
-        <div class="modal-backdrop show" (click)="closeDebitNote()" aria-hidden="true"></div>
+        <div class="modal-backdrop show" (click)="closeDebitNote()"
+             (keydown.escape)="closeDebitNote()" aria-hidden="true"></div>
       </div>
     }
   }

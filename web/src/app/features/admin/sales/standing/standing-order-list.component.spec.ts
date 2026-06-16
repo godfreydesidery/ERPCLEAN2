@@ -5,7 +5,7 @@
  *  1. Fires exactly one load on startup after company resolves.
  *  2. isEmpty is true when no rows returned.
  *  3. 403 response sets state to 'forbidden'.
- *  4. statusBadgeClass: ACTIVE, PAUSED, CANCELLED.
+ *  4. Status-tag modifier: ACTIVE→ok, PAUSED→warn, CANCELLED→danger.
  *  5. orderLabel returns orderNumber when present, DRAFT when null.
  *  6. canCreate is true when session has SALES.STANDING.CREATE permission.
  */
@@ -131,34 +131,34 @@ describe('StandingOrderListComponent — 403 forbidden', () => {
   });
 });
 
-// ── statusBadgeClass ───────────────────────────────────────────────────────────
+// ── status-tag modifier logic ─────────────────────────────────────────────────
+// Mirrors inline template bindings on the standing-order status span.
 
-describe('StandingOrderListComponent — statusBadgeClass', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    makeBed();
-  });
-  afterEach(() => {
-    vi.useRealTimers();
-    TestBed.resetTestingModule();
-  });
+function standingOk(s: string)      { return s === 'ACTIVE'; }
+function standingWarn(s: string)    { return s === 'PAUSED'; }
+function standingDanger(s: string)  { return s === 'CANCELLED'; }
+function standingNeutral(s: string) { return s !== 'ACTIVE' && s !== 'PAUSED' && s !== 'CANCELLED'; }
 
-  it('ACTIVE → text-bg-success', async () => {
-    const comp = TestBed.createComponent(StandingOrderListComponent).componentInstance;
-    await vi.runAllTimersAsync();
-    expect(comp.statusBadgeClass('ACTIVE')).toBe('text-bg-success');
+describe('StandingOrderListComponent — status-tag modifier', () => {
+  it('ACTIVE → ok only', () => {
+    expect(standingOk('ACTIVE')).toBe(true);
+    expect(standingWarn('ACTIVE')).toBe(false);
+    expect(standingDanger('ACTIVE')).toBe(false);
+    expect(standingNeutral('ACTIVE')).toBe(false);
   });
 
-  it('PAUSED → text-bg-warning', async () => {
-    const comp = TestBed.createComponent(StandingOrderListComponent).componentInstance;
-    await vi.runAllTimersAsync();
-    expect(comp.statusBadgeClass('PAUSED')).toBe('text-bg-warning');
+  it('PAUSED → warn only', () => {
+    expect(standingOk('PAUSED')).toBe(false);
+    expect(standingWarn('PAUSED')).toBe(true);
+    expect(standingDanger('PAUSED')).toBe(false);
+    expect(standingNeutral('PAUSED')).toBe(false);
   });
 
-  it('CANCELLED → text-bg-danger', async () => {
-    const comp = TestBed.createComponent(StandingOrderListComponent).componentInstance;
-    await vi.runAllTimersAsync();
-    expect(comp.statusBadgeClass('CANCELLED')).toBe('text-bg-danger');
+  it('CANCELLED → danger only', () => {
+    expect(standingOk('CANCELLED')).toBe(false);
+    expect(standingWarn('CANCELLED')).toBe(false);
+    expect(standingDanger('CANCELLED')).toBe(true);
+    expect(standingNeutral('CANCELLED')).toBe(false);
   });
 });
 

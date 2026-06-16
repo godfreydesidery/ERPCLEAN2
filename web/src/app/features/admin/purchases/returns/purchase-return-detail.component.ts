@@ -4,7 +4,7 @@ import { Component, computed, inject, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AlertService } from '../../../../core/feedback/alert.service';
 import { SessionStore } from '../../../../core/auth/session.store';
-import { PurchaseReturnDto, PurchaseReturnStatus } from '../../models/purchases.model';
+import { PurchaseReturnDto } from '../../models/purchases.model';
 import { PurchaseReturnService } from './purchase-return.service';
 
 type LoadState = 'loading' | 'idle' | 'error';
@@ -58,10 +58,6 @@ export class PurchaseReturnDetailComponent {
         this.confirming.set(false);
       },
     });
-  }
-
-  statusBadgeClass(status: PurchaseReturnStatus): string {
-    return status === 'CONFIRMED' ? 'text-bg-success' : 'text-bg-warning';
   }
 
   private messageFrom(err: unknown, fallback: string): string {

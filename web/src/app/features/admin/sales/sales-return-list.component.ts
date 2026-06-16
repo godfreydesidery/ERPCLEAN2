@@ -138,11 +138,6 @@ export class SalesReturnListComponent {
     return r.returnNumber ?? 'PENDING';
   }
 
-  statusBadgeClass(status: SalesReturnStatus): string {
-    if (status === 'CONFIRMED') return 'text-bg-success';
-    return 'text-bg-warning'; // DRAFT
-  }
-
   /** Coerce money: handles both number and string on the wire. */
   fmtMoney(v: number | string | null | undefined): string {
     const n = +(v ?? 0);

@@ -194,23 +194,6 @@ export class PosSessionDetailComponent {
 
   // ── Display helpers ────────────────────────────────────────────────────────
 
-  statusBadgeClass(status: PosSessionStatus): string {
-    switch (status) {
-      case 'OPEN': return 'text-bg-success';
-      case 'CLOSED': return 'text-bg-warning';
-      case 'RECONCILED': return 'text-bg-secondary';
-      default: return 'text-bg-light';
-    }
-  }
-
-  varianceBadgeClass(variance: string | null): string {
-    if (!variance) return 'text-bg-secondary';
-    const n = +variance;
-    if (n === 0) return 'text-bg-success';
-    if (n > 0) return 'text-bg-info';
-    return 'text-bg-danger';
-  }
-
   private messageFrom(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {
       const errors = (err.error as { errors?: string[] })?.errors;

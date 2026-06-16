@@ -1,7 +1,7 @@
 <section class="admin-page">
   <header class="page-head">
     <h1 class="h4 mb-1">Depreciation Runs</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
+    <p class="subtitle">
       <i class="bi bi-calendar3 me-1" aria-hidden="true"></i>
       Posted depreciation runs per fiscal period. Each run is idempotent per company + period.
     </p>
@@ -37,10 +37,10 @@
 
   @if (selectedCompanyId()) {
     <!-- Toolbar -->
-    <div class="d-flex flex-wrap gap-2 mb-3 align-items-end">
+    <div class="erp-toolbar mb-3">
+      <span class="erp-toolbar__spacer"></span>
       @if (canDepreciate()) {
-        <a class="btn btn-primary ms-auto" routerLink="/admin/depreciation-runs/post"
-           aria-label="Preview or post a depreciation run">
+        <a class="btn btn-primary" routerLink="/admin/depreciation-runs/post">
           <i class="bi bi-play-circle me-1" aria-hidden="true"></i>Run Depreciation
         </a>
       }
@@ -49,26 +49,29 @@
     <!-- List states -->
     @switch (state()) {
       @case ('loading') {
-        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading runs…
         </p>
       }
       @case ('error') {
-        <p class="state text-danger" role="alert">
+        <p class="text-danger" role="alert">
           <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load depreciation runs.
         </p>
       }
       @case ('forbidden') {
-        <p class="state text-muted">
+        <p class="text-muted">
           <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>You don't have permission to view depreciation runs.
         </p>
       }
       @default {
         @if (isEmpty()) {
-          <p class="state text-muted">No depreciation runs yet. Use "Run Depreciation" to post one.</p>
+          <div class="erp-empty">
+            <i class="bi bi-calendar3" aria-hidden="true"></i>
+            No depreciation runs yet. Use "Run Depreciation" to post one.
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Depreciation Runs</caption>
               <thead>
                 <tr>
@@ -76,8 +79,8 @@
                   <th scope="col">Fiscal Period</th>
                   <th scope="col">Posting Date</th>
                   <th scope="col">Status</th>
-                  <th scope="col" class="text-end">Total Charge</th>
-                  <th scope="col">Assets</th>
+                  <th scope="col" class="num">Total Charge</th>
+                  <th scope="col" class="num">Assets</th>
                   <th scope="col">Executed</th>
                   <th scope="col"><span class="visually-hidden">Actions</span></th>
                 </tr>
@@ -85,12 +88,16 @@
               <tbody>
                 @for (run of rows(); track run.uid) {
                   <tr>
-                    <td class="font-monospace small">{{ run.runNumber }}</td>
+                    <td class="mono">{{ run.runNumber }}</td>
                     <td class="small">{{ periodLabel(run.fiscalPeriodId) }}</td>
                     <td class="small text-muted">{{ run.postingDate }}</td>
-                    <td><span class="badge text-bg-success">{{ run.status }}</span></td>
-                    <td class="text-end font-monospace small">{{ run.currency }} {{ +run.totalChargeAmount | number:'1.2-2' }}</td>
-                    <td class="text-end small">{{ run.assetCount }}</td>
+                    <td>
+                      <span class="status-tag status-tag--ok">
+                        <span class="status-tag__dot" aria-hidden="true"></span>{{ run.status }}
+                      </span>
+                    </td>
+                    <td class="num mono">{{ run.currency }} {{ +run.totalChargeAmount | number:'1.2-2' }}</td>
+                    <td class="num">{{ run.assetCount }}</td>
                     <td class="small text-muted">{{ run.executedAt.substring(0, 16) }}</td>
                     <td>
                       <a class="btn btn-sm btn-outline-primary"

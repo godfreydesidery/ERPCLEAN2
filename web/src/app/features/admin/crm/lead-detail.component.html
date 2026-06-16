@@ -7,20 +7,26 @@
     </nav>
     @if (lead(); as l) {
       <h1 class="h4 mb-1 mt-1">{{ l.displayName }}
-        <span class="badge ms-2 align-middle" [class]="statusBadgeClass(l.leadStatus)">{{ l.leadStatus }}</span>
+        <span class="status-tag ms-2 align-middle"
+              [class.status-tag--warn]="l.leadStatus === 'NEW'"
+              [class.status-tag--info]="l.leadStatus === 'CONTACTED'"
+              [class.status-tag--ok]="l.leadStatus === 'QUALIFIED' || l.leadStatus === 'CONVERTED'"
+              [class.status-tag--danger]="l.leadStatus === 'DISQUALIFIED'">
+          {{ l.leadStatus }}
+        </span>
       </h1>
-      <p class="text-muted mb-0 small">{{ l.leadNumber }} · {{ l.leadSource }}</p>
+      <p class="subtitle">{{ l.leadNumber }} · {{ l.leadSource }}</p>
     }
   </header>
 
   @switch (leadState()) {
     @case ('loading') {
-      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+      <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
         <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading lead…
       </p>
     }
     @case ('error') {
-      <p class="state text-danger" role="alert">
+      <p class="text-danger" role="alert">
         <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
         Could not load lead.
       </p>
@@ -78,186 +84,198 @@
 
         <!-- Qualify form -->
         @if (showQualifyForm()) {
-          <div id="qualifyForm" class="card card-body mb-4">
-            <h2 class="h6 mb-3">Qualify Lead</h2>
-            <div class="mb-3">
-              <label class="form-label small text-muted mb-1">Customer Resolution</label>
-              <div class="d-flex gap-3">
-                <div class="form-check">
-                  <input class="form-check-input" type="radio" id="modeExisting" name="qualifyMode"
-                         value="existing"
-                         [ngModel]="qualifyMode()" (ngModelChange)="qualifyMode.set($event)" />
-                  <label class="form-check-label" for="modeExisting">Link existing customer</label>
-                </div>
-                <div class="form-check">
-                  <input class="form-check-input" type="radio" id="modeNew" name="qualifyMode"
-                         value="new"
-                         [ngModel]="qualifyMode()" (ngModelChange)="qualifyMode.set($event)" />
-                  <label class="form-check-label" for="modeNew">Create new customer</label>
-                </div>
-              </div>
+          <div id="qualifyForm" class="erp-card mb-4">
+            <div class="erp-card__head">
+              <h2 class="h6 mb-0">Qualify Lead</h2>
             </div>
-
-            @if (qualifyMode() === 'existing') {
-              <div class="col-sm-6 mb-3">
-                <label class="form-label small text-muted mb-1" for="qualifyCustomerUid">
-                  Customer <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <app-uid-picker id="qualifyCustomerUid" name="qualifyCustomerUid"
-                                [(ngModel)]="qualifyCustomerUid"
-                                [options]="customerOptions()"
-                                placeholder="Select customer"
-                                [required]="true" />
+            <div class="erp-card__body">
+              <div class="mb-3">
+                <label class="form-label small text-muted mb-1">Customer Resolution</label>
+                <div class="d-flex gap-3">
+                  <div class="form-check">
+                    <input class="form-check-input" type="radio" id="modeExisting" name="qualifyMode"
+                           value="existing"
+                           [ngModel]="qualifyMode()" (ngModelChange)="qualifyMode.set($event)" />
+                    <label class="form-check-label" for="modeExisting">Link existing customer</label>
+                  </div>
+                  <div class="form-check">
+                    <input class="form-check-input" type="radio" id="modeNew" name="qualifyMode"
+                           value="new"
+                           [ngModel]="qualifyMode()" (ngModelChange)="qualifyMode.set($event)" />
+                    <label class="form-check-label" for="modeNew">Create new customer</label>
+                  </div>
+                </div>
               </div>
-            } @else {
-              <div class="row g-2 mb-3">
-                <div class="col-sm-4">
-                  <label class="form-label small text-muted mb-1" for="qualifyNewName">
-                    Customer Name <span class="text-danger" aria-hidden="true">*</span>
+
+              @if (qualifyMode() === 'existing') {
+                <div class="col-sm-6 mb-3">
+                  <label class="form-label small text-muted mb-1" for="qualifyCustomerUid">
+                    Customer <span class="text-danger" aria-hidden="true">*</span>
                   </label>
-                  <input id="qualifyNewName" name="qualifyNewName" type="text" class="form-control"
-                         [ngModel]="qualifyNewName()" (ngModelChange)="qualifyNewName.set($event)"
-                         [disabled]="qualifying()" autocomplete="off" />
+                  <app-uid-picker id="qualifyCustomerUid" name="qualifyCustomerUid"
+                                  [(ngModel)]="qualifyCustomerUid"
+                                  [options]="customerOptions()"
+                                  placeholder="Select customer"
+                                  [required]="true" />
                 </div>
-                <div class="col-sm-3">
-                  <label class="form-label small text-muted mb-1" for="qualifyNewKind">Kind</label>
-                  <select id="qualifyNewKind" name="qualifyNewKind" class="form-select"
-                          [ngModel]="qualifyNewKind()" (ngModelChange)="qualifyNewKind.set($event)"
-                          [disabled]="qualifying()">
-                    <option value="CREDIT_ACCOUNT">Credit Account</option>
-                    <option value="CASH_WALK_IN">Cash Walk-in</option>
-                  </select>
+              } @else {
+                <div class="row g-2 mb-3">
+                  <div class="col-sm-4">
+                    <label class="form-label small text-muted mb-1" for="qualifyNewName">
+                      Customer Name <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <input id="qualifyNewName" name="qualifyNewName" type="text" class="form-control"
+                           [ngModel]="qualifyNewName()" (ngModelChange)="qualifyNewName.set($event)"
+                           [disabled]="qualifying()" autocomplete="off" />
+                  </div>
+                  <div class="col-sm-3">
+                    <label class="form-label small text-muted mb-1" for="qualifyNewKind">Kind</label>
+                    <select id="qualifyNewKind" name="qualifyNewKind" class="form-select"
+                            [ngModel]="qualifyNewKind()" (ngModelChange)="qualifyNewKind.set($event)"
+                            [disabled]="qualifying()">
+                      <option value="CREDIT_ACCOUNT">Credit Account</option>
+                      <option value="CASH_WALK_IN">Cash Walk-in</option>
+                    </select>
+                  </div>
+                  <div class="col-sm-3">
+                    <label class="form-label small text-muted mb-1" for="qualifyNewPhone">Phone</label>
+                    <input id="qualifyNewPhone" name="qualifyNewPhone" type="tel" class="form-control"
+                           [ngModel]="qualifyNewPhone()" (ngModelChange)="qualifyNewPhone.set($event)"
+                           [disabled]="qualifying()" autocomplete="off" />
+                  </div>
+                  <div class="col-sm-4">
+                    <label class="form-label small text-muted mb-1" for="qualifyNewEmail">Email</label>
+                    <input id="qualifyNewEmail" name="qualifyNewEmail" type="email" class="form-control"
+                           [ngModel]="qualifyNewEmail()" (ngModelChange)="qualifyNewEmail.set($event)"
+                           [disabled]="qualifying()" autocomplete="off" />
+                  </div>
+                  <div class="col-sm-5">
+                    <label class="form-label small text-muted mb-1" for="qualifyNewAddress">Address</label>
+                    <input id="qualifyNewAddress" name="qualifyNewAddress" type="text" class="form-control"
+                           [ngModel]="qualifyNewAddress()" (ngModelChange)="qualifyNewAddress.set($event)"
+                           [disabled]="qualifying()" autocomplete="off" />
+                  </div>
                 </div>
-                <div class="col-sm-3">
-                  <label class="form-label small text-muted mb-1" for="qualifyNewPhone">Phone</label>
-                  <input id="qualifyNewPhone" name="qualifyNewPhone" type="tel" class="form-control"
-                         [ngModel]="qualifyNewPhone()" (ngModelChange)="qualifyNewPhone.set($event)"
-                         [disabled]="qualifying()" autocomplete="off" />
-                </div>
-                <div class="col-sm-4">
-                  <label class="form-label small text-muted mb-1" for="qualifyNewEmail">Email</label>
-                  <input id="qualifyNewEmail" name="qualifyNewEmail" type="email" class="form-control"
-                         [ngModel]="qualifyNewEmail()" (ngModelChange)="qualifyNewEmail.set($event)"
-                         [disabled]="qualifying()" autocomplete="off" />
-                </div>
-                <div class="col-sm-5">
-                  <label class="form-label small text-muted mb-1" for="qualifyNewAddress">Address</label>
-                  <input id="qualifyNewAddress" name="qualifyNewAddress" type="text" class="form-control"
-                         [ngModel]="qualifyNewAddress()" (ngModelChange)="qualifyNewAddress.set($event)"
-                         [disabled]="qualifying()" autocomplete="off" />
-                </div>
-              </div>
-            }
+              }
 
-            @if (qualifyError(); as msg) {
-              <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
-            }
-            <div class="d-flex gap-2">
-              <button type="button" class="btn btn-primary" [disabled]="qualifying()" (click)="qualify()">
-                @if (qualifying()) {
-                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                }
-                Qualify Lead
-              </button>
-              <button type="button" class="btn btn-outline-secondary" (click)="toggleQualifyForm()">Cancel</button>
+              @if (qualifyError(); as msg) {
+                <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
+              }
+              <div class="d-flex gap-2">
+                <button type="button" class="btn btn-primary" [disabled]="qualifying()" (click)="qualify()">
+                  @if (qualifying()) {
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  }
+                  Qualify Lead
+                </button>
+                <button type="button" class="btn btn-outline-secondary" (click)="toggleQualifyForm()">Cancel</button>
+              </div>
             </div>
           </div>
         }
 
         <!-- Disqualify form -->
         @if (showDisqualifyForm()) {
-          <div id="disqualifyForm" class="card card-body mb-4 border-danger">
-            <h2 class="h6 mb-3 text-danger">Disqualify Lead</h2>
-            <div class="mb-3" style="max-width:480px">
-              <label class="form-label small text-muted mb-1" for="disqualifyReason">
-                Reason <span class="text-danger" aria-hidden="true">*</span>
-              </label>
-              <input id="disqualifyReason" name="disqualifyReason" type="text" class="form-control"
-                     placeholder="Why is this lead being disqualified?"
-                     [ngModel]="disqualifyReason()" (ngModelChange)="disqualifyReason.set($event)"
-                     [disabled]="disqualifying()" autocomplete="off" />
+          <div id="disqualifyForm" class="erp-card mb-4 border-danger">
+            <div class="erp-card__head">
+              <h2 class="h6 mb-0 text-danger">Disqualify Lead</h2>
             </div>
-            @if (disqualifyError(); as msg) {
-              <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
-            }
-            <div class="d-flex gap-2">
-              <button type="button" class="btn btn-danger" [disabled]="disqualifying()" (click)="disqualify()">
-                @if (disqualifying()) {
-                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                }
-                Confirm Disqualify
-              </button>
-              <button type="button" class="btn btn-outline-secondary" (click)="toggleDisqualifyForm()">Cancel</button>
+            <div class="erp-card__body">
+              <div class="mb-3" style="max-width:480px">
+                <label class="form-label small text-muted mb-1" for="disqualifyReason">
+                  Reason <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="disqualifyReason" name="disqualifyReason" type="text" class="form-control"
+                       placeholder="Why is this lead being disqualified?"
+                       [ngModel]="disqualifyReason()" (ngModelChange)="disqualifyReason.set($event)"
+                       [disabled]="disqualifying()" autocomplete="off" />
+              </div>
+              @if (disqualifyError(); as msg) {
+                <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
+              }
+              <div class="d-flex gap-2">
+                <button type="button" class="btn btn-danger" [disabled]="disqualifying()" (click)="disqualify()">
+                  @if (disqualifying()) {
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  }
+                  Confirm Disqualify
+                </button>
+                <button type="button" class="btn btn-outline-secondary" (click)="toggleDisqualifyForm()">Cancel</button>
+              </div>
             </div>
           </div>
         }
 
         <!-- Edit form (non-terminal) -->
         @if (canEdit()) {
-          <form class="card card-body mb-4" (ngSubmit)="save()" aria-label="Edit lead">
-            <h2 class="h6 mb-3">Lead Details</h2>
-            <div class="row g-2 mb-2">
-              <div class="col-sm-4">
-                <label class="form-label small text-muted mb-1" for="fDisplayName">
-                  Name <span class="text-danger" aria-hidden="true">*</span>
-                </label>
-                <input id="fDisplayName" name="fDisplayName" type="text" class="form-control"
-                       [ngModel]="fDisplayName()" (ngModelChange)="fDisplayName.set($event)"
-                       [disabled]="saving()" autocomplete="off" />
-              </div>
-              <div class="col-sm-3">
-                <label class="form-label small text-muted mb-1" for="fLeadSource">Source</label>
-                <select id="fLeadSource" name="fLeadSource" class="form-select"
-                        [ngModel]="fLeadSource()" (ngModelChange)="fLeadSource.set($event)"
-                        [disabled]="saving()">
-                  @for (opt of leadSourceOptions; track opt.value) {
-                    <option [value]="opt.value">{{ opt.label }}</option>
-                  }
-                </select>
-              </div>
-              <div class="col-sm-3">
-                <label class="form-label small text-muted mb-1" for="fCompanyName">Company / Org</label>
-                <input id="fCompanyName" name="fCompanyName" type="text" class="form-control"
-                       [ngModel]="fCompanyName()" (ngModelChange)="fCompanyName.set($event)"
-                       [disabled]="saving()" autocomplete="off" />
-              </div>
-              <div class="col-sm-3">
-                <label class="form-label small text-muted mb-1" for="fContactPerson">Contact Person</label>
-                <input id="fContactPerson" name="fContactPerson" type="text" class="form-control"
-                       [ngModel]="fContactPerson()" (ngModelChange)="fContactPerson.set($event)"
-                       [disabled]="saving()" autocomplete="off" />
-              </div>
-              <div class="col-sm-3">
-                <label class="form-label small text-muted mb-1" for="fPhone">Phone</label>
-                <input id="fPhone" name="fPhone" type="tel" class="form-control"
-                       [ngModel]="fPhone()" (ngModelChange)="fPhone.set($event)"
-                       [disabled]="saving()" autocomplete="off" />
-              </div>
-              <div class="col-sm-4">
-                <label class="form-label small text-muted mb-1" for="fEmail">Email</label>
-                <input id="fEmail" name="fEmail" type="email" class="form-control"
-                       [ngModel]="fEmail()" (ngModelChange)="fEmail.set($event)"
-                       [disabled]="saving()" autocomplete="off" />
-              </div>
-              <div class="col-sm-6">
-                <label class="form-label small text-muted mb-1" for="fNotes">Notes</label>
-                <input id="fNotes" name="fNotes" type="text" class="form-control"
-                       [ngModel]="fNotes()" (ngModelChange)="fNotes.set($event)"
-                       [disabled]="saving()" autocomplete="off" />
-              </div>
+          <form class="erp-card mb-4" (ngSubmit)="save()" aria-label="Edit lead">
+            <div class="erp-card__head">
+              <h2 class="h6 mb-0">Lead Details</h2>
             </div>
-            @if (saveError(); as msg) {
-              <p class="form-error text-danger small mt-2 mb-2" role="alert">{{ msg }}</p>
-            }
-            <div>
-              <button type="submit" class="btn btn-primary" [disabled]="saving()">
-                @if (saving()) {
-                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                  Saving…
-                } @else {
-                  Save Changes
-                }
-              </button>
+            <div class="erp-card__body">
+              <div class="row g-2 mb-2">
+                <div class="col-sm-4">
+                  <label class="form-label small text-muted mb-1" for="fDisplayName">
+                    Name <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <input id="fDisplayName" name="fDisplayName" type="text" class="form-control"
+                         [ngModel]="fDisplayName()" (ngModelChange)="fDisplayName.set($event)"
+                         [disabled]="saving()" autocomplete="off" />
+                </div>
+                <div class="col-sm-3">
+                  <label class="form-label small text-muted mb-1" for="fLeadSource">Source</label>
+                  <select id="fLeadSource" name="fLeadSource" class="form-select"
+                          [ngModel]="fLeadSource()" (ngModelChange)="fLeadSource.set($event)"
+                          [disabled]="saving()">
+                    @for (opt of leadSourceOptions; track opt.value) {
+                      <option [value]="opt.value">{{ opt.label }}</option>
+                    }
+                  </select>
+                </div>
+                <div class="col-sm-3">
+                  <label class="form-label small text-muted mb-1" for="fCompanyName">Company / Org</label>
+                  <input id="fCompanyName" name="fCompanyName" type="text" class="form-control"
+                         [ngModel]="fCompanyName()" (ngModelChange)="fCompanyName.set($event)"
+                         [disabled]="saving()" autocomplete="off" />
+                </div>
+                <div class="col-sm-3">
+                  <label class="form-label small text-muted mb-1" for="fContactPerson">Contact Person</label>
+                  <input id="fContactPerson" name="fContactPerson" type="text" class="form-control"
+                         [ngModel]="fContactPerson()" (ngModelChange)="fContactPerson.set($event)"
+                         [disabled]="saving()" autocomplete="off" />
+                </div>
+                <div class="col-sm-3">
+                  <label class="form-label small text-muted mb-1" for="fPhone">Phone</label>
+                  <input id="fPhone" name="fPhone" type="tel" class="form-control"
+                         [ngModel]="fPhone()" (ngModelChange)="fPhone.set($event)"
+                         [disabled]="saving()" autocomplete="off" />
+                </div>
+                <div class="col-sm-4">
+                  <label class="form-label small text-muted mb-1" for="fEmail">Email</label>
+                  <input id="fEmail" name="fEmail" type="email" class="form-control"
+                         [ngModel]="fEmail()" (ngModelChange)="fEmail.set($event)"
+                         [disabled]="saving()" autocomplete="off" />
+                </div>
+                <div class="col-sm-6">
+                  <label class="form-label small text-muted mb-1" for="fNotes">Notes</label>
+                  <input id="fNotes" name="fNotes" type="text" class="form-control"
+                         [ngModel]="fNotes()" (ngModelChange)="fNotes.set($event)"
+                         [disabled]="saving()" autocomplete="off" />
+                </div>
+              </div>
+              @if (saveError(); as msg) {
+                <p class="text-danger small mt-2 mb-2" role="alert">{{ msg }}</p>
+              }
+              <div>
+                <button type="submit" class="btn btn-primary" [disabled]="saving()">
+                  @if (saving()) {
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    Saving…
+                  } @else {
+                    Save Changes
+                  }
+                </button>
+              </div>
             </div>
           </form>
         } @else {

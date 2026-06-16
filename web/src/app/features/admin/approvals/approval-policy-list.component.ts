@@ -17,7 +17,6 @@ import type { ApprovalPolicyPage } from './approvals.service';
 import {
   ApprovalPolicyDto,
   CreateApprovalPolicyRequest,
-  MasterStatus,
   PolicyBranchScope,
   PolicyStepInputDto,
 } from './models/approvals.model';
@@ -268,16 +267,6 @@ export class ApprovalPolicyListComponent {
         this.saving.set(false);
       },
     });
-  }
-
-  // ── Display helpers ──────────────────────────────────────────────────────────
-
-  statusBadgeClass(status: MasterStatus): string {
-    switch (status) {
-      case 'ACTIVE': return 'text-bg-success';
-      case 'INACTIVE': return 'text-bg-warning';
-      case 'ARCHIVED': return 'text-bg-secondary';
-    }
   }
 
   private messageFrom(err: unknown, fallback: string): string {

@@ -11,7 +11,7 @@ import { Company } from '../../models/company.model';
 import { CompanyService } from '../../company/company.service';
 import { OrganisationService } from '../../organisation/organisation.service';
 import { PaginatorComponent } from '../../../../shared/paginator/paginator.component';
-import { PurchaseRequisitionDto, RequisitionStatus } from './purchase-requisition.model';
+import { PurchaseRequisitionDto } from './purchase-requisition.model';
 import { PurchaseRequisitionService } from './purchase-requisition.service';
 
 const DEFAULT_SIZE = 20;
@@ -139,16 +139,5 @@ export class RequisitionListComponent {
 
   reqLabel(r: PurchaseRequisitionDto): string {
     return r.requisitionNumber ?? 'DRAFT';
-  }
-
-  statusBadgeClass(status: RequisitionStatus): string {
-    switch (status) {
-      case 'SUBMITTED': return 'text-bg-primary';
-      case 'APPROVED': return 'text-bg-success';
-      case 'REJECTED': return 'text-bg-danger';
-      case 'CONVERTED': return 'text-bg-info';
-      case 'CANCELLED': return 'text-bg-secondary';
-      default: return 'text-bg-warning'; // DRAFT
-    }
   }
 }

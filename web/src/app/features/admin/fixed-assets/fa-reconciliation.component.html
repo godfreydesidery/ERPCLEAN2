@@ -1,7 +1,7 @@
 <section class="admin-page">
   <header class="page-head">
     <h1 class="h4 mb-1">FA-to-GL Reconciliation</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
+    <p class="subtitle">
       <i class="bi bi-bar-chart-steps me-1" aria-hidden="true"></i>
       Compare the fixed asset register totals against GL balances.
       Flags discrepancies in red.
@@ -9,7 +9,7 @@
   </header>
 
   @if (!canView()) {
-    <p class="state text-muted">
+    <p class="text-muted">
       <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>You don't have permission to view this report.
     </p>
   } @else {
@@ -52,71 +52,69 @@
 
       @switch (state()) {
         @case ('loading') {
-          <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
             <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading reconciliation…
           </p>
         }
         @case ('error') {
-          <p class="state text-danger" role="alert">
+          <p class="text-danger" role="alert">
             <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load reconciliation data.
           </p>
         }
         @default {
           @if (report(); as r) {
-            <!-- Cost bar -->
-            <div class="card mb-3" [class.border-danger]="!r.costTies" [class.border-success]="r.costTies">
-              <div class="card-header d-flex align-items-center gap-2">
-                <strong>Asset Cost</strong>
+            <!-- Cost card -->
+            <div class="erp-card mb-3" [class.border-danger]="!r.costTies" [class.border-success]="r.costTies">
+              <div class="erp-card__head">
+                <h2>Asset Cost</h2>
+                <span class="spacer"></span>
                 @if (r.costTies) {
-                  <span class="badge text-bg-success ms-auto">
-                    <i class="bi bi-check-circle me-1" aria-hidden="true"></i>TIED
+                  <span class="status-tag status-tag--ok">
+                    <span class="status-tag__dot" aria-hidden="true"></span>TIED
                   </span>
                 } @else {
-                  <span class="badge text-bg-danger ms-auto" role="alert">
-                    <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>MISMATCH
+                  <span class="status-tag status-tag--danger" role="alert">
+                    <span class="status-tag__dot" aria-hidden="true"></span>MISMATCH
                   </span>
                 }
               </div>
-              <div class="card-body">
+              <div class="erp-card__body">
                 <dl class="row small mb-0">
-                  <dt class="col-sm-4">Register: Σ carrying_cost (IN_SERVICE)</dt>
-                  <dd class="col-sm-8 font-monospace fw-semibold">{{ +r.registerCostSum | number:'1.2-2' }}</dd>
-                  <dt class="col-sm-4">GL: Fixed Assets debit balance</dt>
-                  <dd class="col-sm-8 font-monospace fw-semibold"
-                      [class.text-danger]="!r.costTies">{{ +r.glCostBalance | number:'1.2-2' }}</dd>
-                  <dt class="col-sm-4">Difference</dt>
-                  <dd class="col-sm-8 font-monospace"
-                      [class.text-danger]="!r.costTies">
+                  <dt class="col-sm-5">Register: Σ carrying_cost (IN_SERVICE)</dt>
+                  <dd class="col-sm-7 mono fw-semibold">{{ +r.registerCostSum | number:'1.2-2' }}</dd>
+                  <dt class="col-sm-5">GL: Fixed Assets debit balance</dt>
+                  <dd class="col-sm-7 mono fw-semibold" [class.text-danger]="!r.costTies">{{ +r.glCostBalance | number:'1.2-2' }}</dd>
+                  <dt class="col-sm-5">Difference</dt>
+                  <dd class="col-sm-7 mono" [class.text-danger]="!r.costTies">
                     {{ +(+r.registerCostSum - +r.glCostBalance) | number:'1.2-2' }}
                   </dd>
                 </dl>
               </div>
             </div>
 
-            <!-- Accumulated depreciation bar -->
-            <div class="card mb-3" [class.border-danger]="!r.accumDepTies" [class.border-success]="r.accumDepTies">
-              <div class="card-header d-flex align-items-center gap-2">
-                <strong>Accumulated Depreciation</strong>
+            <!-- Accumulated depreciation card -->
+            <div class="erp-card mb-3" [class.border-danger]="!r.accumDepTies" [class.border-success]="r.accumDepTies">
+              <div class="erp-card__head">
+                <h2>Accumulated Depreciation</h2>
+                <span class="spacer"></span>
                 @if (r.accumDepTies) {
-                  <span class="badge text-bg-success ms-auto">
-                    <i class="bi bi-check-circle me-1" aria-hidden="true"></i>TIED
+                  <span class="status-tag status-tag--ok">
+                    <span class="status-tag__dot" aria-hidden="true"></span>TIED
                   </span>
                 } @else {
-                  <span class="badge text-bg-danger ms-auto" role="alert">
-                    <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>MISMATCH
+                  <span class="status-tag status-tag--danger" role="alert">
+                    <span class="status-tag__dot" aria-hidden="true"></span>MISMATCH
                   </span>
                 }
               </div>
-              <div class="card-body">
+              <div class="erp-card__body">
                 <dl class="row small mb-0">
-                  <dt class="col-sm-4">Register: Σ accumulated_depreciation (IN_SERVICE)</dt>
-                  <dd class="col-sm-8 font-monospace fw-semibold">{{ +r.registerAccumDepSum | number:'1.2-2' }}</dd>
-                  <dt class="col-sm-4">GL: Accum Dep balance (negated for positive presentation)</dt>
-                  <dd class="col-sm-8 font-monospace fw-semibold"
-                      [class.text-danger]="!r.accumDepTies">{{ +r.glAccumDepBalance | number:'1.2-2' }}</dd>
-                  <dt class="col-sm-4">Difference</dt>
-                  <dd class="col-sm-8 font-monospace"
-                      [class.text-danger]="!r.accumDepTies">
+                  <dt class="col-sm-5">Register: Σ accumulated_depreciation (IN_SERVICE)</dt>
+                  <dd class="col-sm-7 mono fw-semibold">{{ +r.registerAccumDepSum | number:'1.2-2' }}</dd>
+                  <dt class="col-sm-5">GL: Accum Dep balance (negated for positive presentation)</dt>
+                  <dd class="col-sm-7 mono fw-semibold" [class.text-danger]="!r.accumDepTies">{{ +r.glAccumDepBalance | number:'1.2-2' }}</dd>
+                  <dt class="col-sm-5">Difference</dt>
+                  <dd class="col-sm-7 mono" [class.text-danger]="!r.accumDepTies">
                     {{ +(+r.registerAccumDepSum - +r.glAccumDepBalance) | number:'1.2-2' }}
                   </dd>
                 </dl>
@@ -131,7 +129,7 @@
                 Investigate unposted journals or manual GL adjustments.
               </div>
             } @else {
-              <div class="alert alert-success" role="status">
+              <div class="alert alert-success" aria-live="polite">
                 <i class="bi bi-check-circle-fill me-2" aria-hidden="true"></i>
                 All balances reconcile.
               </div>

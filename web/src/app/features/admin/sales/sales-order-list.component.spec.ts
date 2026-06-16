@@ -9,7 +9,7 @@
  *  5. create() validation: requires orderDate.
  *  6. create() calls soService.createOrder with correct payload (incl. optional agent).
  *  7. 403 response sets state to 'forbidden'.
- *  8. statusBadgeClass: key status values.
+ *  8. Status-tag modifier: key status values.
  *  9. Numeric money guard: grossTotalAmount coerced via +value in template.
  */
 import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
@@ -214,40 +214,66 @@ describe('SalesOrderListComponent — create form', () => {
   });
 });
 
-// ── Status badge class ──────────────────────────────────────────────────────────
+// ── status-tag modifier logic ─────────────────────────────────────────────────
+// Mirrors inline template bindings on the sales-order status span.
 
-describe('SalesOrderListComponent — statusBadgeClass', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    makeBed();
-  });
-  afterEach(() => {
-    vi.useRealTimers();
-    TestBed.resetTestingModule();
-  });
+function orderOk(s: string)      { return s === 'FULFILLED' || s === 'INVOICED'; }
+function orderInfo(s: string)    { return s === 'CONFIRMED' || s === 'PARTIALLY_FULFILLED'; }
+function orderWarn(s: string)    { return s === 'DRAFT' || s === 'PARTIALLY_INVOICED'; }
+function orderDanger(s: string)  { return s === 'CANCELLED'; }
+function orderNeutral(s: string) { return s === 'CLOSED'; }
 
-  it('DRAFT → text-bg-warning', async () => {
-    const comp = TestBed.createComponent(SalesOrderListComponent).componentInstance;
-    await vi.runAllTimersAsync();
-    expect(comp.statusBadgeClass('DRAFT')).toBe('text-bg-warning');
-  });
-
-  it('CONFIRMED → text-bg-primary', async () => {
-    const comp = TestBed.createComponent(SalesOrderListComponent).componentInstance;
-    await vi.runAllTimersAsync();
-    expect(comp.statusBadgeClass('CONFIRMED')).toBe('text-bg-primary');
+describe('SalesOrderListComponent — status-tag modifier', () => {
+  it('DRAFT → warn only', () => {
+    expect(orderOk('DRAFT')).toBe(false);
+    expect(orderInfo('DRAFT')).toBe(false);
+    expect(orderWarn('DRAFT')).toBe(true);
+    expect(orderDanger('DRAFT')).toBe(false);
+    expect(orderNeutral('DRAFT')).toBe(false);
   });
 
-  it('FULFILLED → text-bg-success', async () => {
-    const comp = TestBed.createComponent(SalesOrderListComponent).componentInstance;
-    await vi.runAllTimersAsync();
-    expect(comp.statusBadgeClass('FULFILLED')).toBe('text-bg-success');
+  it('CONFIRMED → info only', () => {
+    expect(orderOk('CONFIRMED')).toBe(false);
+    expect(orderInfo('CONFIRMED')).toBe(true);
+    expect(orderWarn('CONFIRMED')).toBe(false);
+    expect(orderDanger('CONFIRMED')).toBe(false);
   });
 
-  it('CANCELLED → text-bg-danger', async () => {
-    const comp = TestBed.createComponent(SalesOrderListComponent).componentInstance;
-    await vi.runAllTimersAsync();
-    expect(comp.statusBadgeClass('CANCELLED')).toBe('text-bg-danger');
+  it('FULFILLED → ok only', () => {
+    expect(orderOk('FULFILLED')).toBe(true);
+    expect(orderInfo('FULFILLED')).toBe(false);
+    expect(orderWarn('FULFILLED')).toBe(false);
+    expect(orderDanger('FULFILLED')).toBe(false);
+  });
+
+  it('INVOICED → ok only', () => {
+    expect(orderOk('INVOICED')).toBe(true);
+    expect(orderInfo('INVOICED')).toBe(false);
+    expect(orderWarn('INVOICED')).toBe(false);
+  });
+
+  it('PARTIALLY_FULFILLED → info only', () => {
+    expect(orderOk('PARTIALLY_FULFILLED')).toBe(false);
+    expect(orderInfo('PARTIALLY_FULFILLED')).toBe(true);
+    expect(orderWarn('PARTIALLY_FULFILLED')).toBe(false);
+  });
+
+  it('PARTIALLY_INVOICED → warn only', () => {
+    expect(orderOk('PARTIALLY_INVOICED')).toBe(false);
+    expect(orderWarn('PARTIALLY_INVOICED')).toBe(true);
+    expect(orderDanger('PARTIALLY_INVOICED')).toBe(false);
+  });
+
+  it('CANCELLED → danger only', () => {
+    expect(orderOk('CANCELLED')).toBe(false);
+    expect(orderWarn('CANCELLED')).toBe(false);
+    expect(orderDanger('CANCELLED')).toBe(true);
+    expect(orderNeutral('CANCELLED')).toBe(false);
+  });
+
+  it('CLOSED → neutral only', () => {
+    expect(orderOk('CLOSED')).toBe(false);
+    expect(orderNeutral('CLOSED')).toBe(true);
   });
 });
 

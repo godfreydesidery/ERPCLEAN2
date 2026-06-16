@@ -1,1 +1,7 @@
-// BOM list inherits all layout from admin.styles.scss via the admin-page class.
+// Picker label helper: matches .erp-field > label visuals for uid-picker fields
+// that self-label via aria-label (placeholder) so a <label for> is not applicable.
+.erp-field__label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--erp-text);
+}

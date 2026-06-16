@@ -7,7 +7,7 @@ import { SessionStore } from '../../../core/auth/session.store';
 import { Company } from '../models/company.model';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
-import { VatReturnDto, VatReturnStatus } from './models/tax.model';
+import { VatReturnDto } from './models/tax.model';
 import { TaxService } from './tax.service';
 
 /**
@@ -148,10 +148,6 @@ export class VatReturnsListComponent {
   }
 
   // ── Display helpers ────────────────────────────────────────────────────────
-
-  statusBadgeClass(status: VatReturnStatus): string {
-    return status === 'FILED' ? 'text-bg-success' : 'text-bg-warning';
-  }
 
   fmtMoney(v: number | string | null | undefined): string {
     const n = +(v ?? 0);

@@ -1,6 +1,6 @@
 <section class="admin-page">
   <header class="page-head">
-    <a class="back-link text-muted small" routerLink="/admin/sales-returns">
+    <a class="text-muted small" routerLink="/admin/sales-returns">
       <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Sales Returns
     </a>
 
@@ -22,10 +22,14 @@
           <div class="d-flex flex-wrap align-items-start gap-3 mt-1">
             <div>
               <h1 class="h4 mb-0">
-                <span class="font-monospace text-primary">{{ returnLabel() }}</span>
+                <span class="mono text-primary">{{ returnLabel() }}</span>
               </h1>
               <div class="d-flex gap-2 mt-1 flex-wrap align-items-center">
-                <span class="badge" [class]="statusBadgeClass(r.status)">{{ r.status }}</span>
+                <span class="status-tag"
+                      [class.status-tag--ok]="r.status === 'CONFIRMED'"
+                      [class.status-tag--warn]="r.status === 'DRAFT'">
+                  {{ r.status }}
+                </span>
                 <a class="small text-muted"
                    [routerLink]="['/admin/deliveries/uid', r.deliveryUid]">
                   Delivery
@@ -37,7 +41,7 @@
               </div>
             </div>
 
-            <!-- Metadata -->
+            <!-- Metadata + totals -->
             <dl class="row g-1 mb-0 flex-grow-1" style="font-size:0.875rem">
               <dt class="col-sm-3 text-muted fw-normal">Return Date</dt>
               <dd class="col-sm-9 mb-0">{{ r.returnDate }}</dd>
@@ -46,13 +50,11 @@
                 <dd class="col-sm-9 mb-0">{{ r.reason }}</dd>
               }
               <dt class="col-sm-3 text-muted fw-normal">Net</dt>
-              <dd class="col-sm-9 mb-0 font-monospace">{{ r.currency }} {{ fmtMoney(r.netAmount) }}</dd>
+              <dd class="col-sm-9 mb-0 mono">{{ r.currency }} {{ fmtMoney(r.netAmount) }}</dd>
               <dt class="col-sm-3 text-muted fw-normal">VAT</dt>
-              <dd class="col-sm-9 mb-0 font-monospace">{{ r.currency }} {{ fmtMoney(r.vatAmount) }}</dd>
+              <dd class="col-sm-9 mb-0 mono">{{ r.currency }} {{ fmtMoney(r.vatAmount) }}</dd>
               <dt class="col-sm-3 text-muted fw-normal">Gross</dt>
-              <dd class="col-sm-9 mb-0 font-monospace">
-                <strong>{{ r.currency }} {{ fmtMoney(r.grossAmount) }}</strong>
-              </dd>
+              <dd class="col-sm-9 mb-0 mono fw-bold">{{ r.currency }} {{ fmtMoney(r.grossAmount) }}</dd>
             </dl>
           </div>
 
@@ -78,57 +80,61 @@
 
   <!-- Lines panel -->
   @if (returnDoc(); as r) {
-    <div class="mt-4">
-      <h2 class="h5 mb-2">Return Lines</h2>
-
-      @if (r.lines.length === 0) {
-        <p class="text-muted small">No lines on this return.</p>
-      } @else {
-        <div class="table-responsive">
-          <table class="table table-sm table-hover align-middle bg-white">
-            <caption class="visually-hidden">Sales return lines</caption>
-            <thead>
-              <tr>
-                <th scope="col">#</th>
-                <th scope="col">Product</th>
-                <th scope="col">Unit</th>
-                <th scope="col" class="text-end">Returned Qty</th>
-                <th scope="col" class="text-end">Unit Price</th>
-                <th scope="col" class="text-end">Net</th>
-                <th scope="col" class="text-end">VAT</th>
-                <th scope="col" class="text-end">Gross</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (line of r.lines; track line.uid) {
+    <div class="erp-card mb-3">
+      <div class="erp-card__head"><h2>Return Lines</h2></div>
+      <div class="erp-card__body">
+        @if (r.lines.length === 0) {
+          <div class="erp-empty">
+            <i class="bi bi-list-ul"></i>
+            No lines on this return.
+          </div>
+        } @else {
+          <div class="erp-table-wrap">
+            <table class="erp-table">
+              <caption class="visually-hidden">Sales return lines</caption>
+              <thead>
                 <tr>
-                  <td class="small text-muted">{{ line.lineNo }}</td>
-                  <td>
-                    <span class="font-monospace small">{{ line.productCode }}</span>
-                    <br /><span class="small text-muted">{{ line.productName }}</span>
-                  </td>
-                  <td class="small">{{ line.unitName }}</td>
-                  <td class="text-end font-monospace">{{ +line.qtyReturned | number:'1.3-3' }}</td>
-                  <td class="text-end font-monospace">
-                    {{ line.unitPriceAmount != null ? fmtMoney(line.unitPriceAmount) : '—' }}
-                  </td>
-                  <td class="text-end font-monospace">{{ fmtMoney(line.netAmount) }}</td>
-                  <td class="text-end font-monospace">{{ fmtMoney(line.vatAmount) }}</td>
-                  <td class="text-end font-monospace">{{ fmtMoney(line.grossAmount) }}</td>
+                  <th scope="col">#</th>
+                  <th scope="col">Product</th>
+                  <th scope="col">Unit</th>
+                  <th scope="col" class="num">Returned Qty</th>
+                  <th scope="col" class="num">Unit Price</th>
+                  <th scope="col" class="num">Net</th>
+                  <th scope="col" class="num">VAT</th>
+                  <th scope="col" class="num">Gross</th>
                 </tr>
-              }
-            </tbody>
-            <tfoot>
-              <tr class="fw-semibold">
-                <td colspan="5" class="text-end small text-muted">Totals</td>
-                <td class="text-end font-monospace">{{ fmtMoney(r.netAmount) }}</td>
-                <td class="text-end font-monospace">{{ fmtMoney(r.vatAmount) }}</td>
-                <td class="text-end font-monospace">{{ fmtMoney(r.grossAmount) }}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      }
+              </thead>
+              <tbody>
+                @for (line of r.lines; track line.uid) {
+                  <tr>
+                    <td class="small text-muted">{{ line.lineNo }}</td>
+                    <td>
+                      <span class="mono small">{{ line.productCode }}</span>
+                      <br><span class="small text-muted">{{ line.productName }}</span>
+                    </td>
+                    <td class="small">{{ line.unitName }}</td>
+                    <td class="num">{{ +line.qtyReturned | number:'1.3-3' }}</td>
+                    <td class="num">
+                      {{ line.unitPriceAmount != null ? fmtMoney(line.unitPriceAmount) : '—' }}
+                    </td>
+                    <td class="num">{{ fmtMoney(line.netAmount) }}</td>
+                    <td class="num">{{ fmtMoney(line.vatAmount) }}</td>
+                    <td class="num fw-semibold">{{ fmtMoney(line.grossAmount) }}</td>
+                  </tr>
+                }
+              </tbody>
+              <tfoot class="erp-tfoot">
+                <tr class="fw-semibold">
+                  <td colspan="5" class="text-end small text-muted">Totals</td>
+                  <td class="num">{{ fmtMoney(r.netAmount) }}</td>
+                  <td class="num">{{ fmtMoney(r.vatAmount) }}</td>
+                  <td class="num">{{ fmtMoney(r.grossAmount) }}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        }
+      </div>
     </div>
   }
 </section>

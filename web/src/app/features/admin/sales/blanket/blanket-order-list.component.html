@@ -1,7 +1,7 @@
 <section class="admin-page">
   <header class="page-head">
-    <h1 class="h4 mb-1">Blanket Orders</h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
+    <h1>Blanket Orders</h1>
+    <p class="subtitle">
       <i class="bi bi-file-earmark-ruled me-1" aria-hidden="true"></i>
       Sales blanket agreements — draw releases against committed quantities.
     </p>
@@ -22,8 +22,8 @@
     }
     @default {
       @if (companies().length > 1) {
-        <div class="mb-3" style="max-width:320px">
-          <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+        <div class="mb-3 erp-field" style="max-width:320px">
+          <label for="companyPicker">Company</label>
           <select id="companyPicker" name="companyPicker" class="form-select"
                   [ngModel]="selectedCompanyId()"
                   (ngModelChange)="onCompanyChange($event)">
@@ -38,43 +38,45 @@
 
   @if (selectedCompanyId()) {
     <!-- Toolbar -->
-    <div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
+    <div class="erp-toolbar mb-3">
+      <span class="erp-toolbar__spacer"></span>
       @if (canCreate()) {
-        <a class="btn btn-primary ms-auto" routerLink="/admin/blanket-orders/create">
+        <a class="btn btn-primary" routerLink="/admin/blanket-orders/create">
           <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>New Blanket Order
         </a>
       }
     </div>
 
-    <!-- List states -->
     @switch (state()) {
       @case ('loading') {
-        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading blanket orders…
         </p>
       }
       @case ('error') {
-        <p class="state text-danger" role="alert">
+        <p class="text-danger" role="alert">
           <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
           Could not load blanket orders. Please try again.
         </p>
       }
       @case ('forbidden') {
-        <p class="state text-muted d-flex align-items-center gap-2">
-          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock"></i>
           You don't have permission to view blanket orders.
-        </p>
+        </div>
       }
       @default {
         @if (isEmpty()) {
-          <p class="state text-muted">No blanket orders yet.
+          <div class="erp-empty">
+            <i class="bi bi-file-earmark-ruled"></i>
+            No blanket orders yet.
             @if (canCreate()) {
               <a routerLink="/admin/blanket-orders/create">Create one</a>.
             }
-          </p>
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Blanket orders</caption>
               <thead>
                 <tr>
@@ -83,23 +85,29 @@
                   <th scope="col">Valid From</th>
                   <th scope="col">Valid To</th>
                   <th scope="col">Currency</th>
-                  <th scope="col" class="text-end">Committed</th>
-                  <th scope="col" class="text-end">Drawn</th>
+                  <th scope="col" class="num">Committed</th>
+                  <th scope="col" class="num">Drawn</th>
                   <th scope="col"><span class="visually-hidden">Actions</span></th>
                 </tr>
               </thead>
               <tbody>
                 @for (b of rows(); track b.uid) {
                   <tr>
-                    <td class="font-monospace">{{ b.orderNumber ?? 'DRAFT' }}</td>
+                    <td class="mono">{{ b.orderNumber ?? 'DRAFT' }}</td>
                     <td>
-                      <span class="badge" [class]="statusBadgeClass(b.status)">{{ b.status }}</span>
+                      <span class="status-tag"
+                            [class.status-tag--ok]="b.status === 'ACTIVE'"
+                            [class.status-tag--warn]="b.status === 'EXHAUSTED'"
+                            [class.status-tag--danger]="b.status === 'CANCELLED'"
+                            [class.status-tag--neutral]="b.status !== 'ACTIVE' && b.status !== 'EXHAUSTED' && b.status !== 'CANCELLED'">
+                        {{ b.status }}
+                      </span>
                     </td>
                     <td class="small text-muted">{{ b.validFrom }}</td>
                     <td class="small text-muted">{{ b.validTo }}</td>
                     <td class="small">{{ b.currency }}</td>
-                    <td class="text-end font-monospace small">{{ +b.totalCommittedAmount | number:'1.2-2' }}</td>
-                    <td class="text-end font-monospace small">{{ +b.totalDrawnAmount | number:'1.2-2' }}</td>
+                    <td class="num small">{{ +b.totalCommittedAmount | number:'1.2-2' }}</td>
+                    <td class="num small">{{ +b.totalDrawnAmount | number:'1.2-2' }}</td>
                     <td>
                       <a class="btn btn-sm btn-outline-primary"
                          [routerLink]="['/admin/blanket-orders/uid', b.uid]"

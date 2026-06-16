@@ -1,12 +1,12 @@
 <section class="admin-page">
-  <header class="page-head">
-    <h1 class="h4 mb-1">
-      <i class="bi bi-calendar-check me-2" aria-hidden="true"></i>Year-End Close
-    </h1>
-    <p class="text-muted mb-0" style="font-size:0.9rem">
-      Close a fiscal year to post the P&amp;L closing journal to Retained Earnings, or reopen
-      the most-recently-closed year to reverse the closing entry.
-    </p>
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1><i class="bi bi-calendar-check me-2" aria-hidden="true"></i>Year-End Close</h1>
+      <p class="subtitle">
+        Close a fiscal year to post the P&amp;L closing journal to Retained Earnings, or reopen
+        the most-recently-closed year to reverse the closing entry.
+      </p>
+    </div>
   </header>
 
   <!-- Company selector -->
@@ -68,31 +68,32 @@
     <!-- Fiscal years table -->
     @switch (state()) {
       @case ('loading') {
-        <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading fiscal years…
         </p>
       }
       @case ('error') {
-        <p class="state text-danger" role="alert">
+        <p class="text-danger" role="alert">
           <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
           Could not load fiscal years.
         </p>
       }
       @case ('forbidden') {
-        <p class="state text-warning" role="alert">
-          <i class="bi bi-shield-exclamation me-1" aria-hidden="true"></i>
+        <div class="erp-empty" role="alert">
+          <i class="bi bi-shield-exclamation"></i>
           You do not have permission to view fiscal years.
-        </p>
+        </div>
       }
       @default {
         @if (isEmpty()) {
-          <p class="state text-muted">
+          <div class="erp-empty">
+            <i class="bi bi-calendar-check"></i>
             No fiscal years found. Open a fiscal year on the
             <a routerLink="/admin/gl/periods">Fiscal Periods</a> screen first.
-          </p>
+          </div>
         } @else {
-          <div class="table-responsive">
-            <table class="table table-hover align-middle bg-white grid">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
               <caption class="visually-hidden">Fiscal years — year-end close status</caption>
               <thead>
                 <tr>
@@ -109,12 +110,14 @@
               </thead>
               <tbody>
                 @for (year of fiscalYears(); track year.uid) {
-                  <tr [class.table-secondary]="year.status === 'CLOSED'">
+                  <tr [class.is-muted]="year.status === 'CLOSED'">
                     <td class="fw-semibold">{{ year.yearCode }}</td>
                     <td class="small">{{ year.startDate }}</td>
                     <td class="small">{{ year.endDate }}</td>
                     <td>
-                      <span class="badge" [class]="statusBadgeClass(year.status)">
+                      <span class="status-tag"
+                            [class.status-tag--ok]="year.status === 'OPEN'"
+                            [class.status-tag--neutral]="year.status !== 'OPEN'">
                         {{ year.status }}
                       </span>
                     </td>

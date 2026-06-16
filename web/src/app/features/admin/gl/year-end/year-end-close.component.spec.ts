@@ -247,21 +247,29 @@ describe('YearEndCloseComponent — rowBusyUid guard', () => {
   });
 });
 
-describe('YearEndCloseComponent — status helpers', () => {
+describe('YearEndCloseComponent — status pill rendering', () => {
   beforeEach(() => { vi.useFakeTimers(); });
   afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
 
-  it('statusBadgeClass returns text-bg-success for OPEN', async () => {
-    makeBed();
-    const comp = TestBed.createComponent(YearEndCloseComponent).componentInstance;
+  it('OPEN year renders status-tag--ok pill', async () => {
+    makeBed([makeYear('FY1', 'FY2024', 'OPEN')]);
+    const fixture = TestBed.createComponent(YearEndCloseComponent);
     await vi.runAllTimersAsync();
-    expect(comp.statusBadgeClass('OPEN')).toBe('text-bg-success');
+    fixture.detectChanges();
+
+    const pill = fixture.nativeElement.querySelector('.status-tag.status-tag--ok') as HTMLElement | null;
+    expect(pill).not.toBeNull();
+    expect(pill!.textContent?.trim()).toBe('OPEN');
   });
 
-  it('statusBadgeClass returns text-bg-secondary for CLOSED', async () => {
-    makeBed();
-    const comp = TestBed.createComponent(YearEndCloseComponent).componentInstance;
+  it('CLOSED year renders status-tag--neutral pill', async () => {
+    makeBed([makeYear('FY1', 'FY2024', 'CLOSED')]);
+    const fixture = TestBed.createComponent(YearEndCloseComponent);
     await vi.runAllTimersAsync();
-    expect(comp.statusBadgeClass('CLOSED')).toBe('text-bg-secondary');
+    fixture.detectChanges();
+
+    const pill = fixture.nativeElement.querySelector('.status-tag.status-tag--neutral') as HTMLElement | null;
+    expect(pill).not.toBeNull();
+    expect(pill!.textContent?.trim()).toBe('CLOSED');
   });
 });

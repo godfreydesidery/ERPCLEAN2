@@ -11,7 +11,7 @@ import { Company } from '../models/company.model';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { HrPayrollService, EmployeePage } from './hr-payroll.service';
-import { CreateEmployeeRequest, EmployeeDto, EmploymentStatus } from './models/hr-payroll.model';
+import { CreateEmployeeRequest, EmployeeDto } from './models/hr-payroll.model';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
@@ -185,16 +185,6 @@ export class EmployeeListComponent {
         this.saving.set(false);
       },
     });
-  }
-
-  statusBadgeClass(status: EmploymentStatus): string {
-    switch (status) {
-      case 'ACTIVE': return 'text-bg-success';
-      case 'ON_LEAVE': return 'text-bg-info';
-      case 'SUSPENDED': return 'text-bg-warning';
-      case 'TERMINATED': return 'text-bg-danger';
-      default: return 'text-bg-secondary';
-    }
   }
 
   private messageFrom(err: unknown, fallback: string): string {
