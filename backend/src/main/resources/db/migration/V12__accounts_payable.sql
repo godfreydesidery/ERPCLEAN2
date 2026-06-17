@@ -161,6 +161,10 @@ CREATE TABLE ap_payments (
     -- D-7: WHT withheld on payment header (ADR-0040 D-7)
     wht_amount           NUMERIC(19,4),      -- withheld amount (null = no WHT on this payment)
     wht_transaction_uid  VARCHAR(26),        -- scalar ref to wht_transactions.uid; no FK (cross-module soft ref)
+    -- D-9: on-account (prepayment) tracking (ADR-0040 D-9)
+    unallocated_amount   NUMERIC(19,4)   NOT NULL DEFAULT 0,   -- on-account remainder; starts == amount for prepayments
+    status               VARCHAR(20)     NOT NULL DEFAULT 'ALLOCATED',  -- UNALLOCATED|PARTIAL|ALLOCATED
+    cheque_uid           VARCHAR(26),        -- scalar ref to cheques.uid; no FK (cross-module soft ref)
     version          BIGINT          NOT NULL DEFAULT 0,
     created_at       TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by       BIGINT,
@@ -175,7 +179,9 @@ CREATE TABLE ap_payments (
     CONSTRAINT chk_ap_payment_amount        CHECK (amount > 0),
     CONSTRAINT chk_ap_payment_kind          CHECK (kind IN ('SINGLE','PAYMENT_RUN')),
     CONSTRAINT chk_ap_payment_tender        CHECK (tender_type IN ('CASH','BANK_TRANSFER','MOBILE_MONEY')),
-    CONSTRAINT chk_ap_payment_wht_amount    CHECK (wht_amount IS NULL OR wht_amount > 0)
+    CONSTRAINT chk_ap_payment_wht_amount    CHECK (wht_amount IS NULL OR wht_amount > 0),
+    CONSTRAINT chk_ap_payment_unallocated   CHECK (unallocated_amount >= 0 AND unallocated_amount <= amount),
+    CONSTRAINT chk_ap_payment_status        CHECK (status IN ('UNALLOCATED','PARTIAL','ALLOCATED'))
 );
 
 -- ============================================================================
@@ -298,6 +304,14 @@ CREATE INDEX ix_ap_payments_company_supplier
     ON ap_payments (company_id, supplier_id);
 CREATE INDEX ix_ap_payments_company_date
     ON ap_payments (company_id, payment_date);
+-- D-9: on-account remainder query (supplier balance netting)
+CREATE INDEX ix_ap_payments_onaccount
+    ON ap_payments (company_id, supplier_id)
+    WHERE unallocated_amount > 0;
+-- D-9: cheque back-link
+CREATE INDEX ix_ap_payments_cheque
+    ON ap_payments (cheque_uid)
+    WHERE cheque_uid IS NOT NULL;
 
 -- ap_payment_allocations
 CREATE INDEX ix_ap_payment_allocations_payment

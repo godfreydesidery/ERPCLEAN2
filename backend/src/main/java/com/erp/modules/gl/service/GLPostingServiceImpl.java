@@ -385,6 +385,18 @@ public class GLPostingServiceImpl implements GLPostingService {
                     "Account " + account.getAccountCode()
                             + " does not allow manual posting. Update the account's allowManualPosting flag to permit direct entries.");
         }
+        // Belt-and-suspenders (D-1, ADR-0040): even if allowManualPosting was inadvertently left true
+        // on a sub-ledger control account, reject the MANUAL journal at the control-type gate. Only
+        // control types that block manual posting apply here — CASH/BANK are classified controls but
+        // stay manually postable (reconciled via the cash/bank module), see ControlType.blocksManualPosting().
+        if (enforceManualPostingGate
+                && account.getControlType() != null
+                && account.getControlType().blocksManualPosting()) {
+            throw new com.erp.platform.common.api.ConflictException(
+                    "Account " + account.getAccountCode()
+                            + " is a control account (" + account.getControlType()
+                            + ") and cannot be the target of a manual journal entry (D-1).");
+        }
 
         // Base currency (BR-GL-06, D-9)
         if (!baseCurrency.equals(ld.currency())) {

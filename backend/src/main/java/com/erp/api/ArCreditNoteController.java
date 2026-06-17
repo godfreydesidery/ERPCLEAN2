@@ -1,5 +1,6 @@
 package com.erp.api;
 
+import com.erp.modules.ar.domain.dto.ApplyCreditNoteRequest;
 import com.erp.modules.ar.domain.dto.ArCreditNoteDto;
 import com.erp.modules.ar.domain.dto.RaiseCreditNoteRequest;
 import com.erp.modules.ar.service.ArCreditNoteService;
@@ -14,6 +15,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -42,6 +44,28 @@ public class ArCreditNoteController {
     @PreAuthorize("@perm.scoped(#req.companyUid,'company','AR.CREDITNOTE')")
     public ArCreditNoteDto raise(@Valid @RequestBody RaiseCreditNoteRequest req) {
         return service.raise(req);
+    }
+
+    /**
+     * Apply a credit note to one or more open invoices (ADR-0040 D-6).
+     * Posts nothing to GL except a realized-FX plug when rates differ.
+     * Uses the existing AR.CREDITNOTE permission.
+     */
+    @PostMapping("/uid/{uid}/apply")
+    @PreAuthorize("@perm.has('AR.CREDITNOTE')")
+    public ArCreditNoteDto apply(@PathVariable String uid,
+                                  @Valid @RequestBody ApplyCreditNoteRequest req) {
+        return service.apply(new ApplyCreditNoteRequest(uid, req.allocations()));
+    }
+
+    /**
+     * Replace the current allocation set (delete-and-reinsert). No GL change except FX plug.
+     */
+    @PutMapping("/uid/{uid}/apply")
+    @PreAuthorize("@perm.has('AR.CREDITNOTE')")
+    public ArCreditNoteDto reapply(@PathVariable String uid,
+                                    @Valid @RequestBody ApplyCreditNoteRequest req) {
+        return service.reapply(new ApplyCreditNoteRequest(uid, req.allocations()));
     }
 
     /** Single credit note by uid. */

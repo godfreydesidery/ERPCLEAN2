@@ -8,6 +8,7 @@ import com.erp.modules.ap.domain.entity.ApPayment;
 import com.erp.modules.ap.domain.entity.ApPaymentAllocation;
 import com.erp.modules.ap.domain.entity.SupplierBill;
 import com.erp.modules.ap.domain.enums.ApPaymentKind;
+import com.erp.modules.ap.domain.enums.ApPaymentStatus;
 import com.erp.modules.ap.domain.enums.SupplierBillStatus;
 import com.erp.modules.ap.repository.ApPaymentAllocationRepository;
 import com.erp.modules.ap.repository.ApPaymentRepository;
@@ -181,6 +182,12 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         bill.setStatus(billStatusAfterPayment(bill.getOutstandingAmount()));
         bills.save(bill);
 
+        // D-9: set on-account tracking — for a normal single-bill payment, toAllocate == amount
+        // so unallocated == 0 and status == ALLOCATED. For a partial payment the remainder stays.
+        BigDecimal unallocated = payment.getAmount().subtract(toAllocate);
+        payment.setUnallocatedAmount(unallocated);
+        payment.setStatus(derivePaymentStatus(unallocated, payment.getAmount(), toAllocate));
+
         // GL: DR AP / CR Cash (+FX leg if applicable)
         JournalEntryDto posted = postPaymentToGl(
                 payment, companyId, bill.getBranchId(), currency,
@@ -293,6 +300,10 @@ public class ApPaymentServiceImpl implements ApPaymentService {
             sumBaseRelieved = sumBaseRelieved.add(baseRelieved);
             sumBaseSettled  = sumBaseSettled.add(baseSettled);
         }
+
+        // D-9: payment run always fully allocates — unallocated == 0, status == ALLOCATED
+        payment.setUnallocatedAmount(BigDecimal.ZERO);
+        payment.setStatus(ApPaymentStatus.ALLOCATED);
 
         // For a payment run the WHT applies to the batch total; supplier id from first bill if batch.
         Long runSupplierId = openBills.isEmpty() ? null : openBills.get(0).getSupplierId();
@@ -528,6 +539,19 @@ public class ApPaymentServiceImpl implements ApPaymentService {
                 p.getPaymentNumber(), p.getKind(), p.getPaymentDate(), p.getAmount(),
                 p.getCurrency().value(), p.getTenderType(), p.getBankReference(), p.getGlEntryUid(),
                 p.getWhtAmount(), p.getWhtTransactionUid(),
+                p.getUnallocatedAmount(), p.getStatus(), p.getChequeUid(),
                 dtoAllocs);
+    }
+
+    // -------------------------------------------------------------------------
+    // D-9 — status derivation helper (mirror of ArReceiptServiceImpl)
+    // -------------------------------------------------------------------------
+
+    static ApPaymentStatus derivePaymentStatus(BigDecimal unallocated, BigDecimal amount,
+                                                BigDecimal allocated) {
+        if (unallocated.compareTo(amount) == 0) return ApPaymentStatus.UNALLOCATED;
+        if (allocated.compareTo(BigDecimal.ZERO) > 0
+                && unallocated.compareTo(BigDecimal.ZERO) > 0) return ApPaymentStatus.PARTIAL;
+        return ApPaymentStatus.ALLOCATED;
     }
 }
