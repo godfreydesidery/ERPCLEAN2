@@ -209,12 +209,12 @@ class InventoryValuationServiceIT extends PostgresIntegrationTest {
         supplierUid = supplierService.create(new CreateSupplierRequest(
                 company.getId(), PartyType.INDIVIDUAL, "InvVal Supplier",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                SupplierKind.GOODS, null)).uid();
+                SupplierKind.GOODS, null, null)).uid();
 
         customerUid = customerService.create(new CreateCustomerRequest(
                 company.getId(), PartyType.INDIVIDUAL, "InvVal Customer",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CASH_WALK_IN, null, null)).uid();
+                CustomerKind.CASH_WALK_IN, null, null, null)).uid();
 
         agentUid = agentService.create(new CreateAgentRequest(
                 company.getId(), PartyType.INDIVIDUAL, "InvVal Agent",
@@ -1166,7 +1166,7 @@ class InventoryValuationServiceIT extends PostgresIntegrationTest {
         setCtx();
         ProductDto p = productService.create(new CreateProductRequest(
                 company.getUid(), null, name, null,
-                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD));
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null));
         productService.setPrice(p.uid(),
                 new SetProductPriceRequest(priceListUid, new MoneyDto("1000", "TZS")));
         return p;

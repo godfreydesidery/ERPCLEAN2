@@ -23,6 +23,7 @@ public record UpdateCustomerRequest(
         String district,
         @NotNull CustomerKind customerKind,
         MoneyDto creditLimit,
-        Integer paymentTermsDays
+        Integer paymentTermsDays,
+        Long paymentTermsId
 ) {
 }

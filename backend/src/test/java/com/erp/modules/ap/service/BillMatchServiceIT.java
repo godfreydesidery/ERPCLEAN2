@@ -100,7 +100,7 @@ class BillMatchServiceIT extends PostgresIntegrationTest {
         supplierUid = supplierService.create(new CreateSupplierRequest(
                 company.getId(), PartyType.INDIVIDUAL, "BM Supplier Ltd",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                SupplierKind.GOODS, null)).uid();
+                SupplierKind.GOODS, null, null)).uid();
 
         chartOfAccountService.seedDefaults(company.getId());
         fiscalCalendarService.seedCurrentYear(company.getId());

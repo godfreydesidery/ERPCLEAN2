@@ -73,6 +73,7 @@ public class CustomerServiceImpl implements CustomerService {
         c.setCustomerKind(req.customerKind());
         c.setCreditLimit(MoneyDto.toMoney(req.creditLimit()));
         c.setPaymentTermsDays(req.paymentTermsDays());
+        c.setPaymentTermsId(req.paymentTermsId());
 
         Customer saved = customers.save(c);
         audit.record(AuditEvent.of(AuditActions.CUSTOMER_CREATE, "customers",
@@ -118,6 +119,7 @@ public class CustomerServiceImpl implements CustomerService {
         c.setCustomerKind(req.customerKind());
         c.setCreditLimit(MoneyDto.toMoney(req.creditLimit()));
         c.setPaymentTermsDays(req.paymentTermsDays());
+        c.setPaymentTermsId(req.paymentTermsId());
         c.setUpdatedAt(Instant.now());
         c.setUpdatedBy(actorId());
 

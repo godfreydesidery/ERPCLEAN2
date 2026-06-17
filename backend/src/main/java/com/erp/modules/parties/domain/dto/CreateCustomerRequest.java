@@ -24,6 +24,7 @@ public record CreateCustomerRequest(
         String district,
         @NotNull CustomerKind customerKind,
         MoneyDto creditLimit,
-        Integer paymentTermsDays
+        Integer paymentTermsDays,
+        Long paymentTermsId
 ) {
 }

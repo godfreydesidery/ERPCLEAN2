@@ -134,7 +134,7 @@ class StockCountServiceImplTest {
         ProductDto productDto = new ProductDto(PRODUCT_ID, "PROD-UID-001", COMPANY_ID,
                 "P001", "Widget A", null, null,
                 true, true, false, false, false, null, null, null,
-                null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, false, null);
         when(productService.getById(PRODUCT_ID)).thenReturn(productDto);
 
         // Stub saves — return the passed object (simulate persist)

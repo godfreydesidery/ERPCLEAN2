@@ -229,7 +229,9 @@ INSERT INTO permissions (code, module, description) VALUES
     ('WORKORDER.CLOSE', 'manufacturing', 'Close a completed work order (variance-clear, finance act)'),
     ('WORKORDER.MANAGE', 'manufacturing', 'Create / edit draft / issue / apply-cost / complete / cancel work orders + add operations'),
     ('WORKORDER.QC', 'manufacturing', 'RESERVED — no workflow in v1; hook for future QC workflow'),
-    ('WORKORDER.RELEASE', 'manufacturing', 'Release a planned work order (BOM explosion + component plan)')
+    ('WORKORDER.RELEASE', 'manufacturing', 'Release a planned work order (BOM explosion + component plan)'),
+    ('PAYMENTTERMS.VIEW', 'parties', 'View payment terms masters'),
+    ('PAYMENTTERMS.MANAGE', 'parties', 'Create, update and archive payment terms masters')
 ON CONFLICT (code) DO UPDATE
     SET module = EXCLUDED.module, description = EXCLUDED.description;
 

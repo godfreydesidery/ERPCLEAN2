@@ -111,7 +111,7 @@ class ArAgeingQueryIT extends PostgresIntegrationTest {
         var cust = customerService.create(new CreateCustomerRequest(
                 companyId, PartyType.INDIVIDUAL, "Ageing Customer",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CREDIT_ACCOUNT, null, null));
+                CustomerKind.CREDIT_ACCOUNT, null, null, null));
         customerId    = cust.id();
         customerUidStr = cust.uid();
 
@@ -203,7 +203,7 @@ class ArAgeingQueryIT extends PostgresIntegrationTest {
         Long customer2Id = customerService.create(new CreateCustomerRequest(
                 company2.getId(), PartyType.INDIVIDUAL, "Cross Customer",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CREDIT_ACCOUNT, null, null)).id();
+                CustomerKind.CREDIT_ACCOUNT, null, null, null)).id();
 
         // Cross-tenant DENIAL must be asserted with a NON-ROOT principal: root legitimately
         // bypasses tenant scope (ScopeGuard line ~197), so it would NOT be denied. A non-root user
@@ -298,7 +298,7 @@ class ArAgeingQueryIT extends PostgresIntegrationTest {
         var cust2 = customerService.create(new CreateCustomerRequest(
                 companyId, PartyType.INDIVIDUAL, "Ageing Customer 2",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CREDIT_ACCOUNT, null, null));
+                CustomerKind.CREDIT_ACCOUNT, null, null, null));
         Long cust2Id   = cust2.id();
         String cust2Uid = cust2.uid();
         // Open item for customer 2 (overdue by 40 days → D31_60)

@@ -145,12 +145,12 @@ class WhtCaptureIT extends PostgresIntegrationTest {
         supplierUid = supplierService.create(new CreateSupplierRequest(
                 company.getId(), PartyType.INDIVIDUAL, "WHT Supplier Ltd",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                SupplierKind.GOODS, null)).uid();
+                SupplierKind.GOODS, null, null)).uid();
 
         creditCustomerUid = customerService.create(new CreateCustomerRequest(
                 company.getId(), PartyType.INDIVIDUAL, "WHT Customer",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CREDIT_ACCOUNT, null, null)).uid();
+                CustomerKind.CREDIT_ACCOUNT, null, null, null)).uid();
 
         // Seed all GL prerequisites (CoA includes 1400/1500/2300/2400; glConfig includes
         // VAT_INPUT/VAT_DUE/WHT_PAYABLE/WHT_RECEIVABLE)

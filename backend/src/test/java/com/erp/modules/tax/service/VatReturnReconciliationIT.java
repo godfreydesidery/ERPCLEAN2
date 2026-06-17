@@ -155,14 +155,14 @@ class VatReturnReconciliationIT extends PostgresIntegrationTest {
 
         productUid = productService.create(new CreateProductRequest(
                 companyUid, null, "VAT Recon Widget", null,
-                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD)).uid();
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null)).uid();
         productService.setPrice(productUid,
                 new SetProductPriceRequest(priceListUid, new MoneyDto("1000", "TZS")));
 
         customerUid = customerService.create(new CreateCustomerRequest(
                 company.getId(), PartyType.INDIVIDUAL, "VAT Recon Customer",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CASH_WALK_IN, null, null)).uid();
+                CustomerKind.CASH_WALK_IN, null, null, null)).uid();
 
         agentUid = agentService.create(new CreateAgentRequest(
                 company.getId(), PartyType.INDIVIDUAL, "VAT Recon Agent",

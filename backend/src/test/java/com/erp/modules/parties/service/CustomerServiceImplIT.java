@@ -132,7 +132,7 @@ class CustomerServiceImplIT extends PostgresIntegrationTest {
                 companyA.getId(), PartyType.BUSINESS, "No TIN Co", null,
                 null,   // tin = null
                 false, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CREDIT_ACCOUNT, null, null);
+                CustomerKind.CREDIT_ACCOUNT, null, null, null);
 
         assertThatThrownBy(() -> customerService.create(req))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -148,7 +148,7 @@ class CustomerServiceImplIT extends PostgresIntegrationTest {
         CreateCustomerRequest req = new CreateCustomerRequest(
                 companyA.getId(), PartyType.INDIVIDUAL, "John Doe", null,
                 null, false, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CASH_WALK_IN, null, null);
+                CustomerKind.CASH_WALK_IN, null, null, null);
 
         CustomerDto dto = customerService.create(req);
 
@@ -170,7 +170,7 @@ class CustomerServiceImplIT extends PostgresIntegrationTest {
                 false,       // vatRegistered = false
                 "VRN-BAD",   // vrn set — invalid
                 null, null, null, null, null, null, null, null,
-                CustomerKind.CREDIT_ACCOUNT, null, null);
+                CustomerKind.CREDIT_ACCOUNT, null, null, null);
 
         assertThatThrownBy(() -> customerService.create(req))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -350,6 +350,6 @@ class CustomerServiceImplIT extends PostgresIntegrationTest {
         return new CreateCustomerRequest(
                 companyId, PartyType.BUSINESS, name, name + " Legal",
                 tin, vatRegistered, vrn, null, null, null, null, null, null, null, null,
-                CustomerKind.CREDIT_ACCOUNT, creditLimit, paymentTermsDays);
+                CustomerKind.CREDIT_ACCOUNT, creditLimit, paymentTermsDays, null);
     }
 }

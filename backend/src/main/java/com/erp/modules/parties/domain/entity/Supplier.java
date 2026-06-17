@@ -29,6 +29,15 @@ public class Supplier extends PartyBase {
     @Setter
     private Integer paymentTermsDays;
 
+    /**
+     * Soft-FK to payment_terms(id) — scalar, no @ManyToOne (cross-module soft-FK convention).
+     * When set, overrides payment_terms_days for due-date derivation (D-2, ADR-0040).
+     * payment_terms_days is retained as deprecated fallback.
+     */
+    @Column(name = "payment_terms_id")
+    @Setter
+    private Long paymentTermsId;
+
     protected Supplier() {
         // JPA
     }

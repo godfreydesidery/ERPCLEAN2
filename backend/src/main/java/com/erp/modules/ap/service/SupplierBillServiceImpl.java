@@ -10,6 +10,9 @@ import com.erp.modules.ap.domain.enums.SupplierBillSource;
 import com.erp.modules.ap.repository.SupplierBillLineRepository;
 import com.erp.modules.ap.repository.SupplierBillRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.modules.parties.domain.entity.PaymentTerms;
+import com.erp.modules.parties.domain.entity.Supplier;
+import com.erp.modules.parties.repository.PaymentTermsRepository;
 import com.erp.modules.parties.repository.SupplierRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
@@ -19,6 +22,7 @@ import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -38,6 +42,7 @@ public class SupplierBillServiceImpl implements SupplierBillService {
     private final SupplierBillRepository     bills;
     private final SupplierBillLineRepository lines;
     private final SupplierRepository         suppliers;
+    private final PaymentTermsRepository     paymentTermsRepo;
     private final CompanyRepository          companies;
     private final ScopeGuard                 scopeGuard;
     private final AuditService               audit;
@@ -45,15 +50,17 @@ public class SupplierBillServiceImpl implements SupplierBillService {
     public SupplierBillServiceImpl(SupplierBillRepository bills,
                                     SupplierBillLineRepository lines,
                                     SupplierRepository suppliers,
+                                    PaymentTermsRepository paymentTermsRepo,
                                     CompanyRepository companies,
                                     ScopeGuard scopeGuard,
                                     AuditService audit) {
-        this.bills      = bills;
-        this.lines      = lines;
-        this.suppliers  = suppliers;
-        this.companies  = companies;
-        this.scopeGuard = scopeGuard;
-        this.audit      = audit;
+        this.bills            = bills;
+        this.lines            = lines;
+        this.suppliers        = suppliers;
+        this.paymentTermsRepo = paymentTermsRepo;
+        this.companies        = companies;
+        this.scopeGuard       = scopeGuard;
+        this.audit            = audit;
     }
 
     @Override
@@ -63,9 +70,9 @@ public class SupplierBillServiceImpl implements SupplierBillService {
                 .orElseThrow(() -> new NotFoundException("Company not found: " + req.companyUid()));
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
 
-        Long supplierId = suppliers.findByCompanyIdAndUid(companyId, req.supplierUid())
-                .map(s -> s.getId())
+        Supplier supplier = suppliers.findByCompanyIdAndUid(companyId, req.supplierUid())
                 .orElseThrow(() -> new NotFoundException("Supplier not found: " + req.supplierUid()));
+        Long supplierId = supplier.getId();
 
         // Duplicate-invoice guard (uq_supplier_bill_supplier_invoice)
         if (bills.existsByCompanyIdAndSupplierIdAndSupplierInvoiceNo(
@@ -77,6 +84,11 @@ public class SupplierBillServiceImpl implements SupplierBillService {
 
         String currency = req.currency() != null ? req.currency()
                 : companies.findById(companyId).map(c -> c.getBaseCurrency()).orElse("TZS");
+
+        // Derive due date: caller-supplied > PaymentTerms master > paymentTermsDays integer > net-on-receipt (D-2)
+        LocalDate dueDate = req.dueDate() != null
+                ? req.dueDate()
+                : resolveDueDate(req.billDate(), supplier);
 
         // Compute net amount from lines
         BigDecimal netAmount = req.lines().stream()
@@ -93,7 +105,7 @@ public class SupplierBillServiceImpl implements SupplierBillService {
                 SupplierBillSource.BILL,
                 req.purchaseOrderUid(),
                 req.billDate(),
-                req.dueDate(),
+                dueDate,
                 netAmount,
                 vatAmount,
                 grossAmount,
@@ -165,6 +177,29 @@ public class SupplierBillServiceImpl implements SupplierBillService {
                 b.getBillDate(), b.getDueDate(),
                 b.getNetAmount(), b.getVatAmount(), b.getGrossAmount(), b.getOutstandingAmount(),
                 b.getCurrency().value(), b.getStatus(), b.getPostedGlEntryUid(), lineDtos);
+    }
+
+    /**
+     * Derives the AP bill due date from the supplier's PaymentTerms master or paymentTermsDays integer.
+     * Priority: PaymentTerms master > paymentTermsDays integer > net-on-receipt (D-2, ADR-0040).
+     */
+    private LocalDate resolveDueDate(LocalDate billDate, Supplier supplier) {
+        if (supplier.getPaymentTermsId() != null) {
+            PaymentTerms pt = paymentTermsRepo.findById(supplier.getPaymentTermsId()).orElse(null);
+            if (pt != null) {
+                return switch (pt.getBasis()) {
+                    case DAYS_AFTER_INVOICE  -> billDate.plusDays(pt.getNetDays());
+                    case DAYS_AFTER_MONTH_END ->
+                            billDate.withDayOfMonth(billDate.lengthOfMonth())
+                                    .plusDays(pt.getNetDays());
+                    case DUE_ON_RECEIPT -> billDate;
+                };
+            }
+        }
+        if (supplier.getPaymentTermsDays() != null) {
+            return billDate.plusDays(supplier.getPaymentTermsDays());
+        }
+        return billDate; // net-on-receipt
     }
 
     private Long actorId() {

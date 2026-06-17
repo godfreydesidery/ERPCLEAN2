@@ -129,7 +129,7 @@ class ArCreditNoteServiceIT extends PostgresIntegrationTest {
         customerUid = customerService.create(new CreateCustomerRequest(
                 company.getId(), PartyType.INDIVIDUAL, "CN Customer",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CREDIT_ACCOUNT, null, null)).uid();
+                CustomerKind.CREDIT_ACCOUNT, null, null, null)).uid();
 
         chartOfAccountService.seedDefaults(company.getId());
         fiscalCalendarService.seedCurrentYear(company.getId());

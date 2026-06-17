@@ -36,7 +36,26 @@ CREATE TABLE products (
         CHECK (
             (cost_amount IS NULL AND cost_currency IS NULL) OR
             (cost_amount IS NOT NULL AND cost_currency IS NOT NULL)
-        )
+        ),
+    -- D-10: product planning + sourcing (ADR-0040)
+    reorder_level           NUMERIC(19,6),
+    reorder_qty             NUMERIC(19,6),
+    min_stock               NUMERIC(19,6),
+    max_stock               NUMERIC(19,6),
+    safety_stock            NUMERIC(19,6),
+    lead_time_days          INTEGER,
+    purchasable             BOOLEAN             NOT NULL DEFAULT true,
+    preferred_supplier_id   BIGINT,
+    CONSTRAINT chk_product_reorder_level    CHECK (reorder_level   IS NULL OR reorder_level   >= 0),
+    CONSTRAINT chk_product_reorder_qty      CHECK (reorder_qty     IS NULL OR reorder_qty     >= 0),
+    CONSTRAINT chk_product_min_stock        CHECK (min_stock       IS NULL OR min_stock       >= 0),
+    CONSTRAINT chk_product_max_stock        CHECK (max_stock       IS NULL OR max_stock       >= 0),
+    CONSTRAINT chk_product_safety_stock     CHECK (safety_stock    IS NULL OR safety_stock    >= 0),
+    CONSTRAINT chk_product_lead_time        CHECK (lead_time_days  IS NULL OR lead_time_days  >= 0),
+    CONSTRAINT chk_product_stock_range
+        CHECK (min_stock IS NULL OR max_stock IS NULL OR max_stock >= min_stock),
+    CONSTRAINT fk_product_preferred_supplier
+        FOREIGN KEY (preferred_supplier_id) REFERENCES suppliers (id)
 );
 
 -- ---------------------------------------------------------------------------

@@ -57,6 +57,14 @@ public class ApPayment extends UidEntity {
     @Setter
     private String bankReference;
 
+    /**
+     * Captured beneficiary account uid (soft-FK to supplier_bank_accounts.uid, no DB FK — D-4).
+     * Set at payment time; AP service validates ownership at that point.
+     */
+    @Column(name = "supplier_bank_account_uid", length = 26)
+    @Setter
+    private String supplierBankAccountUid;
+
     @Column(name = "gl_entry_uid", length = 26)
     @Setter
     private String glEntryUid;

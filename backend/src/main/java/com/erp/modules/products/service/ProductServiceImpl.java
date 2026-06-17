@@ -1,6 +1,7 @@
 package com.erp.modules.products.service;
 
 import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.modules.parties.repository.SupplierRepository;
 import com.erp.modules.products.domain.dto.AddBarcodeRequest;
 import com.erp.modules.products.domain.dto.AddComponentRequest;
 import com.erp.modules.products.domain.dto.AssignProductBranchRequest;
@@ -68,6 +69,7 @@ public class ProductServiceImpl implements ProductService {
     private final PriceListRepository priceLists;
     private final UnitOfMeasureRepository units;
     private final CompanyRepository companies;
+    private final SupplierRepository suppliers;
     private final ProductCodeGenerator codeGen;
     private final ProductBranchGuard branchGuard;
     private final ProductCompositionGuard compositionGuard;
@@ -83,6 +85,7 @@ public class ProductServiceImpl implements ProductService {
                               PriceListRepository priceLists,
                               UnitOfMeasureRepository units,
                               CompanyRepository companies,
+                              SupplierRepository suppliers,
                               ProductCodeGenerator codeGen,
                               ProductBranchGuard branchGuard,
                               ProductCompositionGuard compositionGuard,
@@ -97,6 +100,7 @@ public class ProductServiceImpl implements ProductService {
         this.priceLists = priceLists;
         this.units = units;
         this.companies = companies;
+        this.suppliers = suppliers;
         this.codeGen = codeGen;
         this.branchGuard = branchGuard;
         this.compositionGuard = compositionGuard;
@@ -126,6 +130,9 @@ public class ProductServiceImpl implements ProductService {
         p.setDescription(req.description());
         p.setCost(MoneyDto.toMoney(req.cost()));
         p.setVatStatus(req.vatStatus() != null ? req.vatStatus() : VatStatus.STANDARD);
+        applyPlanningFields(p, companyId, req.reorderLevel(), req.reorderQty(), req.safetyStock(),
+                req.minStock(), req.maxStock(), req.leadTimeDays(), req.purchasable(),
+                req.preferredSupplierId());
 
         Product saved = products.save(p);
         audit.record(AuditEvent.of(AuditActions.PRODUCT_CREATE, "products",
@@ -181,6 +188,9 @@ public class ProductServiceImpl implements ProductService {
         p.setBaseUnit(baseUnit);
         p.setCost(MoneyDto.toMoney(req.cost()));
         p.setVatStatus(req.vatStatus() != null ? req.vatStatus() : VatStatus.STANDARD);
+        applyPlanningFields(p, p.getCompanyId(), req.reorderLevel(), req.reorderQty(),
+                req.safetyStock(), req.minStock(), req.maxStock(), req.leadTimeDays(),
+                req.purchasable(), req.preferredSupplierId());
         p.setUpdatedAt(Instant.now());
         p.setUpdatedBy(actorId());
 
@@ -493,6 +503,44 @@ public class ProductServiceImpl implements ProductService {
     private UnitOfMeasure resolveUnit(Long companyId, String unitUid) {
         return units.findByCompanyIdAndUid(companyId, unitUid)
                 .orElseThrow(() -> new NotFoundException("UnitOfMeasure not found: " + unitUid));
+    }
+
+    /**
+     * Applies D-10 planning + sourcing fields to a Product.
+     * preferredSupplierId is validated to belong to the same company before being set.
+     */
+    private void applyPlanningFields(Product p, Long companyId,
+                                     java.math.BigDecimal reorderLevel,
+                                     java.math.BigDecimal reorderQty,
+                                     java.math.BigDecimal safetyStock,
+                                     java.math.BigDecimal minStock,
+                                     java.math.BigDecimal maxStock,
+                                     Integer leadTimeDays,
+                                     Boolean purchasable,
+                                     Long preferredSupplierId) {
+        p.setReorderLevel(reorderLevel);
+        p.setReorderQty(reorderQty);
+        p.setSafetyStock(safetyStock);
+        p.setMinStock(minStock);
+        p.setMaxStock(maxStock);
+        p.setLeadTimeDays(leadTimeDays);
+        if (purchasable != null) {
+            p.setPurchasable(purchasable);
+        }
+        if (preferredSupplierId != null) {
+            suppliers.findById(preferredSupplierId).ifPresentOrElse(s -> {
+                if (!s.getCompanyId().equals(companyId)) {
+                    throw new com.erp.platform.common.api.NotFoundException(
+                            "Supplier not found in this company: " + preferredSupplierId);
+                }
+                p.setPreferredSupplierId(preferredSupplierId);
+            }, () -> {
+                throw new com.erp.platform.common.api.NotFoundException(
+                        "Supplier not found: " + preferredSupplierId);
+            });
+        } else {
+            p.setPreferredSupplierId(null);
+        }
     }
 
     private Long actorId() {

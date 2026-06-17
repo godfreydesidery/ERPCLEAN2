@@ -14,7 +14,8 @@ public record EnterBillRequest(
         @NotBlank String supplierInvoiceNo,
         String purchaseOrderUid,
         @NotNull LocalDate billDate,
-        @NotNull LocalDate dueDate,
+        /** Nullable — if null the service derives from the supplier's PaymentTerms master or paymentTermsDays (D-2). */
+        LocalDate dueDate,
         /** Total VAT stated on the bill; 0 if none. */
         BigDecimal vatAmount,
         @NotBlank String currency,

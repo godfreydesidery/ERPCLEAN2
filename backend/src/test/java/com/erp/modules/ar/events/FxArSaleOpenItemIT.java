@@ -165,21 +165,21 @@ class FxArSaleOpenItemIT extends PostgresIntegrationTest {
         // USD product: 1 unit = USD 100 (no VAT for simplicity — use VatStatus.EXEMPT)
         productUsdUid = productService.create(new CreateProductRequest(
                 company.getUid(), null, "USD Widget", null,
-                ProductType.GOODS, true, true, pcsUid, null, VatStatus.EXEMPT)).uid();
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.EXEMPT, null, null, null, null, null, null, null, null)).uid();
         productService.setPrice(productUsdUid,
                 new SetProductPriceRequest(priceListUid, new MoneyDto("100", USD)));
 
         // TZS product: 1 unit = TZS 1000 (no-regression check)
         productTzsUid = productService.create(new CreateProductRequest(
                 company.getUid(), null, "TZS Widget", null,
-                ProductType.GOODS, true, true, pcsUid, null, VatStatus.EXEMPT)).uid();
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.EXEMPT, null, null, null, null, null, null, null, null)).uid();
         productService.setPrice(productTzsUid,
                 new SetProductPriceRequest(priceListUid, new MoneyDto("1000", TZS)));
 
         creditCustomerUid = customerService.create(new CreateCustomerRequest(
                 company.getId(), PartyType.INDIVIDUAL, "FX Credit Customer",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CREDIT_ACCOUNT, null, null)).uid();
+                CustomerKind.CREDIT_ACCOUNT, null, null, null)).uid();
 
         agentUid = agentService.create(new CreateAgentRequest(
                 company.getId(), PartyType.INDIVIDUAL, "FX Agent",

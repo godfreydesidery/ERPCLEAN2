@@ -86,7 +86,7 @@ class ApAgeingQueryIT extends PostgresIntegrationTest {
         var sup = supplierService.create(new CreateSupplierRequest(
                 company.getId(), PartyType.INDIVIDUAL, "Ageing Supplier",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                SupplierKind.GOODS, null));
+                SupplierKind.GOODS, null, null));
         supplierUid = sup.uid();
         supplierId  = sup.id();
 

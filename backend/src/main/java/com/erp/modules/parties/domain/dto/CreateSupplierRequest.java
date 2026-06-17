@@ -23,6 +23,7 @@ public record CreateSupplierRequest(
         String region,
         String district,
         @NotNull SupplierKind supplierKind,
-        Integer paymentTermsDays
+        Integer paymentTermsDays,
+        Long paymentTermsId
 ) {
 }

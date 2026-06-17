@@ -180,14 +180,14 @@ class BiDashboardServiceIT extends PostgresIntegrationTest {
                 companyA.getUid(), "RETAIL", "Retail")).uid();
         productUid   = productService.create(new CreateProductRequest(
                 companyA.getUid(), null, "BI Widget", null,
-                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD)).uid();
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null)).uid();
         productService.setPrice(productUid,
                 new SetProductPriceRequest(priceListUid, new MoneyDto(SALE_PRICE.toPlainString(), TZS)));
 
         customerUid = customerService.create(new CreateCustomerRequest(
                 companyA.getId(), PartyType.INDIVIDUAL, "BI Customer",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CASH_WALK_IN, null, null)).uid();
+                CustomerKind.CASH_WALK_IN, null, null, null)).uid();
         agentUid    = agentService.create(new CreateAgentRequest(
                 companyA.getId(), PartyType.INDIVIDUAL, "BI Agent",
                 null, null, null, null, null, null, null, null, null, null, null, null,
@@ -195,7 +195,7 @@ class BiDashboardServiceIT extends PostgresIntegrationTest {
         supplierUid = supplierService.create(new CreateSupplierRequest(
                 companyA.getId(), PartyType.INDIVIDUAL, "BI Supplier",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                SupplierKind.GOODS, null)).uid();
+                SupplierKind.GOODS, null, null)).uid();
 
         // ── Company B (separate tenant) ───────────────────────────────────────
         Organisation orgB = organisations.save(new Organisation("BI IT Org B"));

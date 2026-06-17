@@ -5,6 +5,7 @@ import com.erp.modules.products.domain.enums.ProductType;
 import com.erp.modules.products.domain.enums.VatStatus;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.money.MoneyDto;
+import java.math.BigDecimal;
 
 /**
  * Full response DTO for a Product (ADR-0007 D-12).
@@ -12,6 +13,7 @@ import com.erp.platform.common.money.MoneyDto;
  * baseUnit fields are enriched from the UnitOfMeasure association (UoM cutover), mirroring
  * how ProductPriceDto carries priceList code/name.
  * vatStatus added in V5 (ADR-0008 D-5a).
+ * D-10 planning/sourcing fields added in ADR-0040.
  */
 public record ProductDto(
         Long id,
@@ -36,7 +38,16 @@ public record ProductDto(
         String createdAt,
         Long createdBy,
         String updatedAt,
-        Long updatedBy
+        Long updatedBy,
+        // D-10 planning + sourcing
+        BigDecimal reorderLevel,
+        BigDecimal reorderQty,
+        BigDecimal safetyStock,
+        BigDecimal minStock,
+        BigDecimal maxStock,
+        Integer leadTimeDays,
+        boolean purchasable,
+        Long preferredSupplierId
 ) {
 
     public static ProductDto from(Product p) {
@@ -63,7 +74,16 @@ public record ProductDto(
                 p.getCreatedAt() != null ? p.getCreatedAt().toString() : null,
                 p.getCreatedBy(),
                 p.getUpdatedAt() != null ? p.getUpdatedAt().toString() : null,
-                p.getUpdatedBy()
+                p.getUpdatedBy(),
+                // D-10
+                p.getReorderLevel(),
+                p.getReorderQty(),
+                p.getSafetyStock(),
+                p.getMinStock(),
+                p.getMaxStock(),
+                p.getLeadTimeDays(),
+                p.isPurchasable(),
+                p.getPreferredSupplierId()
         );
     }
 }
