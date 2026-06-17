@@ -1,6 +1,7 @@
 package com.erp.modules.gl.domain.entity;
 
 import com.erp.modules.gl.domain.enums.AccountType;
+import com.erp.modules.gl.domain.enums.ControlType;
 import com.erp.modules.gl.domain.enums.NormalBalance;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.domain.UidEntity;
@@ -66,6 +67,24 @@ public class ChartOfAccount extends UidEntity {
     @Column(name = "allow_manual_posting", nullable = false)
     @Setter
     private boolean allowManualPosting = true;
+
+    /**
+     * Control-account classification (D-1, ADR-0040). NULL = ordinary account.
+     * Non-null accounts are owned by a specific sub-ledger; manual journals to them are blocked
+     * by the existing {@code allowManualPosting=false} gate in GLPostingServiceImpl.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "control_type", length = 24)
+    @Setter
+    private ControlType controlType;
+
+    /**
+     * Derived: returns true when this account is a sub-ledger control account (controlType != null).
+     * Used as a belt-and-suspenders guard in GLPostingServiceImpl.validateLine for MANUAL journals.
+     */
+    public boolean isControlAccount() {
+        return controlType != null;
+    }
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)

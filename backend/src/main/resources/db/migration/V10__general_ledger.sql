@@ -40,10 +40,15 @@ CREATE TABLE chart_of_accounts (
         REFERENCES companies (id),
     CONSTRAINT fk_chart_of_account_parent       FOREIGN KEY (parent_id)
         REFERENCES chart_of_accounts (id),
+    control_type     VARCHAR(24),                -- D-1: NULL = ordinary account; non-null = control
+
     CONSTRAINT chk_chart_of_account_type        CHECK (
         account_type IN ('ASSET','LIABILITY','EQUITY','INCOME','EXPENSE')),
     CONSTRAINT chk_chart_of_account_normal_balance CHECK (
-        normal_balance IN ('DEBIT','CREDIT'))
+        normal_balance IN ('DEBIT','CREDIT')),
+    CONSTRAINT chk_chart_of_account_control_type CHECK (
+        control_type IS NULL OR control_type IN (
+            'AR','AP','BANK','CASH','INVENTORY','TAX','PAYROLL_CLEARING','FX_CLEARING'))
 );
 
 -- ============================================================================
@@ -247,6 +252,8 @@ CREATE INDEX ix_chart_of_accounts_company_type
     ON chart_of_accounts (company_id, account_type);
 CREATE INDEX ix_chart_of_accounts_active
     ON chart_of_accounts (company_id) WHERE is_active = true;
+CREATE INDEX ix_chart_of_accounts_control
+    ON chart_of_accounts (company_id, control_type) WHERE control_type IS NOT NULL;
 
 -- fiscal_years
 CREATE INDEX ix_fiscal_years_company
@@ -327,6 +334,26 @@ CROSS JOIN (VALUES
     ('5400', 'Utilities',               'EXPENSE',   'DEBIT')
 ) AS a(code, name, account_type, normal_balance)
 ON CONFLICT (company_id, account_code) DO NOTHING;
+
+-- D-1 (ADR-0040): classify the seeded sub-ledger control accounts. CASH/BANK are classified yet
+-- stay manually postable (reconciled via the cash/bank module + bank reconciliation, which expect
+-- manual journals for bank charges/interest/corrections); the genuine reconciliation controls
+-- (AR/AP/INVENTORY/TAX) block direct manual journals. Mirrors ChartOfAccountServiceImpl.seedDefaults
+-- so the migrate-seeded path and the new-company path agree. (No-op on a fresh DB with no companies.)
+UPDATE chart_of_accounts SET
+    control_type = CASE account_code
+        WHEN '1000' THEN 'CASH'
+        WHEN '1100' THEN 'BANK'
+        WHEN '1200' THEN 'AR'
+        WHEN '1300' THEN 'INVENTORY'
+        WHEN '2100' THEN 'AP'
+        WHEN '2200' THEN 'TAX'
+    END,
+    allow_manual_posting = CASE
+        WHEN account_code IN ('1200','1300','2100','2200') THEN false
+        ELSE allow_manual_posting
+    END
+WHERE account_code IN ('1000','1100','1200','1300','2100','2200');
 
 -- ============================================================================
 -- (12) Fiscal year + 12 period seed — current FY per existing company (ADR-0013 D-4/D-16)

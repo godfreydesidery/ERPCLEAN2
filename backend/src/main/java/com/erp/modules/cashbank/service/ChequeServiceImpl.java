@@ -5,6 +5,7 @@ import com.erp.modules.cashbank.domain.dto.RegisterChequeRequest;
 import com.erp.modules.cashbank.domain.entity.CashBankAccount;
 import com.erp.modules.cashbank.domain.entity.Cheque;
 import com.erp.modules.cashbank.domain.enums.CashBankAccountType;
+import com.erp.modules.cashbank.domain.enums.ChequeDirection;
 import com.erp.modules.cashbank.domain.enums.ChequeStatus;
 import com.erp.modules.cashbank.repository.CashBankAccountRepository;
 import com.erp.modules.cashbank.repository.ChequeRepository;
@@ -111,7 +112,7 @@ public class ChequeServiceImpl implements ChequeService {
     public ChequeDto cancel(String uid) {
         Cheque cheque = Lookups.orNotFound(cheques.findByUid(uid), "Cheque", uid);
         scopeGuard.assertCanActIn(RequestContext.get(), cheque.getCompanyId());
-        assertTransitionAllowed(cheque, ChequeStatus.CANCELLED);
+        assertCancelAllowed(cheque);
         cheque.setStatus(ChequeStatus.CANCELLED);
         cheque.setCancelledAt(Instant.now());
         cheque.setUpdatedAt(Instant.now());
@@ -121,6 +122,82 @@ public class ChequeServiceImpl implements ChequeService {
         audit.record(AuditEvent.of(AuditActions.CHEQUE_CANCEL, "cheques",
                         cheque.getId(), cheque.getUid())
                 .detail(Map.of("uid", uid)));
+        return toDto(cheque);
+    }
+
+    /**
+     * INBOUND only: ISSUED → DEPOSITED.
+     * Records the bank-deposit timestamp. No GL posting (ADR-0016 D-5; GL rides the AR receipt).
+     */
+    @Override
+    public ChequeDto deposit(String uid) {
+        Cheque cheque = Lookups.orNotFound(cheques.findByUid(uid), "Cheque", uid);
+        scopeGuard.assertCanActIn(RequestContext.get(), cheque.getCompanyId());
+
+        if (cheque.getDirection() != ChequeDirection.INBOUND) {
+            throw new IllegalStateException(
+                    "deposit() is only valid for INBOUND cheques — cheque " + uid
+                    + " is " + cheque.getDirection() + " (D-9).");
+        }
+        if (cheque.getStatus() != ChequeStatus.ISSUED
+                && cheque.getStatus() != ChequeStatus.BOUNCED) {
+            throw new IllegalStateException(
+                    "Cannot deposit cheque " + uid + " in status " + cheque.getStatus()
+                    + " — must be ISSUED or BOUNCED (re-present after bounce, D-9).");
+        }
+
+        // Track re-presentations after a bounce
+        if (cheque.getStatus() == ChequeStatus.BOUNCED) {
+            cheque.setRepresentCount((short) (cheque.getRepresentCount() + 1));
+        }
+
+        cheque.setStatus(ChequeStatus.DEPOSITED);
+        cheque.setDepositedAt(Instant.now());
+        cheque.setUpdatedAt(Instant.now());
+        cheque.setUpdatedBy(actorId());
+        cheque = cheques.save(cheque);
+
+        audit.record(AuditEvent.of(AuditActions.CHEQUE_CLEAR, "cheques",
+                        cheque.getId(), cheque.getUid())
+                .detail(Map.of("uid", uid, "action", "deposit")));
+        return toDto(cheque);
+    }
+
+    /**
+     * INBOUND only: DEPOSITED → BOUNCED.
+     * Records bounce timestamp and reason. Bounce-reversal GL posting is deferred (D-9 follow-up).
+     *
+     * <p><b>Deferred:</b> a bounce should post a reversing entry on the owning AR receipt
+     * (append-only — never mutate). This requires a cross-module outbox event to the AR module.
+     * That posting path is recorded as a follow-up item (ADR-0040 D-9 open follow-up).
+     */
+    @Override
+    public ChequeDto bounce(String uid, String bounceReason) {
+        Cheque cheque = Lookups.orNotFound(cheques.findByUid(uid), "Cheque", uid);
+        scopeGuard.assertCanActIn(RequestContext.get(), cheque.getCompanyId());
+
+        if (cheque.getDirection() != ChequeDirection.INBOUND) {
+            throw new IllegalStateException(
+                    "bounce() is only valid for INBOUND cheques — cheque " + uid
+                    + " is " + cheque.getDirection() + " (D-9).");
+        }
+        if (cheque.getStatus() != ChequeStatus.DEPOSITED) {
+            throw new IllegalStateException(
+                    "Cannot bounce cheque " + uid + " in status " + cheque.getStatus()
+                    + " — must be DEPOSITED (D-9).");
+        }
+
+        cheque.setStatus(ChequeStatus.BOUNCED);
+        cheque.setBouncedAt(Instant.now());
+        cheque.setBounceReason(bounceReason);
+        cheque.setUpdatedAt(Instant.now());
+        cheque.setUpdatedBy(actorId());
+        cheque = cheques.save(cheque);
+
+        audit.record(AuditEvent.of(AuditActions.CHEQUE_CANCEL, "cheques",
+                        cheque.getId(), cheque.getUid())
+                .detail(Map.of("uid", uid, "action", "bounce", "reason",
+                        bounceReason != null ? bounceReason : "")));
         return toDto(cheque);
     }
 
@@ -142,11 +219,26 @@ public class ChequeServiceImpl implements ChequeService {
 
     // -------------------------------------------------------------------------
 
+    /** OUTBOUND clear: must be ISSUED. */
     private void assertTransitionAllowed(Cheque cheque, ChequeStatus target) {
         if (cheque.getStatus() != ChequeStatus.ISSUED) {
             throw new IllegalStateException(
-                    "Cheque " + cheque.getChequeNumber() + " is already in terminal state "
+                    "Cheque " + cheque.getChequeNumber() + " is already in state "
                             + cheque.getStatus() + " — cannot transition to " + target + " (D-5).");
+        }
+    }
+
+    /** Cancel: ISSUED or DEPOSITED may be cancelled; CLEARED/BOUNCED are terminal. */
+    private void assertCancelAllowed(Cheque cheque) {
+        if (cheque.getStatus() == ChequeStatus.CLEARED
+                || cheque.getStatus() == ChequeStatus.BOUNCED) {
+            throw new IllegalStateException(
+                    "Cheque " + cheque.getChequeNumber() + " is in terminal state "
+                            + cheque.getStatus() + " — cannot cancel (D-5/D-9).");
+        }
+        if (cheque.getStatus() == ChequeStatus.CANCELLED) {
+            throw new IllegalStateException(
+                    "Cheque " + cheque.getChequeNumber() + " is already CANCELLED.");
         }
     }
 
@@ -166,6 +258,10 @@ public class ChequeServiceImpl implements ChequeService {
                 c.getChequeNumber(), c.getPayee(), c.getAmount(), CurrencyCode.value(c.getCurrency()),
                 c.getIssueDate(), c.getValueDate(), c.getStatus(),
                 c.getApPaymentUid(), c.getCashTransactionUid(),
-                c.getClearedAt(), c.getCancelledAt());
+                c.getClearedAt(), c.getCancelledAt(),
+                // D-9: bidirectional fields
+                c.getDirection(), c.getArReceiptUid(),
+                c.getDepositedAt(), c.getBouncedAt(), c.getBounceReason(),
+                c.getRepresentCount());
     }
 }

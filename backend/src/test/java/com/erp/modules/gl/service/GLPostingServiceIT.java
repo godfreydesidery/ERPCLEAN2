@@ -135,23 +135,19 @@ class GLPostingServiceIT extends PostgresIntegrationTest {
 
     @Test
     void post_balancedThreeLineJournal_succeeds_debitsEqualCredits() {
-        // DR Cash 1000, DR COGS 200, CR Cash… wait — use distinct accounts
         Long salesRevId = accountRepo
                 .findByCompanyIdAndAccountCode(company.getId(), "4100")
                 .map(ChartOfAccount::getId)
                 .orElseThrow();
-        Long arId = accountRepo
-                .findByCompanyIdAndAccountCode(company.getId(), "1200")
-                .map(ChartOfAccount::getId)
-                .orElseThrow();
 
-        // DR AR 1180, CR Sales Revenue 1000, CR COGS (repurpose as second credit for balance) — actually
-        // let's use a structurally valid example: DR AR 1180, CR Revenue 1000, CR Cash 180
+        // Structural 3-line balance test (debits == credits, all lines persisted). AR (1200) is a
+        // control account that blocks manual posting (D-1, ADR-0040), so the debit leg uses the
+        // non-control COGS account: DR COGS 1180, CR Revenue 1000, CR Cash 180.
         JournalEntryDraft draft = new JournalEntryDraft(
                 company.getId(), branch.getId(), LocalDate.now(),
                 "Three-line test", JournalSourceType.MANUAL, null, null, rootId,
                 List.of(
-                        new JournalEntryDraft.LineDraft(arId,          new BigDecimal("1180"), null, TZS, null),
+                        new JournalEntryDraft.LineDraft(cogsAccountId, new BigDecimal("1180"), null, TZS, null),
                         new JournalEntryDraft.LineDraft(salesRevId,    null, new BigDecimal("1000"), TZS, null),
                         new JournalEntryDraft.LineDraft(cashAccountId, null, new BigDecimal("180"),  TZS, null)
                 )

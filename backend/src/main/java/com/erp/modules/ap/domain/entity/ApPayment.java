@@ -1,6 +1,7 @@
 package com.erp.modules.ap.domain.entity;
 
 import com.erp.modules.ap.domain.enums.ApPaymentKind;
+import com.erp.modules.ap.domain.enums.ApPaymentStatus;
 import com.erp.platform.common.domain.UidEntity;
 import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
@@ -85,6 +86,37 @@ public class ApPayment extends UidEntity {
     @Column(name = "gl_entry_uid", length = 26)
     @Setter
     private String glEntryUid;
+
+    // -------------------------------------------------------------------------
+    // D-9 — on-account (prepayment) tracking (ADR-0040 D-9)
+    // Mirror of ArReceipt.unallocatedAmount / ArReceiptStatus pattern.
+    // -------------------------------------------------------------------------
+
+    /**
+     * Unallocated (on-account) remainder. Starts at 0 for normal bill payments;
+     * starts at {@code amount} for prepayments. Service enforces the invariant
+     * Σ allocated + unallocated == amount under SELECT FOR UPDATE.
+     */
+    @Column(name = "unallocated_amount", nullable = false, precision = 19, scale = 4)
+    @Setter
+    private BigDecimal unallocatedAmount = BigDecimal.ZERO;
+
+    /**
+     * Allocation state derived from unallocated_amount (D-9).
+     * UNALLOCATED = full amount on-account; PARTIAL = some applied; ALLOCATED = fully applied.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 20)
+    @Setter
+    private ApPaymentStatus status = ApPaymentStatus.ALLOCATED;
+
+    /**
+     * Scalar uid of the cheque that funded this payment (soft-FK to cheques.uid, no DB FK — D-9).
+     * Set at payment time for cheque-tender payments.
+     */
+    @Column(name = "cheque_uid", length = 26)
+    @Setter
+    private String chequeUid;
 
     /** FK → cash_bank_accounts(id); nullable for back-compat rows pre-V13 (ADR-0016 D-13). */
     @Column(name = "cash_bank_account_id")
