@@ -1,5 +1,6 @@
 package com.erp.modules.fixedassets.domain.entity;
 
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.modules.fixedassets.domain.enums.DepreciationRunStatus;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
@@ -52,7 +53,7 @@ public class DepreciationRun extends UidEntity {
     private String glEntryUid;
 
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "executed_at", nullable = false)
     private Instant executedAt = Instant.now();
@@ -81,7 +82,7 @@ public class DepreciationRun extends UidEntity {
         this.runNumber      = runNumber;
         this.fiscalPeriodId = fiscalPeriodId;
         this.postingDate    = postingDate;
-        this.currency       = currency;
+        this.currency       = CurrencyCode.ofNullable(currency);
         this.createdBy      = createdBy;
     }
 }

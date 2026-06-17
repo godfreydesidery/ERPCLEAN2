@@ -1,5 +1,6 @@
 package com.erp.modules.purchases.domain.entity;
 
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -40,7 +41,7 @@ public class LandedCostAllocation extends UidEntity {
     private BigDecimal allocatedAmount;
 
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
@@ -63,7 +64,7 @@ public class LandedCostAllocation extends UidEntity {
         this.companyId            = companyId;
         this.branchId             = branchId;
         this.allocatedAmount      = allocatedAmount;
-        this.currency             = currency;
+        this.currency             = CurrencyCode.ofNullable(currency);
         this.createdBy            = createdBy;
     }
 }

@@ -1,6 +1,7 @@
 package com.erp.modules.purchases.domain.entity;
 
 import com.erp.platform.common.domain.Ulid;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import lombok.Setter;
 import jakarta.persistence.Entity;
@@ -103,7 +104,7 @@ public class GoodsReceiptLine {
 
     /** Document currency; denormalised from PO/GR header. */
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     /**
      * Cumulative qty returned in base units across all confirmed purchase returns (ADR-0027 D-7, V35).
@@ -174,7 +175,7 @@ public class GoodsReceiptLine {
         this.qtyInBase           = qtyInBase;
         this.unitCostAmount      = unitCostAmount;
         this.lineCostAmount      = unitCostAmount.multiply(receivedQty);
-        this.currency            = currency;
+        this.currency            = CurrencyCode.of(currency);
         this.createdBy           = createdBy;
     }
 }

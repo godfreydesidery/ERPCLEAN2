@@ -143,6 +143,10 @@ public class IamTestData {
                 "TRUNCATE fx_revaluation_run_lines, fx_revaluation_runs RESTART IDENTITY CASCADE")
                 .executeUpdate();
         em.createNativeQuery("TRUNCATE currency_rates RESTART IDENTITY CASCADE").executeUpdate();
+        // 4-CCY. Clear currency enablement allow-lists BEFORE companies (FK children of companies/branches).
+        em.createNativeQuery(
+                "TRUNCATE branch_currency, company_currency RESTART IDENTITY CASCADE")
+                .executeUpdate();
         // 7. Clear the rest of the IAM tables (CASCADE handles FK order within this set).
         //    audit_log has a NULLABLE FK to app_user (ON DELETE SET NULL per schema) so it does not
         //    block the app_user truncate, but its rows must be cleared so audit-count assertions in

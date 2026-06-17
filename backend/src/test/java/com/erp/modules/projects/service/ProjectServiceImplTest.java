@@ -77,7 +77,7 @@ class ProjectServiceImplTest {
         assertThat(dto.name()).isEqualTo("Acme Website");
         assertThat(dto.companyId()).isEqualTo(10L);
         assertThat(dto.projectStatus()).isEqualTo(ProjectStatus.DRAFT);
-        assertThat(captor.getValue().getCurrency()).isEqualTo("USD");
+        assertThat(captor.getValue().getCurrency().value()).isEqualTo("USD");
     }
 
     @Test

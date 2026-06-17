@@ -2,6 +2,7 @@ package com.erp.modules.purchases.domain.dto;
 
 import com.erp.modules.purchases.domain.entity.PurchaseOrder;
 import com.erp.modules.purchases.domain.enums.PurchaseOrderStatus;
+import com.erp.platform.common.money.CurrencyCode;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -40,7 +41,7 @@ public record PurchaseOrderDto(
                 po.getCompanyId(), po.getBranchId(),
                 po.getOrderNumber(), po.getStatus(),
                 po.getSupplierId(), po.getSupplierCode(), po.getSupplierName(),
-                po.getCurrency(), po.getOrderTotalAmount(),
+                CurrencyCode.value(po.getCurrency()), po.getOrderTotalAmount(),
                 po.getExpectedDate(), po.getNotes(),
                 po.getOrderedAt(), po.getVoidedAt(), po.getVoidReason(),
                 po.getClosedAt(), po.getCreatedAt(),

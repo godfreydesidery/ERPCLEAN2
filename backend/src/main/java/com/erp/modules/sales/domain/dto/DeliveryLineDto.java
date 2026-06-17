@@ -30,6 +30,6 @@ public record DeliveryLineDto(
                 l.getQtyDelivered(), l.getQtyDeliveredBase(),
                 l.getQtyInvoicedBase(), l.getReturnedQtyBase(),
                 l.getIssueValueAmount(),
-                l.getCurrency());
+                l.getCurrency().value());
     }
 }

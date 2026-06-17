@@ -97,7 +97,7 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
             SupplierBill bill = bills.findByCompanyIdAndUid(companyId, req.supplierBillUid())
                     .orElseThrow(() -> new NotFoundException("SupplierBill: " + req.supplierBillUid()));
             supplierBillId = bill.getId();
-            currency       = bill.getCurrency();
+            currency       = bill.getCurrency().value();
             branchId       = bill.getBranchId();
 
             // Reduce outstanding (SELECT FOR UPDATE not needed here — debit note has its own GL lock)
@@ -200,7 +200,7 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
                 n.getId(), n.getUid(), n.getCompanyId(), n.getBranchId(), n.getSupplierId(),
                 n.getDebitNoteNumber(), n.getSupplierBillId(), n.getNoteDate(),
                 n.getAmount(), n.getNetAmount(), n.getVatAmount(),
-                n.getCurrency(), n.getReason(), n.getGlEntryUid(), n.getOrigin());
+                n.getCurrency().value(), n.getReason(), n.getGlEntryUid(), n.getOrigin());
     }
 
     private Long branchId() {

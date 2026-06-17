@@ -33,7 +33,7 @@ public record SalesInvoicePaymentDto(
                 p.getBranchId(),
                 p.getTenderType(),
                 p.getAmount(),
-                p.getCurrency(),
+                p.getCurrency().value(),
                 p.getChangeAmount(),
                 p.getReference(),
                 p.getReceivedAt() != null ? p.getReceivedAt().toString() : null,

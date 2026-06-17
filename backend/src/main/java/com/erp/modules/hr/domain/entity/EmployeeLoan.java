@@ -1,5 +1,6 @@
 package com.erp.modules.hr.domain.entity;
 
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.modules.hr.domain.enums.LoanStatus;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
@@ -51,7 +52,7 @@ public class EmployeeLoan extends UidEntity {
     private LocalDate startDate;
 
     @Column(name = "currency", nullable = false, length = 3, updatable = false)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
@@ -80,7 +81,7 @@ public class EmployeeLoan extends UidEntity {
         this.outstandingAmount = principalAmount;
         this.glAccountId       = glAccountId;
         this.startDate         = startDate;
-        this.currency          = currency;
+        this.currency          = CurrencyCode.ofNullable(currency);
         this.createdBy         = createdBy;
     }
 }

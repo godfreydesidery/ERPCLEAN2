@@ -27,6 +27,7 @@ import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.repository.Lookups;
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.time.Instant;
@@ -129,7 +130,7 @@ public class OpportunityConversionServiceImpl implements OpportunityConversionSe
             LocalDate validUntil = req.validUntil() != null ? req.validUntil() : quoteDate.plusDays(30);
             CreateQuotationRequest qReq = new CreateQuotationRequest(
                     companyUid, customerUid, agentUid,
-                    opp.getCurrency(), quoteDate, validUntil,
+                    CurrencyCode.value(opp.getCurrency()), quoteDate, validUntil,
                     null, null, null,
                     opp.getUid()  // sourceOpportunityUid (ADR-0031 D-7)
             );
@@ -156,7 +157,7 @@ public class OpportunityConversionServiceImpl implements OpportunityConversionSe
             // SALES_ORDER (requires WON — already gated above)
             CreateSalesOrderRequest soReq = new CreateSalesOrderRequest(
                     companyUid, customerUid, agentUid,
-                    opp.getCurrency(), LocalDate.now(),
+                    CurrencyCode.value(opp.getCurrency()), LocalDate.now(),
                     null, null, null,
                     opp.getUid()  // sourceOpportunityUid (ADR-0031 D-7)
             );

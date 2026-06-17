@@ -404,4 +404,11 @@ public final class AuditActions {
     public static final String FX_RATE_SET             = "FX.RATE.SET";
     /** Emitted when a period-end FX revaluation run is posted. */
     public static final String FX_REVALUATION_RUN      = "FX.REVALUATION.RUN";
+
+    // ---- Currency enablement (ADR-0039 D-9 / OQ-CCY-08) ----
+    /**
+     * Emitted when the company base currency is changed. Gated by admin permission;
+     * only allowed when no GL journal_entries exist for the company (OQ-CCY-08).
+     */
+    public static final String COMPANY_BASE_CURRENCY_CHANGE = "COMPANY.BASE_CURRENCY.CHANGE";
 }

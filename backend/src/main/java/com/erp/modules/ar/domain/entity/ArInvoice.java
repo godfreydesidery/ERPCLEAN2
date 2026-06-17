@@ -3,6 +3,7 @@ package com.erp.modules.ar.domain.entity;
 import com.erp.modules.ar.domain.enums.ArInvoiceSource;
 import com.erp.modules.ar.domain.enums.ArInvoiceStatus;
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -55,7 +56,7 @@ public class ArInvoice extends UidEntity {
     private BigDecimal outstandingAmount;
 
     @Column(name = "currency", nullable = false, length = 3, updatable = false)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "invoice_date", nullable = false, updatable = false)
     private LocalDate invoiceDate;
@@ -125,7 +126,7 @@ public class ArInvoice extends UidEntity {
         this.documentNo        = documentNo;
         this.originalAmount    = amount;
         this.outstandingAmount = amount;
-        this.currency          = currency;
+        this.currency          = CurrencyCode.of(currency);
         this.invoiceDate       = invoiceDate;
         this.dueDate           = dueDate;
         this.createdBy         = createdBy;

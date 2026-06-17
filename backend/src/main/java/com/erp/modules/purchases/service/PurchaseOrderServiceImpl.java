@@ -35,6 +35,7 @@ import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
@@ -625,7 +626,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         PurchaseOrder po = new PurchaseOrder(
                 quote.getCompanyId(), branchId,
                 supplier.getId(), supplier.getCode(), supplier.getDisplayName(),
-                quote.getCurrency(), actorId());
+                CurrencyCode.value(quote.getCurrency()), actorId());
         po.setSourceQuoteUid(quote.getUid());
         PurchaseOrder saved = orders.save(po);
 

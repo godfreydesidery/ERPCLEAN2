@@ -20,6 +20,7 @@ import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
@@ -198,7 +199,7 @@ public class CashTransferServiceImpl implements CashTransferService {
                 t.getId(), t.getUid(), t.getCompanyId(), t.getTransferNumber(),
                 t.getSourceAccountId(), srcUid,
                 t.getDestinationAccountId(), destUid,
-                t.getTransferDate(), t.getAmount(), t.getCurrency(),
+                t.getTransferDate(), t.getAmount(), CurrencyCode.value(t.getCurrency()),
                 t.getReference(), t.getOutTxnId(), t.getInTxnId(), t.getJournalEntryRef());
     }
 }

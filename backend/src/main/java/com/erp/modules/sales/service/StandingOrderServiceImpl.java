@@ -214,7 +214,7 @@ public class StandingOrderServiceImpl implements StandingOrderService {
 
         var soDto = salesOrderService.create(new CreateSalesOrderRequest(
                 company.getUid(), customer.getUid(), null,
-                standing.getCurrency(), runDate, null, null, null, null));
+                standing.getCurrency().value(), runDate, null, null, null, null));
 
         // Stamp source_standing_uid
         var soEntity = salesOrders.findByUid(soDto.uid())
@@ -270,7 +270,7 @@ public class StandingOrderServiceImpl implements StandingOrderService {
 
     private StandingOrderDto toDto(StandingOrder s, List<StandingOrderLine> lines) {
         return new StandingOrderDto(s.getId(), s.getUid(), s.getCompanyId(), s.getBranchId(),
-                s.getOrderNumber(), s.getCustomerId(), s.getCurrency(),
+                s.getOrderNumber(), s.getCustomerId(), s.getCurrency().value(),
                 s.getFrequency(), s.getStartDate() == null ? null : s.getStartDate().toString(),
                 s.getEndDate() == null ? null : s.getEndDate().toString(),
                 s.getNextRunDate() == null ? null : s.getNextRunDate().toString(),
@@ -282,6 +282,6 @@ public class StandingOrderServiceImpl implements StandingOrderService {
         return new StandingOrderLineDto(l.getId(), l.getUid(), l.getStandingOrderId(),
                 l.getLineNo(), l.getProductId(), l.getProductCode(), l.getProductName(),
                 l.getUnitId(), l.getUnitName(), l.getQty(), l.getQtyBase(),
-                l.getUnitPriceAmount(), l.getCurrency());
+                l.getUnitPriceAmount(), l.getCurrency().value());
     }
 }

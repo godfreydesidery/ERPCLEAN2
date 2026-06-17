@@ -14,6 +14,7 @@ import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.time.Instant;
@@ -213,7 +214,7 @@ public class ProjectServiceImpl implements ProjectService {
                 p.getCustomerId(), p.getManagerUserId(),
                 p.getProjectStatus(),
                 p.getPlannedStartDate(), p.getPlannedEndDate(),
-                p.getBudgetAmount(), p.getCurrency(),
+                p.getBudgetAmount(), CurrencyCode.value(p.getCurrency()),
                 p.getNotes(), p.getStatus(),
                 p.getActivatedAt(), p.getCompletedAt(), p.getCancelledAt()
         );

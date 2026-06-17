@@ -6,6 +6,7 @@ import com.erp.modules.purchases.domain.dto.UpdatePurchaseSettingsRequest;
 import com.erp.modules.purchases.domain.entity.PurchaseSettings;
 import com.erp.modules.purchases.repository.PurchaseSettingsRepository;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.time.Instant;
@@ -52,7 +53,7 @@ public class PurchaseSettingsServiceImpl implements PurchaseSettingsService {
         s.setPoApprovalEnabled(req.poApprovalEnabled());
         s.setPoApprovalThresholdAmount(req.poApprovalThresholdAmount());
         if (req.currency() != null && !req.currency().isBlank()) {
-            s.setCurrency(req.currency());
+            s.setCurrency(CurrencyCode.ofNullable(req.currency()));
         }
         s.setUpdatedAt(Instant.now());
         s.setUpdatedBy(actorId());

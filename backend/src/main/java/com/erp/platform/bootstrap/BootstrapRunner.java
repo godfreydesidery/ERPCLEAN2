@@ -21,6 +21,7 @@ import com.erp.modules.stock.service.InventoryGlSeeder;
 import com.erp.modules.fixedassets.service.FixedAssetGlSeeder;
 import com.erp.modules.hr.service.HrGlSeeder;
 import com.erp.modules.hr.service.HrStatutorySeeder;
+import com.erp.modules.fx.service.CurrencyEnablementSeeder;
 import com.erp.modules.manufacturing.service.ManufacturingGlSeeder;
 import com.erp.modules.stock.service.StockLocationSeeder;
 import com.erp.modules.gl.service.ChartOfAccountService;
@@ -96,6 +97,8 @@ public class BootstrapRunner implements ApplicationRunner {
     private final ManufacturingGlSeeder manufacturingGlSeeder;
     // Stock location seeder — seeds WAREHOUSE + in-transit per branch (ADR-0028 D-4/D-5)
     private final StockLocationSeeder stockLocationSeeder;
+    // Currency enablement seeder — seeds company_currency rows from BootstrapProperties (ADR-0039 D-9)
+    private final CurrencyEnablementSeeder currencyEnablementSeeder;
 
     public BootstrapRunner(BootstrapProperties props,
                            OrganisationRepository organisations,
@@ -122,7 +125,8 @@ public class BootstrapRunner implements ApplicationRunner {
                            HrStatutorySeeder hrStatutorySeeder,
                            NotificationTypeSeeder notificationTypeSeeder,
                            ManufacturingGlSeeder manufacturingGlSeeder,
-                           StockLocationSeeder stockLocationSeeder) {
+                           StockLocationSeeder stockLocationSeeder,
+                           CurrencyEnablementSeeder currencyEnablementSeeder) {
         this.props = props;
         this.organisations = organisations;
         this.companies = companies;
@@ -147,8 +151,9 @@ public class BootstrapRunner implements ApplicationRunner {
         this.hrGlSeeder             = hrGlSeeder;
         this.hrStatutorySeeder      = hrStatutorySeeder;
         this.notificationTypeSeeder = notificationTypeSeeder;
-        this.manufacturingGlSeeder  = manufacturingGlSeeder;
-        this.stockLocationSeeder    = stockLocationSeeder;
+        this.manufacturingGlSeeder       = manufacturingGlSeeder;
+        this.stockLocationSeeder         = stockLocationSeeder;
+        this.currencyEnablementSeeder    = currencyEnablementSeeder;
     }
 
     @Override
@@ -204,6 +209,14 @@ public class BootstrapRunner implements ApplicationRunner {
         notificationTypeSeeder.seedDefaults(company.getId());
         // Seed Manufacturing GL accounts + gl_configs (ADR-0035 D-7).
         manufacturingGlSeeder.seedDefaults(company.getId());
+
+        // Seed company_currency allow-list from BootstrapProperties (ADR-0039 D-9).
+        BootstrapProperties.CurrencyConfig ccy = props.effectiveCurrency();
+        currencyEnablementSeeder.seedDefaults(
+                company.getId(),
+                ccy.effectiveBase(),
+                ccy.effectiveDefault(),
+                ccy.effectiveEnabled());
 
         Branch branch = new Branch(company, props.branchCode(), props.branchName());
         branch.setTimeZone(props.timeZone());

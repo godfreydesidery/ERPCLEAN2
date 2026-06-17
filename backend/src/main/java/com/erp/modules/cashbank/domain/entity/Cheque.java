@@ -1,5 +1,6 @@
 package com.erp.modules.cashbank.domain.entity;
 
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.modules.cashbank.domain.enums.ChequeStatus;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
@@ -43,7 +44,7 @@ public class Cheque extends UidEntity {
     private BigDecimal amount;
 
     @Column(name = "currency", nullable = false, length = 3, updatable = false)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "issue_date", nullable = false, updatable = false)
     private LocalDate issueDate;
@@ -101,7 +102,7 @@ public class Cheque extends UidEntity {
         this.chequeNumber        = chequeNumber;
         this.payee               = payee;
         this.amount              = amount;
-        this.currency            = currency;
+        this.currency            = CurrencyCode.ofNullable(currency);
         this.issueDate           = issueDate;
         this.valueDate           = valueDate;
         this.apPaymentUid        = apPaymentUid;

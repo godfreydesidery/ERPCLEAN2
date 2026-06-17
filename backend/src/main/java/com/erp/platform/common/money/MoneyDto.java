@@ -18,7 +18,7 @@ public record MoneyDto(String amount, String currency) {
         if (money == null || !money.isPresent()) {
             return null;
         }
-        return new MoneyDto(money.getAmount().toPlainString(), money.getCurrency());
+        return new MoneyDto(money.getAmount().toPlainString(), money.getCurrency().value());
     }
 
     public static Money toMoney(MoneyDto dto) {

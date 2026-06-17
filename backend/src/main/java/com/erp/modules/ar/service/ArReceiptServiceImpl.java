@@ -587,7 +587,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         return new ArReceiptDto(
                 r.getId(), r.getUid(), r.getCompanyId(), r.getBranchId(), r.getCustomerId(),
                 r.getReceiptNumber(), r.getReceiptDate(), r.getAmount(), r.getUnallocatedAmount(),
-                r.getCurrency(), r.getTenderType(), r.getBankReference(), r.getGlEntryUid(),
+                r.getCurrency().value(), r.getTenderType(), r.getBankReference(), r.getGlEntryUid(),
                 r.getStatus(), allocDtos);
     }
 }

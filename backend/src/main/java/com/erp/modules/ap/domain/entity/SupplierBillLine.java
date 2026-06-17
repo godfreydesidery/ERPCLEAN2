@@ -1,6 +1,7 @@
 package com.erp.modules.ap.domain.entity;
 
 import com.erp.platform.common.domain.Ulid;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import lombok.Setter;
 import jakarta.persistence.Entity;
@@ -73,7 +74,7 @@ public class SupplierBillLine {
     private BigDecimal lineNetAmount;
 
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     // --- projects (ADR-0033 D-3, V65) — optional project dimension tag on AP lines ---
     /** FK → projects(id); nullable — analysis tag when this cost belongs to a project. */
@@ -116,7 +117,7 @@ public class SupplierBillLine {
         this.billedQty       = billedQty;
         this.unitCostAmount  = unitCostAmount;
         this.lineNetAmount   = unitCostAmount.multiply(billedQty);
-        this.currency        = currency;
+        this.currency        = CurrencyCode.of(currency);
         this.createdBy       = createdBy;
     }
 }

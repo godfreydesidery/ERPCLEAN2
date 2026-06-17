@@ -2,6 +2,7 @@ package com.erp.modules.sales.domain.entity;
 
 import com.erp.modules.sales.domain.enums.SalesReturnStatus;
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -82,7 +83,7 @@ public class SalesReturn extends UidEntity {
     private BigDecimal grossAmount = BigDecimal.ZERO;
 
     @Column(name = "currency", nullable = false, length = 3, updatable = false)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
@@ -113,7 +114,7 @@ public class SalesReturn extends UidEntity {
         this.salesOrderUid = salesOrderUid;
         this.customerId    = customerId;
         this.returnDate    = returnDate;
-        this.currency      = currency;
+        this.currency      = CurrencyCode.of(currency);
         this.reason        = reason;
         this.createdBy     = createdBy;
     }

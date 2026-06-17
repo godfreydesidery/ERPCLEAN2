@@ -49,7 +49,7 @@ public class ArInvoiceServiceImpl implements ArInvoiceService {
         return new ArInvoiceDto(
                 i.getId(), i.getUid(), i.getCompanyId(), i.getBranchId(), i.getCustomerId(),
                 i.getSource(), i.getSourceInvoiceUid(), i.getDocumentNo(),
-                i.getOriginalAmount(), i.getOutstandingAmount(), i.getCurrency(),
+                i.getOriginalAmount(), i.getOutstandingAmount(), i.getCurrency().value(),
                 i.getInvoiceDate(), i.getDueDate(), i.getStatus());
     }
 }

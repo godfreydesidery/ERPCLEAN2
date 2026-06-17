@@ -131,7 +131,7 @@ public class ArWriteOffServiceImpl implements ArWriteOffService {
         // Create the write-off record (amount in face currency; the document face for the record)
         ArWriteOff writeOff = new ArWriteOff(
                 inv.getCompanyId(), inv.getBranchId(), inv.getCustomerId(), inv.getId(),
-                req.writeOffDate(), faceOutstanding, inv.getCurrency(), req.reason(), actorId());
+                req.writeOffDate(), faceOutstanding, inv.getCurrency().value(), req.reason(), actorId());
         writeOff.setGlEntryUid(posted.uid());
         writeOff = writeOffs.save(writeOff);
 
@@ -171,7 +171,7 @@ public class ArWriteOffServiceImpl implements ArWriteOffService {
     private static ArWriteOffDto toDto(ArWriteOff w) {
         return new ArWriteOffDto(
                 w.getId(), w.getUid(), w.getCompanyId(), w.getCustomerId(), w.getArInvoiceId(),
-                w.getWriteOffDate(), w.getAmount(), w.getCurrency(), w.getReason(),
+                w.getWriteOffDate(), w.getAmount(), w.getCurrency().value(), w.getReason(),
                 w.getGlEntryUid());
     }
 }

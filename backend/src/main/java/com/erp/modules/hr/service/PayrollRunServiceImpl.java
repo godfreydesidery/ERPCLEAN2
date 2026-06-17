@@ -45,6 +45,7 @@ import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.OutboxPublisher;
 import com.erp.platform.security.RequestContext;
@@ -215,7 +216,7 @@ public class PayrollRunServiceImpl implements PayrollRunService {
 
             EmploymentContract contract = contractOpt.get();
             BigDecimal basicSalary = contract.getBaseSalaryAmount();
-            String currency = contract.getCurrency();
+            String currency = CurrencyCode.value(contract.getCurrency());
 
             // --- Fix #9: snapshot department name ---
             String departmentName = null;
@@ -520,6 +521,6 @@ public class PayrollRunServiceImpl implements PayrollRunService {
                 l.getPayeAmount(), l.getNssfEmployeeAmount(), l.getHeslbAmount(),
                 l.getVoluntaryDeductionTotal(), l.getLoanDeductionTotal(),
                 l.getNssfEmployerAmount(), l.getWcfEmployerAmount(), l.getSdlEmployerAmount(),
-                l.getStatus(), l.getFlagReason(), l.getCurrency());
+                l.getStatus(), l.getFlagReason(), CurrencyCode.value(l.getCurrency()));
     }
 }

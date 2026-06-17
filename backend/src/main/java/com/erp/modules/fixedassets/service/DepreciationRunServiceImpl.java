@@ -25,6 +25,7 @@ import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.OutboxPublisher;
 import com.erp.platform.security.RequestContext;
@@ -270,7 +271,7 @@ public class DepreciationRunServiceImpl implements DepreciationRunService {
                 r.getId(), r.getUid(), r.getCompanyId(), r.getRunNumber(),
                 r.getFiscalPeriodId(), r.getPostingDate(), r.getStatus(),
                 r.getTotalChargeAmount(), r.getAssetCount(), r.getGlEntryUid(),
-                r.getCurrency(), r.getExecutedAt(),
+                CurrencyCode.value(r.getCurrency()), r.getExecutedAt(),
                 lines.stream().map(l -> new DepreciationRunLineDto(
                         l.getId(), l.getUid(), l.getFixedAssetId(), l.getScheduleLineId(),
                         l.getChargeAmount(), l.getAccumDepAfter(), l.getNbvAfter()))

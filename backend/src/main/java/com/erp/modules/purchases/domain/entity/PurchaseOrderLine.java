@@ -1,5 +1,6 @@
 package com.erp.modules.purchases.domain.entity;
 
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.domain.Ulid;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -117,7 +118,7 @@ public class PurchaseOrderLine {
 
     /** Document currency; denormalised from parent PO (BR-PURCH-04). */
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();

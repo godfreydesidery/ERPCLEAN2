@@ -4,6 +4,7 @@ import com.erp.modules.sales.domain.enums.DocumentOrigin;
 import com.erp.modules.sales.domain.enums.DocumentType;
 import com.erp.modules.sales.domain.enums.InvoiceStatus;
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -66,7 +67,7 @@ public class SalesInvoice extends UidEntity {
 
     /** Document currency (ISO 4217). All monetary columns share this currency (BR-SALES-04). */
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     /** Document-level discount amount (optional). Apportioned across lines before VAT. */
     @Column(name = "doc_discount_amount", precision = 19, scale = 4)
@@ -244,7 +245,7 @@ public class SalesInvoice extends UidEntity {
         this.branchId = branchId;
         this.customerId = customerId;
         this.agentId = agentId;
-        this.currency = currency;
+        this.currency = CurrencyCode.of(currency);
         this.createdBy = createdBy;
     }
 }

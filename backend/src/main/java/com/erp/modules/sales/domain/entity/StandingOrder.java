@@ -3,6 +3,7 @@ package com.erp.modules.sales.domain.entity;
 import com.erp.modules.sales.domain.enums.StandingFrequency;
 import com.erp.modules.sales.domain.enums.StandingStatus;
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -38,7 +39,7 @@ public class StandingOrder extends UidEntity {
     private Long customerId;
 
     @Column(name = "currency", nullable = false, length = 3, updatable = false)
-    private String currency;
+    private CurrencyCode currency;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "frequency", nullable = false, length = 20)
@@ -87,7 +88,7 @@ public class StandingOrder extends UidEntity {
         this.companyId  = companyId;
         this.branchId   = branchId;
         this.customerId = customerId;
-        this.currency   = currency;
+        this.currency   = CurrencyCode.of(currency);
         this.frequency  = frequency;
         this.startDate  = startDate;
         this.endDate    = endDate;

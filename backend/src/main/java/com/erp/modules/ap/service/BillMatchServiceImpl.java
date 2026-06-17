@@ -323,7 +323,7 @@ public class BillMatchServiceImpl implements BillMatchService {
         // ADR-0036 D-3: convert face amounts to BASE before LineDraft construction.
         // GL engine (GLPostingServiceImpl) is BYTE-UNTOUCHED; only base-currency lines reach it.
         // AP control leg (CR AP) is the BALANCING PLUG to absorb HALF_UP rounding residual. (D-3/D-8)
-        String    docCurrency = bill.getCurrency();
+        String    docCurrency = bill.getCurrency().value();
         Long      companyId   = bill.getCompanyId();
 
         // Convert gross once — used for the D-4 triple stamp and plugScale below.

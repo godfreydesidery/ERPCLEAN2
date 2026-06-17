@@ -40,6 +40,6 @@ public record SalesReturnLineDto(
                 l.getLineDiscountAmount(), l.getLineDiscountPercent(),
                 l.getVatStatus(), l.getVatRate(),
                 l.getNetAmount(), l.getVatAmount(), l.getGrossAmount(),
-                l.getCurrency());
+                l.getCurrency().value());
     }
 }

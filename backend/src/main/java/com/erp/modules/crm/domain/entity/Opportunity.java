@@ -1,5 +1,6 @@
 package com.erp.modules.crm.domain.entity;
 
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.modules.crm.domain.enums.OpportunityStatus;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.domain.UidEntity;
@@ -77,7 +78,7 @@ public class Opportunity extends UidEntity {
     private BigDecimal estimatedValueAmount = BigDecimal.ZERO;
 
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "expected_close_date")
     @Setter
@@ -136,7 +137,7 @@ public class Opportunity extends UidEntity {
         this.title = title;
         this.customerId = customerId;
         this.customerUid = customerUid;
-        this.currency = currency;
+        this.currency = CurrencyCode.ofNullable(currency);
         this.pipelineStageId = pipelineStageId;
         this.winProbability = winProbability;
         this.createdBy = createdBy;

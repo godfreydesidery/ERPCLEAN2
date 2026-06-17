@@ -1,5 +1,6 @@
 package com.erp.modules.cashbank.domain.entity;
 
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -41,7 +42,7 @@ public class CashTransfer extends UidEntity {
     private BigDecimal amount;
 
     @Column(name = "currency", nullable = false, length = 3, updatable = false)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "reference", length = 255)
     private String reference;
@@ -88,7 +89,7 @@ public class CashTransfer extends UidEntity {
         this.destinationAccountId = destinationAccountId;
         this.transferDate         = transferDate;
         this.amount               = amount;
-        this.currency             = currency;
+        this.currency             = CurrencyCode.ofNullable(currency);
         this.reference            = reference;
         this.outTxnId             = outTxnId;
         this.inTxnId              = inTxnId;

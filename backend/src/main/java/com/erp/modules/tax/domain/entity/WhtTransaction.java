@@ -1,5 +1,6 @@
 package com.erp.modules.tax.domain.entity;
 
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.modules.tax.domain.enums.WhtKind;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
@@ -57,7 +58,7 @@ public class WhtTransaction extends UidEntity {
     private BigDecimal whtAmount;
 
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "certificate_date", nullable = false)
     private LocalDate certificateDate;
@@ -100,7 +101,7 @@ public class WhtTransaction extends UidEntity {
         this.sourceRef       = sourceRef;
         this.taxableBase     = taxableBase;
         this.whtAmount       = whtAmount;
-        this.currency        = currency;
+        this.currency        = CurrencyCode.ofNullable(currency);
         this.certificateDate = certificateDate;
         this.createdBy       = createdBy;
     }

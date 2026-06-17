@@ -1,5 +1,6 @@
 package com.erp.modules.products.domain.entity;
 
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
@@ -42,7 +43,7 @@ public class CustomerPrice extends UidEntity {
     private BigDecimal unitPriceAmount;
 
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     /** NULL = no start date restriction. */
     @Column(name = "effective_from")
@@ -85,7 +86,7 @@ public class CustomerPrice extends UidEntity {
         this.customerId      = customerId;
         this.productId       = productId;
         this.unitPriceAmount = unitPriceAmount;
-        this.currency        = currency;
+        this.currency        = CurrencyCode.ofNullable(currency);
         this.effectiveFrom   = effectiveFrom;
         this.effectiveTo     = effectiveTo;
         this.createdBy       = createdBy;

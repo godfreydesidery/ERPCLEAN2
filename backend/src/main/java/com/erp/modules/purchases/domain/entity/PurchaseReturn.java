@@ -1,5 +1,6 @@
 package com.erp.modules.purchases.domain.entity;
 
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.modules.purchases.domain.enums.PurchaseReturnStatus;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
@@ -66,7 +67,7 @@ public class PurchaseReturn extends UidEntity {
     private BigDecimal grossAmount = BigDecimal.ZERO;
 
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     /** Scalar uid of the AP debit note raised on confirm. */
     @Column(name = "debit_note_uid", length = 26)
@@ -117,7 +118,7 @@ public class PurchaseReturn extends UidEntity {
         this.supplierCode     = supplierCode;
         this.supplierName     = supplierName;
         this.reason           = reason;
-        this.currency         = currency;
+        this.currency         = CurrencyCode.ofNullable(currency);
         this.createdBy        = createdBy;
     }
 }

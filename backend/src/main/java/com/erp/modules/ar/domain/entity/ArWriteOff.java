@@ -1,6 +1,7 @@
 package com.erp.modules.ar.domain.entity;
 
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
@@ -37,7 +38,7 @@ public class ArWriteOff extends UidEntity {
     private BigDecimal amount;
 
     @Column(name = "currency", nullable = false, length = 3, updatable = false)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "reason", nullable = false, length = 255)
     private String reason;
@@ -74,7 +75,7 @@ public class ArWriteOff extends UidEntity {
         this.arInvoiceId  = arInvoiceId;
         this.writeOffDate = writeOffDate;
         this.amount       = amount;
-        this.currency     = currency;
+        this.currency     = CurrencyCode.of(currency);
         this.reason       = reason;
         this.createdBy    = createdBy;
     }

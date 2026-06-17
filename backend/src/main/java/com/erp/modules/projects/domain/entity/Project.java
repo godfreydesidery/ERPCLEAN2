@@ -1,5 +1,6 @@
 package com.erp.modules.projects.domain.entity;
 
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.modules.projects.domain.enums.ProjectStatus;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.domain.UidEntity;
@@ -65,7 +66,7 @@ public class Project extends UidEntity {
     private BigDecimal budgetAmount;
 
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "notes", length = 500)
     @Setter
@@ -112,7 +113,7 @@ public class Project extends UidEntity {
         this.branchId      = branchId;
         this.projectNumber = projectNumber;
         this.name          = name;
-        this.currency      = currency;
+        this.currency      = CurrencyCode.ofNullable(currency);
         this.createdBy     = createdBy;
     }
 }

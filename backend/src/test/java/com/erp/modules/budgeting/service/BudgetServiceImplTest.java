@@ -122,7 +122,7 @@ class BudgetServiceImplTest {
         when(existingLine.getAccountId()).thenReturn(20L);
         when(existingLine.getFiscalPeriodId()).thenReturn(30L);
         when(existingLine.getAmount()).thenReturn(new BigDecimal("500.0000"));
-        when(existingLine.getCurrency()).thenReturn("TZS");
+        when(existingLine.getCurrency()).thenReturn(com.erp.platform.common.money.CurrencyCode.of("TZS"));
         when(lines.save(existingLine)).thenReturn(existingLine);
 
         UpsertBudgetLineRequest request = new UpsertBudgetLineRequest(
@@ -226,7 +226,7 @@ class BudgetServiceImplTest {
         when(existingLine.getUid()).thenReturn("LINE-UID-2");
         when(existingLine.getBudgetVersionId()).thenReturn(1L);
         when(existingLine.getAmount()).thenReturn(monthlyAmt);
-        when(existingLine.getCurrency()).thenReturn("TZS");
+        when(existingLine.getCurrency()).thenReturn(com.erp.platform.common.money.CurrencyCode.of("TZS"));
         for (FiscalPeriod p : twelve) {
             when(lines.findByBudgetVersionIdAndAccountIdAndFiscalPeriodId(1L, 20L, p.getId()))
                     .thenReturn(Optional.of(existingLine));

@@ -64,7 +64,7 @@ public record SalesInvoiceDto(
                 customerName,
                 inv.getAgentId(),
                 agentName,
-                inv.getCurrency(),
+                inv.getCurrency().value(),
                 inv.getDocDiscountAmount(),
                 inv.getDocDiscountPercent(),
                 inv.getNetTotalAmount(),

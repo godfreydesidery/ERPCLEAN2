@@ -1,5 +1,6 @@
 package com.erp.modules.purchases.domain.entity;
 
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.modules.purchases.domain.enums.SupplierQuoteStatus;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
@@ -64,7 +65,7 @@ public class SupplierQuote extends UidEntity {
     private BigDecimal quoteTotalAmount = BigDecimal.ZERO;
 
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "notes", length = 500)
     @Setter
@@ -100,7 +101,7 @@ public class SupplierQuote extends UidEntity {
         this.supplierId    = supplierId;
         this.supplierCode  = supplierCode;
         this.supplierName  = supplierName;
-        this.currency      = currency;
+        this.currency      = CurrencyCode.ofNullable(currency);
         this.createdBy     = createdBy;
     }
 }

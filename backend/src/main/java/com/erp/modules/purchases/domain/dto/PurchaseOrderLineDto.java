@@ -1,6 +1,7 @@
 package com.erp.modules.purchases.domain.dto;
 
 import com.erp.modules.purchases.domain.entity.PurchaseOrderLine;
+import com.erp.platform.common.money.CurrencyCode;
 import java.math.BigDecimal;
 
 /**
@@ -40,6 +41,6 @@ public record PurchaseOrderLineDto(
                 l.getOrderedQty(), l.getOrderedQtyInBase(), l.getReceivedQtyInBase(),
                 outstanding, fully,
                 l.getUnitCostAmount(), l.getLineTotalAmount(),
-                l.getCurrency());
+                CurrencyCode.value(l.getCurrency()));
     }
 }

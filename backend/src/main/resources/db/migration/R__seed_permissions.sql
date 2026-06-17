@@ -71,6 +71,7 @@ INSERT INTO permissions (code, module, description) VALUES
     ('CRM.OPPORTUNITY.VIEW', 'crm', 'View CRM opportunities'),
     ('CRM.PIPELINE.VIEW', 'crm', 'View the CRM pipeline, forecast and KPI report'),
     ('CRM.STAGE.MANAGE', 'crm', 'Manage per-company CRM pipeline stages (add, rename, reorder, deactivate)'),
+    ('COMPANY.CURRENCY.CHANGE', 'iam', 'Change the company base (ledger) currency — blocked once GL transactions exist (ADR-0039 OQ-CCY-08)'),
     ('CURRENCY.MANAGE', 'fx', 'Create and maintain currency master and exchange rates'),
     ('CURRENCY.VIEW', 'fx', 'View currencies and exchange rates (read-only)'),
     ('CUSTOMER.MANAGE', 'parties', 'Create, update and archive customers'),

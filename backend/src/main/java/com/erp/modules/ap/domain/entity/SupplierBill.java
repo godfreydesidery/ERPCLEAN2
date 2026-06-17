@@ -3,6 +3,7 @@ package com.erp.modules.ap.domain.entity;
 import com.erp.modules.ap.domain.enums.SupplierBillSource;
 import com.erp.modules.ap.domain.enums.SupplierBillStatus;
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -71,7 +72,7 @@ public class SupplierBill extends UidEntity {
     private BigDecimal outstandingAmount;
 
     @Column(name = "currency", nullable = false, length = 3, updatable = false)
-    private String currency;
+    private CurrencyCode currency;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 25)
@@ -163,7 +164,7 @@ public class SupplierBill extends UidEntity {
         this.vatAmount         = vatAmount;
         this.grossAmount       = grossAmount;
         this.outstandingAmount = BigDecimal.ZERO; // starts zero; set to gross on match/post
-        this.currency          = currency;
+        this.currency          = CurrencyCode.of(currency);
         this.createdBy         = createdBy;
     }
 }

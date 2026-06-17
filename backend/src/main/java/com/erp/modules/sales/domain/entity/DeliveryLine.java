@@ -1,6 +1,7 @@
 package com.erp.modules.sales.domain.entity;
 
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
@@ -80,7 +81,7 @@ public class DeliveryLine extends UidEntity {
     private BigDecimal issueValueAmount;
 
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     // --- projects (ADR-0033 D-3, V66) ---
     @Column(name = "project_id")
@@ -128,7 +129,7 @@ public class DeliveryLine extends UidEntity {
         this.unitName = unitName;
         this.qtyDelivered = qtyDelivered;
         this.qtyDeliveredBase = qtyDeliveredBase;
-        this.currency = currency;
+        this.currency = CurrencyCode.of(currency);
         this.createdBy = createdBy;
     }
 

@@ -2,6 +2,7 @@ package com.erp.modules.crm.domain.dto;
 
 import com.erp.modules.crm.domain.entity.Opportunity;
 import com.erp.modules.crm.domain.enums.OpportunityStatus;
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.domain.MasterStatus;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -47,7 +48,7 @@ public record OpportunityDto(
                 o.getOpportunityNumber(), o.getOpportunityStatus(), o.getTitle(),
                 o.getCustomerId(), o.getCustomerUid(), o.getAgentId(), o.getOwnerUserId(),
                 o.getSourceLeadId(), o.getSourceLeadUid(), o.getPipelineStageId(),
-                o.getWinProbability(), o.getEstimatedValueAmount(), o.getCurrency(),
+                o.getWinProbability(), o.getEstimatedValueAmount(), CurrencyCode.value(o.getCurrency()),
                 o.getExpectedCloseDate(), o.getWonAt(), o.getLostAt(), o.getLossReason(),
                 o.getConvertedDocumentKind(), o.getConvertedDocumentUid(), o.getConvertedAt(),
                 o.getStatus(), o.getVersion(), o.getCreatedAt(), o.getCreatedBy(),

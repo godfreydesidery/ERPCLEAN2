@@ -157,14 +157,14 @@ public class SupplierBillServiceImpl implements SupplierBillService {
                         l.getId(), l.getUid(), l.getSupplierBillId(), l.getLineNo(),
                         l.getProductId(), l.getPoLineUid(), l.getGrLineUid(),
                         l.getDescription(), l.getBilledQty(), l.getUnitCostAmount(),
-                        l.getLineNetAmount(), l.getCurrency())
+                        l.getLineNetAmount(), l.getCurrency().value())
         ).toList();
         return new SupplierBillDto(
                 b.getId(), b.getUid(), b.getCompanyId(), b.getBranchId(), b.getSupplierId(),
                 b.getBillNumber(), b.getSupplierInvoiceNo(), b.getSource(), b.getPurchaseOrderUid(),
                 b.getBillDate(), b.getDueDate(),
                 b.getNetAmount(), b.getVatAmount(), b.getGrossAmount(), b.getOutstandingAmount(),
-                b.getCurrency(), b.getStatus(), b.getPostedGlEntryUid(), lineDtos);
+                b.getCurrency().value(), b.getStatus(), b.getPostedGlEntryUid(), lineDtos);
     }
 
     private Long actorId() {

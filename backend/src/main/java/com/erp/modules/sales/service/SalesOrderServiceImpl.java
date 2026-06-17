@@ -177,7 +177,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
                 req.quantity(), qtyInBase,
                 listPrice, appliedPrice,
                 product.getVatStatus(), vatRate,
-                order.getCurrency(), actorId());
+                order.getCurrency().value(), actorId());
         line.setLineDiscountAmount(req.lineDiscountAmount());
         line.setLineDiscountPercent(req.lineDiscountPercent());
 
@@ -306,7 +306,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         SalesOrder order = new SalesOrder(
                 quote.getCompanyId(), quote.getBranchId(),
                 quote.getCustomerId(), quote.getAgentId(),
-                quote.getCurrency(), LocalDate.now(), actorId());
+                quote.getCurrency().value(), LocalDate.now(), actorId());
         order.setSourceQuotationUid(quote.getUid());
         order.setDocDiscountAmount(quote.getDocDiscountAmount());
         order.setDocDiscountPercent(quote.getDocDiscountPercent());
@@ -325,7 +325,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
                     ql.getQuantity(), ql.getQtyInBase(),
                     ql.getListPriceAmount(), ql.getUnitPriceAmount(),
                     ql.getVatStatus(), ql.getVatRate(),
-                    ql.getCurrency(), actorId());
+                    ql.getCurrency().value(), actorId());
             ol.setLineDiscountAmount(ql.getLineDiscountAmount());
             ol.setLineDiscountPercent(ql.getLineDiscountPercent());
             ol.setNetAmount(ql.getNetAmount());

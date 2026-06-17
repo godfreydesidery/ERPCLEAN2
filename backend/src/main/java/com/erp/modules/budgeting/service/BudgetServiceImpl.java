@@ -212,7 +212,7 @@ public class BudgetServiceImpl implements BudgetService {
                 BudgetLine copy = new BudgetLine(
                         newVer.getId(), newVer.getCompanyId(),
                         src.getAccountId(), src.getFiscalPeriodId(),
-                        src.getAmount(), src.getCurrency(), src.getLineMemo(), actorId);
+                        src.getAmount(), src.getCurrency().value(), src.getLineMemo(), actorId);
                 copiedLines.add(copy);
             }
             lines.saveAll(copiedLines);
@@ -347,7 +347,7 @@ public class BudgetServiceImpl implements BudgetService {
             lines.save(new BudgetLine(
                     ver.getId(), ver.getCompanyId(),
                     src.getAccountId(), src.getFiscalPeriodId(),
-                    src.getAmount(), src.getCurrency(), src.getLineMemo(), actorId));
+                    src.getAmount(), src.getCurrency().value(), src.getLineMemo(), actorId));
         }
     }
 
@@ -517,6 +517,6 @@ public class BudgetServiceImpl implements BudgetService {
                 l.getId(), l.getUid(), l.getBudgetVersionId(),
                 l.getAccountId(), null, null, null,
                 l.getFiscalPeriodId(), null, 0,
-                l.getAmount(), l.getCurrency(), l.getLineMemo(), l.getCreatedAt());
+                l.getAmount(), l.getCurrency().value(), l.getLineMemo(), l.getCreatedAt());
     }
 }

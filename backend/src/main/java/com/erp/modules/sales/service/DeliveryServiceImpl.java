@@ -179,7 +179,7 @@ public class DeliveryServiceImpl implements DeliveryService {
                     sol.getProductId(), sol.getProductCode(), sol.getProductName(),
                     sol.getUnitId(), sol.getUnitName(),
                     qtyDeliveredBase, qtyDeliveredBase,   // qty + qty_base (same in v1)
-                    sol.getCurrency(), actorId());
+                    sol.getCurrency().value(), actorId());
             savedLines.add(deliveryLines.save(dl));
 
             // Release the corresponding reservation (delta = negative)
@@ -352,7 +352,7 @@ public class DeliveryServiceImpl implements DeliveryService {
         SalesInvoice invoice = new SalesInvoice(
                 delivery.getCompanyId(), delivery.getBranchId(),
                 delivery.getCustomerId(), agentId,
-                order.getCurrency(), actorId());
+                order.getCurrency().value(), actorId());
         invoice.setOrigin(DocumentOrigin.SALES_ORDER);
         invoice.setSourceOrderUid(order.getUid());
         invoice.setSourceDeliveryUid(delivery.getUid());
