@@ -210,7 +210,8 @@ public class FiscalCalendarServiceImpl implements FiscalCalendarService {
     private FiscalYearDto toYearDto(FiscalYear y) {
         return new FiscalYearDto(y.getId(), y.getUid(), y.getCompanyId(),
                 y.getYearCode(), y.getStartMonth(), y.getStartDate(), y.getEndDate(), y.getStatus(),
-                y.getClosedAt(), y.getClosedBy(), y.getClosingJournalUid());
+                y.getClosedAt(), y.getClosedBy(), y.getClosingJournalUid(),
+                y.getReopenedAt(), y.getReopenedBy());
     }
 
     private FiscalPeriodDto toPeriodDto(FiscalPeriod p) {

@@ -13,5 +13,9 @@ public record JournalLineDto(
         BigDecimal debitAmount,
         BigDecimal creditAmount,
         String currency,
-        String lineMemo
+        String lineMemo,
+        /** Informational tax code tag (P2-M1); null when not set. */
+        String taxCode,
+        /** Informational tax amount (P2-M1); null when not set. */
+        BigDecimal taxAmount
 ) {}

@@ -58,6 +58,22 @@ public class FxRevaluationRunLine extends UidEntity {
     @Column(name = "adjustment_amount", nullable = false, precision = 19, scale = 4)
     private BigDecimal adjustmentAmount;
 
+    /**
+     * Exchange rate at which the carrying base was originally computed (P2-M1).
+     * Enables reconstruction of the original conversion on the certificate.
+     */
+    @Column(name = "prior_rate", precision = 19, scale = 8)
+    @Setter
+    private BigDecimal priorRate;
+
+    /**
+     * FK → journal_lines(id): the GL leg posted for this revaluation line (P2-M1).
+     * Enables per-line GL drill-down. Null until the run is POSTED.
+     */
+    @Column(name = "journal_line_id")
+    @Setter
+    private Long journalLineId;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

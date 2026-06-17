@@ -31,6 +31,7 @@ CREATE TABLE currencies (
     code            VARCHAR(3)       NOT NULL,
     name            VARCHAR(60)      NOT NULL,
     symbol          VARCHAR(8),
+    numeric_code    VARCHAR(3),                  -- P2-M1: ISO-4217 numeric code (e.g. 840=USD, 834=TZS)
     minor_units     SMALLINT         NOT NULL,
     active          BOOLEAN          NOT NULL DEFAULT true,
     status          VARCHAR(20)      NOT NULL DEFAULT 'ACTIVE',

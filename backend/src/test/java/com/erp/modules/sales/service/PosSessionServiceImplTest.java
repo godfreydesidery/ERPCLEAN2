@@ -152,7 +152,7 @@ class PosSessionServiceImplTest {
         ChartOfAccount overAcct = mockCoa(20L);
         when(glConfig.resolve(1L, GlConfigKey.CASH)).thenReturn(cashAcct);
         when(glConfig.resolve(1L, GlConfigKey.POS_CASH_OVER)).thenReturn(overAcct);
-        when(glInvoker.postInNewTx(any())).thenReturn(new JournalEntryDto(99L, null, null, null, null, null, null, null, null, null, null, null));
+        when(glInvoker.postInNewTx(any())).thenReturn(new JournalEntryDto(99L, null, null, null, null, null, null, null, null, null, null, false, null, null, null, null, null));
         when(sessions.save(any())).thenReturn(session);
 
         service.reconcileSession("S3", new ReconcileSessionRequest(null));
@@ -184,7 +184,7 @@ class PosSessionServiceImplTest {
         ChartOfAccount shortAcct = mockCoa(30L);
         when(glConfig.resolve(1L, GlConfigKey.CASH)).thenReturn(cashAcct);
         when(glConfig.resolve(1L, GlConfigKey.POS_CASH_SHORT)).thenReturn(shortAcct);
-        when(glInvoker.postInNewTx(any())).thenReturn(new JournalEntryDto(99L, null, null, null, null, null, null, null, null, null, null, null));
+        when(glInvoker.postInNewTx(any())).thenReturn(new JournalEntryDto(99L, null, null, null, null, null, null, null, null, null, null, false, null, null, null, null, null));
         when(sessions.save(any())).thenReturn(session);
 
         service.reconcileSession("S4", new ReconcileSessionRequest(null));
@@ -260,7 +260,7 @@ class PosSessionServiceImplTest {
         ChartOfAccount overAcctS7 = mockCoa(20L);
         when(glConfig.resolve(1L, GlConfigKey.CASH)).thenReturn(cashAcctS7);
         when(glConfig.resolve(1L, GlConfigKey.POS_CASH_OVER)).thenReturn(overAcctS7);
-        when(glInvoker.postInNewTx(any())).thenReturn(new JournalEntryDto(99L, null, null, null, null, null, null, null, null, null, null, null));
+        when(glInvoker.postInNewTx(any())).thenReturn(new JournalEntryDto(99L, null, null, null, null, null, null, null, null, null, null, false, null, null, null, null, null));
         when(sessions.save(any())).thenReturn(session);
 
         service.reconcileSession("S7", new ReconcileSessionRequest(null));

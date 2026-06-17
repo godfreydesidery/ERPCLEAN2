@@ -58,6 +58,15 @@ public class FiscalYear extends UidEntity {
     @Setter
     private String closingJournalUid;
 
+    // Reopen audit trail (P2-M1) — set on each reopen; null if never reopened.
+    @Column(name = "reopened_at")
+    @Setter
+    private Instant reopenedAt;
+
+    @Column(name = "reopened_by")
+    @Setter
+    private Long reopenedBy;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

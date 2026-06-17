@@ -5,6 +5,7 @@ import com.erp.modules.gl.domain.enums.ControlType;
 import com.erp.modules.gl.domain.enums.NormalBalance;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -77,6 +78,15 @@ public class ChartOfAccount extends UidEntity {
     @Column(name = "control_type", length = 24)
     @Setter
     private ControlType controlType;
+
+    /**
+     * Optional currency lock (P2-M1). Non-null pins this account to a single ISO-4217 currency
+     * (typical use: bank accounts, FX clearing accounts). NULL = multi-currency allowed.
+     * Mapped via {@link com.erp.platform.common.money.CurrencyCodeConverter} (autoApply=true).
+     */
+    @Column(name = "currency", length = 3)
+    @Setter
+    private CurrencyCode currency;
 
     /**
      * Derived: returns true when this account is a sub-ledger control account (controlType != null).

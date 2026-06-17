@@ -77,7 +77,7 @@ class DropshipFulfilCogsHandlerTest {
         when(glConfig.resolve(1L, GlConfigKey.COGS)).thenReturn(cogsAcct);
         when(glConfig.resolve(1L, GlConfigKey.GRNI)).thenReturn(grniAcct);
         when(glInvoker.postInNewTx(any())).thenReturn(
-                new JournalEntryDto(77L, "JE-001", 1L, null, null, null, null, null, null, null, null, null));
+                new JournalEntryDto(77L, "JE-001", 1L, null, null, null, null, null, null, null, null, false, null, null, null, null, null));
 
         handler.handle(event);
 
@@ -154,7 +154,7 @@ class DropshipFulfilCogsHandlerTest {
         when(glConfig.resolve(1L, GlConfigKey.COGS)).thenReturn(cogsAcct3);
         when(glConfig.resolve(1L, GlConfigKey.GRNI)).thenReturn(grniAcct3);
         when(glInvoker.postInNewTx(any())).thenReturn(
-                new JournalEntryDto(78L, "JE-002", 1L, null, null, null, null, null, null, null, null, null));
+                new JournalEntryDto(78L, "JE-002", 1L, null, null, null, null, null, null, null, null, false, null, null, null, null, null));
 
         handler.handle(event);
 

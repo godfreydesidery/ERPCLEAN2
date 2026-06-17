@@ -7,8 +7,10 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
+import java.math.BigDecimal;
 import java.time.Instant;
 import lombok.Getter;
+import lombok.Setter;
 
 /**
  * The numbered batch container for journal entries (ADR-0013 D-2c, D-3).
@@ -42,6 +44,16 @@ public class JournalBatch extends UidEntity {
     /** NULL for the SYSTEM auto-poster (FR-GL-19). */
     @Column(name = "posted_by")
     private Long postedBy;
+
+    /** Denormalised Σ debit_amount across all lines in this batch (P2-M1). */
+    @Column(name = "total_debit", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal totalDebit;
+
+    /** Denormalised Σ credit_amount across all lines in this batch (P2-M1). */
+    @Column(name = "total_credit", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal totalCredit;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
