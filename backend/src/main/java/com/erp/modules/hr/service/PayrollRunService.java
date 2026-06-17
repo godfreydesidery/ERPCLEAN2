@@ -33,4 +33,12 @@ public interface PayrollRunService {
     PayrollRunDto reverse(String uid);
 
     List<PayrollLineDto> listLines(String uid);
+
+    /**
+     * Export the per-employee EFT batch as CSV text for a run that has been disbursed (PAID status
+     * is not enforced — callers may export from POSTED onwards). Columns:
+     * employee_number, employee_name, payee_method, payee_bank_name, payee_account_name,
+     * payee_account_ref, net_amount, currency (ADR-0040 D-11).
+     */
+    String exportEftBatch(String runUid);
 }

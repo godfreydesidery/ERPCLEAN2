@@ -1,6 +1,7 @@
 package com.erp.modules.hr.domain.entity;
 
 import com.erp.modules.hr.domain.enums.EmploymentStatus;
+import com.erp.modules.hr.domain.enums.PaymentMethod;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -79,6 +80,59 @@ public class Employee extends UidEntity {
     @Column(name = "user_id")
     @Setter
     private Long userId;
+
+    // ---- Contact fields (ADR-0040 D-11) ----
+
+    @Column(name = "phone", length = 40)
+    @Setter
+    private String phone;
+
+    @Column(name = "email", length = 160)
+    @Setter
+    private String email;
+
+    @Column(name = "address_line", length = 255)
+    @Setter
+    private String addressLine;
+
+    @Column(name = "region", length = 120)
+    @Setter
+    private String region;
+
+    @Column(name = "district", length = 120)
+    @Setter
+    private String district;
+
+    @Column(name = "postal_address", length = 255)
+    @Setter
+    private String postalAddress;
+
+    // ---- Payee / disbursement fields (ADR-0040 D-11) ----
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_method", length = 20)
+    @Setter
+    private PaymentMethod paymentMethod;
+
+    @Column(name = "bank_name", length = 120)
+    @Setter
+    private String bankName;
+
+    @Column(name = "bank_branch", length = 120)
+    @Setter
+    private String bankBranch;
+
+    @Column(name = "bank_account_no", length = 60)
+    @Setter
+    private String bankAccountNo;
+
+    @Column(name = "bank_account_name", length = 120)
+    @Setter
+    private String bankAccountName;
+
+    @Column(name = "mobile_money_no", length = 60)
+    @Setter
+    private String mobileMoneyNo;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();

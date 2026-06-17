@@ -1,5 +1,6 @@
 package com.erp.modules.parties.domain.entity;
 
+import com.erp.modules.parties.domain.enums.CreditStatus;
 import com.erp.modules.parties.domain.enums.CustomerKind;
 import com.erp.modules.parties.domain.enums.PartyType;
 import com.erp.platform.common.money.Money;
@@ -56,6 +57,29 @@ public class Customer extends PartyBase {
     @Column(name = "payment_terms_id")
     @Setter
     private Long paymentTermsId;
+
+    // -------------------------------------------------------------------------
+    // ADR-0040 D-5 — credit-control status (V68)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Machine-driven credit status. WARNING is advisory; ON_HOLD and STOPPED are hard blocks at SO
+     * confirm. Defaults to OK; updated by a credit-review job or manually by credit-control staff.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "credit_status", nullable = false, length = 20)
+    @Setter
+    private CreditStatus creditStatus = CreditStatus.OK;
+
+    /** Manual hold flag; set by credit-control staff independently of the computed credit_status. */
+    @Column(name = "manual_hold", nullable = false)
+    @Setter
+    private boolean manualHold = false;
+
+    /** Free-text reason recorded when manualHold is set or credit_status is changed by staff. */
+    @Column(name = "credit_hold_reason", length = 255)
+    @Setter
+    private String creditHoldReason;
 
     protected Customer() {
         // JPA

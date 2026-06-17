@@ -24,5 +24,10 @@ public record PayrollLineDto(
         BigDecimal sdlEmployerAmount,
         PayrollLineStatus status,
         String flagReason,
-        String currency
+        String currency,
+        // Payee snapshot fields (ADR-0040 D-11)
+        String payeeMethod,
+        String payeeAccountRef,
+        String payeeBankName,
+        String payeeAccountName
 ) {}

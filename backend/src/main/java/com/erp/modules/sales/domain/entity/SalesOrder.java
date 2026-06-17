@@ -121,6 +121,27 @@ public class SalesOrder extends UidEntity {
     @Setter
     private Long projectTaskId;
 
+    // --- ADR-0040 D-3 — ship-to / bill-to address snapshot fields ---
+    /** FK → customer_addresses.id; nullable — delivery address used for this order. */
+    @Column(name = "ship_to_address_id")
+    @Setter
+    private Long shipToAddressId;
+
+    /** FK → customer_addresses.id; nullable — billing address used for this order. */
+    @Column(name = "bill_to_address_id")
+    @Setter
+    private Long billToAddressId;
+
+    /** Free-text shipping address override / snapshot (at most 500 chars). */
+    @Column(name = "ship_to_address_text", length = 500)
+    @Setter
+    private String shipToAddressText;
+
+    /** Free-text billing address override / snapshot (at most 500 chars). */
+    @Column(name = "bill_to_address_text", length = 500)
+    @Setter
+    private String billToAddressText;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

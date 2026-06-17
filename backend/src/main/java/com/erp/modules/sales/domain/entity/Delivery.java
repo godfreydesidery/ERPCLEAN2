@@ -70,6 +70,17 @@ public class Delivery extends UidEntity {
     @Setter
     private Long projectTaskId;
 
+    // --- ADR-0040 D-3 — ship-to address snapshot fields ---
+    /** FK → customer_addresses.id; nullable — delivery address used for this delivery. */
+    @Column(name = "ship_to_address_id")
+    @Setter
+    private Long shipToAddressId;
+
+    /** Free-text shipping address override / snapshot (at most 500 chars). */
+    @Column(name = "ship_to_address_text", length = 500)
+    @Setter
+    private String shipToAddressText;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
