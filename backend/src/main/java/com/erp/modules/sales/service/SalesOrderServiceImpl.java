@@ -1,8 +1,12 @@
 package com.erp.modules.sales.service;
 
+import com.erp.modules.ar.domain.dto.ArBalanceDto;
+import com.erp.modules.ar.service.ArBalanceService;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.parties.domain.entity.Agent;
 import com.erp.modules.parties.domain.entity.Customer;
+import com.erp.modules.parties.domain.enums.CreditStatus;
+import com.erp.modules.parties.domain.enums.CustomerKind;
 import com.erp.modules.parties.repository.AgentRepository;
 import com.erp.modules.parties.repository.CustomerRepository;
 import com.erp.modules.products.domain.entity.Product;
@@ -31,9 +35,13 @@ import com.erp.modules.stock.service.StockReservationService;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
+import com.erp.platform.common.money.CurrencyCode;
+import com.erp.platform.common.money.Money;
 import com.erp.platform.common.repository.Lookups;
+import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -73,6 +81,9 @@ public class SalesOrderServiceImpl implements SalesOrderService {
     private final SalesOrderTotalsCalculator totalsCalc;
     private final ScopeGuard               scopeGuard;
     private final AuditService             audit;
+    /** ADR-0040 D-5: credit-limit + status check at SO confirm (mirrors SalesInvoiceServiceImpl). */
+    private final ArBalanceService         arBalanceService;
+    private final PermissionResolver       permissionResolver;
 
     public SalesOrderServiceImpl(SalesOrderRepository orders,
                                  SalesOrderLineRepository orderLines,
@@ -90,7 +101,9 @@ public class SalesOrderServiceImpl implements SalesOrderService {
                                  OrderToCashNumberGenerator numberGen,
                                  SalesOrderTotalsCalculator totalsCalc,
                                  ScopeGuard scopeGuard,
-                                 AuditService audit) {
+                                 AuditService audit,
+                                 ArBalanceService arBalanceService,
+                                 PermissionResolver permissionResolver) {
         this.orders           = orders;
         this.orderLines       = orderLines;
         this.quotations       = quotations;
@@ -108,6 +121,8 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         this.totalsCalc       = totalsCalc;
         this.scopeGuard       = scopeGuard;
         this.audit            = audit;
+        this.arBalanceService = arBalanceService;
+        this.permissionResolver = permissionResolver;
     }
 
     @Override
@@ -232,6 +247,10 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         if (lines.isEmpty()) {
             throw new IllegalStateException("Cannot confirm a sales order with no lines.");
         }
+
+        // ADR-0040 D-5: credit-control hard-block — checked BEFORE stock reservation.
+        // Only applies to CREDIT_ACCOUNT customers; cash/walk-in customers are unaffected.
+        assertCreditClearance(order);
 
         // Reserve stock for each line (D-4/D-5)
         for (SalesOrderLine line : lines) {
@@ -463,6 +482,105 @@ public class SalesOrderServiceImpl implements SalesOrderService {
                 .findFirst()
                 .map(bp -> qty.multiply(bp.getFactorToBase()))
                 .orElse(qty);
+    }
+
+    /**
+     * ADR-0040 D-5 credit-control gate at SO confirm.
+     *
+     * <p>Three independent block conditions — any one suffices to block:
+     * <ol>
+     *   <li>{@code creditStatus IN (ON_HOLD, STOPPED)} — operator or automated status change.</li>
+     *   <li>{@code manualHold = true} — credit-control staff override.</li>
+     *   <li>AR balance + SO gross total exceeds the customer's credit limit.</li>
+     * </ol>
+     *
+     * <p>WARNING is advisory only and never blocks (the operator sees it in the response DTO but
+     * the order proceeds). Cash/walk-in customers bypass this check entirely.
+     *
+     * <p>If the caller holds {@code SALES.CREDIT.OVERRIDE}, the block is lifted and the override
+     * is audited (mirrors SalesInvoiceServiceImpl.finalise credit-limit branch).
+     */
+    private void assertCreditClearance(SalesOrder order) {
+        Customer customer = customers.findById(order.getCustomerId())
+                .orElseThrow(() -> new NotFoundException(
+                        "Customer not found for order " + order.getUid()
+                                + " (id=" + order.getCustomerId() + ")"));
+
+        if (customer.getCustomerKind() != CustomerKind.CREDIT_ACCOUNT) {
+            // Cash / walk-in: no credit restriction (BR-SO-CREDIT-01).
+            return;
+        }
+
+        RequestContext.Principal ctx = RequestContext.get();
+
+        // --- Block condition 1 & 2: status hold or manual hold ---
+        CreditStatus cs = customer.getCreditStatus();
+        boolean statusBlocked = cs == CreditStatus.ON_HOLD || cs == CreditStatus.STOPPED;
+        boolean manualBlocked = customer.isManualHold();
+
+        // --- Block condition 3: credit-limit breach ---
+        boolean limitBreached = false;
+        BigDecimal projectedBalance = null;
+        Money creditLimit = customer.getCreditLimit();
+        if (creditLimit != null && creditLimit.isPresent()
+                && creditLimit.getAmount().compareTo(BigDecimal.ZERO) > 0) {
+            ArBalanceDto balance = arBalanceService.currentBalance(
+                    order.getCompanyId(), order.getCustomerId());
+            projectedBalance = balance.balance().add(order.getGrossTotalAmount());
+            if (projectedBalance.compareTo(creditLimit.getAmount()) > 0) {
+                limitBreached = true;
+            }
+        }
+
+        if (!statusBlocked && !manualBlocked && !limitBreached) {
+            // No block condition met — proceed normally.
+            return;
+        }
+
+        // At least one block condition is active. Check for override permission.
+        boolean hasOverride = permissionResolver.hasPermission(
+                ctx, "SALES.CREDIT.OVERRIDE", System.currentTimeMillis());
+
+        if (!hasOverride) {
+            // Build a clear, actionable message covering whichever conditions fired.
+            StringBuilder msg = new StringBuilder("Sales order ")
+                    .append(order.getOrderNumber())
+                    .append(" blocked by credit control for customer ")
+                    .append(customer.getUid())
+                    .append(".");
+            if (statusBlocked) {
+                msg.append(" Credit status: ").append(cs.name()).append(".");
+            }
+            if (manualBlocked) {
+                msg.append(" Manual hold is active");
+                if (customer.getCreditHoldReason() != null) {
+                    msg.append(" (").append(customer.getCreditHoldReason()).append(")");
+                }
+                msg.append(".");
+            }
+            if (limitBreached && creditLimit != null) {
+                msg.append(" Credit limit ").append(creditLimit.getAmount().toPlainString())
+                   .append(" ").append(CurrencyCode.value(creditLimit.getCurrency()))
+                   .append(" exceeded; projected balance: ")
+                   .append(projectedBalance.toPlainString()).append(".");
+            }
+            msg.append(" Requires SALES.CREDIT.OVERRIDE permission (ADR-0040 D-5).");
+            throw new ConflictException(msg.toString());
+        }
+
+        // Override granted — audit the bypass.
+        java.util.Map<String, Object> detail = new java.util.LinkedHashMap<>();
+        detail.put("customerUid", customer.getUid());
+        detail.put("creditStatus", cs.name());
+        if (manualBlocked) detail.put("manualHold", "true");
+        if (limitBreached && creditLimit != null && projectedBalance != null) {
+            detail.put("creditLimit", creditLimit.getAmount().toPlainString());
+            detail.put("creditLimitCurrency", CurrencyCode.value(creditLimit.getCurrency()));
+            detail.put("projectedBalance", projectedBalance.toPlainString());
+        }
+        audit.record(AuditEvent.of(AuditActions.SALES_CREDIT_OVERRIDE, "sales_orders",
+                order.getId(), order.getUid())
+                .detail(detail));
     }
 
     private void recomputeTotals(SalesOrder order) {

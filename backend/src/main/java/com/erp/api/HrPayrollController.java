@@ -14,6 +14,8 @@ import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -92,5 +94,20 @@ public class HrPayrollController {
     @PreAuthorize("@perm.scoped(#uid,'payrollrun','HR.PAYROLL.REVERSE')")
     public PayrollRunDto reverse(@PathVariable String uid) {
         return service.reverse(uid);
+    }
+
+    /**
+     * Export EFT batch as CSV for the payroll run (ADR-0040 D-11).
+     * Gated by HR.PAYROLL.DISBURSE — same permission as disburse.
+     */
+    @GetMapping("/uid/{uid}/eft-export")
+    @PreAuthorize("@perm.scoped(#uid,'payrollrun','HR.PAYROLL.DISBURSE')")
+    public ResponseEntity<String> eftExport(@PathVariable String uid) {
+        String csv = service.exportEftBatch(uid);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("text/csv"))
+                .header("Content-Disposition",
+                        "attachment; filename=\"eft-batch-" + uid + ".csv\"")
+                .body(csv);
     }
 }

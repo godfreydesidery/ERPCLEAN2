@@ -424,4 +424,18 @@ public final class AuditActions {
      * only allowed when no GL journal_entries exist for the company (OQ-CCY-08).
      */
     public static final String COMPANY_BASE_CURRENCY_CHANGE = "COMPANY.BASE_CURRENCY.CHANGE";
+
+    // ---- Party contacts & addresses (ADR-0040 D-3) ----
+    public static final String CUSTOMER_CONTACT_ADD      = "CUSTOMER.CONTACT.ADD";
+    public static final String CUSTOMER_CONTACT_UPDATE   = "CUSTOMER.CONTACT.UPDATE";
+    public static final String CUSTOMER_CONTACT_DEACTIVATE = "CUSTOMER.CONTACT.DEACTIVATE";
+    public static final String CUSTOMER_ADDRESS_ADD      = "CUSTOMER.ADDRESS.ADD";
+    public static final String CUSTOMER_ADDRESS_UPDATE   = "CUSTOMER.ADDRESS.UPDATE";
+    public static final String CUSTOMER_ADDRESS_DEACTIVATE = "CUSTOMER.ADDRESS.DEACTIVATE";
+    public static final String SUPPLIER_CONTACT_ADD      = "SUPPLIER.CONTACT.ADD";
+    public static final String SUPPLIER_CONTACT_UPDATE   = "SUPPLIER.CONTACT.UPDATE";
+    public static final String SUPPLIER_CONTACT_DEACTIVATE = "SUPPLIER.CONTACT.DEACTIVATE";
+    public static final String SUPPLIER_ADDRESS_ADD      = "SUPPLIER.ADDRESS.ADD";
+    public static final String SUPPLIER_ADDRESS_UPDATE   = "SUPPLIER.ADDRESS.UPDATE";
+    public static final String SUPPLIER_ADDRESS_DEACTIVATE = "SUPPLIER.ADDRESS.DEACTIVATE";
 }

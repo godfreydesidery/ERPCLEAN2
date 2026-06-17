@@ -121,7 +121,10 @@ class PayrollRunServiceIT extends PostgresIntegrationTest {
                 "John", "Mwangi", null, null, null, null,
                 LocalDate.of(1985, 1, 1), "M",
                 LocalDate.of(2024, 1, 1),
-                null, "Engineer", branch.getId(), null)).uid();
+                null, "Engineer", branch.getId(), null,
+                // contact + payee fields (ADR-0040 D-11) — not required here
+                null, null, null, null, null, null,
+                null, null, null, null, null, null)).uid();
 
         contractService.createForEmployee(employeeUid, new CreateContractRequest(
                 ContractType.PERMANENT,

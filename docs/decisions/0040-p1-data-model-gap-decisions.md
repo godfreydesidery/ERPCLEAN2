@@ -62,3 +62,16 @@ Closes the 13 P1 genuine gaps. Two cross-module enablers land early (D-2 Payment
 - `ApDebitNote` application parity (D-6 sibling).
 - WHT remittance-run table + posting (D-7, if a true batch remit-to-TRA is wanted).
 - Per-rate input-VAT GL legs (D-8, when the input-VAT return lands).
+
+## Wave 4 implementation note (2026-06-17)
+
+Implemented across migrations V66 (D-11), V67 (D-3), V68 (D-5), all additive new migrations (dev-phase). Built in parallel and integrated onto the gap-program branch; full suite green (970 tests, 0 failures).
+
+- **D-3 ruling — children carry `uid`.** Despite the D-3 body's "owned children omit uid (junction convention)" phrasing, the 8 `*_contacts`/`*_addresses` tables are addressable sub-masters (managed via REST, referenced by sales soft-FKs), so they get `uid` like `supplier_bank_account` (D-4). Java duplication absorbed by `PartyContactBase` / `PartyAddressBase` `@MappedSuperclass`.
+
+Deferred to a Wave-4 follow-up tranche (data model + core wiring shipped; these are additive usage, not gaps):
+- **D-3 sales snapshot population** — `ship_to_address_id`/`bill_to_address_id` + `*_address_text` columns + entity fields exist; populating them at SO/SI create (resolve address uid → set id + snapshot text) is the remaining wiring.
+- **D-3 agent/other_party contact/address CRUD** — tables + entities + repos exist; service/controller built for customer + supplier only.
+- **D-11 `employee_next_of_kin` CRUD** — table + entity + repo exist; service/controller not yet wired.
+- **D-11 payee field-level masking** — `HR.EMPLOYEE.PAYEE.VIEW` seeded; masking bank/mobile fields in the employee read DTO unless the caller holds it is pending.
+- **D-5 credit-block IT** — `assertCreditClearance` mirrors the tested invoice-finalise pattern; a dedicated SO-confirm credit IT is pending.

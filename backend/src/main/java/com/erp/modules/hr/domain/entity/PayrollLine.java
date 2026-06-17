@@ -93,6 +93,24 @@ public class PayrollLine extends UidEntity {
     @Column(name = "currency", nullable = false, length = 3)
     private CurrencyCode currency;
 
+    // ---- Payee snapshot (set at calculate time, ADR-0040 D-11) ----
+
+    @Column(name = "payee_method", length = 20)
+    @Setter
+    private String payeeMethod;
+
+    @Column(name = "payee_account_ref", length = 60)
+    @Setter
+    private String payeeAccountRef;
+
+    @Column(name = "payee_bank_name", length = 120)
+    @Setter
+    private String payeeBankName;
+
+    @Column(name = "payee_account_name", length = 120)
+    @Setter
+    private String payeeAccountName;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
