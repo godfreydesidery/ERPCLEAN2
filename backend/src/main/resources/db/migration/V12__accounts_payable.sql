@@ -34,6 +34,7 @@ CREATE TABLE supplier_bills (
     posted_gl_entry_uid  VARCHAR(26),
     matched_at           TIMESTAMPTZ,
     matched_by           BIGINT,
+    supplier_bank_account_uid VARCHAR(26),    -- captured beneficiary (soft ref, no FK — ADR-0040 D-4)
     version              BIGINT          NOT NULL DEFAULT 0,
     created_at           TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by           BIGINT,
@@ -141,6 +142,7 @@ CREATE TABLE ap_payments (
     tender_type      VARCHAR(20)     NOT NULL,
     bank_reference   VARCHAR(80),
     gl_entry_uid     VARCHAR(26),
+    supplier_bank_account_uid VARCHAR(26),    -- captured beneficiary (soft ref, no FK — ADR-0040 D-4)
     version          BIGINT          NOT NULL DEFAULT 0,
     created_at       TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by       BIGINT,

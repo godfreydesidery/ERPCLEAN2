@@ -321,10 +321,6 @@ CREATE INDEX ix_supplier_bank_accounts_supplier
 CREATE INDEX ix_supplier_bank_accounts_company
     ON supplier_bank_accounts (company_id);
 
--- Add captured-beneficiary scalar uid to supplier_bills and ap_payments (no FK — soft ref, D-4)
-ALTER TABLE supplier_bills  ADD COLUMN supplier_bank_account_uid VARCHAR(26);
-ALTER TABLE ap_payments     ADD COLUMN supplier_bank_account_uid VARCHAR(26);
-
 -- customers: tenant, name (expression), tin, phone; link table pair/direction indexes
 CREATE INDEX ix_customers_company
     ON customers (company_id);
