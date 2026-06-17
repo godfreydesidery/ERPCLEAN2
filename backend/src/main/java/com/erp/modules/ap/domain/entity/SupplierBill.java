@@ -87,6 +87,27 @@ public class SupplierBill extends UidEntity {
     @Setter
     private String supplierBankAccountUid;
 
+    // -------------------------------------------------------------------------
+    // D-7 — WHT plan/snapshot at bill entry (ADR-0040 D-7)
+    // Non-posting: records the intended WHT type and amounts for informational / approval purposes.
+    // Actual WHT capture happens at payment time via WhtCaptureService.
+    // -------------------------------------------------------------------------
+
+    /** Scalar ref to wht_types(id) — no DB FK (cross-module soft ref). Nullable. */
+    @Column(name = "wht_type_id")
+    @Setter
+    private Long whtTypeId;
+
+    /** Taxable base for WHT calculation (plan/snapshot). Nullable. */
+    @Column(name = "wht_taxable_base", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal whtTaxableBase;
+
+    /** Planned/snapshot WHT amount. Nullable. Non-negative when set. */
+    @Column(name = "wht_amount", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal whtAmount;
+
     @Column(name = "posted_gl_entry_uid", length = 26)
     @Setter
     private String postedGlEntryUid;

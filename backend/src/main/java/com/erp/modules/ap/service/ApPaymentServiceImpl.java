@@ -385,12 +385,17 @@ public class ApPaymentServiceImpl implements ApPaymentService {
                 && whtAmount.compareTo(BigDecimal.ZERO) > 0;
 
         // Capture WHT certificate before building the GL draft (ADR-0017 D-9).
+        // D-7: resolve supplier TIN snapshot from party master (no tax→parties import — done here in ap).
         WhtCaptureResultDto whtResult = null;
         if (hasWht) {
+            String supplierTin = supplierId != null
+                    ? suppliers.findById(supplierId).map(s -> s.getTin()).orElse(null)
+                    : null;
             whtResult = whtCapture.captureOnPayment(
                     companyId, branchId,
                     whtTypeUid,
                     supplierId, "Supplier",
+                    supplierTin,
                     payment.getUid(),
                     payment.getAmount(), whtAmount,
                     currency, payment.getPaymentDate(),
@@ -522,6 +527,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
                 p.getId(), p.getUid(), p.getCompanyId(), p.getBranchId(), p.getSupplierId(),
                 p.getPaymentNumber(), p.getKind(), p.getPaymentDate(), p.getAmount(),
                 p.getCurrency().value(), p.getTenderType(), p.getBankReference(), p.getGlEntryUid(),
+                p.getWhtAmount(), p.getWhtTransactionUid(),
                 dtoAllocs);
     }
 }

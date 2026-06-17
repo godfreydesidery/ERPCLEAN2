@@ -9,11 +9,13 @@ import com.erp.modules.ap.domain.entity.SupplierBillLine;
 import com.erp.modules.ap.domain.enums.SupplierBillSource;
 import com.erp.modules.ap.repository.SupplierBillLineRepository;
 import com.erp.modules.ap.repository.SupplierBillRepository;
+import com.erp.modules.gl.repository.ChartOfAccountRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.parties.domain.entity.PaymentTerms;
 import com.erp.modules.parties.domain.entity.Supplier;
 import com.erp.modules.parties.repository.PaymentTermsRepository;
 import com.erp.modules.parties.repository.SupplierRepository;
+import com.erp.modules.products.domain.enums.VatStatus;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -22,6 +24,7 @@ import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -44,6 +47,7 @@ public class SupplierBillServiceImpl implements SupplierBillService {
     private final SupplierRepository         suppliers;
     private final PaymentTermsRepository     paymentTermsRepo;
     private final CompanyRepository          companies;
+    private final ChartOfAccountRepository   chartOfAccounts;
     private final ScopeGuard                 scopeGuard;
     private final AuditService               audit;
 
@@ -52,6 +56,7 @@ public class SupplierBillServiceImpl implements SupplierBillService {
                                     SupplierRepository suppliers,
                                     PaymentTermsRepository paymentTermsRepo,
                                     CompanyRepository companies,
+                                    ChartOfAccountRepository chartOfAccounts,
                                     ScopeGuard scopeGuard,
                                     AuditService audit) {
         this.bills            = bills;
@@ -59,6 +64,7 @@ public class SupplierBillServiceImpl implements SupplierBillService {
         this.suppliers        = suppliers;
         this.paymentTermsRepo = paymentTermsRepo;
         this.companies        = companies;
+        this.chartOfAccounts  = chartOfAccounts;
         this.scopeGuard       = scopeGuard;
         this.audit            = audit;
     }
@@ -90,11 +96,24 @@ public class SupplierBillServiceImpl implements SupplierBillService {
                 ? req.dueDate()
                 : resolveDueDate(req.billDate(), supplier);
 
-        // Compute net amount from lines
-        BigDecimal netAmount = req.lines().stream()
-                .map(l -> l.unitCostAmount().multiply(l.billedQty()))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal vatAmount = req.vatAmount() != null ? req.vatAmount() : BigDecimal.ZERO;
+        // Compute net amount from lines and per-line VAT (D-8).
+        // lineVatAmount = lineNetAmount × vatRate (zero when vatStatus is null/ZERO_RATED/EXEMPT).
+        BigDecimal netAmount     = BigDecimal.ZERO;
+        BigDecimal lineVatTotal  = BigDecimal.ZERO;
+        for (BillLineRequest lr : req.lines()) {
+            BigDecimal lineNet = lr.unitCostAmount().multiply(lr.billedQty());
+            netAmount = netAmount.add(lineNet);
+            lineVatTotal = lineVatTotal.add(computeLineVat(lineNet, lr.vatStatus(), lr.vatRate()));
+        }
+
+        // Header VAT (D-8): when any line carries per-line VAT, the header is the service-enforced
+        // Σ of line VAT (mixed-rate bills). Otherwise fall back to the caller-supplied header
+        // vatAmount (back-compat with header-level VAT entry). Keeps chk_supplier_bill_amounts satisfied.
+        boolean anyLineVat = req.lines().stream()
+                .anyMatch(lr -> lr.vatStatus() != null && lr.vatRate() != null);
+        BigDecimal vatAmount = anyLineVat
+                ? lineVatTotal
+                : (req.vatAmount() != null ? req.vatAmount() : BigDecimal.ZERO);
         BigDecimal grossAmount = netAmount.add(vatAmount);
 
         SupplierBill bill = new SupplierBill(
@@ -113,16 +132,33 @@ public class SupplierBillServiceImpl implements SupplierBillService {
                 actorId());
         bill = bills.save(bill);
 
-        // Persist lines
+        // Persist lines — resolve GL account id from uid when caller provides one (D-8).
+        Long branchId = RequestContext.get() != null ? RequestContext.get().branchId() : null;
         List<SupplierBillLine> savedLines = new ArrayList<>();
         short lineNo = 1;
         for (BillLineRequest lr : req.lines()) {
             SupplierBillLine line = new SupplierBillLine(
-                    bill.getId(), companyId,
-                    RequestContext.get() != null ? RequestContext.get().branchId() : null,
+                    bill.getId(), companyId, branchId,
                     lineNo++,
                     lr.productId(), lr.poLineUid(), lr.grLineUid(),
                     lr.description(), lr.billedQty(), lr.unitCostAmount(), currency, actorId());
+
+            // D-8: stamp per-line VAT fields
+            if (lr.vatStatus() != null) {
+                line.setVatStatus(lr.vatStatus());
+            }
+            if (lr.vatRate() != null) {
+                line.setVatRate(lr.vatRate());
+            }
+            BigDecimal lineNet = lr.unitCostAmount().multiply(lr.billedQty());
+            line.setLineVatAmount(computeLineVat(lineNet, lr.vatStatus(), lr.vatRate()));
+
+            // D-8: resolve optional GL account override by uid
+            if (lr.glAccountUid() != null && !lr.glAccountUid().isBlank()) {
+                chartOfAccounts.findByUid(lr.glAccountUid()).ifPresent(
+                        acct -> line.setGlAccountId(acct.getId()));
+            }
+
             savedLines.add(lines.save(line));
         }
 
@@ -169,14 +205,37 @@ public class SupplierBillServiceImpl implements SupplierBillService {
                         l.getId(), l.getUid(), l.getSupplierBillId(), l.getLineNo(),
                         l.getProductId(), l.getPoLineUid(), l.getGrLineUid(),
                         l.getDescription(), l.getBilledQty(), l.getUnitCostAmount(),
-                        l.getLineNetAmount(), l.getCurrency().value())
+                        l.getLineNetAmount(), l.getCurrency().value(),
+                        // D-8: per-line VAT + GL override
+                        l.getVatStatus(), l.getVatRate(),
+                        l.getLineVatAmount() != null ? l.getLineVatAmount() : BigDecimal.ZERO,
+                        l.getGlAccountId())
         ).toList();
         return new SupplierBillDto(
                 b.getId(), b.getUid(), b.getCompanyId(), b.getBranchId(), b.getSupplierId(),
                 b.getBillNumber(), b.getSupplierInvoiceNo(), b.getSource(), b.getPurchaseOrderUid(),
                 b.getBillDate(), b.getDueDate(),
                 b.getNetAmount(), b.getVatAmount(), b.getGrossAmount(), b.getOutstandingAmount(),
-                b.getCurrency().value(), b.getStatus(), b.getPostedGlEntryUid(), lineDtos);
+                b.getCurrency().value(), b.getStatus(), b.getPostedGlEntryUid(),
+                // D-7: WHT snapshot
+                b.getWhtTypeId(), b.getWhtTaxableBase(), b.getWhtAmount(),
+                lineDtos);
+    }
+
+    /**
+     * Computes line VAT amount = lineNet × vatRate.
+     * Returns ZERO when vatStatus is null, ZERO_RATED, or EXEMPT, or when vatRate is null/zero.
+     * Back-compat: callers that omit vatStatus/vatRate get ZERO (no VAT applied).
+     */
+    static BigDecimal computeLineVat(BigDecimal lineNet, VatStatus vatStatus, BigDecimal vatRate) {
+        if (vatStatus == null
+                || vatStatus == VatStatus.ZERO_RATED
+                || vatStatus == VatStatus.EXEMPT
+                || vatRate == null
+                || vatRate.compareTo(BigDecimal.ZERO) == 0) {
+            return BigDecimal.ZERO;
+        }
+        return lineNet.multiply(vatRate).setScale(4, RoundingMode.HALF_UP);
     }
 
     /**

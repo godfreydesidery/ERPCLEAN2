@@ -5,6 +5,10 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
+/**
+ * Response DTO for an AP payment.
+ * D-7: exposes whtAmount and whtTransactionUid stamped at payment time.
+ */
 public record ApPaymentDto(
         Long id,
         String uid,
@@ -19,6 +23,9 @@ public record ApPaymentDto(
         String tenderType,
         String bankReference,
         String glEntryUid,
+        // D-7: WHT withheld on this payment
+        BigDecimal whtAmount,
+        String whtTransactionUid,
         List<PaymentAllocationDto> allocations
 ) {
     public record PaymentAllocationDto(

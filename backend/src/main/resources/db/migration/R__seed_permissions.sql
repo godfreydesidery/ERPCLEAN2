@@ -225,6 +225,7 @@ INSERT INTO permissions (code, module, description) VALUES
     ('VAT.RETURN.PREPARE', 'tax', 'Open / compute / recompute a DRAFT VAT return'),
     ('VAT.VIEW', 'tax', 'View VAT returns (face + band breakdown) and the WHT register'),
     ('WHT.MANAGE', 'tax', 'Manage WHT rates/types; capture WHT on an AP payment / AR receipt; issue certificates'),
+    ('WHT.REMIT', 'tax', 'Mark a WHT transaction as remitted to the tax authority (flag-on-row, ADR-0040 D-7)'),
     ('WHT.VIEW', 'tax', 'Read WHT transactions / the WHT register'),
     ('WORKORDER.CLOSE', 'manufacturing', 'Close a completed work order (variance-clear, finance act)'),
     ('WORKORDER.MANAGE', 'manufacturing', 'Create / edit draft / issue / apply-cost / complete / cancel work orders + add operations'),

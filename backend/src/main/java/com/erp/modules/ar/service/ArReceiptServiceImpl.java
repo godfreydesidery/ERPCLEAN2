@@ -263,7 +263,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
             whtResult = whtCapture.captureOnReceipt(
                     companyId, receipt.getBranchId(),
                     req.whtTypeUid(),
-                    customer.getId(), customer.getDisplayName(),
+                    customer.getId(), customer.getDisplayName(), customer.getTin(),
                     receipt.getUid(),
                     receipt.getAmount(), req.whtAmount(),
                     currency, receipt.getReceiptDate(),

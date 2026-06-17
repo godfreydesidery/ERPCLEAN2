@@ -65,6 +65,23 @@ public class ApPayment extends UidEntity {
     @Setter
     private String supplierBankAccountUid;
 
+    // -------------------------------------------------------------------------
+    // D-7 — WHT withheld on payment header (ADR-0040 D-7)
+    // -------------------------------------------------------------------------
+
+    /** WHT amount withheld from this payment. Null when no WHT applies. Positive when set. */
+    @Column(name = "wht_amount", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal whtAmount;
+
+    /**
+     * Scalar uid of the wht_transactions row created at payment time (soft ref, no DB FK).
+     * Set by ApPaymentServiceImpl after WhtCaptureService.captureOnPayment succeeds.
+     */
+    @Column(name = "wht_transaction_uid", length = 26)
+    @Setter
+    private String whtTransactionUid;
+
     @Column(name = "gl_entry_uid", length = 26)
     @Setter
     private String glEntryUid;

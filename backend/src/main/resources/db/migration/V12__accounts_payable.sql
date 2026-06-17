@@ -35,6 +35,10 @@ CREATE TABLE supplier_bills (
     matched_at           TIMESTAMPTZ,
     matched_by           BIGINT,
     supplier_bank_account_uid VARCHAR(26),    -- captured beneficiary (soft ref, no FK — ADR-0040 D-4)
+    -- D-7: WHT plan/snapshot at bill entry (non-posting; captured on payment) — ADR-0040 D-7
+    wht_type_id          BIGINT,             -- scalar, no FK (cross-module soft ref)
+    wht_taxable_base     NUMERIC(19,4),      -- taxable base for WHT calculation
+    wht_amount           NUMERIC(19,4),      -- planned/snapshot WHT amount
     version              BIGINT          NOT NULL DEFAULT 0,
     created_at           TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by           BIGINT,
@@ -59,7 +63,8 @@ CREATE TABLE supplier_bills (
     CONSTRAINT chk_supplier_bill_dates         CHECK (due_date >= bill_date),
     CONSTRAINT chk_supplier_bill_number_when_posted CHECK (
         (status = 'DRAFT' AND bill_number IS NULL)
-        OR (status <> 'DRAFT' AND bill_number IS NOT NULL))
+        OR (status <> 'DRAFT' AND bill_number IS NOT NULL)),
+    CONSTRAINT chk_supplier_bill_wht_amount    CHECK (wht_amount IS NULL OR wht_amount >= 0)
 );
 
 -- ============================================================================
@@ -79,18 +84,28 @@ CREATE TABLE supplier_bill_lines (
     billed_qty       NUMERIC(19,6)   NOT NULL,
     unit_cost_amount NUMERIC(19,4)   NOT NULL,
     line_net_amount  NUMERIC(19,4)   NOT NULL,
+    -- D-8: per-line VAT (ADR-0040 D-8) — reuses products.VatStatus enum values
+    vat_status       VARCHAR(20),            -- STANDARD | ZERO_RATED | EXEMPT; null = inherit from product
+    vat_rate         NUMERIC(9,4),           -- rate snapshot at bill entry (e.g. 0.1800 for 18%)
+    line_vat_amount  NUMERIC(19,4)   NOT NULL DEFAULT 0,   -- lineNetAmount × vatRate; 0 if no VAT
+    -- D-8: optional per-line GL account override for service / non-stock lines
+    gl_account_id    BIGINT,                 -- intra-DB FK → chart_of_accounts(id); null = use PURCHASES config key
     currency         VARCHAR(3)      NOT NULL,
     created_at       TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by       BIGINT,
 
     CONSTRAINT uq_supplier_bill_line_uid    UNIQUE (uid),
     CONSTRAINT uq_supplier_bill_line_no     UNIQUE (supplier_bill_id, line_no),
-    CONSTRAINT fk_supplier_bill_line_bill   FOREIGN KEY (supplier_bill_id) REFERENCES supplier_bills (id),
-    CONSTRAINT fk_supplier_bill_line_company FOREIGN KEY (company_id)       REFERENCES companies (id),
-    CONSTRAINT fk_supplier_bill_line_branch  FOREIGN KEY (branch_id)        REFERENCES branches (id),
-    CONSTRAINT fk_supplier_bill_line_product FOREIGN KEY (product_id)       REFERENCES products (id),
+    CONSTRAINT fk_supplier_bill_line_bill   FOREIGN KEY (supplier_bill_id)  REFERENCES supplier_bills (id),
+    CONSTRAINT fk_supplier_bill_line_company FOREIGN KEY (company_id)        REFERENCES companies (id),
+    CONSTRAINT fk_supplier_bill_line_branch  FOREIGN KEY (branch_id)         REFERENCES branches (id),
+    CONSTRAINT fk_supplier_bill_line_product FOREIGN KEY (product_id)        REFERENCES products (id),
+    CONSTRAINT fk_supplier_bill_line_gl_acct FOREIGN KEY (gl_account_id)     REFERENCES chart_of_accounts (id),
     CONSTRAINT chk_supplier_bill_line_qty   CHECK (billed_qty > 0),
-    CONSTRAINT chk_supplier_bill_line_cost  CHECK (unit_cost_amount >= 0 AND line_net_amount >= 0)
+    CONSTRAINT chk_supplier_bill_line_cost  CHECK (unit_cost_amount >= 0 AND line_net_amount >= 0),
+    CONSTRAINT chk_supplier_bill_line_vat_status CHECK (
+        vat_status IS NULL OR vat_status IN ('STANDARD','ZERO_RATED','EXEMPT')),
+    CONSTRAINT chk_supplier_bill_line_vat_amount CHECK (line_vat_amount >= 0)
 );
 
 -- ============================================================================
@@ -143,6 +158,9 @@ CREATE TABLE ap_payments (
     bank_reference   VARCHAR(80),
     gl_entry_uid     VARCHAR(26),
     supplier_bank_account_uid VARCHAR(26),    -- captured beneficiary (soft ref, no FK — ADR-0040 D-4)
+    -- D-7: WHT withheld on payment header (ADR-0040 D-7)
+    wht_amount           NUMERIC(19,4),      -- withheld amount (null = no WHT on this payment)
+    wht_transaction_uid  VARCHAR(26),        -- scalar ref to wht_transactions.uid; no FK (cross-module soft ref)
     version          BIGINT          NOT NULL DEFAULT 0,
     created_at       TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by       BIGINT,
@@ -156,7 +174,8 @@ CREATE TABLE ap_payments (
     CONSTRAINT fk_ap_payment_supplier       FOREIGN KEY (supplier_id) REFERENCES suppliers (id),
     CONSTRAINT chk_ap_payment_amount        CHECK (amount > 0),
     CONSTRAINT chk_ap_payment_kind          CHECK (kind IN ('SINGLE','PAYMENT_RUN')),
-    CONSTRAINT chk_ap_payment_tender        CHECK (tender_type IN ('CASH','BANK_TRANSFER','MOBILE_MONEY'))
+    CONSTRAINT chk_ap_payment_tender        CHECK (tender_type IN ('CASH','BANK_TRANSFER','MOBILE_MONEY')),
+    CONSTRAINT chk_ap_payment_wht_amount    CHECK (wht_amount IS NULL OR wht_amount > 0)
 );
 
 -- ============================================================================
@@ -257,6 +276,11 @@ CREATE INDEX ix_supplier_bill_lines_company
     ON supplier_bill_lines (company_id);
 CREATE INDEX ix_supplier_bill_lines_po_line
     ON supplier_bill_lines (po_line_uid);
+
+-- D-8: partial index on supplier_bill_lines.gl_account_id when set
+CREATE INDEX ix_supplier_bill_lines_gl_account
+    ON supplier_bill_lines (gl_account_id)
+    WHERE gl_account_id IS NOT NULL;
 
 -- bill_match
 CREATE INDEX ix_bill_match_bill

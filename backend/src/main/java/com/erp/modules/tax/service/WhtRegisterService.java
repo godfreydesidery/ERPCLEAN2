@@ -13,4 +13,11 @@ public interface WhtRegisterService {
      * grouped by kind (WHT_ON_PAYMENT / WHT_ON_RECEIPT) with totals.
      */
     WhtRegisterDto getRegister(Long companyId, LocalDate periodStart, LocalDate periodEnd);
+
+    /**
+     * Mark a WHT transaction (by uid) as remitted to the tax authority (ADR-0040 D-7):
+     * stamps remitted=true, the period, the authority reference, and the actor/timestamp.
+     * Rejects if the transaction is already remitted.
+     */
+    void markRemitted(String whtTransactionUid, String remittancePeriod, String remittanceRef);
 }

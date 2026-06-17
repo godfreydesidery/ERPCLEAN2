@@ -360,9 +360,12 @@ public class BillMatchServiceImpl implements BillMatchService {
                 // Goods line: accumulate into single GRNI DR leg
                 baseGoodsNet = baseGoodsNet.add(baseLineNet);
             } else {
-                // Service line: one LineDraft per line with project tag (ADR-0033 D-4b)
-                ChartOfAccount purchasesAcct = glConfig.resolve(companyId, GlConfigKey.PURCHASES);
-                glLines.add(new LineDraft(purchasesAcct.getId(),
+                // Service line: one LineDraft per line with project tag (ADR-0033 D-4b).
+                // ADR-0040 D-8: debit the line's gl_account_id override when set, else the PURCHASES default.
+                Long expenseAccountId = l.getGlAccountId() != null
+                        ? l.getGlAccountId()
+                        : glConfig.resolve(companyId, GlConfigKey.PURCHASES).getId();
+                glLines.add(new LineDraft(expenseAccountId,
                         baseLineNet, BigDecimal.ZERO,
                         postCurrency, "Purchases — " + bill.getSupplierInvoiceNo(),
                         ccId, deptId, null, null,
