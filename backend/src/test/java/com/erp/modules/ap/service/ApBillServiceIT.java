@@ -78,7 +78,7 @@ class ApBillServiceIT extends PostgresIntegrationTest {
         supplierUid = supplierService.create(new CreateSupplierRequest(
                 company.getId(), PartyType.INDIVIDUAL, "IT Supplier Ltd",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                SupplierKind.GOODS)).uid();
+                SupplierKind.GOODS, null)).uid();
     }
 
     @AfterEach

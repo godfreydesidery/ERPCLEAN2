@@ -10,5 +10,6 @@ public record OpenReconciliationRequest(
         @NotBlank String companyUid,
         @NotBlank String cashBankAccountUid,
         @NotNull LocalDate statementDate,
+        BigDecimal statementOpeningBalance,
         @NotNull BigDecimal statementClosingBalance
 ) {}

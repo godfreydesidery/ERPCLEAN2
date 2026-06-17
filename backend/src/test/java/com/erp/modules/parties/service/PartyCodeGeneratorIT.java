@@ -169,6 +169,6 @@ class PartyCodeGeneratorIT extends PostgresIntegrationTest {
         return new CreateSupplierRequest(
                 companyId, PartyType.BUSINESS, "Supplier " + tin, null,
                 tin, false, null, null, null, null, null, null, null, null, null,
-                SupplierKind.GOODS);
+                SupplierKind.GOODS, null);
     }
 }

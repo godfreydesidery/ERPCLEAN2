@@ -165,6 +165,6 @@ class PartyBranchGuardIT extends PostgresIntegrationTest {
         return supplierService.create(new CreateSupplierRequest(
                 companyA.getId(), PartyType.BUSINESS, name, null,
                 tin, false, null, null, null, null, null, null, null, null, null,
-                SupplierKind.GOODS));
+                SupplierKind.GOODS, null));
     }
 }

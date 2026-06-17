@@ -65,6 +65,7 @@ public class SupplierServiceImpl implements SupplierService {
                 req.phone(), req.email(), req.physicalAddress(), req.postalAddress(),
                 req.region(), req.district());
         s.setSupplierKind(req.supplierKind());
+        s.setPaymentTermsDays(req.paymentTermsDays());
 
         Supplier saved = suppliers.save(s);
         audit.record(AuditEvent.of(AuditActions.SUPPLIER_CREATE, "suppliers",
@@ -107,6 +108,7 @@ public class SupplierServiceImpl implements SupplierService {
                 req.phone(), req.email(), req.physicalAddress(), req.postalAddress(),
                 req.region(), req.district());
         s.setSupplierKind(req.supplierKind());
+        s.setPaymentTermsDays(req.paymentTermsDays());
         s.setUpdatedAt(Instant.now());
         s.setUpdatedBy(actorId());
 

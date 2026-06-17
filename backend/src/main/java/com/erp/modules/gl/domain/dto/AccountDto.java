@@ -13,5 +13,6 @@ public record AccountDto(
         AccountType accountType,
         NormalBalance normalBalance,
         boolean active,
+        boolean allowManualPosting,
         String status
 ) {}

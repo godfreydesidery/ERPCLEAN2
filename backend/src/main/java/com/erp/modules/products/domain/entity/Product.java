@@ -85,6 +85,31 @@ public class Product extends UidEntity {
     private Money cost;
 
     /**
+     * Lot/batch tracking enabled (V35, ADR-0028 D-7). When true, every stock movement for
+     * this product must reference a batch/lot. Mutually exclusive with serialTracked
+     * (DB CHECK chk_product_tracking_exclusive).
+     */
+    @Column(name = "lot_tracked", nullable = false)
+    @Setter
+    private boolean lotTracked = false;
+
+    /**
+     * Serial-number tracking enabled (V35, ADR-0028 D-7). When true, every stock movement
+     * must reference a serial. Mutually exclusive with lotTracked.
+     */
+    @Column(name = "serial_tracked", nullable = false)
+    @Setter
+    private boolean serialTracked = false;
+
+    /**
+     * Expiry-date tracking enabled. When true, batch/lot records must carry an expiry date
+     * and FEFO picking is applied. Only meaningful when lotTracked = true.
+     */
+    @Column(name = "expiry_tracked", nullable = false)
+    @Setter
+    private boolean expiryTracked = false;
+
+    /**
      * VAT classification of this product (FR-SALES-10, ADR-0008 D-5a).
      * Default STANDARD — additive safe; existing rows become standard-rated.
      * Stored as VARCHAR(20) matching every other enum column.

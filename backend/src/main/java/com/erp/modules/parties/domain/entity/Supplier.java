@@ -24,6 +24,11 @@ public class Supplier extends PartyBase {
     @Setter
     private SupplierKind supplierKind;
 
+    /** Optional payment terms in days (mirrors Customer.paymentTermsDays; unblocks AP due-date derivation, X10). */
+    @Column(name = "payment_terms_days")
+    @Setter
+    private Integer paymentTermsDays;
+
     protected Supplier() {
         // JPA
     }

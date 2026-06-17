@@ -22,6 +22,7 @@ public record CreateSupplierRequest(
         String postalAddress,
         String region,
         String district,
-        @NotNull SupplierKind supplierKind
+        @NotNull SupplierKind supplierKind,
+        Integer paymentTermsDays
 ) {
 }

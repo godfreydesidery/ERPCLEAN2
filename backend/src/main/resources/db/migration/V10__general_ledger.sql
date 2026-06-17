@@ -26,6 +26,7 @@ CREATE TABLE chart_of_accounts (
     normal_balance   VARCHAR(10)     NOT NULL,  -- DEBIT|CREDIT; stored, derived-from-type at write
     parent_id        BIGINT,                    -- self-FK; reserved for later grouping; NULL in v1
     is_active        BOOLEAN         NOT NULL DEFAULT true,
+    allow_manual_posting BOOLEAN     NOT NULL DEFAULT true,
     status           VARCHAR(32)     NOT NULL DEFAULT 'ACTIVE',
     version          BIGINT          NOT NULL DEFAULT 0,
     created_at       TIMESTAMPTZ     NOT NULL DEFAULT now(),

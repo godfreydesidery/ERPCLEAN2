@@ -195,7 +195,7 @@ class BiDashboardServiceIT extends PostgresIntegrationTest {
         supplierUid = supplierService.create(new CreateSupplierRequest(
                 companyA.getId(), PartyType.INDIVIDUAL, "BI Supplier",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                SupplierKind.GOODS)).uid();
+                SupplierKind.GOODS, null)).uid();
 
         // ── Company B (separate tenant) ───────────────────────────────────────
         Organisation orgB = organisations.save(new Organisation("BI IT Org B"));

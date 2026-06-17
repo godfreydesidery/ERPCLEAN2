@@ -154,7 +154,7 @@ class PurchasesServiceImplIT extends PostgresIntegrationTest {
         SupplierDto supplier = supplierService.create(new CreateSupplierRequest(
                 companyA.getId(), PartyType.INDIVIDUAL, "Test Supplier",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                SupplierKind.GOODS));
+                SupplierKind.GOODS, null));
         supplierUid = supplier.uid();
     }
 
@@ -495,7 +495,7 @@ class PurchasesServiceImplIT extends PostgresIntegrationTest {
         SupplierDto supplierB = supplierService.create(new CreateSupplierRequest(
                 companyB.getId(), PartyType.INDIVIDUAL, "B-Supplier",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                SupplierKind.GOODS));
+                SupplierKind.GOODS, null));
 
         // Back to company A context
         setContext(companyA, branchA);

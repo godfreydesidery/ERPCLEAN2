@@ -145,7 +145,7 @@ class WhtCaptureIT extends PostgresIntegrationTest {
         supplierUid = supplierService.create(new CreateSupplierRequest(
                 company.getId(), PartyType.INDIVIDUAL, "WHT Supplier Ltd",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                SupplierKind.GOODS)).uid();
+                SupplierKind.GOODS, null)).uid();
 
         creditCustomerUid = customerService.create(new CreateCustomerRequest(
                 company.getId(), PartyType.INDIVIDUAL, "WHT Customer",

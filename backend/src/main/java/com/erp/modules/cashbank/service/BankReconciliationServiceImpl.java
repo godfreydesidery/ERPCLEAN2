@@ -92,6 +92,7 @@ public class BankReconciliationServiceImpl implements BankReconciliationService 
         BankReconciliation recon = new BankReconciliation(
                 companyId, branch, account.getId(),
                 reconNumber, req.statementDate(),
+                req.statementOpeningBalance(),
                 req.statementClosingBalance(), actor);
         recon = reconciliations.save(recon);
 
@@ -172,6 +173,7 @@ public class BankReconciliationServiceImpl implements BankReconciliationService 
 
         Long actor = actorId();
         recon.setClearedBookBalance(clearedBalance);
+        recon.setUnreconciledAmount(recon.getStatementClosingBalance().subtract(clearedBalance));
         recon.setStatus(ReconciliationStatus.COMPLETED);
         recon.setReconciledBy(actor);
         recon.setCompletedAt(Instant.now());
@@ -223,7 +225,9 @@ public class BankReconciliationServiceImpl implements BankReconciliationService 
     static BankReconciliationDto toDto(BankReconciliation r) {
         return new BankReconciliationDto(
                 r.getId(), r.getUid(), r.getCompanyId(), r.getCashBankAccountId(),
-                r.getReconciliationNumber(), r.getStatementDate(), r.getStatementClosingBalance(),
-                r.getClearedBookBalance(), r.getStatus(), r.getReconciledBy(), r.getCompletedAt());
+                r.getReconciliationNumber(), r.getStatementDate(),
+                r.getStatementOpeningBalance(), r.getStatementClosingBalance(),
+                r.getClearedBookBalance(), r.getUnreconciledAmount(),
+                r.getStatus(), r.getReconciledBy(), r.getCompletedAt());
     }
 }

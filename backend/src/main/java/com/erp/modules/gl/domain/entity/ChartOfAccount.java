@@ -57,6 +57,16 @@ public class ChartOfAccount extends UidEntity {
     @Setter
     private boolean active = true;
 
+    /**
+     * When false, manual journal lines targeting this account are rejected at posting time.
+     * Use for system-controlled accounts (e.g. control accounts, retained earnings) where
+     * direct user entries would break subledger reconciliation.
+     * Defaults to true — all accounts allow manual posting unless explicitly locked.
+     */
+    @Column(name = "allow_manual_posting", nullable = false)
+    @Setter
+    private boolean allowManualPosting = true;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     @Setter
