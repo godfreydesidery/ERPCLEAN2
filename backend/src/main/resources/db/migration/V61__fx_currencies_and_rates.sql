@@ -96,11 +96,15 @@ CREATE INDEX ix_currency_rates_lookup
 -- ============================================================================
 INSERT INTO currencies (uid, code, name, symbol, minor_units, active, status, version, created_at)
 VALUES
-    ('CUR_PLACEHOLDER_TZS', 'TZS', 'Tanzanian Shilling', 'TSh', 0, true, 'ACTIVE', 0, now()),
-    ('CUR_PLACEHOLDER_USD', 'USD', 'US Dollar',           '$',   2, true, 'ACTIVE', 0, now()),
-    ('CUR_PLACEHOLDER_EUR', 'EUR', 'Euro',                '€',   2, true, 'ACTIVE', 0, now()),
-    ('CUR_PLACEHOLDER_KES', 'KES', 'Kenyan Shilling',     'KSh', 2, true, 'ACTIVE', 0, now()),
-    ('CUR_PLACEHOLDER_GBP', 'GBP', 'Pound Sterling',      '£',   2, true, 'ACTIVE', 0, now())
+    ('CUR_PLACEHOLDER_TZS', 'TZS', 'Tanzanian Shilling',    'TSh', 0, true, 'ACTIVE', 0, now()),
+    ('CUR_PLACEHOLDER_USD', 'USD', 'US Dollar',              '$',   2, true, 'ACTIVE', 0, now()),
+    ('CUR_PLACEHOLDER_EUR', 'EUR', 'Euro',                   '€',   2, true, 'ACTIVE', 0, now()),
+    ('CUR_PLACEHOLDER_KES', 'KES', 'Kenyan Shilling',        'KSh', 2, true, 'ACTIVE', 0, now()),
+    ('CUR_PLACEHOLDER_GBP', 'GBP', 'Pound Sterling',         '£',   2, true, 'ACTIVE', 0, now()),
+    ('CUR_PLACEHOLDER_UGX', 'UGX', 'Ugandan Shilling',       'USh', 0, true, 'ACTIVE', 0, now()),
+    ('CUR_PLACEHOLDER_RWF', 'RWF', 'Rwandan Franc',          'RF',  0, true, 'ACTIVE', 0, now()),
+    ('CUR_PLACEHOLDER_BIF', 'BIF', 'Burundian Franc',        'Fr',  0, true, 'ACTIVE', 0, now()),
+    ('CUR_PLACEHOLDER_SSP', 'SSP', 'South Sudanese Pound',   '£',   2, true, 'ACTIVE', 0, now())
 ON CONFLICT (code) DO NOTHING;
 
 -- Fix uid to the #12-safe pattern: 'CUR' || lpad(id,6,'0') || code = 3+6+3 = 12 chars

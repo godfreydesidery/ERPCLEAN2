@@ -115,7 +115,7 @@ class RouteServiceImplIT extends PostgresIntegrationTest {
         CustomerDto cust = customerService.create(new CreateCustomerRequest(
                 companyA.getId(), PartyType.INDIVIDUAL, "Cust A1",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CASH_WALK_IN, null, null));
+                CustomerKind.CASH_WALK_IN, null, null, null));
         customerAUid = cust.uid();
 
         // Seed EXTERNAL agent for companyA
@@ -258,7 +258,7 @@ class RouteServiceImplIT extends PostgresIntegrationTest {
         CustomerDto custB = customerService.create(new CreateCustomerRequest(
                 companyB.getId(), PartyType.INDIVIDUAL, "Cust B1",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CASH_WALK_IN, null, null));
+                CustomerKind.CASH_WALK_IN, null, null, null));
 
         // Back to companyA for the route
         RequestContext.set(new RequestContext.Principal(

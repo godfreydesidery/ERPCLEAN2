@@ -1,5 +1,6 @@
 package com.erp.modules.purchases.domain.entity;
 
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.modules.purchases.domain.enums.LandedCostBasis;
 import com.erp.modules.purchases.domain.enums.LandedCostStatus;
 import com.erp.platform.common.domain.UidEntity;
@@ -47,7 +48,7 @@ public class LandedCost extends UidEntity {
     private BigDecimal totalChargeAmount = BigDecimal.ZERO;
 
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     /** The capitalisation journal uid set by the stock handler (diagnostic). */
     @Column(name = "gl_entry_uid", length = 26)
@@ -90,7 +91,7 @@ public class LandedCost extends UidEntity {
         this.branchId          = branchId;
         this.landedCostNumber  = landedCostNumber;
         this.basis             = basis;
-        this.currency          = currency;
+        this.currency          = CurrencyCode.ofNullable(currency);
         this.notes             = notes;
         this.createdBy         = createdBy;
     }

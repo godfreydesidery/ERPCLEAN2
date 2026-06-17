@@ -10,7 +10,8 @@
 -- ============================================================================
 ALTER TABLE products
     ADD COLUMN lot_tracked    BOOLEAN NOT NULL DEFAULT false,
-    ADD COLUMN serial_tracked BOOLEAN NOT NULL DEFAULT false;
+    ADD COLUMN serial_tracked BOOLEAN NOT NULL DEFAULT false,
+    ADD COLUMN expiry_tracked BOOLEAN NOT NULL DEFAULT false;
 
 -- Mutual exclusivity: a product is lot-tracked OR serial-tracked OR neither (D-7, OQ-INVD-05)
 ALTER TABLE products

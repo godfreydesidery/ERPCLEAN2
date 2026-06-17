@@ -2,6 +2,7 @@ package com.erp.modules.sales.domain.entity;
 
 import com.erp.modules.sales.domain.enums.TenderType;
 import com.erp.platform.common.domain.Ulid;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -60,7 +61,7 @@ public class SalesInvoicePayment {
 
     /** Document currency; denormalised from parent. */
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     /**
      * Cash over-tender returned as change (BR-SALES-07). NULL/0 for non-cash.

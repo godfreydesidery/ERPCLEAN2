@@ -19,6 +19,7 @@ public interface WhtCaptureService {
      * @param whtTypeUid      uid of the WhtType (must be same company, active, kind=WHT_ON_PAYMENT)
      * @param partySupplierId supplier id (party_id in wht_transactions)
      * @param partyName       supplier display name
+     * @param partyTin        supplier TIN snapshot (nullable — from PartyBase.tin)
      * @param apPaymentUid    source_ref for the certificate
      * @param taxableBase     gross taxable amount before withholding
      * @param whtAmount       withheld amount
@@ -31,6 +32,7 @@ public interface WhtCaptureService {
     WhtCaptureResultDto captureOnPayment(Long companyId, Long branchId,
                                          String whtTypeUid,
                                          Long partySupplierId, String partyName,
+                                         String partyTin,
                                          String apPaymentUid,
                                          BigDecimal taxableBase, BigDecimal whtAmount,
                                          String currency, LocalDate certificateDate,
@@ -50,6 +52,7 @@ public interface WhtCaptureService {
      * @param whtTypeUid      uid of the WhtType (must be same company, active, kind=WHT_ON_RECEIPT)
      * @param partyCustomerId customer id (party_id in wht_transactions)
      * @param partyName       customer display name
+     * @param partyTin        customer TIN snapshot (nullable — from PartyBase.tin)
      * @param arReceiptUid    source_ref for the certificate
      * @param taxableBase     gross taxable amount before withholding
      * @param whtAmount       withheld amount
@@ -62,6 +65,7 @@ public interface WhtCaptureService {
     WhtCaptureResultDto captureOnReceipt(Long companyId, Long branchId,
                                           String whtTypeUid,
                                           Long partyCustomerId, String partyName,
+                                          String partyTin,
                                           String arReceiptUid,
                                           BigDecimal taxableBase, BigDecimal whtAmount,
                                           String currency, LocalDate certificateDate,

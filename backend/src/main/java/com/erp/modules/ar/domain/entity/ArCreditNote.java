@@ -2,6 +2,7 @@ package com.erp.modules.ar.domain.entity;
 
 import com.erp.modules.ar.domain.enums.ArCreditNoteOrigin;
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -50,7 +51,7 @@ public class ArCreditNote extends UidEntity {
     private BigDecimal vatAmount;
 
     @Column(name = "currency", nullable = false, length = 3, updatable = false)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "reason", nullable = false, length = 255)
     private String reason;
@@ -95,7 +96,7 @@ public class ArCreditNote extends UidEntity {
         this.amount           = amount;
         this.netAmount        = netAmount;
         this.vatAmount        = vatAmount;
-        this.currency         = currency;
+        this.currency         = CurrencyCode.of(currency);
         this.reason           = reason;
         this.origin           = origin;
         this.createdBy        = createdBy;

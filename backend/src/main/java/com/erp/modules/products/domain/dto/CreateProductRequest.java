@@ -3,8 +3,10 @@ package com.erp.modules.products.domain.dto;
 import com.erp.modules.products.domain.enums.ProductType;
 import com.erp.modules.products.domain.enums.VatStatus;
 import com.erp.platform.common.money.MoneyDto;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import java.math.BigDecimal;
 
 /**
  * Request DTO to create a new Product.
@@ -13,6 +15,7 @@ import jakarta.validation.constraints.NotNull;
  * {@code code} is OPTIONAL: blank → the system auto-assigns PROD-#### (FR-PROD-23); a supplied
  * value is used as-is (trimmed/uppercased) and must be unique within the company (BR-PROD-08).
  * {@code vatStatus} defaults to STANDARD when null (ADR-0008 D-5a).
+ * D-10 planning/sourcing fields added in ADR-0040 — all optional.
  */
 public record CreateProductRequest(
         @NotBlank String companyUid,
@@ -24,6 +27,15 @@ public record CreateProductRequest(
         boolean stockable,
         @NotBlank String baseUnitUid,
         MoneyDto cost,
-        VatStatus vatStatus
+        VatStatus vatStatus,
+        // D-10 planning + sourcing (all optional)
+        BigDecimal reorderLevel,
+        BigDecimal reorderQty,
+        BigDecimal safetyStock,
+        BigDecimal minStock,
+        BigDecimal maxStock,
+        @Min(0) Integer leadTimeDays,
+        Boolean purchasable,
+        Long preferredSupplierId
 ) {
 }

@@ -2,6 +2,7 @@ package com.erp.modules.ar.domain.entity;
 
 import com.erp.modules.ar.domain.enums.ArReceiptStatus;
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -47,7 +48,7 @@ public class ArReceipt extends UidEntity {
     private BigDecimal unallocatedAmount;
 
     @Column(name = "currency", nullable = false, length = 3, updatable = false)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "tender_type", nullable = false, length = 20, updatable = false)
     private String tenderType;
@@ -114,7 +115,7 @@ public class ArReceipt extends UidEntity {
         this.receiptDate       = receiptDate;
         this.amount            = amount;
         this.unallocatedAmount = amount;
-        this.currency          = currency;
+        this.currency          = CurrencyCode.of(currency);
         this.tenderType        = tenderType;
         this.createdBy         = createdBy;
     }

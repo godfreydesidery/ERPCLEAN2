@@ -5,8 +5,9 @@ import com.erp.modules.ar.domain.enums.ArInvoiceSource;
 import com.erp.modules.ar.repository.ArInvoiceRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.parties.domain.entity.Customer;
-import com.erp.modules.parties.domain.enums.CustomerKind;
+import com.erp.modules.parties.domain.entity.PaymentTerms;
 import com.erp.modules.parties.repository.CustomerRepository;
+import com.erp.modules.parties.repository.PaymentTermsRepository;
 import com.erp.modules.sales.domain.dto.InvoicePostingTotalsDto;
 import com.erp.modules.sales.domain.dto.SaleFinalisedPayload;
 import com.erp.modules.sales.service.SalesInvoiceService;
@@ -55,6 +56,7 @@ public class ArSalePostedHandler implements DomainEventHandler {
     private final SalesInvoiceService salesInvoiceService;
     private final ArInvoiceRepository arInvoices;
     private final CustomerRepository customers;
+    private final PaymentTermsRepository paymentTermsRepo;
     private final CompanyRepository companies;
     private final AuditService audit;
     private final ObjectMapper objectMapper;
@@ -63,6 +65,7 @@ public class ArSalePostedHandler implements DomainEventHandler {
                                 SalesInvoiceService salesInvoiceService,
                                 ArInvoiceRepository arInvoices,
                                 CustomerRepository customers,
+                                PaymentTermsRepository paymentTermsRepo,
                                 CompanyRepository companies,
                                 AuditService audit,
                                 ObjectMapper objectMapper) {
@@ -70,6 +73,7 @@ public class ArSalePostedHandler implements DomainEventHandler {
         this.salesInvoiceService = salesInvoiceService;
         this.arInvoices          = arInvoices;
         this.customers           = customers;
+        this.paymentTermsRepo    = paymentTermsRepo;
         this.companies           = companies;
         this.audit               = audit;
         this.objectMapper        = objectMapper;
@@ -144,7 +148,8 @@ public class ArSalePostedHandler implements DomainEventHandler {
             return;
         }
 
-        // 3c. Resolve due date from customer payment terms (OQ-AR-01: else net-on-receipt)
+        // 3c. Resolve due date — priority: PaymentTerms master > paymentTermsDays integer > net-on-receipt
+        //     (D-2, ADR-0040: linked term wins; deprecated integer is fallback; net-on-receipt if neither set)
         LocalDate invoiceDate = totals.finalisedAt() != null
                 ? totals.finalisedAt().atZone(ZoneOffset.UTC).toLocalDate()
                 : LocalDate.now();
@@ -152,9 +157,7 @@ public class ArSalePostedHandler implements DomainEventHandler {
         Customer customer = totals.customerId() != null
                 ? customers.findById(totals.customerId()).orElse(null)
                 : null;
-        int termsDays = (customer != null && customer.getPaymentTermsDays() != null)
-                ? customer.getPaymentTermsDays() : 0;
-        LocalDate dueDate = invoiceDate.plusDays(termsDays);
+        LocalDate dueDate = resolveDueDate(invoiceDate, customer);
 
         // 3d. Create the open item — NO GL POST (D-5, BR-AR-02)
         // Use outstandingAmount from totals if present; fall back to grossTotalAmount (D-10 v1 default)
@@ -211,6 +214,35 @@ public class ArSalePostedHandler implements DomainEventHandler {
 
         log.debug("ArSalePostedHandler: open item uid={} created for invoice uid={} amount={}",
                 inv.getUid(), payload.invoiceUid(), receivable);
+    }
+
+    /**
+     * Resolves the AR due date using priority: PaymentTerms master > paymentTermsDays integer > net-on-receipt.
+     * (D-2, ADR-0040 — preserve current behaviour when no term is set.)
+     */
+    private LocalDate resolveDueDate(LocalDate invoiceDate, Customer customer) {
+        if (customer == null) {
+            return invoiceDate; // net-on-receipt
+        }
+        // Priority 1: linked PaymentTerms master
+        if (customer.getPaymentTermsId() != null) {
+            PaymentTerms pt = paymentTermsRepo.findById(customer.getPaymentTermsId()).orElse(null);
+            if (pt != null) {
+                return switch (pt.getBasis()) {
+                    case DAYS_AFTER_INVOICE -> invoiceDate.plusDays(pt.getNetDays());
+                    case DAYS_AFTER_MONTH_END ->
+                            invoiceDate.withDayOfMonth(invoiceDate.lengthOfMonth())
+                                    .plusDays(pt.getNetDays());
+                    case DUE_ON_RECEIPT -> invoiceDate;
+                };
+            }
+        }
+        // Priority 2: deprecated integer fallback
+        if (customer.getPaymentTermsDays() != null) {
+            return invoiceDate.plusDays(customer.getPaymentTermsDays());
+        }
+        // Priority 3: net-on-receipt
+        return invoiceDate;
     }
 
     /** Minor-unit scale for HALF_UP rounding of base amounts (mirrors ArReceiptServiceImpl). */

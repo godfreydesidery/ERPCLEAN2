@@ -168,7 +168,7 @@ class ChartOfAccountServiceIT extends PostgresIntegrationTest {
                 company.getUid(), "6300", "Old Name", AccountType.EXPENSE));
 
         AccountDto updated = chartOfAccountService.update(
-                created.uid(), new UpdateAccountRequest("New Name", AccountType.EXPENSE, null));
+                created.uid(), new UpdateAccountRequest("New Name", AccountType.EXPENSE, null, null));
 
         assertThat(updated.name()).isEqualTo("New Name");
         assertThat(updated.normalBalance()).isEqualTo(NormalBalance.DEBIT);

@@ -120,7 +120,7 @@ class BankReconciliationServiceIT extends PostgresIntegrationTest {
     @Test
     void open_bankAccount_createsDraftReconciliation() {
         BankReconciliationDto recon = reconService.open(new OpenReconciliationRequest(
-                companyUid, bankAccount.uid(), LocalDate.now(), new BigDecimal("1000")));
+                companyUid, bankAccount.uid(), LocalDate.now(), null, new BigDecimal("1000")));
 
         assertThat(recon.uid()).isNotBlank();
         assertThat(recon.status()).isEqualTo(ReconciliationStatus.DRAFT);
@@ -130,7 +130,7 @@ class BankReconciliationServiceIT extends PostgresIntegrationTest {
     @Test
     void open_cashAccount_rejected_BR_CASH_11() {
         OpenReconciliationRequest req = new OpenReconciliationRequest(
-                companyUid, cashAccount.uid(), LocalDate.now(), new BigDecimal("500"));
+                companyUid, cashAccount.uid(), LocalDate.now(), null, new BigDecimal("500"));
 
         assertThatThrownBy(() -> reconService.open(req))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -146,7 +146,7 @@ class BankReconciliationServiceIT extends PostgresIntegrationTest {
                 LocalDate.now(), incomeGlUid, "Interest income"));
 
         BankReconciliationDto recon = reconService.open(new OpenReconciliationRequest(
-                companyUid, bankAccount.uid(), LocalDate.now(), amount));
+                companyUid, bankAccount.uid(), LocalDate.now(), null, amount));
 
         // Mark the transaction as cleared in this reconciliation
         reconService.markCleared(recon.uid(), new MarkClearedRequest(List.of(txn.uid()), true));
@@ -168,7 +168,7 @@ class BankReconciliationServiceIT extends PostgresIntegrationTest {
 
         // Open with a DIFFERENT statement closing balance
         BankReconciliationDto recon = reconService.open(new OpenReconciliationRequest(
-                companyUid, bankAccount.uid(), LocalDate.now(), new BigDecimal("9999")));
+                companyUid, bankAccount.uid(), LocalDate.now(), null, new BigDecimal("9999")));
 
         reconService.markCleared(recon.uid(), new MarkClearedRequest(List.of(txn.uid()), true));
 
@@ -186,7 +186,7 @@ class BankReconciliationServiceIT extends PostgresIntegrationTest {
                 LocalDate.now(), incomeGlUid, "Inc"));
 
         BankReconciliationDto recon = reconService.open(new OpenReconciliationRequest(
-                companyUid, bankAccount.uid(), LocalDate.now(), amount));
+                companyUid, bankAccount.uid(), LocalDate.now(), null, amount));
         reconService.markCleared(recon.uid(), new MarkClearedRequest(List.of(txn.uid()), true));
         reconService.complete(recon.uid());
 

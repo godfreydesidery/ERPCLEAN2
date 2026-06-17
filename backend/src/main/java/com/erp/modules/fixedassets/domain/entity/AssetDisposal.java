@@ -1,5 +1,6 @@
 package com.erp.modules.fixedassets.domain.entity;
 
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.modules.fixedassets.domain.enums.AssetDisposalType;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
@@ -60,7 +61,7 @@ public class AssetDisposal extends UidEntity {
     private String glEntryUid;
 
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "reason", length = 255)
     private String reason;
@@ -97,7 +98,7 @@ public class AssetDisposal extends UidEntity {
         this.proceedsAmount  = proceedsAmount;
         this.nbvAtDisposal   = nbvAtDisposal;
         this.gainLossAmount  = gainLossAmount;
-        this.currency        = currency;
+        this.currency        = CurrencyCode.ofNullable(currency);
         this.reason          = reason;
         this.createdBy       = createdBy;
     }

@@ -17,6 +17,7 @@ import com.erp.modules.notifications.domain.entity.NotificationScanMarker;
 import com.erp.modules.notifications.repository.NotificationScanMarkerRepository;
 import com.erp.modules.stock.domain.entity.StockOnHand;
 import com.erp.modules.stock.repository.StockOnHandRepository;
+import com.erp.platform.common.money.CurrencyCode;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -198,7 +199,7 @@ class NotificationScannerTest {
         when(inv.getDueDate()).thenReturn(dueDate);
         when(inv.getDocumentNo()).thenReturn(uid);
         when(inv.getOutstandingAmount()).thenReturn(new BigDecimal("500.00"));
-        when(inv.getCurrency()).thenReturn("TZS");
+        when(inv.getCurrency()).thenReturn(CurrencyCode.of("TZS"));
         return inv;
     }
 

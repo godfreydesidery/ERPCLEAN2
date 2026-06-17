@@ -1,5 +1,6 @@
 package com.erp.modules.stock.domain.entity;
 
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -51,8 +52,8 @@ public class StockTransferLine extends UidEntity {
     @Column(name = "value_amount", updatable = false, precision = 19, scale = 4)
     private BigDecimal valueAmount;
 
-    @Column(name = "currency", nullable = false, updatable = false, length = 10)
-    private String currency;
+    @Column(name = "currency", nullable = false, updatable = false, length = 3)
+    private CurrencyCode currency;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -86,7 +87,7 @@ public class StockTransferLine extends UidEntity {
         this.qtyTransferred    = qtyTransferred;
         this.qtyTransferredBase = qtyTransferredBase;
         this.valueAmount       = valueAmount;
-        this.currency          = currency;
+        this.currency          = CurrencyCode.ofNullable(currency);
         this.createdBy         = createdBy;
     }
 
@@ -106,7 +107,7 @@ public class StockTransferLine extends UidEntity {
     public BigDecimal getQtyTransferred()    { return qtyTransferred; }
     public BigDecimal getQtyTransferredBase(){ return qtyTransferredBase; }
     public BigDecimal getValueAmount()       { return valueAmount; }
-    public String     getCurrency()          { return currency; }
+    public String     getCurrency()          { return CurrencyCode.value(currency); }
     public Instant    getCreatedAt()         { return createdAt; }
     public Long       getCreatedBy()         { return createdBy; }
     public Instant    getUpdatedAt()         { return updatedAt; }

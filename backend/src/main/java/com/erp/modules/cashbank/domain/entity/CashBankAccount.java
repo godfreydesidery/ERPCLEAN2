@@ -2,6 +2,7 @@ package com.erp.modules.cashbank.domain.entity;
 
 import com.erp.modules.cashbank.domain.enums.CashBankAccountType;
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -51,7 +52,7 @@ public class CashBankAccount extends UidEntity {
     private String bankBranch;
 
     @Column(name = "currency", nullable = false, length = 3, updatable = false)
-    private String currency;
+    private CurrencyCode currency;
 
     /** FK → chart_of_accounts(id); the linked GL 1xxx asset account. */
     @Column(name = "gl_account_id", nullable = false, updatable = false)
@@ -92,7 +93,7 @@ public class CashBankAccount extends UidEntity {
         this.code         = code;
         this.name         = name;
         this.accountType  = accountType;
-        this.currency     = currency;
+        this.currency     = CurrencyCode.of(currency);
         this.glAccountId  = glAccountId;
         this.isDefault    = isDefault;
         this.createdBy    = createdBy;

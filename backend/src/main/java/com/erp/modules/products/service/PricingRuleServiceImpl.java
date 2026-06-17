@@ -26,6 +26,7 @@ import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.time.Instant;
@@ -273,13 +274,13 @@ public class PricingRuleServiceImpl implements PricingRuleService {
     private PriceTierDto toDto(PriceTier t) {
         return new PriceTierDto(t.getId(), t.getUid(), t.getCompanyId(),
                 t.getProductId(), t.getPriceListId(),
-                t.getMinQty(), t.getUnitPriceAmount(), t.getCurrency(), t.getStatus());
+                t.getMinQty(), t.getUnitPriceAmount(), CurrencyCode.value(t.getCurrency()), t.getStatus());
     }
 
     private CustomerPriceDto toDto(CustomerPrice cp) {
         return new CustomerPriceDto(cp.getId(), cp.getUid(), cp.getCompanyId(),
                 cp.getCustomerId(), cp.getProductId(),
-                cp.getUnitPriceAmount(), cp.getCurrency(),
+                cp.getUnitPriceAmount(), CurrencyCode.value(cp.getCurrency()),
                 cp.getEffectiveFrom(), cp.getEffectiveTo(), cp.getStatus());
     }
 

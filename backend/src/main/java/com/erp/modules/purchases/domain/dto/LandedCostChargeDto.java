@@ -2,6 +2,7 @@ package com.erp.modules.purchases.domain.dto;
 
 import com.erp.modules.purchases.domain.entity.LandedCostCharge;
 import com.erp.modules.purchases.domain.enums.LandedCostChargeType;
+import com.erp.platform.common.money.CurrencyCode;
 import java.math.BigDecimal;
 
 public record LandedCostChargeDto(
@@ -18,6 +19,6 @@ public record LandedCostChargeDto(
         return new LandedCostChargeDto(
                 c.getId(), c.getUid(), c.getLineNo(),
                 c.getChargeType(), c.getAmount(),
-                c.isBilled(), c.getSupplierBillUid(), c.getCurrency());
+                c.isBilled(), c.getSupplierBillUid(), CurrencyCode.value(c.getCurrency()));
     }
 }

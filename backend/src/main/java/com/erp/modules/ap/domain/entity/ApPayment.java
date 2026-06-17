@@ -2,6 +2,7 @@ package com.erp.modules.ap.domain.entity;
 
 import com.erp.modules.ap.domain.enums.ApPaymentKind;
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -47,7 +48,7 @@ public class ApPayment extends UidEntity {
     private BigDecimal amount;
 
     @Column(name = "currency", nullable = false, length = 3, updatable = false)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "tender_type", nullable = false, length = 20, updatable = false)
     private String tenderType;
@@ -55,6 +56,31 @@ public class ApPayment extends UidEntity {
     @Column(name = "bank_reference", length = 80)
     @Setter
     private String bankReference;
+
+    /**
+     * Captured beneficiary account uid (soft-FK to supplier_bank_accounts.uid, no DB FK — D-4).
+     * Set at payment time; AP service validates ownership at that point.
+     */
+    @Column(name = "supplier_bank_account_uid", length = 26)
+    @Setter
+    private String supplierBankAccountUid;
+
+    // -------------------------------------------------------------------------
+    // D-7 — WHT withheld on payment header (ADR-0040 D-7)
+    // -------------------------------------------------------------------------
+
+    /** WHT amount withheld from this payment. Null when no WHT applies. Positive when set. */
+    @Column(name = "wht_amount", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal whtAmount;
+
+    /**
+     * Scalar uid of the wht_transactions row created at payment time (soft ref, no DB FK).
+     * Set by ApPaymentServiceImpl after WhtCaptureService.captureOnPayment succeeds.
+     */
+    @Column(name = "wht_transaction_uid", length = 26)
+    @Setter
+    private String whtTransactionUid;
 
     @Column(name = "gl_entry_uid", length = 26)
     @Setter
@@ -109,7 +135,7 @@ public class ApPayment extends UidEntity {
         this.kind           = kind;
         this.paymentDate    = paymentDate;
         this.amount         = amount;
-        this.currency       = currency;
+        this.currency       = CurrencyCode.of(currency);
         this.tenderType     = tenderType;
         this.bankReference  = bankReference;
         this.createdBy      = createdBy;

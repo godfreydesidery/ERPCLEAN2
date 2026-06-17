@@ -1,5 +1,6 @@
 package com.erp.modules.fx.domain.entity;
 
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -32,7 +33,7 @@ public class FxRevaluationRunLine extends UidEntity {
     private String sourceType;
 
     @Column(name = "currency", nullable = false, length = 3, updatable = false)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "control_account_id", nullable = false, updatable = false)
     private Long controlAccountId;
@@ -83,7 +84,7 @@ public class FxRevaluationRunLine extends UidEntity {
         this.fxRevaluationRunId  = fxRevaluationRunId;
         this.companyId           = companyId;
         this.sourceType          = sourceType;
-        this.currency            = currency;
+        this.currency            = CurrencyCode.ofNullable(currency);
         this.controlAccountId    = controlAccountId;
         this.outstandingTxnAmount = outstandingTxnAmount;
         this.carryingBaseAmount  = carryingBaseAmount;

@@ -17,6 +17,7 @@ import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -153,6 +154,6 @@ public class AssetRevaluationServiceImpl implements AssetRevaluationService {
                 r.getId(), r.getUid(), r.getCompanyId(), r.getBranchId(),
                 r.getFixedAssetId(), r.getRevaluationDate(), r.getFiscalPeriodId(),
                 r.getDirection(), r.getDeltaAmount(), r.getCarryingBefore(),
-                r.getCarryingAfter(), r.getGlEntryUid(), r.getCurrency(), r.getReason());
+                r.getCarryingAfter(), r.getGlEntryUid(), CurrencyCode.value(r.getCurrency()), r.getReason());
     }
 }

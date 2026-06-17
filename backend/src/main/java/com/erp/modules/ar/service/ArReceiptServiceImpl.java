@@ -263,7 +263,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
             whtResult = whtCapture.captureOnReceipt(
                     companyId, receipt.getBranchId(),
                     req.whtTypeUid(),
-                    customer.getId(), customer.getDisplayName(),
+                    customer.getId(), customer.getDisplayName(), customer.getTin(),
                     receipt.getUid(),
                     receipt.getAmount(), req.whtAmount(),
                     currency, receipt.getReceiptDate(),
@@ -587,7 +587,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         return new ArReceiptDto(
                 r.getId(), r.getUid(), r.getCompanyId(), r.getBranchId(), r.getCustomerId(),
                 r.getReceiptNumber(), r.getReceiptDate(), r.getAmount(), r.getUnallocatedAmount(),
-                r.getCurrency(), r.getTenderType(), r.getBankReference(), r.getGlEntryUid(),
+                r.getCurrency().value(), r.getTenderType(), r.getBankReference(), r.getGlEntryUid(),
                 r.getStatus(), allocDtos);
     }
 }

@@ -16,6 +16,7 @@ import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
@@ -92,7 +93,7 @@ public class SupplierQuoteServiceImpl implements SupplierQuoteService {
                     rfqLine.getProductId(), rfqLine.getProductCode(), rfqLine.getProductName(),
                     rfqLine.getUnitId(), rfqLine.getUnitName(),
                     l.quotedQty(), l.quotedQty(),   // qty_in_base = qty (no conversion in quotes)
-                    l.unitPriceAmount(), quote.getCurrency(), actorId());
+                    l.unitPriceAmount(), CurrencyCode.value(quote.getCurrency()), actorId());
             ql.setLineTotalAmount(lineTotal);
             quoteLines.save(ql);
             total = total.add(lineTotal);

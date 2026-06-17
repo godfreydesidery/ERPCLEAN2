@@ -141,14 +141,14 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
         // Seed products (STANDARD + ZERO_RATED)
         ProductDto prodA = productService.create(new CreateProductRequest(
                 companyA.getUid(), null, "Widget Standard", null,
-                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD));
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null));
         productAUid = prodA.uid();
         productService.setPrice(productAUid,
                 new SetProductPriceRequest(priceListAUid, new MoneyDto("1000", "TZS")));
 
         ProductDto prodZero = productService.create(new CreateProductRequest(
                 companyA.getUid(), null, "Widget Zero", null,
-                ProductType.GOODS, true, true, pcsUid, null, VatStatus.ZERO_RATED));
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.ZERO_RATED, null, null, null, null, null, null, null, null));
         productZeroUid = prodZero.uid();
         productService.setPrice(productZeroUid,
                 new SetProductPriceRequest(priceListAUid, new MoneyDto("500", "TZS")));
@@ -157,7 +157,7 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
         CustomerDto cust = customerService.create(new CreateCustomerRequest(
                 companyA.getId(), PartyType.INDIVIDUAL, "Test Customer A",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CASH_WALK_IN, null, null));
+                CustomerKind.CASH_WALK_IN, null, null, null));
         customerAUid = cust.uid();
 
         // Seed external agent for companyA
@@ -250,13 +250,13 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
                 new CreatePriceListRequest(companyB.getUid(), "RETAIL", "Retail B"));
         ProductDto prodB = productService.create(new CreateProductRequest(
                 companyB.getUid(), null, "B Widget", null,
-                ProductType.GOODS, true, true, pcsB.uid(), null, VatStatus.STANDARD));
+                ProductType.GOODS, true, true, pcsB.uid(), null, VatStatus.STANDARD, null, null, null, null, null, null, null, null));
         productService.setPrice(prodB.uid(),
                 new SetProductPriceRequest(plB.uid(), new MoneyDto("1000", "TZS")));
         CustomerDto custB = customerService.create(new CreateCustomerRequest(
                 companyB.getId(), PartyType.INDIVIDUAL, "B Customer",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CASH_WALK_IN, null, null));
+                CustomerKind.CASH_WALK_IN, null, null, null));
         AgentDto agB = agentService.create(new CreateAgentRequest(
                 companyB.getId(), PartyType.INDIVIDUAL, "B Agent",
                 null, null, null, null, null, null, null, null, null, null, null, null,
@@ -326,7 +326,7 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
         // Need a STANDARD product at 500 TZS price
         ProductDto prod500 = productService.create(new CreateProductRequest(
                 companyA.getUid(), null, "Widget 500 Standard", null,
-                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD));
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null));
         productService.setPrice(prod500.uid(),
                 new SetProductPriceRequest(priceListAUid, new MoneyDto("500", "TZS")));
 
@@ -632,7 +632,7 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
         CustomerDto custB = customerService.create(new CreateCustomerRequest(
                 companyB.getId(), PartyType.INDIVIDUAL, "B Customer V",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CASH_WALK_IN, null, null));
+                CustomerKind.CASH_WALK_IN, null, null, null));
 
         // Back to company A: try to create invoice with company B's customer
         RequestContext.set(new RequestContext.Principal(
@@ -654,7 +654,7 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
                 new CreateUnitOfMeasureRequest(companyB.getUid(), "PCS", "Pieces"));
         ProductDto prodB = productService.create(new CreateProductRequest(
                 companyB.getUid(), null, "B Product U", null,
-                ProductType.GOODS, true, true, pcsB.uid(), null, VatStatus.STANDARD));
+                ProductType.GOODS, true, true, pcsB.uid(), null, VatStatus.STANDARD, null, null, null, null, null, null, null, null));
         PriceListDto plB = priceListService.create(
                 new CreatePriceListRequest(companyB.getUid(), "RETAIL", "Retail B"));
         productService.setPrice(prodB.uid(),
@@ -709,7 +709,7 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
     void addLine_exemptProduct_vatIsZero() {
         ProductDto prodExempt = productService.create(new CreateProductRequest(
                 companyA.getUid(), null, "Exempt Product", null,
-                ProductType.GOODS, true, true, pcsUid, null, VatStatus.EXEMPT));
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.EXEMPT, null, null, null, null, null, null, null, null));
         productService.setPrice(prodExempt.uid(),
                 new SetProductPriceRequest(priceListAUid, new MoneyDto("800", "TZS")));
 
@@ -793,7 +793,7 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
         CustomerDto custB = customerService.create(new CreateCustomerRequest(
                 companyB.getId(), PartyType.INDIVIDUAL, "S Customer",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CASH_WALK_IN, null, null));
+                CustomerKind.CASH_WALK_IN, null, null, null));
         AgentDto agB = agentService.create(new CreateAgentRequest(
                 companyB.getId(), PartyType.INDIVIDUAL, "S Agent",
                 null, null, null, null, null, null, null, null, null, null, null, null,
@@ -840,7 +840,7 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
     void addLine_unpricedProduct_rejected_BR_SALES_03() {
         ProductDto unpricedProd = productService.create(new CreateProductRequest(
                 companyA.getUid(), null, "Unpriced Widget", null,
-                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD));
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null));
         // No price set
 
         SalesInvoiceDto draft = salesInvoiceService.create(invoiceRequest());

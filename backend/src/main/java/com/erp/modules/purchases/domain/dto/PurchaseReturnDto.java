@@ -2,6 +2,7 @@ package com.erp.modules.purchases.domain.dto;
 
 import com.erp.modules.purchases.domain.entity.PurchaseReturn;
 import com.erp.modules.purchases.domain.enums.PurchaseReturnStatus;
+import com.erp.platform.common.money.CurrencyCode;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -38,7 +39,7 @@ public record PurchaseReturnDto(
                 r.getSupplierId(), r.getSupplierCode(), r.getSupplierName(),
                 r.getReason(),
                 r.getNetAmount(), r.getVatAmount(), r.getGrossAmount(),
-                r.getCurrency(), r.getDebitNoteUid(), r.getGlEntryUid(),
+                CurrencyCode.value(r.getCurrency()), r.getDebitNoteUid(), r.getGlEntryUid(),
                 r.getConfirmedAt(), r.getCreatedAt(),
                 lines);
     }

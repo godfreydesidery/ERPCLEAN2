@@ -143,7 +143,8 @@ public class ChartOfAccountServiceImpl implements ChartOfAccountService {
             account.setAccountType(req.accountType());
             account.setNormalBalance(NormalBalance.forType(req.accountType()));
         }
-        if (req.active() != null)      account.setActive(req.active());
+        if (req.active() != null)               account.setActive(req.active());
+        if (req.allowManualPosting() != null)   account.setAllowManualPosting(req.allowManualPosting());
         account.setUpdatedAt(Instant.now());
         account.setUpdatedBy(actorId());
 
@@ -223,6 +224,6 @@ public class ChartOfAccountServiceImpl implements ChartOfAccountService {
                 a.getId(), a.getUid(), a.getCompanyId(),
                 a.getAccountCode(), a.getName(),
                 a.getAccountType(), a.getNormalBalance(),
-                a.isActive(), a.getStatus().name());
+                a.isActive(), a.isAllowManualPosting(), a.getStatus().name());
     }
 }

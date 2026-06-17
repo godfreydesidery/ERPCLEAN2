@@ -1,6 +1,7 @@
 package com.erp.modules.purchases.domain.dto;
 
 import com.erp.modules.purchases.domain.entity.PurchaseSettings;
+import com.erp.platform.common.money.CurrencyCode;
 import java.math.BigDecimal;
 
 public record PurchaseSettingsDto(
@@ -14,6 +15,6 @@ public record PurchaseSettingsDto(
     public static PurchaseSettingsDto from(PurchaseSettings s) {
         return new PurchaseSettingsDto(
                 s.getId(), s.getUid(), s.getCompanyId(),
-                s.isPoApprovalEnabled(), s.getPoApprovalThresholdAmount(), s.getCurrency());
+                s.isPoApprovalEnabled(), s.getPoApprovalThresholdAmount(), CurrencyCode.value(s.getCurrency()));
     }
 }

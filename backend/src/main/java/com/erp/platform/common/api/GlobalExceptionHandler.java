@@ -104,6 +104,14 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(ApiResponse.error(ex.getMessage()));
     }
 
+    /** Currency not enabled for the company/branch scope → 422 (ADR-0039 D-7/D-8). */
+    @ExceptionHandler(com.erp.modules.fx.domain.exception.CurrencyNotEnabledException.class)
+    public ResponseEntity<ApiResponse<Void>> handleCurrencyNotEnabled(
+            com.erp.modules.fx.domain.exception.CurrencyNotEnabledException ex) {
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
     /**
      * Business-rule state conflict (operation not valid for the resource's current state) → 409.
      * e.g. finalising an unpaid or empty invoice, mutating a finalised invoice, voiding a

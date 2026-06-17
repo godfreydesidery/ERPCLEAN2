@@ -1,5 +1,6 @@
 package com.erp.modules.purchases.domain.entity;
 
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -63,7 +64,7 @@ public class PurchaseRequisitionLine extends UidEntity {
 
     @Column(name = "currency", length = 3)
     @Setter
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
@@ -102,7 +103,7 @@ public class PurchaseRequisitionLine extends UidEntity {
         this.requestedQtyInBase    = requestedQtyInBase;
         this.estimatedUnitCost     = estimatedUnitCost;
         this.note                  = note;
-        this.currency              = currency;
+        this.currency              = CurrencyCode.ofNullable(currency);
         this.createdBy             = createdBy;
     }
 }

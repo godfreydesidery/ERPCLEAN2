@@ -1,6 +1,7 @@
 package com.erp.modules.purchases.domain.dto;
 
 import com.erp.modules.purchases.domain.entity.PurchaseReturnLine;
+import com.erp.platform.common.money.CurrencyCode;
 import java.math.BigDecimal;
 
 public record PurchaseReturnLineDto(
@@ -27,6 +28,6 @@ public record PurchaseReturnLineDto(
                 l.getProductId(), l.getProductCode(), l.getProductName(),
                 l.getUnitId(), l.getUnitName(),
                 l.getReturnedQty(), l.getReturnedQtyInBase(),
-                l.getUnitCostAmount(), l.getLineValueAmount(), l.getCurrency());
+                l.getUnitCostAmount(), l.getLineValueAmount(), CurrencyCode.value(l.getCurrency()));
     }
 }

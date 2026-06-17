@@ -1,11 +1,16 @@
 package com.erp.api;
 
 import com.erp.modules.tax.domain.dto.WhtRegisterDto;
+import com.erp.modules.tax.domain.dto.WhtRemitRequest;
 import com.erp.modules.tax.service.WhtRegisterService;
+import jakarta.validation.Valid;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -53,5 +58,15 @@ public class WhtRegisterController {
                     "Provide either year+month or periodStart+periodEnd.");
         }
         return service.getRegister(companyId, start, end);
+    }
+
+    /**
+     * Mark a WHT transaction as remitted to the tax authority (ADR-0040 D-7).
+     * Permission WHT.REMIT seeded in the repeatable permission seed.
+     */
+    @PostMapping("/transactions/{uid}/remit")
+    @PreAuthorize("@perm.has('WHT.REMIT')")
+    public void remit(@PathVariable String uid, @RequestBody @Valid WhtRemitRequest req) {
+        service.markRemitted(uid, req.remittancePeriod(), req.remittanceRef());
     }
 }

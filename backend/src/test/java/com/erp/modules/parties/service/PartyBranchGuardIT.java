@@ -156,7 +156,7 @@ class PartyBranchGuardIT extends PostgresIntegrationTest {
         return customerService.create(new CreateCustomerRequest(
                 companyA.getId(), PartyType.BUSINESS, name, null,
                 tin, false, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CREDIT_ACCOUNT, null, null));
+                CustomerKind.CREDIT_ACCOUNT, null, null, null));
     }
 
     private SupplierDto createSupplierInA(String name, String tin) {
@@ -165,6 +165,6 @@ class PartyBranchGuardIT extends PostgresIntegrationTest {
         return supplierService.create(new CreateSupplierRequest(
                 companyA.getId(), PartyType.BUSINESS, name, null,
                 tin, false, null, null, null, null, null, null, null, null, null,
-                SupplierKind.GOODS));
+                SupplierKind.GOODS, null, null));
     }
 }

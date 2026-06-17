@@ -3,6 +3,7 @@ package com.erp.modules.sales.domain.entity;
 import com.erp.modules.products.domain.enums.PriceSource;
 import com.erp.modules.products.domain.enums.VatStatus;
 import com.erp.platform.common.domain.Ulid;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -145,7 +146,7 @@ public class SalesInvoiceLine {
 
     /** Document currency; denormalised from parent invoice (BR-SALES-04). */
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     // --- projects (ADR-0033 D-3, V66) ---
     /** FK → projects(id); nullable — analysis tag for project-billed sales. */

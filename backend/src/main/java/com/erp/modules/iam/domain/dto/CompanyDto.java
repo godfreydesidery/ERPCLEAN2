@@ -15,6 +15,7 @@ public record CompanyDto(
         String legalName,
         String taxId,
         String timeZone,
+        String baseCurrency,
         String status) {
 
     public static CompanyDto from(Company c) {
@@ -27,6 +28,7 @@ public record CompanyDto(
                 c.getLegalName(),
                 c.getTaxId(),
                 c.getTimeZone(),
+                c.getBaseCurrency(),
                 c.getStatus().name());
     }
 }

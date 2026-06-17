@@ -140,7 +140,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
             throw new IllegalStateException("Bill " + req.supplierBillUid() + " has zero outstanding.");
         }
 
-        String currency = bill.getCurrency();
+        String currency = bill.getCurrency().value();
         String payNum   = numbers.nextPayment(companyId);
 
         // Resolve settlement rate (identity short-circuit when currency == base)
@@ -244,7 +244,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
                     + " distinct currencies. Split the run by currency.");
         }
 
-        String currency = openBills.get(0).getCurrency();
+        String currency = openBills.get(0).getCurrency().value();
         // Resolve settlement rate once for the run
         ConvertedAmount settlementConv = fxConversion.toBase(
                 BigDecimal.ONE, currency, companyId, req.paymentDate());
@@ -385,12 +385,17 @@ public class ApPaymentServiceImpl implements ApPaymentService {
                 && whtAmount.compareTo(BigDecimal.ZERO) > 0;
 
         // Capture WHT certificate before building the GL draft (ADR-0017 D-9).
+        // D-7: resolve supplier TIN snapshot from party master (no tax→parties import — done here in ap).
         WhtCaptureResultDto whtResult = null;
         if (hasWht) {
+            String supplierTin = supplierId != null
+                    ? suppliers.findById(supplierId).map(s -> s.getTin()).orElse(null)
+                    : null;
             whtResult = whtCapture.captureOnPayment(
                     companyId, branchId,
                     whtTypeUid,
                     supplierId, "Supplier",
+                    supplierTin,
                     payment.getUid(),
                     payment.getAmount(), whtAmount,
                     currency, payment.getPaymentDate(),
@@ -521,7 +526,8 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         return new ApPaymentDto(
                 p.getId(), p.getUid(), p.getCompanyId(), p.getBranchId(), p.getSupplierId(),
                 p.getPaymentNumber(), p.getKind(), p.getPaymentDate(), p.getAmount(),
-                p.getCurrency(), p.getTenderType(), p.getBankReference(), p.getGlEntryUid(),
+                p.getCurrency().value(), p.getTenderType(), p.getBankReference(), p.getGlEntryUid(),
+                p.getWhtAmount(), p.getWhtTransactionUid(),
                 dtoAllocs);
     }
 }

@@ -9,6 +9,7 @@ import com.erp.modules.projects.repository.ProjectCostingQueryRepository;
 import com.erp.modules.projects.repository.ProjectRepository;
 import com.erp.platform.common.api.ForbiddenException;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -84,7 +85,7 @@ public class ProjectCostingQueryImpl implements ProjectCostingQuery {
                 revenue, cost, costByType,
                 margin, marginPct,
                 project.getBudgetAmount(), budgetVariance,
-                wip, project.getCurrency(), recon
+                wip, CurrencyCode.value(project.getCurrency()), recon
         );
     }
 

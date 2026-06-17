@@ -120,7 +120,7 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
             arInvoiceId = targetInvoice.getId();
 
             // ADR-0036 D-5 BR-CUR-06: credit note currency must match the invoice currency.
-            if (!docCurrency.equals(targetInvoice.getCurrency())) {
+            if (!docCurrency.equals(targetInvoice.getCurrency().value())) {
                 throw new IllegalStateException(
                         "Credit note currency " + docCurrency
                                 + " does not match invoice currency " + targetInvoice.getCurrency()
@@ -323,7 +323,7 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
         return new ArCreditNoteDto(
                 n.getId(), n.getUid(), n.getCompanyId(), n.getCustomerId(),
                 n.getCreditNoteNumber(), n.getArInvoiceId(), n.getNoteDate(),
-                n.getAmount(), n.getNetAmount(), n.getVatAmount(), n.getCurrency(),
+                n.getAmount(), n.getNetAmount(), n.getVatAmount(), n.getCurrency().value(),
                 n.getReason(), n.getOrigin(), n.getGlEntryUid());
     }
 }

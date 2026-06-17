@@ -66,4 +66,17 @@ public class CompanyController {
     public void archive(@PathVariable String uid) {
         companies.archiveByUid(uid);
     }
+
+    /**
+     * Change the company base (ledger) currency (ADR-0039 D-9 / OQ-CCY-08).
+     * Only allowed when no GL journal entries have been posted for the company.
+     * Requires {@code COMPANY.CURRENCY.CHANGE} — a separate, more-sensitive permission
+     * than the general {@code COMPANY.MANAGE}, as this is a post-once operation.
+     */
+    @PostMapping("/uid/{uid}/base-currency")
+    @PreAuthorize("@perm.scoped(#uid, 'company', 'COMPANY.CURRENCY.CHANGE')")
+    public CompanyDto changeBaseCurrency(@PathVariable String uid,
+                                          @RequestParam String newBase) {
+        return companies.changeBaseCurrency(uid, newBase);
+    }
 }

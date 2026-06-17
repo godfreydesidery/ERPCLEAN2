@@ -1,7 +1,11 @@
 package com.erp.modules.ap.domain.entity;
 
+import com.erp.modules.products.domain.enums.VatStatus;
 import com.erp.platform.common.domain.Ulid;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import lombok.Setter;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -72,8 +76,44 @@ public class SupplierBillLine {
     @Column(name = "line_net_amount", nullable = false, precision = 19, scale = 4)
     private BigDecimal lineNetAmount;
 
+    // -------------------------------------------------------------------------
+    // D-8 — per-line VAT + per-line GL account (ADR-0040 D-8)
+    // -------------------------------------------------------------------------
+
+    /**
+     * VAT classification for this line. Null = inherit from the product master.
+     * Reuses {@link VatStatus} from products module (no copy — same package convention as sales).
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "vat_status", length = 20)
+    @Setter
+    private VatStatus vatStatus;
+
+    /** Rate snapshot at bill entry (e.g. 0.1800 for 18%). Null when vatStatus is ZERO_RATED/EXEMPT or not set. */
+    @Column(name = "vat_rate", precision = 9, scale = 4)
+    @Setter
+    private BigDecimal vatRate;
+
+    /**
+     * Line-level VAT amount = lineNetAmount × vatRate. Zero when no VAT applies.
+     * Service enforces that header vat_amount = Σ line_vat_amount.
+     */
+    @Column(name = "line_vat_amount", nullable = false, precision = 19, scale = 4)
+    @Setter
+    private BigDecimal lineVatAmount = BigDecimal.ZERO;
+
+    /**
+     * Optional GL account override for this line (intra-DB FK → chart_of_accounts(id)).
+     * When set on a service line (gr_line_uid IS NULL), the bill-match poster debits this account
+     * instead of the PURCHASES gl_config key (D-8).
+     * Null on goods lines (they clear GRNI regardless).
+     */
+    @Column(name = "gl_account_id")
+    @Setter
+    private Long glAccountId;
+
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     // --- projects (ADR-0033 D-3, V65) — optional project dimension tag on AP lines ---
     /** FK → projects(id); nullable — analysis tag when this cost belongs to a project. */
@@ -116,7 +156,7 @@ public class SupplierBillLine {
         this.billedQty       = billedQty;
         this.unitCostAmount  = unitCostAmount;
         this.lineNetAmount   = unitCostAmount.multiply(billedQty);
-        this.currency        = currency;
+        this.currency        = CurrencyCode.of(currency);
         this.createdBy       = createdBy;
     }
 }

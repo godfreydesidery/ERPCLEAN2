@@ -13,8 +13,9 @@ import lombok.Getter;
  *   <li>Both fields are null together, or both non-null together — mixed-null is rejected at
  *       the type level (the DB CHECK constraint mirrors this at the storage level).</li>
  *   <li>{@code amount} is {@link BigDecimal}; never {@code float}/{@code double}.</li>
- *   <li>{@code currency} is an ISO 4217 alpha-3 code ({@code CHAR(3)}) stored as a
- *       {@code String}; validated non-blank when amount is set.</li>
+ *   <li>{@code currency} is a {@link CurrencyCode} (ISO 4217 alpha-3); validated and normalised
+ *       (trim + upper-case) at construction. The {@link CurrencyCodeConverter} auto-applies to map
+ *       it to/from the existing {@code CHAR(3)} column — no schema change (ADR-0039 D-2).</li>
  * </ul>
  *
  * <p>Map into an entity with {@code @Embedded} and {@code @AttributeOverride}s to the
@@ -33,7 +34,7 @@ import lombok.Getter;
  * helpers will be added here under their own ADR. For now {@code Money} is a value-holder only.
  *
  * <p>Equality: {@code amount} compared by value ({@link BigDecimal#compareTo}), {@code currency}
- * by exact string match — consistent with ADR-0005 D-6.
+ * by normalised code — consistent with ADR-0005 D-6.
  */
 @Getter
 @Embeddable
@@ -42,30 +43,49 @@ public class Money {
     @Column(name = "amount", precision = 19, scale = 4)
     private BigDecimal amount;
 
+    /**
+     * ISO 4217 alpha-3 currency code.
+     * Stored as {@code CHAR(3)} via {@link CurrencyCodeConverter} (auto-applied by JPA).
+     * Typed as {@link CurrencyCode}, never as {@code String} or the {@code Currency} entity
+     * (ADR-0039 naming rule).
+     */
     @Column(name = "currency", length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     /** JPA no-arg constructor. */
     protected Money() {
     }
 
     /**
-     * Full constructor — both fields must be non-null (ADR-0005 D-1: a monetary value is always
-     * an {@code (amount, currency)} pair).
+     * Canonical constructor — both fields must be non-null (ADR-0005 D-1: a monetary value is
+     * always an {@code (amount, currency)} pair).
      *
      * @param amount   the amount (non-null, {@link BigDecimal})
-     * @param currency ISO 4217 alpha-3 code, non-blank (e.g. {@code "TZS"}, {@code "USD"})
-     * @throws IllegalArgumentException if either argument is null / blank
+     * @param currency a validated, normalised {@link CurrencyCode}
+     * @throws IllegalArgumentException if either argument is null
      */
-    public Money(BigDecimal amount, String currency) {
+    public Money(BigDecimal amount, CurrencyCode currency) {
         if (amount == null) {
             throw new IllegalArgumentException("Money amount must not be null");
         }
-        if (currency == null || currency.isBlank()) {
-            throw new IllegalArgumentException("Money currency must not be null or blank");
+        if (currency == null) {
+            throw new IllegalArgumentException("Money currency must not be null");
         }
-        this.amount = amount;
+        this.amount   = amount;
         this.currency = currency;
+    }
+
+    /**
+     * Convenience overload — accepts a raw currency string and delegates to
+     * {@link CurrencyCode#of(String)} so callers that supply string literals compile without
+     * change (ADR-0039 D-2 — minimise caller churn).
+     *
+     * @param amount      the amount (non-null)
+     * @param rawCurrency ISO 4217 alpha-3 code; trimmed + upper-cased; validated
+     * @throws IllegalArgumentException if null/blank/invalid
+     */
+    public Money(BigDecimal amount, String rawCurrency) {
+        this(amount, CurrencyCode.of(rawCurrency));
     }
 
     /**

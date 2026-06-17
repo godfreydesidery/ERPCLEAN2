@@ -1,5 +1,6 @@
 package com.erp.modules.purchases.domain.entity;
 
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -32,7 +33,7 @@ public class PurchaseSettings extends UidEntity {
 
     @Column(name = "currency", nullable = false, length = 3)
     @Setter
-    private String currency = "TZS";
+    private CurrencyCode currency = CurrencyCode.of("TZS");
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();

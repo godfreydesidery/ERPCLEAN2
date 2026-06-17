@@ -14,6 +14,7 @@ import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
@@ -162,7 +163,7 @@ public class ChequeServiceImpl implements ChequeService {
     static ChequeDto toDto(Cheque c) {
         return new ChequeDto(
                 c.getId(), c.getUid(), c.getCompanyId(), c.getCashBankAccountId(),
-                c.getChequeNumber(), c.getPayee(), c.getAmount(), c.getCurrency(),
+                c.getChequeNumber(), c.getPayee(), c.getAmount(), CurrencyCode.value(c.getCurrency()),
                 c.getIssueDate(), c.getValueDate(), c.getStatus(),
                 c.getApPaymentUid(), c.getCashTransactionUid(),
                 c.getClearedAt(), c.getCancelledAt());

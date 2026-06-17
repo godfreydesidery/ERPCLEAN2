@@ -7,6 +7,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
+import java.time.Instant;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -35,6 +36,20 @@ public class Organisation extends UidEntity {
     @Column(name = "status", nullable = false, length = 32)
     @Setter
     private MasterStatus status = MasterStatus.ACTIVE;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt = Instant.now();
+
+    @Column(name = "created_by", updatable = false)
+    private Long createdBy;
+
+    @Column(name = "updated_at")
+    @Setter
+    private Instant updatedAt;
+
+    @Column(name = "updated_by")
+    @Setter
+    private Long updatedBy;
 
     protected Organisation() {
         // JPA

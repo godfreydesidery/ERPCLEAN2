@@ -44,7 +44,7 @@ public class CashAccountStatementQuery {
 
         return new CashAccountBalanceDto(
                 account.getId(), account.getUid(), account.getCode(),
-                account.getName(), balance, account.getCurrency());
+                account.getName(), balance, account.getCurrency().value());
     }
 
     /** All transactions for an account with the running current balance (FR-CASH-12). */
@@ -64,7 +64,7 @@ public class CashAccountStatementQuery {
 
         return new CashAccountStatementDto(
                 account.getId(), account.getUid(), account.getName(),
-                balance, account.getCurrency(), rows);
+                balance, account.getCurrency().value(), rows);
     }
 
     /** Book balances of all company accounts (FR-CASH-12). */
@@ -75,7 +75,7 @@ public class CashAccountStatementQuery {
             if (balance == null) balance = BigDecimal.ZERO;
             return new CashAccountBalanceDto(
                     account.getId(), account.getUid(), account.getCode(),
-                    account.getName(), balance, account.getCurrency());
+                    account.getName(), balance, account.getCurrency().value());
         }).toList();
     }
 }

@@ -1,5 +1,6 @@
 package com.erp.modules.purchases.domain.entity;
 
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.modules.purchases.domain.enums.LandedCostChargeType;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
@@ -50,7 +51,7 @@ public class LandedCostCharge extends UidEntity {
     private String supplierBillUid;
 
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
@@ -82,7 +83,7 @@ public class LandedCostCharge extends UidEntity {
         this.amount          = amount;
         this.billed          = billed;
         this.supplierBillUid = supplierBillUid;
-        this.currency        = currency;
+        this.currency        = CurrencyCode.ofNullable(currency);
         this.createdBy       = createdBy;
     }
 }

@@ -2,6 +2,7 @@ package com.erp.modules.purchases.domain.dto;
 
 import com.erp.modules.purchases.domain.entity.SupplierQuote;
 import com.erp.modules.purchases.domain.enums.SupplierQuoteStatus;
+import com.erp.platform.common.money.CurrencyCode;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -35,7 +36,7 @@ public record SupplierQuoteDto(
                 q.getRfqId(), q.getRfqUid(),
                 q.getSupplierId(), q.getSupplierCode(), q.getSupplierName(),
                 q.getStatus(), q.getValidUntil(), q.getLeadTimeDays(),
-                q.getQuoteTotalAmount(), q.getCurrency(), q.getNotes(),
+                q.getQuoteTotalAmount(), CurrencyCode.value(q.getCurrency()), q.getNotes(),
                 q.getCreatedAt(), lines);
     }
 }

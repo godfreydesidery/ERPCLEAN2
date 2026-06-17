@@ -64,7 +64,7 @@ public record SalesInvoiceLineDto(
                 l.getNetAmount(),
                 l.getVatAmount(),
                 l.getGrossAmount(),
-                l.getCurrency(),
+                l.getCurrency().value(),
                 l.getCreatedAt() != null ? l.getCreatedAt().toString() : null,
                 l.getCreatedBy()
         );

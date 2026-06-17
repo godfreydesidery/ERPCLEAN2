@@ -159,6 +159,14 @@ CREATE TABLE wht_transactions (
     currency            VARCHAR(3)      NOT NULL,
     certificate_date    DATE            NOT NULL,
     journal_entry_ref   VARCHAR(26),
+    -- D-7: TIN snapshot + rate snapshot + remittance tracking (ADR-0040 D-7)
+    tin                 VARCHAR(40),            -- party tax-id snapshot at capture time
+    rate_pct            NUMERIC(9,4),           -- WHT rate snapshot (e.g. 5.0000 for 5%); guards against type rate changes
+    remitted            BOOLEAN         NOT NULL DEFAULT FALSE,
+    remittance_period   VARCHAR(7),             -- YYYY-MM format; set when remitted
+    remittance_ref      VARCHAR(80),            -- TRA/authority reference number; set when remitted
+    remitted_at         TIMESTAMPTZ,            -- timestamp of remittance action
+    remitted_by         BIGINT,                 -- app_users.id of the actor who remitted
     version             BIGINT          NOT NULL DEFAULT 0,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by          BIGINT,
@@ -172,7 +180,11 @@ CREATE TABLE wht_transactions (
     CONSTRAINT fk_wht_transaction_type              FOREIGN KEY (wht_type_id) REFERENCES wht_types (id),
     CONSTRAINT chk_wht_transaction_kind             CHECK (kind IN ('WHT_ON_PAYMENT','WHT_ON_RECEIPT')),
     CONSTRAINT chk_wht_transaction_party_kind       CHECK (party_kind IN ('SUPPLIER','CUSTOMER')),
-    CONSTRAINT chk_wht_transaction_amounts          CHECK (taxable_base >= 0 AND wht_amount > 0)
+    CONSTRAINT chk_wht_transaction_amounts          CHECK (taxable_base >= 0 AND wht_amount > 0),
+    -- D-7: remittance integrity: unremitted rows carry no ref/timestamp; remitted rows require both
+    CONSTRAINT chk_wht_transaction_remittance CHECK (
+        (NOT remitted AND remittance_ref IS NULL AND remitted_at IS NULL)
+        OR (remitted AND remittance_ref IS NOT NULL AND remitted_at IS NOT NULL))
 );
 
 -- ============================================================================
@@ -212,6 +224,9 @@ CREATE INDEX ix_wht_transactions_source
     ON wht_transactions (company_id, source_ref);
 CREATE INDEX ix_wht_transactions_party
     ON wht_transactions (company_id, party_kind, party_id);
+-- D-7: remittance query index (find unremitted / by period)
+CREATE INDEX ix_wht_transactions_remittance
+    ON wht_transactions (company_id, remitted, remittance_period);
 
 -- ============================================================================
 -- (7) CoA seed — add 4 new accounts per existing company

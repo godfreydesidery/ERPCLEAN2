@@ -38,6 +38,15 @@ public class BankReconciliation extends UidEntity {
     @Setter
     private LocalDate statementDate;
 
+    /**
+     * Opening balance from the bank statement (continuity check / carry-forward).
+     * Should equal the previous reconciliation's statementClosingBalance. Nullable —
+     * not required for the first reconciliation on an account.
+     */
+    @Column(name = "statement_opening_balance", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal statementOpeningBalance;
+
     @Column(name = "statement_closing_balance", nullable = false, precision = 19, scale = 4)
     @Setter
     private BigDecimal statementClosingBalance;
@@ -46,6 +55,15 @@ public class BankReconciliation extends UidEntity {
     @Column(name = "cleared_book_balance", precision = 19, scale = 4)
     @Setter
     private BigDecimal clearedBookBalance;
+
+    /**
+     * Reconciling difference at completion: statementClosingBalance − clearedBookBalance.
+     * Zero when balanced (the normal case); non-zero indicates outstanding items not yet
+     * cleared. Persisted at completion alongside clearedBookBalance. Null while DRAFT.
+     */
+    @Column(name = "unreconciled_amount", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal unreconciledAmount;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 10)
@@ -80,12 +98,14 @@ public class BankReconciliation extends UidEntity {
 
     public BankReconciliation(Long companyId, Long branchId, Long cashBankAccountId,
                                String reconciliationNumber, LocalDate statementDate,
+                               BigDecimal statementOpeningBalance,
                                BigDecimal statementClosingBalance, Long createdBy) {
         this.companyId                = companyId;
         this.branchId                 = branchId;
         this.cashBankAccountId        = cashBankAccountId;
         this.reconciliationNumber     = reconciliationNumber;
         this.statementDate            = statementDate;
+        this.statementOpeningBalance  = statementOpeningBalance;
         this.statementClosingBalance  = statementClosingBalance;
         this.createdBy                = createdBy;
     }

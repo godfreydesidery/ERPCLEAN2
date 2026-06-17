@@ -10,6 +10,7 @@ import com.erp.modules.products.repository.ProductPriceRepository;
 import com.erp.modules.products.repository.ProductRepository;
 import com.erp.modules.products.repository.PriceTierRepository;
 import com.erp.modules.products.repository.PromotionRepository;
+import com.erp.platform.common.money.CurrencyCode;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
@@ -50,7 +51,7 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
                     req.customerId(), req.productId(), req.businessDate());
             if (cp.isPresent()) {
                 return ResolvedPriceDto.customerPrice(cp.get().getUnitPriceAmount(),
-                        cp.get().getCurrency());
+                        CurrencyCode.value(cp.get().getCurrency()));
             }
         }
 
@@ -69,7 +70,7 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
             var tier = priceTiers.findBestTier(req.productId(), req.priceListId(), req.quantity());
             if (tier.isPresent()) {
                 return ResolvedPriceDto.tier(tier.get().getUnitPriceAmount(),
-                        tier.get().getCurrency());
+                        CurrencyCode.value(tier.get().getCurrency()));
             }
         }
 
@@ -92,7 +93,7 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
         var pp = productPrices.findByProductIdAndPriceListId(req.productId(), req.priceListId());
         if (pp.isPresent()) {
             var price = pp.get().getPrice();
-            return ResolvedPriceDto.listPrice(price.getAmount(), price.getCurrency());
+            return ResolvedPriceDto.listPrice(price.getAmount(), price.getCurrency().value());
         }
         return null;
     }

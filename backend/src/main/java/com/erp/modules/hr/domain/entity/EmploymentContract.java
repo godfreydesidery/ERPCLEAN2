@@ -1,5 +1,6 @@
 package com.erp.modules.hr.domain.entity;
 
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.modules.hr.domain.enums.ContractType;
 import com.erp.modules.hr.domain.enums.PayFrequency;
 import com.erp.platform.common.domain.UidEntity;
@@ -36,7 +37,7 @@ public class EmploymentContract extends UidEntity {
     private BigDecimal baseSalaryAmount;
 
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "pay_frequency", nullable = false, length = 12)
@@ -96,7 +97,7 @@ public class EmploymentContract extends UidEntity {
         this.employeeId        = employeeId;
         this.contractType      = contractType;
         this.baseSalaryAmount  = baseSalaryAmount;
-        this.currency          = currency;
+        this.currency          = CurrencyCode.ofNullable(currency);
         this.startDate         = startDate;
         this.endDate           = endDate;
         this.createdBy         = createdBy;

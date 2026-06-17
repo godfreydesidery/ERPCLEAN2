@@ -63,7 +63,7 @@ CREATE TABLE stock_count_lines (
     variance_value   NUMERIC(19,4),
     reason_code      VARCHAR(40),
     movement_uid     VARCHAR(26),
-    currency         VARCHAR(10)     NOT NULL DEFAULT 'TZS',
+    currency         VARCHAR(3)      NOT NULL DEFAULT 'TZS',
     version          BIGINT          NOT NULL DEFAULT 0,
     created_at       TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by       BIGINT,

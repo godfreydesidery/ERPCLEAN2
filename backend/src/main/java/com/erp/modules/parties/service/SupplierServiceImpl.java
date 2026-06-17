@@ -1,15 +1,21 @@
 package com.erp.modules.parties.service;
 
 import com.erp.modules.parties.domain.dto.AssignPartyBranchRequest;
+import com.erp.modules.parties.domain.dto.CreateSupplierBankAccountRequest;
 import com.erp.modules.parties.domain.dto.CreateSupplierRequest;
 import com.erp.modules.parties.domain.dto.PartyBranchDto;
+import com.erp.modules.parties.domain.dto.SupplierBankAccountDto;
 import com.erp.modules.parties.domain.dto.SupplierDto;
+import com.erp.modules.parties.domain.dto.UpdateSupplierBankAccountRequest;
 import com.erp.modules.parties.domain.dto.UpdateSupplierRequest;
 import com.erp.modules.parties.domain.entity.Supplier;
+import com.erp.modules.parties.domain.entity.SupplierBankAccount;
 import com.erp.modules.parties.domain.entity.SupplierBranch;
 import com.erp.modules.parties.domain.enums.PartyType;
+import com.erp.modules.parties.repository.SupplierBankAccountRepository;
 import com.erp.modules.parties.repository.SupplierBranchRepository;
 import com.erp.modules.parties.repository.SupplierRepository;
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -33,6 +39,7 @@ public class SupplierServiceImpl implements SupplierService {
 
     private final SupplierRepository suppliers;
     private final SupplierBranchRepository supplierBranches;
+    private final SupplierBankAccountRepository bankAccounts;
     private final PartyCodeGenerator codeGen;
     private final PartyBranchGuard branchGuard;
     private final ScopeGuard scopeGuard;
@@ -40,12 +47,14 @@ public class SupplierServiceImpl implements SupplierService {
 
     public SupplierServiceImpl(SupplierRepository suppliers,
                                SupplierBranchRepository supplierBranches,
+                               SupplierBankAccountRepository bankAccounts,
                                PartyCodeGenerator codeGen,
                                PartyBranchGuard branchGuard,
                                ScopeGuard scopeGuard,
                                AuditService audit) {
         this.suppliers = suppliers;
         this.supplierBranches = supplierBranches;
+        this.bankAccounts = bankAccounts;
         this.codeGen = codeGen;
         this.branchGuard = branchGuard;
         this.scopeGuard = scopeGuard;
@@ -65,6 +74,8 @@ public class SupplierServiceImpl implements SupplierService {
                 req.phone(), req.email(), req.physicalAddress(), req.postalAddress(),
                 req.region(), req.district());
         s.setSupplierKind(req.supplierKind());
+        s.setPaymentTermsDays(req.paymentTermsDays());
+        s.setPaymentTermsId(req.paymentTermsId());
 
         Supplier saved = suppliers.save(s);
         audit.record(AuditEvent.of(AuditActions.SUPPLIER_CREATE, "suppliers",
@@ -107,6 +118,8 @@ public class SupplierServiceImpl implements SupplierService {
                 req.phone(), req.email(), req.physicalAddress(), req.postalAddress(),
                 req.region(), req.district());
         s.setSupplierKind(req.supplierKind());
+        s.setPaymentTermsDays(req.paymentTermsDays());
+        s.setPaymentTermsId(req.paymentTermsId());
         s.setUpdatedAt(Instant.now());
         s.setUpdatedBy(actorId());
 
@@ -173,6 +186,125 @@ public class SupplierServiceImpl implements SupplierService {
         return supplierBranches.findBySupplierId(s.getId()).stream()
                 .map(a -> PartyBranchDto.of(a.getBranchId(), a.getAssignedAt(), a.getAssignedBy()))
                 .toList();
+    }
+
+    // ---- bank accounts (D-4) ------------------------------------------------
+
+    @Override
+    public SupplierBankAccountDto addBankAccount(String supplierUid,
+                                                  CreateSupplierBankAccountRequest req) {
+        Supplier s = require(supplierUid);
+        scopeGuard.assertCanActIn(RequestContext.get(), s.getCompanyId());
+        validateBankAccountIdentifiers(req.accountNo(), req.iban());
+
+        if (req.isDefault()) {
+            // clear existing default before setting the new one
+            bankAccounts.findBySupplierIdAndIsDefaultTrue(s.getId())
+                    .ifPresent(existing -> { existing.setDefault(false); bankAccounts.save(existing); });
+        }
+
+        SupplierBankAccount sba = new SupplierBankAccount(
+                s.getCompanyId(), s.getId(),
+                req.bankName(), req.accountName(), req.accountNo(), req.iban(), actorId());
+        sba.setBankBranch(req.bankBranch());
+        sba.setSwiftBic(req.swiftBic());
+        sba.setCurrency(req.currency() != null ? CurrencyCode.of(req.currency()) : null);
+        sba.setDefault(req.isDefault());
+
+        SupplierBankAccount saved = bankAccounts.save(sba);
+        audit.record(AuditEvent.of(AuditActions.SUPPLIER_BANK_ACCOUNT_CREATE, "supplier_bank_accounts",
+                saved.getId(), saved.getUid())
+                .detail(Map.of("supplierUid", supplierUid, "bankName", saved.getBankName())));
+        return SupplierBankAccountDto.from(saved);
+    }
+
+    @Override
+    public SupplierBankAccountDto updateBankAccount(String supplierUid, String bankAccountUid,
+                                                     UpdateSupplierBankAccountRequest req) {
+        Supplier s = require(supplierUid);
+        scopeGuard.assertCanActIn(RequestContext.get(), s.getCompanyId());
+        SupplierBankAccount sba = requireBankAccount(bankAccountUid, s.getId());
+        validateBankAccountIdentifiers(req.accountNo(), req.iban());
+
+        sba.setBankName(req.bankName());
+        sba.setAccountName(req.accountName());
+        sba.setAccountNo(req.accountNo());
+        sba.setBankBranch(req.bankBranch());
+        sba.setIban(req.iban());
+        sba.setSwiftBic(req.swiftBic());
+        sba.setCurrency(req.currency() != null ? CurrencyCode.of(req.currency()) : null);
+        sba.setUpdatedAt(Instant.now());
+        sba.setUpdatedBy(actorId());
+
+        audit.record(AuditEvent.of(AuditActions.SUPPLIER_BANK_ACCOUNT_UPDATE, "supplier_bank_accounts",
+                sba.getId(), sba.getUid()));
+        return SupplierBankAccountDto.from(sba);
+    }
+
+    @Override
+    public void archiveBankAccount(String supplierUid, String bankAccountUid) {
+        Supplier s = require(supplierUid);
+        scopeGuard.assertCanActIn(RequestContext.get(), s.getCompanyId());
+        SupplierBankAccount sba = requireBankAccount(bankAccountUid, s.getId());
+        sba.setStatus(com.erp.platform.common.domain.MasterStatus.ARCHIVED);
+        sba.setUpdatedAt(Instant.now());
+        sba.setUpdatedBy(actorId());
+        audit.record(AuditEvent.of(AuditActions.SUPPLIER_BANK_ACCOUNT_ARCHIVE,
+                "supplier_bank_accounts", sba.getId(), sba.getUid()));
+    }
+
+    @Override
+    public void restoreBankAccount(String supplierUid, String bankAccountUid) {
+        Supplier s = require(supplierUid);
+        scopeGuard.assertCanActIn(RequestContext.get(), s.getCompanyId());
+        SupplierBankAccount sba = requireBankAccount(bankAccountUid, s.getId());
+        sba.setStatus(com.erp.platform.common.domain.MasterStatus.ACTIVE);
+        sba.setUpdatedAt(Instant.now());
+        sba.setUpdatedBy(actorId());
+        audit.record(AuditEvent.of(AuditActions.SUPPLIER_BANK_ACCOUNT_RESTORE,
+                "supplier_bank_accounts", sba.getId(), sba.getUid()));
+    }
+
+    @Override
+    public void setDefaultBankAccount(String supplierUid, String bankAccountUid) {
+        Supplier s = require(supplierUid);
+        scopeGuard.assertCanActIn(RequestContext.get(), s.getCompanyId());
+        SupplierBankAccount sba = requireBankAccount(bankAccountUid, s.getId());
+        // clear existing default
+        bankAccounts.findBySupplierIdAndIsDefaultTrue(s.getId())
+                .ifPresent(existing -> { existing.setDefault(false); bankAccounts.save(existing); });
+        sba.setDefault(true);
+        sba.setUpdatedAt(Instant.now());
+        sba.setUpdatedBy(actorId());
+        audit.record(AuditEvent.of(AuditActions.SUPPLIER_BANK_ACCOUNT_SET_DEFAULT,
+                "supplier_bank_accounts", sba.getId(), sba.getUid()));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<SupplierBankAccountDto> listBankAccounts(String supplierUid) {
+        Supplier s = require(supplierUid);
+        scopeGuard.assertCanActIn(RequestContext.get(), s.getCompanyId());
+        return bankAccounts.findBySupplierId(s.getId()).stream()
+                .map(SupplierBankAccountDto::from)
+                .toList();
+    }
+
+    private SupplierBankAccount requireBankAccount(String uid, Long supplierId) {
+        SupplierBankAccount sba = Lookups.orNotFound(
+                bankAccounts.findByUid(uid), "SupplierBankAccount", uid);
+        if (!sba.getSupplierId().equals(supplierId)) {
+            throw new com.erp.platform.common.api.NotFoundException(
+                    "SupplierBankAccount " + uid + " does not belong to this supplier.");
+        }
+        return sba;
+    }
+
+    private static void validateBankAccountIdentifiers(String accountNo, String iban) {
+        if ((accountNo == null || accountNo.isBlank()) && (iban == null || iban.isBlank())) {
+            throw new IllegalArgumentException(
+                    "At least one of accountNo or iban must be provided (D-4 account_no OR iban NOT NULL).");
+        }
     }
 
     private Supplier require(String uid) {

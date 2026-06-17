@@ -30,6 +30,7 @@ import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
@@ -185,7 +186,7 @@ public class OpportunityServiceImpl implements OpportunityService {
 
         OpportunityLine line = new OpportunityLine(opp.getId(), opp.getCompanyId(), opp.getBranchId(),
                 lineNo, product.getId(), product.getCode(), product.getName(),
-                unit.getId(), unit.getName(), req.estimatedQty(), price, opp.getCurrency(), actorId());
+                unit.getId(), unit.getName(), req.estimatedQty(), price, CurrencyCode.value(opp.getCurrency()), actorId());
         line.setLineDiscountAmount(req.lineDiscountAmount());
         line.setLineDiscountPercent(req.lineDiscountPercent());
 

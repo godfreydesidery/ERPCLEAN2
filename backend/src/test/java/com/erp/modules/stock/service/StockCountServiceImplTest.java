@@ -128,12 +128,13 @@ class StockCountServiceImplTest {
 
         // Product lookup via getById — the correct method (no NotFoundException)
         // ProductDto(id, uid, companyId, code, name, description, type,
-        //            sellable, stockable, baseUnitUid, baseUnitCode, baseUnitName,
+        //            sellable, stockable, lotTracked, serialTracked, expiryTracked,
+        //            baseUnitUid, baseUnitCode, baseUnitName,
         //            cost, vatStatus, status, version, createdAt, createdBy, updatedAt, updatedBy)
         ProductDto productDto = new ProductDto(PRODUCT_ID, "PROD-UID-001", COMPANY_ID,
                 "P001", "Widget A", null, null,
-                true, true, null, null, null,
-                null, null, null, null, null, null, null, null);
+                true, true, false, false, false, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, false, null);
         when(productService.getById(PRODUCT_ID)).thenReturn(productDto);
 
         // Stub saves — return the passed object (simulate persist)

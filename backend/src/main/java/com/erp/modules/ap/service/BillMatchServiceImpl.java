@@ -323,7 +323,7 @@ public class BillMatchServiceImpl implements BillMatchService {
         // ADR-0036 D-3: convert face amounts to BASE before LineDraft construction.
         // GL engine (GLPostingServiceImpl) is BYTE-UNTOUCHED; only base-currency lines reach it.
         // AP control leg (CR AP) is the BALANCING PLUG to absorb HALF_UP rounding residual. (D-3/D-8)
-        String    docCurrency = bill.getCurrency();
+        String    docCurrency = bill.getCurrency().value();
         Long      companyId   = bill.getCompanyId();
 
         // Convert gross once — used for the D-4 triple stamp and plugScale below.
@@ -360,9 +360,12 @@ public class BillMatchServiceImpl implements BillMatchService {
                 // Goods line: accumulate into single GRNI DR leg
                 baseGoodsNet = baseGoodsNet.add(baseLineNet);
             } else {
-                // Service line: one LineDraft per line with project tag (ADR-0033 D-4b)
-                ChartOfAccount purchasesAcct = glConfig.resolve(companyId, GlConfigKey.PURCHASES);
-                glLines.add(new LineDraft(purchasesAcct.getId(),
+                // Service line: one LineDraft per line with project tag (ADR-0033 D-4b).
+                // ADR-0040 D-8: debit the line's gl_account_id override when set, else the PURCHASES default.
+                Long expenseAccountId = l.getGlAccountId() != null
+                        ? l.getGlAccountId()
+                        : glConfig.resolve(companyId, GlConfigKey.PURCHASES).getId();
+                glLines.add(new LineDraft(expenseAccountId,
                         baseLineNet, BigDecimal.ZERO,
                         postCurrency, "Purchases — " + bill.getSupplierInvoiceNo(),
                         ccId, deptId, null, null,

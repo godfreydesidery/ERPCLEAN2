@@ -36,6 +36,6 @@ public record QuotationLineDto(
                 l.getVatStatus() != null ? l.getVatStatus().name() : null,
                 l.getVatRate(),
                 l.getNetAmount(), l.getVatAmount(), l.getGrossAmount(),
-                l.getCurrency());
+                l.getCurrency().value());
     }
 }

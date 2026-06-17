@@ -133,7 +133,7 @@ public class SalesReturnServiceImpl implements SalesReturnService {
                 delivery.getCompanyId(), delivery.getBranchId(),
                 delivery.getId(), delivery.getUid(), order.getUid(),
                 delivery.getCustomerId(),
-                req.returnDate(), order.getCurrency(),
+                req.returnDate(), order.getCurrency().value(),
                 req.reason(), actorId());
         ret.setReturnNumber(numberGen.nextSalesReturn(delivery.getCompanyId()));
         SalesReturn savedReturn = returns.save(ret);
@@ -197,7 +197,7 @@ public class SalesReturnServiceImpl implements SalesReturnService {
                     sol.getLineDiscountPercent(),
                     sol.getVatStatus() != null ? sol.getVatStatus().name() : "STANDARD",
                     vatRate,
-                    order.getCurrency(), actorId());
+                    order.getCurrency().value(), actorId());
             rl.setNetAmount(lineNet);
             rl.setVatAmount(lineVat);
             rl.setGrossAmount(lineGross);
@@ -309,7 +309,7 @@ public class SalesReturnServiceImpl implements SalesReturnService {
                 savedReturn.getReturnDate(),
                 netAmount,
                 vatAmount,
-                order.getCurrency(),
+                order.getCurrency().value(),
                 savedReturn.getReason() != null
                         ? savedReturn.getReason()
                         : "Sales return " + savedReturn.getReturnNumber(),

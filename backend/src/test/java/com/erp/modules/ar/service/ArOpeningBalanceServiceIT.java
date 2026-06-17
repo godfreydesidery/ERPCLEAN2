@@ -103,7 +103,7 @@ class ArOpeningBalanceServiceIT extends PostgresIntegrationTest {
         customerUid = customerService.create(new CreateCustomerRequest(
                 company.getId(), PartyType.INDIVIDUAL, "OB Customer",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CREDIT_ACCOUNT, null, null)).uid();
+                CustomerKind.CREDIT_ACCOUNT, null, null, null)).uid();
 
         // GL + AR-GL prerequisites
         chartOfAccountService.seedDefaults(company.getId());
@@ -254,7 +254,7 @@ class ArOpeningBalanceServiceIT extends PostgresIntegrationTest {
         String customer2Uid = customerService.create(new CreateCustomerRequest(
                 company.getId(), PartyType.INDIVIDUAL, "OB Customer 2",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CREDIT_ACCOUNT, null, null)).uid();
+                CustomerKind.CREDIT_ACCOUNT, null, null, null)).uid();
 
         BigDecimal amount1 = new BigDecimal("3000");
         BigDecimal amount2 = new BigDecimal("7000");
@@ -298,7 +298,7 @@ class ArOpeningBalanceServiceIT extends PostgresIntegrationTest {
         String customer2Uid = customerService.create(new CreateCustomerRequest(
                 company2.getId(), PartyType.INDIVIDUAL, "OB Cross Customer",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CREDIT_ACCOUNT, null, null)).uid();
+                CustomerKind.CREDIT_ACCOUNT, null, null, null)).uid();
 
         // Switch principal back to company A — attempt to reference company B's customer
         RequestContext.set(new RequestContext.Principal(
@@ -340,7 +340,7 @@ class ArOpeningBalanceServiceIT extends PostgresIntegrationTest {
         String customer3Uid = customerService.create(new CreateCustomerRequest(
                 company3.getId(), PartyType.INDIVIDUAL, "OB No GL Customer",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CREDIT_ACCOUNT, null, null)).uid();
+                CustomerKind.CREDIT_ACCOUNT, null, null, null)).uid();
 
         // Deliberately skip chartOfAccountService.seedDefaults / glConfigService.seedDefaults
 

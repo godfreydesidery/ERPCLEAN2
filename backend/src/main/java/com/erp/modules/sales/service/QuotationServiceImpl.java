@@ -161,7 +161,7 @@ public class QuotationServiceImpl implements QuotationService {
                 req.quantity(), qtyInBase,
                 listPrice, appliedPrice,
                 product.getVatStatus(), vatRate,
-                q.getCurrency(), actorId());
+                q.getCurrency().value(), actorId());
         line.setLineDiscountAmount(req.lineDiscountAmount());
         line.setLineDiscountPercent(req.lineDiscountPercent());
 

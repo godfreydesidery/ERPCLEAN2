@@ -229,7 +229,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         // without a rate — OQ-FX-06). The poster (GLPostingSafeInvoker) re-applies the same effective
         // rate on the same posting date, so the stamped base equals the posted-journal base.
         ConvertedAmount fxConv = fxConverter.toBase(
-                inv.getGrossTotalAmount(), inv.getCurrency(), inv.getCompanyId(), LocalDate.now());
+                inv.getGrossTotalAmount(), inv.getCurrency().value(), inv.getCompanyId(), LocalDate.now());
         inv.setFxRate(fxConv.rate());
         inv.setBaseGrossTotalAmount(fxConv.baseAmount());
         inv.setRateAt(fxConv.rateAt());
@@ -270,7 +270,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                         throw new IllegalStateException(
                                 "Credit limit exceeded for customer " + customer.getUid()
                                         + ". Limit: " + creditLimit.getAmount().toPlainString()
-                                        + " " + creditLimit.getCurrency()
+                                        + " " + creditLimit.getCurrency().value()
                                         + ", projected balance: " + projectedBalance.toPlainString()
                                         + " (ADR-0014 D-9). Requires SALES.CREDIT.OVERRIDE permission.");
                     }
@@ -279,7 +279,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                             .detail(Map.of(
                                     "customerUid", customer.getUid(),
                                     "creditLimit", creditLimit.getAmount().toPlainString(),
-                                    "creditLimitCurrency", creditLimit.getCurrency(),
+                                    "creditLimitCurrency", creditLimit.getCurrency().value(),
                                     "projectedBalance", projectedBalance.toPlainString())));
                 }
             }
@@ -395,7 +395,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         UnitOfMeasure unit = resolveUnit(inv.getCompanyId(), req.unitUid());
 
         // Snapshot price from price list (BR-SALES-03)
-        BigDecimal listPrice = resolveListPrice(product, inv.getCompanyId(), inv.getCurrency());
+        BigDecimal listPrice = resolveListPrice(product, inv.getCompanyId(), inv.getCurrency().value());
 
         // Snapshot VAT rate from tax_rates (ADR-0008 D-5b)
         BigDecimal vatRate = resolveVatRate(inv.getCompanyId(), product);
@@ -537,10 +537,10 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         assertDraft(inv, "add a payment to");
 
         // Currency must match header (BR-CUR-07)
-        if (!inv.getCurrency().equals(req.currency())) {
+        if (!inv.getCurrency().value().equals(req.currency())) {
             throw new IllegalArgumentException(
                     "Payment currency " + req.currency()
-                            + " does not match invoice currency " + inv.getCurrency());
+                            + " does not match invoice currency " + inv.getCurrency().value());
         }
 
         Long actor = actorId();
@@ -662,7 +662,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                     return new InvoicePostingTotalsDto(
                             inv.getUid(),
                             inv.getStatus().name(),
-                            inv.getCurrency(),
+                            inv.getCurrency().value(),
                             inv.getCustomerId(),
                             isCashSale,
                             inv.getNetTotalAmount(),

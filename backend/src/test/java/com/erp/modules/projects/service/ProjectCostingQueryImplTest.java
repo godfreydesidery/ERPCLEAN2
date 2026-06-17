@@ -11,6 +11,7 @@ import com.erp.modules.projects.domain.entity.Project;
 import com.erp.modules.projects.repository.ProjectCostingQueryRepository;
 import com.erp.modules.projects.repository.ProjectRepository;
 import com.erp.platform.common.api.ForbiddenException;
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -164,7 +165,7 @@ class ProjectCostingQueryImplTest {
         when(project.getName()).thenReturn("Test Project");
         when(project.getCustomerId()).thenReturn(null);
         when(project.getBudgetAmount()).thenReturn(null);
-        when(project.getCurrency()).thenReturn("USD");
+        when(project.getCurrency()).thenReturn(CurrencyCode.of("USD"));
 
         BigDecimal rev  = new BigDecimal(revenue);
         BigDecimal cst  = new BigDecimal(cost);

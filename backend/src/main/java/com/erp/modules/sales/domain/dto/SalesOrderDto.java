@@ -37,7 +37,7 @@ public record SalesOrderDto(
                 o.getOrderNumber(),
                 o.getStatus().name(),
                 o.getCustomerId(), o.getAgentId(),
-                o.getCurrency(),
+                o.getCurrency().value(),
                 o.getOrderDate(),
                 o.getSourceQuotationUid(),
                 o.getSourceOpportunityUid(),

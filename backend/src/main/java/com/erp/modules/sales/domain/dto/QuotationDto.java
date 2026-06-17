@@ -39,7 +39,7 @@ public record QuotationDto(
                 q.getQuoteNumber(),
                 q.getStatus().name(),
                 q.getCustomerId(), q.getAgentId(),
-                q.getCurrency(),
+                q.getCurrency().value(),
                 q.getQuoteDate(), q.getValidUntil(),
                 q.getDocDiscountAmount(), q.getDocDiscountPercent(),
                 q.getNetTotalAmount(), q.getVatTotalAmount(), q.getGrossTotalAmount(),

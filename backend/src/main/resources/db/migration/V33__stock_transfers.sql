@@ -63,7 +63,7 @@ CREATE TABLE stock_transfer_lines (
     qty_transferred      NUMERIC(19,6)   NOT NULL,
     qty_transferred_base NUMERIC(19,6)   NOT NULL,
     value_amount         NUMERIC(19,4),
-    currency             VARCHAR(10)     NOT NULL DEFAULT 'TZS',
+    currency             VARCHAR(3)      NOT NULL DEFAULT 'TZS',
     version              BIGINT          NOT NULL DEFAULT 0,
     created_at           TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by           BIGINT,

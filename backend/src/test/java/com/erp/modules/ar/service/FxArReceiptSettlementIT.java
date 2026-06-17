@@ -135,7 +135,7 @@ class FxArReceiptSettlementIT extends PostgresIntegrationTest {
         var custDto = customerService.create(new CreateCustomerRequest(
                 company.getId(), PartyType.INDIVIDUAL, "FX Customer",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CREDIT_ACCOUNT, null, null));
+                CustomerKind.CREDIT_ACCOUNT, null, null, null));
         customerUid = custDto.uid();
     }
 

@@ -102,7 +102,7 @@ public class NotificationScanner {
             Map<String, String> vals = new HashMap<>();
             vals.put("invoiceNumber", invoice.getDocumentNo() != null ? invoice.getDocumentNo() : invoice.getUid());
             vals.put("customerName", "Customer#" + invoice.getCustomerId());
-            vals.put("outstandingAmount", formatMoney(invoice.getOutstandingAmount(), invoice.getCurrency()));
+            vals.put("outstandingAmount", formatMoney(invoice.getOutstandingAmount(), invoice.getCurrency().value()));
             vals.put("daysOverdue", String.valueOf(daysOverdue));
             vals.put("sourceUid", invoice.getUid());
 

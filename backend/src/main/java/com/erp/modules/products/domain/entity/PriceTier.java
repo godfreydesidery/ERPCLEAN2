@@ -1,5 +1,6 @@
 package com.erp.modules.products.domain.entity;
 
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
@@ -46,7 +47,7 @@ public class PriceTier extends UidEntity {
     private BigDecimal unitPriceAmount;
 
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
@@ -79,7 +80,7 @@ public class PriceTier extends UidEntity {
         this.priceListId     = priceListId;
         this.minQty          = minQty;
         this.unitPriceAmount = unitPriceAmount;
-        this.currency        = currency;
+        this.currency        = CurrencyCode.ofNullable(currency);
         this.createdBy       = createdBy;
     }
 }

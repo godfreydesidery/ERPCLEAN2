@@ -3,6 +3,7 @@ package com.erp.modules.approvals.domain.entity;
 import com.erp.modules.approvals.domain.enums.PolicyBranchScope;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -61,7 +62,7 @@ public class ApprovalPolicy extends UidEntity {
     private BigDecimal maxAmount;
 
     @Column(name = "currency", nullable = false, length = 3, updatable = false)
-    private String currency;
+    private CurrencyCode currency;
 
     /** Active flag: only active policies match new submissions. Does not affect in-flight requests. */
     @Column(name = "is_active", nullable = false)
@@ -113,7 +114,7 @@ public class ApprovalPolicy extends UidEntity {
         this.branchId     = branchId;
         this.minAmount    = minAmount;
         this.maxAmount    = maxAmount;
-        this.currency     = currency;
+        this.currency     = CurrencyCode.of(currency);
         this.notes        = notes;
         this.createdBy    = createdBy;
     }

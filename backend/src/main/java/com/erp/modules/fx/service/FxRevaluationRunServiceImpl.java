@@ -33,6 +33,7 @@ import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.money.FxRateService;
 import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.OutboxPublisher;
@@ -395,12 +396,12 @@ public class FxRevaluationRunServiceImpl implements FxRevaluationRunService {
         ChartOfAccount arAccount = resolveAccountSilently(companyId, GlConfigKey.ACCOUNTS_RECEIVABLE);
         Long arAccountId = arAccount != null ? arAccount.getId() : null;
 
-        List<ArInvoice> foreignAr = arInvoices.findOpenForeignForRevaluation(companyId, baseCurrency);
+        List<ArInvoice> foreignAr = arInvoices.findOpenForeignForRevaluation(companyId, CurrencyCode.of(baseCurrency));
 
         // Group by currency
         Map<String, BigDecimal[]> arByCcy = new LinkedHashMap<>();
         for (ArInvoice inv : foreignAr) {
-            String ccy = inv.getCurrency();
+            String ccy = inv.getCurrency().value();
             // [0] = Σ outstanding_amount (face), [1] = Σ base_outstanding_amount (carrying base)
             arByCcy.compute(ccy, (k, v) -> {
                 if (v == null) v = new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO};
@@ -434,11 +435,11 @@ public class FxRevaluationRunServiceImpl implements FxRevaluationRunService {
         ChartOfAccount apAccount = resolveAccountSilently(companyId, GlConfigKey.ACCOUNTS_PAYABLE);
         Long apAccountId = apAccount != null ? apAccount.getId() : null;
 
-        List<SupplierBill> foreignAp = supplierBills.findOpenForeignForRevaluation(companyId, baseCurrency);
+        List<SupplierBill> foreignAp = supplierBills.findOpenForeignForRevaluation(companyId, CurrencyCode.of(baseCurrency));
 
         Map<String, BigDecimal[]> apByCcy = new LinkedHashMap<>();
         for (SupplierBill bill : foreignAp) {
-            String ccy = bill.getCurrency();
+            String ccy = bill.getCurrency().value();
             apByCcy.compute(ccy, (k, v) -> {
                 if (v == null) v = new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO};
                 v[0] = v[0].add(bill.getOutstandingAmount());
@@ -628,7 +629,7 @@ public class FxRevaluationRunServiceImpl implements FxRevaluationRunService {
                 r.getTotalGainAmount(), r.getTotalLossAmount(), r.getNetAdjustmentAmount(),
                 r.getGlEntryUid(), r.getReversalGlEntryUid(), r.getExecutedAt(),
                 lines.stream().map(l -> new FxRevaluationRunLineDto(
-                        l.getId(), l.getUid(), l.getSourceType(), l.getCurrency(),
+                        l.getId(), l.getUid(), l.getSourceType(), CurrencyCode.value(l.getCurrency()),
                         l.getControlAccountId(),
                         l.getOutstandingTxnAmount(), l.getCarryingBaseAmount(),
                         l.getSpotRate(), l.getRevaluedBaseAmount(), l.getAdjustmentAmount()))

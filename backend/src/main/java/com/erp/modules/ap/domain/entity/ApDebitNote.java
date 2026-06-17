@@ -1,6 +1,7 @@
 package com.erp.modules.ap.domain.entity;
 
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
@@ -50,7 +51,7 @@ public class ApDebitNote extends UidEntity {
     private BigDecimal vatAmount;
 
     @Column(name = "currency", nullable = false, length = 3, updatable = false)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "reason", nullable = false, length = 255, updatable = false)
     private String reason;
@@ -98,7 +99,7 @@ public class ApDebitNote extends UidEntity {
         this.amount          = amount;
         this.netAmount       = netAmount;
         this.vatAmount       = vatAmount;
-        this.currency        = currency;
+        this.currency        = CurrencyCode.of(currency);
         this.reason          = reason;
         this.createdBy       = createdBy;
     }

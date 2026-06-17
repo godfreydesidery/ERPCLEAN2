@@ -2,6 +2,7 @@ package com.erp.modules.sales.domain.entity;
 
 import com.erp.modules.sales.domain.enums.SalesOrderStatus;
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -47,7 +48,7 @@ public class SalesOrder extends UidEntity {
     private Long agentId;
 
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "order_date", nullable = false)
     private LocalDate orderDate;
@@ -144,7 +145,7 @@ public class SalesOrder extends UidEntity {
         this.branchId = branchId;
         this.customerId = customerId;
         this.agentId = agentId;
-        this.currency = currency;
+        this.currency = CurrencyCode.of(currency);
         this.orderDate = orderDate;
         this.createdBy = createdBy;
     }

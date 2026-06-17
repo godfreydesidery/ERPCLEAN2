@@ -99,9 +99,12 @@ public class GLPostingServiceImpl implements GLPostingService {
         //    postings, so the close must still be able to clear it). BR-GL-04 stays enforced for every
         //    other source type. (Year-End Close adversarial review, ISSUES-REGISTER #14.)
         String baseCurrency = resolveBaseCurrency(draft.companyId());
-        boolean allowInactive = draft.sourceType() == JournalSourceType.YEAR_END_CLOSE;
+        boolean allowInactive       = draft.sourceType() == JournalSourceType.YEAR_END_CLOSE;
+        // Only user-entered MANUAL journals are subject to the allowManualPosting gate.
+        // System/event-driven sources post to control accounts by design (ADR-0013 D-3).
+        boolean isManualJournal     = draft.sourceType() == JournalSourceType.MANUAL;
         for (JournalEntryDraft.LineDraft ld : draftLines) {
-            validateLine(ld, draft.companyId(), baseCurrency, allowInactive);
+            validateLine(ld, draft.companyId(), baseCurrency, allowInactive, isManualJournal);
         }
 
         // 2b. Dimension validation (ADR-0025 D-4 steps 2-3, BR-CC-04, FR-CC-08).
@@ -342,7 +345,7 @@ public class GLPostingServiceImpl implements GLPostingService {
     }
 
     private void validateLine(JournalEntryDraft.LineDraft ld, Long companyId, String baseCurrency,
-                              boolean allowInactiveAccount) {
+                              boolean allowInactiveAccount, boolean enforceManualPostingGate) {
         BigDecimal debit  = ld.debitAmount()  != null ? ld.debitAmount()  : BigDecimal.ZERO;
         BigDecimal credit = ld.creditAmount() != null ? ld.creditAmount() : BigDecimal.ZERO;
 
@@ -372,6 +375,15 @@ public class GLPostingServiceImpl implements GLPostingService {
         if (!account.isActive() && !allowInactiveAccount) {
             throw new IllegalArgumentException(
                     "Account " + account.getAccountCode() + " is inactive; cannot post to it (BR-GL-04).");
+        }
+
+        // Manual-posting gate: only user-entered MANUAL journals are subject to this check.
+        // System/event-driven posters (YEAR_END_CLOSE, inventory, AP/AR settlement, payroll, FX)
+        // are exempted — they post to control accounts by design and do not carry operator context.
+        if (enforceManualPostingGate && !account.isAllowManualPosting()) {
+            throw new com.erp.platform.common.api.ConflictException(
+                    "Account " + account.getAccountCode()
+                            + " does not allow manual posting. Update the account's allowManualPosting flag to permit direct entries.");
         }
 
         // Base currency (BR-GL-06, D-9)

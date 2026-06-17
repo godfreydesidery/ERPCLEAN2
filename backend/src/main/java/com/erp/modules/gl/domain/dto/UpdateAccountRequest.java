@@ -6,5 +6,6 @@ import com.erp.modules.gl.domain.enums.AccountType;
 public record UpdateAccountRequest(
         String name,
         AccountType accountType,
-        Boolean active
+        Boolean active,
+        Boolean allowManualPosting
 ) {}
