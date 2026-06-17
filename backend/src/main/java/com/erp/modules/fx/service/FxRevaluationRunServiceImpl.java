@@ -262,6 +262,7 @@ public class FxRevaluationRunServiceImpl implements FxRevaluationRunService {
             run.setGlEntryUid(glEntry.uid());
             run.setStatus(FxRevaluationRunStatus.POSTED);
             run.setExecutedAt(Instant.now());
+            run.setExecutedBy(actorId());
 
             // Schedule next-period reversal immediately (D-6 mandatory).
             // Uses REQUIRES_NEW safe-invoker so a closed/missing next-period never poisons the outer TX
@@ -628,11 +629,15 @@ public class FxRevaluationRunServiceImpl implements FxRevaluationRunService {
                 r.getStatus(),
                 r.getTotalGainAmount(), r.getTotalLossAmount(), r.getNetAdjustmentAmount(),
                 r.getGlEntryUid(), r.getReversalGlEntryUid(), r.getExecutedAt(),
+                // P2-M1 fields
+                r.getExecutedBy(), r.getReversalDate(), r.getReversalPeriodId(),
+                r.getRateType(), r.getScopeSummary(),
                 lines.stream().map(l -> new FxRevaluationRunLineDto(
                         l.getId(), l.getUid(), l.getSourceType(), CurrencyCode.value(l.getCurrency()),
                         l.getControlAccountId(),
                         l.getOutstandingTxnAmount(), l.getCarryingBaseAmount(),
-                        l.getSpotRate(), l.getRevaluedBaseAmount(), l.getAdjustmentAmount()))
+                        l.getSpotRate(), l.getRevaluedBaseAmount(), l.getAdjustmentAmount(),
+                        l.getPriorRate(), l.getJournalLineId()))
                         .toList());
     }
 

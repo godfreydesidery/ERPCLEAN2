@@ -23,6 +23,7 @@ import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.money.CurrencyCode;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -415,7 +416,8 @@ public class GLPostingServiceImpl implements GLPostingService {
                             acct != null ? acct.getAccountCode() : null,
                             acct != null ? acct.getName() : null,
                             l.getDebitAmount(), l.getCreditAmount(),
-                            l.getCurrency(), l.getLineMemo());
+                            l.getCurrency(), l.getLineMemo(),
+                            l.getTaxCode(), l.getTaxAmount());
                 })
                 .toList();
 
@@ -424,6 +426,9 @@ public class GLPostingServiceImpl implements GLPostingService {
                 batchNumber, entry.getPostingDate(), entry.getFiscalPeriodId(),
                 entry.getDescription(), entry.getSourceType(),
                 entry.getSourceRef(), entry.getReversalOfId(),
+                entry.getReversedByEntryId(), entry.isReversed(),
+                CurrencyCode.value(entry.getHeaderCurrency()),
+                entry.getTotalDebit(), entry.getTotalCredit(),
                 entry.getPostedAt(), lineDtos);
     }
 }

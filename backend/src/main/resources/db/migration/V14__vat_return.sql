@@ -42,6 +42,13 @@ CREATE TABLE vat_returns (
     created_by          BIGINT,
     updated_at          TIMESTAMPTZ,
     updated_by          BIGINT,
+    paid_at             TIMESTAMPTZ,             -- P2-M1: VAT remittance (cash settlement to authority)
+    paid_amount         NUMERIC(19,4),
+    payment_reference   VARCHAR(80),
+    sales_turnover      NUMERIC(19,4),           -- P2-M1: statutory turnover figures for the return face form
+    purchases_turnover  NUMERIC(19,4),
+    zero_rated_sales    NUMERIC(19,4),
+    exempt_sales        NUMERIC(19,4),
 
     CONSTRAINT uq_vat_return_uid                UNIQUE (uid),
     CONSTRAINT uq_vat_return_company_number     UNIQUE (company_id, return_number),

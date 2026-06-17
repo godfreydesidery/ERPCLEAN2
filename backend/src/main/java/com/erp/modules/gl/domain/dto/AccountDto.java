@@ -17,5 +17,7 @@ public record AccountDto(
         boolean allowManualPosting,
         String status,
         /** NULL means an ordinary account; non-null identifies the owning sub-ledger (D-1). */
-        ControlType controlType
+        ControlType controlType,
+        /** ISO-4217 alpha-3 currency lock (P2-M1). NULL = multi-currency allowed. */
+        String currency
 ) {}

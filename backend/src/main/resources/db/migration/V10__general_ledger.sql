@@ -28,6 +28,7 @@ CREATE TABLE chart_of_accounts (
     is_active        BOOLEAN         NOT NULL DEFAULT true,
     allow_manual_posting BOOLEAN     NOT NULL DEFAULT true,
     status           VARCHAR(32)     NOT NULL DEFAULT 'ACTIVE',
+    currency         VARCHAR(3),                 -- P2-M1: locks account to one currency (NULL = multi-currency)
     version          BIGINT          NOT NULL DEFAULT 0,
     created_at       TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by       BIGINT,
@@ -68,6 +69,8 @@ CREATE TABLE fiscal_years (
     created_by   BIGINT,
     updated_at   TIMESTAMPTZ,
     updated_by   BIGINT,
+    reopened_at  TIMESTAMPTZ,                    -- P2-M1: reopen audit trail (last reopen action)
+    reopened_by  BIGINT,                         -- P2-M1: app_users.id of the reopening actor
 
     CONSTRAINT uq_fiscal_year_uid              UNIQUE (uid),
     CONSTRAINT uq_fiscal_year_company_code     UNIQUE (company_id, year_code),
@@ -123,6 +126,8 @@ CREATE TABLE journal_batches (
     version       BIGINT          NOT NULL DEFAULT 0,
     created_at    TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by    BIGINT,
+    total_debit   NUMERIC(19,4),                 -- P2-M1: denormalised control totals (populated on post)
+    total_credit  NUMERIC(19,4),
 
     CONSTRAINT uq_journal_batch_uid            UNIQUE (uid),
     CONSTRAINT uq_journal_batch_company_number UNIQUE (company_id, batch_number),
@@ -155,6 +160,11 @@ CREATE TABLE journal_entries (
     version          BIGINT          NOT NULL DEFAULT 0,
     created_at       TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by       BIGINT,
+    reversed_by_entry_id BIGINT,                 -- P2-M1: self-ref id of the entry that reversed THIS one
+    reversed         BOOLEAN         NOT NULL DEFAULT false,  -- P2-M1: denormalised "has been reversed" flag
+    header_currency  VARCHAR(3),                 -- P2-M1: informational source-doc currency (ledger stays base-only)
+    total_debit      NUMERIC(19,4),              -- P2-M1: denormalised control totals
+    total_credit     NUMERIC(19,4),
 
     CONSTRAINT uq_journal_entry_uid        UNIQUE (uid),
     CONSTRAINT uq_journal_entry_batch_no   UNIQUE (batch_id, entry_no),
@@ -198,6 +208,8 @@ CREATE TABLE journal_lines (
     version        BIGINT          NOT NULL DEFAULT 0,
     created_at     TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by     BIGINT,
+    tax_code       VARCHAR(30),                  -- P2-M1: informational tax tag (does not drive posting)
+    tax_amount     NUMERIC(19,4),
 
     CONSTRAINT uq_journal_line_uid      UNIQUE (uid),
     CONSTRAINT uq_journal_line_entry_no UNIQUE (entry_id, line_no),

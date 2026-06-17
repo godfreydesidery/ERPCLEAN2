@@ -16,6 +16,7 @@ import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.time.Instant;
@@ -249,6 +250,7 @@ public class ChartOfAccountServiceImpl implements ChartOfAccountService {
                 a.getAccountCode(), a.getName(),
                 a.getAccountType(), a.getNormalBalance(),
                 a.isActive(), a.isAllowManualPosting(), a.getStatus().name(),
-                a.getControlType());
+                a.getControlType(),
+                CurrencyCode.value(a.getCurrency()));
     }
 }

@@ -156,7 +156,8 @@ public class FxRateServiceImpl implements FxRateService {
     static CurrencyDto toCurrencyDto(Currency c) {
         return new CurrencyDto(
                 c.getId(), c.getUid(), c.getCode(), c.getName(),
-                c.getSymbol(), c.getMinorUnits(), c.isActive(), c.getStatus());
+                c.getSymbol(), c.getMinorUnits(), c.getNumericCode(),
+                c.isActive(), c.getStatus());
     }
 
     static CurrencyRateDto toRateDto(CurrencyRate r) {

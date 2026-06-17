@@ -74,6 +74,31 @@ public class FxRevaluationRun extends UidEntity {
     @Setter
     private Instant executedAt;
 
+    /** app_users.id of the actor who executed (posted) this run (P2-M1). */
+    @Column(name = "executed_by")
+    @Setter
+    private Long executedBy;
+
+    /** Effective date of the auto-reversal journal — first day of next period (P2-M1). */
+    @Column(name = "reversal_date")
+    @Setter
+    private java.time.LocalDate reversalDate;
+
+    /** fiscal_periods.id into which the auto-reversal was posted (P2-M1). */
+    @Column(name = "reversal_period_id")
+    @Setter
+    private Long reversalPeriodId;
+
+    /** Rate type used for this run (mirrors currency_rates.rate_type); e.g. SPOT (P2-M1). */
+    @Column(name = "rate_type", length = 20)
+    @Setter
+    private String rateType;
+
+    /** Human-readable summary of what was revalued (e.g. "AR:USD,EUR AP:USD") (P2-M1). */
+    @Column(name = "scope_summary", length = 255)
+    @Setter
+    private String scopeSummary;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

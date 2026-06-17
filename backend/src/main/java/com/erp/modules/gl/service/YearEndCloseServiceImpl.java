@@ -266,11 +266,13 @@ public class YearEndCloseServiceImpl implements YearEndCloseService {
         }
         // If closingJournalUid == null (no-trading year, D-4 edge): no journal to reverse; skip.
 
-        // 5. Flip the year OPEN + clear the close stamps (D-6 step 5)
+        // 5. Flip the year OPEN + clear the close stamps (D-6 step 5); record reopen audit (P2-M1)
         year.setStatus(PeriodStatus.OPEN);
         year.setClosedAt(null);
         year.setClosedBy(null);
         year.setClosingJournalUid(null);
+        year.setReopenedAt(Instant.now());
+        year.setReopenedBy(actorId);
         year.setUpdatedAt(Instant.now());
         year.setUpdatedBy(actorId);
         years.save(year);
@@ -366,6 +368,7 @@ public class YearEndCloseServiceImpl implements YearEndCloseService {
                 y.getId(), y.getUid(), y.getCompanyId(),
                 y.getYearCode(), y.getStartMonth(), y.getStartDate(), y.getEndDate(),
                 y.getStatus(),
-                y.getClosedAt(), y.getClosedBy(), y.getClosingJournalUid());
+                y.getClosedAt(), y.getClosedBy(), y.getClosingJournalUid(),
+                y.getReopenedAt(), y.getReopenedBy());
     }
 }

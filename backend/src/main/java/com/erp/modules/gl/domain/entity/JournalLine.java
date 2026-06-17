@@ -77,6 +77,15 @@ public class JournalLine extends UidEntity {
     @Column(name = "project_cost_type", length = 20)
     private String projectCostType;
 
+    // --- tax tagging (P2-M1) — informational; does not drive posting logic ---
+    /** Tax code tag (e.g. "VAT-STANDARD"); nullable. */
+    @Column(name = "tax_code", length = 30)
+    private String taxCode;
+
+    /** Tax amount on this line; nullable. */
+    @Column(name = "tax_amount", precision = 19, scale = 4)
+    private BigDecimal taxAmount;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

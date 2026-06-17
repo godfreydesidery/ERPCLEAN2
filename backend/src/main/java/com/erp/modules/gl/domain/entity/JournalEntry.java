@@ -2,11 +2,13 @@ package com.erp.modules.gl.domain.entity;
 
 import com.erp.modules.gl.domain.enums.JournalSourceType;
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import lombok.Getter;
@@ -59,6 +61,38 @@ public class JournalEntry extends UidEntity {
     @Column(name = "reversal_of_id")
     @Setter
     private Long reversalOfId;
+
+    /**
+     * Self-FK (P2-M1): set on the original entry when it has been reversed. Points to the
+     * reversing entry's id (complement of reversal_of_id).
+     */
+    @Column(name = "reversed_by_entry_id")
+    @Setter
+    private Long reversedByEntryId;
+
+    /** Convenience flag (P2-M1): true when a reversing entry referencing this one exists. */
+    @Column(name = "reversed", nullable = false)
+    @Setter
+    private boolean reversed = false;
+
+    /**
+     * Informational source-document currency (P2-M1). The ledger remains single-functional-currency
+     * (ADR-0036); this field records the face currency of the originating document for reporting.
+     * Mapped via {@link com.erp.platform.common.money.CurrencyCodeConverter} (autoApply=true).
+     */
+    @Column(name = "header_currency", length = 3)
+    @Setter
+    private CurrencyCode headerCurrency;
+
+    /** Denormalised Σ debit_amount across all lines in this entry (P2-M1). */
+    @Column(name = "total_debit", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal totalDebit;
+
+    /** Denormalised Σ credit_amount across all lines in this entry (P2-M1). */
+    @Column(name = "total_credit", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal totalCredit;
 
     @Column(name = "posted_at", nullable = false, updatable = false)
     private Instant postedAt = Instant.now();
