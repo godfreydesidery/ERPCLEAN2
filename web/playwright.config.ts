@@ -64,7 +64,7 @@ export default defineConfig({
         storageState: AUTH_FILE,
       },
       dependencies: ['setup'],
-      testMatch: /\/(routes-smoke|conventions|massive-data)\.spec\.ts/,
+      testMatch: /\/(routes-smoke|conventions|massive-data|uiux-forms-validation|uiux-empty-error-states|uiux-journeys-a11y)\.spec\.ts/,
     },
 
     /**
@@ -76,7 +76,7 @@ export default defineConfig({
     {
       name: 'chromium-unauthenticated',
       use: { ...devices['Desktop Chrome'] },
-      testMatch: /\/smoke\.spec\.ts/,
+      testMatch: /\/(smoke|uiux-auth-session|uiux-rbac-nav)\.spec\.ts/,
     },
   ],
 
