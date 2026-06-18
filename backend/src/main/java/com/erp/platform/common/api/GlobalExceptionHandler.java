@@ -148,6 +148,25 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error(ex.getMessage()));
     }
 
+    /**
+     * Optimistic-locking conflict — two transactions updated the same {@code @Version}-ed row
+     * concurrently (Spring's {@code OptimisticLockingFailureException}, which wraps Hibernate's
+     * {@code StaleObjectStateException}; also the raw Hibernate/JPA variants) → 409 Conflict, never
+     * 500. This is a TRANSIENT, retryable conflict (e.g. concurrent stock-on-hand updates), not a
+     * server fault — the caller should reload and retry. Logged at WARN (expected under contention).
+     */
+    @ExceptionHandler({
+            org.springframework.dao.OptimisticLockingFailureException.class,
+            org.hibernate.StaleObjectStateException.class,
+            jakarta.persistence.OptimisticLockException.class
+    })
+    public ResponseEntity<ApiResponse<Void>> handleOptimisticLock(Exception ex) {
+        log.warn("Optimistic-lock conflict (concurrent update): {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error(
+                        "This record was modified by another transaction. Please reload and try again."));
+    }
+
     // -------------------------------------------------------------------------
     // New handlers — cross-cutting theme fixes (adversarial issues #1 / #10 /
     // #47 + every MEDIUM whose actual is "HTTP 500 on bad-but-validatable input")
