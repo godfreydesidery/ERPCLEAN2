@@ -84,6 +84,25 @@ public class ApDebitNote extends UidEntity {
     @Setter
     private String originRef;
 
+    /**
+     * P3: structured purchase-return reference (purchase_returns.uid). {@link #origin}/{@link #originRef}
+     * carry it today as free text; this dedicated typed column lets a PURCHASE_RETURN-originated DN be
+     * queried directly. Nullable.
+     */
+    @Column(name = "purchase_return_ref", length = 60)
+    @Setter
+    private String purchaseReturnRef;
+
+    /** P3: Cost Centre dimension (soft ref → dimension_values.id; no DB FK). Nullable. */
+    @Column(name = "cost_centre_value_id")
+    @Setter
+    private Long costCentreValueId;
+
+    /** P3: Department dimension (soft ref → dimension_values.id; no DB FK). Nullable. */
+    @Column(name = "department_value_id")
+    @Setter
+    private Long departmentValueId;
+
     // -------------------------------------------------------------------------
     // ADR-0041 D3 — unapplied tracking (credit-note parity); see ArCreditNote
     // -------------------------------------------------------------------------

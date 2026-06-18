@@ -68,6 +68,7 @@ CREATE TABLE ar_receipts (
     currency            VARCHAR(3)      NOT NULL,
     tender_type         VARCHAR(20)     NOT NULL,
     bank_reference      VARCHAR(80),
+    payer_name          VARCHAR(160),   -- P3: free-text payer name when it differs from the customer master, nullable
     gl_entry_uid        VARCHAR(26),
     status              VARCHAR(20)     NOT NULL DEFAULT 'UNALLOCATED',
     -- NOTE: fx_rate / rate_at (V62) and cash_bank_account_id + FK (V13) are added by later
@@ -210,6 +211,9 @@ CREATE TABLE ar_write_offs (
     currency       VARCHAR(3)      NOT NULL,
     reason         VARCHAR(255)    NOT NULL,
     gl_entry_uid   VARCHAR(26),
+    -- P3: FX capture for foreign-currency write-offs (base relievable off ar_invoices.base_outstanding_amount)
+    fx_rate        NUMERIC(19,8)   NOT NULL DEFAULT 1,   -- units of base per 1 foreign unit at write-off (immutable; DEFAULT 1)
+    base_amount    NUMERIC(19,4),                        -- amount in base currency at fx_rate; nullable for back-compat rows
     version        BIGINT          NOT NULL DEFAULT 0,
     created_at     TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by     BIGINT,

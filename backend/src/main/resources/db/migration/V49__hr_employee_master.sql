@@ -39,7 +39,9 @@ CREATE TABLE employees (
     branch_id        BIGINT,
     employee_number  VARCHAR(30)  NOT NULL,
     first_name       VARCHAR(80)  NOT NULL,
+    middle_name      VARCHAR(80),                 -- P3: optional middle name
     last_name        VARCHAR(80)  NOT NULL,
+    photo_ref        VARCHAR(255),                -- P3: documents-module ref to employee photo
     national_id      VARCHAR(40),
     tin              VARCHAR(20),
     nssf_number      VARCHAR(40),

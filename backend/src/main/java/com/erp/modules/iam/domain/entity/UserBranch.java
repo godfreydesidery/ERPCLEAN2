@@ -46,6 +46,14 @@ public class UserBranch extends UidEntity {
     @Column(name = "assigned_by", nullable = false)
     private Long assignedBy;
 
+    /** Soft-unassign timestamp (P3). NULL = still active. */
+    @Column(name = "revoked_at")
+    private Instant revokedAt;
+
+    /** Soft-delete flag (P3). Unassignment is a hard delete today; this enables soft-revoke. */
+    @Column(name = "active", nullable = false)
+    private boolean active = true;
+
     protected UserBranch() {
         // JPA
     }
@@ -69,5 +77,11 @@ public class UserBranch extends UidEntity {
     /** Clear the default flag (called before promoting another assignment to default). */
     public void clearDefault() {
         this.isDefault = false;
+    }
+
+    /** Soft-unassign this branch assignment (P3): clears active and stamps the revocation time. */
+    public void revoke(Instant at) {
+        this.active = false;
+        this.revokedAt = at;
     }
 }

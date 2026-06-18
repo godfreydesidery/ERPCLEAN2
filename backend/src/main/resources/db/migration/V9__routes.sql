@@ -41,12 +41,19 @@ CREATE TABLE route_customer (
     customer_id BIGINT          NOT NULL,
     assigned_at TIMESTAMPTZ     NOT NULL DEFAULT now(),
     assigned_by BIGINT          NOT NULL,
+    active        BOOLEAN       NOT NULL DEFAULT true,  -- P3: soft-unassign flag
+    unassigned_at TIMESTAMPTZ,                          -- P3: unassignment timestamp
 
-    CONSTRAINT uq_route_customer_pair       UNIQUE (route_id, customer_id),
+    -- Uniqueness scoped to active rows (partial unique index below) so a soft-unassigned
+    -- pair can be re-added later (P3 re-add support).
     CONSTRAINT fk_route_customer_route      FOREIGN KEY (route_id)    REFERENCES routes (id),
     CONSTRAINT fk_route_customer_customer   FOREIGN KEY (customer_id) REFERENCES customers (id),
     CONSTRAINT fk_route_customer_by         FOREIGN KEY (assigned_by)  REFERENCES app_users (id)
 );
+
+-- ** partial unique: at most one ACTIVE link per (route, customer); re-add allowed after unassign **
+CREATE UNIQUE INDEX uq_route_customer_pair
+    ON route_customer (route_id, customer_id) WHERE active;
 
 -- ---------------------------------------------------------------------------
 -- (3) route_agent — N:M junction, EXTERNAL agents only (FR-ROUTE-07, ADR-0012 D-4)
@@ -59,12 +66,19 @@ CREATE TABLE route_agent (
     is_primary  BOOLEAN         NOT NULL DEFAULT false,
     assigned_at TIMESTAMPTZ     NOT NULL DEFAULT now(),
     assigned_by BIGINT          NOT NULL,
+    active        BOOLEAN       NOT NULL DEFAULT true,  -- P3: soft-unassign flag
+    unassigned_at TIMESTAMPTZ,                          -- P3: unassignment timestamp
 
-    CONSTRAINT uq_route_agent_pair      UNIQUE (route_id, agent_id),
+    -- Uniqueness scoped to active rows (partial unique index below) so a soft-unassigned
+    -- pair can be re-added later (P3 re-add support).
     CONSTRAINT fk_route_agent_route     FOREIGN KEY (route_id)   REFERENCES routes (id),
     CONSTRAINT fk_route_agent_agent     FOREIGN KEY (agent_id)   REFERENCES agents (id),
     CONSTRAINT fk_route_agent_by        FOREIGN KEY (assigned_by) REFERENCES app_users (id)
 );
+
+-- ** partial unique: at most one ACTIVE link per (route, agent); re-add allowed after unassign **
+CREATE UNIQUE INDEX uq_route_agent_pair
+    ON route_agent (route_id, agent_id) WHERE active;
 
 -- ---------------------------------------------------------------------------
 -- (4) route_branch — N:M junction, mirrors customer_branch exactly (FR-ROUTE-11, ADR-0012 D-5)
@@ -75,12 +89,19 @@ CREATE TABLE route_branch (
     branch_id   BIGINT          NOT NULL,
     assigned_at TIMESTAMPTZ     NOT NULL DEFAULT now(),
     assigned_by BIGINT          NOT NULL,
+    active        BOOLEAN       NOT NULL DEFAULT true,  -- P3: soft-unassign flag
+    unassigned_at TIMESTAMPTZ,                          -- P3: unassignment timestamp
 
-    CONSTRAINT uq_route_branch_pair     UNIQUE (route_id, branch_id),
+    -- Uniqueness scoped to active rows (partial unique index below) so a soft-unassigned
+    -- pair can be re-added later (P3 re-add support).
     CONSTRAINT fk_route_branch_route    FOREIGN KEY (route_id)   REFERENCES routes (id),
     CONSTRAINT fk_route_branch_br       FOREIGN KEY (branch_id)  REFERENCES branches (id),
     CONSTRAINT fk_route_branch_by       FOREIGN KEY (assigned_by) REFERENCES app_users (id)
 );
+
+-- ** partial unique: at most one ACTIVE link per (route, branch); re-add allowed after unassign **
+CREATE UNIQUE INDEX uq_route_branch_pair
+    ON route_branch (route_id, branch_id) WHERE active;
 
 -- ---------------------------------------------------------------------------
 -- (5) ALTER sales_invoices — additive nullable route_id (ADR-0012 D-6a)
@@ -115,7 +136,7 @@ CREATE INDEX ix_route_agent_agent   ON route_agent (agent_id);
 -- ** partial unique: at-most-one primary route per agent (BR-ROUTE-04, ADR-0012 D-4) **
 -- Mirrors uq_product_barcode_primary (V3) and uq_user_branch_default (V1).
 CREATE UNIQUE INDEX uq_route_agent_primary
-    ON route_agent (agent_id) WHERE is_primary;
+    ON route_agent (agent_id) WHERE is_primary AND active;
 
 -- route_branch: two-direction lookup
 CREATE INDEX ix_route_branch_route  ON route_branch (route_id);

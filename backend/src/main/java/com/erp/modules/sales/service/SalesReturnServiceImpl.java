@@ -195,7 +195,7 @@ public class SalesReturnServiceImpl implements SalesReturnService {
                     sol.getUnitPriceAmount(),
                     proRateDiscountAmount(sol, qtyReturnedBase),
                     sol.getLineDiscountPercent(),
-                    sol.getVatStatus() != null ? sol.getVatStatus().name() : "STANDARD",
+                    sol.getVatStatus() != null ? sol.getVatStatus() : com.erp.modules.products.domain.enums.VatStatus.STANDARD,
                     vatRate,
                     order.getCurrency().value(), actorId());
             rl.setNetAmount(lineNet);

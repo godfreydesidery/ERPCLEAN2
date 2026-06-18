@@ -19,6 +19,9 @@ CREATE TABLE depreciation_runs (
     gl_entry_uid        VARCHAR(26)     NOT NULL,
     currency            VARCHAR(3)      NOT NULL,
     executed_at         TIMESTAMPTZ     NOT NULL DEFAULT now(),
+    executed_by         BIGINT,                 -- P3: actor who ran the depreciation
+    reversed_at         TIMESTAMPTZ,            -- P3: run reversal marker (POSTING lifecycle DEFERRED)
+    reversal_of_run_uid VARCHAR(26),            -- P3: uid of the run this reversal backs out
     version             BIGINT          NOT NULL DEFAULT 0,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by          BIGINT,

@@ -39,6 +39,8 @@ CREATE TABLE cash_bank_accounts (
     gl_account_id       BIGINT          NOT NULL,
     is_default          BOOLEAN         NOT NULL DEFAULT FALSE,
     active              BOOLEAN         NOT NULL DEFAULT TRUE,
+    -- P3 (X3): MasterStatus soft-delete lifecycle alongside the legacy boolean (additive; approval_policies precedent)
+    status              VARCHAR(32)     NOT NULL DEFAULT 'ACTIVE',
     version             BIGINT          NOT NULL DEFAULT 0,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by          BIGINT,
@@ -54,7 +56,8 @@ CREATE TABLE cash_bank_accounts (
     CONSTRAINT chk_cash_bank_account_type           CHECK (account_type IN ('CASH','BANK')),
     CONSTRAINT chk_cash_bank_account_bank_details   CHECK (
         (account_type = 'BANK')
-        OR (bank_name IS NULL AND bank_account_no IS NULL AND bank_branch IS NULL))
+        OR (bank_name IS NULL AND bank_account_no IS NULL AND bank_branch IS NULL)),
+    CONSTRAINT chk_cash_bank_account_status         CHECK (status IN ('ACTIVE','INACTIVE','ARCHIVED'))
 );
 
 -- Partial unique: at most one default per company (BR-CASH-09)
@@ -116,6 +119,9 @@ CREATE TABLE cash_transactions (
     journal_entry_ref           VARCHAR(26),
     cleared                     BOOLEAN         NOT NULL DEFAULT FALSE,
     cleared_in_reconciliation_id BIGINT,
+    -- P3: counterparty name (free text, e.g. payee/payer) + self soft-FK to the txn this row reverses
+    counterparty_name           VARCHAR(160),                 -- P3: free-text counterparty, nullable
+    reversal_of_transaction_id  BIGINT,                       -- P3: self soft-FK → cash_transactions.id this reverses, nullable
     memo                        VARCHAR(255),
     version                     BIGINT          NOT NULL DEFAULT 0,
     created_at                  TIMESTAMPTZ     NOT NULL DEFAULT now(),

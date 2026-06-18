@@ -29,6 +29,20 @@ public class EmployeeRecurringItem extends UidEntity {
     @Setter
     private BigDecimal amountOrPercent;
 
+    /** When true, {@code amountOrPercent} is a percentage rather than an absolute amount (P3). */
+    @Column(name = "is_percent", nullable = false)
+    @Setter
+    private boolean percent = false;
+
+    /** Optional cap on the computed amount (P3). */
+    @Column(name = "cap_amount", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal capAmount;
+
+    @Column(name = "note", length = 255)
+    @Setter
+    private String note;
+
     @Column(name = "effective_from", nullable = false, updatable = false)
     private LocalDate effectiveFrom;
 

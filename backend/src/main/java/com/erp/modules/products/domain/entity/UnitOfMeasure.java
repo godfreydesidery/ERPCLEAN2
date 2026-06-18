@@ -35,6 +35,11 @@ public class UnitOfMeasure extends UidEntity {
     @Setter
     private String name;
 
+    /** P3: display symbol, e.g. "kg", "L", "pcs". Nullable. */
+    @Column(name = "symbol", length = 20)
+    @Setter
+    private String symbol;
+
     /** P2 D5: physical dimension family (COUNT/WEIGHT/VOLUME/LENGTH/TIME). Defaults to COUNT. */
     @Enumerated(EnumType.STRING)
     @Column(name = "dimension_type", nullable = false, length = 20)

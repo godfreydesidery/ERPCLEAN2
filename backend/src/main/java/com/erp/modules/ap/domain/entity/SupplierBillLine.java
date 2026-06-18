@@ -67,11 +67,21 @@ public class SupplierBillLine {
     @Column(name = "description", nullable = false, length = 200)
     private String description;
 
+    /** P3: unit-of-measure code snapshot at bill entry. Nullable. */
+    @Column(name = "uom", length = 20)
+    @Setter
+    private String uom;
+
     @Column(name = "billed_qty", nullable = false, precision = 19, scale = 6)
     private BigDecimal billedQty;
 
     @Column(name = "unit_cost_amount", nullable = false, precision = 19, scale = 4)
     private BigDecimal unitCostAmount;
+
+    /** P3: per-line discount amount (informational). DEFAULT 0. */
+    @Column(name = "line_discount_amount", nullable = false, precision = 19, scale = 4)
+    @Setter
+    private BigDecimal lineDiscountAmount = BigDecimal.ZERO;
 
     @Column(name = "line_net_amount", nullable = false, precision = 19, scale = 4)
     private BigDecimal lineNetAmount;

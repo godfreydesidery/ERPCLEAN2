@@ -47,6 +47,8 @@ CREATE TABLE customer_prices (
     product_id           BIGINT          NOT NULL,
     unit_price_amount    NUMERIC(19,4)   NOT NULL,
     currency             VARCHAR(3)      NOT NULL,
+    min_qty              NUMERIC(19,6),                  -- P3: volume-break minimum quantity (null = applies to any qty)
+    price_list_id        BIGINT,                         -- P3: soft-FK → price_lists(id); provenance of this contract price
     effective_from       DATE,
     effective_to         DATE,
     status               VARCHAR(20)     NOT NULL DEFAULT 'ACTIVE',

@@ -1,6 +1,7 @@
 package com.erp.modules.cashbank.domain.entity;
 
 import com.erp.modules.cashbank.domain.enums.CashBankAccountType;
+import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.domain.UidEntity;
 import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
@@ -116,6 +117,15 @@ public class CashBankAccount extends UidEntity {
     @Column(name = "active", nullable = false)
     @Setter
     private boolean active = true;
+
+    /**
+     * P3 (X3): MasterStatus soft-delete lifecycle alongside the legacy {@link #active} boolean
+     * (additive — approval_policies precedent). DEFAULT ACTIVE; the boolean is kept for back-compat.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 32)
+    @Setter
+    private MasterStatus status = MasterStatus.ACTIVE;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();

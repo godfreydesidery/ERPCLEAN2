@@ -87,6 +87,8 @@ CREATE TABLE quotation_lines (
     vat_amount           NUMERIC(19,4)   NOT NULL DEFAULT 0,
     gross_amount         NUMERIC(19,4)   NOT NULL DEFAULT 0,
     currency             VARCHAR(3)      NOT NULL,
+    -- P3 (X15): promotion provenance — soft-FK to promotions(id); nullable.
+    promotion_id         BIGINT,
     version              BIGINT          NOT NULL DEFAULT 0,
     created_at           TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by           BIGINT,

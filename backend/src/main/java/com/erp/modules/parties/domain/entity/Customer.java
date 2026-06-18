@@ -127,6 +127,25 @@ public class Customer extends PartyBase {
     @Setter
     private CustomerSegment segment = CustomerSegment.OTHER;
 
+    // -------------------------------------------------------------------------
+    // P3 CRM — nice-to-have profile columns. All nullable/defaulted, additive-safe.
+    // -------------------------------------------------------------------------
+
+    /** P3: free-text/coded credit rating (e.g. "A", "B-"). Nullable. */
+    @Column(name = "credit_rating", length = 20)
+    @Setter
+    private String creditRating;
+
+    /** P3: date this customer was onboarded. Nullable. */
+    @Column(name = "onboarding_date")
+    @Setter
+    private java.time.LocalDate onboardingDate;
+
+    /** P3: accrued loyalty points. Defaults to 0. */
+    @Column(name = "loyalty_points", nullable = false)
+    @Setter
+    private int loyaltyPoints = 0;
+
     protected Customer() {
         // JPA
     }

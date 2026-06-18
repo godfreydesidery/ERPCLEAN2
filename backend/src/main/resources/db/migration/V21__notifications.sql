@@ -65,6 +65,7 @@ CREATE TABLE notifications (
     trigger_key             VARCHAR(80)     NOT NULL,
     is_read                 BOOLEAN         NOT NULL DEFAULT false,
     read_at                 TIMESTAMPTZ,
+    expires_at              TIMESTAMPTZ,    -- P3: TTL / auto-expiry (ADR-0024)
     version                 BIGINT          NOT NULL DEFAULT 0,
     created_at              TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by              BIGINT,

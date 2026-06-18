@@ -86,8 +86,11 @@ CREATE TABLE supplier_bill_lines (
     po_line_uid      VARCHAR(26),
     gr_line_uid      VARCHAR(26),
     description      VARCHAR(200)    NOT NULL,
+    -- P3: unit of measure snapshot + per-line discount (asset_id/capitalization deferred → FA integration)
+    uom                  VARCHAR(20),                     -- P3: UoM code snapshot at bill entry, nullable
     billed_qty       NUMERIC(19,6)   NOT NULL,
     unit_cost_amount NUMERIC(19,4)   NOT NULL,
+    line_discount_amount NUMERIC(19,4)   NOT NULL DEFAULT 0,  -- P3: per-line discount amount; informational, nullable-safe
     line_net_amount  NUMERIC(19,4)   NOT NULL,
     -- D-8: per-line VAT (ADR-0040 D-8) — reuses products.VatStatus enum values
     vat_status       VARCHAR(20),            -- STANDARD | ZERO_RATED | EXEMPT; null = inherit from product
@@ -134,6 +137,11 @@ CREATE TABLE bill_match (
     match_status           VARCHAR(25)     NOT NULL,
     match_type             VARCHAR(10)     NOT NULL DEFAULT 'THREE_WAY',  -- P2 D7: 2-way vs 3-way match
     variance_reason        VARCHAR(100),                                  -- P2 D7: free-text reason for an accepted variance
+    -- P3: audit-convenience scalar refs captured at match time (no FK — cross-module soft refs)
+    po_line_uid            VARCHAR(26),                                   -- P3: PO line uid the bill line matched, nullable
+    gr_line_uid            VARCHAR(26),                                   -- P3: GR line uid drawn against, nullable
+    grni_entry_uid         VARCHAR(26),                                   -- P3: GRNI clearing entry uid, nullable
+    currency               VARCHAR(3),                                    -- P3: currency snapshot for the variance amounts, nullable
     tolerance_pct          NUMERIC(9,4),
     tolerance_abs_amount   NUMERIC(19,4),
     accepted_by            BIGINT,
@@ -251,6 +259,13 @@ CREATE TABLE ap_debit_notes (
     -- "KIND:{uid}" tag (e.g. PURCHASE_RETURN:{uid}); origin_ref isolates the uid suffix so the
     -- kind can move to the ApDebitNoteOrigin enum without losing the source-document reference.
     origin_ref          VARCHAR(60),                          -- P2: source-document uid suffix, nullable
+    -- P3: structured purchase-return reference (origin/origin_ref carry it today as free text);
+    --     dedicated typed column so a PURCHASE_RETURN-originated DN can be queried directly. Nullable.
+    purchase_return_ref VARCHAR(60),                          -- P3: purchase_returns.uid this DN was raised for, nullable
+    -- P3: per-line dimension tags at header level (mirror supplier_bill_lines cost/dept dimensions).
+    --     Scalar soft-FK BIGINT (no DB FK: dimension_values created in V23). Nullable.
+    cost_centre_value_id BIGINT,                              -- P3: Cost Centre dimension (soft ref → dimension_values.id), nullable
+    department_value_id  BIGINT,                              -- P3: Department dimension (soft ref → dimension_values.id), nullable
     -- ADR-0041 D3: unapplied/applied tracking + base capture + FX rate + status
     --              (parity with ar_credit_notes D-6: raise posts full contra; apply = sub-ledger
     --               move + realized-FX plug). All NULLABLE/DEFAULT-ed for back-compat.

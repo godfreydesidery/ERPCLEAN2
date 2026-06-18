@@ -1,5 +1,6 @@
 package com.erp.modules.crm.domain.entity;
 
+import com.erp.modules.crm.domain.enums.PipelineStageType;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
@@ -40,6 +41,22 @@ public class PipelineStage extends UidEntity {
     @Column(name = "is_active", nullable = false)
     @Setter
     private boolean active = true;
+
+    /** Terminal-won funnel position (P3). */
+    @Column(name = "is_won_stage", nullable = false)
+    @Setter
+    private boolean wonStage = false;
+
+    /** Terminal-lost funnel position (P3). */
+    @Column(name = "is_lost_stage", nullable = false)
+    @Setter
+    private boolean lostStage = false;
+
+    /** Reconciles the stage with the orthogonal {@code Opportunity.opportunity_status} axis (P3, data-only). */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "stage_type", length = 20)
+    @Setter
+    private PipelineStageType stageType;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)

@@ -34,9 +34,18 @@ public class Employee extends UidEntity {
     @Setter
     private String firstName;
 
+    @Column(name = "middle_name", length = 80)
+    @Setter
+    private String middleName;
+
     @Column(name = "last_name", nullable = false, length = 80)
     @Setter
     private String lastName;
+
+    /** Documents-module ref (uid/path) to the employee photo (P3). */
+    @Column(name = "photo_ref", length = 255)
+    @Setter
+    private String photoRef;
 
     @Column(name = "national_id", length = 40)
     @Setter

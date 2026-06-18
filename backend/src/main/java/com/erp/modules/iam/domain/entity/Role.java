@@ -41,6 +41,10 @@ public class Role extends UidEntity {
     @Column(name = "is_system", nullable = false)
     private boolean system = false;
 
+    /** Scope-typing field (P3). Roles are org-wide by ADR-0001 D-A; NULL = the default org scope. */
+    @Column(name = "role_scope", length = 20)
+    private String roleScope;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     private MasterStatus status = MasterStatus.ACTIVE;
