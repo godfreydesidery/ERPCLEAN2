@@ -26,7 +26,12 @@ Sequencing for the P2 tranche of [GAP-FIX-WORKLIST.md](GAP-FIX-WORKLIST.md) (lin
 ## Status
 - [x] **P2-M1** (gl/tax/fx) — shipped `170498c`, green.
 - [x] **P2-M2…M6** (ap/cashbank, sales/products, purchases, hr/stock/mfg, crm/projects/fixedassets, approvals/iam/parties) — ~148 columns/enums, built by 6 parallel agents, green (970 tests).
-- [ ] P2-D1 … P2-D7 (design)
+- [x] **P2 design batch 1** (ADR-0041): **D1** (payment-terms doc wiring + settlement discount, data-only), **D2** (sales ship-to/bill-to snapshot population), **D5-Tier1** (customer/supplier/agent/UoM/pricelist/promotion defaults + `promotion_usages`), **D7-v1** (~30 cols across fixedassets/fx/billmatch/purchases/tax/budgeting/stock/iam). Green (982 tests).
+- [ ] **P2 design batch 2** (posting-sensitive): **D3** instrument links + cheque-bounce reversing-GL + `payment_runs` + ApDebitNote allocations; **D4** dimension requiredness (MANUAL-only); **D6** HR org + minimal Position master.
+- [ ] P2-D5 Tier-2 (Territory/Segment masters) — deferred per ADR-0041.
+
+## Design batch-1 follow-up (write-path wiring, low-risk)
+Fields are persisted + read-DTO-exposed + entity-settable, but **create/update request DTOs don't accept them yet** (deferred): D5 master-data defaults (customer default price-list/agent/segment, supplier defaults, UoM/pricelist/promotion fields); `promotion_usages` has entity+table but no repository/redemption-recording service (usage-limit enforcement); `CurrencyRateDto.effectiveTo` not surfaced (toRateDto is in platform/common — shared file, avoided); BillMatch `variance_reason` not in the acceptVariance request payload; D1 `createFromQuotation` doesn't propagate the quote's payment_terms_id/addresses (SO.confirm backfills from customer default); direct-SI per-request payment-terms override not wired.
 
 ## Mechanical follow-up tranche (deferred from M2–M6, all low-risk)
 Columns/enums landed; these remaining bits were deferred to stay strictly mechanical / avoid cross-module breakage:

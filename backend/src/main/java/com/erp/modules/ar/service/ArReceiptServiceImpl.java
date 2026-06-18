@@ -446,7 +446,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
 
             ArReceiptAllocation alloc = new ArReceiptAllocation(
                     receipt.getCompanyId(), receipt.getId(), inv.getId(),
-                    line.allocatedAmount(), actorId());
+                    line.allocatedAmount(), line.discountAmount(), line.writeOffAmount(), actorId());
             alloc.setBaseAllocatedAmount(baseSettledSlice);
             alloc.setSettlementRate(settlementRate);
             saved.add(allocations.save(alloc));
@@ -530,7 +530,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                             "ArInvoice not found: " + line.arInvoiceUid()));
             result.add(new ArReceiptAllocation(
                     companyId, receipt.getId(), inv.getId(),
-                    line.allocatedAmount(), actorId()));
+                    line.allocatedAmount(), line.discountAmount(), line.writeOffAmount(), actorId()));
         }
         return result;
     }

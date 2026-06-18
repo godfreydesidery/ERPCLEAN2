@@ -193,6 +193,7 @@ public class AssetDisposalServiceImpl implements AssetDisposalService {
                 d.getId(), d.getUid(), d.getCompanyId(), d.getBranchId(),
                 d.getFixedAssetId(), d.getDisposalType(), d.getDisposalDate(),
                 d.getFiscalPeriodId(), d.getProceedsAmount(), d.getNbvAtDisposal(),
-                d.getGainLossAmount(), d.getGlEntryUid(), CurrencyCode.value(d.getCurrency()), d.getReason());
+                d.getGainLossAmount(), d.getGlEntryUid(), CurrencyCode.value(d.getCurrency()), d.getReason(),
+                d.getBuyerName(), d.getBuyerId(), d.getProceedsArInvoiceUid(), d.getApprovedBy());
     }
 }

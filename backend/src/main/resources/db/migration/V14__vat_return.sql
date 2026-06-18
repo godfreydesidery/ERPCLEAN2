@@ -49,12 +49,17 @@ CREATE TABLE vat_returns (
     purchases_turnover  NUMERIC(19,4),
     zero_rated_sales    NUMERIC(19,4),
     exempt_sales        NUMERIC(19,4),
+    amended_return_id   BIGINT,                  -- P2 D7: self soft-FK → the original return this amends
+    is_amendment        BOOLEAN         NOT NULL DEFAULT false,  -- P2 D7: this is an amended/revised return
+    penalty_amount      NUMERIC(19,4),           -- P2 D7: late-filing/payment penalty assessed
+    interest_amount     NUMERIC(19,4),           -- P2 D7: interest assessed on overdue VAT
 
     CONSTRAINT uq_vat_return_uid                UNIQUE (uid),
     CONSTRAINT uq_vat_return_company_number     UNIQUE (company_id, return_number),
     CONSTRAINT uq_vat_return_company_period     UNIQUE (company_id, period_year, period_month),
     CONSTRAINT fk_vat_return_company            FOREIGN KEY (company_id)      REFERENCES companies (id),
     CONSTRAINT fk_vat_return_prior              FOREIGN KEY (prior_return_id) REFERENCES vat_returns (id),
+    CONSTRAINT fk_vat_return_amended            FOREIGN KEY (amended_return_id) REFERENCES vat_returns (id),
     CONSTRAINT fk_vat_return_filed_by           FOREIGN KEY (filed_by)        REFERENCES app_users (id),
     CONSTRAINT chk_vat_return_status            CHECK (status IN ('DRAFT','FILED')),
     CONSTRAINT chk_vat_return_period_month      CHECK (period_month BETWEEN 1 AND 12),

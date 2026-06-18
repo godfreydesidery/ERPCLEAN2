@@ -20,6 +20,9 @@ public record BudgetDto(
         Long costCentreValueId,
         String costCentreValueUid,
         String costCentreValueName,
+        // P2 D7: budget type + branch scope
+        String budgetType,
+        Long branchId,
         String notes,
         Long version,
         Instant createdAt,

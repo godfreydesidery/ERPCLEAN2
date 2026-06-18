@@ -21,6 +21,10 @@ CREATE TABLE asset_disposals (
     gl_entry_uid        VARCHAR(26),
     currency            VARCHAR(3)      NOT NULL,
     reason              VARCHAR(255),
+    buyer_name          VARCHAR(200),   -- P2 D7: disposal buyer name (SALE)
+    buyer_id            BIGINT,         -- P2 D7: soft-FK to a party/customer (no DB FK — cross-module)
+    proceeds_ar_invoice_uid VARCHAR(26),-- P2 D7: AR invoice uid raised for the proceeds (provenance)
+    approved_by         BIGINT,         -- P2 D7: approver linkage (app_users.id; no DB FK to keep additive)
     version             BIGINT          NOT NULL DEFAULT 0,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by          BIGINT,
@@ -61,6 +65,9 @@ CREATE TABLE asset_revaluations (
     gl_entry_uid        VARCHAR(26),
     currency            VARCHAR(3)      NOT NULL,
     reason              VARCHAR(255),
+    valuer_name         VARCHAR(200),   -- P2 D7: name of the professional valuer
+    valuation_ref       VARCHAR(80),    -- P2 D7: valuation report reference number
+    approved_by         BIGINT,         -- P2 D7: approver linkage (app_users.id; no DB FK to keep additive)
     version             BIGINT          NOT NULL DEFAULT 0,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by          BIGINT,

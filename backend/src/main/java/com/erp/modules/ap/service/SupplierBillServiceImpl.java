@@ -14,6 +14,7 @@ import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.parties.domain.entity.PaymentTerms;
 import com.erp.modules.parties.domain.entity.Supplier;
 import com.erp.modules.parties.repository.PaymentTermsRepository;
+import com.erp.modules.parties.service.PaymentTermsDueDateCalculator;
 import com.erp.modules.parties.repository.SupplierRepository;
 import com.erp.modules.products.domain.enums.VatStatus;
 import com.erp.platform.audit.AuditActions;
@@ -91,10 +92,14 @@ public class SupplierBillServiceImpl implements SupplierBillService {
         String currency = req.currency() != null ? req.currency()
                 : companies.findById(companyId).map(c -> c.getBaseCurrency()).orElse("TZS");
 
+        // Resolve PaymentTerms: request uid > supplier default payment_terms_id (ADR-0041 D1).
+        PaymentTerms terms = resolvePaymentTerms(req.paymentTermsUid(), supplier);
+
         // Derive due date: caller-supplied > PaymentTerms master > paymentTermsDays integer > net-on-receipt (D-2)
         LocalDate dueDate = req.dueDate() != null
                 ? req.dueDate()
-                : resolveDueDate(req.billDate(), supplier);
+                : PaymentTermsDueDateCalculator.derive(
+                        req.billDate(), terms, supplier.getPaymentTermsDays());
 
         // Compute net amount from lines and per-line VAT (D-8).
         // lineVatAmount = lineNetAmount × vatRate (zero when vatStatus is null/ZERO_RATED/EXEMPT).
@@ -130,6 +135,15 @@ public class SupplierBillServiceImpl implements SupplierBillService {
                 grossAmount,
                 currency,
                 actorId());
+
+        // ADR-0041 D1 — stamp payment terms + settlement discount (data-only, no GL leg).
+        if (terms != null) {
+            bill.setPaymentTermsId(terms.getId());
+            bill.setSettlementDiscountDueDate(
+                    PaymentTermsDueDateCalculator.settlementDiscountDueDate(req.billDate(), terms));
+            bill.setSettlementDiscountAmount(
+                    PaymentTermsDueDateCalculator.settlementDiscountAmount(grossAmount, terms));
+        }
         bill = bills.save(bill);
 
         // Persist lines — resolve GL account id from uid when caller provides one (D-8).
@@ -219,6 +233,8 @@ public class SupplierBillServiceImpl implements SupplierBillService {
                 b.getBillDate(), b.getDueDate(),
                 // P2: tax-point + received dates
                 b.getTaxPointDate(), b.getReceivedDate(),
+                // P2 D1: payment terms + settlement discount
+                b.getPaymentTermsId(), b.getSettlementDiscountDueDate(), b.getSettlementDiscountAmount(),
                 b.getNetAmount(), b.getVatAmount(), b.getGrossAmount(), b.getOutstandingAmount(),
                 b.getCurrency().value(), b.getStatus(), b.getPostedGlEntryUid(),
                 // D-7: WHT snapshot
@@ -243,26 +259,21 @@ public class SupplierBillServiceImpl implements SupplierBillService {
     }
 
     /**
-     * Derives the AP bill due date from the supplier's PaymentTerms master or paymentTermsDays integer.
-     * Priority: PaymentTerms master > paymentTermsDays integer > net-on-receipt (D-2, ADR-0040).
+     * Resolves the PaymentTerms master for a bill: the request uid takes priority, falling back to
+     * the supplier's default {@code payment_terms_id} (ADR-0041 D1). Returns null when neither
+     * resolves (the calculator then falls back to the integer paymentTermsDays / net-on-receipt).
      */
-    private LocalDate resolveDueDate(LocalDate billDate, Supplier supplier) {
-        if (supplier.getPaymentTermsId() != null) {
-            PaymentTerms pt = paymentTermsRepo.findById(supplier.getPaymentTermsId()).orElse(null);
+    private PaymentTerms resolvePaymentTerms(String paymentTermsUid, Supplier supplier) {
+        if (paymentTermsUid != null && !paymentTermsUid.isBlank()) {
+            PaymentTerms pt = paymentTermsRepo.findByUid(paymentTermsUid).orElse(null);
             if (pt != null) {
-                return switch (pt.getBasis()) {
-                    case DAYS_AFTER_INVOICE  -> billDate.plusDays(pt.getNetDays());
-                    case DAYS_AFTER_MONTH_END ->
-                            billDate.withDayOfMonth(billDate.lengthOfMonth())
-                                    .plusDays(pt.getNetDays());
-                    case DUE_ON_RECEIPT -> billDate;
-                };
+                return pt;
             }
         }
-        if (supplier.getPaymentTermsDays() != null) {
-            return billDate.plusDays(supplier.getPaymentTermsDays());
+        if (supplier.getPaymentTermsId() != null) {
+            return paymentTermsRepo.findById(supplier.getPaymentTermsId()).orElse(null);
         }
-        return billDate; // net-on-receipt
+        return null;
     }
 
     private Long actorId() {

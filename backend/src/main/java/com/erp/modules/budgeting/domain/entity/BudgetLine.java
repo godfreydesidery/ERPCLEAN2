@@ -45,6 +45,11 @@ public class BudgetLine extends UidEntity {
     @Setter
     private BigDecimal amount;
 
+    /** P2 D7: optional volume/quantity basis for the line (e.g. units, hours). */
+    @Column(name = "quantity", precision = 19, scale = 6)
+    @Setter
+    private BigDecimal quantity;
+
     @Column(name = "currency", nullable = false, length = 3)
     @Setter
     private CurrencyCode currency;

@@ -5,10 +5,13 @@ import com.erp.modules.ar.service.ArBalanceService;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.parties.domain.entity.Agent;
 import com.erp.modules.parties.domain.entity.Customer;
+import com.erp.modules.parties.domain.entity.CustomerAddress;
 import com.erp.modules.parties.domain.enums.CreditStatus;
 import com.erp.modules.parties.domain.enums.CustomerKind;
 import com.erp.modules.parties.repository.AgentRepository;
+import com.erp.modules.parties.repository.CustomerAddressRepository;
 import com.erp.modules.parties.repository.CustomerRepository;
+import com.erp.modules.parties.repository.PaymentTermsRepository;
 import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.domain.entity.ProductPrice;
 import com.erp.modules.products.domain.entity.UnitOfMeasure;
@@ -69,6 +72,8 @@ public class SalesOrderServiceImpl implements SalesOrderService {
     private final QuotationRepository      quotations;
     private final QuotationLineRepository  quotationLines;
     private final CustomerRepository       customers;
+    private final CustomerAddressRepository customerAddresses;
+    private final PaymentTermsRepository   paymentTermsRepo;
     private final AgentRepository          agents;
     private final CompanyRepository        companies;
     private final ProductRepository        products;
@@ -90,6 +95,8 @@ public class SalesOrderServiceImpl implements SalesOrderService {
                                  QuotationRepository quotations,
                                  QuotationLineRepository quotationLines,
                                  CustomerRepository customers,
+                                 CustomerAddressRepository customerAddresses,
+                                 PaymentTermsRepository paymentTermsRepo,
                                  AgentRepository agents,
                                  CompanyRepository companies,
                                  ProductRepository products,
@@ -109,6 +116,8 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         this.quotations       = quotations;
         this.quotationLines   = quotationLines;
         this.customers        = customers;
+        this.customerAddresses = customerAddresses;
+        this.paymentTermsRepo = paymentTermsRepo;
         this.agents           = agents;
         this.companies        = companies;
         this.products         = products;
@@ -145,6 +154,14 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         // ADR-0031 D-7 back-link: set when called from CRM OpportunityConversionService
         order.setSourceOpportunityUid(req.sourceOpportunityUid());
         order.setOrderNumber(numberGen.nextSalesOrder(companyId));
+
+        // ADR-0041 D1 — resolve payment terms: request uid > customer default. Stored at create.
+        Long paymentTermsId = resolvePaymentTermsId(req.paymentTermsUid(), customer);
+        order.setPaymentTermsId(paymentTermsId);
+
+        // ADR-0041 D2 — snapshot ship-to / bill-to addresses when an explicit uid is supplied.
+        // No auto-default when omitted (FORK: leave null).
+        applyAddressSnapshot(order, customer.getId(), req.shipToAddressUid(), req.billToAddressUid());
 
         SalesOrder saved = orders.save(order);
         audit.record(AuditEvent.of(AuditActions.SO_CREATE, "sales_orders",
@@ -260,6 +277,15 @@ public class SalesOrderServiceImpl implements SalesOrderService {
             reservationService.applyReservationDelta(
                     order.getCompanyId(), order.getBranchId(),
                     line.getProductId(), line.getQtyOrderedBase(), actorId());
+        }
+
+        // ADR-0041 D1 — backfill payment terms from the customer default at confirm if not already
+        // resolved at create (e.g. created before the customer had a default term set).
+        if (order.getPaymentTermsId() == null) {
+            Customer customer = customers.findById(order.getCustomerId()).orElse(null);
+            if (customer != null && customer.getPaymentTermsId() != null) {
+                order.setPaymentTermsId(customer.getPaymentTermsId());
+            }
         }
 
         order.setStatus(SalesOrderStatus.CONFIRMED);
@@ -427,6 +453,48 @@ public class SalesOrderServiceImpl implements SalesOrderService {
     private Customer resolveCustomer(Long companyId, String uid) {
         return customers.findByCompanyIdAndUid(companyId, uid)
                 .orElseThrow(() -> new NotFoundException("Customer not found: " + uid));
+    }
+
+    /**
+     * ADR-0041 D1 — resolves the PaymentTerms id for an order: the request uid takes priority,
+     * else the customer's default {@code payment_terms_id}. Returns null when neither resolves.
+     */
+    private Long resolvePaymentTermsId(String paymentTermsUid, Customer customer) {
+        if (paymentTermsUid != null && !paymentTermsUid.isBlank()) {
+            return paymentTermsRepo.findByUid(paymentTermsUid)
+                    .map(pt -> pt.getId())
+                    .orElseThrow(() -> new NotFoundException("PaymentTerms not found: " + paymentTermsUid));
+        }
+        return customer != null ? customer.getPaymentTermsId() : null;
+    }
+
+    /**
+     * ADR-0041 D2 — resolves a ship-to / bill-to customer-address uid, validates it belongs to the
+     * order's customer, and snapshots the formatted text (immutable). No auto-default when omitted.
+     */
+    private void applyAddressSnapshot(SalesOrder order, Long customerId,
+                                      String shipToAddressUid, String billToAddressUid) {
+        if (shipToAddressUid != null && !shipToAddressUid.isBlank()) {
+            CustomerAddress addr = resolveCustomerAddress(customerId, shipToAddressUid);
+            order.setShipToAddressId(addr.getId());
+            order.setShipToAddressText(CustomerAddressSnapshot.format(addr));
+        }
+        if (billToAddressUid != null && !billToAddressUid.isBlank()) {
+            CustomerAddress addr = resolveCustomerAddress(customerId, billToAddressUid);
+            order.setBillToAddressId(addr.getId());
+            order.setBillToAddressText(CustomerAddressSnapshot.format(addr));
+        }
+    }
+
+    /** Loads a customer address by uid and asserts it belongs to the document's customer (D2). */
+    private CustomerAddress resolveCustomerAddress(Long customerId, String addressUid) {
+        CustomerAddress addr = customerAddresses.findByUid(addressUid)
+                .orElseThrow(() -> new NotFoundException("Customer address not found: " + addressUid));
+        if (!addr.getCustomerId().equals(customerId)) {
+            throw new ConflictException(
+                    "Customer address " + addressUid + " does not belong to customer id=" + customerId);
+        }
+        return addr;
     }
 
     private Long resolveAgentId(Long companyId, String agentUid, RequestContext.Principal ctx) {

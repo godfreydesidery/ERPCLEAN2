@@ -65,6 +65,8 @@ CREATE TABLE stock_transfer_lines (
     unit_name            VARCHAR(50),
     qty_transferred      NUMERIC(19,6)   NOT NULL,
     qty_transferred_base NUMERIC(19,6)   NOT NULL,
+    qty_dispatched       NUMERIC(19,6),                       -- P2 D7: qty actually dispatched (partial-transfer tracking)
+    qty_received         NUMERIC(19,6),                       -- P2 D7: qty actually received at destination
     value_amount         NUMERIC(19,4),
     currency             VARCHAR(3)      NOT NULL DEFAULT 'TZS',
     version              BIGINT          NOT NULL DEFAULT 0,

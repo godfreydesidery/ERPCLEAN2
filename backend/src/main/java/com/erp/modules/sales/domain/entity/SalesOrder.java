@@ -68,6 +68,11 @@ public class SalesOrder extends UidEntity {
     @Setter
     private LocalDate promisedDate;
 
+    /** Soft-FK → payment_terms(id) (P2 D1, ADR-0041). Resolved + stored at confirm. Nullable. */
+    @Column(name = "payment_terms_id")
+    @Setter
+    private Long paymentTermsId;
+
     @Column(name = "source_quotation_uid", length = 26)
     @Setter
     private String sourceQuotationUid;

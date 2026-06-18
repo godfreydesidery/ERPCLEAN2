@@ -56,6 +56,13 @@ public class CurrencyRate extends UidEntity {
     @Column(name = "effective_date", nullable = false, updatable = false)
     private LocalDate effectiveDate;
 
+    /**
+     * P2 D7: end of this rate's validity window. NULL = still active (open-ended).
+     * Mutable — set when a superseding rate closes this one.
+     */
+    @Column(name = "effective_to")
+    private LocalDate effectiveTo;
+
     /** Rate type: SPOT (default), CLOSING, AVERAGE, BUDGET. */
     @Column(name = "rate_type", nullable = false, length = 20)
     private String rateType = "SPOT";
@@ -105,6 +112,7 @@ public class CurrencyRate extends UidEntity {
     public String    getToCurrency()    { return toCurrency; }
     public BigDecimal getRate()         { return rate; }
     public LocalDate getEffectiveDate() { return effectiveDate; }
+    public LocalDate getEffectiveTo()   { return effectiveTo; }
     public String    getRateType()      { return rateType; }
     public String    getSource()        { return source; }
     public boolean   isActive()         { return active; }
@@ -118,4 +126,5 @@ public class CurrencyRate extends UidEntity {
     public void setUpdatedBy(Long updatedBy)     { this.updatedBy = updatedBy; }
     public void setBranchId(Long branchId)       { this.branchId = branchId; }
     public void setSource(String source)         { this.source = source; }
+    public void setEffectiveTo(LocalDate effectiveTo) { this.effectiveTo = effectiveTo; }
 }

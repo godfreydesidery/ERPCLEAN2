@@ -58,6 +58,35 @@ public class Company extends UidEntity {
     @Setter
     private Short fiscalYearStartMonth;
 
+    // P2 D7 — contact + address block
+    @Column(name = "contact_phone", length = 40)
+    @Setter
+    private String contactPhone;
+
+    @Column(name = "contact_email", length = 160)
+    @Setter
+    private String contactEmail;
+
+    @Column(name = "address_line1", length = 160)
+    @Setter
+    private String addressLine1;
+
+    @Column(name = "address_line2", length = 160)
+    @Setter
+    private String addressLine2;
+
+    @Column(name = "city", length = 80)
+    @Setter
+    private String city;
+
+    @Column(name = "region", length = 80)
+    @Setter
+    private String region;
+
+    @Column(name = "country", length = 80)
+    @Setter
+    private String country;
+
     @Column(name = "time_zone", nullable = false, length = 64)
     @Setter
     private String timeZone = "Africa/Dar_es_Salaam";

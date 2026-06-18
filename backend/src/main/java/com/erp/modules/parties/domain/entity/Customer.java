@@ -2,6 +2,7 @@ package com.erp.modules.parties.domain.entity;
 
 import com.erp.modules.parties.domain.enums.CreditStatus;
 import com.erp.modules.parties.domain.enums.CustomerKind;
+import com.erp.modules.parties.domain.enums.CustomerSegment;
 import com.erp.modules.parties.domain.enums.PartyType;
 import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.money.Money;
@@ -100,6 +101,31 @@ public class Customer extends PartyBase {
     @Column(name = "default_currency", length = 3)
     @Setter
     private CurrencyCode defaultCurrency;
+
+    // -------------------------------------------------------------------------
+    // P2 D5 — master-data defaults (ADR-0041 D5 Tier-1)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Soft-FK → price_lists(id) — scalar, no @ManyToOne (cross-module soft-FK convention).
+     * Default selling price list applied to this customer's sales documents.
+     */
+    @Column(name = "default_price_list_id")
+    @Setter
+    private Long defaultPriceListId;
+
+    /**
+     * Soft-FK → agents(id) — scalar, no @ManyToOne. Default sales agent for this customer.
+     */
+    @Column(name = "default_agent_id")
+    @Setter
+    private Long defaultAgentId;
+
+    /** P2 D5: coarse commercial segment (Tier-2 rich master deferred; simple enum only). */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "segment", nullable = false, length = 20)
+    @Setter
+    private CustomerSegment segment = CustomerSegment.OTHER;
 
     protected Customer() {
         // JPA

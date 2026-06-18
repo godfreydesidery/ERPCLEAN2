@@ -167,9 +167,10 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         BigDecimal baseSettled   = toAllocate.multiply(settlementRate)
                 .setScale(baseScale, RoundingMode.HALF_UP);
 
-        // Allocate to bill — capture base columns (V78)
+        // Allocate to bill — capture base columns (V78) + settlement discount / write-off (D1, data-only)
         ApPaymentAllocation alloc = new ApPaymentAllocation(
-                companyId, payment.getId(), bill.getId(), toAllocate, actorId());
+                companyId, payment.getId(), bill.getId(), toAllocate,
+                req.discountAmount(), req.writeOffAmount(), actorId());
         alloc.setBaseAllocatedAmount(baseSettled);
         alloc.setSettlementRate(settlementRate);
         allocations.save(alloc);

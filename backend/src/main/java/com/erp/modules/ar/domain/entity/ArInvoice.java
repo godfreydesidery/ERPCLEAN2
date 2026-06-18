@@ -65,6 +65,16 @@ public class ArInvoice extends UidEntity {
     @Setter
     private LocalDate dueDate;
 
+    /** P2 D1: settlement (early-payment) discount deadline; inherited from the source SI. Nullable. */
+    @Column(name = "settlement_discount_due_date")
+    @Setter
+    private LocalDate settlementDiscountDueDate;
+
+    /** P2 D1: settlement (early-payment) discount amount; data-only, no GL leg (ADR-0041). Nullable. */
+    @Column(name = "settlement_discount_amount", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal settlementDiscountAmount;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     @Setter

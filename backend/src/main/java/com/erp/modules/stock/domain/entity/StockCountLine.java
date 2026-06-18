@@ -57,6 +57,10 @@ public class StockCountLine extends UidEntity {
     @Column(name = "counted_qty", precision = 19, scale = 6)
     private BigDecimal countedQty;
 
+    /** P2 D7: re-count quantity captured when a recount is performed. NULL if no recount. */
+    @Column(name = "recounted_qty", precision = 19, scale = 6)
+    private BigDecimal recountedQty;
+
     /** computed = counted − live-on-hand at post (BR-INVD-09, OQ-INVD-06). */
     @Column(name = "variance_qty", precision = 19, scale = 6)
     private BigDecimal varianceQty;
@@ -158,7 +162,10 @@ public class StockCountLine extends UidEntity {
     public String     getUnitName()       { return unitName; }
     public BigDecimal getSystemQty()      { return systemQty; }
     public BigDecimal getCountedQty()     { return countedQty; }
+    public BigDecimal getRecountedQty()   { return recountedQty; }
     public BigDecimal getVarianceQty()    { return varianceQty; }
+
+    public void setRecountedQty(BigDecimal recountedQty) { this.recountedQty = recountedQty; }
     public BigDecimal getUnitCostAmount() { return unitCostAmount; }
     public BigDecimal getVarianceValue()  { return varianceValue; }
     public String     getReasonCode()     { return reasonCode; }

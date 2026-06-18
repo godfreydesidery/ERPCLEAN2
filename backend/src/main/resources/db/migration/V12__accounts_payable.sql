@@ -27,6 +27,9 @@ CREATE TABLE supplier_bills (
     due_date             DATE            NOT NULL,
     tax_point_date       DATE,                               -- P2: VAT tax-point (supply date), nullable
     received_date        DATE,                               -- P2: date the bill was physically received, nullable
+    payment_terms_id     BIGINT,                             -- P2 D1: soft-FK payment_terms(id)
+    settlement_discount_due_date DATE,                       -- P2 D1: early-payment discount deadline
+    settlement_discount_amount   NUMERIC(19,4),              -- P2 D1: early-payment discount amount (data-only)
     net_amount           NUMERIC(19,4)   NOT NULL,
     vat_amount           NUMERIC(19,4)   NOT NULL DEFAULT 0,
     gross_amount         NUMERIC(19,4)   NOT NULL,
@@ -129,6 +132,8 @@ CREATE TABLE bill_match (
     price_variance_pct     NUMERIC(9,4)    NOT NULL DEFAULT 0,
     qty_variance           NUMERIC(19,6)   NOT NULL DEFAULT 0,
     match_status           VARCHAR(25)     NOT NULL,
+    match_type             VARCHAR(10)     NOT NULL DEFAULT 'THREE_WAY',  -- P2 D7: 2-way vs 3-way match
+    variance_reason        VARCHAR(100),                                  -- P2 D7: free-text reason for an accepted variance
     tolerance_pct          NUMERIC(9,4),
     tolerance_abs_amount   NUMERIC(19,4),
     accepted_by            BIGINT,
@@ -143,7 +148,8 @@ CREATE TABLE bill_match (
     CONSTRAINT fk_bill_match_line           FOREIGN KEY (supplier_bill_line_id) REFERENCES supplier_bill_lines (id),
     CONSTRAINT fk_bill_match_accepted_by    FOREIGN KEY (accepted_by)           REFERENCES app_users (id),
     CONSTRAINT chk_bill_match_status        CHECK (match_status IN (
-        'MATCHED','HELD_PRICE_VARIANCE','HELD_QTY_VARIANCE','VARIANCE_ACCEPTED'))
+        'MATCHED','HELD_PRICE_VARIANCE','HELD_QTY_VARIANCE','VARIANCE_ACCEPTED')),
+    CONSTRAINT chk_bill_match_type          CHECK (match_type IN ('TWO_WAY','THREE_WAY'))
 );
 
 -- ============================================================================
@@ -199,6 +205,8 @@ CREATE TABLE ap_payment_allocations (
     ap_payment_id    BIGINT          NOT NULL,
     supplier_bill_id BIGINT          NOT NULL,
     allocated_amount NUMERIC(19,4)   NOT NULL,
+    discount_amount  NUMERIC(19,4),                      -- P2 D1: settlement discount taken (immutable, data-only, no GL leg)
+    write_off_amount NUMERIC(19,4),                      -- P2 D1: residual write-off (immutable, data-only, no GL leg)
     allocated_at     TIMESTAMPTZ,                        -- P2: when this allocation was made (mirrors AR), nullable
     allocated_by     BIGINT,                             -- P2: actor who made this allocation (mirrors AR), nullable
     created_at       TIMESTAMPTZ     NOT NULL DEFAULT now(),
@@ -208,7 +216,9 @@ CREATE TABLE ap_payment_allocations (
     CONSTRAINT fk_ap_payment_allocation_company  FOREIGN KEY (company_id)      REFERENCES companies (id),
     CONSTRAINT fk_ap_payment_allocation_payment  FOREIGN KEY (ap_payment_id)   REFERENCES ap_payments (id),
     CONSTRAINT fk_ap_payment_allocation_bill     FOREIGN KEY (supplier_bill_id) REFERENCES supplier_bills (id),
-    CONSTRAINT chk_ap_payment_allocation_amount  CHECK (allocated_amount > 0)
+    CONSTRAINT chk_ap_payment_allocation_amount  CHECK (allocated_amount > 0),
+    CONSTRAINT chk_ap_payment_allocation_discount CHECK (discount_amount IS NULL OR discount_amount >= 0),
+    CONSTRAINT chk_ap_payment_allocation_writeoff CHECK (write_off_amount IS NULL OR write_off_amount >= 0)
 );
 
 -- ============================================================================

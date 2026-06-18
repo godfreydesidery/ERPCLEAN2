@@ -15,6 +15,17 @@ CREATE TABLE organisations (
     name                VARCHAR(160) NOT NULL,
     legal_name          VARCHAR(200),
     default_time_zone   VARCHAR(64)  NOT NULL DEFAULT 'Africa/Dar_es_Salaam',
+    -- P2 D7: organisation contact + address block
+    contact_phone       VARCHAR(40),
+    contact_email       VARCHAR(160),
+    address_line1       VARCHAR(160),
+    address_line2       VARCHAR(160),
+    city                VARCHAR(80),
+    region              VARCHAR(80),
+    country             VARCHAR(80),
+    -- P2 D7: subscription/plan tracking (descriptive in v1)
+    subscription_plan   VARCHAR(40),
+    subscription_status VARCHAR(20),
     status              VARCHAR(32)  NOT NULL DEFAULT 'ACTIVE',
     version             BIGINT       NOT NULL DEFAULT 0,
     created_at          TIMESTAMPTZ  NOT NULL DEFAULT now(),
@@ -38,6 +49,14 @@ CREATE TABLE companies (
     vrn                 VARCHAR(40),                 -- P2: VAT registration number (distinct from tax_id)
     logo_ref            VARCHAR(255),                -- P2: company-level branding logo reference
     fiscal_year_start_month SMALLINT,               -- P2: doc-default fiscal-year start month (1-12)
+    -- P2 D7: company contact + address block
+    contact_phone       VARCHAR(40),
+    contact_email       VARCHAR(160),
+    address_line1       VARCHAR(160),
+    address_line2       VARCHAR(160),
+    city                VARCHAR(80),
+    region              VARCHAR(80),
+    country             VARCHAR(80),
     time_zone           VARCHAR(64)  NOT NULL DEFAULT 'Africa/Dar_es_Salaam',
     status              VARCHAR(32)  NOT NULL DEFAULT 'ACTIVE',
     version             BIGINT       NOT NULL DEFAULT 0,
@@ -64,6 +83,14 @@ CREATE TABLE branches (
     is_default          BOOLEAN      NOT NULL DEFAULT false,
     manager_id          BIGINT,                      -- P2: soft-FK to app_users/employee (no DB FK — cross-module convention)
     branch_type         VARCHAR(20),                 -- P2: typed branch classification (enum-as-string)
+    -- P2 D7: branch contact + address block
+    contact_phone       VARCHAR(40),
+    contact_email       VARCHAR(160),
+    address_line1       VARCHAR(160),
+    address_line2       VARCHAR(160),
+    city                VARCHAR(80),
+    region              VARCHAR(80),
+    country             VARCHAR(80),
     status              VARCHAR(32)  NOT NULL DEFAULT 'ACTIVE',
     version             BIGINT       NOT NULL DEFAULT 0,
     created_at          TIMESTAMPTZ  NOT NULL DEFAULT now(),
@@ -121,6 +148,8 @@ CREATE TABLE app_users (
     password_expires_at  TIMESTAMPTZ,                           -- P2: password expiry timestamp (nullable)
     last_login_ip        VARCHAR(45),                           -- P2: last successful login IP (IPv6-max length)
     employee_id          BIGINT,                                -- P2: soft-FK to HR employee master (no DB FK — cross-module)
+    mfa_enabled          BOOLEAN      NOT NULL DEFAULT false,   -- P2 D7: multi-factor auth enabled for this user
+    mfa_secret           VARCHAR(120),                          -- P2 D7: TOTP/MFA shared secret (nullable; set on enrol)
     status               VARCHAR(32)  NOT NULL DEFAULT 'ACTIVE',
     version              BIGINT       NOT NULL DEFAULT 0,
     created_at           TIMESTAMPTZ  NOT NULL DEFAULT now(),

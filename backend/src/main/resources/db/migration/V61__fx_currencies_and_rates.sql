@@ -66,6 +66,7 @@ CREATE TABLE currency_rates (
     to_currency     VARCHAR(3)       NOT NULL,
     rate            NUMERIC(19,8)    NOT NULL,
     effective_date  DATE             NOT NULL,
+    effective_to    DATE,            -- P2 D7: end of this rate's validity window; NULL = still active
     rate_type       VARCHAR(20)      NOT NULL DEFAULT 'SPOT',
     source          VARCHAR(40),
     active          BOOLEAN          NOT NULL DEFAULT true,

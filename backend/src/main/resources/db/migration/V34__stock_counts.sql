@@ -20,6 +20,9 @@ CREATE TABLE stock_counts (
     posted_at            TIMESTAMPTZ,
     cancelled_at         TIMESTAMPTZ,
     variance_gl_entry_uid VARCHAR(26),
+    counted_by           BIGINT,                                    -- P2 D7: actor who performed the physical count (soft-FK)
+    approved_by          BIGINT,                                    -- P2 D7: actor who approved the count (soft-FK)
+    recount_required     BOOLEAN         NOT NULL DEFAULT false,    -- P2 D7: a recount is required before posting
     notes                VARCHAR(500),
     version              BIGINT          NOT NULL DEFAULT 0,
     created_at           TIMESTAMPTZ     NOT NULL DEFAULT now(),
@@ -58,6 +61,7 @@ CREATE TABLE stock_count_lines (
     unit_name        VARCHAR(50),
     system_qty       NUMERIC(19,6)   NOT NULL,
     counted_qty      NUMERIC(19,6),
+    recounted_qty    NUMERIC(19,6),                                 -- P2 D7: re-count quantity when a recount is performed
     variance_qty     NUMERIC(19,6),
     unit_cost_amount NUMERIC(19,4),
     variance_value   NUMERIC(19,4),

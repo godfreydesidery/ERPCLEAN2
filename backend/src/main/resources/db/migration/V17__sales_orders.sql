@@ -28,6 +28,7 @@ CREATE TABLE quotations (
     customer_po_number   VARCHAR(60),                    -- P2-M3: customer's own PO reference
     revision_no          INT,                            -- P2-M3: plain revision counter
     probability          NUMERIC(5,2),                   -- P2-M3: win-probability percent
+    payment_terms_id     BIGINT,                         -- P2 D1: soft-FK payment_terms(id)
     doc_discount_amount  NUMERIC(19,4),
     doc_discount_percent NUMERIC(9,4),
     net_total_amount     NUMERIC(19,4)   NOT NULL DEFAULT 0,
@@ -120,6 +121,7 @@ CREATE TABLE sales_orders (
     customer_po_number   VARCHAR(60),                    -- P2-M3: customer's own PO reference
     requested_delivery_date DATE,                        -- P2-M3: customer-requested delivery date
     promised_date        DATE,                           -- P2-M3: promised delivery date
+    payment_terms_id     BIGINT,                         -- P2 D1: soft-FK payment_terms(id)
     source_quotation_uid VARCHAR(26),
     doc_discount_amount  NUMERIC(19,4),
     doc_discount_percent NUMERIC(9,4),

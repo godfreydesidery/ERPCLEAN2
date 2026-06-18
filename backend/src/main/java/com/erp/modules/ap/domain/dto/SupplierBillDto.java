@@ -25,6 +25,10 @@ public record SupplierBillDto(
         // P2: tax-point + received dates
         LocalDate taxPointDate,
         LocalDate receivedDate,
+        // P2 D1: payment terms + settlement discount (data-only)
+        Long paymentTermsId,
+        LocalDate settlementDiscountDueDate,
+        BigDecimal settlementDiscountAmount,
         BigDecimal netAmount,
         BigDecimal vatAmount,
         BigDecimal grossAmount,

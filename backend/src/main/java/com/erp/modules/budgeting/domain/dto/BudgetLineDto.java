@@ -18,6 +18,7 @@ public record BudgetLineDto(
         String fiscalPeriodUid,
         int periodNo,
         BigDecimal amount,
+        BigDecimal quantity,
         String currency,
         String lineMemo,
         Instant createdAt

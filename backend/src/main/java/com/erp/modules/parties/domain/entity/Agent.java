@@ -7,6 +7,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
+import java.math.BigDecimal;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -39,6 +40,20 @@ public class Agent extends PartyBase {
     @Column(name = "app_user_id")
     @Setter
     private Long appUserId;
+
+    // -------------------------------------------------------------------------
+    // P2 D5 — performance targets (ADR-0041 D5 Tier-1)
+    // -------------------------------------------------------------------------
+
+    /** P2 D5: periodic sales target value (currency implied by company base). */
+    @Column(name = "sales_target", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal salesTarget;
+
+    /** P2 D5: assigned quota value. */
+    @Column(name = "quota", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal quota;
 
     protected Agent() {
         // JPA

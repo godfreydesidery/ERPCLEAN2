@@ -10,6 +10,7 @@ import com.erp.modules.parties.repository.AgentRepository;
 import com.erp.modules.ar.domain.dto.ArBalanceDto;
 import com.erp.modules.ar.service.ArBalanceService;
 import com.erp.modules.parties.repository.CustomerRepository;
+import com.erp.modules.parties.repository.PaymentTermsRepository;
 import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.domain.entity.ProductBulkPack;
 import com.erp.modules.products.domain.entity.ProductPrice;
@@ -102,6 +103,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     private final PermissionResolver permissionResolver;
     /** ADR-0036 D-3/D-4: converts face amounts to base and stamps the FX triple at finalise. */
     private final FxDocumentConverter fxConverter;
+    /** ADR-0041 D1: resolves customer payment terms to stamp settlement discount at finalise. */
+    private final PaymentTermsRepository paymentTermsRepo;
 
     public SalesInvoiceServiceImpl(SalesInvoiceRepository invoices,
                                    SalesInvoiceLineRepository lines,
@@ -123,7 +126,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                                    RouteRepository routeRepository,
                                    ArBalanceService arBalanceService,
                                    PermissionResolver permissionResolver,
-                                   FxDocumentConverter fxConverter) {
+                                   FxDocumentConverter fxConverter,
+                                   PaymentTermsRepository paymentTermsRepo) {
         this.invoices = invoices;
         this.lines = lines;
         this.payments = payments;
@@ -145,6 +149,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         this.arBalanceService = arBalanceService;
         this.permissionResolver = permissionResolver;
         this.fxConverter = fxConverter;
+        this.paymentTermsRepo = paymentTermsRepo;
     }
 
     // -------------------------------------------------------------------------
@@ -240,6 +245,14 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                         "Customer not found for invoice " + inv.getUid() + " (id=" + inv.getCustomerId() + ")"));
         boolean isCreditCustomer = customer.getCustomerKind()
                 == com.erp.modules.parties.domain.enums.CustomerKind.CREDIT_ACCOUNT;
+
+        // ADR-0041 D1 — resolve + stamp the customer's payment terms on the SI (data-only).
+        // The AR open item (created by ArSalePostedHandler) inherits the term + computes the
+        // settlement-discount fields onto ar_invoices via the same PaymentTerms master.
+        if (customer.getPaymentTermsId() != null
+                && paymentTermsRepo.findById(customer.getPaymentTermsId()).isPresent()) {
+            inv.setPaymentTermsId(customer.getPaymentTermsId());
+        }
 
         List<SalesInvoicePayment> paymentList = payments.findByInvoiceId(inv.getId());
 

@@ -2,6 +2,7 @@ package com.erp.modules.purchases.service;
 
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.parties.domain.entity.Supplier;
+import com.erp.modules.parties.repository.PaymentTermsRepository;
 import com.erp.modules.parties.repository.SupplierRepository;
 import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.domain.entity.ProductBulkPack;
@@ -64,6 +65,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     private final PurchaseOrderLineRepository lines;
     private final GoodsReceiptRepository      receipts;
     private final SupplierRepository          suppliers;
+    private final PaymentTermsRepository      paymentTermsRepo;
     private final ProductRepository           products;
     private final UnitOfMeasureRepository     units;
     private final ProductBulkPackRepository   bulkPacks;
@@ -81,6 +83,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                                     PurchaseOrderLineRepository lines,
                                     GoodsReceiptRepository receipts,
                                     SupplierRepository suppliers,
+                                    PaymentTermsRepository paymentTermsRepo,
                                     ProductRepository products,
                                     UnitOfMeasureRepository units,
                                     ProductBulkPackRepository bulkPacks,
@@ -96,6 +99,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         this.lines        = lines;
         this.receipts     = receipts;
         this.suppliers    = suppliers;
+        this.paymentTermsRepo = paymentTermsRepo;
         this.products     = products;
         this.units        = units;
         this.bulkPacks    = bulkPacks;
@@ -132,6 +136,9 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         if (req.expectedDate() != null) {
             po.setExpectedDate(req.expectedDate());
         }
+
+        // ADR-0041 D1 — resolve payment terms: request uid > supplier default. Stored at create.
+        po.setPaymentTermsId(resolvePaymentTermsId(req.paymentTermsUid(), supplier));
 
         PurchaseOrder saved = orders.save(po);
 
@@ -318,6 +325,14 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                             + "Submit for approval and wait for APPROVED status before placing.");
         }
 
+        // ADR-0041 D1 — backfill payment terms from the supplier default at place if not set at create.
+        if (po.getPaymentTermsId() == null) {
+            Supplier supplier = suppliers.findById(po.getSupplierId()).orElse(null);
+            if (supplier != null && supplier.getPaymentTermsId() != null) {
+                po.setPaymentTermsId(supplier.getPaymentTermsId());
+            }
+        }
+
         // Assign PO number (ADR-0011 D-6) — inside this TX
         String number = numberGen.nextPurchaseOrder(po.getCompanyId());
         po.setOrderNumber(number);
@@ -488,6 +503,19 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                     "Supplier is archived and not selectable (BR-PURCH-02): " + supplierUid);
         }
         return s;
+    }
+
+    /**
+     * ADR-0041 D1 — resolves the PaymentTerms id for a PO: the request uid takes priority, else the
+     * supplier's default {@code payment_terms_id}. Returns null when neither resolves.
+     */
+    private Long resolvePaymentTermsId(String paymentTermsUid, Supplier supplier) {
+        if (paymentTermsUid != null && !paymentTermsUid.isBlank()) {
+            return paymentTermsRepo.findByUid(paymentTermsUid)
+                    .map(pt -> pt.getId())
+                    .orElseThrow(() -> new NotFoundException("PaymentTerms not found: " + paymentTermsUid));
+        }
+        return supplier != null ? supplier.getPaymentTermsId() : null;
     }
 
     private Product resolveProduct(Long companyId, String productUid) {

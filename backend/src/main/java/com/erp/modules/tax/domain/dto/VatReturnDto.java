@@ -43,5 +43,10 @@ public record VatReturnDto(
         BigDecimal purchasesTurnover,
         BigDecimal zeroRatedSales,
         BigDecimal exemptSales,
+        // P2 D7: amendment + penalty/interest
+        Long amendedReturnId,
+        boolean amendment,
+        BigDecimal penaltyAmount,
+        BigDecimal interestAmount,
         List<VatReturnBandDto> bands
 ) {}

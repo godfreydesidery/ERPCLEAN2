@@ -35,6 +35,45 @@ public class PurchaseSettings extends UidEntity {
     @Setter
     private CurrencyCode currency = CurrencyCode.of("TZS");
 
+    // -------------------------------------------------------------------------
+    // P2 D7 — company-wide procurement policy defaults
+    // -------------------------------------------------------------------------
+
+    /** Soft-FK → payment_terms; default terms applied to new POs. No @ManyToOne (cross-module). */
+    @Column(name = "default_payment_terms_id")
+    @Setter
+    private Long defaultPaymentTermsId;
+
+    /** Soft-FK → stock_locations; default receiving location. No @ManyToOne (cross-module). */
+    @Column(name = "default_location_id")
+    @Setter
+    private Long defaultLocationId;
+
+    /** Default 3-way price-match tolerance percentage. */
+    @Column(name = "match_tolerance_pct", precision = 9, scale = 4)
+    @Setter
+    private BigDecimal matchTolerancePct;
+
+    /** Default absolute price-match tolerance. */
+    @Column(name = "match_tolerance_abs", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal matchToleranceAbs;
+
+    /** Auto-close fully-received/billed POs. */
+    @Column(name = "auto_close_enabled", nullable = false)
+    @Setter
+    private boolean autoCloseEnabled = false;
+
+    /** Require purchase-requisition approval before RFQ/PO. */
+    @Column(name = "requisition_approval_enabled", nullable = false)
+    @Setter
+    private boolean requisitionApprovalEnabled = false;
+
+    /** PR value above which approval is required (when enabled). */
+    @Column(name = "requisition_approval_threshold_amount", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal requisitionApprovalThresholdAmount;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

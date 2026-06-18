@@ -25,6 +25,8 @@ CREATE TABLE ar_invoices (
     currency             VARCHAR(3)      NOT NULL,
     invoice_date         DATE            NOT NULL,
     due_date             DATE            NOT NULL,
+    settlement_discount_due_date DATE,                  -- P2 D1: early-payment discount deadline
+    settlement_discount_amount   NUMERIC(19,4),         -- P2 D1: early-payment discount amount (data-only)
     status               VARCHAR(20)     NOT NULL DEFAULT 'OPEN',
     version              BIGINT          NOT NULL DEFAULT 0,
     created_at           TIMESTAMPTZ     NOT NULL DEFAULT now(),
@@ -97,6 +99,8 @@ CREATE TABLE ar_receipt_allocations (
     receipt_id       BIGINT          NOT NULL,
     ar_invoice_id    BIGINT          NOT NULL,
     allocated_amount NUMERIC(19,4)   NOT NULL,
+    discount_amount  NUMERIC(19,4),                     -- P2 D1: settlement discount taken (immutable, data-only, no GL leg)
+    write_off_amount NUMERIC(19,4),                     -- P2 D1: residual write-off (immutable, data-only, no GL leg)
     allocated_at     TIMESTAMPTZ     NOT NULL DEFAULT now(),
     allocated_by     BIGINT,
     created_at       TIMESTAMPTZ     NOT NULL DEFAULT now(),
@@ -106,7 +110,9 @@ CREATE TABLE ar_receipt_allocations (
     CONSTRAINT fk_ar_receipt_allocation_company FOREIGN KEY (company_id)    REFERENCES companies (id),
     CONSTRAINT fk_ar_receipt_allocation_receipt FOREIGN KEY (receipt_id)    REFERENCES ar_receipts (id),
     CONSTRAINT fk_ar_receipt_allocation_invoice FOREIGN KEY (ar_invoice_id) REFERENCES ar_invoices (id),
-    CONSTRAINT chk_ar_receipt_allocation_amount CHECK (allocated_amount > 0)
+    CONSTRAINT chk_ar_receipt_allocation_amount CHECK (allocated_amount > 0),
+    CONSTRAINT chk_ar_receipt_allocation_discount CHECK (discount_amount IS NULL OR discount_amount >= 0),
+    CONSTRAINT chk_ar_receipt_allocation_writeoff CHECK (write_off_amount IS NULL OR write_off_amount >= 0)
 );
 
 -- ============================================================================

@@ -62,6 +62,18 @@ public class StockCount extends UidEntity {
     @Column(name = "variance_gl_entry_uid", length = 26)
     private String varianceGlEntryUid;
 
+    /** P2 D7: actor who performed the physical count (soft-FK to app_users). */
+    @Column(name = "counted_by")
+    private Long countedBy;
+
+    /** P2 D7: actor who approved the count (soft-FK to app_users). */
+    @Column(name = "approved_by")
+    private Long approvedBy;
+
+    /** P2 D7: a recount is required before this count may be posted. */
+    @Column(name = "recount_required", nullable = false)
+    private boolean recountRequired = false;
+
     @Column(name = "notes", length = 500)
     private String notes;
 
@@ -142,7 +154,14 @@ public class StockCount extends UidEntity {
     public Instant          getPostedAt()           { return postedAt; }
     public Instant          getCancelledAt()        { return cancelledAt; }
     public String           getVarianceGlEntryUid() { return varianceGlEntryUid; }
+    public Long             getCountedBy()          { return countedBy; }
+    public Long             getApprovedBy()         { return approvedBy; }
+    public boolean          isRecountRequired()     { return recountRequired; }
     public String           getNotes()              { return notes; }
+
+    public void setCountedBy(Long countedBy)               { this.countedBy = countedBy; }
+    public void setApprovedBy(Long approvedBy)             { this.approvedBy = approvedBy; }
+    public void setRecountRequired(boolean recountRequired){ this.recountRequired = recountRequired; }
     public Instant          getCreatedAt()          { return createdAt; }
     public Long             getCreatedBy()          { return createdBy; }
     public Instant          getUpdatedAt()          { return updatedAt; }

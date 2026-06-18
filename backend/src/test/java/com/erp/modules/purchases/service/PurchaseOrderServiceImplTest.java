@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.modules.parties.repository.PaymentTermsRepository;
 import com.erp.modules.parties.repository.SupplierRepository;
 import com.erp.modules.products.repository.ProductBulkPackRepository;
 import com.erp.modules.products.repository.ProductRepository;
@@ -43,6 +44,7 @@ class PurchaseOrderServiceImplTest {
     private PurchaseOrderLineRepository   lines;
     private GoodsReceiptRepository        receipts;
     private SupplierRepository            suppliers;
+    private PaymentTermsRepository        paymentTerms;
     private ProductRepository             products;
     private UnitOfMeasureRepository       units;
     private ProductBulkPackRepository     bulkPacks;
@@ -63,6 +65,7 @@ class PurchaseOrderServiceImplTest {
         lines       = mock(PurchaseOrderLineRepository.class);
         receipts    = mock(GoodsReceiptRepository.class);
         suppliers   = mock(SupplierRepository.class);
+        paymentTerms = mock(PaymentTermsRepository.class);
         products    = mock(ProductRepository.class);
         units       = mock(UnitOfMeasureRepository.class);
         bulkPacks   = mock(ProductBulkPackRepository.class);
@@ -76,7 +79,7 @@ class PurchaseOrderServiceImplTest {
         quoteLines  = mock(SupplierQuoteLineRepository.class);
 
         service = new PurchaseOrderServiceImpl(
-                orders, lines, receipts, suppliers, products, units, bulkPacks,
+                orders, lines, receipts, suppliers, paymentTerms, products, units, bulkPacks,
                 companies, numberGen, totals, scopeGuard, audit, approvalGate,
                 quotes, quoteLines);
     }

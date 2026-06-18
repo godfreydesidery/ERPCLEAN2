@@ -290,6 +290,10 @@ public class PricingRuleServiceImpl implements PricingRuleService {
                 p.getTargetProductId(), p.getTargetCategory(),
                 p.getEffect(), p.getEffectValue(),
                 p.getEffectiveFrom(), p.getEffectiveTo(),
-                p.getPriority(), p.getStatus());
+                p.getPriority(),
+                p.getTargetCustomerId(), p.getTargetBranchId(),
+                p.getMinThreshold(), p.getUsageLimit(),
+                p.getCouponCode(), p.isCombinable(),
+                p.getStatus());
     }
 }

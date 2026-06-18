@@ -1,8 +1,11 @@
 package com.erp.modules.budgeting.domain.entity;
 
+import com.erp.modules.budgeting.domain.enums.BudgetType;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import lombok.Getter;
@@ -45,6 +48,17 @@ public class Budget extends UidEntity {
      */
     @Column(name = "cost_centre_value_id")
     private Long costCentreValueId;
+
+    /** P2 D7: OPERATING (default) | CAPITAL | CASH. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "budget_type", nullable = false, length = 12)
+    @Setter
+    private BudgetType budgetType = BudgetType.OPERATING;
+
+    /** P2 D7: branch scope (soft-FK to branches; no @ManyToOne). NULL = all branches. */
+    @Column(name = "branch_id")
+    @Setter
+    private Long branchId;
 
     @Column(name = "notes", length = 500)
     @Setter

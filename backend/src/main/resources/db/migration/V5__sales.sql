@@ -57,6 +57,7 @@ CREATE TABLE sales_invoices (
     agent_id            BIGINT          NOT NULL,
     currency            VARCHAR(3)      NOT NULL,
     customer_po_number  VARCHAR(60),                    -- P2-M3: customer's own PO reference
+    payment_terms_id    BIGINT,                         -- P2 D1: soft-FK payment_terms(id)
     doc_discount_amount  NUMERIC(19,4),
     doc_discount_percent NUMERIC(9,4),
     net_total_amount    NUMERIC(19,4)   NOT NULL DEFAULT 0,

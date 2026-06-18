@@ -86,6 +86,12 @@ CREATE TABLE price_lists (
     company_id  BIGINT          NOT NULL,
     code        VARCHAR(20)     NOT NULL,
     name        VARCHAR(120)    NOT NULL,
+    currency          VARCHAR(3),                          -- P2 D5: price-list currency (CurrencyCode); null = company default
+    effective_from    DATE,                                -- P2 D5: validity window start (null = open)
+    effective_to      DATE,                                -- P2 D5: validity window end (null = open)
+    price_includes_vat BOOLEAN        NOT NULL DEFAULT false, -- P2 D5: whether listed prices are VAT-inclusive
+    is_default        BOOLEAN        NOT NULL DEFAULT false,  -- P2 D5: company default price list
+    scope             VARCHAR(20)    NOT NULL DEFAULT 'GLOBAL', -- P2 D5: PriceListScope (GLOBAL/CUSTOMER/BRANCH/SEGMENT)
     status      VARCHAR(32)     NOT NULL DEFAULT 'ACTIVE',
     version     BIGINT          NOT NULL DEFAULT 0,
     created_at  TIMESTAMPTZ     NOT NULL DEFAULT now(),
@@ -94,7 +100,9 @@ CREATE TABLE price_lists (
     updated_by  BIGINT,
     CONSTRAINT uq_price_list_uid            UNIQUE (uid),
     CONSTRAINT uq_price_list_company_code   UNIQUE (company_id, code),
-    CONSTRAINT fk_price_list_company        FOREIGN KEY (company_id) REFERENCES companies (id)
+    CONSTRAINT fk_price_list_company        FOREIGN KEY (company_id) REFERENCES companies (id),
+    CONSTRAINT chk_price_list_scope         CHECK (scope IN ('GLOBAL','CUSTOMER','BRANCH','SEGMENT')),
+    CONSTRAINT chk_price_list_window        CHECK (effective_to IS NULL OR effective_from IS NULL OR effective_to >= effective_from)
 );
 
 -- ---------------------------------------------------------------------------

@@ -60,6 +60,35 @@ public class Branch extends UidEntity {
     @Setter
     private BranchType branchType;
 
+    // P2 D7 — contact + address block
+    @Column(name = "contact_phone", length = 40)
+    @Setter
+    private String contactPhone;
+
+    @Column(name = "contact_email", length = 160)
+    @Setter
+    private String contactEmail;
+
+    @Column(name = "address_line1", length = 160)
+    @Setter
+    private String addressLine1;
+
+    @Column(name = "address_line2", length = 160)
+    @Setter
+    private String addressLine2;
+
+    @Column(name = "city", length = 80)
+    @Setter
+    private String city;
+
+    @Column(name = "region", length = 80)
+    @Setter
+    private String region;
+
+    @Column(name = "country", length = 80)
+    @Setter
+    private String country;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     @Setter

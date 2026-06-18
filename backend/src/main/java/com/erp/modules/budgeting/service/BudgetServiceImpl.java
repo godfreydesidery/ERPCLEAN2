@@ -493,6 +493,7 @@ public class BudgetServiceImpl implements BudgetService {
                 b.getId(), b.getUid(), b.getCompanyId(), b.getBudgetNumber(), b.getName(),
                 b.getFiscalYearId(), null, null,
                 b.getCostCentreValueId(), null, null,
+                b.getBudgetType() != null ? b.getBudgetType().name() : null, b.getBranchId(),
                 b.getNotes(), b.getVersion(),
                 b.getCreatedAt(), b.getCreatedBy(), b.getUpdatedAt(), b.getUpdatedBy(),
                 vDtos);
@@ -517,6 +518,6 @@ public class BudgetServiceImpl implements BudgetService {
                 l.getId(), l.getUid(), l.getBudgetVersionId(),
                 l.getAccountId(), null, null, null,
                 l.getFiscalPeriodId(), null, 0,
-                l.getAmount(), l.getCurrency().value(), l.getLineMemo(), l.getCreatedAt());
+                l.getAmount(), l.getQuantity(), l.getCurrency().value(), l.getLineMemo(), l.getCreatedAt());
     }
 }

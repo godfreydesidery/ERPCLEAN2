@@ -20,6 +20,7 @@ CREATE TABLE rfqs (
     response_due_date       DATE,
     awarded_quote_uid       VARCHAR(26),                          -- set on award
     awarded_po_uid          VARCHAR(26),                          -- the PO generated on award
+    award_reason            VARCHAR(500),                         -- P2 D7: rationale for the award decision
     notes                   VARCHAR(500),
     sent_at                 TIMESTAMPTZ,
     awarded_at              TIMESTAMPTZ,
@@ -119,6 +120,12 @@ CREATE TABLE supplier_quotes (
     lead_time_days          SMALLINT,
     quote_total_amount      NUMERIC(19,4)    NOT NULL DEFAULT 0,
     currency                VARCHAR(3)       NOT NULL DEFAULT 'TZS',
+    incoterms               VARCHAR(40),                          -- P2 D7: quoted Incoterms (e.g. FOB, CIF)
+    terms                   VARCHAR(255),                         -- P2 D7: quoted payment/delivery terms (free text)
+    score                   NUMERIC(9,4),                         -- P2 D7: evaluation score (comparison)
+    rank                    INTEGER,                              -- P2 D7: ranking among quotes for the RFQ
+    warranty                VARCHAR(120),                         -- P2 D7: warranty offered (free text)
+    quote_ref               VARCHAR(80),                          -- P2 D7: supplier's own quotation reference
     notes                   VARCHAR(500),
     version                 BIGINT           NOT NULL DEFAULT 0,
     created_at              TIMESTAMPTZ      NOT NULL DEFAULT now(),
