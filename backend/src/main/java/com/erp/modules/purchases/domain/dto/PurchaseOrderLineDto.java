@@ -31,7 +31,12 @@ public record PurchaseOrderLineDto(
         boolean    fullyReceived,
         BigDecimal unitCostAmount,
         BigDecimal lineTotalAmount,
-        String     currency
+        String     currency,
+        // ADR-0041 D4: per-line dimension tags (soft-FK → dimension_values.id; nullable).
+        // Exposed so AP can copy them onto a derived supplier_bill_line via the service boundary
+        // (never importing a Purchases entity — NFR-AP-06).
+        Long       costCentreValueId,
+        Long       departmentValueId
 ) {
     public static PurchaseOrderLineDto from(PurchaseOrderLine l) {
         BigDecimal outstanding = l.getOrderedQtyInBase().subtract(l.getReceivedQtyInBase());
@@ -46,6 +51,7 @@ public record PurchaseOrderLineDto(
                 l.getBilledQtyInBase(), l.getCancelledQty(), l.getRequiredByDate(),
                 outstanding, fully,
                 l.getUnitCostAmount(), l.getLineTotalAmount(),
-                CurrencyCode.value(l.getCurrency()));
+                CurrencyCode.value(l.getCurrency()),
+                l.getCostCentreValueId(), l.getDepartmentValueId());
     }
 }

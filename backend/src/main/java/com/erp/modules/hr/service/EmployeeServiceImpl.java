@@ -12,6 +12,7 @@ import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.time.Instant;
@@ -24,22 +25,28 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class EmployeeServiceImpl implements EmployeeService {
 
+    /** Permission gating the sensitive payee bank/mobile-money fields in the read DTO (ADR-0040 D-11). */
+    private static final String PAYEE_VIEW = "HR.EMPLOYEE.PAYEE.VIEW";
+
     private final EmployeeRepository   employees;
     private final DepartmentRepository departments;
     private final HrNumberGenerator    numberGenerator;
     private final ScopeGuard           scopeGuard;
     private final AuditService         audit;
+    private final PermissionResolver   permissions;
 
     public EmployeeServiceImpl(EmployeeRepository employees,
                                 DepartmentRepository departments,
                                 HrNumberGenerator numberGenerator,
                                 ScopeGuard scopeGuard,
-                                AuditService audit) {
+                                AuditService audit,
+                                PermissionResolver permissions) {
         this.employees       = employees;
         this.departments     = departments;
         this.numberGenerator = numberGenerator;
         this.scopeGuard      = scopeGuard;
         this.audit           = audit;
+        this.permissions     = permissions;
     }
 
     @Override
@@ -166,6 +173,12 @@ public class EmployeeServiceImpl implements EmployeeService {
     }
 
     private EmployeeDto toDto(Employee e, String deptName) {
+        // Mask the sensitive payee identifiers unless the caller holds HR.EMPLOYEE.PAYEE.VIEW
+        // (ADR-0040 D-11). The non-sensitive payee context (method, bank name/branch) stays visible.
+        boolean showPayee = canViewPayee();
+        String bankAccountNo   = showPayee ? e.getBankAccountNo()   : null;
+        String bankAccountName = showPayee ? e.getBankAccountName() : null;
+        String mobileMoneyNo   = showPayee ? e.getMobileMoneyNo()   : null;
         return new EmployeeDto(e.getId(), e.getUid(), e.getCompanyId(), e.getBranchId(),
                 e.getEmployeeNumber(), e.getFirstName(), e.getLastName(),
                 e.getNationalId(), e.getTin(), e.getNssfNumber(), e.getHeslbNumber(),
@@ -177,6 +190,12 @@ public class EmployeeServiceImpl implements EmployeeService {
                 e.getPhone(), e.getEmail(), e.getAddressLine(),
                 e.getRegion(), e.getDistrict(), e.getPostalAddress(),
                 e.getPaymentMethod(), e.getBankName(), e.getBankBranch(),
-                e.getBankAccountNo(), e.getBankAccountName(), e.getMobileMoneyNo());
+                bankAccountNo, bankAccountName, mobileMoneyNo);
+    }
+
+    /** Whether the current caller may see the sensitive payee bank/mobile-money identifiers. */
+    private boolean canViewPayee() {
+        return permissions.hasPermission(
+                RequestContext.get(), PAYEE_VIEW, System.currentTimeMillis());
     }
 }

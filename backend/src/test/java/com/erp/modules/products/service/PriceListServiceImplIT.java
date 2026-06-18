@@ -121,4 +121,58 @@ class PriceListServiceImplIT extends PostgresIntegrationTest {
         PriceListDto fetched = priceListService.getByUid(dto.uid());
         assertThat(fetched.status()).isEqualTo(MasterStatus.ARCHIVED);
     }
+
+    // -----------------------------------------------------------------------
+    // P2 D5 — pricing metadata settable via create/update
+    // -----------------------------------------------------------------------
+
+    @Test
+    void create_withMetadata_persistsCurrencyDatesVatDefaultAndScope() {
+        java.time.LocalDate from = java.time.LocalDate.of(2026, 1, 1);
+        java.time.LocalDate to = java.time.LocalDate.of(2026, 12, 31);
+
+        PriceListDto dto = priceListService.create(new CreatePriceListRequest(
+                companyA.getUid(), "PROMO", "Promo List",
+                "usd", from, to, true, true,
+                com.erp.modules.products.domain.enums.PriceListScope.SEGMENT));
+
+        assertThat(dto.currency()).isEqualTo("USD"); // CurrencyCode normalises to upper-case
+        assertThat(dto.effectiveFrom()).isEqualTo(from);
+        assertThat(dto.effectiveTo()).isEqualTo(to);
+        assertThat(dto.priceIncludesVat()).isTrue();
+        assertThat(dto.isDefault()).isTrue();
+        assertThat(dto.scope())
+                .isEqualTo(com.erp.modules.products.domain.enums.PriceListScope.SEGMENT);
+    }
+
+    @Test
+    void create_withoutMetadata_usesEntityDefaults() {
+        PriceListDto dto = priceListService.create(
+                new CreatePriceListRequest(companyA.getUid(), "PLAIN", "Plain"));
+
+        assertThat(dto.currency()).isNull();
+        assertThat(dto.effectiveFrom()).isNull();
+        assertThat(dto.effectiveTo()).isNull();
+        assertThat(dto.priceIncludesVat()).isFalse();
+        assertThat(dto.isDefault()).isFalse();
+        assertThat(dto.scope())
+                .isEqualTo(com.erp.modules.products.domain.enums.PriceListScope.GLOBAL);
+    }
+
+    @Test
+    void update_withMetadata_overwritesPricingFields() {
+        PriceListDto created = priceListService.create(
+                new CreatePriceListRequest(companyA.getUid(), "EDIT", "Edit Me"));
+
+        PriceListDto updated = priceListService.updateByUid(created.uid(),
+                new com.erp.modules.products.domain.dto.UpdatePriceListRequest(
+                        "Edited", "EUR", null, null, true, false,
+                        com.erp.modules.products.domain.enums.PriceListScope.BRANCH));
+
+        assertThat(updated.name()).isEqualTo("Edited");
+        assertThat(updated.currency()).isEqualTo("EUR");
+        assertThat(updated.priceIncludesVat()).isTrue();
+        assertThat(updated.scope())
+                .isEqualTo(com.erp.modules.products.domain.enums.PriceListScope.BRANCH);
+    }
 }

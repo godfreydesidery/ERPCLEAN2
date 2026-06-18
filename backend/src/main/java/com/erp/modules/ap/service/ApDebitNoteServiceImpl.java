@@ -164,9 +164,11 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
                 noteNum, supplierBillId,
                 req.noteDate(), grossAmount, netAmount, vatAmount,
                 docCurrency, req.reason(), actorId());
-        if (req.origin() != null) {
-            note.setOrigin(req.origin());
-        }
+        // origin is NOT NULL (free-text source tag). Default standalone-raised DNs to STANDALONE;
+        // return-sourced callers pass req.origin() = "PURCHASE_RETURN:{uid}".
+        note.setOrigin(req.origin() != null
+                ? req.origin()
+                : com.erp.modules.ap.domain.enums.ApDebitNoteOrigin.STANDALONE.name());
         note.setFxRate(dnRate);
         note.setRateAt(dnConversion.rateAt());
         note.setBaseAmount(baseTotal);

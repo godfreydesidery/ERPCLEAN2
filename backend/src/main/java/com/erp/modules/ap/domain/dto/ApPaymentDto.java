@@ -32,6 +32,8 @@ public record ApPaymentDto(
         BigDecimal unallocatedAmount,
         ApPaymentStatus status,
         String chequeUid,
+        // ADR-0041 D3: grouping run id (null for single-bill payments)
+        Long paymentRunId,
         List<PaymentAllocationDto> allocations
 ) {
     public record PaymentAllocationDto(

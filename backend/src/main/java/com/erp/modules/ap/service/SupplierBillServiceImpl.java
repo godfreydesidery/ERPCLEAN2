@@ -49,6 +49,8 @@ public class SupplierBillServiceImpl implements SupplierBillService {
     private final PaymentTermsRepository     paymentTermsRepo;
     private final CompanyRepository          companies;
     private final ChartOfAccountRepository   chartOfAccounts;
+    /** ADR-0041 D4 — reads PO lines via the Purchases service boundary (no entity import, NFR-AP-06). */
+    private final PurchaseMatchReader        purchaseMatchReader;
     private final ScopeGuard                 scopeGuard;
     private final AuditService               audit;
 
@@ -58,16 +60,18 @@ public class SupplierBillServiceImpl implements SupplierBillService {
                                     PaymentTermsRepository paymentTermsRepo,
                                     CompanyRepository companies,
                                     ChartOfAccountRepository chartOfAccounts,
+                                    PurchaseMatchReader purchaseMatchReader,
                                     ScopeGuard scopeGuard,
                                     AuditService audit) {
-        this.bills            = bills;
-        this.lines            = lines;
-        this.suppliers        = suppliers;
-        this.paymentTermsRepo = paymentTermsRepo;
-        this.companies        = companies;
-        this.chartOfAccounts  = chartOfAccounts;
-        this.scopeGuard       = scopeGuard;
-        this.audit            = audit;
+        this.bills               = bills;
+        this.lines               = lines;
+        this.suppliers           = suppliers;
+        this.paymentTermsRepo    = paymentTermsRepo;
+        this.companies           = companies;
+        this.chartOfAccounts     = chartOfAccounts;
+        this.purchaseMatchReader = purchaseMatchReader;
+        this.scopeGuard          = scopeGuard;
+        this.audit               = audit;
     }
 
     @Override
@@ -181,6 +185,11 @@ public class SupplierBillServiceImpl implements SupplierBillService {
                 line.setDepartmentValueId(lr.departmentValueId());
             }
 
+            // ADR-0041 D4: when this bill is raised from a PO and the line maps to a PO line, inherit
+            // the PO line's dimensions for any tag the caller did NOT explicitly supply. So a PO-line
+            // cost centre / department reaches the ledger even when the bill request omits them.
+            copyPoLineDimensions(req.purchaseOrderUid(), lr.poLineUid(), line);
+
             savedLines.add(lines.save(line));
         }
 
@@ -282,6 +291,32 @@ public class SupplierBillServiceImpl implements SupplierBillService {
             return paymentTermsRepo.findById(supplier.getPaymentTermsId()).orElse(null);
         }
         return null;
+    }
+
+    /**
+     * ADR-0041 D4 — copies the source PO line's cost-centre / department onto a derived bill line.
+     * Only runs when the bill is raised from a PO ({@code purchaseOrderUid} set) AND the bill line
+     * maps to a PO line ({@code poLineUid} set). Caller-supplied tags WIN — only an unset tag is
+     * inherited. Reads the PO line via the Purchases service boundary (no entity import). Fail-open:
+     * any lookup miss leaves the bill line untagged (a missing dimension never blocks bill entry).
+     */
+    private void copyPoLineDimensions(String purchaseOrderUid, String poLineUid, SupplierBillLine line) {
+        if (purchaseOrderUid == null || purchaseOrderUid.isBlank()
+                || poLineUid == null || poLineUid.isBlank()) {
+            return;
+        }
+        // Nothing to inherit if the caller already tagged both dimensions.
+        if (line.getCostCentreValueId() != null && line.getDepartmentValueId() != null) {
+            return;
+        }
+        purchaseMatchReader.findPoLine(purchaseOrderUid, poLineUid).ifPresent(poLine -> {
+            if (line.getCostCentreValueId() == null && poLine.costCentreValueId() != null) {
+                line.setCostCentreValueId(poLine.costCentreValueId());
+            }
+            if (line.getDepartmentValueId() == null && poLine.departmentValueId() != null) {
+                line.setDepartmentValueId(poLine.departmentValueId());
+            }
+        });
     }
 
     private Long actorId() {

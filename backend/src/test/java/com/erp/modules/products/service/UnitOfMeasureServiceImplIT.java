@@ -188,4 +188,53 @@ class UnitOfMeasureServiceImplIT extends PostgresIntegrationTest {
         UnitOfMeasureDto fetched = unitService.getByUid(dto.uid());
         assertThat(fetched.status()).isEqualTo(MasterStatus.ACTIVE);
     }
+
+    // -----------------------------------------------------------------------
+    // P2 D5 — unit metadata settable via create/update (symbol/dimension/decimals/fractional)
+    // -----------------------------------------------------------------------
+
+    @Test
+    void create_withMetadata_persistsDimensionDecimalsSymbolAndFractional() {
+        UnitOfMeasureDto dto = unitService.create(new CreateUnitOfMeasureRequest(
+                companyA.getUid(), "GRM", "Gram", "g",
+                com.erp.modules.products.domain.enums.DimensionType.WEIGHT,
+                (short) 3, true));
+
+        assertThat(dto.symbol()).isEqualTo("g");
+        assertThat(dto.dimensionType())
+                .isEqualTo(com.erp.modules.products.domain.enums.DimensionType.WEIGHT);
+        assertThat(dto.decimalPlaces()).isEqualTo((short) 3);
+        assertThat(dto.fractional()).isTrue();
+    }
+
+    @Test
+    void create_withoutMetadata_usesEntityDefaults() {
+        UnitOfMeasureDto dto = unitService.create(
+                new CreateUnitOfMeasureRequest(companyA.getUid(), "EACH", "Each"));
+
+        assertThat(dto.symbol()).isNull();
+        assertThat(dto.dimensionType())
+                .isEqualTo(com.erp.modules.products.domain.enums.DimensionType.COUNT);
+        assertThat(dto.decimalPlaces()).isEqualTo((short) 0);
+        assertThat(dto.fractional()).isTrue();
+    }
+
+    @Test
+    void update_withMetadata_overwritesFields() {
+        UnitOfMeasureDto created = unitService.create(
+                new CreateUnitOfMeasureRequest(companyA.getUid(), "LTR", "Litre"));
+
+        UnitOfMeasureDto updated = unitService.updateByUid(created.uid(),
+                new com.erp.modules.products.domain.dto.UpdateUnitOfMeasureRequest(
+                        "Litre", "L",
+                        com.erp.modules.products.domain.enums.DimensionType.VOLUME,
+                        (short) 2, false));
+
+        assertThat(updated.name()).isEqualTo("Litre");
+        assertThat(updated.symbol()).isEqualTo("L");
+        assertThat(updated.dimensionType())
+                .isEqualTo(com.erp.modules.products.domain.enums.DimensionType.VOLUME);
+        assertThat(updated.decimalPlaces()).isEqualTo((short) 2);
+        assertThat(updated.fractional()).isFalse();
+    }
 }

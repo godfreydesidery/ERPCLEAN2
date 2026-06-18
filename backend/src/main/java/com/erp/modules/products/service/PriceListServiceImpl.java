@@ -5,7 +5,9 @@ import com.erp.modules.products.domain.dto.CreatePriceListRequest;
 import com.erp.modules.products.domain.dto.PriceListDto;
 import com.erp.modules.products.domain.dto.UpdatePriceListRequest;
 import com.erp.modules.products.domain.entity.PriceList;
+import com.erp.modules.products.domain.enums.PriceListScope;
 import com.erp.modules.products.repository.PriceListRepository;
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -50,6 +52,8 @@ public class PriceListServiceImpl implements PriceListService {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
 
         PriceList pl = new PriceList(companyId, req.code(), req.name(), actorId());
+        applyMetadata(pl, req.currency(), req.effectiveFrom(), req.effectiveTo(),
+                req.priceIncludesVat(), req.isDefault(), req.scope());
         PriceList saved = priceLists.save(pl);
         audit.record(AuditEvent.of(AuditActions.PRICELIST_CREATE, "price_lists",
                         saved.getId(), saved.getUid())
@@ -82,6 +86,8 @@ public class PriceListServiceImpl implements PriceListService {
         PriceList pl = require(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), pl.getCompanyId());
         pl.setName(req.name());
+        applyMetadata(pl, req.currency(), req.effectiveFrom(), req.effectiveTo(),
+                req.priceIncludesVat(), req.isDefault(), req.scope());
         pl.setUpdatedAt(Instant.now());
         pl.setUpdatedBy(actorId());
         audit.record(AuditEvent.of(AuditActions.PRICELIST_UPDATE, "price_lists",
@@ -121,6 +127,30 @@ public class PriceListServiceImpl implements PriceListService {
 
     private PriceList require(String uid) {
         return Lookups.orNotFound(priceLists.findByUid(uid), "PriceList", uid);
+    }
+
+    /**
+     * Applies the optional P2 D5 pricing-resolution metadata. {@code currency} is parsed via
+     * {@link CurrencyCode#ofNullable}; dates are set as-is (null = open-ended). The defaulted
+     * {@code priceIncludesVat}/{@code isDefault}/{@code scope} are only overwritten when the request
+     * supplied a value (null = keep the entity default).
+     */
+    private static void applyMetadata(PriceList pl, String currency,
+                                      java.time.LocalDate effectiveFrom,
+                                      java.time.LocalDate effectiveTo, Boolean priceIncludesVat,
+                                      Boolean isDefault, PriceListScope scope) {
+        pl.setCurrency(CurrencyCode.ofNullable(currency));
+        pl.setEffectiveFrom(effectiveFrom);
+        pl.setEffectiveTo(effectiveTo);
+        if (priceIncludesVat != null) {
+            pl.setPriceIncludesVat(priceIncludesVat);
+        }
+        if (isDefault != null) {
+            pl.setDefault(isDefault);
+        }
+        if (scope != null) {
+            pl.setScope(scope);
+        }
     }
 
     private Long resolveCompanyId(String companyUid) {

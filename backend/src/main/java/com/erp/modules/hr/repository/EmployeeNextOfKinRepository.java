@@ -12,4 +12,6 @@ public interface EmployeeNextOfKinRepository extends JpaRepository<EmployeeNextO
     List<EmployeeNextOfKin> findByEmployeeId(Long employeeId);
 
     boolean existsByEmployeeIdAndIsPrimaryTrue(Long employeeId);
+
+    Optional<EmployeeNextOfKin> findByEmployeeIdAndIsPrimaryTrue(Long employeeId);
 }

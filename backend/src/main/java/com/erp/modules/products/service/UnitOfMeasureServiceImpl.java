@@ -5,6 +5,7 @@ import com.erp.modules.products.domain.dto.CreateUnitOfMeasureRequest;
 import com.erp.modules.products.domain.dto.UnitOfMeasureDto;
 import com.erp.modules.products.domain.dto.UpdateUnitOfMeasureRequest;
 import com.erp.modules.products.domain.entity.UnitOfMeasure;
+import com.erp.modules.products.domain.enums.DimensionType;
 import com.erp.modules.products.repository.UnitOfMeasureRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
@@ -57,6 +58,7 @@ public class UnitOfMeasureServiceImpl implements UnitOfMeasureService {
         }
 
         UnitOfMeasure u = new UnitOfMeasure(companyId, req.code(), req.name(), actorId());
+        applyMetadata(u, req.symbol(), req.dimensionType(), req.decimalPlaces(), req.fractional());
         UnitOfMeasure saved = units.save(u);
         audit.record(AuditEvent.of(AuditActions.UOM_CREATE, "units_of_measure",
                         saved.getId(), saved.getUid())
@@ -87,6 +89,7 @@ public class UnitOfMeasureServiceImpl implements UnitOfMeasureService {
         UnitOfMeasure u = require(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), u.getCompanyId());
         u.setName(req.name());
+        applyMetadata(u, req.symbol(), req.dimensionType(), req.decimalPlaces(), req.fractional());
         u.setUpdatedAt(Instant.now());
         u.setUpdatedBy(actorId());
         audit.record(AuditEvent.of(AuditActions.UOM_UPDATE, "units_of_measure",
@@ -126,6 +129,25 @@ public class UnitOfMeasureServiceImpl implements UnitOfMeasureService {
 
     private UnitOfMeasure require(String uid) {
         return Lookups.orNotFound(units.findByUid(uid), "UnitOfMeasure", uid);
+    }
+
+    /**
+     * Applies the optional P2 D5 unit metadata. {@code symbol} is set as-is (null = clear). The
+     * primitive {@code decimalPlaces}/{@code fractional} and the defaulted {@code dimensionType} are
+     * only overwritten when the request supplied a value (null = keep the entity default).
+     */
+    private static void applyMetadata(UnitOfMeasure u, String symbol, DimensionType dimensionType,
+                                      Short decimalPlaces, Boolean fractional) {
+        u.setSymbol(symbol);
+        if (dimensionType != null) {
+            u.setDimensionType(dimensionType);
+        }
+        if (decimalPlaces != null) {
+            u.setDecimalPlaces(decimalPlaces);
+        }
+        if (fractional != null) {
+            u.setFractional(fractional);
+        }
     }
 
     private Long resolveCompanyId(String companyUid) {

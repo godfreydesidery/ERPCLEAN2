@@ -76,6 +76,8 @@ public class SupplierServiceImpl implements SupplierService {
         s.setSupplierKind(req.supplierKind());
         s.setPaymentTermsDays(req.paymentTermsDays());
         s.setPaymentTermsId(req.paymentTermsId());
+        applyDefaults(s, req.country(), req.defaultCurrency(), req.leadTimeDays(),
+                req.minOrderValue(), req.defaultWhtTypeId());
 
         Supplier saved = suppliers.save(s);
         audit.record(AuditEvent.of(AuditActions.SUPPLIER_CREATE, "suppliers",
@@ -120,6 +122,8 @@ public class SupplierServiceImpl implements SupplierService {
         s.setSupplierKind(req.supplierKind());
         s.setPaymentTermsDays(req.paymentTermsDays());
         s.setPaymentTermsId(req.paymentTermsId());
+        applyDefaults(s, req.country(), req.defaultCurrency(), req.leadTimeDays(),
+                req.minOrderValue(), req.defaultWhtTypeId());
         s.setUpdatedAt(Instant.now());
         s.setUpdatedBy(actorId());
 
@@ -340,6 +344,20 @@ public class SupplierServiceImpl implements SupplierService {
         s.setPostalAddress(postalAddress);
         s.setRegion(region);
         s.setDistrict(district);
+    }
+
+    /**
+     * Applies the optional P2 D5 master-data defaults. {@code defaultCurrency} is parsed via
+     * {@link CurrencyCode#ofNullable}; the remaining fields are set as-is (null = clear).
+     */
+    private static void applyDefaults(Supplier s, String country, String defaultCurrency,
+                                      Integer leadTimeDays, java.math.BigDecimal minOrderValue,
+                                      Long defaultWhtTypeId) {
+        s.setCountry(country);
+        s.setDefaultCurrency(CurrencyCode.ofNullable(defaultCurrency));
+        s.setLeadTimeDays(leadTimeDays);
+        s.setMinOrderValue(minOrderValue);
+        s.setDefaultWhtTypeId(defaultWhtTypeId);
     }
 
     private Long actorId() {
