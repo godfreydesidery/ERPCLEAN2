@@ -166,7 +166,7 @@ CREATE TABLE sales_invoice_payments (
     CONSTRAINT fk_sales_invoice_payment_by      FOREIGN KEY (received_by) REFERENCES app_users (id),
     CONSTRAINT fk_sales_invoice_payment_company FOREIGN KEY (company_id) REFERENCES companies (id),
     CONSTRAINT fk_sales_invoice_payment_branch  FOREIGN KEY (branch_id)  REFERENCES branches (id),
-    CONSTRAINT chk_sales_invoice_payment_tender CHECK (tender_type IN ('CASH','MOBILE_MONEY')),
+    CONSTRAINT chk_sales_invoice_payment_tender CHECK (tender_type IN ('CASH','MOBILE_MONEY','CHEQUE','CARD')),
     CONSTRAINT chk_sales_invoice_payment_amount CHECK (amount > 0),
     CONSTRAINT chk_sales_invoice_payment_change CHECK (change_amount IS NULL OR change_amount >= 0)
 );

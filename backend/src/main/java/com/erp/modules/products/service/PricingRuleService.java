@@ -6,6 +6,8 @@ import com.erp.modules.products.domain.dto.CreatePromotionRequest;
 import com.erp.modules.products.domain.dto.CustomerPriceDto;
 import com.erp.modules.products.domain.dto.PriceTierDto;
 import com.erp.modules.products.domain.dto.PromotionDto;
+import com.erp.modules.products.domain.dto.PromotionUsageDto;
+import com.erp.modules.products.domain.dto.RecordPromotionUsageRequest;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -41,4 +43,10 @@ public interface PricingRuleService {
     Page<PromotionDto> listPromotions(Long companyId, Pageable pageable);
 
     void deactivatePromotion(String uid);
+
+    /**
+     * Records a single promotion redemption and enforces its {@code usage_limit} (P2 D5,
+     * ADR-0041 D5). Intended for the sales side to call when a promotion is applied to a document.
+     */
+    PromotionUsageDto recordUsage(RecordPromotionUsageRequest request);
 }

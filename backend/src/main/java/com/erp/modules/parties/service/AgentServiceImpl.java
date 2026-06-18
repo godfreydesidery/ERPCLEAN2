@@ -79,6 +79,7 @@ public class AgentServiceImpl implements AgentService {
                 req.region(), req.district());
         a.setAgentKind(req.agentKind());
         a.setAppUserId(req.agentKind() == AgentKind.INTERNAL ? req.appUserId() : null);
+        applyDefaults(a, req.country(), req.salesTarget(), req.quota());
 
         Agent saved = agents.save(a);
         Map<String, Object> detail = new HashMap<>();
@@ -127,6 +128,7 @@ public class AgentServiceImpl implements AgentService {
                 req.region(), req.district());
         a.setAgentKind(req.agentKind());
         a.setAppUserId(req.agentKind() == AgentKind.INTERNAL ? req.appUserId() : null);
+        applyDefaults(a, req.country(), req.salesTarget(), req.quota());
         a.setUpdatedAt(Instant.now());
         a.setUpdatedBy(actorId());
 
@@ -255,6 +257,14 @@ public class AgentServiceImpl implements AgentService {
         a.setPostalAddress(postalAddress);
         a.setRegion(region);
         a.setDistrict(district);
+    }
+
+    /** Applies the optional P2 D5 performance targets + country (null = clear). */
+    private static void applyDefaults(Agent a, String country, java.math.BigDecimal salesTarget,
+                                      java.math.BigDecimal quota) {
+        a.setCountry(country);
+        a.setSalesTarget(salesTarget);
+        a.setQuota(quota);
     }
 
     private Long actorId() {

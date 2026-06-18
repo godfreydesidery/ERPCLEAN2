@@ -184,6 +184,13 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         inv.setNotes(req.notes());
         inv.setRouteId(routeId);
 
+        // ADR-0041 D1 — early payment-terms override on a DIRECT invoice (optional). When present,
+        // resolve scoped to this company and stamp it now; a finalise-time override still wins.
+        Long createTermId = resolvePaymentTermsOverrideId(companyId, req.paymentTermsUid());
+        if (createTermId != null) {
+            inv.setPaymentTermsId(createTermId);
+        }
+
         SalesInvoice saved = invoices.save(inv);
         audit.record(AuditEvent.of(AuditActions.SALES_INVOICE_CREATE, "sales_invoices",
                         saved.getId(), saved.getUid())
@@ -215,6 +222,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
 
     @Override
     public void finalise(String uid, FinaliseInvoiceRequest req) {
+        FinaliseInvoiceRequest safeReq = req != null ? req : new FinaliseInvoiceRequest();
         SalesInvoice inv = requireInvoice(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), inv.getCompanyId());
         assertDraft(inv, "finalise");
@@ -246,13 +254,23 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         boolean isCreditCustomer = customer.getCustomerKind()
                 == com.erp.modules.parties.domain.enums.CustomerKind.CREDIT_ACCOUNT;
 
-        // ADR-0041 D1 — resolve + stamp the customer's payment terms on the SI (data-only).
-        // The AR open item (created by ArSalePostedHandler) inherits the term + computes the
-        // settlement-discount fields onto ar_invoices via the same PaymentTerms master.
-        if (customer.getPaymentTermsId() != null
-                && paymentTermsRepo.findById(customer.getPaymentTermsId()).isPresent()) {
-            inv.setPaymentTermsId(customer.getPaymentTermsId());
+        // ADR-0041 D1 — resolve + stamp the payment terms on the SI (data-only). Priority:
+        //   1. finalise-time override (safeReq.paymentTermsUid)
+        //   2. a term already stamped at create (CreateSalesInvoiceRequest.paymentTermsUid)
+        //   3. the customer's default payment_terms_id
+        // The downstream AR open item (ArSalePostedHandler) derives the due date + settlement-discount
+        // fields via PaymentTermsDueDateCalculator. SO-sourced invoices keep the SO-inherited term
+        // (set at delivery-billing) unless a finalise override is explicitly supplied.
+        Long resolvedTermId = resolvePaymentTermsOverrideId(inv.getCompanyId(), safeReq.paymentTermsUid());
+        if (resolvedTermId == null) {
+            resolvedTermId = inv.getPaymentTermsId();   // create-time override or SO-inherited term
         }
+        if (resolvedTermId == null
+                && customer.getPaymentTermsId() != null
+                && paymentTermsRepo.findById(customer.getPaymentTermsId()).isPresent()) {
+            resolvedTermId = customer.getPaymentTermsId();
+        }
+        inv.setPaymentTermsId(resolvedTermId);
 
         List<SalesInvoicePayment> paymentList = payments.findByInvoiceId(inv.getId());
 
@@ -559,6 +577,9 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         Long actor = actorId();
         SalesInvoicePayment payment = new SalesInvoicePayment(
                 inv, req.tenderType(), req.amount(), req.reference(), actor, actor);
+        // ADR-0041 D3 — populate structured instrument links / refs (POS / immediate-payment path).
+        // Stamp only the field relevant to the tender type so a CASH tender never carries a card ref.
+        applyTenderInstruments(payment, req);
         SalesInvoicePayment saved = payments.save(payment);
 
         audit.record(AuditEvent.of(AuditActions.SALES_INVOICE_PAYMENT_ADD, "sales_invoice_payments",
@@ -595,6 +616,43 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         return payments.findByInvoiceId(inv.getId()).stream()
                 .map(SalesInvoicePaymentDto::from)
                 .toList();
+    }
+
+    /**
+     * ADR-0041 D3 — copy the structured instrument links / refs from the request onto the payment,
+     * gated by tender type so each tender carries only its own instrument:
+     * <ul>
+     *   <li>CASH / MOBILE_MONEY / CHEQUE / CARD → cash_bank_account_id (the account the tender landed in)</li>
+     *   <li>CHEQUE → cheque_id</li>
+     *   <li>MOBILE_MONEY → mobile_money_ref</li>
+     *   <li>CARD → card_ref</li>
+     * </ul>
+     * All fields are optional — when omitted the payment row keeps the legacy free-text reference only.
+     */
+    private void applyTenderInstruments(SalesInvoicePayment payment, AddPaymentRequest req) {
+        if (req.cashBankAccountId() != null) {
+            payment.setCashBankAccountId(req.cashBankAccountId());
+        }
+        switch (req.tenderType()) {
+            case CHEQUE -> {
+                if (req.chequeId() != null) {
+                    payment.setChequeId(req.chequeId());
+                }
+            }
+            case MOBILE_MONEY -> {
+                if (req.mobileMoneyRef() != null && !req.mobileMoneyRef().isBlank()) {
+                    payment.setMobileMoneyRef(req.mobileMoneyRef());
+                }
+            }
+            case CARD -> {
+                if (req.cardRef() != null && !req.cardRef().isBlank()) {
+                    payment.setCardRef(req.cardRef());
+                }
+            }
+            default -> {
+                // CASH — no structured instrument beyond the optional cash_bank_account_id above.
+            }
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -690,7 +748,9 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                             // ADR-0036 D-4 FX triple — stamped at finalise (fix: was missing)
                             inv.getFxRate(),
                             inv.getBaseGrossTotalAmount(),
-                            inv.getRateAt()
+                            inv.getRateAt(),
+                            // ADR-0041 D1 — the term stamped at finalise (override or customer default)
+                            inv.getPaymentTermsId()
                     );
                 });
     }
@@ -780,6 +840,22 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     private Customer resolveCustomer(Long companyId, String customerUid) {
         return customers.findByCompanyIdAndUid(companyId, customerUid)
                 .orElseThrow(() -> new NotFoundException("Customer not found: " + customerUid));
+    }
+
+    /**
+     * ADR-0041 D1 — resolves an OPTIONAL payment-terms override uid to its id, scoped to the
+     * invoice's company. Returns null when {@code paymentTermsUid} is blank (caller then falls back
+     * to the create-time / customer-default term). Throws when a non-blank uid does not resolve in
+     * this company (mirrors SalesOrderServiceImpl.resolvePaymentTermsId — fail loud on a bad uid).
+     */
+    private Long resolvePaymentTermsOverrideId(Long companyId, String paymentTermsUid) {
+        if (paymentTermsUid == null || paymentTermsUid.isBlank()) {
+            return null;
+        }
+        return paymentTermsRepo.findByUid(paymentTermsUid)
+                .filter(pt -> companyId.equals(pt.getCompanyId()))
+                .map(pt -> pt.getId())
+                .orElseThrow(() -> new NotFoundException("PaymentTerms not found: " + paymentTermsUid));
     }
 
     /**

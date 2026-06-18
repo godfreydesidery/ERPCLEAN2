@@ -9,9 +9,11 @@ import com.erp.modules.parties.domain.dto.UpdateCustomerRequest;
 import com.erp.modules.parties.domain.entity.Customer;
 import com.erp.modules.parties.domain.entity.CustomerBranch;
 import com.erp.modules.parties.domain.enums.CustomerKind;
+import com.erp.modules.parties.domain.enums.CustomerSegment;
 import com.erp.modules.parties.domain.enums.PartyType;
 import com.erp.modules.parties.repository.CustomerBranchRepository;
 import com.erp.modules.parties.repository.CustomerRepository;
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -74,6 +76,8 @@ public class CustomerServiceImpl implements CustomerService {
         c.setCreditLimit(MoneyDto.toMoney(req.creditLimit()));
         c.setPaymentTermsDays(req.paymentTermsDays());
         c.setPaymentTermsId(req.paymentTermsId());
+        applyDefaults(c, req.country(), req.defaultPriceListId(), req.defaultAgentId(),
+                req.segment(), req.taxExempt(), req.taxExemptionRef(), req.defaultCurrency());
 
         Customer saved = customers.save(c);
         audit.record(AuditEvent.of(AuditActions.CUSTOMER_CREATE, "customers",
@@ -120,6 +124,8 @@ public class CustomerServiceImpl implements CustomerService {
         c.setCreditLimit(MoneyDto.toMoney(req.creditLimit()));
         c.setPaymentTermsDays(req.paymentTermsDays());
         c.setPaymentTermsId(req.paymentTermsId());
+        applyDefaults(c, req.country(), req.defaultPriceListId(), req.defaultAgentId(),
+                req.segment(), req.taxExempt(), req.taxExemptionRef(), req.defaultCurrency());
         c.setUpdatedAt(Instant.now());
         c.setUpdatedBy(actorId());
 
@@ -237,6 +243,27 @@ public class CustomerServiceImpl implements CustomerService {
         c.setPostalAddress(postalAddress);
         c.setRegion(region);
         c.setDistrict(district);
+    }
+
+    /**
+     * Applies the optional P2 D5 / P2-mechanical master-data defaults. Each field is only set when
+     * the request supplied a value (null = keep the entity default), mirroring the partial-update
+     * shape used elsewhere. {@code defaultCurrency} is parsed via {@link CurrencyCode#ofNullable}.
+     */
+    private static void applyDefaults(Customer c, String country, Long defaultPriceListId,
+                                      Long defaultAgentId, CustomerSegment segment, Boolean taxExempt,
+                                      String taxExemptionRef, String defaultCurrency) {
+        c.setCountry(country);
+        c.setDefaultPriceListId(defaultPriceListId);
+        c.setDefaultAgentId(defaultAgentId);
+        if (segment != null) {
+            c.setSegment(segment);
+        }
+        if (taxExempt != null) {
+            c.setTaxExempt(taxExempt);
+        }
+        c.setTaxExemptionRef(taxExemptionRef);
+        c.setDefaultCurrency(CurrencyCode.ofNullable(defaultCurrency));
     }
 
     private Long actorId() {

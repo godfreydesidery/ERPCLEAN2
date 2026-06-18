@@ -6,12 +6,15 @@ import com.erp.modules.ap.domain.dto.PaySingleBillRequest;
 import com.erp.modules.ap.domain.dto.PaymentRunRequest;
 import com.erp.modules.ap.domain.entity.ApPayment;
 import com.erp.modules.ap.domain.entity.ApPaymentAllocation;
+import com.erp.modules.ap.domain.entity.PaymentRun;
 import com.erp.modules.ap.domain.entity.SupplierBill;
 import com.erp.modules.ap.domain.enums.ApPaymentKind;
 import com.erp.modules.ap.domain.enums.ApPaymentStatus;
+import com.erp.modules.ap.domain.enums.PaymentRunStatus;
 import com.erp.modules.ap.domain.enums.SupplierBillStatus;
 import com.erp.modules.ap.repository.ApPaymentAllocationRepository;
 import com.erp.modules.ap.repository.ApPaymentRepository;
+import com.erp.modules.ap.repository.PaymentRunRepository;
 import com.erp.modules.ap.repository.SupplierBillRepository;
 import com.erp.modules.gl.domain.dto.JournalEntryDraft;
 import com.erp.modules.gl.domain.dto.JournalEntryDraft.LineDraft;
@@ -76,6 +79,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
     private final SupplierBillRepository        bills;
     private final ApPaymentRepository           payments;
     private final ApPaymentAllocationRepository allocations;
+    private final PaymentRunRepository          paymentRuns;
     private final CompanyRepository             companies;
     private final SupplierRepository            suppliers;
     private final ApBillNumberGenerator         numbers;
@@ -91,6 +95,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
     public ApPaymentServiceImpl(SupplierBillRepository bills,
                                  ApPaymentRepository payments,
                                  ApPaymentAllocationRepository allocations,
+                                 PaymentRunRepository paymentRuns,
                                  CompanyRepository companies,
                                  SupplierRepository suppliers,
                                  ApBillNumberGenerator numbers,
@@ -105,6 +110,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         this.bills                   = bills;
         this.payments                = payments;
         this.allocations             = allocations;
+        this.paymentRuns             = paymentRuns;
         this.companies               = companies;
         this.suppliers               = suppliers;
         this.numbers                 = numbers;
@@ -265,6 +271,14 @@ public class ApPaymentServiceImpl implements ApPaymentService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         String payNum = numbers.nextPayment(companyId);
 
+        // ADR-0041 D3 — create the grouping PaymentRun (DRAFT) before the member payment. The run
+        // posts NOTHING to GL (balance-neutral); its member payment does. Stamped POSTED below once
+        // the member payment's GL entry succeeds. run_number via the dedicated run sequence.
+        PaymentRun run = new PaymentRun(
+                companyId, branchId(), numbers.nextPaymentRun(companyId), currency, actorId());
+        run.setTotalAmount(totalPaid);
+        run = paymentRuns.save(run);
+
         final Long finalSupplierId = supplierId;
         ApPayment payment = new ApPayment(
                 companyId, branchId(), finalSupplierId,
@@ -273,6 +287,8 @@ public class ApPaymentServiceImpl implements ApPaymentService {
                 req.tenderType(), req.bankReference(), actorId());
         payment.setFxRate(settlementRate);
         payment.setRateAt(settlementConv.rateAt());
+        // ADR-0041 D3 — group this payment under the run (soft-FK).
+        payment.setPaymentRunId(run.getId());
         payment = payments.save(payment);
 
         List<ApPaymentAllocation> allocList = new ArrayList<>();
@@ -316,9 +332,16 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         payment.setGlEntryUid(posted.uid());
         payment = payments.save(payment);
 
+        // ADR-0041 D3 — the member payment posted; flip the run DRAFT→POSTED (balance-neutral).
+        run.setStatus(PaymentRunStatus.POSTED);
+        run.setUpdatedAt(java.time.Instant.now());
+        run.setUpdatedBy(actorId());
+        paymentRuns.save(run);
+
         audit.record(AuditEvent.of(AuditActions.AP_PAYMENT_MAKE, "ap_payments",
                         payment.getId(), payment.getUid())
                 .detail(Map.of("paymentNumber", payNum,
+                        "runNumber", run.getRunNumber(),
                         "totalPaid", totalPaid.toPlainString(),
                         "billCount", String.valueOf(openBills.size()))));
 
@@ -541,6 +564,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
                 p.getCurrency().value(), p.getTenderType(), p.getBankReference(), p.getGlEntryUid(),
                 p.getWhtAmount(), p.getWhtTransactionUid(),
                 p.getUnallocatedAmount(), p.getStatus(), p.getChequeUid(),
+                p.getPaymentRunId(),
                 dtoAllocs);
     }
 

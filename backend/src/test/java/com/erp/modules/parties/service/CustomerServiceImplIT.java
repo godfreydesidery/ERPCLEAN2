@@ -341,6 +341,70 @@ class CustomerServiceImplIT extends PostgresIntegrationTest {
     }
 
     // -----------------------------------------------------------------------
+    // P2 D5 / P2-mechanical — master-data defaults settable via create/update
+    // -----------------------------------------------------------------------
+
+    @Test
+    void create_withD5Defaults_persistsCountrySegmentTaxAndDefaults() {
+        CreateCustomerRequest req = new CreateCustomerRequest(
+                companyA.getId(), PartyType.BUSINESS, "Defaults Co", null,
+                "TIN-D5", true, "VRN-D5", null, null, null, null, null, null, null, null,
+                CustomerKind.CREDIT_ACCOUNT, null, null, null,
+                "TZ", 7001L, 8001L,
+                com.erp.modules.parties.domain.enums.CustomerSegment.WHOLESALE,
+                true, "EXEMPT-REF-1", "usd");
+
+        CustomerDto dto = customerService.create(req);
+
+        assertThat(dto.country()).isEqualTo("TZ");
+        assertThat(dto.defaultPriceListId()).isEqualTo(7001L);
+        assertThat(dto.defaultAgentId()).isEqualTo(8001L);
+        assertThat(dto.segment())
+                .isEqualTo(com.erp.modules.parties.domain.enums.CustomerSegment.WHOLESALE);
+        assertThat(dto.taxExempt()).isTrue();
+        assertThat(dto.taxExemptionRef()).isEqualTo("EXEMPT-REF-1");
+        assertThat(dto.defaultCurrency()).isEqualTo("USD"); // normalised upper-case
+    }
+
+    @Test
+    void create_withoutD5Defaults_usesEntityDefaults() {
+        CustomerDto dto = customerService.create(businessCreditRequest(companyA.getId(),
+                "Plain Co", "TIN-PL", false, null, null, null));
+
+        assertThat(dto.country()).isNull();
+        assertThat(dto.defaultPriceListId()).isNull();
+        assertThat(dto.defaultAgentId()).isNull();
+        assertThat(dto.segment())
+                .isEqualTo(com.erp.modules.parties.domain.enums.CustomerSegment.OTHER);
+        assertThat(dto.taxExempt()).isFalse();
+        assertThat(dto.defaultCurrency()).isNull();
+    }
+
+    @Test
+    void update_withD5Defaults_overwritesFields() {
+        CustomerDto created = customerService.create(businessCreditRequest(companyA.getId(),
+                "Edit Co", "TIN-ED", false, null, null, null));
+
+        var updated = customerService.updateByUid(created.uid(),
+                new com.erp.modules.parties.domain.dto.UpdateCustomerRequest(
+                        PartyType.BUSINESS, "Edit Co", null, "TIN-ED", false, null,
+                        null, null, null, null, null, null, null, null,
+                        CustomerKind.CREDIT_ACCOUNT, null, null, null,
+                        "KE", 1L, 2L,
+                        com.erp.modules.parties.domain.enums.CustomerSegment.GOVERNMENT,
+                        true, "REF-2", "kes"));
+
+        assertThat(updated.country()).isEqualTo("KE");
+        assertThat(updated.defaultPriceListId()).isEqualTo(1L);
+        assertThat(updated.defaultAgentId()).isEqualTo(2L);
+        assertThat(updated.segment())
+                .isEqualTo(com.erp.modules.parties.domain.enums.CustomerSegment.GOVERNMENT);
+        assertThat(updated.taxExempt()).isTrue();
+        assertThat(updated.taxExemptionRef()).isEqualTo("REF-2");
+        assertThat(updated.defaultCurrency()).isEqualTo("KES");
+    }
+
+    // -----------------------------------------------------------------------
     // Private helpers
     // -----------------------------------------------------------------------
 

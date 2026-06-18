@@ -289,6 +289,9 @@ public final class AuditActions {
     public static final String HR_EMPLOYEE_CREATE      = "HR.EMPLOYEE.CREATE";
     public static final String HR_EMPLOYEE_UPDATE      = "HR.EMPLOYEE.UPDATE";
     public static final String HR_EMPLOYEE_ARCHIVE     = "HR.EMPLOYEE.ARCHIVE";
+    public static final String HR_EMPLOYEE_NOK_ADD        = "HR.EMPLOYEE.NOK.ADD";
+    public static final String HR_EMPLOYEE_NOK_UPDATE     = "HR.EMPLOYEE.NOK.UPDATE";
+    public static final String HR_EMPLOYEE_NOK_DEACTIVATE = "HR.EMPLOYEE.NOK.DEACTIVATE";
     public static final String HR_CONTRACT_CREATE      = "HR.CONTRACT.CREATE";
     public static final String HR_CONTRACT_TERMINATE   = "HR.CONTRACT.TERMINATE";
     public static final String HR_PAYCOMPONENT_CREATE  = "HR.PAYCOMPONENT.CREATE";
