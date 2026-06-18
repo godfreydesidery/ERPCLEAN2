@@ -21,6 +21,7 @@ import {
 import { ArService } from './ar.service';
 import { WhtTypeDto } from '../tax/models/tax.model';
 import { TaxService } from '../tax/tax.service';
+import { CurrencySelectComponent } from '../../../shared/currency-select/currency-select.component';
 
 /**
  * A UI-only allocation row — wraps an ArInvoiceDto with the user's input.
@@ -48,7 +49,7 @@ interface AllocationRow {
  */
 @Component({
   selector: 'app-record-receipt',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, CurrencySelectComponent],
   templateUrl: './record-receipt.component.html',
   styleUrl: './record-receipt.component.scss',
 })
@@ -65,6 +66,7 @@ export class RecordReceiptComponent {
   // ── Company context ────────────────────────────────────────────────────────
   readonly companies = signal<Company[]>([]);
   readonly selectedCompanyId = signal('');
+  readonly selectedCompanyUid = computed(() => this.companies().find((c) => c.id === this.selectedCompanyId())?.uid ?? '');
   readonly companyState = signal<'loading' | 'idle' | 'error'>('loading');
 
   // ── Customer picker ────────────────────────────────────────────────────────

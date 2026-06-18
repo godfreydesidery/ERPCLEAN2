@@ -21,6 +21,7 @@ import {
   BlanketLineRequest,
   CreateBlanketOrderRequest,
 } from './blanket-order.model';
+import { CurrencySelectComponent } from '../../../../shared/currency-select/currency-select.component';
 
 interface LineEntry {
   productId: string;
@@ -38,7 +39,7 @@ interface LineEntry {
  */
 @Component({
   selector: 'app-blanket-order-create',
-  imports: [FormsModule, RouterLink, DecimalPipe],
+  imports: [FormsModule, RouterLink, DecimalPipe, CurrencySelectComponent],
   templateUrl: './blanket-order-create.component.html',
   styleUrl: './blanket-order-create.component.scss',
 })

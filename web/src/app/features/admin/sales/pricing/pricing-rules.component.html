@@ -135,9 +135,11 @@
                   </div>
                   <div class="erp-field">
                     <label for="newTierCurrency">Currency <span class="text-danger" aria-hidden="true">*</span></label>
-                    <input id="newTierCurrency" name="newTierCurrency" type="text" class="form-control"
-                           [ngModel]="newTierCurrency()" (ngModelChange)="newTierCurrency.set($event)"
-                           [disabled]="tierSaving()" placeholder="TZS" autocomplete="off" maxlength="3" />
+                    <app-currency-select id="newTierCurrency" name="newTierCurrency"
+                                         [(ngModel)]="newTierCurrency"
+                                         [companyUid]="selectedCompanyUid()"
+                                         [required]="true"
+                                         [disabled]="tierSaving()" />
                   </div>
                 </div>
                 @if (tierFormError(); as msg) {
@@ -311,9 +313,11 @@
                   </div>
                   <div class="erp-field">
                     <label for="newCpCurrency">Currency <span class="text-danger" aria-hidden="true">*</span></label>
-                    <input id="newCpCurrency" name="newCpCurrency" type="text" class="form-control"
-                           [ngModel]="newCpCurrency()" (ngModelChange)="newCpCurrency.set($event)"
-                           [disabled]="cpSaving()" placeholder="TZS" autocomplete="off" maxlength="3" />
+                    <app-currency-select id="newCpCurrency" name="newCpCurrency"
+                                         [(ngModel)]="newCpCurrency"
+                                         [companyUid]="selectedCompanyUid()"
+                                         [required]="true"
+                                         [disabled]="cpSaving()" />
                   </div>
                   <div class="erp-field">
                     <label for="newCpFrom">Effective From</label>

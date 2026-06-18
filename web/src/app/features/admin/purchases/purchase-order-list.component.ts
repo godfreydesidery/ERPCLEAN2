@@ -19,6 +19,7 @@ import { OrganisationService } from '../organisation/organisation.service';
 import { SupplierService } from '../parties/supplier.service';
 import { PurchasesService } from './purchases.service';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
+import { CurrencySelectComponent } from '../../../shared/currency-select/currency-select.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -30,7 +31,7 @@ interface LoadTrigger { q: string; status: string; page: number }
  */
 @Component({
   selector: 'app-purchase-order-list',
-  imports: [FormsModule, RouterLink, DatePipe, PaginatorComponent],
+  imports: [FormsModule, RouterLink, DatePipe, PaginatorComponent, CurrencySelectComponent],
   templateUrl: './purchase-order-list.component.html',
   styleUrl: './purchase-order-list.component.scss',
 })
@@ -45,6 +46,7 @@ export class PurchaseOrderListComponent {
   // ── Company context ────────────────────────────────────────────────────────
   readonly companies = signal<Company[]>([]);
   readonly selectedCompanyId = signal('');
+  readonly selectedCompanyUid = computed(() => this.companies().find((c) => c.id === this.selectedCompanyId())?.uid ?? '');
   readonly companyState = signal<'loading' | 'idle' | 'error'>('loading');
 
   // ── List state ─────────────────────────────────────────────────────────────

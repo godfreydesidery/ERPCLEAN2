@@ -15,6 +15,7 @@ import { ArInvoiceDto, WriteOffRequest, RaiseCreditNoteRequest } from './models/
 import { ArService } from './ar.service';
 import { debounceTime, distinctUntilChanged, Subject as RxSubject } from 'rxjs';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
+import { CurrencySelectComponent } from '../../../shared/currency-select/currency-select.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -32,7 +33,7 @@ interface LoadTrigger {
  */
 @Component({
   selector: 'app-ar-invoices-list',
-  imports: [FormsModule, PaginatorComponent],
+  imports: [FormsModule, PaginatorComponent, CurrencySelectComponent],
   templateUrl: './ar-invoices-list.component.html',
   styleUrl: './ar-invoices-list.component.scss',
 })
@@ -47,6 +48,7 @@ export class ArInvoicesListComponent {
   // ── Company context ────────────────────────────────────────────────────────
   readonly companies = signal<Company[]>([]);
   readonly selectedCompanyId = signal('');
+  readonly selectedCompanyUid = computed(() => this.companies().find((c) => c.id === this.selectedCompanyId())?.uid ?? '');
   readonly companyState = signal<'loading' | 'idle' | 'error'>('loading');
 
   // ── List state ─────────────────────────────────────────────────────────────

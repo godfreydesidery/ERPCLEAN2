@@ -106,10 +106,11 @@
                 <label for="currency">
                   Currency <span class="text-danger" aria-hidden="true">*</span>
                 </label>
-                <input id="currency" name="currency" type="text" class="form-control"
-                       placeholder="TZS"
-                       [ngModel]="currency()" (ngModelChange)="currency.set($event)"
-                       [disabled]="saving()" autocomplete="off" />
+                <app-currency-select id="currency" name="currency"
+                                     [(ngModel)]="currency"
+                                     [companyUid]="selectedCompany()?.uid ?? ''"
+                                     [required]="true"
+                                     [disabled]="saving()" />
               </div>
 
               <!-- Valid From -->
