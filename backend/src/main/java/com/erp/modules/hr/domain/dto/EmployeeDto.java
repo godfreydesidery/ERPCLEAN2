@@ -1,6 +1,7 @@
 package com.erp.modules.hr.domain.dto;
 
 import com.erp.modules.hr.domain.enums.EmploymentStatus;
+import com.erp.modules.hr.domain.enums.MaritalStatus;
 import com.erp.modules.hr.domain.enums.PaymentMethod;
 import java.time.LocalDate;
 
@@ -24,6 +25,15 @@ public record EmployeeDto(
         String jobTitle,
         EmploymentStatus status,
         Long userId,
+        // Lifecycle + HR profile + org (P2 D6, ADR-0041)
+        LocalDate terminationDate,
+        String terminationReason,
+        LocalDate confirmationDate,
+        LocalDate probationEndDate,
+        Long managerId,
+        MaritalStatus maritalStatus,
+        String nationality,
+        Long positionId,
         // Contact fields (ADR-0040 D-11)
         String phone,
         String email,

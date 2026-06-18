@@ -101,6 +101,32 @@ public class ArReceipt extends UidEntity {
     @Setter
     private Instant rateAt;
 
+    // -------------------------------------------------------------------------
+    // ADR-0041 D3 — cheque instrument link + bounce reversal
+    // -------------------------------------------------------------------------
+
+    /** Scalar uid of the INBOUND cheque that funded this receipt (soft-FK to cheques.uid, no DB FK). */
+    @Column(name = "cheque_uid", length = 26)
+    @Setter
+    private String chequeUid;
+
+    /**
+     * Timestamp when this receipt's cash leg was reversed because the funding cheque BOUNCED.
+     * Null while the receipt is live. Set append-only when the reversing JournalEntry posts.
+     */
+    @Column(name = "reversed_at")
+    @Setter
+    private Instant reversedAt;
+
+    /**
+     * Scalar uid of the receipt that this row reverses (self soft-FK). Null on ordinary receipts;
+     * used only if a reversal is itself represented as a receipt row (not used by the bounce path,
+     * which reverses via an append-only JournalEntry and stamps {@link #reversedAt} on the original).
+     */
+    @Column(name = "reversal_of_receipt_uid", length = 26)
+    @Setter
+    private String reversalOfReceiptUid;
+
     protected ArReceipt() {
         // JPA
     }

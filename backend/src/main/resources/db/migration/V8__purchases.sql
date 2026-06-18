@@ -76,6 +76,11 @@ CREATE TABLE purchase_order_lines (
     required_by_date        DATE,                                -- P2: per-line required-by date
     unit_cost_amount        NUMERIC(19,4)    NOT NULL,
     line_total_amount       NUMERIC(19,4)    NOT NULL,
+    -- P2-D4 (ADR-0041): per-line dimension tags (mirror supplier_bill_lines / journal_lines).
+    -- Scalar soft-FK BIGINT (no DB FK: dimension_values is created later in V23). Flow onto the
+    -- GL lines the bill (derived from this PO) generates so a line dimension reaches the ledger.
+    cost_centre_value_id    BIGINT,                              -- P2-D4: Cost Centre dimension (soft ref → dimension_values.id), nullable
+    department_value_id     BIGINT,                              -- P2-D4: Department dimension (soft ref → dimension_values.id), nullable
     currency                VARCHAR(3)       NOT NULL,            -- denormalised document currency
     created_at              TIMESTAMPTZ      NOT NULL DEFAULT now(),
     created_by              BIGINT,

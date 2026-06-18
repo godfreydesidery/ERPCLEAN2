@@ -112,6 +112,8 @@ public class ContractServiceImpl implements ContractService {
                 c.getContractType(), c.getBaseSalaryAmount(), CurrencyCode.value(c.getCurrency()), c.getPayFrequency(),
                 c.getStartDate(), c.getEndDate(),
                 c.isPayeResident(), c.isNssfMember(), c.isHeslbBorrower(),
-                c.isWcfCovered(), c.isSdlCounted(), c.isActive());
+                c.isWcfCovered(), c.isSdlCounted(), c.isActive(),
+                c.getProbationMonths(), c.getNoticePeriodDays(), c.getWorkingHoursPerDay(),
+                c.getWorkingDaysPerWeek(), c.getJobGrade(), c.getSignedDocumentRef());
     }
 }

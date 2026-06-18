@@ -70,6 +70,32 @@ public class EmploymentContract extends UidEntity {
     @Setter
     private boolean sdlCounted = true;
 
+    // ---- Contract policy fields (P2 D6, ADR-0041) ----
+
+    @Column(name = "probation_months")
+    @Setter
+    private Integer probationMonths;
+
+    @Column(name = "notice_period_days")
+    @Setter
+    private Integer noticePeriodDays;
+
+    @Column(name = "working_hours_per_day", precision = 5, scale = 2)
+    @Setter
+    private BigDecimal workingHoursPerDay;
+
+    @Column(name = "working_days_per_week")
+    @Setter
+    private Integer workingDaysPerWeek;
+
+    @Column(name = "job_grade", length = 40)
+    @Setter
+    private String jobGrade;
+
+    @Column(name = "signed_document_ref", length = 255)
+    @Setter
+    private String signedDocumentRef;
+
     @Column(name = "active", nullable = false)
     @Setter
     private boolean active = true;

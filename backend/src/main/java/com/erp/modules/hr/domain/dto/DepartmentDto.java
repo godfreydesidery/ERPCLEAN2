@@ -6,5 +6,10 @@ public record DepartmentDto(
         Long companyId,
         String code,
         String name,
-        boolean active
+        boolean active,
+        // Org hierarchy + ownership (P2 D6, ADR-0041)
+        Long parentDepartmentId,
+        Long managerId,
+        Long costCentreValueId,
+        Long branchId
 ) {}

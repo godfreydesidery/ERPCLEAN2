@@ -50,6 +50,24 @@ public class PayComponent extends UidEntity {
     @Setter
     private boolean pensionable = true;
 
+    // ---- Statutory applicability + presentation (P2 D6, ADR-0041) ----
+
+    @Column(name = "wcf_applicable", nullable = false)
+    @Setter
+    private boolean wcfApplicable = true;
+
+    @Column(name = "sdl_applicable", nullable = false)
+    @Setter
+    private boolean sdlApplicable = true;
+
+    @Column(name = "display_order", nullable = false)
+    @Setter
+    private int displayOrder = 0;
+
+    @Column(name = "pro_ratable", nullable = false)
+    @Setter
+    private boolean proRatable = true;
+
     @Column(name = "active", nullable = false)
     @Setter
     private boolean active = true;

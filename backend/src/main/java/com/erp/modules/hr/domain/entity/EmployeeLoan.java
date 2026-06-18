@@ -2,6 +2,7 @@ package com.erp.modules.hr.domain.entity;
 
 import com.erp.platform.common.money.CurrencyCode;
 import com.erp.modules.hr.domain.enums.LoanStatus;
+import com.erp.modules.hr.domain.enums.LoanType;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -53,6 +54,27 @@ public class EmployeeLoan extends UidEntity {
 
     @Column(name = "currency", nullable = false, length = 3, updatable = false)
     private CurrencyCode currency;
+
+    // ---- Loan terms (P2 D6, ADR-0041) — single rate v1; dynamic schedule DEFERRED ----
+
+    /** Annual interest rate %; NULL = interest-free advance. */
+    @Column(name = "interest_rate", precision = 7, scale = 4)
+    @Setter
+    private BigDecimal interestRate;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "loan_type", length = 20)
+    @Setter
+    private LoanType loanType;
+
+    /** Soft-FK app_users. */
+    @Column(name = "approved_by")
+    @Setter
+    private Long approvedBy;
+
+    @Column(name = "term_months")
+    @Setter
+    private Integer termMonths;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();

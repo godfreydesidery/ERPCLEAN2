@@ -14,6 +14,7 @@ import com.erp.modules.cashbank.repository.CashBankAccountRepository;
 import com.erp.modules.cashbank.repository.ChequeRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.events.OutboxPublisher;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -37,6 +38,7 @@ class ChequeInboundServiceImplTest {
     private ChequeRepository         chequeRepo;
     private CashBankAccountRepository accountRepo;
     private CompanyRepository         companyRepo;
+    private OutboxPublisher           outbox;
     private ScopeGuard                scopeGuard;
     private AuditService              audit;
     private ChequeServiceImpl         service;
@@ -46,10 +48,11 @@ class ChequeInboundServiceImplTest {
         chequeRepo  = mock(ChequeRepository.class);
         accountRepo = mock(CashBankAccountRepository.class);
         companyRepo = mock(CompanyRepository.class);
+        outbox      = mock(OutboxPublisher.class);
         scopeGuard  = mock(ScopeGuard.class);
         audit       = mock(AuditService.class);
 
-        service = new ChequeServiceImpl(chequeRepo, accountRepo, companyRepo, scopeGuard, audit);
+        service = new ChequeServiceImpl(chequeRepo, accountRepo, companyRepo, outbox, scopeGuard, audit);
 
         RequestContext.set(new RequestContext.Principal(1L, "user", false, 10L, 20L, null));
     }

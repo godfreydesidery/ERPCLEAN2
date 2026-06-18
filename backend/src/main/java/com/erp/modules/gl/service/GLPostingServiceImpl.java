@@ -273,15 +273,29 @@ public class GLPostingServiceImpl implements GLPostingService {
             assertDimensionValueValid(companyId, DimensionSlot.DIMENSION_4, ld.dimension4ValueId());
         }
 
-        // Step 3: mandatory-slot enforcement (ADR-0025 amendment, ISSUES-REGISTER #20d) — applies ONLY
-        // to user-entered MANUAL journals. Automated/system posters do not carry operator dimension
-        // context; enforcing mandatory slots on them poisons event-driven postings. The operator who
-        // enters a manual journal CAN supply the dimension, so the BR-CC-03/FR-CC-08 control is kept
-        // exactly where it is actionable.
+        // Step 3 (MANUAL-only) — dimension REQUIREDNESS. Two complementary controls, both applying ONLY to
+        // user-entered MANUAL journals. Automated/system posters do not carry operator dimension context;
+        // enforcing requiredness on them poisons event-driven postings (ISSUES-REGISTER #20d, ADR-0025).
+        // The operator who enters a manual journal CAN supply the dimension, so the controls are kept
+        // exactly where they are actionable. Neither control adds/removes/alters a leg → Σ-gate untouched.
         if (sourceType != JournalSourceType.MANUAL) {
             return;
         }
 
+        // Step 3a — per-account dimension requirement flags (ADR-0041 D4). MANUAL-only (we are past the
+        // sourceType guard above). For each line whose target account carries a require_* flag, assert the
+        // line supplies the matching dimension value; else reject naming the account + the missing slot.
+        // Same exemption rationale as the company mandatory-slot rule below and the control-account gate:
+        // system/event-driven posters do not carry operator dimension context (ADR-0025). No balance
+        // impact — this is a pre-persist validation only. No-op when no account sets any flag
+        // (zero-regression for existing manual journals, NFR-CC-01).
+        enforceAccountDimensionRequirements(draftLines);
+
+        // Step 3b — company-wide mandatory-slot enforcement (ADR-0025 amendment, ISSUES-REGISTER #20d) —
+        // applies ONLY to user-entered MANUAL journals. Automated/system posters do not carry operator
+        // dimension context; enforcing mandatory slots on them poisons event-driven postings. The operator
+        // who enters a manual journal CAN supply the dimension, so the BR-CC-03/FR-CC-08 control is kept
+        // exactly where it is actionable.
         // Skip entirely if no mandatory dimension exists (NFR-CC-01 zero-regression guard).
         List<DimensionSlot> mandatory = dimensionTypes.findMandatorySlots(companyId);
         if (mandatory.isEmpty()) {
@@ -305,6 +319,45 @@ public class GLPostingServiceImpl implements GLPostingService {
                                     + " (FR-CC-08 / BR-CC-03). Journal line for account "
                                     + ld.accountId() + " is missing a value for this slot.");
                 }
+            }
+        }
+    }
+
+    /**
+     * ADR-0041 D4: per-account dimension-requirement enforcement. For each posting line whose target
+     * account sets {@code require_cost_centre}/{@code require_department}/{@code require_project}=true,
+     * assert the line carries the corresponding dimension value (cost-centre value, department value,
+     * project id respectively); else throw {@link com.erp.platform.common.api.ConflictException} naming
+     * the account code and the missing dimension.
+     *
+     * <p>MANUAL-only by construction — this is reached only after the {@code sourceType==MANUAL} guard in
+     * {@link #validateDimensions}. System/event-driven posters are exempt for the same reason as the
+     * company mandatory-slot rule and the control-account gate (no operator dimension context, ADR-0025).
+     *
+     * <p>No balance impact: pre-persist validation only — it never alters, adds, or removes a leg, so the
+     * Σ debit==Σ credit gate is untouched. No-op when no account on the draft sets any flag (NFR-CC-01).
+     */
+    private void enforceAccountDimensionRequirements(List<JournalEntryDraft.LineDraft> draftLines) {
+        for (JournalEntryDraft.LineDraft ld : draftLines) {
+            ChartOfAccount account = accounts.findById(ld.accountId())
+                    .orElseThrow(() -> new NotFoundException("Account not found: " + ld.accountId()));
+            if (account.isRequireCostCentre() && ld.costCentreValueId() == null) {
+                throw new com.erp.platform.common.api.ConflictException(
+                        "Account " + account.getAccountCode()
+                                + " requires a cost-centre dimension on every manual journal line "
+                                + "(ADR-0041 D4). This line is missing a cost-centre value.");
+            }
+            if (account.isRequireDepartment() && ld.departmentValueId() == null) {
+                throw new com.erp.platform.common.api.ConflictException(
+                        "Account " + account.getAccountCode()
+                                + " requires a department dimension on every manual journal line "
+                                + "(ADR-0041 D4). This line is missing a department value.");
+            }
+            if (account.isRequireProject() && ld.projectId() == null) {
+                throw new com.erp.platform.common.api.ConflictException(
+                        "Account " + account.getAccountCode()
+                                + " requires a project dimension on every manual journal line "
+                                + "(ADR-0041 D4). This line is missing a project value.");
             }
         }
     }

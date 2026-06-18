@@ -100,6 +100,7 @@ public class PayComponentServiceImpl implements PayComponentService {
     private PayComponentDto toDto(PayComponent pc) {
         return new PayComponentDto(pc.getId(), pc.getUid(), pc.getCompanyId(),
                 pc.getCode(), pc.getName(), pc.getKind(), pc.getBasis(),
-                pc.getGlAccountId(), pc.isTaxable(), pc.isPensionable(), pc.isActive());
+                pc.getGlAccountId(), pc.isTaxable(), pc.isPensionable(), pc.isActive(),
+                pc.isWcfApplicable(), pc.isSdlApplicable(), pc.getDisplayOrder(), pc.isProRatable());
     }
 }

@@ -132,6 +132,23 @@ public class PurchaseOrderLine {
     @Setter
     private BigDecimal lineTotalAmount;
 
+    // -------------------------------------------------------------------------
+    // P2-D4 (ADR-0041) — per-line dimension tags (mirror supplier_bill_lines /
+    // journal_lines cost_centre_value_id / department_value_id). Scalar soft-FK Long
+    // (no DB FK: dimension_values created in V23). Flow onto the GL lines the bill
+    // derived from this PO generates, so a PO line dimension reaches the ledger.
+    // -------------------------------------------------------------------------
+
+    /** P2-D4: Cost Centre dimension (soft ref → dimension_values.id). Nullable. */
+    @Column(name = "cost_centre_value_id")
+    @Setter
+    private Long costCentreValueId;
+
+    /** P2-D4: Department dimension (soft ref → dimension_values.id). Nullable. */
+    @Column(name = "department_value_id")
+    @Setter
+    private Long departmentValueId;
+
     /** Document currency; denormalised from parent PO (BR-PURCH-04). */
     @Column(name = "currency", nullable = false, length = 3)
     private CurrencyCode currency;

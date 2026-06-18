@@ -112,6 +112,15 @@ public final class DomainEventType {
     public static final String PAYMENT_RECEIVED       = "PAYMENT.RECEIVED";
     public static final String AGG_AR_RECEIPT         = "AR_RECEIPT";
 
+    // --- cash & bank cheque-bounce reversal (ADR-0041 D3) ---
+    /**
+     * An inbound/outbound cheque was returned unpaid (BOUNCED transition). The owning AR receipt
+     * (inbound) or AP payment (outbound) must post an APPEND-ONLY reversing JournalEntry of its
+     * cash leg and restore the relieved open item (ADR-0041 D3 — closes the deferred D-9 follow-up).
+     */
+    public static final String CHEQUE_BOUNCED         = "CHEQUE.BOUNCED";
+    public static final String AGG_CHEQUE             = "CHEQUE";
+
     // --- projects (ADR-0033) ---
 
     /** Materials issued to a project — triggers cost recording on the project dimension (ADR-0033 D-5). */

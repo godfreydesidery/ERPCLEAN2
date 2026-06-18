@@ -173,6 +173,14 @@ public class SupplierBillServiceImpl implements SupplierBillService {
                         acct -> line.setGlAccountId(acct.getId()));
             }
 
+            // ADR-0041 D4: stamp per-line dimension tags (flow onto the GL P&L leg at match-time).
+            if (lr.costCentreValueId() != null) {
+                line.setCostCentreValueId(lr.costCentreValueId());
+            }
+            if (lr.departmentValueId() != null) {
+                line.setDepartmentValueId(lr.departmentValueId());
+            }
+
             savedLines.add(lines.save(line));
         }
 

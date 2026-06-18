@@ -75,6 +75,30 @@ public class SalesInvoicePayment {
     @Column(name = "reference", length = 80)
     private String reference;
 
+    // -------------------------------------------------------------------------
+    // ADR-0041 D3 — instrument links + structured tender refs (all optional)
+    // -------------------------------------------------------------------------
+
+    /** Soft-FK to {@code cash_bank_accounts.id} the tender landed in (no DB FK — cross-module). */
+    @Column(name = "cash_bank_account_id")
+    @Setter
+    private Long cashBankAccountId;
+
+    /** Soft-FK to {@code cheques.id} when the tender is a cheque (no DB FK — cross-module). */
+    @Column(name = "cheque_id")
+    @Setter
+    private Long chequeId;
+
+    /** Structured mobile-money transaction reference (distinct from the free-text {@link #reference}). */
+    @Column(name = "mobile_money_ref", length = 80)
+    @Setter
+    private String mobileMoneyRef;
+
+    /** Structured card authorisation reference. */
+    @Column(name = "card_ref", length = 80)
+    @Setter
+    private String cardRef;
+
     @Column(name = "received_at", nullable = false)
     private Instant receivedAt = Instant.now();
 

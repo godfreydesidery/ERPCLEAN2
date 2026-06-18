@@ -163,6 +163,10 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         // Stamp settlement rate (ADR-0036 D-4; immutable after persist)
         receipt.setFxRate(settlementRate);
         receipt.setRateAt(settlementConv.rateAt());
+        // ADR-0041 D3: link the funding INBOUND cheque (lets a later bounce locate + reverse this receipt)
+        if (req.chequeUid() != null && !req.chequeUid().isBlank()) {
+            receipt.setChequeUid(req.chequeUid());
+        }
         receipt = receipts.save(receipt);
 
         // 6. Build allocation set

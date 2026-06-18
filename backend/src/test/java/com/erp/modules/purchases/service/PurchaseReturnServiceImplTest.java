@@ -309,6 +309,13 @@ class PurchaseReturnServiceImplTest {
                 LocalDate.now(),
                 new BigDecimal("100.00"), new BigDecimal("100.00"), BigDecimal.ZERO,
                 "TZS", "Purchase return test", null, "PURCHASE_RETURN:PRET-UID-1",
-                null); // P2: originRef (uid suffix) — not split in this stub
+                null,  // P2: originRef (uid suffix) — not split in this stub
+                // ADR-0041 D3: unapplied tracking + allocations (debit-note parity)
+                BigDecimal.ZERO,            // unappliedAmount
+                new BigDecimal("100.00"),  // baseAmount
+                BigDecimal.ZERO,            // baseUnappliedAmount
+                BigDecimal.ONE,             // fxRate
+                com.erp.modules.ap.domain.enums.ApDebitNoteStatus.APPLIED,
+                java.util.List.of());       // allocations
     }
 }
