@@ -17,8 +17,11 @@ CREATE TABLE stock_transfers (
     dest_branch_id      BIGINT          NOT NULL,
     dest_location_id    BIGINT          NOT NULL,
     transfer_date       DATE            NOT NULL,
+    expected_arrival_date DATE,                                  -- P2-M5: planned in-transit arrival date
     dispatched_at       TIMESTAMPTZ,
+    dispatched_by       BIGINT,                                  -- P2-M5: actor who dispatched (soft-FK app_users)
     received_at         TIMESTAMPTZ,
+    received_by         BIGINT,                                  -- P2-M5: actor who received (soft-FK app_users)
     notes               VARCHAR(500),
     version             BIGINT          NOT NULL DEFAULT 0,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT now(),

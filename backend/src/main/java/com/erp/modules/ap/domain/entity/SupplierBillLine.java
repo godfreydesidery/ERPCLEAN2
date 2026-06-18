@@ -112,6 +112,21 @@ public class SupplierBillLine {
     @Setter
     private Long glAccountId;
 
+    // -------------------------------------------------------------------------
+    // P2 — per-line dimension tags (mirror journal_lines cost_centre_value_id /
+    // department_value_id). Scalar soft-FK Long (no DB FK: dimension_values created in V23).
+    // -------------------------------------------------------------------------
+
+    /** P2: Cost Centre dimension (soft ref → dimension_values.id). Nullable. */
+    @Column(name = "cost_centre_value_id")
+    @Setter
+    private Long costCentreValueId;
+
+    /** P2: Department dimension (soft ref → dimension_values.id). Nullable. */
+    @Column(name = "department_value_id")
+    @Setter
+    private Long departmentValueId;
+
     @Column(name = "currency", nullable = false, length = 3)
     private CurrencyCode currency;
 

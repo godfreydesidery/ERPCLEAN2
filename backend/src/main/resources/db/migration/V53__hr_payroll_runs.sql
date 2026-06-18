@@ -78,6 +78,7 @@ CREATE TABLE payroll_lines (
     status                   VARCHAR(10)   NOT NULL DEFAULT 'OK',
     flag_reason              VARCHAR(255),
     currency                 VARCHAR(3)    NOT NULL DEFAULT 'TZS',
+    contract_id              BIGINT,                            -- P2-M5: employment-contract snapshot (soft-FK)
     version                  BIGINT        NOT NULL DEFAULT 0,
     created_at               TIMESTAMPTZ   NOT NULL DEFAULT now(),
     created_by               BIGINT,
@@ -107,6 +108,8 @@ CREATE TABLE payroll_line_items (
     item_kind           VARCHAR(20)   NOT NULL,
     label               VARCHAR(120)  NOT NULL,
     amount              NUMERIC(19,4) NOT NULL,
+    taxable             BOOLEAN,                               -- P2-M5: taxable snapshot at calculate time
+    pensionable         BOOLEAN,                               -- P2-M5: pensionable snapshot at calculate time
     gl_account_id       BIGINT,
     version             BIGINT        NOT NULL DEFAULT 0,
     created_at          TIMESTAMPTZ   NOT NULL DEFAULT now(),

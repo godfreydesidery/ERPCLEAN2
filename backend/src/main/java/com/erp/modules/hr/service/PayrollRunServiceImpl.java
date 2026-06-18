@@ -607,6 +607,7 @@ public class PayrollRunServiceImpl implements PayrollRunService {
                 l.getVoluntaryDeductionTotal(), l.getLoanDeductionTotal(),
                 l.getNssfEmployerAmount(), l.getWcfEmployerAmount(), l.getSdlEmployerAmount(),
                 l.getStatus(), l.getFlagReason(), CurrencyCode.value(l.getCurrency()),
+                l.getContractId(),
                 l.getPayeeMethod(), l.getPayeeAccountRef(), l.getPayeeBankName(), l.getPayeeAccountName());
     }
 }

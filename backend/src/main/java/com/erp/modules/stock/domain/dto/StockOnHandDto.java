@@ -19,6 +19,12 @@ public record StockOnHandDto(
         Long productId,
         BigDecimal quantity,
         BigDecimal reorderLevel,
+        /** Optional max-stock indicator threshold (P2-M5). */
+        BigDecimal maxQty,
+        /** Last applied movement timestamp (P2-M5 snapshot), ISO string or null. */
+        String lastMovementAt,
+        /** Last physical count timestamp (P2-M5 snapshot), ISO string or null. */
+        String lastCountedAt,
         /** Derived: quantity < 0 (overselling indicator, FR-STOCK-04). */
         boolean negative,
         /** Derived: reorder_level IS NOT NULL AND quantity <= reorder_level (low-stock indicator). */
@@ -42,6 +48,9 @@ public record StockOnHandDto(
                 s.getProductId(),
                 s.getQuantity(),
                 s.getReorderLevel(),
+                s.getMaxQty(),
+                s.getLastMovementAt() != null ? s.getLastMovementAt().toString() : null,
+                s.getLastCountedAt() != null ? s.getLastCountedAt().toString() : null,
                 neg,
                 low,
                 s.getVersion(),

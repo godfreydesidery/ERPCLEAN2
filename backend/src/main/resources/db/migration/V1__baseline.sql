@@ -35,6 +35,9 @@ CREATE TABLE companies (
     name                VARCHAR(160) NOT NULL,
     legal_name          VARCHAR(200),
     tax_id              VARCHAR(60),
+    vrn                 VARCHAR(40),                 -- P2: VAT registration number (distinct from tax_id)
+    logo_ref            VARCHAR(255),                -- P2: company-level branding logo reference
+    fiscal_year_start_month SMALLINT,               -- P2: doc-default fiscal-year start month (1-12)
     time_zone           VARCHAR(64)  NOT NULL DEFAULT 'Africa/Dar_es_Salaam',
     status              VARCHAR(32)  NOT NULL DEFAULT 'ACTIVE',
     version             BIGINT       NOT NULL DEFAULT 0,
@@ -59,6 +62,8 @@ CREATE TABLE branches (
     name                VARCHAR(160) NOT NULL,
     time_zone           VARCHAR(64)  NOT NULL DEFAULT 'Africa/Dar_es_Salaam',
     is_default          BOOLEAN      NOT NULL DEFAULT false,
+    manager_id          BIGINT,                      -- P2: soft-FK to app_users/employee (no DB FK — cross-module convention)
+    branch_type         VARCHAR(20),                 -- P2: typed branch classification (enum-as-string)
     status              VARCHAR(32)  NOT NULL DEFAULT 'ACTIVE',
     version             BIGINT       NOT NULL DEFAULT 0,
     created_at          TIMESTAMPTZ  NOT NULL DEFAULT now(),
@@ -67,7 +72,8 @@ CREATE TABLE branches (
     updated_by          BIGINT,
     CONSTRAINT uq_branch_uid UNIQUE (uid),
     CONSTRAINT uq_branch_company_code UNIQUE (company_id, code),
-    CONSTRAINT fk_branch_company FOREIGN KEY (company_id) REFERENCES companies (id)
+    CONSTRAINT fk_branch_company FOREIGN KEY (company_id) REFERENCES companies (id),
+    CONSTRAINT chk_branch_type CHECK (branch_type IS NULL OR branch_type IN ('HEAD_OFFICE','RETAIL','WAREHOUSE','SALES_OFFICE','FACTORY','OTHER'))
 );
 CREATE INDEX ix_branch_company ON branches (company_id);
 
@@ -111,6 +117,10 @@ CREATE TABLE app_users (
     locked_until         TIMESTAMPTZ,
     last_login_at        TIMESTAMPTZ,
     password_changed_at  TIMESTAMPTZ,
+    must_change_password BOOLEAN      NOT NULL DEFAULT false,   -- P2: force password change on next login
+    password_expires_at  TIMESTAMPTZ,                           -- P2: password expiry timestamp (nullable)
+    last_login_ip        VARCHAR(45),                           -- P2: last successful login IP (IPv6-max length)
+    employee_id          BIGINT,                                -- P2: soft-FK to HR employee master (no DB FK — cross-module)
     status               VARCHAR(32)  NOT NULL DEFAULT 'ACTIVE',
     version              BIGINT       NOT NULL DEFAULT 0,
     created_at           TIMESTAMPTZ  NOT NULL DEFAULT now(),
@@ -164,6 +174,10 @@ CREATE TABLE refresh_tokens (
     replaced_by_id      BIGINT,
     client_company_id   BIGINT,
     client_branch_id    BIGINT,
+    device_info         VARCHAR(255),    -- P2: session/device-management label
+    user_agent          VARCHAR(255),    -- P2: requesting client user-agent
+    ip_address          VARCHAR(45),     -- P2: issuing/last IP (IPv6-max length)
+    last_used_at        TIMESTAMPTZ,     -- P2: last time this token was presented
     CONSTRAINT uq_refresh_token_hash UNIQUE (token_hash),
     CONSTRAINT fk_refresh_token_user FOREIGN KEY (user_id) REFERENCES app_users (id),
     CONSTRAINT fk_refresh_token_replaced FOREIGN KEY (replaced_by_id) REFERENCES refresh_tokens (id)

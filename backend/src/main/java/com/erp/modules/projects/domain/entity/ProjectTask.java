@@ -9,6 +9,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -45,6 +46,23 @@ public class ProjectTask extends UidEntity {
     @Column(name = "planned_hours", precision = 9, scale = 2)
     @Setter
     private BigDecimal plannedHours;
+
+    @Column(name = "planned_start_date")
+    @Setter
+    private LocalDate plannedStartDate;
+
+    @Column(name = "planned_end_date")
+    @Setter
+    private LocalDate plannedEndDate;
+
+    @Column(name = "actual_hours", precision = 9, scale = 2)
+    @Setter
+    private BigDecimal actualHours;
+
+    /** P2: nullable soft-FK to app_users — the assignee. */
+    @Column(name = "assignee_user_id")
+    @Setter
+    private Long assigneeUserId;
 
     @Column(name = "is_billable", nullable = false)
     @Setter

@@ -86,6 +86,11 @@ public abstract class PartyBase extends UidEntity {
     @Setter
     private String district;
 
+    /** P2: ISO-3166 alpha-2 country code (nullable). Shared across all four party master tables. */
+    @Column(name = "country", length = 2)
+    @Setter
+    private String country;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     @Setter

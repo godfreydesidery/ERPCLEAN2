@@ -14,7 +14,10 @@ public record ProductBulkPackDto(
         String unitUid,
         String unitCode,
         String unitName,
-        BigDecimal factorToBase
+        BigDecimal factorToBase,
+        String barcode,
+        boolean purchaseDefault,
+        boolean saleDefault
 ) {
 
     public static ProductBulkPackDto from(ProductBulkPack bp) {
@@ -25,7 +28,10 @@ public record ProductBulkPackDto(
                 bp.getUnit() != null ? bp.getUnit().getUid()  : null,
                 bp.getUnit() != null ? bp.getUnit().getCode() : null,
                 bp.getUnit() != null ? bp.getUnit().getName() : null,
-                bp.getFactorToBase()
+                bp.getFactorToBase(),
+                bp.getBarcode(),
+                bp.isPurchaseDefault(),
+                bp.isSaleDefault()
         );
     }
 }

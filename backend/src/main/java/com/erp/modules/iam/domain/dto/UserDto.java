@@ -21,11 +21,17 @@ public record UserDto(
         boolean isRoot,
         String status,
         boolean locked,
-        String lastLoginAt) {
+        String lastLoginAt,
+        boolean mustChangePassword,
+        String passwordExpiresAt,
+        String lastLoginIp,
+        Long employeeId) {
 
     public static UserDto from(AppUser u) {
         Instant now = Instant.now();
         String lastLogin = u.getLastLoginAt() != null ? u.getLastLoginAt().toString() : null;
+        String passwordExpiry =
+                u.getPasswordExpiresAt() != null ? u.getPasswordExpiresAt().toString() : null;
         return new UserDto(
                 u.getId(),
                 u.getUid(),
@@ -36,6 +42,10 @@ public record UserDto(
                 u.isRoot(),
                 u.getStatus().name(),
                 u.isLocked(now),
-                lastLogin);
+                lastLogin,
+                u.isMustChangePassword(),
+                passwordExpiry,
+                u.getLastLoginIp(),
+                u.getEmployeeId());
     }
 }

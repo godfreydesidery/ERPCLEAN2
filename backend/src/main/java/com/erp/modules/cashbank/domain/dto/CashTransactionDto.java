@@ -13,6 +13,9 @@ public record CashTransactionDto(
         Long cashBankAccountId,
         String txnNumber,
         LocalDate txnDate,
+        // P2: bank value date + linked cheque
+        LocalDate valueDate,
+        Long chequeId,
         CashTxnDirection direction,
         BigDecimal amount,
         String currency,

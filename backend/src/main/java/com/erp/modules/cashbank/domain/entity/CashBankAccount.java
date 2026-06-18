@@ -8,7 +8,9 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -50,6 +52,54 @@ public class CashBankAccount extends UidEntity {
     @Column(name = "bank_branch", length = 120)
     @Setter
     private String bankBranch;
+
+    // -------------------------------------------------------------------------
+    // P2 — bank-identifier detail (BANK accounts). All nullable.
+    // -------------------------------------------------------------------------
+
+    /** P2: International Bank Account Number. Nullable. */
+    @Column(name = "iban", length = 34)
+    @Setter
+    private String iban;
+
+    /** P2: SWIFT code. Nullable. */
+    @Column(name = "swift", length = 11)
+    @Setter
+    private String swift;
+
+    /** P2: Bank Identifier Code. Nullable. */
+    @Column(name = "bic", length = 11)
+    @Setter
+    private String bic;
+
+    /** P2: domestic sort / routing code. Nullable. */
+    @Column(name = "sort_code", length = 20)
+    @Setter
+    private String sortCode;
+
+    // -------------------------------------------------------------------------
+    // P2 — treasury limits + cached reconciliation figures. All nullable.
+    // -------------------------------------------------------------------------
+
+    /** P2: agreed overdraft limit. Nullable. */
+    @Column(name = "overdraft_limit", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal overdraftLimit;
+
+    /** P2: minimum-balance floor. Nullable. */
+    @Column(name = "minimum_balance", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal minimumBalance;
+
+    /** P2: date of last completed reconciliation. Nullable. */
+    @Column(name = "last_reconciled_date")
+    @Setter
+    private LocalDate lastReconciledDate;
+
+    /** P2: balance at last reconciliation. Nullable. */
+    @Column(name = "last_reconciled_balance", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal lastReconciledBalance;
 
     @Column(name = "currency", nullable = false, length = 3, updatable = false)
     private CurrencyCode currency;

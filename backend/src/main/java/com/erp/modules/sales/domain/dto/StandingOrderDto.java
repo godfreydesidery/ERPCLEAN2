@@ -19,6 +19,10 @@ public record StandingOrderDto(
         String startDate,
         String endDate,
         String nextRunDate,
+        String lastRunDate,
+        Integer occurrencesGenerated,
+        Integer maxOccurrences,
+        boolean autoConfirm,
         StandingStatus status,
         String notes,
         List<StandingOrderLineDto> lines

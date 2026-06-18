@@ -209,12 +209,16 @@ public class SupplierBillServiceImpl implements SupplierBillService {
                         // D-8: per-line VAT + GL override
                         l.getVatStatus(), l.getVatRate(),
                         l.getLineVatAmount() != null ? l.getLineVatAmount() : BigDecimal.ZERO,
-                        l.getGlAccountId())
+                        l.getGlAccountId(),
+                        // P2: per-line dimensions
+                        l.getCostCentreValueId(), l.getDepartmentValueId())
         ).toList();
         return new SupplierBillDto(
                 b.getId(), b.getUid(), b.getCompanyId(), b.getBranchId(), b.getSupplierId(),
                 b.getBillNumber(), b.getSupplierInvoiceNo(), b.getSource(), b.getPurchaseOrderUid(),
                 b.getBillDate(), b.getDueDate(),
+                // P2: tax-point + received dates
+                b.getTaxPointDate(), b.getReceivedDate(),
                 b.getNetAmount(), b.getVatAmount(), b.getGrossAmount(), b.getOutstandingAmount(),
                 b.getCurrency().value(), b.getStatus(), b.getPostedGlEntryUid(),
                 // D-7: WHT snapshot

@@ -47,6 +47,10 @@ public class ProjectTimesheet extends UidEntity {
     @Setter
     private BigDecimal hours;
 
+    @Column(name = "overtime_hours", precision = 9, scale = 2)
+    @Setter
+    private BigDecimal overtimeHours;
+
     @Column(name = "is_billable", nullable = false)
     @Setter
     private boolean billable = true;

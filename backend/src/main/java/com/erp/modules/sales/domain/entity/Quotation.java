@@ -58,6 +58,21 @@ public class Quotation extends UidEntity {
     @Setter
     private LocalDate validUntil;
 
+    /** Customer's own purchase-order reference (P2-M3). Nullable. */
+    @Column(name = "customer_po_number", length = 60)
+    @Setter
+    private String customerPoNumber;
+
+    /** Plain revision counter (P2-M3). Nullable. */
+    @Column(name = "revision_no")
+    @Setter
+    private Integer revisionNo;
+
+    /** Win-probability percent, 0.00–100.00 (P2-M3). Nullable. */
+    @Column(name = "probability", precision = 5, scale = 2)
+    @Setter
+    private BigDecimal probability;
+
     @Column(name = "doc_discount_amount", precision = 19, scale = 4)
     @Setter
     private BigDecimal docDiscountAmount;

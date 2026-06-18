@@ -57,6 +57,26 @@ public class StandingOrder extends UidEntity {
     @Setter
     private LocalDate nextRunDate;
 
+    /** Date of the most recent generation run (P2-M3). Nullable. */
+    @Column(name = "last_run_date")
+    @Setter
+    private LocalDate lastRunDate;
+
+    /** Running count of SOs generated so far (P2-M3). Nullable. */
+    @Column(name = "occurrences_generated")
+    @Setter
+    private Integer occurrencesGenerated;
+
+    /** Optional cap on total generations (P2-M3). Nullable. */
+    @Column(name = "max_occurrences")
+    @Setter
+    private Integer maxOccurrences;
+
+    /** When true, generated SOs are auto-confirmed (P2-M3). Default false. */
+    @Column(name = "auto_confirm", nullable = false)
+    @Setter
+    private boolean autoConfirm = false;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     @Setter

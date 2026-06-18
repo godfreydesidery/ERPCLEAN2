@@ -61,6 +61,14 @@ public class Project extends UidEntity {
     @Setter
     private LocalDate plannedEndDate;
 
+    @Column(name = "actual_start_date")
+    @Setter
+    private LocalDate actualStartDate;
+
+    @Column(name = "actual_end_date")
+    @Setter
+    private LocalDate actualEndDate;
+
     @Column(name = "budget_amount", precision = 19, scale = 4)
     @Setter
     private BigDecimal budgetAmount;

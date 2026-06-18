@@ -14,8 +14,11 @@ public record WorkOrderComponentDto(
         String componentProductName,
         BigDecimal plannedQty,
         BigDecimal issuedQty,
+        BigDecimal returnedQty,
+        BigDecimal scrapQty,
         BigDecimal issuedValue,
         BigDecimal unitCostAtIssue,
+        Long unitId,
         boolean costSkipped,
         ComponentLineStatus status
 ) {}

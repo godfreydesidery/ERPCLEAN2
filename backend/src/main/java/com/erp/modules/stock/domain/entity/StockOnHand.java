@@ -60,6 +60,18 @@ public class StockOnHand {
     @Column(name = "reorder_level", precision = 19, scale = 6)
     private BigDecimal reorderLevel;
 
+    /** Optional max-stock indicator threshold (P2-M5). Indicator-only; NULL = no threshold. */
+    @Column(name = "max_qty", precision = 19, scale = 6)
+    private BigDecimal maxQty;
+
+    /** Timestamp of the last applied movement (P2-M5 snapshot); NULL until first movement. */
+    @Column(name = "last_movement_at")
+    private Instant lastMovementAt;
+
+    /** Timestamp of the last physical count (P2-M5 snapshot); NULL until first count. */
+    @Column(name = "last_counted_at")
+    private Instant lastCountedAt;
+
     /**
      * Running moving-average unit cost in base currency (ADR-0020 D-2).
      * NULL = no cost established yet (never received, never opened).
@@ -191,6 +203,9 @@ public class StockOnHand {
     public Long       getProductId()     { return productId; }
     public BigDecimal getQuantity()      { return quantity; }
     public BigDecimal getReorderLevel()  { return reorderLevel; }
+    public BigDecimal getMaxQty()        { return maxQty; }
+    public Instant    getLastMovementAt(){ return lastMovementAt; }
+    public Instant    getLastCountedAt() { return lastCountedAt; }
     public BigDecimal getAvgCost()       { return avgCost; }
     public BigDecimal getOnHandValue()   { return onHandValue; }
     public BigDecimal getReservedQty()   { return reservedQty; }

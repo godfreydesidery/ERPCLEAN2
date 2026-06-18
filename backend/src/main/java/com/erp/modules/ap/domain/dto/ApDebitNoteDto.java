@@ -18,5 +18,7 @@ public record ApDebitNoteDto(
         String currency,
         String reason,
         String glEntryUid,
-        String origin
+        String origin,
+        // P2: source-document uid suffix (isolated from the combined origin tag)
+        String originRef
 ) {}

@@ -52,6 +52,21 @@ public class ProductBulkPack {
     @Setter
     private BigDecimal factorToBase;
 
+    /** Pack-level barcode (P2-M3). Nullable. */
+    @Column(name = "barcode", length = 40)
+    @Setter
+    private String barcode;
+
+    /** When true, this is the default pack chosen on purchase documents (P2-M3). Default false. */
+    @Column(name = "is_purchase_default", nullable = false)
+    @Setter
+    private boolean purchaseDefault = false;
+
+    /** When true, this is the default pack chosen on sale documents (P2-M3). Default false. */
+    @Column(name = "is_sale_default", nullable = false)
+    @Setter
+    private boolean saleDefault = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

@@ -1,6 +1,7 @@
 package com.erp.modules.sales.domain.entity;
 
 import com.erp.modules.products.domain.enums.VatStatus;
+import com.erp.modules.sales.domain.enums.TaxType;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
@@ -26,6 +27,20 @@ public class TaxRate extends UidEntity {
     /** FK → companies.id; tenant scope; never updated. */
     @Column(name = "company_id", nullable = false, updatable = false)
     private Long companyId;
+
+    /** Human-readable rate label (P2-M3). Nullable. */
+    @Column(name = "name", length = 80)
+    @Setter
+    private String name;
+
+    /**
+     * Tax classification, generalising the master beyond VAT (P2-M3).
+     * Default VAT — additive-safe; existing rows map to VAT via the DB DEFAULT.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "tax_type", nullable = false, length = 20)
+    @Setter
+    private TaxType taxType = TaxType.VAT;
 
     /** The VAT classification this rate applies to. Unique per (company, vat_status). */
     @Enumerated(EnumType.STRING)

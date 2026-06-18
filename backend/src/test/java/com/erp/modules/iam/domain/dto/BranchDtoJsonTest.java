@@ -22,7 +22,7 @@ class BranchDtoJsonTest {
     void ids_serialiseAsStrings() throws Exception {
         BranchDto dto = new BranchDto(
                 42L, "01HZX0BRANCHUID0000000000", 7L, "01HZX0COMPANYUID000000000",
-                "BR-01", "Kariakoo", "Africa/Dar_es_Salaam", true, "ACTIVE");
+                "BR-01", "Kariakoo", "Africa/Dar_es_Salaam", true, null, null, "ACTIVE");
 
         String json = mapper.writeValueAsString(dto);
 

@@ -53,6 +53,21 @@ public class SalesOrder extends UidEntity {
     @Column(name = "order_date", nullable = false)
     private LocalDate orderDate;
 
+    /** Customer's own purchase-order reference (P2-M3). Nullable. */
+    @Column(name = "customer_po_number", length = 60)
+    @Setter
+    private String customerPoNumber;
+
+    /** Customer-requested delivery date (P2-M3). Nullable. */
+    @Column(name = "requested_delivery_date")
+    @Setter
+    private LocalDate requestedDeliveryDate;
+
+    /** Promised delivery date (P2-M3). Nullable. */
+    @Column(name = "promised_date")
+    @Setter
+    private LocalDate promisedDate;
+
     @Column(name = "source_quotation_uid", length = 26)
     @Setter
     private String sourceQuotationUid;

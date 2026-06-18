@@ -25,6 +25,8 @@ public record PayrollLineDto(
         PayrollLineStatus status,
         String flagReason,
         String currency,
+        // Employment-contract snapshot (P2-M5)
+        Long contractId,
         // Payee snapshot fields (ADR-0040 D-11)
         String payeeMethod,
         String payeeAccountRef,

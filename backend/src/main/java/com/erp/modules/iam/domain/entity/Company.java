@@ -43,6 +43,21 @@ public class Company extends UidEntity {
     @Setter
     private String taxId;
 
+    /** P2: VAT registration number (distinct from taxId). */
+    @Column(name = "vrn", length = 40)
+    @Setter
+    private String vrn;
+
+    /** P2: company-level branding logo reference. */
+    @Column(name = "logo_ref", length = 255)
+    @Setter
+    private String logoRef;
+
+    /** P2: doc-default fiscal-year start month (1-12). */
+    @Column(name = "fiscal_year_start_month")
+    @Setter
+    private Short fiscalYearStartMonth;
+
     @Column(name = "time_zone", nullable = false, length = 64)
     @Setter
     private String timeZone = "Africa/Dar_es_Salaam";

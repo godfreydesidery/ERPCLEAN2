@@ -239,7 +239,8 @@ public class ApprovalEngineImpl implements ApprovalEngine {
         return new ApprovalRequestDto(
                 r.getId(), r.getUid(), r.getCompanyId(), r.getBranchId(),
                 r.getRequestNumber(), r.getDocumentType(), r.getDocumentUid(),
-                r.getAmount(), r.getCurrency().value(), r.getStatus(), r.isAutoApproved(),
+                r.getAmount(), r.getCurrency().value(), r.getStatus(),
+                r.getCurrentStepSequence(), r.isAutoApproved(),
                 r.getSourcePolicyId(), r.getSourcePolicyUid(), r.getSummary(),
                 r.getSubmittedBy(), r.getSubmittedAt(), r.getResolvedAt(), r.getResolvedBy(),
                 stepDtos);

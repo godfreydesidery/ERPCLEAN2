@@ -20,6 +20,9 @@ public record ActivityDto(
         Instant occurredAt,
         LocalDate dueDate,
         Long assigneeUserId,
+        String outcome,
+        Instant reminderAt,
+        Integer durationMinutes,
         boolean done,
         Instant doneAt,
         MasterStatus status,
@@ -34,7 +37,8 @@ public record ActivityDto(
                 a.getId(), a.getUid(), a.getCompanyId(), a.getBranchId(),
                 a.getActivityNumber(), a.getActivityType(), a.getLeadId(), a.getOpportunityId(),
                 a.getSubject(), a.getBody(), a.getOccurredAt(), a.getDueDate(),
-                a.getAssigneeUserId(), a.isDone(), a.getDoneAt(), a.getStatus(),
+                a.getAssigneeUserId(), a.getOutcome(), a.getReminderAt(), a.getDurationMinutes(),
+                a.isDone(), a.getDoneAt(), a.getStatus(),
                 a.getVersion(), a.getCreatedAt(), a.getCreatedBy(),
                 a.getUpdatedAt(), a.getUpdatedBy());
     }

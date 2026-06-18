@@ -50,6 +50,16 @@ public class ApPaymentAllocation {
     @Setter
     private BigDecimal settlementRate;
 
+    /** P2: when this allocation was made (mirrors AR allocation). Nullable. */
+    @Column(name = "allocated_at")
+    @Setter
+    private Instant allocatedAt;
+
+    /** P2: actor who made this allocation (mirrors AR allocation). Nullable. */
+    @Column(name = "allocated_by")
+    @Setter
+    private Long allocatedBy;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

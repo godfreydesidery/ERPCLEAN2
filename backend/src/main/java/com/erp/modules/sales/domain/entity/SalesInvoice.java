@@ -69,6 +69,11 @@ public class SalesInvoice extends UidEntity {
     @Column(name = "currency", nullable = false, length = 3)
     private CurrencyCode currency;
 
+    /** Customer's own purchase-order reference (P2-M3). Nullable. */
+    @Column(name = "customer_po_number", length = 60)
+    @Setter
+    private String customerPoNumber;
+
     /** Document-level discount amount (optional). Apportioned across lines before VAT. */
     @Column(name = "doc_discount_amount", precision = 19, scale = 4)
     @Setter

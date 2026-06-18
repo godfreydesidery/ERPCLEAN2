@@ -60,6 +60,11 @@ public class ApprovalRequest extends UidEntity {
     @Setter
     private ApprovalRequestStatus status = ApprovalRequestStatus.PENDING;
 
+    /** P2: denormalised sequence of the currently-open step (derived listing convenience). */
+    @Column(name = "current_step_sequence")
+    @Setter
+    private Integer currentStepSequence;
+
     /** True iff no policy matched — terminal APPROVED with no steps (BR-APR-09). */
     @Column(name = "auto_approved", nullable = false, updatable = false)
     private boolean autoApproved = false;

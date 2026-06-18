@@ -101,6 +101,16 @@ public class SalesOrderLine extends UidEntity {
     @Setter
     private BigDecimal lineDiscountPercent;
 
+    /** Free-text reason for the line discount (P2-M3). Nullable. */
+    @Column(name = "discount_reason", length = 160)
+    @Setter
+    private String discountReason;
+
+    /** Customer-requested date for this line (P2-M3). Nullable. */
+    @Column(name = "requested_date")
+    @Setter
+    private java.time.LocalDate requestedDate;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "vat_status", nullable = false, length = 20)
     private VatStatus vatStatus;

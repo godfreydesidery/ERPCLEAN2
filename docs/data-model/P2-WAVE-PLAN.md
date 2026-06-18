@@ -24,5 +24,13 @@ Sequencing for the P2 tranche of [GAP-FIX-WORKLIST.md](GAP-FIX-WORKLIST.md) (lin
 - **P2-D7 — Remaining design.** GL FS-mapping/reportingGroup, FiscalPeriod module soft-close, GlConfig effective dating, JournalEntry DRAFT lifecycle, JournalLine subledger key; ArWriteOff/AssetDisposal/AssetRevaluation approvals + provenance; FixedAsset componentisation/insurance; BillMatch split/matchType/variance; VatReturn amendment/penalty; CurrencyRate effectiveTo; FxRevaluationRunLine drill-down; budgeting type/branch/quantity; StockLocation hierarchy + StockTransferLine partial + StockCount workflow; on-order/ATP (X20); manufacturing BOM/routing/lot (X16/X19); PurchaseSettings; Rfq award/SupplierQuote scoring; PosSession per-tender; SalesReturn handling; Delivery logistics/POD; IAM Org/Company/Branch contact-address + Org subscription + AppUser MFA.
 
 ## Status
-- [ ] P2-M1 … P2-M6 (mechanical)
+- [x] **P2-M1** (gl/tax/fx) — shipped `170498c`, green.
+- [x] **P2-M2…M6** (ap/cashbank, sales/products, purchases, hr/stock/mfg, crm/projects/fixedassets, approvals/iam/parties) — ~148 columns/enums, built by 6 parallel agents, green (970 tests).
 - [ ] P2-D1 … P2-D7 (design)
+
+## Mechanical follow-up tranche (deferred from M2–M6, all low-risk)
+Columns/enums landed; these remaining bits were deferred to stay strictly mechanical / avoid cross-module breakage:
+- **Cross-module enum-swaps kept as String** (compile-safe): `ap_debit_notes.origin` → `ApDebitNoteOrigin` (enum TYPE + `origin_ref` added; mapping needs purchases caller `RaiseDebitNoteRequest.origin` + `PurchaseReturnServiceImpl` split of `KIND:{uid}`); `payroll_line_items.item_kind` → enum (read as String by gl `PayrollPostingHandler`).
+- **Population wiring** (snapshot/derived columns added but not yet written by services): control/snapshot cols (loan `deducted_amount/due_date/paid_at`, `contract_id`, taxable/pensionable, stock `max_qty/last_movement_at/last_counted_at`, WO `target_location_id`), `opportunities.stage_changed_at` stamp in `advanceStage`, PO `billing_status` roll-up.
+- **DTO symmetry**: `SupplierDto/AgentDto/OtherPartyDto.country`; `RfqSupplier` has no read DTO; Customer create/update request DTOs not extended (country/taxExempt/defaultCurrency are entity-settable + read-exposed only); `ProductDto.category` pre-existing omission.
+- **Soft-FK → real FK** (optional, via later ALTER once referenced tables exist in migration order): `cash_transactions.cheque_id`, `supplier_bill_lines` dimension cols, `product_barcodes.uom_id`, `project_tasks.assignee_user_id`.

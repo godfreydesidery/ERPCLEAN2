@@ -25,6 +25,16 @@ CREATE TABLE cash_bank_accounts (
     bank_name           VARCHAR(120),
     bank_account_no     VARCHAR(60),
     bank_branch         VARCHAR(120),
+    -- P2: bank-identifier detail (BANK accounts), all nullable
+    iban                VARCHAR(34),                          -- P2: International Bank Account Number
+    swift               VARCHAR(11),                          -- P2: SWIFT code
+    bic                 VARCHAR(11),                          -- P2: Bank Identifier Code
+    sort_code           VARCHAR(20),                          -- P2: domestic sort / routing code
+    -- P2: treasury limits + cached reconciliation figures, all nullable
+    overdraft_limit         NUMERIC(19,4),                    -- P2: agreed overdraft limit
+    minimum_balance         NUMERIC(19,4),                    -- P2: minimum-balance floor
+    last_reconciled_date    DATE,                             -- P2: date of last completed reconciliation
+    last_reconciled_balance NUMERIC(19,4),                    -- P2: balance at last reconciliation
     currency            VARCHAR(3)      NOT NULL,
     gl_account_id       BIGINT          NOT NULL,
     is_default          BOOLEAN         NOT NULL DEFAULT FALSE,
@@ -95,6 +105,8 @@ CREATE TABLE cash_transactions (
     cash_bank_account_id        BIGINT          NOT NULL,
     txn_number                  VARCHAR(30)     NOT NULL,
     txn_date                    DATE            NOT NULL,
+    value_date                  DATE,                         -- P2: bank value date (when funds cleared), nullable
+    cheque_id                   BIGINT,                       -- P2: linked cheque (soft ref → cheques.id; cheques created later in V13), nullable
     direction                   VARCHAR(3)      NOT NULL,
     amount                      NUMERIC(19,4)   NOT NULL,
     currency                    VARCHAR(3)      NOT NULL,

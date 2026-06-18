@@ -1,5 +1,6 @@
 package com.erp.modules.purchases.domain.entity;
 
+import com.erp.modules.purchases.domain.enums.RequisitionPriority;
 import com.erp.modules.purchases.domain.enums.RequisitionStatus;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
@@ -38,6 +39,17 @@ public class PurchaseRequisition extends UidEntity {
     @Column(name = "status", nullable = false, length = 20)
     @Setter
     private RequisitionStatus status = RequisitionStatus.DRAFT;
+
+    /** P2: priority/urgency. Nullable. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "priority", length = 10)
+    @Setter
+    private RequisitionPriority priority;
+
+    /** P2: soft-FK suppliers.id — requester's preferred source. Nullable. */
+    @Column(name = "preferred_supplier_id")
+    @Setter
+    private Long preferredSupplierId;
 
     @Column(name = "required_by_date")
     @Setter

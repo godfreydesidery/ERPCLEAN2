@@ -1,6 +1,7 @@
 package com.erp.modules.purchases.domain.dto;
 
 import com.erp.modules.purchases.domain.entity.PurchaseOrder;
+import com.erp.modules.purchases.domain.enums.PoBillingStatus;
 import com.erp.modules.purchases.domain.enums.PurchaseOrderStatus;
 import com.erp.platform.common.money.CurrencyCode;
 import java.math.BigDecimal;
@@ -26,6 +27,9 @@ public record PurchaseOrderDto(
         String supplierName,
         String currency,
         BigDecimal orderTotalAmount,
+        Long       buyerId,
+        BigDecimal invoicedAmount,
+        PoBillingStatus billingStatus,
         LocalDate  expectedDate,
         String     notes,
         Instant    orderedAt,
@@ -42,6 +46,7 @@ public record PurchaseOrderDto(
                 po.getOrderNumber(), po.getStatus(),
                 po.getSupplierId(), po.getSupplierCode(), po.getSupplierName(),
                 CurrencyCode.value(po.getCurrency()), po.getOrderTotalAmount(),
+                po.getBuyerId(), po.getInvoicedAmount(), po.getBillingStatus(),
                 po.getExpectedDate(), po.getNotes(),
                 po.getOrderedAt(), po.getVoidedAt(), po.getVoidReason(),
                 po.getClosedAt(), po.getCreatedAt(),

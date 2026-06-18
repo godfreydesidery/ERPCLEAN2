@@ -1,6 +1,7 @@
 package com.erp.modules.iam.domain.dto;
 
 import com.erp.modules.iam.domain.entity.Branch;
+import com.erp.modules.iam.domain.enums.BranchType;
 
 /** Response shape for a branch (DATA-MODEL §1.3). */
 public record BranchDto(
@@ -12,6 +13,8 @@ public record BranchDto(
         String name,
         String timeZone,
         boolean isDefault,
+        Long managerId,
+        BranchType branchType,
         String status) {
 
     public static BranchDto from(Branch b) {
@@ -24,6 +27,8 @@ public record BranchDto(
                 b.getName(),
                 b.getTimeZone(),
                 b.isDefault(),
+                b.getManagerId(),
+                b.getBranchType(),
                 b.getStatus().name());
     }
 }

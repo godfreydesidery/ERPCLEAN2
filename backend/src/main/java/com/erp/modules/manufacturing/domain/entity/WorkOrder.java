@@ -93,6 +93,10 @@ public class WorkOrder extends UidEntity {
     @Column(name = "cost_centre_value_id")
     private Long costCentreValueId;
 
+    /** Finished-goods receipt location (P2-M5). Soft-FK → stock_locations(id). */
+    @Column(name = "target_location_id")
+    private Long targetLocationId;
+
     @Column(name = "planned_date")
     private LocalDate plannedDate;
 
@@ -246,6 +250,11 @@ public class WorkOrder extends UidEntity {
         this.createdBy = actorId;
     }
 
+    /** Set the finished-goods receipt location (P2-M5). */
+    public void setTargetLocationId(Long targetLocationId) {
+        this.targetLocationId = targetLocationId;
+    }
+
     // -------------------------------------------------------------------------
     // Accessors
     // -------------------------------------------------------------------------
@@ -269,6 +278,7 @@ public class WorkOrder extends UidEntity {
     public BigDecimal      getVarianceAmount()        { return varianceAmount; }
     public boolean         isIncompleteCost()         { return incompleteCost; }
     public Long            getCostCentreValueId()     { return costCentreValueId; }
+    public Long            getTargetLocationId()      { return targetLocationId; }
     public LocalDate       getPlannedDate()           { return plannedDate; }
     public Instant         getReleasedAt()            { return releasedAt; }
     public Instant         getCompletedAt()           { return completedAt; }

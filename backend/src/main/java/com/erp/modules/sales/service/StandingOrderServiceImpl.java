@@ -274,6 +274,8 @@ public class StandingOrderServiceImpl implements StandingOrderService {
                 s.getFrequency(), s.getStartDate() == null ? null : s.getStartDate().toString(),
                 s.getEndDate() == null ? null : s.getEndDate().toString(),
                 s.getNextRunDate() == null ? null : s.getNextRunDate().toString(),
+                s.getLastRunDate() == null ? null : s.getLastRunDate().toString(),
+                s.getOccurrencesGenerated(), s.getMaxOccurrences(), s.isAutoConfirm(),
                 s.getStatus(), s.getNotes(),
                 lines.stream().map(this::toLineDto).toList());
     }

@@ -34,6 +34,7 @@ CREATE TABLE work_orders (
     variance_amount             NUMERIC(19,4)    NOT NULL DEFAULT 0,
     incomplete_cost             BOOLEAN          NOT NULL DEFAULT false,
     cost_centre_value_id        BIGINT,
+    target_location_id          BIGINT,                              -- P2-M5: finished-goods receipt location (soft-FK stock_locations)
     planned_date                DATE,
     released_at                 TIMESTAMPTZ,
     completed_at                TIMESTAMPTZ,
@@ -74,8 +75,11 @@ CREATE TABLE work_order_components (
     component_product_name      VARCHAR(200)     NOT NULL,
     planned_qty                 NUMERIC(19,6)    NOT NULL DEFAULT 0,
     issued_qty                  NUMERIC(19,6)    NOT NULL DEFAULT 0,
+    returned_qty                NUMERIC(19,6),                       -- P2-M5: qty returned to stock from WIP
+    scrap_qty                   NUMERIC(19,6),                       -- P2-M5: qty scrapped during consumption
     issued_value                NUMERIC(19,4)    NOT NULL DEFAULT 0,
     unit_cost_at_issue          NUMERIC(19,4),
+    unit_id                     BIGINT,                              -- P2-M5: unit-of-measure snapshot (FK units_of_measure)
     cost_skipped                BOOLEAN          NOT NULL DEFAULT false,
     status                      VARCHAR(12)      NOT NULL DEFAULT 'PLANNED',
     version                     BIGINT           NOT NULL DEFAULT 0,
@@ -89,6 +93,7 @@ CREATE TABLE work_order_components (
     CONSTRAINT fk_work_order_component_wo       FOREIGN KEY (work_order_id)        REFERENCES work_orders (id),
     CONSTRAINT fk_work_order_component_company  FOREIGN KEY (company_id)           REFERENCES companies (id),
     CONSTRAINT fk_work_order_component_product  FOREIGN KEY (component_product_id) REFERENCES products (id),
+    CONSTRAINT fk_work_order_component_unit     FOREIGN KEY (unit_id)              REFERENCES units_of_measure (id),
     CONSTRAINT chk_work_order_component_planned CHECK (planned_qty >= 0),
     CONSTRAINT chk_work_order_component_issued  CHECK (issued_qty >= 0),
     CONSTRAINT chk_work_order_component_status  CHECK (status IN ('PLANNED','PARTIAL','ISSUED'))

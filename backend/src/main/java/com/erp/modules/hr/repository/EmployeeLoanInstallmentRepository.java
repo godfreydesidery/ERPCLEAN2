@@ -15,7 +15,8 @@ public interface EmployeeLoanInstallmentRepository extends JpaRepository<Employe
 
     List<EmployeeLoanInstallment> findByEmployeeLoanIdOrderByInstallmentNoAsc(Long employeeLoanId);
 
-    @Query("SELECT i FROM EmployeeLoanInstallment i WHERE i.employeeLoanId = :employeeLoanId AND i.status = 'PENDING' " +
+    @Query("SELECT i FROM EmployeeLoanInstallment i WHERE i.employeeLoanId = :employeeLoanId " +
+           "AND i.status = com.erp.modules.hr.domain.enums.LoanInstallmentStatus.PENDING " +
            "ORDER BY i.installmentNo ASC")
     List<EmployeeLoanInstallment> findUnpaidByLoanId(Long employeeLoanId);
 }

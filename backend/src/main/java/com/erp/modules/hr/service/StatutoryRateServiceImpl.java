@@ -125,7 +125,7 @@ public class StatutoryRateServiceImpl implements StatutoryRateService {
         return new StatutoryRateSetDto(srs.getId(), srs.getUid(), srs.getCompanyId(),
                 srs.getRateType(), srs.getEffectiveFrom(),
                 srs.getEmployeeRate(), srs.getEmployerRate(), srs.getBasis(),
-                srs.getCeilingAmount(), srs.getHeadcountThreshold(),
+                srs.getCeilingAmount(), srs.getFloorAmount(), srs.getHeadcountThreshold(),
                 srs.isActive(), srs.getDescription());
     }
 }

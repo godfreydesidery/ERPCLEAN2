@@ -275,6 +275,7 @@ public class FixedAssetServiceImpl implements FixedAssetService {
                 a.getRevaluationReserveBalance(),
                 a.getSupplierId(), a.getSourceBillUid(),
                 a.getLocation(), a.getCostCentreId(), a.getAssetTag(),
+                a.getSerialNumber(), a.getModel(), a.getManufacturer(), a.getBarcode(),
                 a.getCapitalisedGlEntryUid(), a.getDisposedAt());
     }
 }

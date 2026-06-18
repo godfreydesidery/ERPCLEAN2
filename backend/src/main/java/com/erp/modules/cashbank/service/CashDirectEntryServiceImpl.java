@@ -170,7 +170,10 @@ public class CashDirectEntryServiceImpl implements CashDirectEntryService {
     static CashTransactionDto toDto(CashTransaction t) {
         return new CashTransactionDto(
                 t.getId(), t.getUid(), t.getCompanyId(), t.getCashBankAccountId(),
-                t.getTxnNumber(), t.getTxnDate(), t.getDirection(), t.getAmount(),
+                t.getTxnNumber(), t.getTxnDate(),
+                // P2: value date + linked cheque
+                t.getValueDate(), t.getChequeId(),
+                t.getDirection(), t.getAmount(),
                 t.getCurrency().value(), t.getTxnType(), t.getSourceRef(),
                 t.getCounterGlAccountId(), t.getJournalEntryRef(),
                 t.isCleared(), t.getClearedInReconciliationId(), t.getMemo());

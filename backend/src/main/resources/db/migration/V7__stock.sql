@@ -14,6 +14,9 @@ CREATE TABLE stock_on_hand (
     product_id    BIGINT          NOT NULL,
     quantity      NUMERIC(19,6)   NOT NULL DEFAULT 0,   -- signed; NO >= 0 CHECK
     reorder_level NUMERIC(19,6),                         -- optional indicator threshold; nullable
+    max_qty       NUMERIC(19,6),                         -- P2-M5: optional max-stock indicator threshold
+    last_movement_at TIMESTAMPTZ,                        -- P2-M5: timestamp of last applied movement (snapshot)
+    last_counted_at  TIMESTAMPTZ,                        -- P2-M5: timestamp of last physical count (snapshot)
     version       BIGINT          NOT NULL DEFAULT 0,   -- optimistic lock (NFR-STOCK-04)
     created_at    TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by    BIGINT,

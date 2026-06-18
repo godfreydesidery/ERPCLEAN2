@@ -22,6 +22,9 @@ public record SupplierBillDto(
         String purchaseOrderUid,
         LocalDate billDate,
         LocalDate dueDate,
+        // P2: tax-point + received dates
+        LocalDate taxPointDate,
+        LocalDate receivedDate,
         BigDecimal netAmount,
         BigDecimal vatAmount,
         BigDecimal grossAmount,

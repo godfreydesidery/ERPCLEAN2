@@ -33,6 +33,7 @@ public record WorkOrderDto(
         BigDecimal varianceAmount,
         boolean incompleteCost,
         Long costCentreValueId,
+        Long targetLocationId,
         LocalDate plannedDate,
         Instant releasedAt,
         Instant completedAt,
