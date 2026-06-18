@@ -118,6 +118,12 @@ public class SupplierBillServiceImpl implements SupplierBillService {
                 : PaymentTermsDueDateCalculator.derive(
                         req.billDate(), terms, supplier.getPaymentTermsDays());
 
+        // Guard: dueDate must not precede billDate (issue #18 — chk_supplier_bill_dates).
+        if (dueDate != null && dueDate.isBefore(req.billDate())) {
+            throw new IllegalArgumentException(
+                    "dueDate (" + dueDate + ") must not be before billDate (" + req.billDate() + ").");
+        }
+
         // Compute net amount from lines and per-line VAT (D-8).
         // lineVatAmount = lineNetAmount × vatRate (zero when vatStatus is null/ZERO_RATED/EXEMPT).
         BigDecimal netAmount     = BigDecimal.ZERO;

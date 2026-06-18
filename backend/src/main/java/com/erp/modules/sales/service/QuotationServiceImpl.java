@@ -107,6 +107,12 @@ public class QuotationServiceImpl implements QuotationService {
 
         DiscountValidator.validateDocDiscount(req.docDiscountAmount(), req.docDiscountPercent());
 
+        if (req.validUntil().isBefore(req.quoteDate())) {
+            throw new IllegalArgumentException(
+                    "validUntil must be on or after quoteDate (validUntil=" + req.validUntil()
+                    + ", quoteDate=" + req.quoteDate() + ").");
+        }
+
         Quotation q = new Quotation(companyId, branchId, customer.getId(), agentId,
                 req.currency(), req.quoteDate(), req.validUntil(), actorId());
         q.setDocDiscountAmount(req.docDiscountAmount());

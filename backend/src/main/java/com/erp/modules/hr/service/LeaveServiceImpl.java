@@ -51,6 +51,10 @@ public class LeaveServiceImpl implements LeaveService {
                 .orElseThrow(() -> NotFoundException.of("Employee", employeeUid));
         scopeGuard.assertCanActIn(p, emp.getCompanyId());
 
+        if (req.toDate().isBefore(req.fromDate())) {
+            throw new IllegalArgumentException("fromDate must not be after toDate");
+        }
+
         LeaveType leaveType = leaveTypes.findById(req.leaveTypeId())
                 .orElseThrow(() -> NotFoundException.of("LeaveType", String.valueOf(req.leaveTypeId())));
 

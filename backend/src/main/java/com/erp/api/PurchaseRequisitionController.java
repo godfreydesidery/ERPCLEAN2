@@ -5,6 +5,7 @@ import com.erp.modules.purchases.domain.dto.PurchaseRequisitionDto;
 import com.erp.modules.purchases.service.PurchaseRequisitionService;
 import com.erp.platform.common.api.ApiResponse;
 import com.erp.platform.common.api.PageMeta;
+import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -36,7 +37,7 @@ public class PurchaseRequisitionController {
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("@perm.scoped(#req.companyUid(), 'company', 'PURCHASE.REQUISITION.CREATE')")
     public ApiResponse<PurchaseRequisitionDto> create(
-            @RequestBody CreatePurchaseRequisitionRequest req) {
+            @Valid @RequestBody CreatePurchaseRequisitionRequest req) {
         return ApiResponse.ok(service.create(req));
     }
 

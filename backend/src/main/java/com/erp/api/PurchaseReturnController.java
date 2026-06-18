@@ -5,6 +5,7 @@ import com.erp.modules.purchases.domain.dto.PurchaseReturnDto;
 import com.erp.modules.purchases.service.PurchaseReturnService;
 import com.erp.platform.common.api.ApiResponse;
 import com.erp.platform.common.api.PageMeta;
+import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -35,7 +36,7 @@ public class PurchaseReturnController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("@perm.scoped(#req.companyUid(), 'company', 'PURCHASE.RETURN.CREATE')")
-    public ApiResponse<PurchaseReturnDto> create(@RequestBody CreatePurchaseReturnRequest req) {
+    public ApiResponse<PurchaseReturnDto> create(@Valid @RequestBody CreatePurchaseReturnRequest req) {
         return ApiResponse.ok(service.create(req));
     }
 

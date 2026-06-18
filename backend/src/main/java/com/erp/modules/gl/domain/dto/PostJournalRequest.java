@@ -1,6 +1,9 @@
 package com.erp.modules.gl.domain.dto;
 
 import com.erp.modules.gl.domain.enums.JournalSourceType;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -11,5 +14,9 @@ public record PostJournalRequest(
         String description,
         JournalSourceType sourceType,
         String sourceRef,
+        /** Must contain at least one element; bean validation also cascades into each line (#29). */
+        @NotNull(message = "lines must not be null (BR-GL-01 requires at least 2 lines)")
+        @NotEmpty(message = "lines must not be empty (BR-GL-01 requires at least 2 lines)")
+        @Valid
         List<PostJournalLineRequest> lines
 ) {}

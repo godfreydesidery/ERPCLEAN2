@@ -197,10 +197,18 @@ public class GLPostingServiceImpl implements GLPostingService {
         return toDto(entry, batchNumber, savedLines);
     }
 
+    /** Backwards-compatible overload; delegates to the reason-aware variant with null reason. */
     @Override
     public JournalEntryDto postReversal(String originalEntryUid, LocalDate reversalDate,
                                          JournalSourceType sourceType, String sourceRef,
                                          Long postedBy) {
+        return postReversal(originalEntryUid, reversalDate, sourceType, sourceRef, postedBy, null);
+    }
+
+    @Override
+    public JournalEntryDto postReversal(String originalEntryUid, LocalDate reversalDate,
+                                         JournalSourceType sourceType, String sourceRef,
+                                         Long postedBy, String reason) {
         JournalEntry original = entries.findByUid(originalEntryUid)
                 .orElseThrow(() -> new NotFoundException("JournalEntry not found: " + originalEntryUid));
 
@@ -245,11 +253,17 @@ public class GLPostingServiceImpl implements GLPostingService {
                 ))
                 .toList();
 
+        // Build the description: always start with "Reversal of entry <uid>" and append the
+        // caller-supplied reason when present (issue #30 — preserve audit trail).
+        String description = (reason != null && !reason.isBlank())
+                ? "Reversal of entry " + originalEntryUid + " — " + reason.trim()
+                : "Reversal of entry " + originalEntryUid;
+
         JournalEntryDraft reversalDraft = new JournalEntryDraft(
                 original.getCompanyId(),
                 original.getBranchId(),
                 reversalDate,
-                "Reversal of entry " + originalEntryUid,
+                description,
                 sourceType,
                 sourceRef,
                 original.getId(),

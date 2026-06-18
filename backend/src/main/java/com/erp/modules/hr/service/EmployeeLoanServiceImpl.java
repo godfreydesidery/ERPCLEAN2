@@ -1,5 +1,6 @@
 package com.erp.modules.hr.service;
 
+import com.erp.modules.gl.repository.ChartOfAccountRepository;
 import com.erp.modules.hr.domain.dto.CreateLoanRequest;
 import com.erp.modules.hr.domain.dto.EmployeeLoanDto;
 import com.erp.modules.hr.domain.entity.Employee;
@@ -25,19 +26,22 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class EmployeeLoanServiceImpl implements EmployeeLoanService {
 
-    private final EmployeeLoanRepository loans;
-    private final EmployeeRepository     employees;
-    private final HrNumberGenerator      numberGenerator;
-    private final ScopeGuard             scopeGuard;
-    private final AuditService           audit;
+    private final EmployeeLoanRepository    loans;
+    private final EmployeeRepository        employees;
+    private final ChartOfAccountRepository  glAccounts;
+    private final HrNumberGenerator         numberGenerator;
+    private final ScopeGuard                scopeGuard;
+    private final AuditService              audit;
 
     public EmployeeLoanServiceImpl(EmployeeLoanRepository loans,
                                     EmployeeRepository employees,
+                                    ChartOfAccountRepository glAccounts,
                                     HrNumberGenerator numberGenerator,
                                     ScopeGuard scopeGuard,
                                     AuditService audit) {
         this.loans           = loans;
         this.employees       = employees;
+        this.glAccounts      = glAccounts;
         this.numberGenerator = numberGenerator;
         this.scopeGuard      = scopeGuard;
         this.audit           = audit;
@@ -49,6 +53,17 @@ public class EmployeeLoanServiceImpl implements EmployeeLoanService {
         Employee emp = employees.findByUid(employeeUid)
                 .orElseThrow(() -> NotFoundException.of("Employee", employeeUid));
         scopeGuard.assertCanActIn(p, emp.getCompanyId());
+
+        // #23 — resolve GL account before persistence; unknown id returns 404 not 500
+        if (!glAccounts.existsById(req.glAccountId())) {
+            throw NotFoundException.of("GlAccount", String.valueOf(req.glAccountId()));
+        }
+
+        // #25 — installment must not exceed principal
+        if (req.installmentAmount().compareTo(req.principalAmount()) > 0) {
+            throw new IllegalArgumentException(
+                    "installmentAmount must not exceed principalAmount");
+        }
 
         String loanNumber = numberGenerator.nextLoan(emp.getCompanyId());
         String currency   = req.currency() != null ? req.currency() : "TZS";

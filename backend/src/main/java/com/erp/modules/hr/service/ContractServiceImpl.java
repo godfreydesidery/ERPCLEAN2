@@ -61,6 +61,10 @@ public class ContractServiceImpl implements ContractService {
             throw new ConflictException("Employee already has an active contract.");
         }
 
+        if (req.endDate() != null && req.endDate().isBefore(req.startDate())) {
+            throw new IllegalArgumentException("endDate must be on or after startDate");
+        }
+
         EmploymentContract c = new EmploymentContract(
                 emp.getCompanyId(), emp.getId(), req.contractType(),
                 req.baseSalaryAmount(), "TZS",

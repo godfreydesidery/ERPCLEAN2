@@ -105,14 +105,15 @@ public class JournalServiceImpl implements JournalService {
     }
 
     @Override
-    public JournalEntryDto postManualReversal(String originalEntryUid, LocalDate reversalDate) {
+    public JournalEntryDto postManualReversal(String originalEntryUid, LocalDate reversalDate,
+                                              String reason) {
         JournalEntry original = entries.findByUid(originalEntryUid)
                 .orElseThrow(() -> NotFoundException.of("JournalEntry", originalEntryUid));
         scopeGuard.assertCanActIn(RequestContext.get(), original.getCompanyId());
 
         LocalDate date = reversalDate != null ? reversalDate : LocalDate.now();
         return postingService.postReversal(
-                originalEntryUid, date, JournalSourceType.MANUAL, null, actorId());
+                originalEntryUid, date, JournalSourceType.MANUAL, null, actorId(), reason);
     }
 
     // -------------------------------------------------------------------------
