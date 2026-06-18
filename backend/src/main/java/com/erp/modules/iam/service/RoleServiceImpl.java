@@ -74,6 +74,12 @@ public class RoleServiceImpl implements RoleService {
     public RoleDto setPermissions(String uid, SetRolePermissionsRequest request) {
         Role role = requireByUid(uid);
 
+        // BR-7: system roles are immutable — the same protection that blocks deletion must also
+        // block permission replacement, otherwise an admin can lock themselves out irreversibly.
+        if (role.isSystem()) {
+            throw new ConflictException("System role permissions cannot be modified: " + role.getCode());
+        }
+
         List<String> requestedCodes = request.permissionCodes();
         List<Permission> found = permissions.findByCodeIn(requestedCodes);
 

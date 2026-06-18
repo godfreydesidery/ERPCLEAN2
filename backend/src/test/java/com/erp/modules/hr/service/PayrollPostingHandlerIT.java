@@ -16,6 +16,7 @@ import com.erp.modules.hr.domain.dto.CreatePayrollRunRequest;
 import com.erp.modules.hr.domain.dto.PayrollRunDto;
 import com.erp.modules.hr.domain.entity.EmployeeLoan;
 import com.erp.modules.hr.domain.enums.ContractType;
+import com.erp.modules.hr.domain.enums.LoanStatus;
 import com.erp.modules.hr.domain.enums.PayrollRunStatus;
 import com.erp.modules.hr.repository.EmployeeLoanRepository;
 import com.erp.modules.hr.repository.EmployeeRepository;
@@ -273,11 +274,14 @@ class PayrollPostingHandlerIT extends PostgresIntegrationTest {
                 .orElseThrow(() -> new AssertionError("EMPLOYEE_LOAN_RECEIVABLE config not seeded"));
 
         // Loan: principal 100k, installment 50k — less than gross so net stays positive (no FLAGGED)
-        loanRepository.save(new EmployeeLoan(
+        // Loans now start PENDING (issue #14 lifecycle fix); activate it so payroll deducts it.
+        EmployeeLoan testLoan = new EmployeeLoan(
                 company.getId(), emp.getId(), "LN-TEST-001",
                 new BigDecimal("100000"), new BigDecimal("50000"),
                 loanAccountId,
-                LocalDate.of(2024, 1, 1), "TZS", rootId));
+                LocalDate.of(2024, 1, 1), "TZS", rootId);
+        testLoan.setStatus(LoanStatus.ACTIVE);
+        loanRepository.save(testLoan);
 
         PayrollRunDto posted = createCalculateApprovePost();
         DomainEvent event = getPendingEvent(DomainEventType.PAYROLL_FINALISED, posted.uid());

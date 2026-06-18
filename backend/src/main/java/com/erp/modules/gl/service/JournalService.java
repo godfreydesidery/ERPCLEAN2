@@ -16,7 +16,12 @@ public interface JournalService {
 
     /**
      * Post a manual reversing entry for the given original entry uid (BR-GL-11).
-     * The reversal date defaults to today if null.
+     *
+     * @param originalEntryUid the uid of the journal entry to reverse
+     * @param reversalDate     the business date for the reversing entry; defaults to today if null
+     * @param reason           optional free-text reason; incorporated into the reversing entry's
+     *                         description for audit purposes
      */
-    JournalEntryDto postManualReversal(String originalEntryUid, java.time.LocalDate reversalDate);
+    JournalEntryDto postManualReversal(String originalEntryUid, java.time.LocalDate reversalDate,
+                                       String reason);
 }

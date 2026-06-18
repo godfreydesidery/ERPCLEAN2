@@ -74,8 +74,12 @@ public class JournalServiceImpl implements JournalService {
                 })
                 .toList();
 
-        JournalSourceType sourceType = req.sourceType() != null
-                ? req.sourceType() : JournalSourceType.MANUAL;
+        // Issue #2 fix (a): the user-driven journal endpoint ALWAYS posts as MANUAL so that
+        // GLPostingServiceImpl's allowManualPosting / control-account gate fires on every line,
+        // regardless of what sourceType the caller supplied.  System/event-driven posters
+        // (AR, AP, stock, payroll, cash) call GLPostingService.post() directly — they never go
+        // through this method — so their system sourceTypes are unaffected.
+        JournalSourceType sourceType = JournalSourceType.MANUAL;
 
         JournalEntryDraft draft = new JournalEntryDraft(
                 companyId, null, req.postingDate(), req.description(),
@@ -101,14 +105,15 @@ public class JournalServiceImpl implements JournalService {
     }
 
     @Override
-    public JournalEntryDto postManualReversal(String originalEntryUid, LocalDate reversalDate) {
+    public JournalEntryDto postManualReversal(String originalEntryUid, LocalDate reversalDate,
+                                              String reason) {
         JournalEntry original = entries.findByUid(originalEntryUid)
                 .orElseThrow(() -> NotFoundException.of("JournalEntry", originalEntryUid));
         scopeGuard.assertCanActIn(RequestContext.get(), original.getCompanyId());
 
         LocalDate date = reversalDate != null ? reversalDate : LocalDate.now();
         return postingService.postReversal(
-                originalEntryUid, date, JournalSourceType.MANUAL, null, actorId());
+                originalEntryUid, date, JournalSourceType.MANUAL, null, actorId(), reason);
     }
 
     // -------------------------------------------------------------------------

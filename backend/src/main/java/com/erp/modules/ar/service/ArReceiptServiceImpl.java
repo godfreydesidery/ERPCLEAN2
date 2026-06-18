@@ -35,6 +35,7 @@ import com.erp.modules.tax.service.WhtCaptureService;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.money.ConvertedAmount;
 import com.erp.platform.common.money.CurrencyConversionService;
@@ -427,6 +428,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         for (AllocationLineRequest line : newAllocations) {
             ArInvoice inv = invoices.findByCompanyIdAndUid(receipt.getCompanyId(), line.arInvoiceUid())
                     .orElseThrow(() -> new NotFoundException("ArInvoice not found: " + line.arInvoiceUid()));
+            assertInvoiceBelongsToCustomer(inv, receipt.getCustomerId());
             if (line.allocatedAmount().compareTo(inv.getOutstandingAmount()) > 0) {
                 throw new IllegalStateException(
                         "Re-allocation " + line.allocatedAmount()
@@ -532,11 +534,26 @@ public class ArReceiptServiceImpl implements ArReceiptService {
             ArInvoice inv = invoices.findByCompanyIdAndUid(companyId, line.arInvoiceUid())
                     .orElseThrow(() -> new NotFoundException(
                             "ArInvoice not found: " + line.arInvoiceUid()));
+            assertInvoiceBelongsToCustomer(inv, receipt.getCustomerId());
             result.add(new ArReceiptAllocation(
                     companyId, receipt.getId(), inv.getId(),
                     line.allocatedAmount(), line.discountAmount(), line.writeOffAmount(), actorId()));
         }
         return result;
+    }
+
+    /**
+     * BR-AR customer-match guard (issue #1): an allocation may only target an invoice that belongs
+     * to the same customer as the receipt/credit-note. Throws {@link ConflictException} (→ HTTP 409)
+     * when the invariant is violated.
+     */
+    private static void assertInvoiceBelongsToCustomer(ArInvoice invoice, Long expectedCustomerId) {
+        if (!invoice.getCustomerId().equals(expectedCustomerId)) {
+            throw new ConflictException(
+                    "Allocation invoice belongs to a different customer"
+                    + " (invoice customerId=" + invoice.getCustomerId()
+                    + ", receipt customerId=" + expectedCustomerId + ").");
+        }
     }
 
     // -------------------------------------------------------------------------

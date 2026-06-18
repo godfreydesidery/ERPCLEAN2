@@ -296,6 +296,8 @@ public final class AuditActions {
     public static final String HR_CONTRACT_TERMINATE   = "HR.CONTRACT.TERMINATE";
     public static final String HR_PAYCOMPONENT_CREATE  = "HR.PAYCOMPONENT.CREATE";
     public static final String HR_PAYCOMPONENT_UPDATE  = "HR.PAYCOMPONENT.UPDATE";
+    public static final String HR_LEAVE_TYPE_CREATE    = "HR.LEAVE.TYPE.CREATE";
+    public static final String HR_LEAVE_TYPE_UPDATE    = "HR.LEAVE.TYPE.UPDATE";
     public static final String HR_LEAVE_REQUEST_SUBMIT = "HR.LEAVE.REQUEST.SUBMIT";
     public static final String HR_LEAVE_REQUEST_DECIDE = "HR.LEAVE.REQUEST.DECIDE";
     public static final String HR_LOAN_CREATE          = "HR.LOAN.CREATE";

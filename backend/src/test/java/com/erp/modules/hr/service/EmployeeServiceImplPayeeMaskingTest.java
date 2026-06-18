@@ -12,6 +12,7 @@ import com.erp.modules.hr.domain.entity.Employee;
 import com.erp.modules.hr.domain.enums.PaymentMethod;
 import com.erp.modules.hr.repository.DepartmentRepository;
 import com.erp.modules.hr.repository.EmployeeRepository;
+import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
@@ -38,6 +39,7 @@ class EmployeeServiceImplPayeeMaskingTest {
 
     private EmployeeRepository   employeeRepo;
     private DepartmentRepository departmentRepo;
+    private BranchRepository     branchRepo;
     private HrNumberGenerator    numberGenerator;
     private ScopeGuard           scopeGuard;
     private AuditService         audit;
@@ -48,12 +50,13 @@ class EmployeeServiceImplPayeeMaskingTest {
     void setUp() {
         employeeRepo    = mock(EmployeeRepository.class);
         departmentRepo  = mock(DepartmentRepository.class);
+        branchRepo      = mock(BranchRepository.class);
         numberGenerator = mock(HrNumberGenerator.class);
         scopeGuard      = mock(ScopeGuard.class);
         audit           = mock(AuditService.class);
         permissions     = mock(PermissionResolver.class);
-        service = new EmployeeServiceImpl(employeeRepo, departmentRepo, numberGenerator,
-                scopeGuard, audit, permissions);
+        service = new EmployeeServiceImpl(employeeRepo, departmentRepo, branchRepo,
+                numberGenerator, scopeGuard, audit, permissions);
 
         Employee emp = new Employee(COMPANY_ID, 2L, "EMP-000001",
                 "Jane", "Doe", LocalDate.of(2020, 1, 1), null);

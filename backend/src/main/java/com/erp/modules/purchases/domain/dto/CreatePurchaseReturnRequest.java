@@ -12,9 +12,11 @@ public record CreatePurchaseReturnRequest(
         @NotBlank String companyUid,
         @NotBlank String goodsReceiptUid,
         @NotBlank String reason,
-        @NotEmpty @Valid List<LineRequest> lines
+        @NotEmpty @Valid List<ReturnLineRequest> lines
 ) {
-    public record LineRequest(
+    /** Per-line entry for a purchase return. Distinct name avoids OpenAPI schema collision
+     *  with RFQ and requisition line records (issue #11 / theme #11). */
+    public record ReturnLineRequest(
             /** The GR line being returned. */
             @NotBlank String goodsReceiptLineUid,
             @NotNull @Positive BigDecimal returnedQty

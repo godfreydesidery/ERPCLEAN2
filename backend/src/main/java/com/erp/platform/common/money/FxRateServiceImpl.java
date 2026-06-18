@@ -107,6 +107,16 @@ public class FxRateServiceImpl implements FxRateService {
             throw new IllegalArgumentException("Rate must be greater than zero.");
         }
 
+        // Issue #31: self-currency rate with a value other than 1 is economically nonsensical
+        // and would corrupt any lookup that converts base→base (e.g. TZS→TZS = 2.5).
+        // Reject it outright; the only meaningful same-currency rate is exactly 1.
+        if (req.fromCurrency().equals(req.toCurrency())) {
+            throw new IllegalArgumentException(
+                    "fromCurrency and toCurrency must differ. A same-currency rate ('"
+                            + req.fromCurrency() + "' → '" + req.toCurrency()
+                            + "') is not permitted.");
+        }
+
         String rateType = req.rateType() != null ? req.rateType() : "SPOT";
         Long actorId = actorId();
 

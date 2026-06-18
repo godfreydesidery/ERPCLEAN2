@@ -195,6 +195,14 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         assertSellable(product);
         UnitOfMeasure unit = resolveUnit(order.getCompanyId(), req.unitUid());
         BigDecimal listPrice = resolveListPrice(product, order.getCompanyId());
+        // Issue #6: unitPriceOverride must not be negative (revenue leakage / silent-zero bug).
+        // @PositiveOrZero on the DTO is the first-line guard; this is defence-in-depth for
+        // programmatic callers that bypass bean validation.
+        if (req.unitPriceOverride() != null
+                && req.unitPriceOverride().compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException(
+                    "unitPriceOverride must be >= 0; got: " + req.unitPriceOverride().toPlainString());
+        }
         BigDecimal appliedPrice = req.unitPriceOverride() != null ? req.unitPriceOverride() : listPrice;
         BigDecimal vatRate = resolveVatRate(order.getCompanyId(), product);
         BigDecimal qtyInBase = computeQtyInBase(product, unit, req.quantity());

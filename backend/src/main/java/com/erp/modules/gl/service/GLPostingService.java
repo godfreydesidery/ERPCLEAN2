@@ -33,4 +33,16 @@ public interface GLPostingService {
     JournalEntryDto postReversal(String originalEntryUid, java.time.LocalDate reversalDate,
                                   com.erp.modules.gl.domain.enums.JournalSourceType sourceType,
                                   String sourceRef, Long postedBy);
+
+    /**
+     * Posts a reversing entry with an optional audit reason (issue #30).
+     * The reason is appended to the reversing entry's description for the audit trail.
+     * Delegates to {@link #postReversal(String, java.time.LocalDate,
+     * com.erp.modules.gl.domain.enums.JournalSourceType, String, Long)} when reason is blank.
+     *
+     * @param reason free-text reversal reason; null/blank → default description only
+     */
+    JournalEntryDto postReversal(String originalEntryUid, java.time.LocalDate reversalDate,
+                                  com.erp.modules.gl.domain.enums.JournalSourceType sourceType,
+                                  String sourceRef, Long postedBy, String reason);
 }

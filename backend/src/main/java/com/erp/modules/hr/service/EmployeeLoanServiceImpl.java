@@ -1,5 +1,6 @@
 package com.erp.modules.hr.service;
 
+import com.erp.modules.gl.repository.ChartOfAccountRepository;
 import com.erp.modules.hr.domain.dto.CreateLoanRequest;
 import com.erp.modules.hr.domain.dto.EmployeeLoanDto;
 import com.erp.modules.hr.domain.entity.Employee;
@@ -10,6 +11,7 @@ import com.erp.modules.hr.repository.EmployeeRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.security.RequestContext;
@@ -24,19 +26,22 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class EmployeeLoanServiceImpl implements EmployeeLoanService {
 
-    private final EmployeeLoanRepository loans;
-    private final EmployeeRepository     employees;
-    private final HrNumberGenerator      numberGenerator;
-    private final ScopeGuard             scopeGuard;
-    private final AuditService           audit;
+    private final EmployeeLoanRepository    loans;
+    private final EmployeeRepository        employees;
+    private final ChartOfAccountRepository  glAccounts;
+    private final HrNumberGenerator         numberGenerator;
+    private final ScopeGuard                scopeGuard;
+    private final AuditService              audit;
 
     public EmployeeLoanServiceImpl(EmployeeLoanRepository loans,
                                     EmployeeRepository employees,
+                                    ChartOfAccountRepository glAccounts,
                                     HrNumberGenerator numberGenerator,
                                     ScopeGuard scopeGuard,
                                     AuditService audit) {
         this.loans           = loans;
         this.employees       = employees;
+        this.glAccounts      = glAccounts;
         this.numberGenerator = numberGenerator;
         this.scopeGuard      = scopeGuard;
         this.audit           = audit;
@@ -48,6 +53,17 @@ public class EmployeeLoanServiceImpl implements EmployeeLoanService {
         Employee emp = employees.findByUid(employeeUid)
                 .orElseThrow(() -> NotFoundException.of("Employee", employeeUid));
         scopeGuard.assertCanActIn(p, emp.getCompanyId());
+
+        // #23 — resolve GL account before persistence; unknown id returns 404 not 500
+        if (!glAccounts.existsById(req.glAccountId())) {
+            throw NotFoundException.of("GlAccount", String.valueOf(req.glAccountId()));
+        }
+
+        // #25 — installment must not exceed principal
+        if (req.installmentAmount().compareTo(req.principalAmount()) > 0) {
+            throw new IllegalArgumentException(
+                    "installmentAmount must not exceed principalAmount");
+        }
 
         String loanNumber = numberGenerator.nextLoan(emp.getCompanyId());
         String currency   = req.currency() != null ? req.currency() : "TZS";
@@ -83,8 +99,15 @@ public class EmployeeLoanServiceImpl implements EmployeeLoanService {
         RequestContext.Principal p = RequestContext.get();
         EmployeeLoan loan = requireByUid(uid);
         scopeGuard.assertCanActIn(p, loan.getCompanyId());
+        if (loan.getStatus() != LoanStatus.PENDING) {
+            throw new ConflictException(
+                    "Loan " + loan.getLoanNumber() + " is not in PENDING status (current: " + loan.getStatus() + ")");
+        }
+        Instant now = Instant.now();
         loan.setStatus(LoanStatus.ACTIVE);
-        loan.setUpdatedAt(Instant.now());
+        loan.setApprovedBy(p.userId());
+        loan.setApprovedAt(now);
+        loan.setUpdatedAt(now);
         loan.setUpdatedBy(p.userId());
         audit.record(AuditEvent.of(AuditActions.HR_LOAN_APPROVE, "employee_loans", loan.getId(), null));
         String empName = employees.findById(loan.getEmployeeId()).map(Employee::getFullName).orElse(null);
@@ -109,6 +132,6 @@ public class EmployeeLoanServiceImpl implements EmployeeLoanService {
                 empName, l.getLoanNumber(), l.getPrincipalAmount(),
                 l.getInstallmentAmount(), l.getOutstandingAmount(),
                 l.getGlAccountId(), l.getStatus(), l.getStartDate(), CurrencyCode.value(l.getCurrency()),
-                l.getInterestRate(), l.getLoanType(), l.getApprovedBy(), l.getTermMonths());
+                l.getInterestRate(), l.getLoanType(), l.getApprovedBy(), l.getApprovedAt(), l.getTermMonths());
     }
 }

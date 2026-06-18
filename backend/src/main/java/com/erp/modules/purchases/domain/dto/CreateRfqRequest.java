@@ -17,9 +17,11 @@ public record CreateRfqRequest(
         String notes,
         /** Supplier uids to invite. */
         @NotEmpty List<String> supplierUids,
-        @NotEmpty @Valid List<LineRequest> lines
+        @NotEmpty @Valid List<RfqLineRequest> lines
 ) {
-    public record LineRequest(
+    /** Per-line entry for an RFQ. Distinct name avoids OpenAPI schema collision
+     *  with requisition and purchase-return line records (issue #11 / theme #11). */
+    public record RfqLineRequest(
             @NotNull Long productId,
             @NotNull Long unitId,
             @NotNull @Positive BigDecimal quantity

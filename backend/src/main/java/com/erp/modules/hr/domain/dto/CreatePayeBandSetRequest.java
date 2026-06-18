@@ -1,5 +1,7 @@
 package com.erp.modules.hr.domain.dto;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import java.math.BigDecimal;
@@ -10,12 +12,15 @@ public record CreatePayeBandSetRequest(
         @NotNull LocalDate effectiveFrom,
         @NotNull @PositiveOrZero BigDecimal taxFreeThreshold,
         String description,
-        @NotNull List<BandRequest> bands
+        @NotNull @Valid List<BandRequest> bands
 ) {
     public record BandRequest(
             short bandNo,
             @NotNull @PositiveOrZero BigDecimal lowerBound,
-            @NotNull @PositiveOrZero BigDecimal marginalRate,
+            @NotNull
+            @PositiveOrZero
+            @DecimalMax(value = "100.0", message = "marginalRate must be <= 100")
+            BigDecimal marginalRate,
             @NotNull @PositiveOrZero BigDecimal cumulativeFixedTax
     ) {}
 }
