@@ -28,6 +28,11 @@ public class FiscalYear extends UidEntity {
     @Setter
     private String yearCode;
 
+    /** P3: human label (e.g. "Fiscal Year 2026"); nullable. */
+    @Column(name = "name", length = 120)
+    @Setter
+    private String name;
+
     @Column(name = "start_month", nullable = false)
     @Setter
     private int startMonth = 1;

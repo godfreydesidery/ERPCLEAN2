@@ -167,6 +167,35 @@ public class Product extends UidEntity {
     private String hsCode;
 
     // -------------------------------------------------------------------------
+    // P3 — image/notes + default sales/purchase UoM. All nullable, additive-safe.
+    // -------------------------------------------------------------------------
+
+    /** P3: product image URL. Nullable. */
+    @Column(name = "image_url", length = 500)
+    @Setter
+    private String imageUrl;
+
+    /** P3: free-text notes. Nullable. */
+    @Column(name = "notes", length = 1000)
+    @Setter
+    private String notes;
+
+    /**
+     * P3: default sales unit — soft-FK → units_of_measure(id). Nullable (defaults to base unit).
+     * Scalar Long, not @ManyToOne; intra-DB but kept scalar for additive simplicity.
+     */
+    @Column(name = "sales_unit_id")
+    @Setter
+    private Long salesUnitId;
+
+    /**
+     * P3: default purchase unit — soft-FK → units_of_measure(id). Nullable (defaults to base unit).
+     */
+    @Column(name = "purchase_unit_id")
+    @Setter
+    private Long purchaseUnitId;
+
+    // -------------------------------------------------------------------------
     // D-10 — Product planning + sourcing (ADR-0040)
     // All nullable — not required on initial creation. Quantities in base UoM.
     // -------------------------------------------------------------------------

@@ -20,6 +20,7 @@ CREATE TABLE dimensions (
     name         VARCHAR(120)    NOT NULL,
     is_built_in  BOOLEAN         NOT NULL DEFAULT false,
     is_mandatory BOOLEAN         NOT NULL DEFAULT false,
+    description  VARCHAR(255),                   -- P3: free-text dimension description; nullable
     status       VARCHAR(32)     NOT NULL DEFAULT 'ACTIVE',
     version      BIGINT          NOT NULL DEFAULT 0,
     created_at   TIMESTAMPTZ     NOT NULL DEFAULT now(),
@@ -50,6 +51,7 @@ CREATE TABLE dimension_values (
     name         VARCHAR(160)    NOT NULL,
     parent_id    BIGINT,
     is_active    BOOLEAN         NOT NULL DEFAULT true,
+    manager_id   BIGINT,                         -- P3: owner/manager reference (scalar soft-FK, nullable)
     status       VARCHAR(32)     NOT NULL DEFAULT 'ACTIVE',
     version      BIGINT          NOT NULL DEFAULT 0,
     created_at   TIMESTAMPTZ     NOT NULL DEFAULT now(),

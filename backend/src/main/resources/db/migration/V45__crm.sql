@@ -21,6 +21,9 @@ CREATE TABLE pipeline_stages (
     display_order        SMALLINT        NOT NULL,
     default_probability  NUMERIC(5,2)    NOT NULL,
     is_active            BOOLEAN         NOT NULL DEFAULT true,
+    is_won_stage         BOOLEAN         NOT NULL DEFAULT false,  -- P3: terminal won funnel position
+    is_lost_stage        BOOLEAN         NOT NULL DEFAULT false,  -- P3: terminal lost funnel position
+    stage_type           VARCHAR(20),    -- P3: reconciles with Opportunity.opportunity_status (OPEN/WON/LOST)
     status               VARCHAR(32)     NOT NULL DEFAULT 'ACTIVE',
     version              BIGINT          NOT NULL DEFAULT 0,
     created_at           TIMESTAMPTZ     NOT NULL DEFAULT now(),
@@ -32,7 +35,8 @@ CREATE TABLE pipeline_stages (
     CONSTRAINT uq_pipeline_stage_company_order UNIQUE (company_id, display_order),
     CONSTRAINT fk_pipeline_stage_company      FOREIGN KEY (company_id) REFERENCES companies(id),
     CONSTRAINT chk_pipeline_stage_probability CHECK (default_probability BETWEEN 0 AND 100),
-    CONSTRAINT chk_pipeline_stage_status      CHECK (status IN ('ACTIVE','INACTIVE','ARCHIVED'))
+    CONSTRAINT chk_pipeline_stage_status      CHECK (status IN ('ACTIVE','INACTIVE','ARCHIVED')),
+    CONSTRAINT chk_pipeline_stage_type        CHECK (stage_type IS NULL OR stage_type IN ('OPEN','WON','LOST'))
 );
 
 -- ============================================================================

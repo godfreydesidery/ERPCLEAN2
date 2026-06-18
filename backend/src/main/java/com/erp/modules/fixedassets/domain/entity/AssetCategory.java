@@ -61,6 +61,11 @@ public class AssetCategory extends UidEntity {
     @Setter
     private Long depExpenseAccountId;
 
+    /** Self soft-FK asset_categories(id): parent in the category hierarchy (NULL = top-level). */
+    @Column(name = "parent_category_id")
+    @Setter
+    private Long parentCategoryId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     @Setter

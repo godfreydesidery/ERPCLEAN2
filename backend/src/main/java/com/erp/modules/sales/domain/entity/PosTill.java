@@ -44,6 +44,19 @@ public class PosTill extends UidEntity {
     @Setter
     private Long cashBankAccountId;
 
+    /**
+     * P3: default selling price list for this till — soft-FK to price_lists(id). Nullable.
+     * Scalar Long per cross-module soft-FK convention.
+     */
+    @Column(name = "default_price_list_id")
+    @Setter
+    private Long defaultPriceListId;
+
+    /** P3: physical device/terminal identifier (e.g. card-reader serial). Nullable. */
+    @Column(name = "device_terminal_id", length = 60)
+    @Setter
+    private String deviceTerminalId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     @Setter

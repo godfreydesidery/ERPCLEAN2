@@ -38,7 +38,7 @@ public record SalesReturnLineDto(
                 l.getQtyReturned(), l.getQtyReturnedBase(),
                 l.getUnitPriceAmount(),
                 l.getLineDiscountAmount(), l.getLineDiscountPercent(),
-                l.getVatStatus(), l.getVatRate(),
+                l.getVatStatus() != null ? l.getVatStatus().name() : null, l.getVatRate(),
                 l.getNetAmount(), l.getVatAmount(), l.getGrossAmount(),
                 l.getCurrency().value());
     }

@@ -1,9 +1,12 @@
 package com.erp.modules.sales.domain.entity;
 
+import com.erp.modules.products.domain.enums.VatStatus;
 import com.erp.platform.common.domain.UidEntity;
 import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -72,8 +75,9 @@ public class SalesReturnLine extends UidEntity {
     @Column(name = "line_discount_percent", precision = 9, scale = 4, updatable = false)
     private BigDecimal lineDiscountPercent;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "vat_status", nullable = false, length = 20, updatable = false)
-    private String vatStatus;
+    private VatStatus vatStatus;
 
     @Column(name = "vat_rate", nullable = false, precision = 9, scale = 4, updatable = false)
     private BigDecimal vatRate;
@@ -118,7 +122,7 @@ public class SalesReturnLine extends UidEntity {
                            BigDecimal qtyReturned, BigDecimal qtyReturnedBase,
                            BigDecimal unitPriceAmount,
                            BigDecimal lineDiscountAmount, BigDecimal lineDiscountPercent,
-                           String vatStatus, BigDecimal vatRate,
+                           VatStatus vatStatus, BigDecimal vatRate,
                            String currency, Long createdBy) {
         this.salesReturnId       = salesReturnId;
         this.deliveryLineId      = deliveryLineId;

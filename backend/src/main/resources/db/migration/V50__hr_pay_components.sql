@@ -47,6 +47,9 @@ CREATE TABLE employee_recurring_items (
     employee_id         BIGINT        NOT NULL,
     pay_component_id    BIGINT        NOT NULL,
     amount_or_percent   NUMERIC(19,4) NOT NULL,
+    is_percent          BOOLEAN       NOT NULL DEFAULT false,  -- P3: amount_or_percent is a percentage when true
+    cap_amount          NUMERIC(19,4),                          -- P3: optional max applied amount
+    note                VARCHAR(255),                           -- P3: free-text note
     effective_from      DATE          NOT NULL,
     effective_to        DATE,
     version             BIGINT        NOT NULL DEFAULT 0,

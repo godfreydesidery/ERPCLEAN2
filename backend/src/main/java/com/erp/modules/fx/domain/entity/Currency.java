@@ -45,6 +45,14 @@ public class Currency extends UidEntity {
     @Column(name = "active", nullable = false)
     private boolean active = true;
 
+    /**
+     * Lifecycle status (X3). Kept as a String mapped to {@code MasterStatus} values
+     * ('ACTIVE'/'INACTIVE', per {@code chk_currency_status}). NOT migrated to an
+     * {@code @Enumerated MasterStatus} field because {@code getStatus()} flows into
+     * {@code CurrencyDto.status} (String) via {@code FxRateServiceImpl.toCurrencyDto} in the
+     * platform/common module — typing the field would force an out-of-cluster edit. The
+     * {@code active} boolean is retained for back-compat (do NOT drop); the two are independent.
+     */
     @Column(name = "status", nullable = false, length = 20)
     private String status = "ACTIVE";
 

@@ -12,6 +12,7 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.time.LocalDate;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -106,6 +107,27 @@ public class ChartOfAccount extends UidEntity {
     @Column(name = "require_project", nullable = false)
     @Setter
     private boolean requireProject = false;
+
+    // --- P3: convenience / reporting columns (all nullable, additive) ---
+    /** Default tax code suggested when posting to this account; nullable (informational). */
+    @Column(name = "default_tax_code", length = 30)
+    @Setter
+    private String defaultTaxCode;
+
+    /** Account availability window start; NULL = always available. */
+    @Column(name = "effective_from")
+    @Setter
+    private LocalDate effectiveFrom;
+
+    /** Account availability window end; NULL = open-ended. */
+    @Column(name = "effective_to")
+    @Setter
+    private LocalDate effectiveTo;
+
+    /** Free-text account description / notes; nullable. */
+    @Column(name = "description", length = 255)
+    @Setter
+    private String description;
 
     /**
      * Derived: returns true when this account is a sub-ledger control account (controlType != null).

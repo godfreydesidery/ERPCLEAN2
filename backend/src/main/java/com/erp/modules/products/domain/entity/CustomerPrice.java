@@ -45,6 +45,19 @@ public class CustomerPrice extends UidEntity {
     @Column(name = "currency", nullable = false, length = 3)
     private CurrencyCode currency;
 
+    /** P3: volume-break minimum quantity. NULL = applies to any quantity. */
+    @Column(name = "min_qty", precision = 19, scale = 6)
+    @Setter
+    private BigDecimal minQty;
+
+    /**
+     * P3: soft-FK → price_lists(id) — scalar, no @ManyToOne. Provenance of this contract price.
+     * NULL = not derived from a price list.
+     */
+    @Column(name = "price_list_id")
+    @Setter
+    private Long priceListId;
+
     /** NULL = no start date restriction. */
     @Column(name = "effective_from")
     @Setter

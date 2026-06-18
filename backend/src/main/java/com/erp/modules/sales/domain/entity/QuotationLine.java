@@ -96,6 +96,14 @@ public class QuotationLine extends UidEntity {
     @Column(name = "currency", nullable = false, length = 3)
     private CurrencyCode currency;
 
+    /**
+     * P3 (X15): promotion provenance — soft-FK to promotions(id). Nullable; stamped when a
+     * promotion was applied to this line. Scalar Long per cross-module soft-FK convention.
+     */
+    @Column(name = "promotion_id")
+    @Setter
+    private Long promotionId;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

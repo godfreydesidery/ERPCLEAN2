@@ -58,6 +58,24 @@ public class DepreciationRun extends UidEntity {
     @Column(name = "executed_at", nullable = false)
     private Instant executedAt = Instant.now();
 
+    /** Actor who executed the run (NULLABLE; back-filled going forward). */
+    @Column(name = "executed_by")
+    @Setter
+    private Long executedBy;
+
+    /**
+     * Reversal marker (P3, data-only). Set when this run is reversed.
+     * The reversal POSTING lifecycle (contra GL entry, status transition) is DEFERRED.
+     */
+    @Column(name = "reversed_at")
+    @Setter
+    private Instant reversedAt;
+
+    /** uid of the run this entry reverses (NULL for a normal run). Data-only; posting DEFERRED. */
+    @Column(name = "reversal_of_run_uid", length = 26)
+    @Setter
+    private String reversalOfRunUid;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

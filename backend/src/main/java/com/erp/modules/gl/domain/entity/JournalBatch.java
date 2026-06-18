@@ -55,6 +55,14 @@ public class JournalBatch extends UidEntity {
     @Setter
     private BigDecimal totalCredit;
 
+    /**
+     * P3: self soft-FK to the batch that reverses THIS one (batch-level reversal linkage).
+     * Nullable; entry-level reversal already exists on {@link JournalEntry}. DB FK to journal_batches(id).
+     */
+    @Column(name = "reversed_by_batch_id")
+    @Setter
+    private Long reversedByBatchId;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

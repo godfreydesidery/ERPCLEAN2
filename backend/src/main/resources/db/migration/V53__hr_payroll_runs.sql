@@ -167,6 +167,11 @@ CREATE TABLE payslips (
     ytd_paye              NUMERIC(19,4) NOT NULL DEFAULT 0,
     ytd_nssf_employee     NUMERIC(19,4) NOT NULL DEFAULT 0,
     ytd_net               NUMERIC(19,4) NOT NULL DEFAULT 0,
+    ytd_deduction         NUMERIC(19,4) NOT NULL DEFAULT 0,  -- P3: YTD total deductions
+    ytd_employer_cost     NUMERIC(19,4) NOT NULL DEFAULT 0,  -- P3: YTD employer cost
+    generated_pdf_document_uid VARCHAR(26),                   -- P3: documents-module uid for the rendered PDF
+    delivered_at          TIMESTAMPTZ,                        -- P3: payslip delivery timestamp
+    emailed_at            TIMESTAMPTZ,                        -- P3: payslip email timestamp
     version               BIGINT        NOT NULL DEFAULT 0,
     created_at            TIMESTAMPTZ   NOT NULL DEFAULT now(),
     created_by            BIGINT,

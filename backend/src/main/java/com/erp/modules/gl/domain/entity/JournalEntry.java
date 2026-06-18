@@ -1,5 +1,6 @@
 package com.erp.modules.gl.domain.entity;
 
+import com.erp.modules.gl.domain.enums.JournalEntryType;
 import com.erp.modules.gl.domain.enums.JournalSourceType;
 import com.erp.platform.common.domain.UidEntity;
 import com.erp.platform.common.money.CurrencyCode;
@@ -93,6 +94,31 @@ public class JournalEntry extends UidEntity {
     @Column(name = "total_credit", precision = 19, scale = 4)
     @Setter
     private BigDecimal totalCredit;
+
+    // --- P3: classification / convenience columns (all nullable, additive) ---
+    /**
+     * Accounting nature of the entry (P3): GENERAL/ADJUSTING/REVERSING/OPENING/CLOSING/ACCRUAL.
+     * Informational only — orthogonal to {@code sourceType}; does not drive posting. Nullable.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "entry_type", length = 20)
+    @Setter
+    private JournalEntryType entryType;
+
+    /** Business value/effective date, distinct from posting_date; nullable (P3). */
+    @Column(name = "value_date")
+    @Setter
+    private LocalDate valueDate;
+
+    /** External system / document reference; nullable (P3). */
+    @Column(name = "external_ref", length = 60)
+    @Setter
+    private String externalRef;
+
+    /** Link/uid to a supporting attachment; nullable (P3). */
+    @Column(name = "attachment_ref", length = 255)
+    @Setter
+    private String attachmentRef;
 
     @Column(name = "posted_at", nullable = false, updatable = false)
     private Instant postedAt = Instant.now();

@@ -174,6 +174,8 @@ CREATE TABLE user_branch (
     is_default  BOOLEAN      NOT NULL DEFAULT false,
     assigned_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
     assigned_by BIGINT       NOT NULL,
+    revoked_at  TIMESTAMPTZ,                           -- P3: soft-unassign timestamp (NULL = active)
+    active      BOOLEAN      NOT NULL DEFAULT true,    -- P3: soft-delete flag (hard-delete today)
     version     BIGINT       NOT NULL DEFAULT 0,
     CONSTRAINT uq_user_branch_uid        UNIQUE (uid),
     CONSTRAINT uq_user_branch_user_branch UNIQUE (user_id, branch_id),
@@ -230,6 +232,7 @@ CREATE TABLE roles (
     name        VARCHAR(120) NOT NULL,
     description VARCHAR(255),
     is_system   BOOLEAN      NOT NULL DEFAULT false,
+    role_scope  VARCHAR(20),                          -- P3: scope-typing field (roles org-wide by ADR-0001 D-A)
     status      VARCHAR(32)  NOT NULL DEFAULT 'ACTIVE',
     version     BIGINT       NOT NULL DEFAULT 0,
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
@@ -263,6 +266,7 @@ CREATE TABLE user_role (
     granted_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
     granted_by  BIGINT       NOT NULL,
     revoked_at  TIMESTAMPTZ,
+    expires_at  TIMESTAMPTZ,                           -- P3: time-limited grant (NULL = no expiry)
     version     BIGINT       NOT NULL DEFAULT 0,
     CONSTRAINT uq_user_role_uid UNIQUE (uid),
     CONSTRAINT fk_user_role_user FOREIGN KEY (user_id) REFERENCES app_users (id),

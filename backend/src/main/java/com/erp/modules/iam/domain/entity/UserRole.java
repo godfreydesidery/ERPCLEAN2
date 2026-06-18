@@ -48,6 +48,10 @@ public class UserRole extends UidEntity {
     @Column(name = "revoked_at")
     private Instant revokedAt;
 
+    /** Optional expiry for time-limited grants (P3). NULL = no expiry. */
+    @Column(name = "expires_at")
+    private Instant expiresAt;
+
     protected UserRole() {
         // JPA
     }
@@ -63,6 +67,16 @@ public class UserRole extends UidEntity {
 
     public boolean isActive() {
         return revokedAt == null;
+    }
+
+    /** True if a (non-NULL) expiry has passed at {@code now} (P3). */
+    public boolean isExpired(Instant now) {
+        return expiresAt != null && !now.isBefore(expiresAt);
+    }
+
+    /** Set the optional grant expiry (P3). */
+    public void setExpiresAt(Instant at) {
+        this.expiresAt = at;
     }
 
     public void revoke(Instant now) {

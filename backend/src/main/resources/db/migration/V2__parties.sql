@@ -27,6 +27,9 @@ CREATE TABLE customers (
     region                  VARCHAR(80),
     district                VARCHAR(80),
     country                 VARCHAR(2),                 -- P2: PartyBase country (ISO-3166 alpha-2)
+    website                 VARCHAR(200),               -- P3: PartyBase profile website URL
+    notes                   VARCHAR(1000),              -- P3: PartyBase free-text notes
+    image_url               VARCHAR(500),               -- P3: PartyBase logo/photo URL
     customer_kind           VARCHAR(20)     NOT NULL,
     credit_limit_amount     NUMERIC(19,4),
     credit_limit_currency   VARCHAR(3),
@@ -37,6 +40,9 @@ CREATE TABLE customers (
     default_price_list_id   BIGINT,                     -- P2 D5: soft-FK → price_lists(id) (no DB FK, cross-module)
     default_agent_id        BIGINT,                     -- P2 D5: soft-FK → agents(id) (no DB FK, cross-module)
     segment                 VARCHAR(20)     NOT NULL DEFAULT 'OTHER', -- P2 D5: CustomerSegment enum (Tier-2 deferred; simple enum only)
+    credit_rating           VARCHAR(20),                -- P3 CRM: free-text/coded credit rating
+    onboarding_date         DATE,                       -- P3 CRM: date customer was onboarded
+    loyalty_points          INTEGER         NOT NULL DEFAULT 0, -- P3 CRM: accrued loyalty points
     status                  VARCHAR(32)     NOT NULL DEFAULT 'ACTIVE',
     version                 BIGINT          NOT NULL DEFAULT 0,
     created_at              TIMESTAMPTZ     NOT NULL DEFAULT now(),
@@ -79,12 +85,17 @@ CREATE TABLE suppliers (
     region                  VARCHAR(80),
     district                VARCHAR(80),
     country                 VARCHAR(2),                 -- P2: PartyBase country (ISO-3166 alpha-2)
+    website                 VARCHAR(200),               -- P3: PartyBase profile website URL
+    notes                   VARCHAR(1000),              -- P3: PartyBase free-text notes
+    image_url               VARCHAR(500),               -- P3: PartyBase logo/photo URL
     supplier_kind           VARCHAR(20)     NOT NULL,
     payment_terms_days      INTEGER,
     default_currency        VARCHAR(3),                 -- P2 D5: supplier default transaction currency (CurrencyCode)
     lead_time_days          INTEGER,                    -- P2 D5: typical procurement lead time in days
     min_order_value         NUMERIC(19,4),              -- P2 D5: minimum order value threshold
     default_wht_type_id     BIGINT,                     -- P2 D5: soft-FK → wht_types(id) (no DB FK, cross-module)
+    our_credit_limit        NUMERIC(19,4),              -- P3: credit limit THEY extend to us (purchasing terms)
+    price_list_id           BIGINT,                     -- P3: soft-FK → price_lists(id) supplier purchase price list (no DB FK)
     status                  VARCHAR(32)     NOT NULL DEFAULT 'ACTIVE',
     version                 BIGINT          NOT NULL DEFAULT 0,
     created_at              TIMESTAMPTZ     NOT NULL DEFAULT now(),
@@ -124,6 +135,9 @@ CREATE TABLE agents (
     region                  VARCHAR(80),
     district                VARCHAR(80),
     country                 VARCHAR(2),                 -- P2: PartyBase country (ISO-3166 alpha-2)
+    website                 VARCHAR(200),               -- P3: PartyBase profile website URL
+    notes                   VARCHAR(1000),              -- P3: PartyBase free-text notes
+    image_url               VARCHAR(500),               -- P3: PartyBase logo/photo URL
     agent_kind              VARCHAR(20)     NOT NULL,
     app_user_id             BIGINT,
     sales_target            NUMERIC(19,4),              -- P2 D5: periodic sales target value
@@ -172,6 +186,9 @@ CREATE TABLE other_parties (
     region                  VARCHAR(80),
     district                VARCHAR(80),
     country                 VARCHAR(2),                 -- P2: PartyBase country (ISO-3166 alpha-2)
+    website                 VARCHAR(200),               -- P3: PartyBase profile website URL
+    notes                   VARCHAR(1000),              -- P3: PartyBase free-text notes
+    image_url               VARCHAR(500),               -- P3: PartyBase logo/photo URL
     other_kind              VARCHAR(40),
     status                  VARCHAR(32)     NOT NULL DEFAULT 'ACTIVE',
     version                 BIGINT          NOT NULL DEFAULT 0,

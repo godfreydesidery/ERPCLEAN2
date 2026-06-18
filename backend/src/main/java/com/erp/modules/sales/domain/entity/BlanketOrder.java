@@ -64,6 +64,16 @@ public class BlanketOrder extends UidEntity {
     @Setter
     private String notes;
 
+    /** P3: when true, blanket line prices are locked for all draw-down sales orders. */
+    @Column(name = "fixed_price", nullable = false)
+    @Setter
+    private boolean fixedPrice = false;
+
+    /** P3: when true, draw-down sales orders may not exceed the blanket line price. */
+    @Column(name = "price_protection", nullable = false)
+    @Setter
+    private boolean priceProtection = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

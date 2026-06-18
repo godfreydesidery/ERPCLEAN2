@@ -22,6 +22,11 @@ CREATE TABLE blanket_orders (
     total_drawn_amount     NUMERIC(19,4)  NOT NULL DEFAULT 0,
     status                 VARCHAR(20)    NOT NULL DEFAULT 'ACTIVE',
     notes                  VARCHAR(500),
+    -- P3: frame-contract pricing terms.
+    -- fixed_price: line prices on the blanket are locked for draw-down SOs.
+    fixed_price            BOOLEAN        NOT NULL DEFAULT FALSE,
+    -- price_protection: draw-down SOs may not exceed the blanket line price.
+    price_protection       BOOLEAN        NOT NULL DEFAULT FALSE,
     version                BIGINT         NOT NULL DEFAULT 0,
     created_at             TIMESTAMPTZ    NOT NULL DEFAULT now(),
     created_by             BIGINT,

@@ -19,6 +19,7 @@ CREATE TABLE units_of_measure (
     company_id  BIGINT          NOT NULL,
     code        VARCHAR(20)     NOT NULL,
     name        VARCHAR(60)     NOT NULL,
+    symbol      VARCHAR(20),                              -- P3: display symbol (e.g. "kg", "L", "pcs")
     dimension_type VARCHAR(20)  NOT NULL DEFAULT 'COUNT', -- P2 D5: UoM dimension family (COUNT/WEIGHT/VOLUME/LENGTH/TIME)
     decimal_places SMALLINT     NOT NULL DEFAULT 0,        -- P2 D5: display/rounding scale for quantities
     is_fractional  BOOLEAN      NOT NULL DEFAULT true,     -- P2 D5: whether fractional quantities are allowed

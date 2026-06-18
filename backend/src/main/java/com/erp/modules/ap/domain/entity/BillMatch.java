@@ -72,6 +72,30 @@ public class BillMatch {
     @Setter
     private String varianceReason;
 
+    // -------------------------------------------------------------------------
+    // P3 — audit-convenience scalar refs captured at match time (no FK — cross-module soft refs).
+    // -------------------------------------------------------------------------
+
+    /** P3: PO line uid the bill line matched. Nullable. */
+    @Column(name = "po_line_uid", length = 26)
+    @Setter
+    private String poLineUid;
+
+    /** P3: GR line uid drawn against. Nullable. */
+    @Column(name = "gr_line_uid", length = 26)
+    @Setter
+    private String grLineUid;
+
+    /** P3: GRNI clearing entry uid. Nullable. */
+    @Column(name = "grni_entry_uid", length = 26)
+    @Setter
+    private String grniEntryUid;
+
+    /** P3: currency snapshot for the variance amounts. Nullable. */
+    @Column(name = "currency", length = 3)
+    @Setter
+    private String currency;
+
     @Column(name = "tolerance_pct", precision = 9, scale = 4)
     private BigDecimal tolerancePct;
 

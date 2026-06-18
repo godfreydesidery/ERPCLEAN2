@@ -48,6 +48,21 @@ public class ArWriteOff extends UidEntity {
     @Setter
     private String glEntryUid;
 
+    // -------------------------------------------------------------------------
+    // P3 — FX capture for foreign-currency write-offs (base relievable off
+    // ar_invoices.base_outstanding_amount). Additive columns; DEFAULT 1 / nullable.
+    // -------------------------------------------------------------------------
+
+    /** P3: settlement rate (units of base per 1 foreign unit) at write-off; immutable. DEFAULT 1. */
+    @Column(name = "fx_rate", nullable = false, precision = 19, scale = 8, updatable = false)
+    @Setter
+    private BigDecimal fxRate = BigDecimal.ONE;
+
+    /** P3: amount in base currency at {@link #fxRate}. Nullable for back-compat rows. */
+    @Column(name = "base_amount", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal baseAmount;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

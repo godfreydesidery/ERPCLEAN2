@@ -8,6 +8,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import lombok.Getter;
+import lombok.Setter;
 
 /** Immutable payslip document per employee per posted run (ADR-0032 D-6). */
 @Getter
@@ -56,6 +57,31 @@ public class Payslip extends UidEntity {
 
     @Column(name = "ytd_net", nullable = false, precision = 19, scale = 4)
     private BigDecimal ytdNet;
+
+    /** YTD total deductions (P3, additive; defaults 0, set post-construction). */
+    @Column(name = "ytd_deduction", nullable = false, precision = 19, scale = 4)
+    @Setter
+    private BigDecimal ytdDeduction = BigDecimal.ZERO;
+
+    /** YTD employer cost (P3, additive; defaults 0, set post-construction). */
+    @Column(name = "ytd_employer_cost", nullable = false, precision = 19, scale = 4)
+    @Setter
+    private BigDecimal ytdEmployerCost = BigDecimal.ZERO;
+
+    /** documents-module uid of the rendered payslip PDF (P3). */
+    @Column(name = "generated_pdf_document_uid", length = 26)
+    @Setter
+    private String generatedPdfDocumentUid;
+
+    /** Delivery (any channel) timestamp (P3). */
+    @Column(name = "delivered_at")
+    @Setter
+    private Instant deliveredAt;
+
+    /** Email-delivery timestamp (P3). */
+    @Column(name = "emailed_at")
+    @Setter
+    private Instant emailedAt;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();

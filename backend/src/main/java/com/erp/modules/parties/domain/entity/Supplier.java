@@ -67,6 +67,22 @@ public class Supplier extends PartyBase {
     @Setter
     private Long defaultWhtTypeId;
 
+    // -------------------------------------------------------------------------
+    // P3 — purchasing terms. All nullable, additive-safe.
+    // -------------------------------------------------------------------------
+
+    /** P3: credit limit this supplier extends to us (their AR / our AP terms). Nullable. */
+    @Column(name = "our_credit_limit", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal ourCreditLimit;
+
+    /**
+     * P3: soft-FK → price_lists(id) — scalar, no @ManyToOne. The supplier's purchase price list.
+     */
+    @Column(name = "price_list_id")
+    @Setter
+    private Long priceListId;
+
     protected Supplier() {
         // JPA
     }

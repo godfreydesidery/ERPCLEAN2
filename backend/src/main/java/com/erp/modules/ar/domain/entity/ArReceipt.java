@@ -57,6 +57,11 @@ public class ArReceipt extends UidEntity {
     @Setter
     private String bankReference;
 
+    /** P3: free-text payer name when it differs from the customer master. Nullable. */
+    @Column(name = "payer_name", length = 160)
+    @Setter
+    private String payerName;
+
     /** Scalar uid of the GL journal entry (no FK — cross-module link, ADR-0014 D-11). */
     @Column(name = "gl_entry_uid", length = 26)
     @Setter

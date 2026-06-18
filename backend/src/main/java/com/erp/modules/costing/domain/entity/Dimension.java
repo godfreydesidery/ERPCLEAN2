@@ -41,6 +41,11 @@ public class Dimension extends UidEntity {
     @Setter
     private String name;
 
+    /** P3: free-text dimension description; nullable. */
+    @Column(name = "description", length = 255)
+    @Setter
+    private String description;
+
     /** True for the two seeded dimensions (COST_CENTRE, DEPARTMENT) — cannot be deleted. */
     @Column(name = "is_built_in", nullable = false, updatable = false)
     private boolean builtIn;

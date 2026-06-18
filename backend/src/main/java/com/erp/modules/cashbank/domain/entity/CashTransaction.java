@@ -85,6 +85,16 @@ public class CashTransaction extends UidEntity {
     @Setter
     private Long clearedInReconciliationId;
 
+    /** P3: free-text counterparty name (e.g. payee/payer). Nullable. */
+    @Column(name = "counterparty_name", length = 160)
+    @Setter
+    private String counterpartyName;
+
+    /** P3: self soft-FK → cash_transactions.id this row reverses (no DB FK). Nullable. */
+    @Column(name = "reversal_of_transaction_id")
+    @Setter
+    private Long reversalOfTransactionId;
+
     @Column(name = "memo", length = 255)
     private String memo;
 
