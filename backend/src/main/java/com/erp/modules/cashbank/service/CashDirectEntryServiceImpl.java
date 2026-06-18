@@ -86,6 +86,26 @@ public class CashDirectEntryServiceImpl implements CashDirectEntryService {
         if (!counterGlAcct.isActive())
             throw new IllegalStateException("Counter GL account " + counterGlAcct.getAccountCode() + " is inactive.");
 
+        // Issue #2 fix (b): apply the same control-account guard as the manual GL journal path.
+        // A cash direct entry is user-driven; posting its counter leg to a control account
+        // (AR, AP, INVENTORY, TAX, PAYROLL_CLEARING, FX_CLEARING) would silently corrupt
+        // the matching sub-ledger — exactly the same risk as a manual GL journal (ADR-0013 D-3).
+        // CASH/BANK control accounts are deliberately exempt (blocksManualPosting()==false) because
+        // bank charges and interest are the primary use-case for this endpoint.
+        if (!counterGlAcct.isAllowManualPosting()) {
+            throw new com.erp.platform.common.api.ConflictException(
+                    "Counter GL account " + counterGlAcct.getAccountCode()
+                            + " does not allow manual posting and cannot be used as a cash-entry "
+                            + "counter account. Choose a non-control account.");
+        }
+        if (counterGlAcct.getControlType() != null
+                && counterGlAcct.getControlType().blocksManualPosting()) {
+            throw new com.erp.platform.common.api.ConflictException(
+                    "Counter GL account " + counterGlAcct.getAccountCode()
+                            + " is a control account (" + counterGlAcct.getControlType()
+                            + ") and cannot be targeted by a direct cash entry (ADR-0013 D-3).");
+        }
+
         Long branchId = branchId();
         Long actor    = actorId();
         String txnNumber = numbers.nextTransaction(companyId);

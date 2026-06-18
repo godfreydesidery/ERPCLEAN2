@@ -213,12 +213,13 @@ public class BillMatchServiceImpl implements BillMatchService {
         SupplierBillStatus newBillStatus = anyHeld
                 ? SupplierBillStatus.HELD
                 : SupplierBillStatus.MATCHED;
-        // Assign bill_number BEFORE the status transition (finding #15). Order matters: setStatus
-        // dirties the bill as non-DRAFT, and numbers.nextBill(...) runs a code_sequence query that
-        // triggers a Hibernate autoflush — flushing a MATCHED-but-unnumbered row violates
-        // chk_supplier_bill_number_when_posted. Numbering while the bill is still DRAFT keeps that
-        // autoflush legal. Guard is idempotent (no-op if already numbered). HELD bills stay unnumbered.
-        if (!anyHeld && bill.getBillNumber() == null) {
+        // Assign bill_number BEFORE the status transition (issue #3 / finding #15). Order matters:
+        // setStatus dirties the bill as non-DRAFT, and numbers.nextBill(...) runs a code_sequence
+        // query that triggers a Hibernate autoflush — flushing a non-DRAFT-but-unnumbered row
+        // violates chk_supplier_bill_number_when_posted (which requires bill_number IS NOT NULL for
+        // any status != DRAFT). This covers MATCHED *and* HELD transitions. Guard is idempotent
+        // (no-op if the bill was already numbered on a prior runMatch call for a re-run HELD bill).
+        if (bill.getBillNumber() == null) {
             bill.setBillNumber(numbers.nextBill(bill.getCompanyId()));
         }
 

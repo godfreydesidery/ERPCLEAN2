@@ -28,6 +28,7 @@ import com.erp.modules.parties.repository.CustomerRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.money.ConvertedAmount;
 import com.erp.platform.common.money.CurrencyConversionService;
@@ -138,6 +139,9 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
             targetInvoice = invoices.findByCompanyIdAndUid(companyId, req.arInvoiceUid())
                     .orElseThrow(() -> new NotFoundException(
                             "ArInvoice not found: " + req.arInvoiceUid()));
+
+            // BR-AR customer-match: credit note customer must own the target invoice (issue #1)
+            assertInvoiceBelongsToCustomer(targetInvoice, customerId);
 
             // Currency must match (BR-CUR-06)
             if (!docCurrency.equals(targetInvoice.getCurrency().value())) {
@@ -396,6 +400,9 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
                     .orElseThrow(() -> new NotFoundException(
                             "ArInvoice not found: " + line.arInvoiceUid()));
 
+            // BR-AR customer-match: credit note customer must own the target invoice (issue #1)
+            assertInvoiceBelongsToCustomer(inv, note.getCustomerId());
+
             // Guard: slice must not exceed current invoice outstanding (BR-AR-04)
             if (line.allocatedAmount().compareTo(inv.getOutstandingAmount()) > 0) {
                 throw new IllegalStateException(
@@ -507,6 +514,20 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
     // =========================================================================
     // Status helpers
     // =========================================================================
+
+    /**
+     * BR-AR customer-match guard (issue #1): an allocation may only target an invoice that belongs
+     * to the same customer as the credit note. Throws {@link ConflictException} (→ HTTP 409)
+     * when the invariant is violated.
+     */
+    private static void assertInvoiceBelongsToCustomer(ArInvoice invoice, Long expectedCustomerId) {
+        if (!invoice.getCustomerId().equals(expectedCustomerId)) {
+            throw new ConflictException(
+                    "Allocation invoice belongs to a different customer"
+                    + " (invoice customerId=" + invoice.getCustomerId()
+                    + ", credit note customerId=" + expectedCustomerId + ").");
+        }
+    }
 
     private static ArInvoiceStatus deriveInvoiceStatus(BigDecimal outstanding, BigDecimal original) {
         if (outstanding.compareTo(BigDecimal.ZERO) == 0) return ArInvoiceStatus.PAID;

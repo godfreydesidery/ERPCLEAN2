@@ -1,6 +1,7 @@
 package com.erp.modules.ap.service;
 
 import com.erp.modules.purchases.domain.dto.GoodsReceiptLineDto;
+import com.erp.modules.purchases.domain.dto.PurchaseOrderDto;
 import com.erp.modules.purchases.domain.dto.PurchaseOrderLineDto;
 import com.erp.modules.purchases.service.GoodsReceiptService;
 import com.erp.modules.purchases.service.PurchaseOrderService;
@@ -35,6 +36,21 @@ public class PurchaseMatchReader {
             return purchaseOrders.listLines(purchaseOrderUid).stream()
                     .filter(l -> poLineUid.equals(l.uid()))
                     .findFirst();
+        } catch (Exception e) {
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Fetch a PO header DTO by uid. Returns empty if not found or on any lookup error.
+     * Used by SupplierBillServiceImpl to assert supplier ownership before bill entry.
+     */
+    public Optional<PurchaseOrderDto> findPo(String purchaseOrderUid) {
+        if (purchaseOrderUid == null || purchaseOrderUid.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.ofNullable(purchaseOrders.getByUid(purchaseOrderUid));
         } catch (Exception e) {
             return Optional.empty();
         }

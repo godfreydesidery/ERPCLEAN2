@@ -20,6 +20,7 @@ import com.erp.modules.products.domain.enums.VatStatus;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.security.RequestContext;
@@ -84,6 +85,18 @@ public class SupplierBillServiceImpl implements SupplierBillService {
         Supplier supplier = suppliers.findByCompanyIdAndUid(companyId, req.supplierUid())
                 .orElseThrow(() -> new NotFoundException("Supplier not found: " + req.supplierUid()));
         Long supplierId = supplier.getId();
+
+        // Cross-supplier PO ownership guard (issue #8): when a PO is referenced the bill's supplier
+        // must match the PO's supplier. Reject with ConflictException so the caller gets a clean 409.
+        if (req.purchaseOrderUid() != null && !req.purchaseOrderUid().isBlank()) {
+            purchaseMatchReader.findPo(req.purchaseOrderUid()).ifPresent(po -> {
+                if (!supplierId.equals(po.supplierId())) {
+                    throw new ConflictException(
+                            "Purchase order " + req.purchaseOrderUid()
+                                    + " belongs to a different supplier and cannot be referenced by this bill.");
+                }
+            });
+        }
 
         // Duplicate-invoice guard (uq_supplier_bill_supplier_invoice)
         if (bills.existsByCompanyIdAndSupplierIdAndSupplierInvoiceNo(
