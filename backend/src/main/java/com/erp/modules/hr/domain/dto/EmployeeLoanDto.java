@@ -3,6 +3,7 @@ package com.erp.modules.hr.domain.dto;
 import com.erp.modules.hr.domain.enums.LoanStatus;
 import com.erp.modules.hr.domain.enums.LoanType;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 
 public record EmployeeLoanDto(
@@ -23,5 +24,6 @@ public record EmployeeLoanDto(
         BigDecimal interestRate,
         LoanType loanType,
         Long approvedBy,
+        Instant approvedAt,
         Integer termMonths
 ) {}

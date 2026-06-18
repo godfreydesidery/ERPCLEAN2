@@ -51,14 +51,15 @@ public class LeaveServiceImpl implements LeaveService {
                 .orElseThrow(() -> NotFoundException.of("Employee", employeeUid));
         scopeGuard.assertCanActIn(p, emp.getCompanyId());
 
+        LeaveType leaveType = leaveTypes.findById(req.leaveTypeId())
+                .orElseThrow(() -> NotFoundException.of("LeaveType", String.valueOf(req.leaveTypeId())));
+
         LeaveRequest lr = new LeaveRequest(emp.getCompanyId(), emp.getId(),
                 req.leaveTypeId(), req.fromDate(), req.toDate(), req.days(), req.reason(), p.userId());
         leaveRequests.save(lr);
         audit.record(AuditEvent.of(AuditActions.HR_LEAVE_REQUEST_SUBMIT, "leave_requests", lr.getId(), null));
 
-        String leaveTypeName = leaveTypes.findById(req.leaveTypeId())
-                .map(LeaveType::getName).orElse(null);
-        return toDto(lr, emp.getFullName(), leaveTypeName);
+        return toDto(lr, emp.getFullName(), leaveType.getName());
     }
 
     @Override

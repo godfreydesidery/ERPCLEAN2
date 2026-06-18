@@ -20,6 +20,7 @@ import com.erp.modules.stock.repository.StockTransferRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.OutboxPublisher;
@@ -28,7 +29,6 @@ import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.springframework.data.domain.Page;
@@ -55,6 +55,7 @@ public class StockTransferServiceImpl implements StockTransferService {
     private final StockTransferLineRepository  transferLines;
     private final StockOnHandRepository        onHands;
     private final StockPostingService          posting;
+    private final InventoryValuationService    valuation;
     private final ProductService               productService;
     private final LocationResolver             locationResolver;
     private final WarehouseNumberGenerator     numberGenerator;
@@ -66,17 +67,19 @@ public class StockTransferServiceImpl implements StockTransferService {
                                      StockTransferLineRepository transferLines,
                                      StockOnHandRepository onHands,
                                      StockPostingService posting,
+                                     InventoryValuationService valuation,
                                      ProductService productService,
                                      LocationResolver locationResolver,
                                      WarehouseNumberGenerator numberGenerator,
                                      OutboxPublisher outbox,
                                      ScopeGuard scopeGuard,
                                      AuditService audit) {
-        this.transfers       = transfers;
-        this.transferLines   = transferLines;
-        this.onHands         = onHands;
-        this.posting         = posting;
-        this.productService  = productService;
+        this.transfers        = transfers;
+        this.transferLines    = transferLines;
+        this.onHands          = onHands;
+        this.posting          = posting;
+        this.valuation        = valuation;
+        this.productService   = productService;
         this.locationResolver = locationResolver;
         this.numberGenerator  = numberGenerator;
         this.outbox           = outbox;
@@ -143,11 +146,34 @@ public class StockTransferServiceImpl implements StockTransferService {
         List<StockTransferLine> lines = transferLines
                 .findByStockTransferIdOrderByLineNoAsc(transfer.getId());
 
+        // --- Guard: on-hand / allowNegative check at source before any movement ---
+        // allowNegative is a location-level flag (ADR-0028 D-7).
+        // The source location was validated on create; look up the flag by PK (scope already trusted).
+        boolean srcAllowNegative = locationResolver.isAllowNegative(transfer.getSourceLocationId());
+
+        for (StockTransferLine line : lines) {
+            if (!srcAllowNegative) {
+                StockOnHand srcSoh = onHands.findByCompanyIdAndBranchIdAndLocationIdAndProductId(
+                        principal.companyId(), transfer.getSourceBranchId(),
+                        transfer.getSourceLocationId(), line.getProductId())
+                        .orElse(null);
+                BigDecimal available = srcSoh != null ? srcSoh.availableQty() : BigDecimal.ZERO;
+                if (available.compareTo(line.getQtyTransferredBase()) < 0) {
+                    throw new ConflictException(
+                            "Insufficient stock for product id=" + line.getProductId()
+                            + " at source location id=" + transfer.getSourceLocationId()
+                            + ": available=" + available.toPlainString()
+                            + ", requested=" + line.getQtyTransferredBase().toPlainString()
+                            + ". The source location does not allow negative stock.");
+                }
+            }
+        }
+
         Instant now = Instant.now();
 
         for (StockTransferLine line : lines) {
             BigDecimal avgCost = resolveAvgCost(
-                    principal.companyId(), transfer.getSourceLocationId(), line.getProductId());
+                    principal.companyId(), line.getProductId());
             BigDecimal value = avgCost != null
                     ? avgCost.multiply(line.getQtyTransferredBase()).setScale(SCALE, RM)
                     : BigDecimal.ZERO;
@@ -167,6 +193,13 @@ public class StockTransferServiceImpl implements StockTransferService {
                     null, "STOCK_TRANSFER", transfer.getUid(),
                     null, null, now, principal.userId(),
                     avgCost, value);
+
+            // Move on_hand_value with the units so valuation stays correct (issue #12).
+            valuation.transferCost(
+                    principal.companyId(),
+                    transfer.getSourceBranchId(), transfer.getSourceLocationId(),
+                    transfer.getDestBranchId(),   transfer.getDestLocationId(),
+                    line.getProductId(), line.getQtyTransferredBase());
         }
 
         transfer.complete(principal.userId());
@@ -189,16 +222,37 @@ public class StockTransferServiceImpl implements StockTransferService {
             throw new IllegalStateException("Transfer " + transferUid + " is not an IN_TRANSIT transfer.");
         }
 
+        List<StockTransferLine> lines = transferLines
+                .findByStockTransferIdOrderByLineNoAsc(transfer.getId());
+
+        // --- Guard: on-hand / allowNegative check at source before dispatch ---
+        boolean srcAllowNegative = locationResolver.isAllowNegative(transfer.getSourceLocationId());
+        if (!srcAllowNegative) {
+            for (StockTransferLine line : lines) {
+                StockOnHand srcSoh = onHands.findByCompanyIdAndBranchIdAndLocationIdAndProductId(
+                        principal.companyId(), transfer.getSourceBranchId(),
+                        transfer.getSourceLocationId(), line.getProductId())
+                        .orElse(null);
+                BigDecimal available = srcSoh != null ? srcSoh.availableQty() : BigDecimal.ZERO;
+                if (available.compareTo(line.getQtyTransferredBase()) < 0) {
+                    throw new ConflictException(
+                            "Insufficient stock for product id=" + line.getProductId()
+                            + " at source location id=" + transfer.getSourceLocationId()
+                            + ": available=" + available.toPlainString()
+                            + ", requested=" + line.getQtyTransferredBase().toPlainString()
+                            + ". The source location does not allow negative stock.");
+                }
+            }
+        }
+
         transfer.dispatch(principal.userId());
         transfers.save(transfer);
 
-        // Build payload for the outbox event
-        List<StockTransferLine> lines = transferLines
-                .findByStockTransferIdOrderByLineNoAsc(transfer.getId());
+        // Build payload for the outbox event — capture avg cost at dispatch time so the
+        // handler can move cost value atomically with the qty movement.
         List<TransferDispatchedPayload.LineItem> lineItems = lines.stream()
                 .map(l -> {
-                    BigDecimal avg = resolveAvgCost(principal.companyId(),
-                            transfer.getSourceLocationId(), l.getProductId());
+                    BigDecimal avg = resolveAvgCost(principal.companyId(), l.getProductId());
                     BigDecimal val = avg != null
                             ? avg.multiply(l.getQtyTransferredBase()).setScale(SCALE, RM)
                             : BigDecimal.ZERO;
@@ -242,8 +296,7 @@ public class StockTransferServiceImpl implements StockTransferService {
                 .findByStockTransferIdOrderByLineNoAsc(transfer.getId());
         List<TransferDispatchedPayload.LineItem> lineItems = lines.stream()
                 .map(l -> {
-                    BigDecimal avg = resolveAvgCost(principal.companyId(),
-                            transfer.getDestLocationId(), l.getProductId());
+                    BigDecimal avg = resolveAvgCost(principal.companyId(), l.getProductId());
                     BigDecimal val = avg != null
                             ? avg.multiply(l.getQtyTransferredBase()).setScale(SCALE, RM)
                             : BigDecimal.ZERO;
@@ -315,7 +368,7 @@ public class StockTransferServiceImpl implements StockTransferService {
         return t;
     }
 
-    private BigDecimal resolveAvgCost(Long companyId, Long locationId, Long productId) {
+    private BigDecimal resolveAvgCost(Long companyId, Long productId) {
         // The company-product avg_cost is the same across all location rows (D-2).
         // Find any on-hand row for this product in this company to get the running average.
         return onHands.findByCompanyIdAndProductId(companyId, productId)

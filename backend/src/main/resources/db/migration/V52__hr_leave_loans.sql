@@ -113,13 +113,14 @@ CREATE TABLE employee_loans (
     installment_amount  NUMERIC(19,4) NOT NULL,
     outstanding_amount  NUMERIC(19,4) NOT NULL,
     gl_account_id       BIGINT        NOT NULL,
-    status              VARCHAR(12)   NOT NULL DEFAULT 'ACTIVE',
+    status              VARCHAR(12)   NOT NULL DEFAULT 'PENDING',
     start_date          DATE          NOT NULL,
     currency            VARCHAR(3)    NOT NULL DEFAULT 'TZS',
     -- P2 D6 (ADR-0041): loan terms (single rate v1; dynamic rate schedule DEFERRED)
     interest_rate       NUMERIC(7,4),                 -- annual %, NULL = interest-free advance
     loan_type           VARCHAR(20),                  -- enum LoanType
     approved_by         BIGINT,                       -- soft-FK app_users
+    approved_at         TIMESTAMPTZ,
     term_months         INT,
     version             BIGINT        NOT NULL DEFAULT 0,
     created_at          TIMESTAMPTZ   NOT NULL DEFAULT now(),
@@ -131,7 +132,7 @@ CREATE TABLE employee_loans (
     CONSTRAINT chk_employee_loan_principal     CHECK  (principal_amount > 0),
     CONSTRAINT chk_employee_loan_installment   CHECK  (installment_amount > 0),
     CONSTRAINT chk_employee_loan_outstanding   CHECK  (outstanding_amount >= 0),
-    CONSTRAINT chk_employee_loan_status        CHECK  (status IN ('ACTIVE','SETTLED','CANCELLED')),
+    CONSTRAINT chk_employee_loan_status        CHECK  (status IN ('PENDING','ACTIVE','SETTLED','CANCELLED')),
     CONSTRAINT chk_employee_loan_type          CHECK  (loan_type IS NULL OR loan_type IN ('LOAN','SALARY_ADVANCE','EMERGENCY','OTHER')),
     CONSTRAINT chk_employee_loan_interest_rate CHECK  (interest_rate IS NULL OR interest_rate >= 0),
     CONSTRAINT fk_employee_loan_company     FOREIGN KEY (company_id)    REFERENCES companies(id),

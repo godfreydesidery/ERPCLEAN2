@@ -10,6 +10,7 @@ import com.erp.modules.hr.repository.EmployeeRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.security.RequestContext;
@@ -83,8 +84,15 @@ public class EmployeeLoanServiceImpl implements EmployeeLoanService {
         RequestContext.Principal p = RequestContext.get();
         EmployeeLoan loan = requireByUid(uid);
         scopeGuard.assertCanActIn(p, loan.getCompanyId());
+        if (loan.getStatus() != LoanStatus.PENDING) {
+            throw new ConflictException(
+                    "Loan " + loan.getLoanNumber() + " is not in PENDING status (current: " + loan.getStatus() + ")");
+        }
+        Instant now = Instant.now();
         loan.setStatus(LoanStatus.ACTIVE);
-        loan.setUpdatedAt(Instant.now());
+        loan.setApprovedBy(p.userId());
+        loan.setApprovedAt(now);
+        loan.setUpdatedAt(now);
         loan.setUpdatedBy(p.userId());
         audit.record(AuditEvent.of(AuditActions.HR_LOAN_APPROVE, "employee_loans", loan.getId(), null));
         String empName = employees.findById(loan.getEmployeeId()).map(Employee::getFullName).orElse(null);
@@ -109,6 +117,6 @@ public class EmployeeLoanServiceImpl implements EmployeeLoanService {
                 empName, l.getLoanNumber(), l.getPrincipalAmount(),
                 l.getInstallmentAmount(), l.getOutstandingAmount(),
                 l.getGlAccountId(), l.getStatus(), l.getStartDate(), CurrencyCode.value(l.getCurrency()),
-                l.getInterestRate(), l.getLoanType(), l.getApprovedBy(), l.getTermMonths());
+                l.getInterestRate(), l.getLoanType(), l.getApprovedBy(), l.getApprovedAt(), l.getTermMonths());
     }
 }

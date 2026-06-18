@@ -175,6 +175,33 @@ class RoleServiceImplIT extends PostgresIntegrationTest {
                 .hasMessageContaining("ORG_ADMIN");
     }
 
+    // ---------------------------------------------------------------
+    // setPermissions: system role -> ConflictException (issue #4 fix)
+    // ---------------------------------------------------------------
+
+    @Test
+    void setPermissions_systemRole_throwsConflict() {
+        // ORG_ADMIN is seeded as is_system=true; stripping its permissions must be refused.
+        // UID resolved outside the lambda so assertThatThrownBy has exactly one throwable site (S5778).
+        String orgAdminUid = orgAdminUid();
+
+        assertThatThrownBy(() -> roleService.setPermissions(
+                orgAdminUid, new SetRolePermissionsRequest(List.of("USER.VIEW"))))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("ORG_ADMIN");
+    }
+
+    @Test
+    void setPermissions_systemRole_emptyList_throwsConflict() {
+        // Emptying a system role's permission set must also be refused.
+        String orgAdminUid = orgAdminUid();
+
+        assertThatThrownBy(() -> roleService.setPermissions(
+                orgAdminUid, new SetRolePermissionsRequest(List.of())))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("ORG_ADMIN");
+    }
+
     @Test
     void archiveByUid_normalRole_setsStatusArchived() {
         RoleDto role = roleService.create(new CreateRoleRequest("ARCHIVEME", "Archive Me", null));
@@ -197,5 +224,15 @@ class RoleServiceImplIT extends PostgresIntegrationTest {
         assertThat(codes).contains(
                 "COMPANY.MANAGE", "BRANCH.MANAGE", "USER.MANAGE",
                 "ROLE.MANAGE", "PERMISSION.VIEW", "AUDIT.VIEW");
+    }
+
+    // ---------------------------------------------------------------
+    // private helpers
+    // ---------------------------------------------------------------
+
+    private String orgAdminUid() {
+        return roleRepo.findByCode("ORG_ADMIN")
+                .orElseThrow(() -> new IllegalStateException("ORG_ADMIN must be seeded"))
+                .getUid();
     }
 }

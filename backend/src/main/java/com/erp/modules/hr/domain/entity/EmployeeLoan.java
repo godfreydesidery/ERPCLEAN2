@@ -47,7 +47,7 @@ public class EmployeeLoan extends UidEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 12)
     @Setter
-    private LoanStatus status = LoanStatus.ACTIVE;
+    private LoanStatus status = LoanStatus.PENDING;
 
     @Column(name = "start_date", nullable = false, updatable = false)
     private LocalDate startDate;
@@ -71,6 +71,10 @@ public class EmployeeLoan extends UidEntity {
     @Column(name = "approved_by")
     @Setter
     private Long approvedBy;
+
+    @Column(name = "approved_at")
+    @Setter
+    private Instant approvedAt;
 
     @Column(name = "term_months")
     @Setter
