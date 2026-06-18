@@ -182,10 +182,10 @@
             </div>
             <div class="col-sm-2">
               <label class="form-label small text-muted mb-1" for="fCostCurrency">Currency</label>
-              <input id="fCostCurrency" name="fCostCurrency" type="text" class="form-control"
-                     placeholder="TZS"
-                     [ngModel]="fCostCurrency()" (ngModelChange)="fCostCurrency.set($event)"
-                     [disabled]="saving() || !canManage()" />
+              <app-currency-select id="fCostCurrency" name="fCostCurrency"
+                                   [(ngModel)]="fCostCurrency"
+                                   [companyUid]="productCompanyUid()"
+                                   [disabled]="saving() || !canManage()" />
             </div>
           </div>
 
@@ -540,10 +540,10 @@
                   </div>
                   <div class="col-sm-2">
                     <label class="form-label small text-muted mb-1" for="newPriceCurrency">Currency</label>
-                    <input id="newPriceCurrency" name="newPriceCurrency" type="text" class="form-control"
-                           placeholder="TZS"
-                           [ngModel]="newPriceCurrency()" (ngModelChange)="newPriceCurrency.set($event)"
-                           [disabled]="settingPrice()" autocomplete="off" />
+                    <app-currency-select id="newPriceCurrency" name="newPriceCurrency"
+                                         [(ngModel)]="newPriceCurrency"
+                                         [companyUid]="productCompanyUid()"
+                                         [disabled]="settingPrice()" />
                   </div>
                   <div class="col-sm-3">
                     <button type="submit" class="btn btn-primary w-100"

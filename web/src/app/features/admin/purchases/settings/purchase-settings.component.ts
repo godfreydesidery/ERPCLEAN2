@@ -8,12 +8,13 @@ import { PurchaseSettingsDto, UpdatePurchaseSettingsRequest } from '../../models
 import { CompanyService } from '../../company/company.service';
 import { OrganisationService } from '../../organisation/organisation.service';
 import { PurchaseSettingsService } from './purchase-settings.service';
+import { CurrencySelectComponent } from '../../../../shared/currency-select/currency-select.component';
 
 type PageState = 'loading' | 'idle' | 'error' | 'forbidden';
 
 @Component({
   selector: 'app-purchase-settings',
-  imports: [FormsModule],
+  imports: [FormsModule, CurrencySelectComponent],
   templateUrl: './purchase-settings.component.html',
   styleUrl: './purchase-settings.component.scss',
 })

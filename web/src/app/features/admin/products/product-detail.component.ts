@@ -31,6 +31,7 @@ import { BranchService } from '../branch/branch.service';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { ProductService } from './product.service';
+import { CurrencySelectComponent } from '../../../shared/currency-select/currency-select.component';
 
 type LoadState = 'loading' | 'idle' | 'error';
 
@@ -42,7 +43,7 @@ type LoadState = 'loading' | 'idle' | 'error';
  */
 @Component({
   selector: 'app-product-detail',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, CurrencySelectComponent],
   templateUrl: './product-detail.component.html',
   styleUrl: './product-detail.component.scss',
 })
@@ -140,6 +141,14 @@ export class ProductDetailComponent {
   readonly companies = signal<Company[]>([]);
   readonly companiesState = signal<LoadState>('loading');
   readonly selectedCompanyUid = signal('');
+
+  /** Uid of the company that owns this product — used to scope the currency picker. */
+  readonly productCompanyUid = computed(() => {
+    const p = this.product();
+    if (!p) return '';
+    const match = this.companies().find((c) => c.id === p.companyId);
+    return match?.uid ?? '';
+  });
   readonly companyBranches = signal<Branch[]>([]);
   readonly companyBranchesState = signal<'idle' | 'loading' | 'error'>('idle');
   readonly selectedBranchUid = signal('');

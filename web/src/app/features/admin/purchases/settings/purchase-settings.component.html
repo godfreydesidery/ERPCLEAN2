@@ -89,13 +89,10 @@
                       </div>
                       <div class="erp-field">
                         <label class="form-label small text-muted mb-1" for="currency">Currency</label>
-                        <input id="currency" name="currency" type="text"
-                               class="form-control"
-                               placeholder="TZS"
-                               [ngModel]="fCurrency()"
-                               (ngModelChange)="fCurrency.set($event)"
-                               [disabled]="saving() || !canEdit()"
-                               autocomplete="off" />
+                        <app-currency-select id="currency" name="currency"
+                                             [(ngModel)]="fCurrency"
+                                             [companyUid]="selectedCompanyUid()"
+                                             [disabled]="saving() || !canEdit()" />
                       </div>
                     </div>
                   }

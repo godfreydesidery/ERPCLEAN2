@@ -168,10 +168,10 @@
               </div>
               <div class="col-sm-2">
                 <label class="form-label small text-muted mb-1" for="fCreditCurrency">Currency</label>
-                <input id="fCreditCurrency" name="fCreditCurrency" type="text" class="form-control"
-                       [ngModel]="fCreditCurrency()" (ngModelChange)="fCreditCurrency.set($event)"
-                       placeholder="TZS"
-                       [disabled]="saving() || !canManage()" />
+                <app-currency-select id="fCreditCurrency" name="fCreditCurrency"
+                                     [(ngModel)]="fCreditCurrency"
+                                     [companyUid]="customerCompanyUid()"
+                                     [disabled]="saving() || !canManage()" />
               </div>
               <div class="col-sm-3">
                 <label class="form-label small text-muted mb-1" for="fPaymentTermsDays">Payment terms (days)</label>

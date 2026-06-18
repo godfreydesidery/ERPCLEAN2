@@ -20,6 +20,7 @@ import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { ProductService } from './product.service';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
+import { CurrencySelectComponent } from '../../../shared/currency-select/currency-select.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -33,7 +34,7 @@ interface LoadTrigger { q: string; page: number }
  */
 @Component({
   selector: 'app-product-list',
-  imports: [FormsModule, RouterLink, PaginatorComponent],
+  imports: [FormsModule, RouterLink, PaginatorComponent, CurrencySelectComponent],
   templateUrl: './product-list.component.html',
   styleUrl: './product-list.component.scss',
 })
@@ -47,6 +48,7 @@ export class ProductListComponent {
   // ── Company context ────────────────────────────────────────────────────────
   readonly companies = signal<Company[]>([]);
   readonly selectedCompanyId = signal('');
+  readonly selectedCompanyUid = computed(() => this.companies().find((c) => c.id === this.selectedCompanyId())?.uid ?? '');
   readonly companyState = signal<'loading' | 'idle' | 'error'>('loading');
 
   // ── List state ─────────────────────────────────────────────────────────────
