@@ -135,10 +135,11 @@
                     <label class="form-label" for="saleCurrency">
                       Currency <span class="text-danger" aria-hidden="true">*</span>
                     </label>
-                    <input id="saleCurrency" name="saleCurrency" type="text" class="form-control"
-                           placeholder="TZS"
-                           [ngModel]="currency()" (ngModelChange)="currency.set($event)"
-                           [disabled]="submitting()" autocomplete="off" />
+                    <app-currency-select id="saleCurrency" name="saleCurrency"
+                                         [(ngModel)]="currency"
+                                         [companyUid]="selectedCompanyUid()"
+                                         [required]="true"
+                                         [disabled]="submitting()" />
                   </div>
                   <div class="erp-field full">
                     <label class="form-label" for="saleNotes">Notes</label>

@@ -18,6 +18,7 @@ import { BranchService } from '../branch/branch.service';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { CustomerService } from './customer.service';
+import { CurrencySelectComponent } from '../../../shared/currency-select/currency-select.component';
 
 type LoadState = 'loading' | 'idle' | 'error';
 
@@ -29,7 +30,7 @@ type LoadState = 'loading' | 'idle' | 'error';
  */
 @Component({
   selector: 'app-customer-detail',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, CurrencySelectComponent],
   templateUrl: './customer-detail.component.html',
   styleUrl: './customer-detail.component.scss',
 })
@@ -98,6 +99,14 @@ export class CustomerDetailComponent {
   private readonly branchById = signal<Map<string, Branch>>(new Map());
 
   readonly hasBranches = computed(() => this.branches().length > 0);
+
+  /** Uid of the company that owns this customer — scopes the currency picker. */
+  readonly customerCompanyUid = computed(() => {
+    const c = this.customer();
+    if (!c) return '';
+    const match = this.companies().find((co) => co.id === c.companyId);
+    return match?.uid ?? '';
+  });
 
   branchDisplay(branchId: string): string {
     const b = this.branchById().get(branchId);

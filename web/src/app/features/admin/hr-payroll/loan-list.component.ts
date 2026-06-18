@@ -15,6 +15,7 @@ import { HrPayrollService, LoanPage } from './hr-payroll.service';
 import { CreateLoanRequest, EmployeeLoanDto } from './models/hr-payroll.model';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 import { UidOption, UidPickerComponent } from '../../../shared/uid-picker/uid-picker.component';
+import { CurrencySelectComponent } from '../../../shared/currency-select/currency-select.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -26,7 +27,7 @@ interface LoadTrigger { page: number }
  */
 @Component({
   selector: 'app-loan-list',
-  imports: [FormsModule, RouterLink, DecimalPipe, PaginatorComponent, UidPickerComponent],
+  imports: [FormsModule, RouterLink, DecimalPipe, PaginatorComponent, UidPickerComponent, CurrencySelectComponent],
   templateUrl: './loan-list.component.html',
   styleUrl: './loan-list.component.scss',
 })
@@ -39,6 +40,7 @@ export class LoanListComponent {
 
   readonly companies = signal<Company[]>([]);
   readonly selectedCompanyId = signal('');
+  readonly selectedCompanyUid = computed(() => this.companies().find((c) => c.id === this.selectedCompanyId())?.uid ?? '');
   readonly companyState = signal<'loading' | 'idle' | 'error'>('loading');
 
   readonly rows = signal<EmployeeLoanDto[]>([]);

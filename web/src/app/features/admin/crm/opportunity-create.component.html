@@ -84,10 +84,11 @@
           <label class="form-label small text-muted mb-1" for="fCurrency">
             Currency <span class="text-danger" aria-hidden="true">*</span>
           </label>
-          <input id="fCurrency" name="fCurrency" type="text" class="form-control"
-                 placeholder="TZS"
-                 [ngModel]="fCurrency()" (ngModelChange)="fCurrency.set($event)"
-                 [disabled]="saving()" autocomplete="off" />
+          <app-currency-select id="fCurrency" name="fCurrency"
+                               [(ngModel)]="fCurrency"
+                               [companyUid]="selectedCompanyUid()"
+                               [required]="true"
+                               [disabled]="saving()" />
         </div>
 
         <div class="col-sm-3">
