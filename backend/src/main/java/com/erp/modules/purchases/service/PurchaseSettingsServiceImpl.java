@@ -55,6 +55,19 @@ public class PurchaseSettingsServiceImpl implements PurchaseSettingsService {
         if (req.currency() != null && !req.currency().isBlank()) {
             s.setCurrency(CurrencyCode.ofNullable(req.currency()));
         }
+        // P2 D7 — procurement policy defaults (null = leave unchanged for nullable refs/amounts;
+        // booleans are explicit tri-state via Boolean wrapper).
+        s.setDefaultPaymentTermsId(req.defaultPaymentTermsId());
+        s.setDefaultLocationId(req.defaultLocationId());
+        s.setMatchTolerancePct(req.matchTolerancePct());
+        s.setMatchToleranceAbs(req.matchToleranceAbs());
+        s.setRequisitionApprovalThresholdAmount(req.requisitionApprovalThresholdAmount());
+        if (req.autoCloseEnabled() != null) {
+            s.setAutoCloseEnabled(req.autoCloseEnabled());
+        }
+        if (req.requisitionApprovalEnabled() != null) {
+            s.setRequisitionApprovalEnabled(req.requisitionApprovalEnabled());
+        }
         s.setUpdatedAt(Instant.now());
         s.setUpdatedBy(actorId());
         return PurchaseSettingsDto.from(settings.save(s));

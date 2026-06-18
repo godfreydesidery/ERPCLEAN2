@@ -17,6 +17,7 @@ public record RfqDto(
         LocalDate responseDueDate,
         String awardedQuoteUid,
         String awardedPoUid,
+        String awardReason,
         String notes,
         Instant sentAt,
         Instant awardedAt,
@@ -32,6 +33,7 @@ public record RfqDto(
                 r.getRfqNumber(), r.getStatus(),
                 r.getSourceRequisitionUid(), r.getResponseDueDate(),
                 r.getAwardedQuoteUid(), r.getAwardedPoUid(),
+                r.getAwardReason(),
                 r.getNotes(),
                 r.getSentAt(), r.getAwardedAt(), r.getCancelledAt(), r.getCreatedAt(),
                 lines, supplierUids);

@@ -48,6 +48,14 @@ public class StockTransferLine extends UidEntity {
     @Column(name = "qty_transferred_base", nullable = false, updatable = false, precision = 19, scale = 6)
     private BigDecimal qtyTransferredBase;
 
+    /** P2 D7: qty actually dispatched (partial-transfer tracking). NULL until dispatch recorded. */
+    @Column(name = "qty_dispatched", precision = 19, scale = 6)
+    private BigDecimal qtyDispatched;
+
+    /** P2 D7: qty actually received at the destination. NULL until receipt recorded. */
+    @Column(name = "qty_received", precision = 19, scale = 6)
+    private BigDecimal qtyReceived;
+
     /** Attributed value at dispatch (qty × source avg_cost). Diagnostic, not ledger (D-5). */
     @Column(name = "value_amount", updatable = false, precision = 19, scale = 4)
     private BigDecimal valueAmount;
@@ -106,7 +114,12 @@ public class StockTransferLine extends UidEntity {
     public String     getUnitName()          { return unitName; }
     public BigDecimal getQtyTransferred()    { return qtyTransferred; }
     public BigDecimal getQtyTransferredBase(){ return qtyTransferredBase; }
+    public BigDecimal getQtyDispatched()     { return qtyDispatched; }
+    public BigDecimal getQtyReceived()       { return qtyReceived; }
     public BigDecimal getValueAmount()       { return valueAmount; }
+
+    public void setQtyDispatched(BigDecimal qtyDispatched) { this.qtyDispatched = qtyDispatched; }
+    public void setQtyReceived(BigDecimal qtyReceived)     { this.qtyReceived = qtyReceived; }
     public String     getCurrency()          { return CurrencyCode.value(currency); }
     public Instant    getCreatedAt()         { return createdAt; }
     public Long       getCreatedBy()         { return createdBy; }

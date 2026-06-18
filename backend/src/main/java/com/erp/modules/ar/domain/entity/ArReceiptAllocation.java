@@ -37,6 +37,17 @@ public class ArReceiptAllocation {
     @Setter
     private BigDecimal allocatedAmount;
 
+    // ADR-0041 D1 — settlement-discount / residual write-off captured at allocation.
+    // Immutable (no setter, set via constructor); sub-ledger only — NO GL leg (data-only v1).
+
+    /** Settlement discount taken on this allocation (data-only, no GL impact). Nullable. */
+    @Column(name = "discount_amount", precision = 19, scale = 4, updatable = false)
+    private BigDecimal discountAmount;
+
+    /** Residual write-off recorded on this allocation (data-only, no GL impact). Nullable. */
+    @Column(name = "write_off_amount", precision = 19, scale = 4, updatable = false)
+    private BigDecimal writeOffAmount;
+
     // ADR-0036 D-4 — per-allocation base capture (V78, graft from Proposal B).
     // base_allocated_amount : face allocated × settlement rate, HALF_UP (Tranche 3 realized-FX).
     // settlement_rate       : the receipt's fx_rate at the time of allocation (immutable snapshot).
@@ -69,10 +80,22 @@ public class ArReceiptAllocation {
 
     public ArReceiptAllocation(Long companyId, Long receiptId, Long arInvoiceId,
                                 BigDecimal allocatedAmount, Long allocatedBy) {
+        this(companyId, receiptId, arInvoiceId, allocatedAmount, null, null, allocatedBy);
+    }
+
+    /**
+     * ADR-0041 D1 — full constructor capturing the immutable settlement discount / write-off
+     * at allocation. Both amounts are sub-ledger only (no GL leg).
+     */
+    public ArReceiptAllocation(Long companyId, Long receiptId, Long arInvoiceId,
+                                BigDecimal allocatedAmount, BigDecimal discountAmount,
+                                BigDecimal writeOffAmount, Long allocatedBy) {
         this.companyId       = companyId;
         this.receiptId       = receiptId;
         this.arInvoiceId     = arInvoiceId;
         this.allocatedAmount = allocatedAmount;
+        this.discountAmount  = discountAmount;
+        this.writeOffAmount  = writeOffAmount;
         this.allocatedBy     = allocatedBy;
         this.createdBy       = allocatedBy;
     }

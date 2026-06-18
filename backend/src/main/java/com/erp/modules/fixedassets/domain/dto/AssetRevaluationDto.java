@@ -18,5 +18,9 @@ public record AssetRevaluationDto(
         BigDecimal carryingAfter,
         String glEntryUid,
         String currency,
-        String reason
+        String reason,
+        // P2 D7 — valuer + approval provenance
+        String valuerName,
+        String valuationRef,
+        Long approvedBy
 ) {}

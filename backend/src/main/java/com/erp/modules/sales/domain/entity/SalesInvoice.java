@@ -74,6 +74,11 @@ public class SalesInvoice extends UidEntity {
     @Setter
     private String customerPoNumber;
 
+    /** Soft-FK → payment_terms(id) (P2 D1, ADR-0041). Resolved + stored at finalise. Nullable. */
+    @Column(name = "payment_terms_id")
+    @Setter
+    private Long paymentTermsId;
+
     /** Document-level discount amount (optional). Apportioned across lines before VAT. */
     @Column(name = "doc_discount_amount", precision = 19, scale = 4)
     @Setter

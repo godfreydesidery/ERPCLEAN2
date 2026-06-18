@@ -20,6 +20,7 @@ CREATE TABLE purchase_orders (
     buyer_id                BIGINT,                               -- P2: soft-FK app_users.id; assigned purchasing agent
     invoiced_amount         NUMERIC(19,4),                        -- P2: header roll-up of billed-vs-ordered
     billing_status          VARCHAR(20),                          -- P2: NOT_BILLED|PARTIALLY_BILLED|FULLY_BILLED (header roll-up)
+    payment_terms_id        BIGINT,                               -- P2 D1: soft-FK payment_terms(id)
     expected_date           DATE,
     notes                   VARCHAR(500),
     ordered_at              TIMESTAMPTZ,

@@ -1,6 +1,7 @@
 package com.erp.modules.ap.domain.entity;
 
 import com.erp.modules.ap.domain.enums.BillMatchStatus;
+import com.erp.modules.ap.domain.enums.BillMatchType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -59,6 +60,17 @@ public class BillMatch {
     @Column(name = "match_status", nullable = false, length = 25)
     @Setter
     private BillMatchStatus matchStatus;
+
+    /** P2 D7: 2-way (PO only) vs 3-way (PO + GR) match discipline. Defaults to THREE_WAY. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "match_type", nullable = false, length = 10)
+    @Setter
+    private BillMatchType matchType = BillMatchType.THREE_WAY;
+
+    /** P2 D7: free-text reason captured when a variance is accepted. */
+    @Column(name = "variance_reason", length = 100)
+    @Setter
+    private String varianceReason;
 
     @Column(name = "tolerance_pct", precision = 9, scale = 4)
     private BigDecimal tolerancePct;

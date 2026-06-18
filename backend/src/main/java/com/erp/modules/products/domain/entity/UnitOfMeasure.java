@@ -1,5 +1,6 @@
 package com.erp.modules.products.domain.entity;
 
+import com.erp.modules.products.domain.enums.DimensionType;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
@@ -33,6 +34,22 @@ public class UnitOfMeasure extends UidEntity {
     @Column(name = "name", nullable = false, length = 60)
     @Setter
     private String name;
+
+    /** P2 D5: physical dimension family (COUNT/WEIGHT/VOLUME/LENGTH/TIME). Defaults to COUNT. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "dimension_type", nullable = false, length = 20)
+    @Setter
+    private DimensionType dimensionType = DimensionType.COUNT;
+
+    /** P2 D5: display/rounding scale for quantities in this unit (0–6). */
+    @Column(name = "decimal_places", nullable = false)
+    @Setter
+    private short decimalPlaces = 0;
+
+    /** P2 D5: whether fractional quantities are allowed in this unit. */
+    @Column(name = "is_fractional", nullable = false)
+    @Setter
+    private boolean fractional = true;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)

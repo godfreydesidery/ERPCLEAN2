@@ -34,6 +34,9 @@ CREATE TABLE customers (
     tax_exempt              BOOLEAN         NOT NULL DEFAULT false,  -- P2: customer tax-exemption flag
     tax_exemption_ref       VARCHAR(80),                -- P2: tax-exemption certificate/reference
     default_currency        VARCHAR(3),                 -- P2: customer default transaction currency (CurrencyCode)
+    default_price_list_id   BIGINT,                     -- P2 D5: soft-FK → price_lists(id) (no DB FK, cross-module)
+    default_agent_id        BIGINT,                     -- P2 D5: soft-FK → agents(id) (no DB FK, cross-module)
+    segment                 VARCHAR(20)     NOT NULL DEFAULT 'OTHER', -- P2 D5: CustomerSegment enum (Tier-2 deferred; simple enum only)
     status                  VARCHAR(32)     NOT NULL DEFAULT 'ACTIVE',
     version                 BIGINT          NOT NULL DEFAULT 0,
     created_at              TIMESTAMPTZ     NOT NULL DEFAULT now(),
@@ -45,6 +48,7 @@ CREATE TABLE customers (
     CONSTRAINT fk_customer_company      FOREIGN KEY (company_id) REFERENCES companies (id),
     CONSTRAINT chk_customer_party_type  CHECK (party_type IN ('INDIVIDUAL','BUSINESS')),
     CONSTRAINT chk_customer_kind        CHECK (customer_kind IN ('CASH_WALK_IN','CREDIT_ACCOUNT')),
+    CONSTRAINT chk_customer_segment     CHECK (segment IN ('RETAIL','WHOLESALE','GOVERNMENT','OTHER')),
     CONSTRAINT chk_customer_vrn_vat     CHECK (vrn IS NULL OR vat_registered = true),
     CONSTRAINT chk_customer_credit_pair CHECK (
         (credit_limit_amount IS NULL AND credit_limit_currency IS NULL) OR
@@ -77,6 +81,10 @@ CREATE TABLE suppliers (
     country                 VARCHAR(2),                 -- P2: PartyBase country (ISO-3166 alpha-2)
     supplier_kind           VARCHAR(20)     NOT NULL,
     payment_terms_days      INTEGER,
+    default_currency        VARCHAR(3),                 -- P2 D5: supplier default transaction currency (CurrencyCode)
+    lead_time_days          INTEGER,                    -- P2 D5: typical procurement lead time in days
+    min_order_value         NUMERIC(19,4),              -- P2 D5: minimum order value threshold
+    default_wht_type_id     BIGINT,                     -- P2 D5: soft-FK → wht_types(id) (no DB FK, cross-module)
     status                  VARCHAR(32)     NOT NULL DEFAULT 'ACTIVE',
     version                 BIGINT          NOT NULL DEFAULT 0,
     created_at              TIMESTAMPTZ     NOT NULL DEFAULT now(),
@@ -88,6 +96,8 @@ CREATE TABLE suppliers (
     CONSTRAINT fk_supplier_company      FOREIGN KEY (company_id) REFERENCES companies (id),
     CONSTRAINT chk_supplier_party_type  CHECK (party_type IN ('INDIVIDUAL','BUSINESS')),
     CONSTRAINT chk_supplier_kind        CHECK (supplier_kind IN ('GOODS','SERVICE')),
+    CONSTRAINT chk_supplier_lead_time   CHECK (lead_time_days IS NULL OR lead_time_days >= 0),
+    CONSTRAINT chk_supplier_min_order   CHECK (min_order_value IS NULL OR min_order_value >= 0),
     CONSTRAINT chk_supplier_vrn_vat     CHECK (vrn IS NULL OR vat_registered = true)
 );
 
@@ -116,6 +126,8 @@ CREATE TABLE agents (
     country                 VARCHAR(2),                 -- P2: PartyBase country (ISO-3166 alpha-2)
     agent_kind              VARCHAR(20)     NOT NULL,
     app_user_id             BIGINT,
+    sales_target            NUMERIC(19,4),              -- P2 D5: periodic sales target value
+    quota                   NUMERIC(19,4),              -- P2 D5: assigned quota value
     status                  VARCHAR(32)     NOT NULL DEFAULT 'ACTIVE',
     version                 BIGINT          NOT NULL DEFAULT 0,
     created_at              TIMESTAMPTZ     NOT NULL DEFAULT now(),
@@ -129,6 +141,8 @@ CREATE TABLE agents (
     CONSTRAINT chk_agent_party_type      CHECK (party_type IN ('INDIVIDUAL','BUSINESS')),
     CONSTRAINT chk_agent_kind            CHECK (agent_kind IN ('INTERNAL','EXTERNAL')),
     CONSTRAINT chk_agent_vrn_vat         CHECK (vrn IS NULL OR vat_registered = true),
+    CONSTRAINT chk_agent_sales_target    CHECK (sales_target IS NULL OR sales_target >= 0),
+    CONSTRAINT chk_agent_quota           CHECK (quota IS NULL OR quota >= 0),
     CONSTRAINT chk_agent_user_kind       CHECK (
         (agent_kind = 'INTERNAL' AND app_user_id IS NOT NULL) OR
         (agent_kind = 'EXTERNAL' AND app_user_id IS NULL)

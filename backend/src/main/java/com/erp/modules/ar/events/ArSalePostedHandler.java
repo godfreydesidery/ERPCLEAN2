@@ -8,6 +8,7 @@ import com.erp.modules.parties.domain.entity.Customer;
 import com.erp.modules.parties.domain.entity.PaymentTerms;
 import com.erp.modules.parties.repository.CustomerRepository;
 import com.erp.modules.parties.repository.PaymentTermsRepository;
+import com.erp.modules.parties.service.PaymentTermsDueDateCalculator;
 import com.erp.modules.sales.domain.dto.InvoicePostingTotalsDto;
 import com.erp.modules.sales.domain.dto.SaleFinalisedPayload;
 import com.erp.modules.sales.service.SalesInvoiceService;
@@ -157,7 +158,13 @@ public class ArSalePostedHandler implements DomainEventHandler {
         Customer customer = totals.customerId() != null
                 ? customers.findById(totals.customerId()).orElse(null)
                 : null;
-        LocalDate dueDate = resolveDueDate(invoiceDate, customer);
+        // ADR-0041 D1 — resolve the PaymentTerms master once (customer default), then derive the due
+        // date and the inherited settlement-discount fields via the shared calculator.
+        PaymentTerms terms = (customer != null && customer.getPaymentTermsId() != null)
+                ? paymentTermsRepo.findById(customer.getPaymentTermsId()).orElse(null)
+                : null;
+        Integer netDaysFallback = customer != null ? customer.getPaymentTermsDays() : null;
+        LocalDate dueDate = PaymentTermsDueDateCalculator.derive(invoiceDate, terms, netDaysFallback);
 
         // 3d. Create the open item — NO GL POST (D-5, BR-AR-02)
         // Use outstandingAmount from totals if present; fall back to grossTotalAmount (D-10 v1 default)
@@ -190,6 +197,15 @@ public class ArSalePostedHandler implements DomainEventHandler {
         inv.setBaseOriginalAmount(baseReceivable);
         inv.setBaseOutstandingAmount(baseReceivable);
 
+        // ADR-0041 D1 — settlement-discount fields inherited from the customer's payment terms.
+        // Data-only (no GL leg). Null when the term carries no early-payment discount.
+        if (terms != null) {
+            inv.setSettlementDiscountDueDate(
+                    PaymentTermsDueDateCalculator.settlementDiscountDueDate(invoiceDate, terms));
+            inv.setSettlementDiscountAmount(
+                    PaymentTermsDueDateCalculator.settlementDiscountAmount(receivable, terms));
+        }
+
         // Fail loud: a foreign open item must not persist with fxRate=1 / base NULL (I-6 guard).
         if (!totals.currency().equals(baseCurrency)
                 && invoiceFxRate.compareTo(BigDecimal.ONE) == 0
@@ -214,35 +230,6 @@ public class ArSalePostedHandler implements DomainEventHandler {
 
         log.debug("ArSalePostedHandler: open item uid={} created for invoice uid={} amount={}",
                 inv.getUid(), payload.invoiceUid(), receivable);
-    }
-
-    /**
-     * Resolves the AR due date using priority: PaymentTerms master > paymentTermsDays integer > net-on-receipt.
-     * (D-2, ADR-0040 — preserve current behaviour when no term is set.)
-     */
-    private LocalDate resolveDueDate(LocalDate invoiceDate, Customer customer) {
-        if (customer == null) {
-            return invoiceDate; // net-on-receipt
-        }
-        // Priority 1: linked PaymentTerms master
-        if (customer.getPaymentTermsId() != null) {
-            PaymentTerms pt = paymentTermsRepo.findById(customer.getPaymentTermsId()).orElse(null);
-            if (pt != null) {
-                return switch (pt.getBasis()) {
-                    case DAYS_AFTER_INVOICE -> invoiceDate.plusDays(pt.getNetDays());
-                    case DAYS_AFTER_MONTH_END ->
-                            invoiceDate.withDayOfMonth(invoiceDate.lengthOfMonth())
-                                    .plusDays(pt.getNetDays());
-                    case DUE_ON_RECEIPT -> invoiceDate;
-                };
-            }
-        }
-        // Priority 2: deprecated integer fallback
-        if (customer.getPaymentTermsDays() != null) {
-            return invoiceDate.plusDays(customer.getPaymentTermsDays());
-        }
-        // Priority 3: net-on-receipt
-        return invoiceDate;
     }
 
     /** Minor-unit scale for HALF_UP rounding of base amounts (mirrors ArReceiptServiceImpl). */

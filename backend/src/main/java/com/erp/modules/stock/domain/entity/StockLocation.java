@@ -44,6 +44,26 @@ public class StockLocation extends UidEntity {
     @Column(name = "is_default", nullable = false)
     private boolean isDefault;
 
+    /** P2 D7: self soft-FK — location hierarchy parent. NULL = top-level. */
+    @Column(name = "parent_location_id")
+    private Long parentLocationId;
+
+    /** P2 D7: permit negative on-hand at this location. */
+    @Column(name = "allow_negative", nullable = false)
+    private boolean allowNegative = false;
+
+    /** P2 D7: stock here is available for picking. */
+    @Column(name = "pickable", nullable = false)
+    private boolean pickable = true;
+
+    /** P2 D7: stock here is available to sell. */
+    @Column(name = "sellable", nullable = false)
+    private boolean sellable = true;
+
+    /** P2 D7: per-location inventory GL account override (soft-FK to chart_of_accounts). */
+    @Column(name = "gl_account_id")
+    private Long glAccountId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private MasterStatus status;
@@ -131,7 +151,18 @@ public class StockLocation extends UidEntity {
     public String       getName()        { return name; }
     public LocationType getLocationType(){ return locationType; }
     public boolean      isDefault()      { return isDefault; }
+    public Long         getParentLocationId() { return parentLocationId; }
+    public boolean      isAllowNegative()     { return allowNegative; }
+    public boolean      isPickable()          { return pickable; }
+    public boolean      isSellable()          { return sellable; }
+    public Long         getGlAccountId()      { return glAccountId; }
     public MasterStatus getStatus()      { return status; }
+
+    public void setParentLocationId(Long parentLocationId) { this.parentLocationId = parentLocationId; }
+    public void setAllowNegative(boolean allowNegative)    { this.allowNegative = allowNegative; }
+    public void setPickable(boolean pickable)              { this.pickable = pickable; }
+    public void setSellable(boolean sellable)              { this.sellable = sellable; }
+    public void setGlAccountId(Long glAccountId)           { this.glAccountId = glAccountId; }
     public Instant      getCreatedAt()   { return createdAt; }
     public Long         getCreatedBy()   { return createdBy; }
     public Instant      getUpdatedAt()   { return updatedAt; }

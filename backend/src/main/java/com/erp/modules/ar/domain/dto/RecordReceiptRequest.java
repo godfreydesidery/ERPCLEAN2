@@ -49,6 +49,15 @@ public record RecordReceiptRequest(
     /** One allocation line in the create request. */
     public record AllocationLineRequest(
             String arInvoiceUid,
-            BigDecimal allocatedAmount
-    ) {}
+            BigDecimal allocatedAmount,
+            /** Optional settlement discount taken on this allocation (ADR-0041 D1, data-only). */
+            BigDecimal discountAmount,
+            /** Optional residual write-off recorded on this allocation (ADR-0041 D1, data-only). */
+            BigDecimal writeOffAmount
+    ) {
+        /** Back-compat overload: omit discount / write-off → null. */
+        public AllocationLineRequest(String arInvoiceUid, BigDecimal allocatedAmount) {
+            this(arInvoiceUid, allocatedAmount, null, null);
+        }
+    }
 }

@@ -77,6 +77,16 @@ public class AppUser extends UidEntity {
     @Setter
     private Long employeeId;
 
+    /** P2 D7: multi-factor auth enabled for this user. */
+    @Column(name = "mfa_enabled", nullable = false)
+    @Setter
+    private boolean mfaEnabled = false;
+
+    /** P2 D7: TOTP/MFA shared secret (nullable; set on enrolment). */
+    @Column(name = "mfa_secret", length = 120)
+    @Setter
+    private String mfaSecret;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     @Setter

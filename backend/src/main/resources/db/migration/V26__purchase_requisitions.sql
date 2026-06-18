@@ -113,6 +113,14 @@ CREATE TABLE purchase_settings (
     po_approval_threshold_amount NUMERIC(19,4),
     po_approval_enabled         BOOLEAN          NOT NULL DEFAULT false,
     currency                    VARCHAR(3)       NOT NULL DEFAULT 'TZS',
+    -- P2 D7: company-wide procurement policy defaults (one row/company)
+    default_payment_terms_id    BIGINT,                          -- soft-FK → payment_terms (no DB FK — additive)
+    default_location_id         BIGINT,                          -- soft-FK → stock_locations (default receiving location)
+    match_tolerance_pct         NUMERIC(9,4),                    -- default 3-way price-match tolerance %
+    match_tolerance_abs         NUMERIC(19,4),                   -- default absolute match tolerance
+    auto_close_enabled          BOOLEAN          NOT NULL DEFAULT false,  -- auto-close fully-received/billed POs
+    requisition_approval_enabled BOOLEAN         NOT NULL DEFAULT false,  -- require PR approval before RFQ/PO
+    requisition_approval_threshold_amount NUMERIC(19,4),         -- PR value above which approval is required
     version                     BIGINT           NOT NULL DEFAULT 0,
     created_at                  TIMESTAMPTZ      NOT NULL DEFAULT now(),
     created_by                  BIGINT,

@@ -154,6 +154,7 @@ public class AssetRevaluationServiceImpl implements AssetRevaluationService {
                 r.getId(), r.getUid(), r.getCompanyId(), r.getBranchId(),
                 r.getFixedAssetId(), r.getRevaluationDate(), r.getFiscalPeriodId(),
                 r.getDirection(), r.getDeltaAmount(), r.getCarryingBefore(),
-                r.getCarryingAfter(), r.getGlEntryUid(), CurrencyCode.value(r.getCurrency()), r.getReason());
+                r.getCarryingAfter(), r.getGlEntryUid(), CurrencyCode.value(r.getCurrency()), r.getReason(),
+                r.getValuerName(), r.getValuationRef(), r.getApprovedBy());
     }
 }

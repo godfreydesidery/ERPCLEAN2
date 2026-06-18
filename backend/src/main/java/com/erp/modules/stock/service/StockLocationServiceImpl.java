@@ -195,6 +195,8 @@ public class StockLocationServiceImpl implements StockLocationService {
     private static StockLocationDto toDto(StockLocation l) {
         return new StockLocationDto(
                 l.getId(), l.getUid(), l.getCompanyId(), l.getBranchId(),
-                l.getCode(), l.getName(), l.getLocationType(), l.isDefault(), l.getStatus());
+                l.getCode(), l.getName(), l.getLocationType(), l.isDefault(),
+                l.getParentLocationId(), l.isAllowNegative(), l.isPickable(), l.isSellable(),
+                l.getGlAccountId(), l.getStatus());
     }
 }

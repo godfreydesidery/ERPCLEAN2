@@ -73,6 +73,11 @@ public class Quotation extends UidEntity {
     @Setter
     private BigDecimal probability;
 
+    /** Soft-FK → payment_terms(id) (P2 D1, ADR-0041). Nullable. */
+    @Column(name = "payment_terms_id")
+    @Setter
+    private Long paymentTermsId;
+
     @Column(name = "doc_discount_amount", precision = 19, scale = 4)
     @Setter
     private BigDecimal docDiscountAmount;

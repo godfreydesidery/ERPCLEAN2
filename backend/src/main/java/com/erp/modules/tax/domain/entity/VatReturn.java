@@ -136,6 +136,30 @@ public class VatReturn extends UidEntity {
     @Setter
     private BigDecimal exemptSales;
 
+    // -------------------------------------------------------------------------
+    // P2 D7 — amendment + penalty/interest provenance
+    // -------------------------------------------------------------------------
+
+    /** Self soft-FK → the original return this one amends. NULL = not an amendment. */
+    @Column(name = "amended_return_id")
+    @Setter
+    private Long amendedReturnId;
+
+    /** True when this return is an amended/revised filing. */
+    @Column(name = "is_amendment", nullable = false)
+    @Setter
+    private boolean amendment = false;
+
+    /** Late-filing/payment penalty assessed by the authority. */
+    @Column(name = "penalty_amount", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal penaltyAmount;
+
+    /** Interest assessed on overdue VAT. */
+    @Column(name = "interest_amount", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal interestAmount;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

@@ -1,7 +1,9 @@
 package com.erp.modules.products.domain.dto;
 
 import com.erp.modules.products.domain.entity.PriceList;
+import com.erp.modules.products.domain.enums.PriceListScope;
 import com.erp.platform.common.domain.MasterStatus;
+import java.time.LocalDate;
 
 /**
  * Response DTO for a PriceList (ADR-0007 D-7/D-12).
@@ -13,6 +15,12 @@ public record PriceListDto(
         Long companyId,
         String code,
         String name,
+        String currency,
+        LocalDate effectiveFrom,
+        LocalDate effectiveTo,
+        boolean priceIncludesVat,
+        boolean isDefault,
+        PriceListScope scope,
         MasterStatus status,
         Long version,
         String createdAt,
@@ -28,6 +36,12 @@ public record PriceListDto(
                 pl.getCompanyId(),
                 pl.getCode(),
                 pl.getName(),
+                pl.getCurrency() != null ? pl.getCurrency().value() : null,
+                pl.getEffectiveFrom(),
+                pl.getEffectiveTo(),
+                pl.isPriceIncludesVat(),
+                pl.isDefault(),
+                pl.getScope(),
                 pl.getStatus(),
                 pl.getVersion(),
                 pl.getCreatedAt() != null ? pl.getCreatedAt().toString() : null,

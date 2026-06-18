@@ -32,6 +32,44 @@ public class Organisation extends UidEntity {
     @Setter
     private String defaultTimeZone = "Africa/Dar_es_Salaam";
 
+    // P2 D7 — contact + address block
+    @Column(name = "contact_phone", length = 40)
+    @Setter
+    private String contactPhone;
+
+    @Column(name = "contact_email", length = 160)
+    @Setter
+    private String contactEmail;
+
+    @Column(name = "address_line1", length = 160)
+    @Setter
+    private String addressLine1;
+
+    @Column(name = "address_line2", length = 160)
+    @Setter
+    private String addressLine2;
+
+    @Column(name = "city", length = 80)
+    @Setter
+    private String city;
+
+    @Column(name = "region", length = 80)
+    @Setter
+    private String region;
+
+    @Column(name = "country", length = 80)
+    @Setter
+    private String country;
+
+    // P2 D7 — subscription/plan tracking (descriptive in v1)
+    @Column(name = "subscription_plan", length = 40)
+    @Setter
+    private String subscriptionPlan;
+
+    @Column(name = "subscription_status", length = 20)
+    @Setter
+    private String subscriptionStatus;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     @Setter

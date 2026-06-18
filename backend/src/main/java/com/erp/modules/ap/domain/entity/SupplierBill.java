@@ -68,6 +68,21 @@ public class SupplierBill extends UidEntity {
     @Setter
     private LocalDate receivedDate;
 
+    /** Soft-FK → payment_terms(id) (P2 D1, ADR-0041). Resolved + stored at post. Nullable. */
+    @Column(name = "payment_terms_id")
+    @Setter
+    private Long paymentTermsId;
+
+    /** P2 D1: settlement (early-payment) discount deadline; computed at post from the terms. Nullable. */
+    @Column(name = "settlement_discount_due_date")
+    @Setter
+    private LocalDate settlementDiscountDueDate;
+
+    /** P2 D1: settlement (early-payment) discount amount; data-only, no GL leg (ADR-0041). Nullable. */
+    @Column(name = "settlement_discount_amount", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal settlementDiscountAmount;
+
     @Column(name = "net_amount", nullable = false, precision = 19, scale = 4, updatable = false)
     private BigDecimal netAmount;
 

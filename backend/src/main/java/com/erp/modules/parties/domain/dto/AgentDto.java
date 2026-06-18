@@ -4,6 +4,7 @@ import com.erp.modules.parties.domain.entity.Agent;
 import com.erp.modules.parties.domain.enums.AgentKind;
 import com.erp.modules.parties.domain.enums.PartyType;
 import com.erp.platform.common.domain.MasterStatus;
+import java.math.BigDecimal;
 
 /** Response DTO for an Agent (ADR-0006 D-11). */
 public record AgentDto(
@@ -27,6 +28,8 @@ public record AgentDto(
         String district,
         AgentKind agentKind,
         Long appUserId,
+        BigDecimal salesTarget,
+        BigDecimal quota,
         MasterStatus status,
         Long version,
         String createdAt,
@@ -57,6 +60,8 @@ public record AgentDto(
                 a.getDistrict(),
                 a.getAgentKind(),
                 a.getAppUserId(),
+                a.getSalesTarget(),
+                a.getQuota(),
                 a.getStatus(),
                 a.getVersion(),
                 a.getCreatedAt() != null ? a.getCreatedAt().toString() : null,

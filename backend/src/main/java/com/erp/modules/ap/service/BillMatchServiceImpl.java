@@ -6,6 +6,7 @@ import com.erp.modules.ap.domain.entity.BillMatch;
 import com.erp.modules.ap.domain.entity.SupplierBill;
 import com.erp.modules.ap.domain.entity.SupplierBillLine;
 import com.erp.modules.ap.domain.enums.BillMatchStatus;
+import com.erp.modules.ap.domain.enums.BillMatchType;
 import com.erp.modules.ap.domain.enums.SupplierBillStatus;
 import com.erp.modules.ap.repository.BillMatchRepository;
 import com.erp.modules.ap.repository.SupplierBillLineRepository;
@@ -183,14 +184,20 @@ public class BillMatchServiceImpl implements BillMatchService {
             // Upsert bill_match row (one per line — uq_bill_match_line)
             BillMatch match = matches.findBySupplierBillLineId(line.getId())
                     .orElse(null);
+            // P2 D7: a GR-linked line is a 3-way match; a PO-only (no GR) line is 2-way.
+            BillMatchType matchType = (line.getGrLineUid() != null)
+                    ? BillMatchType.THREE_WAY
+                    : BillMatchType.TWO_WAY;
             if (match == null) {
                 match = new BillMatch(
                         bill.getCompanyId(), bill.getId(), line.getId(),
                         poUnitCost, grReceivedQty, line.getBilledQty(),
                         priceVar, priceVarPct, qtyVar,
                         status, tolerancePct, toleranceAbs, actorId());
+                match.setMatchType(matchType);
             } else {
                 match.setMatchStatus(status);
+                match.setMatchType(matchType);
                 match.setMatchedAt(Instant.now());
             }
             match = matches.save(match);

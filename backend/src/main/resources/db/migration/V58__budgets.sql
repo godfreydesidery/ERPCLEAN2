@@ -18,6 +18,8 @@ CREATE TABLE budgets (
     fiscal_year_id       BIGINT           NOT NULL,
     -- NULL = company-wide budget (ADR-0034 D-4a); references ADR-0025 dimension_values
     cost_centre_value_id BIGINT,
+    budget_type          VARCHAR(12)      NOT NULL DEFAULT 'OPERATING',  -- P2 D7: OPERATING|CAPITAL|CASH
+    branch_id            BIGINT,                                         -- P2 D7: branch scope (soft-FK, no DB FK)
     notes                VARCHAR(500),
     version              BIGINT           NOT NULL DEFAULT 0,
     created_at           TIMESTAMPTZ      NOT NULL DEFAULT now(),
@@ -27,6 +29,7 @@ CREATE TABLE budgets (
 
     CONSTRAINT uq_budget_uid                      UNIQUE (uid),
     CONSTRAINT uq_budget_company_number           UNIQUE (company_id, budget_number),
+    CONSTRAINT chk_budget_type                    CHECK (budget_type IN ('OPERATING','CAPITAL','CASH')),
     -- At most one budget per (company, FY, cost centre) for cost-centre-scoped budgets
     CONSTRAINT uq_budget_company_year_cc          UNIQUE (company_id, fiscal_year_id, cost_centre_value_id),
     CONSTRAINT fk_budget_company                  FOREIGN KEY (company_id)           REFERENCES companies (id),
@@ -116,6 +119,7 @@ CREATE TABLE budget_lines (
     fiscal_period_id    BIGINT           NOT NULL,
     amount              NUMERIC(19,4)    NOT NULL,
     currency            VARCHAR(3)       NOT NULL DEFAULT 'TZS',
+    quantity            NUMERIC(19,6),                              -- P2 D7: optional volume/quantity basis for the line
     line_memo           VARCHAR(255),
     version             BIGINT           NOT NULL DEFAULT 0,
     created_at          TIMESTAMPTZ      NOT NULL DEFAULT now(),

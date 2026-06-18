@@ -89,6 +89,11 @@ public class PurchaseOrder extends UidEntity {
     @Setter
     private PoBillingStatus billingStatus;
 
+    /** Soft-FK → payment_terms(id) (P2 D1, ADR-0041). Resolved + stored at confirm. Nullable. */
+    @Column(name = "payment_terms_id")
+    @Setter
+    private Long paymentTermsId;
+
     /** Optional expected-delivery date (operational convenience). */
     @Column(name = "expected_date")
     @Setter

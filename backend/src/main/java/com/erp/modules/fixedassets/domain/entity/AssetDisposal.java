@@ -66,6 +66,26 @@ public class AssetDisposal extends UidEntity {
     @Column(name = "reason", length = 255)
     private String reason;
 
+    /** P2 D7: disposal buyer name (SALE disposals). */
+    @Column(name = "buyer_name", length = 200)
+    @Setter
+    private String buyerName;
+
+    /** P2 D7: soft-FK to a party/customer for the buyer (no @ManyToOne — cross-module). */
+    @Column(name = "buyer_id")
+    @Setter
+    private Long buyerId;
+
+    /** P2 D7: AR invoice uid raised for the disposal proceeds (provenance). */
+    @Column(name = "proceeds_ar_invoice_uid", length = 26)
+    @Setter
+    private String proceedsArInvoiceUid;
+
+    /** P2 D7: approver linkage (app_users.id). */
+    @Column(name = "approved_by")
+    @Setter
+    private Long approvedBy;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
