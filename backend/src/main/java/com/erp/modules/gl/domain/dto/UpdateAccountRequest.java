@@ -15,5 +15,11 @@ public record UpdateAccountRequest(
         Boolean active,
         Boolean allowManualPosting,
         /** Optional: stamp or change the control-type classification (D-1, ADR-0040). */
-        ControlType controlType
+        ControlType controlType,
+        /** P2-D4 (ADR-0041): require a cost-centre value on MANUAL journal lines to this account. */
+        Boolean requireCostCentre,
+        /** P2-D4 (ADR-0041): require a department value on MANUAL journal lines to this account. */
+        Boolean requireDepartment,
+        /** P2-D4 (ADR-0041): require a project value on MANUAL journal lines to this account. */
+        Boolean requireProject
 ) {}

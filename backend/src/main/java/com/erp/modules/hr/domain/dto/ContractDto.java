@@ -21,5 +21,12 @@ public record ContractDto(
         boolean heslbBorrower,
         boolean wcfCovered,
         boolean sdlCounted,
-        boolean active
+        boolean active,
+        // Contract policy fields (P2 D6, ADR-0041)
+        Integer probationMonths,
+        Integer noticePeriodDays,
+        BigDecimal workingHoursPerDay,
+        Integer workingDaysPerWeek,
+        String jobGrade,
+        String signedDocumentRef
 ) {}

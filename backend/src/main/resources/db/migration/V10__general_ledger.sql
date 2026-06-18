@@ -29,6 +29,12 @@ CREATE TABLE chart_of_accounts (
     allow_manual_posting BOOLEAN     NOT NULL DEFAULT true,
     status           VARCHAR(32)     NOT NULL DEFAULT 'ACTIVE',
     currency         VARCHAR(3),                 -- P2-M1: locks account to one currency (NULL = multi-currency)
+    -- P2-D4 (ADR-0041): per-account dimension-requirement flags. When true, a MANUAL journal line
+    -- to this account must carry the corresponding dimension value (enforced in GLPostingServiceImpl,
+    -- MANUAL-only — system/event-driven posters are exempt, mirroring the Step-3 mandatory-slot rule).
+    require_cost_centre  BOOLEAN     NOT NULL DEFAULT false,
+    require_department   BOOLEAN     NOT NULL DEFAULT false,
+    require_project      BOOLEAN     NOT NULL DEFAULT false,
     version          BIGINT          NOT NULL DEFAULT 0,
     created_at       TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by       BIGINT,

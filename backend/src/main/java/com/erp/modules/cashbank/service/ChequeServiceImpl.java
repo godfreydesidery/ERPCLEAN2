@@ -1,5 +1,6 @@
 package com.erp.modules.cashbank.service;
 
+import com.erp.modules.cashbank.domain.dto.ChequeBouncedPayload;
 import com.erp.modules.cashbank.domain.dto.ChequeDto;
 import com.erp.modules.cashbank.domain.dto.RegisterChequeRequest;
 import com.erp.modules.cashbank.domain.entity.CashBankAccount;
@@ -17,6 +18,8 @@ import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.repository.Lookups;
+import com.erp.platform.events.DomainEventType;
+import com.erp.platform.events.OutboxPublisher;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.time.Instant;
@@ -36,17 +39,20 @@ public class ChequeServiceImpl implements ChequeService {
     private final ChequeRepository          cheques;
     private final CashBankAccountRepository accounts;
     private final CompanyRepository         companies;
+    private final OutboxPublisher           outbox;
     private final ScopeGuard                scopeGuard;
     private final AuditService              audit;
 
     public ChequeServiceImpl(ChequeRepository cheques,
                               CashBankAccountRepository accounts,
                               CompanyRepository companies,
+                              OutboxPublisher outbox,
                               ScopeGuard scopeGuard,
                               AuditService audit) {
         this.cheques   = cheques;
         this.accounts  = accounts;
         this.companies = companies;
+        this.outbox    = outbox;
         this.scopeGuard = scopeGuard;
         this.audit     = audit;
     }
@@ -164,12 +170,18 @@ public class ChequeServiceImpl implements ChequeService {
     }
 
     /**
-     * INBOUND only: DEPOSITED → BOUNCED.
-     * Records bounce timestamp and reason. Bounce-reversal GL posting is deferred (D-9 follow-up).
+     * INBOUND only: DEPOSITED → BOUNCED (ADR-0041 D3 — closes the deferred D-9 follow-up).
      *
-     * <p><b>Deferred:</b> a bounce should post a reversing entry on the owning AR receipt
-     * (append-only — never mutate). This requires a cross-module outbox event to the AR module.
-     * That posting path is recorded as a follow-up item (ADR-0040 D-9 open follow-up).
+     * <p>Records bounce timestamp/reason and publishes {@code CHEQUE.BOUNCED} on the transactional
+     * outbox in this TX. The AR reversal handler ({@code ChequeBounceReversalHandler}) consumes it
+     * and posts an APPEND-ONLY reversing JournalEntry of the owning AR receipt's cash leg (never
+     * mutating a posted entry), stamps {@code reversed_at}, and restores the invoice outstanding.
+     *
+     * <p>The event row commits atomically with the BOUNCED state change — if this TX rolls back, no
+     * event is dispatched. (An OUTBOUND cheque tied to an AP payment is reversed symmetrically by
+     * the AP handler, but the OUTBOUND bounce transition is not modelled here — D-9 keeps bounce as
+     * an INBOUND-only register transition; OUTBOUND reversal arrives via the same event when an
+     * OUTBOUND bounce path is added.)
      */
     @Override
     public ChequeDto bounce(String uid, String bounceReason) {
@@ -198,6 +210,17 @@ public class ChequeServiceImpl implements ChequeService {
                         cheque.getId(), cheque.getUid())
                 .detail(Map.of("uid", uid, "action", "bounce", "reason",
                         bounceReason != null ? bounceReason : "")));
+
+        // ADR-0041 D3: publish the bounce so the owning module reverses the cash leg (append-only).
+        outbox.publish(DomainEventType.CHEQUE_BOUNCED, DomainEventType.AGG_CHEQUE,
+                cheque.getId(), cheque.getUid(), cheque.getCompanyId(), cheque.getBranchId(),
+                new ChequeBouncedPayload(
+                        cheque.getUid(),
+                        cheque.getDirection().name(),
+                        cheque.getArReceiptUid(),
+                        cheque.getApPaymentUid(),
+                        bounceReason));
+
         return toDto(cheque);
     }
 

@@ -372,10 +372,16 @@ public class BillMatchServiceImpl implements BillMatchService {
                 Long expenseAccountId = l.getGlAccountId() != null
                         ? l.getGlAccountId()
                         : glConfig.resolve(companyId, GlConfigKey.PURCHASES).getId();
+                // ADR-0041 D4: thread the PER-LINE dimension tags onto the P&L leg this line generates,
+                // so a supplier-bill-line cost-centre/department reaches the ledger. Fall back to the
+                // bill HEADER dimension when the line is untagged (preserves the prior behaviour where
+                // every service leg carried the header dimension — zero regression for untagged lines).
+                Long lineCcId   = l.getCostCentreValueId() != null ? l.getCostCentreValueId() : ccId;
+                Long lineDeptId = l.getDepartmentValueId() != null ? l.getDepartmentValueId() : deptId;
                 glLines.add(new LineDraft(expenseAccountId,
                         baseLineNet, BigDecimal.ZERO,
                         postCurrency, "Purchases — " + bill.getSupplierInvoiceNo(),
-                        ccId, deptId, null, null,
+                        lineCcId, lineDeptId, null, null,
                         l.getProjectId(), l.getProjectTaskId(), null));
                 baseServiceTotal = baseServiceTotal.add(baseLineNet);
             }

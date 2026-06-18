@@ -89,6 +89,25 @@ public class ChartOfAccount extends UidEntity {
     private CurrencyCode currency;
 
     /**
+     * P2-D4 (ADR-0041): per-account dimension-requirement flags. When true, a user-entered MANUAL
+     * journal line posting to this account MUST carry the corresponding dimension value, else the
+     * post is rejected in GLPostingServiceImpl. Enforced for MANUAL journals only —
+     * system/event-driven posters are exempt (same exemption as the Step-3 mandatory-slot rule and
+     * the control-account gate, ADR-0025). Default false (no requirement, zero-regression).
+     */
+    @Column(name = "require_cost_centre", nullable = false)
+    @Setter
+    private boolean requireCostCentre = false;
+
+    @Column(name = "require_department", nullable = false)
+    @Setter
+    private boolean requireDepartment = false;
+
+    @Column(name = "require_project", nullable = false)
+    @Setter
+    private boolean requireProject = false;
+
+    /**
      * Derived: returns true when this account is a sub-ledger control account (controlType != null).
      * Used as a belt-and-suspenders guard in GLPostingServiceImpl.validateLine for MANUAL journals.
      */

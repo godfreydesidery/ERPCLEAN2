@@ -70,6 +70,12 @@ CREATE TABLE ar_receipts (
     bank_reference      VARCHAR(80),
     gl_entry_uid        VARCHAR(26),
     status              VARCHAR(20)     NOT NULL DEFAULT 'UNALLOCATED',
+    -- NOTE: fx_rate / rate_at (V62) and cash_bank_account_id + FK (V13) are added by later
+    -- migrations via ADD COLUMN IF NOT EXISTS; not duplicated here.
+    -- ADR-0041 D3: instrument link + cheque-bounce reversal (closes the deferred D-9 follow-up)
+    cheque_uid               VARCHAR(26),    -- scalar ref to cheques.uid; no FK (cross-module soft ref)
+    reversed_at              TIMESTAMPTZ,    -- set when an INBOUND cheque bounced and the cash leg was reversed
+    reversal_of_receipt_uid  VARCHAR(26),    -- scalar ref to the receipt being reversed (self soft ref), if any
     version             BIGINT          NOT NULL DEFAULT 0,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by          BIGINT,
@@ -84,8 +90,9 @@ CREATE TABLE ar_receipts (
     CONSTRAINT chk_ar_receipt_amount        CHECK (amount > 0),
     CONSTRAINT chk_ar_receipt_unallocated   CHECK (
         unallocated_amount >= 0 AND unallocated_amount <= amount),
+    -- ADR-0041 D3: widen tender to admit CHEQUE + CARD (ArTenderType); keep BANK_TRANSFER for back-compat
     CONSTRAINT chk_ar_receipt_tender        CHECK (
-        tender_type IN ('CASH','BANK_TRANSFER','MOBILE_MONEY')),
+        tender_type IN ('CASH','BANK_TRANSFER','MOBILE_MONEY','CHEQUE','CARD')),
     CONSTRAINT chk_ar_receipt_status        CHECK (
         status IN ('UNALLOCATED','PARTIAL','ALLOCATED'))
 );
@@ -242,6 +249,10 @@ CREATE INDEX ix_ar_receipts_company_date
 CREATE INDEX ix_ar_receipts_onaccount
     ON ar_receipts (company_id, customer_id)
     WHERE unallocated_amount > 0;
+-- ADR-0041 D3: cheque back-link (bounce reversal lookup by inbound cheque)
+CREATE INDEX ix_ar_receipts_cheque
+    ON ar_receipts (cheque_uid)
+    WHERE cheque_uid IS NOT NULL;
 
 -- ar_receipt_allocations
 CREATE INDEX ix_ar_receipt_allocations_receipt

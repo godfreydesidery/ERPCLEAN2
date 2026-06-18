@@ -12,5 +12,10 @@ public record LeaveTypeDto(
         boolean paid,
         BigDecimal annualEntitlementDays,
         LeaveAccrualMethod accrualMethod,
-        boolean active
+        boolean active,
+        // Leave policy fields (P2 D6, ADR-0041)
+        boolean carryForward,
+        boolean requiresApproval,
+        String genderEligibility,
+        Integer maxConsecutiveDays
 ) {}

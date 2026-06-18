@@ -158,6 +158,10 @@ public class ChartOfAccountServiceImpl implements ChartOfAccountService {
         if (req.controlType() != null) {
             account.setControlType(req.controlType());
         }
+        // P2-D4 (ADR-0041): per-account dimension-requirement flags (MANUAL-only enforcement in GL).
+        if (req.requireCostCentre() != null) account.setRequireCostCentre(req.requireCostCentre());
+        if (req.requireDepartment() != null) account.setRequireDepartment(req.requireDepartment());
+        if (req.requireProject() != null)    account.setRequireProject(req.requireProject());
         account.setUpdatedAt(Instant.now());
         account.setUpdatedBy(actorId());
 
@@ -251,6 +255,7 @@ public class ChartOfAccountServiceImpl implements ChartOfAccountService {
                 a.getAccountType(), a.getNormalBalance(),
                 a.isActive(), a.isAllowManualPosting(), a.getStatus().name(),
                 a.getControlType(),
-                CurrencyCode.value(a.getCurrency()));
+                CurrencyCode.value(a.getCurrency()),
+                a.isRequireCostCentre(), a.isRequireDepartment(), a.isRequireProject());
     }
 }

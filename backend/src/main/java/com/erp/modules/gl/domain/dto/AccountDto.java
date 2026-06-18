@@ -19,5 +19,11 @@ public record AccountDto(
         /** NULL means an ordinary account; non-null identifies the owning sub-ledger (D-1). */
         ControlType controlType,
         /** ISO-4217 alpha-3 currency lock (P2-M1). NULL = multi-currency allowed. */
-        String currency
+        String currency,
+        /** P2-D4 (ADR-0041): MANUAL journal lines to this account must carry a cost-centre value. */
+        boolean requireCostCentre,
+        /** P2-D4 (ADR-0041): MANUAL journal lines to this account must carry a department value. */
+        boolean requireDepartment,
+        /** P2-D4 (ADR-0041): MANUAL journal lines to this account must carry a project value. */
+        boolean requireProject
 ) {}

@@ -1,6 +1,7 @@
 package com.erp.modules.hr.domain.entity;
 
 import com.erp.modules.hr.domain.enums.EmploymentStatus;
+import com.erp.modules.hr.domain.enums.MaritalStatus;
 import com.erp.modules.hr.domain.enums.PaymentMethod;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
@@ -80,6 +81,43 @@ public class Employee extends UidEntity {
     @Column(name = "user_id")
     @Setter
     private Long userId;
+
+    // ---- Lifecycle + HR profile + org (P2 D6, ADR-0041) ----
+
+    @Column(name = "termination_date")
+    @Setter
+    private LocalDate terminationDate;
+
+    @Column(name = "termination_reason", length = 255)
+    @Setter
+    private String terminationReason;
+
+    @Column(name = "confirmation_date")
+    @Setter
+    private LocalDate confirmationDate;
+
+    @Column(name = "probation_end_date")
+    @Setter
+    private LocalDate probationEndDate;
+
+    /** Self soft-FK employees — reporting line. */
+    @Column(name = "manager_id")
+    @Setter
+    private Long managerId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "marital_status", length = 20)
+    @Setter
+    private MaritalStatus maritalStatus;
+
+    @Column(name = "nationality", length = 80)
+    @Setter
+    private String nationality;
+
+    /** Soft-FK positions. */
+    @Column(name = "position_id")
+    @Setter
+    private Long positionId;
 
     // ---- Contact fields (ADR-0040 D-11) ----
 

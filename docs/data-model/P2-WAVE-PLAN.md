@@ -27,8 +27,15 @@ Sequencing for the P2 tranche of [GAP-FIX-WORKLIST.md](GAP-FIX-WORKLIST.md) (lin
 - [x] **P2-M1** (gl/tax/fx) — shipped `170498c`, green.
 - [x] **P2-M2…M6** (ap/cashbank, sales/products, purchases, hr/stock/mfg, crm/projects/fixedassets, approvals/iam/parties) — ~148 columns/enums, built by 6 parallel agents, green (970 tests).
 - [x] **P2 design batch 1** (ADR-0041): **D1** (payment-terms doc wiring + settlement discount, data-only), **D2** (sales ship-to/bill-to snapshot population), **D5-Tier1** (customer/supplier/agent/UoM/pricelist/promotion defaults + `promotion_usages`), **D7-v1** (~30 cols across fixedassets/fx/billmatch/purchases/tax/budgeting/stock/iam). Green (982 tests).
-- [ ] **P2 design batch 2** (posting-sensitive): **D3** instrument links + cheque-bounce reversing-GL + `payment_runs` + ApDebitNote allocations; **D4** dimension requiredness (MANUAL-only); **D6** HR org + minimal Position master.
+- [x] **P2 design batch 2** (posting-sensitive): **D3** tender/instrument links + cheque-bounce reversing-GL (closes D-9 follow-up) + `payment_runs` table + ApDebitNote allocation parity (raise full contra / apply FX-plug); **D4** CoA dimension requiredness (MANUAL-only) + PO/bill line dimensions; **D6** HR org cols + minimal `positions` master. Green (982 tests). **=> P2 design phase COMPLETE.**
 - [ ] P2-D5 Tier-2 (Territory/Segment masters) — deferred per ADR-0041.
+
+## Design batch-2 follow-up (low-risk, deferred)
+- `payment_runs`: data model shipped (table + entity + enum + repo + `ap_payments.payment_run_id`); the grouping **service/orchestration** (stamp run_id, run_number gen) not built — balance-neutral.
+- `ArReceipt.tenderType`/`ApPayment.tenderType` stay String (ArTenderType enum + widened CHECKs shipped) — retype-to-enum deferred to avoid call-site churn.
+- `sales_invoice_payments` instrument cols added but `SalesInvoiceServiceImpl` populate + sales TenderType widen not wired.
+- D4 PO→bill per-line dimension auto-copy not wired (cols + manual-set path exist).
+- **Test coverage:** new GL posting paths (cheque-bounce reversal handlers, ApDebitNote raise/apply-FX) lack dedicated ITs — add bounce-reversal + ApDebitNote allocation ITs (mirror `ArCreditNoteServiceIT`).
 
 ## Design batch-1 follow-up (write-path wiring, low-risk)
 Fields are persisted + read-DTO-exposed + entity-settable, but **create/update request DTOs don't accept them yet** (deferred): D5 master-data defaults (customer default price-list/agent/segment, supplier defaults, UoM/pricelist/promotion fields); `promotion_usages` has entity+table but no repository/redemption-recording service (usage-limit enforcement); `CurrencyRateDto.effectiveTo` not surfaced (toRateDto is in platform/common — shared file, avoided); BillMatch `variance_reason` not in the acceptVariance request payload; D1 `createFromQuotation` doesn't propagate the quote's payment_terms_id/addresses (SO.confirm backfills from customer default); direct-SI per-request payment-terms override not wired.

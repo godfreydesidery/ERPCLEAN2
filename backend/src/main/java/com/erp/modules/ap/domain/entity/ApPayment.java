@@ -152,6 +152,28 @@ public class ApPayment extends UidEntity {
     @Setter
     private Instant rateAt;
 
+    // -------------------------------------------------------------------------
+    // ADR-0041 D3 — payment-run grouping + cheque bounce reversal
+    // -------------------------------------------------------------------------
+
+    /** Soft-FK to {@code payment_runs.id} when this payment is part of a bulk run; null otherwise. */
+    @Column(name = "payment_run_id")
+    @Setter
+    private Long paymentRunId;
+
+    /**
+     * Timestamp when this payment's cash leg was reversed because the funding OUTBOUND cheque
+     * BOUNCED. Null while the payment is live. Set append-only when the reversing JournalEntry posts.
+     */
+    @Column(name = "reversed_at")
+    @Setter
+    private Instant reversedAt;
+
+    /** Scalar uid of the payment that this row reverses (self soft-FK); unused by the bounce path. */
+    @Column(name = "reversal_of_payment_uid", length = 26)
+    @Setter
+    private String reversalOfPaymentUid;
+
     protected ApPayment() {
         // JPA
     }

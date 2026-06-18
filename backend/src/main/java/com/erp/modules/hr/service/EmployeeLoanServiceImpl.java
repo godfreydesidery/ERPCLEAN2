@@ -108,6 +108,7 @@ public class EmployeeLoanServiceImpl implements EmployeeLoanService {
         return new EmployeeLoanDto(l.getId(), l.getUid(), l.getCompanyId(), l.getEmployeeId(),
                 empName, l.getLoanNumber(), l.getPrincipalAmount(),
                 l.getInstallmentAmount(), l.getOutstandingAmount(),
-                l.getGlAccountId(), l.getStatus(), l.getStartDate(), CurrencyCode.value(l.getCurrency()));
+                l.getGlAccountId(), l.getStatus(), l.getStartDate(), CurrencyCode.value(l.getCurrency()),
+                l.getInterestRate(), l.getLoanType(), l.getApprovedBy(), l.getTermMonths());
     }
 }

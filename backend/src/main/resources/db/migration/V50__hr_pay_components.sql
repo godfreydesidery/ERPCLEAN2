@@ -16,6 +16,11 @@ CREATE TABLE pay_components (
     gl_account_id   BIGINT       NOT NULL,
     taxable         BOOLEAN      NOT NULL DEFAULT true,
     pensionable     BOOLEAN      NOT NULL DEFAULT true,
+    -- P2 D6 (ADR-0041): statutory applicability + presentation (defaults preserve current behaviour)
+    wcf_applicable  BOOLEAN      NOT NULL DEFAULT true,
+    sdl_applicable  BOOLEAN      NOT NULL DEFAULT true,
+    display_order   INT          NOT NULL DEFAULT 0,
+    pro_ratable     BOOLEAN      NOT NULL DEFAULT true,
     active          BOOLEAN      NOT NULL DEFAULT true,
     version         BIGINT       NOT NULL DEFAULT 0,
     created_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),

@@ -152,6 +152,11 @@ CREATE TABLE sales_invoice_payments (
     currency      VARCHAR(3)      NOT NULL,
     change_amount NUMERIC(19,4),
     reference     VARCHAR(80),
+    -- ADR-0041 D3: instrument links + structured tender refs (additive, all NULLABLE)
+    cash_bank_account_id BIGINT,            -- soft FK to cash_bank_accounts.id (no DB FK — cross-module)
+    cheque_id            BIGINT,            -- soft FK to cheques.id (no DB FK — cross-module)
+    mobile_money_ref     VARCHAR(80),       -- structured mobile-money transaction reference
+    card_ref             VARCHAR(80),       -- structured card authorisation reference
     received_at   TIMESTAMPTZ     NOT NULL DEFAULT now(),
     received_by   BIGINT          NOT NULL,
     created_at    TIMESTAMPTZ     NOT NULL DEFAULT now(),

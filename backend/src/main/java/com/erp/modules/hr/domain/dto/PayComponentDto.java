@@ -14,5 +14,10 @@ public record PayComponentDto(
         Long glAccountId,
         boolean taxable,
         boolean pensionable,
-        boolean active
+        boolean active,
+        // Statutory applicability + presentation (P2 D6, ADR-0041)
+        boolean wcfApplicable,
+        boolean sdlApplicable,
+        int displayOrder,
+        boolean proRatable
 ) {}

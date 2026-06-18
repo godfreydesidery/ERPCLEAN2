@@ -1,6 +1,7 @@
 package com.erp.api;
 
 import com.erp.modules.ap.domain.dto.ApDebitNoteDto;
+import com.erp.modules.ap.domain.dto.ApplyDebitNoteRequest;
 import com.erp.modules.ap.domain.dto.RaiseDebitNoteRequest;
 import com.erp.modules.ap.service.ApDebitNoteService;
 import com.erp.platform.common.api.ApiResponse;
@@ -14,6 +15,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -41,6 +43,25 @@ public class ApDebitNoteController {
     @PreAuthorize("@perm.has('AP.DEBITNOTE')")
     public ApDebitNoteDto raise(@Valid @RequestBody RaiseDebitNoteRequest req) {
         return service.raise(req);
+    }
+
+    /**
+     * Apply a debit note to one or more open bills (ADR-0041 D3).
+     * Posts nothing to GL except a realized-FX plug when rates differ. Uses AP.DEBITNOTE.
+     */
+    @PostMapping("/uid/{uid}/apply")
+    @PreAuthorize("@perm.has('AP.DEBITNOTE')")
+    public ApDebitNoteDto apply(@PathVariable String uid,
+                                @Valid @RequestBody ApplyDebitNoteRequest req) {
+        return service.apply(new ApplyDebitNoteRequest(uid, req.allocations()));
+    }
+
+    /** Replace the current allocation set (delete-and-reinsert). No GL change except FX plug. */
+    @PutMapping("/uid/{uid}/apply")
+    @PreAuthorize("@perm.has('AP.DEBITNOTE')")
+    public ApDebitNoteDto reapply(@PathVariable String uid,
+                                  @Valid @RequestBody ApplyDebitNoteRequest req) {
+        return service.reapply(new ApplyDebitNoteRequest(uid, req.allocations()));
     }
 
     @GetMapping("/uid/{uid}")

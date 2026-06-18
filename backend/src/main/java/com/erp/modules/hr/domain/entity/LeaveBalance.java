@@ -39,6 +39,24 @@ public class LeaveBalance extends UidEntity {
     @Setter
     private BigDecimal balanceDays = BigDecimal.ZERO;
 
+    // ---- Accrual / carry-forward breakdown (P2 D6, ADR-0041) — columns only; accrual posting DEFERRED ----
+
+    @Column(name = "carried_forward_days", nullable = false, precision = 9, scale = 2)
+    @Setter
+    private BigDecimal carriedForwardDays = BigDecimal.ZERO;
+
+    @Column(name = "accrued_days", nullable = false, precision = 9, scale = 2)
+    @Setter
+    private BigDecimal accruedDays = BigDecimal.ZERO;
+
+    @Column(name = "pending_days", nullable = false, precision = 9, scale = 2)
+    @Setter
+    private BigDecimal pendingDays = BigDecimal.ZERO;
+
+    @Column(name = "adjustment_days", nullable = false, precision = 9, scale = 2)
+    @Setter
+    private BigDecimal adjustmentDays = BigDecimal.ZERO;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
