@@ -74,10 +74,11 @@ test.describe('L3 conventions', () => {
         return;
       }
 
-      // Navigate to the detail URL (href is already absolute or app-relative)
+      // Navigate to the detail URL. Keep it app-relative so page.goto() resolves it
+      // against the configured baseURL (any port, e.g. 4400) — never hardcode a host.
       const detailUrl = detailHref.startsWith('http')
         ? detailHref
-        : `http://localhost:4200${detailHref.startsWith('/') ? '' : '/'}${detailHref}`;
+        : `${detailHref.startsWith('/') ? '' : '/'}${detailHref}`;
 
       await page.goto(detailUrl, { waitUntil: 'networkidle' });
       await page.waitForTimeout(500);

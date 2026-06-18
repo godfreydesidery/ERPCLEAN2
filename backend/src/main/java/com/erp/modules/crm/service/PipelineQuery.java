@@ -5,6 +5,7 @@ import com.erp.modules.crm.domain.dto.ForecastDto;
 import com.erp.modules.crm.domain.dto.PipelineSummaryDto;
 import com.erp.modules.crm.domain.dto.PipelineStageSummaryRowDto;
 import com.erp.modules.crm.repository.OpportunityRepository;
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -49,7 +50,7 @@ public class PipelineQuery {
             long openCount    = count.longValue();
             BigDecimal total    = toBd(row[4]);
             BigDecimal weighted = toBd(row[5]);
-            String currency   = (String) row[6];
+            String currency   = toCurrency(row[6]);
             stages.add(new PipelineStageSummaryRowDto(stageUid, stageName, displayOrder,
                     openCount, total, weighted, currency));
         }
@@ -68,7 +69,7 @@ public class PipelineQuery {
         Object[] r = rows.get(0);
         BigDecimal weighted = toBd(r[0]);
         long count = ((Number) r[1]).longValue();
-        String currency = (String) r[2];
+        String currency = toCurrency(r[2]);
         return new ForecastDto(from, to, weighted != null ? weighted : BigDecimal.ZERO, count, currency);
     }
 
@@ -110,5 +111,18 @@ public class PipelineQuery {
         if (val instanceof BigDecimal bd) return bd;
         if (val instanceof Number n) return BigDecimal.valueOf(n.doubleValue());
         return null;
+    }
+
+    /**
+     * Coerce a JPQL currency projection to its 3-letter code. {@code o.currency} is a
+     * {@link CurrencyCode} value type (AttributeConverter), so a JPQL {@code SELECT o.currency}
+     * projects a {@code CurrencyCode} instance — never a raw {@code String}. Casting straight to
+     * {@code (String)} therefore throws {@link ClassCastException} (the BI dashboard 500 caught by
+     * the massive-data e2e gate). Handles {@code CurrencyCode}, {@code String} and {@code null}.
+     */
+    private static String toCurrency(Object val) {
+        if (val == null) return null;
+        if (val instanceof CurrencyCode cc) return cc.value();
+        return val.toString();
     }
 }
