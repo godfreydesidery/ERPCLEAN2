@@ -278,10 +278,10 @@
                 </div>
                 <div class="col-sm-6">
                   <label class="form-label" for="cnCurrency">Currency</label>
-                  <input id="cnCurrency" name="cnCurrency" type="text" class="form-control"
-                         [ngModel]="creditNoteCurrency()"
-                         (ngModelChange)="creditNoteCurrency.set($event)"
-                         [disabled]="raisingCreditNote()" />
+                  <app-currency-select id="cnCurrency" name="cnCurrency"
+                                       [(ngModel)]="creditNoteCurrency"
+                                       [companyUid]="selectedCompanyUid()"
+                                       [disabled]="raisingCreditNote()" />
                 </div>
                 <div class="col-sm-6">
                   <label class="form-label" for="cnNet">

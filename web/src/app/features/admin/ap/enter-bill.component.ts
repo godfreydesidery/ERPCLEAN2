@@ -21,6 +21,7 @@ import {
 } from './models/ap.model';
 import { ApService } from './ap.service';
 import { UidOption, UidPickerComponent } from '../../../shared/uid-picker/uid-picker.component';
+import { CurrencySelectComponent } from '../../../shared/currency-select/currency-select.component';
 
 /**
  * UI-only line row for the bill line editor.
@@ -45,7 +46,7 @@ interface LineRow {
  */
 @Component({
   selector: 'app-enter-bill',
-  imports: [FormsModule, RouterLink, UidPickerComponent],
+  imports: [FormsModule, RouterLink, UidPickerComponent, CurrencySelectComponent],
   templateUrl: './enter-bill.component.html',
   styleUrl: './enter-bill.component.scss',
 })
@@ -66,6 +67,7 @@ export class EnterBillComponent {
   // ── Company context ────────────────────────────────────────────────────────
   readonly companies = signal<Company[]>([]);
   readonly selectedCompanyId = signal('');
+  readonly selectedCompanyUid = computed(() => this.companies().find((c) => c.id === this.selectedCompanyId())?.uid ?? '');
   readonly companyState = signal<'loading' | 'idle' | 'error'>('loading');
 
   // ── Supplier picker ────────────────────────────────────────────────────────

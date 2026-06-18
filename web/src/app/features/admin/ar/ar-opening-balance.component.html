@@ -114,11 +114,11 @@
             <label class="form-label" for="obCurrency">
               Currency <span class="text-danger" aria-hidden="true">*</span>
             </label>
-            <input id="obCurrency" name="obCurrency" type="text"
-                   class="form-control" placeholder="TZS"
-                   [ngModel]="currency()"
-                   (ngModelChange)="currency.set($event)"
-                   [disabled]="saving()" autocomplete="off" required />
+            <app-currency-select id="obCurrency" name="obCurrency"
+                                 [(ngModel)]="currency"
+                                 [companyUid]="selectedCompanyUid()"
+                                 [required]="true"
+                                 [disabled]="saving()" />
           </div>
 
           <!-- Invoice date -->

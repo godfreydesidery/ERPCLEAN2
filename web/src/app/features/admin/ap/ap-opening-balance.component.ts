@@ -13,6 +13,7 @@ import { SupplierModel } from '../models/party.model';
 import { SupplierService } from '../parties/supplier.service';
 import { SetApOpeningBalanceRequest, SupplierBillDto } from './models/ap.model';
 import { ApService } from './ap.service';
+import { CurrencySelectComponent } from '../../../shared/currency-select/currency-select.component';
 
 /**
  * Set AP Opening Balance. Gated AP.OPENING.SET.
@@ -21,7 +22,7 @@ import { ApService } from './ap.service';
  */
 @Component({
   selector: 'app-ap-opening-balance',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, CurrencySelectComponent],
   templateUrl: './ap-opening-balance.component.html',
   styleUrl: './ap-opening-balance.component.scss',
 })
@@ -36,6 +37,7 @@ export class ApOpeningBalanceComponent {
   // ── Company context ────────────────────────────────────────────────────────
   readonly companies = signal<Company[]>([]);
   readonly selectedCompanyId = signal('');
+  readonly selectedCompanyUid = computed(() => this.companies().find((c) => c.id === this.selectedCompanyId())?.uid ?? '');
   readonly companyState = signal<'loading' | 'idle' | 'error'>('loading');
 
   // ── Supplier picker ────────────────────────────────────────────────────────

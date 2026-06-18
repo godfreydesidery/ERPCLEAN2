@@ -134,11 +134,11 @@
               <label class="form-label" for="receiptCurrency">
                 Currency <span class="text-danger" aria-hidden="true">*</span>
               </label>
-              <input id="receiptCurrency" name="receiptCurrency" type="text"
-                     class="form-control" placeholder="TZS"
-                     [ngModel]="receiptCurrency()"
-                     (ngModelChange)="receiptCurrency.set($event)"
-                     [disabled]="submitting()" autocomplete="off" required />
+              <app-currency-select id="receiptCurrency" name="receiptCurrency"
+                                   [(ngModel)]="receiptCurrency"
+                                   [companyUid]="selectedCompanyUid()"
+                                   [required]="true"
+                                   [disabled]="submitting()" />
             </div>
 
             <!-- Date -->
