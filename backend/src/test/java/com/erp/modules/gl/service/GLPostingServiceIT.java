@@ -397,6 +397,93 @@ class GLPostingServiceIT extends PostgresIntegrationTest {
     }
 
     // =========================================================================
+    // BR-GL-11a: second reversal of the same entry is rejected (idempotency guard)
+    // =========================================================================
+
+    @Test
+    void postReversal_secondReversal_rejected_originalFlaggedAfterFirst() {
+        // Post original entry
+        JournalEntryDto original = postingService.post(balancedDraft(
+                new BigDecimal("1000"), new BigDecimal("1000")));
+
+        RequestContext.set(new RequestContext.Principal(
+                rootId, "glpit_root", true, company.getId(), branch.getId(), null));
+
+        // First reversal must succeed
+        JournalEntryDto firstReversal = postingService.postReversal(
+                original.uid(), LocalDate.now(), JournalSourceType.MANUAL, null, rootId);
+        assertThat(firstReversal.reversalOfId()).isEqualTo(original.id());
+
+        // Original must now be flagged
+        var originalInDb = entryRepo.findByUid(original.uid()).orElseThrow();
+        assertThat(originalInDb.isReversed()).isTrue();
+        assertThat(originalInDb.getReversedByEntryId()).isEqualTo(firstReversal.id());
+
+        RequestContext.set(new RequestContext.Principal(
+                rootId, "glpit_root", true, company.getId(), branch.getId(), null));
+
+        // Second reversal on the same uid must be rejected with ConflictException
+        assertThatThrownBy(() -> postingService.postReversal(
+                        original.uid(), LocalDate.now(), JournalSourceType.MANUAL, null, rootId))
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
+                .hasMessageContaining("already been reversed");
+    }
+
+    // =========================================================================
+    // BR-GL-11b: reversing a reversal entry is rejected
+    // =========================================================================
+
+    @Test
+    void postReversal_ofReversalEntry_rejected() {
+        // Post original entry
+        JournalEntryDto original = postingService.post(balancedDraft(
+                new BigDecimal("500"), new BigDecimal("500")));
+
+        RequestContext.set(new RequestContext.Principal(
+                rootId, "glpit_root", true, company.getId(), branch.getId(), null));
+
+        // Post a reversal of the original
+        JournalEntryDto reversal = postingService.postReversal(
+                original.uid(), LocalDate.now(), JournalSourceType.MANUAL, null, rootId);
+        assertThat(reversal.reversalOfId()).isEqualTo(original.id());
+
+        RequestContext.set(new RequestContext.Principal(
+                rootId, "glpit_root", true, company.getId(), branch.getId(), null));
+
+        // Attempting to reverse the reversal itself must be rejected
+        assertThatThrownBy(() -> postingService.postReversal(
+                        reversal.uid(), LocalDate.now(), JournalSourceType.MANUAL, null, rootId))
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
+                .hasMessageContaining("itself a reversal entry");
+    }
+
+    // =========================================================================
+    // BR-GL-11c: original entry is flagged reversed=true / reversedByEntryId set
+    // =========================================================================
+
+    @Test
+    void postReversal_originalFlagged_reversedTrueAndReversedByEntryIdSet() {
+        JournalEntryDto original = postingService.post(balancedDraft(
+                new BigDecimal("250"), new BigDecimal("250")));
+
+        RequestContext.set(new RequestContext.Principal(
+                rootId, "glpit_root", true, company.getId(), branch.getId(), null));
+
+        JournalEntryDto reversal = postingService.postReversal(
+                original.uid(), LocalDate.now(), JournalSourceType.MANUAL, null, rootId);
+
+        var originalInDb = entryRepo.findByUid(original.uid()).orElseThrow();
+        assertThat(originalInDb.isReversed())
+                .as("original entry must be flagged reversed=true after a successful reversal")
+                .isTrue();
+        assertThat(originalInDb.getReversedByEntryId())
+                .as("reversedByEntryId must be set to the new reversing entry's id")
+                .isEqualTo(reversal.id());
+        // The reversing entry's reversalOfId must point back to the original
+        assertThat(reversal.reversalOfId()).isEqualTo(original.id());
+    }
+
+    // =========================================================================
     // NFR-GL-04: service exposes no update/delete path on posted entries (append-only)
     // =========================================================================
 

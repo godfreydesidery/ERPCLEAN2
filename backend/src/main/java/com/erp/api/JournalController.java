@@ -2,15 +2,14 @@ package com.erp.api;
 
 import com.erp.modules.gl.domain.dto.JournalEntryDto;
 import com.erp.modules.gl.domain.dto.PostJournalRequest;
+import com.erp.modules.gl.domain.dto.ReversalRequest;
 import com.erp.modules.gl.service.JournalService;
 import com.erp.platform.common.api.ApiResponse;
 import com.erp.platform.common.api.PageMeta;
 import jakarta.validation.Valid;
-import java.time.LocalDate;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -56,14 +55,21 @@ public class JournalController {
         return ApiResponse.ok(page.getContent(), PageMeta.from(page));
     }
 
-    /** Post a reversing entry for a given journal entry uid (BR-GL-11). */
+    /**
+     * Post a reversing entry for a given journal entry uid (BR-GL-11, issue #30).
+     *
+     * <p>Accepts an optional JSON body with {@code reversalDate} (business date for the reversing
+     * entry; defaults to today if absent) and {@code reason} (audit-trail text appended to the
+     * reversing entry's description). Body may be omitted entirely for backwards compatibility.
+     */
     @PostMapping("/uid/{uid}/reverse")
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("@perm.scoped(#uid,'journalentry','GL.POST')")
     public JournalEntryDto reverse(
             @PathVariable String uid,
-            @RequestParam(required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate reversalDate) {
-        return service.postManualReversal(uid, reversalDate);
+            @RequestBody(required = false) ReversalRequest body) {
+        java.time.LocalDate reversalDate = body != null ? body.reversalDate() : null;
+        String reason = body != null ? body.reason() : null;
+        return service.postManualReversal(uid, reversalDate, reason);
     }
 }

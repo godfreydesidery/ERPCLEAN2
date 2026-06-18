@@ -16,6 +16,9 @@ public interface PayeBandSetRepository extends JpaRepository<PayeBandSet, Long> 
 
     List<PayeBandSet> findByCompanyIdOrderByEffectiveFromDesc(Long companyId);
 
+    /** Duplicate-guard: one PAYE band set per company+effectiveFrom (issue #27). */
+    boolean existsByCompanyIdAndEffectiveFrom(Long companyId, LocalDate effectiveFrom);
+
     /** Resolve the in-force set: latest effective_from <= payDate. */
     @Query("SELECT p FROM PayeBandSet p WHERE p.companyId = :companyId AND p.effectiveFrom <= :payDate " +
            "ORDER BY p.effectiveFrom DESC")

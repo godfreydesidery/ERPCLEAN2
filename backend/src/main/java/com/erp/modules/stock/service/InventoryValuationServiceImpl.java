@@ -571,6 +571,72 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
     }
 
     // -------------------------------------------------------------------------
+    // (h) Transfer cost: move on_hand_value from source to destination location
+    //     Called by StockTransferServiceImpl (instant) and the dispatch/receive handlers
+    //     (in-transit). ADR-0028 D-5 / issue #12 fix.
+    // -------------------------------------------------------------------------
+
+    @Override
+    public void transferCost(Long companyId,
+                             Long srcBranchId, Long srcLocationId,
+                             Long destBranchId, Long destLocationId,
+                             Long productId, BigDecimal qty) {
+        if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) return;
+
+        // --- source row: debit on_hand_value by qty × srcAvgCost ----------------
+        StockOnHand srcSoh = onHands
+                .findByCompanyIdAndBranchIdAndLocationIdAndProductId(
+                        companyId, srcBranchId, srcLocationId, productId)
+                .orElse(null);
+
+        BigDecimal srcAvgCost = srcSoh != null ? srcSoh.getAvgCost() : null;
+        if (srcAvgCost == null) {
+            // No cost established at source — nothing to move (D-2 edge).
+            log.warn("InventoryValuation: transferCost — srcAvgCost IS NULL for company={} " +
+                             "srcLoc={} product={} — value transfer skipped", companyId, srcLocationId, productId);
+            return;
+        }
+
+        BigDecimal transferValue = round4(qty.multiply(srcAvgCost));
+
+        if (srcSoh != null) {
+            BigDecimal newSrcValue = srcSoh.getOnHandValue().subtract(transferValue);
+            // avg_cost at source stays the same (qty depletes, avg unchanged — mirrors costIssue)
+            srcSoh.applyCostRecompute(srcAvgCost, newSrcValue, null);
+            onHands.save(srcSoh);
+        }
+
+        // --- destination row: credit on_hand_value + recompute avgCost ----------
+        // Upsert the dest row (may not exist yet if the product has never been at this location).
+        StockOnHand destSoh = onHands
+                .findByCompanyIdAndBranchIdAndLocationIdAndProductId(
+                        companyId, destBranchId, destLocationId, productId)
+                .orElseGet(() -> {
+                    StockOnHand fresh = new StockOnHand(companyId, destBranchId, destLocationId, productId);
+                    return onHands.save(fresh);
+                });
+
+        BigDecimal destPreQty   = destSoh.getQuantity();
+        BigDecimal destPreValue = destSoh.getOnHandValue() != null ? destSoh.getOnHandValue() : BigDecimal.ZERO;
+
+        // Post-transfer qty on the dest row (the posting service applies the qty delta AFTER this
+        // method returns, so current qty is pre-transfer; add qty to get post-transfer total).
+        BigDecimal destPostQty   = destPreQty.add(qty);
+        BigDecimal destPostValue = destPreValue.add(transferValue);
+
+        BigDecimal newDestAvg;
+        if (destPostQty.compareTo(BigDecimal.ZERO) > 0) {
+            newDestAvg = round4(destPostValue.divide(destPostQty, SCALE, RM));
+        } else {
+            // Destination qty will be zero or negative after transfer (edge case) — keep srcAvgCost
+            newDestAvg = destSoh.getAvgCost() != null ? destSoh.getAvgCost() : srcAvgCost;
+        }
+
+        destSoh.applyCostRecompute(newDestAvg, destPostValue, null);
+        onHands.save(destSoh);
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 

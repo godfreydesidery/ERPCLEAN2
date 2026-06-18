@@ -4,6 +4,7 @@ import com.erp.modules.products.domain.enums.VatStatus;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
 import java.math.BigDecimal;
 
 /**
@@ -17,7 +18,8 @@ public record BillLineRequest(
         String grLineUid,
         @NotBlank String description,
         @NotNull @Positive BigDecimal billedQty,
-        @NotNull BigDecimal unitCostAmount,
+        /** Unit cost must be >= 0; negative values violate chk_supplier_bill_amounts (issue #18). */
+        @NotNull @PositiveOrZero BigDecimal unitCostAmount,
         // D-8: optional per-line VAT
         VatStatus vatStatus,
         BigDecimal vatRate,

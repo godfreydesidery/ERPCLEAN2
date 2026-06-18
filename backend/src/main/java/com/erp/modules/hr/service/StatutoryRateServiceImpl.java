@@ -13,6 +13,7 @@ import com.erp.modules.hr.repository.StatutoryRateSetRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
@@ -47,6 +48,12 @@ public class StatutoryRateServiceImpl implements StatutoryRateService {
         RequestContext.Principal p = RequestContext.get();
         Long companyId = p.companyId();
         scopeGuard.assertCanActIn(p, companyId);
+
+        // #27 — duplicate effectiveFrom returns 409 instead of leaking DB unique violation as 500
+        if (payeBandSets.existsByCompanyIdAndEffectiveFrom(companyId, req.effectiveFrom())) {
+            throw new ConflictException(
+                    "A PAYE band set with effectiveFrom " + req.effectiveFrom() + " already exists.");
+        }
 
         PayeBandSet set = payeBandSets.save(new PayeBandSet(companyId, req.effectiveFrom(),
                 req.taxFreeThreshold(), req.description(), p.userId()));
@@ -84,6 +91,13 @@ public class StatutoryRateServiceImpl implements StatutoryRateService {
         RequestContext.Principal p = RequestContext.get();
         Long companyId = p.companyId();
         scopeGuard.assertCanActIn(p, companyId);
+
+        // #26 — duplicate rateType+effectiveFrom returns 409 instead of leaking DB unique violation as 500
+        if (rateSets.existsByCompanyIdAndRateTypeAndEffectiveFrom(
+                companyId, req.rateType(), req.effectiveFrom())) {
+            throw new ConflictException(
+                    "A statutory rate set for " + req.rateType() + " effective " + req.effectiveFrom() + " already exists.");
+        }
 
         StatutoryRateSet srs = rateSets.save(new StatutoryRateSet(companyId, req.rateType(),
                 req.effectiveFrom(), req.employeeRate(), req.employerRate(), req.basis(),

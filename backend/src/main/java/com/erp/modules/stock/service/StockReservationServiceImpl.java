@@ -48,13 +48,14 @@ public class StockReservationServiceImpl implements StockReservationService {
 
     private void doApply(Long companyId, Long branchId, Long productId,
                          BigDecimal delta, Long actorId) {
+        // ADR-0028 D-3: reservations are tracked on the branch default-location row.
+        // Using the deprecated location-agnostic finder causes NonUniqueResultException when the
+        // product is stocked across more than one location (issue #5). Always resolve the default
+        // location first and use the location-aware 4-key finder so exactly one row is targeted.
+        Long locId = locationResolver.defaultLocationId(companyId, branchId);
         StockOnHand soh = onHands
-                .findByCompanyIdAndBranchIdAndProductId(companyId, branchId, productId)
-                .orElseGet(() -> {
-                    // ADR-0028 D-3: location_id NOT NULL — resolve branch default before first save.
-                    Long locId = locationResolver.defaultLocationId(companyId, branchId);
-                    return onHands.saveAndFlush(new StockOnHand(companyId, branchId, locId, productId));
-                });
+                .findByCompanyIdAndBranchIdAndLocationIdAndProductId(companyId, branchId, locId, productId)
+                .orElseGet(() -> onHands.saveAndFlush(new StockOnHand(companyId, branchId, locId, productId)));
 
         BigDecimal newReserved = soh.getReservedQty().add(delta);
         if (newReserved.compareTo(BigDecimal.ZERO) < 0) {

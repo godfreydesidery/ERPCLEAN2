@@ -130,6 +130,34 @@ public interface InventoryValuationService {
     }
 
     /**
+     * Move cost value from a source stock-on-hand row to a destination row (ADR-0028 D-5).
+     *
+     * <p>Used by the stock-transfer completion and dispatch/receive handlers to keep
+     * {@code on_hand_value} consistent with quantity movements. The transfer quantity is costed at
+     * the source location's current {@code avg_cost}; the same value is removed from the source row
+     * and added to the destination row. The destination's {@code avg_cost} is recomputed as a
+     * weighted average of its pre-transfer value plus the incoming value.
+     *
+     * <p>If the source location has no {@code avg_cost} established (null), the cost move is a
+     * no-op (no value to transfer — consistent with D-2 zero-cost-receipt edge). The destination
+     * retains its existing avg_cost (or remains null).
+     *
+     * <p>REQUIRES MANDATORY propagation — callers must hold an active transaction.
+     *
+     * @param companyId       tenant company
+     * @param srcBranchId     source branch
+     * @param srcLocationId   source physical location
+     * @param destBranchId    destination branch
+     * @param destLocationId  destination physical location
+     * @param productId       the product being transferred
+     * @param qty             transfer quantity (positive)
+     */
+    void transferCost(Long companyId,
+                      Long srcBranchId, Long srcLocationId,
+                      Long destBranchId, Long destLocationId,
+                      Long productId, BigDecimal qty);
+
+    /**
      * Apply a landed-cost allocation to a single stock-on-hand row (ADR-0027 D-5 / BR-PROC-11).
      *
      * <p>Adds {@code allocatedAmount} to {@code on_hand_value} and recomputes {@code avg_cost}.

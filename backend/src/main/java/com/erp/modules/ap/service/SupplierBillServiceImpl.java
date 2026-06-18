@@ -20,6 +20,7 @@ import com.erp.modules.products.domain.enums.VatStatus;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.security.RequestContext;
@@ -85,6 +86,18 @@ public class SupplierBillServiceImpl implements SupplierBillService {
                 .orElseThrow(() -> new NotFoundException("Supplier not found: " + req.supplierUid()));
         Long supplierId = supplier.getId();
 
+        // Cross-supplier PO ownership guard (issue #8): when a PO is referenced the bill's supplier
+        // must match the PO's supplier. Reject with ConflictException so the caller gets a clean 409.
+        if (req.purchaseOrderUid() != null && !req.purchaseOrderUid().isBlank()) {
+            purchaseMatchReader.findPo(req.purchaseOrderUid()).ifPresent(po -> {
+                if (!supplierId.equals(po.supplierId())) {
+                    throw new ConflictException(
+                            "Purchase order " + req.purchaseOrderUid()
+                                    + " belongs to a different supplier and cannot be referenced by this bill.");
+                }
+            });
+        }
+
         // Duplicate-invoice guard (uq_supplier_bill_supplier_invoice)
         if (bills.existsByCompanyIdAndSupplierIdAndSupplierInvoiceNo(
                 companyId, supplierId, req.supplierInvoiceNo())) {
@@ -104,6 +117,12 @@ public class SupplierBillServiceImpl implements SupplierBillService {
                 ? req.dueDate()
                 : PaymentTermsDueDateCalculator.derive(
                         req.billDate(), terms, supplier.getPaymentTermsDays());
+
+        // Guard: dueDate must not precede billDate (issue #18 — chk_supplier_bill_dates).
+        if (dueDate != null && dueDate.isBefore(req.billDate())) {
+            throw new IllegalArgumentException(
+                    "dueDate (" + dueDate + ") must not be before billDate (" + req.billDate() + ").");
+        }
 
         // Compute net amount from lines and per-line VAT (D-8).
         // lineVatAmount = lineNetAmount × vatRate (zero when vatStatus is null/ZERO_RATED/EXEMPT).

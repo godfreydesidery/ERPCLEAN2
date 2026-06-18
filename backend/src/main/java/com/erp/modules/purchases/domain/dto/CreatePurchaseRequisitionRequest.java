@@ -14,9 +14,11 @@ public record CreatePurchaseRequisitionRequest(
         LocalDate requiredByDate,
         String costCentreCode,
         String notes,
-        @NotEmpty @Valid List<LineRequest> lines
+        @NotEmpty @Valid List<RequisitionLineRequest> lines
 ) {
-    public record LineRequest(
+    /** Per-line entry for a purchase requisition. Distinct name avoids OpenAPI schema collision
+     *  with RFQ and purchase-return line records (issue #11 / theme #11). */
+    public record RequisitionLineRequest(
             @NotNull Long productId,
             @NotNull Long unitId,
             @NotNull @Positive BigDecimal requestedQty,

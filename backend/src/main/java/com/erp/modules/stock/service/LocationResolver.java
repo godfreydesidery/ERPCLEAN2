@@ -87,6 +87,19 @@ public class LocationResolver {
     }
 
     /**
+     * Returns whether a location (looked up by its PK id) permits negative on-hand stock.
+     * Used by transfer guards where the location id is already known from the transfer entity
+     * (scope was validated on create; no re-check needed here).
+     * Defaults to {@code false} (safe: block transfer) when the location row is not found.
+     */
+    @Transactional(readOnly = true)
+    public boolean isAllowNegative(Long locationId) {
+        return locations.findById(locationId)
+                .map(StockLocation::isAllowNegative)
+                .orElse(false);
+    }
+
+    /**
      * Resolve a location by uid, asserting it belongs to the given company and is ACTIVE.
      */
     @Transactional(readOnly = true)

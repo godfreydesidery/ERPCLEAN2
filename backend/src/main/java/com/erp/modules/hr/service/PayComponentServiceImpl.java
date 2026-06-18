@@ -1,5 +1,6 @@
 package com.erp.modules.hr.service;
 
+import com.erp.modules.gl.repository.ChartOfAccountRepository;
 import com.erp.modules.hr.domain.dto.CreatePayComponentRequest;
 import com.erp.modules.hr.domain.dto.PayComponentDto;
 import com.erp.modules.hr.domain.entity.PayComponent;
@@ -20,14 +21,17 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class PayComponentServiceImpl implements PayComponentService {
 
-    private final PayComponentRepository payComponents;
-    private final ScopeGuard scopeGuard;
-    private final AuditService audit;
+    private final PayComponentRepository   payComponents;
+    private final ChartOfAccountRepository glAccounts;
+    private final ScopeGuard               scopeGuard;
+    private final AuditService             audit;
 
     public PayComponentServiceImpl(PayComponentRepository payComponents,
+                                    ChartOfAccountRepository glAccounts,
                                     ScopeGuard scopeGuard,
                                     AuditService audit) {
         this.payComponents = payComponents;
+        this.glAccounts    = glAccounts;
         this.scopeGuard    = scopeGuard;
         this.audit         = audit;
     }
@@ -39,6 +43,10 @@ public class PayComponentServiceImpl implements PayComponentService {
         scopeGuard.assertCanActIn(p, companyId);
         if (payComponents.existsByCompanyIdAndCode(companyId, req.code())) {
             throw new ConflictException("Pay component code already exists: " + req.code());
+        }
+        // #23 — resolve GL account before persistence; unknown id returns 404 not 500
+        if (!glAccounts.existsById(req.glAccountId())) {
+            throw NotFoundException.of("GlAccount", String.valueOf(req.glAccountId()));
         }
         PayComponent pc = payComponents.save(new PayComponent(companyId, req.code(), req.name(),
                 req.kind(), req.basis(), req.glAccountId(),
@@ -70,6 +78,10 @@ public class PayComponentServiceImpl implements PayComponentService {
         if (!pc.getCode().equals(req.code())
                 && payComponents.existsByCompanyIdAndCode(pc.getCompanyId(), req.code())) {
             throw new ConflictException("Pay component code already exists: " + req.code());
+        }
+        // #23 — resolve GL account before persistence
+        if (!glAccounts.existsById(req.glAccountId())) {
+            throw NotFoundException.of("GlAccount", String.valueOf(req.glAccountId()));
         }
         pc.setCode(req.code());
         pc.setName(req.name());

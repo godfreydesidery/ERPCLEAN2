@@ -197,12 +197,40 @@ public class GLPostingServiceImpl implements GLPostingService {
         return toDto(entry, batchNumber, savedLines);
     }
 
+    /** Backwards-compatible overload; delegates to the reason-aware variant with null reason. */
     @Override
     public JournalEntryDto postReversal(String originalEntryUid, LocalDate reversalDate,
                                          JournalSourceType sourceType, String sourceRef,
                                          Long postedBy) {
+        return postReversal(originalEntryUid, reversalDate, sourceType, sourceRef, postedBy, null);
+    }
+
+    @Override
+    public JournalEntryDto postReversal(String originalEntryUid, LocalDate reversalDate,
+                                         JournalSourceType sourceType, String sourceRef,
+                                         Long postedBy, String reason) {
         JournalEntry original = entries.findByUid(originalEntryUid)
                 .orElseThrow(() -> new NotFoundException("JournalEntry not found: " + originalEntryUid));
+
+        // BR-GL-11a: idempotency guard — a journal entry can only be reversed once.
+        // The reversed flag and reversedByEntryId are set together atomically at the end of this
+        // method; checking both guards against any partial-state race.
+        if (original.isReversed() || original.getReversedByEntryId() != null) {
+            throw new com.erp.platform.common.api.ConflictException(
+                    "Journal entry " + originalEntryUid
+                            + " has already been reversed (BR-GL-11). "
+                            + "Create a new journal entry if a further correction is required.");
+        }
+
+        // BR-GL-11b: prevent reversing a reversing entry. A reversal entry (reversalOfId != null)
+        // is itself the correction; reversing it would undo the correction and re-expose the original
+        // error. The caller must post a fresh balanced journal if a further adjustment is needed.
+        if (original.getReversalOfId() != null) {
+            throw new com.erp.platform.common.api.ConflictException(
+                    "Journal entry " + originalEntryUid
+                            + " is itself a reversal entry and cannot be reversed again (BR-GL-11). "
+                            + "Post a new manual journal entry if a further correction is needed.");
+        }
 
         List<JournalLine> originalLines = lines.findByEntryIdOrderByLineNo(original.getId());
 
@@ -225,11 +253,17 @@ public class GLPostingServiceImpl implements GLPostingService {
                 ))
                 .toList();
 
+        // Build the description: always start with "Reversal of entry <uid>" and append the
+        // caller-supplied reason when present (issue #30 — preserve audit trail).
+        String description = (reason != null && !reason.isBlank())
+                ? "Reversal of entry " + originalEntryUid + " — " + reason.trim()
+                : "Reversal of entry " + originalEntryUid;
+
         JournalEntryDraft reversalDraft = new JournalEntryDraft(
                 original.getCompanyId(),
                 original.getBranchId(),
                 reversalDate,
-                "Reversal of entry " + originalEntryUid,
+                description,
                 sourceType,
                 sourceRef,
                 original.getId(),
@@ -237,7 +271,16 @@ public class GLPostingServiceImpl implements GLPostingService {
                 reversedLines
         );
 
-        return post(reversalDraft);
+        JournalEntryDto reversalDto = post(reversalDraft);
+
+        // BR-GL-11c: stamp the original entry so subsequent reversal attempts are rejected above.
+        // The original is still in the persistence context; Hibernate will flush the UPDATE in the
+        // same transaction — preserving append-only semantics (the ledger lines are never touched).
+        original.setReversed(true);
+        original.setReversedByEntryId(reversalDto.id());
+        // No explicit save() needed — entity is managed and Hibernate flushes on commit.
+
+        return reversalDto;
     }
 
     // -------------------------------------------------------------------------

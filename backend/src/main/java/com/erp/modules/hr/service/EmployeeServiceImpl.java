@@ -8,6 +8,7 @@ import com.erp.modules.hr.domain.enums.EmploymentStatus;
 import com.erp.modules.hr.domain.enums.PaymentMethod;
 import com.erp.modules.hr.repository.DepartmentRepository;
 import com.erp.modules.hr.repository.EmployeeRepository;
+import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -30,6 +31,7 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     private final EmployeeRepository   employees;
     private final DepartmentRepository departments;
+    private final BranchRepository     branches;
     private final HrNumberGenerator    numberGenerator;
     private final ScopeGuard           scopeGuard;
     private final AuditService         audit;
@@ -37,12 +39,14 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     public EmployeeServiceImpl(EmployeeRepository employees,
                                 DepartmentRepository departments,
+                                BranchRepository branches,
                                 HrNumberGenerator numberGenerator,
                                 ScopeGuard scopeGuard,
                                 AuditService audit,
                                 PermissionResolver permissions) {
         this.employees       = employees;
         this.departments     = departments;
+        this.branches        = branches;
         this.numberGenerator = numberGenerator;
         this.scopeGuard      = scopeGuard;
         this.audit           = audit;
@@ -55,6 +59,7 @@ public class EmployeeServiceImpl implements EmployeeService {
         Long companyId = p.companyId();
         scopeGuard.assertCanActIn(p, companyId);
 
+        validateFkReferences(req);
         validatePayeeTarget(req);
 
         String number = generateEmployeeNumber(companyId);
@@ -89,6 +94,7 @@ public class EmployeeServiceImpl implements EmployeeService {
         scopeGuard.assertCanActIn(RequestContext.get(), emp.getCompanyId());
         RequestContext.Principal p = RequestContext.get();
 
+        validateFkReferences(req);
         validatePayeeTarget(req);
         applyFields(emp, req);
         emp.setUpdatedAt(Instant.now());
@@ -109,6 +115,21 @@ public class EmployeeServiceImpl implements EmployeeService {
     }
 
     // --- helpers ---
+
+    /**
+     * Validate FK references for departmentId and branchId before any persistence attempt.
+     * Returns clean 404 rather than leaking a DB foreign-key violation as 500 (issue #22).
+     */
+    private void validateFkReferences(CreateEmployeeRequest req) {
+        if (req.departmentId() != null
+                && !departments.existsById(req.departmentId())) {
+            throw NotFoundException.of("Department", String.valueOf(req.departmentId()));
+        }
+        if (req.branchId() != null
+                && !branches.existsById(req.branchId())) {
+            throw NotFoundException.of("Branch", String.valueOf(req.branchId()));
+        }
+    }
 
     /**
      * Validate that the payee target required by the chosen payment_method is present.

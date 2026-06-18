@@ -19,6 +19,9 @@ public interface StatutoryRateSetRepository extends JpaRepository<StatutoryRateS
 
     List<StatutoryRateSet> findByCompanyIdOrderByRateTypeAscEffectiveFromDesc(Long companyId);
 
+    /** Duplicate-guard: one effective-dated set per company+rateType+effectiveFrom (issue #26). */
+    boolean existsByCompanyIdAndRateTypeAndEffectiveFrom(Long companyId, StatutoryRateType rateType, LocalDate effectiveFrom);
+
     /** Resolve the in-force set for a given type: latest effective_from <= payDate. */
     @Query("SELECT s FROM StatutoryRateSet s WHERE s.companyId = :companyId AND s.rateType = :rateType " +
            "AND s.effectiveFrom <= :payDate ORDER BY s.effectiveFrom DESC")

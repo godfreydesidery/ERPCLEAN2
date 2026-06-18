@@ -3,6 +3,7 @@ package com.erp.modules.stock.events;
 import com.erp.modules.stock.domain.dto.TransferDispatchedPayload;
 import com.erp.modules.stock.domain.dto.TransferReceivedPayload;
 import com.erp.modules.stock.domain.enums.MovementType;
+import com.erp.modules.stock.service.InventoryValuationService;
 import com.erp.modules.stock.service.StockPostingService;
 import com.erp.platform.events.DomainEvent;
 import com.erp.platform.events.DomainEventHandler;
@@ -30,15 +31,18 @@ public class TransferReceiveStockHandler implements DomainEventHandler {
 
     static final String CONSUMER = "STOCK.TRANSFER_RECEIVE";
 
-    private final IdempotencyGuard    guard;
-    private final StockPostingService posting;
-    private final ObjectMapper        objectMapper;
+    private final IdempotencyGuard          guard;
+    private final StockPostingService       posting;
+    private final InventoryValuationService valuation;
+    private final ObjectMapper              objectMapper;
 
     public TransferReceiveStockHandler(IdempotencyGuard guard,
                                         StockPostingService posting,
+                                        InventoryValuationService valuation,
                                         ObjectMapper objectMapper) {
         this.guard        = guard;
         this.posting      = posting;
+        this.valuation    = valuation;
         this.objectMapper = objectMapper;
     }
 
@@ -83,6 +87,13 @@ public class TransferReceiveStockHandler implements DomainEventHandler {
                         null, null, payload.receivedAt(),
                         null,
                         line.unitCostAmount(), line.valueAmount());
+
+                // (3) Move on_hand_value from in-transit → dest so valuation stays correct (issue #12).
+                valuation.transferCost(
+                        payload.companyId(),
+                        payload.destBranchId(), payload.inTransitLocationId(),
+                        payload.destBranchId(), payload.destLocationId(),
+                        line.productId(), line.qtyInBase());
             }
         } finally {
             if (previous == null) {
