@@ -66,6 +66,7 @@ CREATE TABLE statutory_rate_sets (
     employer_rate        NUMERIC(9,4),
     basis                VARCHAR(16)  NOT NULL,
     ceiling_amount       NUMERIC(19,4),
+    floor_amount         NUMERIC(19,4),                          -- P2-M5: optional minimum-basis floor
     headcount_threshold  SMALLINT,
     active               BOOLEAN      NOT NULL DEFAULT true,
     description          VARCHAR(160),

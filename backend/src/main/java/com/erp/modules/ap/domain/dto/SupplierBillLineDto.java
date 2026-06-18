@@ -26,5 +26,8 @@ public record SupplierBillLineDto(
         BigDecimal vatRate,
         BigDecimal lineVatAmount,
         // D-8: optional GL account override for service lines
-        Long glAccountId
+        Long glAccountId,
+        // P2: per-line dimension tags (soft refs → dimension_values.id)
+        Long costCentreValueId,
+        Long departmentValueId
 ) {}

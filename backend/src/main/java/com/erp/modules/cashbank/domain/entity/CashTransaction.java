@@ -39,6 +39,16 @@ public class CashTransaction extends UidEntity {
     @Column(name = "txn_date", nullable = false, updatable = false)
     private LocalDate txnDate;
 
+    /** P2: bank value date (when funds actually cleared). Nullable. */
+    @Column(name = "value_date")
+    @Setter
+    private LocalDate valueDate;
+
+    /** P2: linked cheque (soft ref → cheques.id; no DB FK — cheques created later in V13). Nullable. */
+    @Column(name = "cheque_id")
+    @Setter
+    private Long chequeId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "direction", nullable = false, length = 3, updatable = false)
     private CashTxnDirection direction;

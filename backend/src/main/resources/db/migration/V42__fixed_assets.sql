@@ -29,6 +29,10 @@ CREATE TABLE fixed_assets (
     location                    VARCHAR(200),
     cost_centre_id              BIGINT,
     asset_tag                   VARCHAR(100),
+    serial_number               VARCHAR(120),   -- P2: manufacturer serial number
+    model                       VARCHAR(120),   -- P2: model designation
+    manufacturer                VARCHAR(120),   -- P2: manufacturer name
+    barcode                     VARCHAR(120),   -- P2: scannable barcode/asset label
     capitalised_gl_entry_uid    VARCHAR(26),
     disposed_at                 DATE,
     version                     BIGINT          NOT NULL DEFAULT 0,

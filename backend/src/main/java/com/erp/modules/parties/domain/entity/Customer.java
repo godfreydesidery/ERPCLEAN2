@@ -3,6 +3,7 @@ package com.erp.modules.parties.domain.entity;
 import com.erp.modules.parties.domain.enums.CreditStatus;
 import com.erp.modules.parties.domain.enums.CustomerKind;
 import com.erp.modules.parties.domain.enums.PartyType;
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.money.Money;
 import jakarta.persistence.AttributeOverride;
 import jakarta.persistence.AttributeOverrides;
@@ -80,6 +81,25 @@ public class Customer extends PartyBase {
     @Column(name = "credit_hold_reason", length = 255)
     @Setter
     private String creditHoldReason;
+
+    // -------------------------------------------------------------------------
+    // P2 mechanical — tax exemption + default currency
+    // -------------------------------------------------------------------------
+
+    /** P2: customer tax-exemption flag. */
+    @Column(name = "tax_exempt", nullable = false)
+    @Setter
+    private boolean taxExempt = false;
+
+    /** P2: tax-exemption certificate/reference (set when taxExempt). */
+    @Column(name = "tax_exemption_ref", length = 80)
+    @Setter
+    private String taxExemptionRef;
+
+    /** P2: customer default transaction currency (CurrencyCode value type → VARCHAR(3)). */
+    @Column(name = "default_currency", length = 3)
+    @Setter
+    private CurrencyCode defaultCurrency;
 
     protected Customer() {
         // JPA

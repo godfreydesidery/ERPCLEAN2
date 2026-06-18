@@ -1,6 +1,7 @@
 package com.erp.modules.crm.domain.entity;
 
 import com.erp.platform.common.money.CurrencyCode;
+import com.erp.modules.crm.domain.enums.OpportunityLossReason;
 import com.erp.modules.crm.domain.enums.OpportunityStatus;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.domain.UidEntity;
@@ -92,9 +93,24 @@ public class Opportunity extends UidEntity {
     @Setter
     private Instant lostAt;
 
+    /** P2: swapped from free-text to enum; column kept (chk_opportunity_loss_reason). */
+    @Enumerated(EnumType.STRING)
     @Column(name = "loss_reason", length = 255)
     @Setter
-    private String lossReason;
+    private OpportunityLossReason lossReason;
+
+    @Column(name = "next_step", length = 255)
+    @Setter
+    private String nextStep;
+
+    @Column(name = "next_action_date")
+    @Setter
+    private LocalDate nextActionDate;
+
+    /** P2: stamped on stage change to drive 'days in current stage' funnel ageing. */
+    @Column(name = "stage_changed_at")
+    @Setter
+    private Instant stageChangedAt;
 
     @Column(name = "converted_document_kind", length = 20)
     @Setter

@@ -34,6 +34,16 @@ public class PayrollLineItem extends UidEntity {
     @Setter
     private BigDecimal amount;
 
+    /** Taxable snapshot captured at calculate time (P2-M5). */
+    @Column(name = "taxable")
+    @Setter
+    private Boolean taxable;
+
+    /** Pensionable snapshot captured at calculate time (P2-M5). */
+    @Column(name = "pensionable")
+    @Setter
+    private Boolean pensionable;
+
     @Column(name = "gl_account_id")
     @Setter
     private Long glAccountId;

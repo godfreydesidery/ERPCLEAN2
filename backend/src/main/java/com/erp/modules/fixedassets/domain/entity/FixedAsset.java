@@ -110,6 +110,22 @@ public class FixedAsset extends UidEntity {
     @Setter
     private String assetTag;
 
+    @Column(name = "serial_number", length = 120)
+    @Setter
+    private String serialNumber;
+
+    @Column(name = "model", length = 120)
+    @Setter
+    private String model;
+
+    @Column(name = "manufacturer", length = 120)
+    @Setter
+    private String manufacturer;
+
+    @Column(name = "barcode", length = 120)
+    @Setter
+    private String barcode;
+
     /** The capitalisation journal uid — audit trace, set on IN_SERVICE. */
     @Column(name = "capitalised_gl_entry_uid", length = 26)
     @Setter

@@ -3,6 +3,7 @@ package com.erp.modules.hr.service;
 import com.erp.modules.hr.domain.entity.PayeBand;
 import com.erp.modules.hr.domain.entity.PayeBandSet;
 import com.erp.modules.hr.domain.entity.StatutoryRateSet;
+import com.erp.modules.hr.domain.enums.StatutoryBasis;
 import com.erp.modules.hr.domain.enums.StatutoryRateType;
 import com.erp.modules.hr.repository.PayeBandRepository;
 import com.erp.modules.hr.repository.PayeBandSetRepository;
@@ -188,11 +189,12 @@ public class StatutoryCalculator {
         return found.isEmpty() ? Optional.empty() : Optional.of(found.get(0));
     }
 
-    private BigDecimal basisAmount(String basis, BigDecimal gross, BigDecimal basic, BigDecimal pensionable) {
-        return switch (basis.toUpperCase()) {
-            case "BASIC"        -> basic;
-            case "PENSIONABLE"  -> pensionable;
-            default             -> gross; // GROSS
+    private BigDecimal basisAmount(StatutoryBasis basis, BigDecimal gross, BigDecimal basic, BigDecimal pensionable) {
+        if (basis == null) return gross;
+        return switch (basis) {
+            case BASIC        -> basic;
+            case PENSIONABLE  -> pensionable;
+            case GROSS        -> gross;
         };
     }
 

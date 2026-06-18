@@ -200,7 +200,8 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
                 n.getId(), n.getUid(), n.getCompanyId(), n.getBranchId(), n.getSupplierId(),
                 n.getDebitNoteNumber(), n.getSupplierBillId(), n.getNoteDate(),
                 n.getAmount(), n.getNetAmount(), n.getVatAmount(),
-                n.getCurrency().value(), n.getReason(), n.getGlEntryUid(), n.getOrigin());
+                n.getCurrency().value(), n.getReason(), n.getGlEntryUid(), n.getOrigin(),
+                n.getOriginRef());
     }
 
     private Long branchId() {

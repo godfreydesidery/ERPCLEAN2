@@ -93,6 +93,11 @@ public class PayrollLine extends UidEntity {
     @Column(name = "currency", nullable = false, length = 3)
     private CurrencyCode currency;
 
+    /** Employment-contract snapshot at calculate time (P2-M5, soft-FK employment_contracts). */
+    @Column(name = "contract_id")
+    @Setter
+    private Long contractId;
+
     // ---- Payee snapshot (set at calculate time, ADR-0040 D-11) ----
 
     @Column(name = "payee_method", length = 20)

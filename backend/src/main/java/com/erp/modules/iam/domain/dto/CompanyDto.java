@@ -14,6 +14,9 @@ public record CompanyDto(
         String name,
         String legalName,
         String taxId,
+        String vrn,
+        String logoRef,
+        Short fiscalYearStartMonth,
         String timeZone,
         String baseCurrency,
         String status) {
@@ -27,6 +30,9 @@ public record CompanyDto(
                 c.getName(),
                 c.getLegalName(),
                 c.getTaxId(),
+                c.getVrn(),
+                c.getLogoRef(),
+                c.getFiscalYearStartMonth(),
                 c.getTimeZone(),
                 c.getBaseCurrency(),
                 c.getStatus().name());

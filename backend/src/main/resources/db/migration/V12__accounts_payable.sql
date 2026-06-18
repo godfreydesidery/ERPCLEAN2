@@ -25,6 +25,8 @@ CREATE TABLE supplier_bills (
     purchase_order_uid   VARCHAR(26),
     bill_date            DATE            NOT NULL,
     due_date             DATE            NOT NULL,
+    tax_point_date       DATE,                               -- P2: VAT tax-point (supply date), nullable
+    received_date        DATE,                               -- P2: date the bill was physically received, nullable
     net_amount           NUMERIC(19,4)   NOT NULL,
     vat_amount           NUMERIC(19,4)   NOT NULL DEFAULT 0,
     gross_amount         NUMERIC(19,4)   NOT NULL,
@@ -90,6 +92,10 @@ CREATE TABLE supplier_bill_lines (
     line_vat_amount  NUMERIC(19,4)   NOT NULL DEFAULT 0,   -- lineNetAmount × vatRate; 0 if no VAT
     -- D-8: optional per-line GL account override for service / non-stock lines
     gl_account_id    BIGINT,                 -- intra-DB FK → chart_of_accounts(id); null = use PURCHASES config key
+    -- P2: per-line dimension tags (mirror journal_lines cost_centre_value_id/department_value_id).
+    -- Scalar soft-FK BIGINT (no DB FK here: dimension_values is created later in V23).
+    cost_centre_value_id BIGINT,             -- P2: Cost Centre dimension (soft ref → dimension_values.id), nullable
+    department_value_id  BIGINT,             -- P2: Department dimension (soft ref → dimension_values.id), nullable
     currency         VARCHAR(3)      NOT NULL,
     created_at       TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by       BIGINT,
@@ -193,6 +199,8 @@ CREATE TABLE ap_payment_allocations (
     ap_payment_id    BIGINT          NOT NULL,
     supplier_bill_id BIGINT          NOT NULL,
     allocated_amount NUMERIC(19,4)   NOT NULL,
+    allocated_at     TIMESTAMPTZ,                        -- P2: when this allocation was made (mirrors AR), nullable
+    allocated_by     BIGINT,                             -- P2: actor who made this allocation (mirrors AR), nullable
     created_at       TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by       BIGINT,
 
@@ -221,6 +229,10 @@ CREATE TABLE ap_debit_notes (
     currency            VARCHAR(3)      NOT NULL,
     reason              VARCHAR(255)    NOT NULL,
     gl_entry_uid        VARCHAR(26),
+    -- P2: clean-origin support. `origin` (free-text above) historically carries a combined
+    -- "KIND:{uid}" tag (e.g. PURCHASE_RETURN:{uid}); origin_ref isolates the uid suffix so the
+    -- kind can move to the ApDebitNoteOrigin enum without losing the source-document reference.
+    origin_ref          VARCHAR(60),                          -- P2: source-document uid suffix, nullable
     version             BIGINT          NOT NULL DEFAULT 0,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by          BIGINT,

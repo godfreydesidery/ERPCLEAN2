@@ -136,6 +136,9 @@ CREATE TABLE employee_loan_installments (
     due_amount          NUMERIC(19,4) NOT NULL,
     due_period          VARCHAR(7)    NOT NULL,
     deducted_in_run_uid VARCHAR(26),
+    deducted_amount     NUMERIC(19,4),                          -- P2-M5: actual amount deducted (snapshot)
+    due_date            DATE,                                   -- P2-M5: scheduled due date
+    paid_at             TIMESTAMPTZ,                            -- P2-M5: timestamp installment was deducted/paid
     status              VARCHAR(12)   NOT NULL DEFAULT 'PENDING',
     version             BIGINT        NOT NULL DEFAULT 0,
     created_at          TIMESTAMPTZ   NOT NULL DEFAULT now(),

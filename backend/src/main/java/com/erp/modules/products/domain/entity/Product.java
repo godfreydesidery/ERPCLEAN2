@@ -133,6 +133,40 @@ public class Product extends UidEntity {
     private String category;
 
     // -------------------------------------------------------------------------
+    // P2-M3 — descriptive / logistics attributes. All nullable, additive-safe.
+    // -------------------------------------------------------------------------
+
+    /** Product brand (P2-M3). Nullable. */
+    @Column(name = "brand", length = 120)
+    @Setter
+    private String brand;
+
+    /** Manufacturer name (P2-M3). Nullable. */
+    @Column(name = "manufacturer", length = 160)
+    @Setter
+    private String manufacturer;
+
+    /** Unit weight (P2-M3). Nullable. */
+    @Column(name = "weight", precision = 19, scale = 6)
+    @Setter
+    private java.math.BigDecimal weight;
+
+    /** Unit volume (P2-M3). Nullable. */
+    @Column(name = "volume", precision = 19, scale = 6)
+    @Setter
+    private java.math.BigDecimal volume;
+
+    /** Free-text dimensions, e.g. LxWxH (P2-M3). Nullable. */
+    @Column(name = "dimensions", length = 80)
+    @Setter
+    private String dimensions;
+
+    /** Harmonised-system customs code (P2-M3). Nullable. */
+    @Column(name = "hs_code", length = 20)
+    @Setter
+    private String hsCode;
+
+    // -------------------------------------------------------------------------
     // D-10 — Product planning + sourcing (ADR-0040)
     // All nullable — not required on initial creation. Quantities in base UoM.
     // -------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 package com.erp.modules.purchases.domain.dto;
 
 import com.erp.modules.purchases.domain.entity.PurchaseRequisition;
+import com.erp.modules.purchases.domain.enums.RequisitionPriority;
 import com.erp.modules.purchases.domain.enums.RequisitionStatus;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -13,6 +14,8 @@ public record PurchaseRequisitionDto(
         Long   branchId,
         String requisitionNumber,
         RequisitionStatus status,
+        RequisitionPriority priority,
+        Long preferredSupplierId,
         LocalDate requiredByDate,
         String costCentreCode,
         String approvalRequestUid,
@@ -33,6 +36,7 @@ public record PurchaseRequisitionDto(
                 r.getId(), r.getUid(),
                 r.getCompanyId(), r.getBranchId(),
                 r.getRequisitionNumber(), r.getStatus(),
+                r.getPriority(), r.getPreferredSupplierId(),
                 r.getRequiredByDate(), r.getCostCentreCode(),
                 r.getApprovalRequestUid(), r.getApprovalStatus(),
                 r.getConvertedToType(), r.getConvertedToUid(),

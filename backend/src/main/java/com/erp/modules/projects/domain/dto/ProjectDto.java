@@ -22,6 +22,8 @@ public record ProjectDto(
         ProjectStatus projectStatus,
         LocalDate plannedStartDate,
         LocalDate plannedEndDate,
+        LocalDate actualStartDate,
+        LocalDate actualEndDate,
         BigDecimal budgetAmount,
         String currency,
         String notes,

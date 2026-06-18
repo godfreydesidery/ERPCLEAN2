@@ -63,6 +63,18 @@ public class Activity extends UidEntity {
     @Setter
     private Long assigneeUserId;
 
+    @Column(name = "outcome", length = 255)
+    @Setter
+    private String outcome;
+
+    @Column(name = "reminder_at")
+    @Setter
+    private Instant reminderAt;
+
+    @Column(name = "duration_minutes")
+    @Setter
+    private Integer durationMinutes;
+
     @Column(name = "done", nullable = false)
     @Setter
     private boolean done = false;

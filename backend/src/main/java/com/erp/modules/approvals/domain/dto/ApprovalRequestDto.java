@@ -23,6 +23,7 @@ public record ApprovalRequestDto(
         BigDecimal amount,
         String currency,
         ApprovalRequestStatus status,
+        Integer currentStepSequence,
         boolean autoApproved,
         Long sourcePolicyId,
         String sourcePolicyUid,

@@ -87,6 +87,10 @@ CREATE TABLE standing_orders (
     start_date     DATE          NOT NULL,
     end_date       DATE,
     next_run_date  DATE          NOT NULL,
+    last_run_date  DATE,                                 -- P2-M3: date of the most recent generation run
+    occurrences_generated INT,                           -- P2-M3: running count of SOs generated
+    max_occurrences INT,                                 -- P2-M3: optional cap on total generations
+    auto_confirm   BOOLEAN       NOT NULL DEFAULT false, -- P2-M3: auto-confirm generated SOs
     status         VARCHAR(20)   NOT NULL DEFAULT 'ACTIVE',
     notes          VARCHAR(500),
     version        BIGINT        NOT NULL DEFAULT 0,

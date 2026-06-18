@@ -41,6 +41,11 @@ public class PriceTier extends UidEntity {
     @Setter
     private BigDecimal minQty;
 
+    /** Optional quantity-break ceiling, in the product's sell unit (P2-M3). Nullable. */
+    @Column(name = "max_qty", precision = 19, scale = 6)
+    @Setter
+    private BigDecimal maxQty;
+
     /** The tier unit price for lines at >= minQty. CHECK >= 0. */
     @Column(name = "unit_price_amount", nullable = false, precision = 19, scale = 4)
     @Setter

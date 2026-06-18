@@ -26,10 +26,14 @@ CREATE TABLE customers (
     postal_address          VARCHAR(255),
     region                  VARCHAR(80),
     district                VARCHAR(80),
+    country                 VARCHAR(2),                 -- P2: PartyBase country (ISO-3166 alpha-2)
     customer_kind           VARCHAR(20)     NOT NULL,
     credit_limit_amount     NUMERIC(19,4),
     credit_limit_currency   VARCHAR(3),
     payment_terms_days      INTEGER,
+    tax_exempt              BOOLEAN         NOT NULL DEFAULT false,  -- P2: customer tax-exemption flag
+    tax_exemption_ref       VARCHAR(80),                -- P2: tax-exemption certificate/reference
+    default_currency        VARCHAR(3),                 -- P2: customer default transaction currency (CurrencyCode)
     status                  VARCHAR(32)     NOT NULL DEFAULT 'ACTIVE',
     version                 BIGINT          NOT NULL DEFAULT 0,
     created_at              TIMESTAMPTZ     NOT NULL DEFAULT now(),
@@ -70,6 +74,7 @@ CREATE TABLE suppliers (
     postal_address          VARCHAR(255),
     region                  VARCHAR(80),
     district                VARCHAR(80),
+    country                 VARCHAR(2),                 -- P2: PartyBase country (ISO-3166 alpha-2)
     supplier_kind           VARCHAR(20)     NOT NULL,
     payment_terms_days      INTEGER,
     status                  VARCHAR(32)     NOT NULL DEFAULT 'ACTIVE',
@@ -108,6 +113,7 @@ CREATE TABLE agents (
     postal_address          VARCHAR(255),
     region                  VARCHAR(80),
     district                VARCHAR(80),
+    country                 VARCHAR(2),                 -- P2: PartyBase country (ISO-3166 alpha-2)
     agent_kind              VARCHAR(20)     NOT NULL,
     app_user_id             BIGINT,
     status                  VARCHAR(32)     NOT NULL DEFAULT 'ACTIVE',
@@ -151,6 +157,7 @@ CREATE TABLE other_parties (
     postal_address          VARCHAR(255),
     region                  VARCHAR(80),
     district                VARCHAR(80),
+    country                 VARCHAR(2),                 -- P2: PartyBase country (ISO-3166 alpha-2)
     other_kind              VARCHAR(40),
     status                  VARCHAR(32)     NOT NULL DEFAULT 'ACTIVE',
     version                 BIGINT          NOT NULL DEFAULT 0,

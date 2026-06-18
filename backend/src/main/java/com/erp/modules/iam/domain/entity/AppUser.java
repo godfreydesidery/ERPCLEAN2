@@ -57,6 +57,26 @@ public class AppUser extends UidEntity {
     @Column(name = "password_changed_at")
     private Instant passwordChangedAt;
 
+    /** P2: force the user to change password on next login. */
+    @Column(name = "must_change_password", nullable = false)
+    @Setter
+    private boolean mustChangePassword = false;
+
+    /** P2: password expiry timestamp (nullable). */
+    @Column(name = "password_expires_at")
+    @Setter
+    private Instant passwordExpiresAt;
+
+    /** P2: last successful login IP (IPv6-max length); convenience denormalisation of audit_logs. */
+    @Column(name = "last_login_ip", length = 45)
+    @Setter
+    private String lastLoginIp;
+
+    /** P2: soft-FK to HR employee master — scalar, no @ManyToOne (cross-module convention). */
+    @Column(name = "employee_id")
+    @Setter
+    private Long employeeId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     @Setter

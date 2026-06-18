@@ -2,6 +2,7 @@ package com.erp.modules.purchases.domain.entity;
 
 import com.erp.platform.common.money.CurrencyCode;
 import com.erp.modules.purchases.domain.enums.PoApprovalStatus;
+import com.erp.modules.purchases.domain.enums.PoBillingStatus;
 import com.erp.modules.purchases.domain.enums.PurchaseOrderStatus;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
@@ -71,6 +72,22 @@ public class PurchaseOrder extends UidEntity {
     @Column(name = "order_total_amount", nullable = false, precision = 19, scale = 4)
     @Setter
     private BigDecimal orderTotalAmount = BigDecimal.ZERO;
+
+    /** P2: soft-FK app_users.id — the assigned purchasing agent (buyer). Nullable. */
+    @Column(name = "buyer_id")
+    @Setter
+    private Long buyerId;
+
+    /** P2: header roll-up of amount billed against this PO. Nullable. */
+    @Column(name = "invoiced_amount", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal invoicedAmount;
+
+    /** P2: header billing roll-up status. Nullable (no maintenance logic in P2). */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "billing_status", length = 20)
+    @Setter
+    private PoBillingStatus billingStatus;
 
     /** Optional expected-delivery date (operational convenience). */
     @Column(name = "expected_date")

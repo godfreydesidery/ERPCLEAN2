@@ -214,6 +214,7 @@ public class ProjectServiceImpl implements ProjectService {
                 p.getCustomerId(), p.getManagerUserId(),
                 p.getProjectStatus(),
                 p.getPlannedStartDate(), p.getPlannedEndDate(),
+                p.getActualStartDate(), p.getActualEndDate(),
                 p.getBudgetAmount(), CurrencyCode.value(p.getCurrency()),
                 p.getNotes(), p.getStatus(),
                 p.getActivatedAt(), p.getCompletedAt(), p.getCancelledAt()

@@ -14,6 +14,7 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -105,6 +106,21 @@ public class PurchaseOrderLine {
     @Column(name = "received_qty_in_base", nullable = false, precision = 19, scale = 6)
     @Setter
     private BigDecimal receivedQtyInBase = BigDecimal.ZERO;
+
+    /** P2: cumulative billed quantity in base units (mirrors received_qty_in_base). Nullable. */
+    @Column(name = "billed_qty_in_base", precision = 19, scale = 6)
+    @Setter
+    private BigDecimal billedQtyInBase;
+
+    /** P2: cancelled quantity in base units. Nullable. */
+    @Column(name = "cancelled_qty", precision = 19, scale = 6)
+    @Setter
+    private BigDecimal cancelledQty;
+
+    /** P2: optional per-line required-by date. */
+    @Column(name = "required_by_date")
+    @Setter
+    private LocalDate requiredByDate;
 
     /** Unit cost per unit_id (a Money amount, ADR-0005). Required; >= 0. */
     @Column(name = "unit_cost_amount", nullable = false, precision = 19, scale = 4)

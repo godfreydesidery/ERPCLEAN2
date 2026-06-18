@@ -12,6 +12,7 @@ import com.erp.modules.stock.domain.entity.StockOnHand;
 import com.erp.modules.stock.domain.entity.StockTransfer;
 import com.erp.modules.stock.domain.entity.StockTransferLine;
 import com.erp.modules.stock.domain.enums.MovementType;
+import com.erp.modules.stock.domain.enums.StockTransferMode;
 import com.erp.modules.stock.domain.enums.StockTransferStatus;
 import com.erp.modules.stock.repository.StockOnHandRepository;
 import com.erp.modules.stock.repository.StockTransferLineRepository;
@@ -135,7 +136,7 @@ public class StockTransferServiceImpl implements StockTransferService {
         if (transfer.getStatus() != StockTransferStatus.DRAFT) {
             throw new IllegalStateException("Transfer " + transferUid + " is not in DRAFT status.");
         }
-        if (!"INSTANT".equals(transfer.getTransferMode())) {
+        if (transfer.getTransferMode() != StockTransferMode.INSTANT) {
             throw new IllegalStateException("Transfer " + transferUid + " is not an INSTANT transfer.");
         }
 
@@ -184,7 +185,7 @@ public class StockTransferServiceImpl implements StockTransferService {
         if (transfer.getStatus() != StockTransferStatus.DRAFT) {
             throw new IllegalStateException("Transfer " + transferUid + " is not in DRAFT status.");
         }
-        if (!"IN_TRANSIT".equals(transfer.getTransferMode())) {
+        if (transfer.getTransferMode() != StockTransferMode.IN_TRANSIT) {
             throw new IllegalStateException("Transfer " + transferUid + " is not an IN_TRANSIT transfer.");
         }
 
@@ -338,7 +339,9 @@ public class StockTransferServiceImpl implements StockTransferService {
                 t.getStatus(), t.getTransferMode(),
                 t.getSourceBranchId(), t.getSourceLocationId(),
                 t.getDestBranchId(), t.getDestLocationId(),
-                t.getTransferDate(), t.getDispatchedAt(), t.getReceivedAt(),
+                t.getTransferDate(), t.getExpectedArrivalDate(),
+                t.getDispatchedAt(), t.getDispatchedBy(),
+                t.getReceivedAt(), t.getReceivedBy(),
                 t.getNotes(), lineDtos);
     }
 }

@@ -54,6 +54,16 @@ public class ProductPrice {
     @Setter
     private Money price;
 
+    /** Price validity start (P2-M3). Nullable. */
+    @Column(name = "effective_from")
+    @Setter
+    private java.time.LocalDate effectiveFrom;
+
+    /** Price validity end (P2-M3). Nullable. */
+    @Column(name = "effective_to")
+    @Setter
+    private java.time.LocalDate effectiveTo;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

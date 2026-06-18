@@ -9,7 +9,9 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -75,6 +77,23 @@ public class Lead extends UidEntity {
     @Column(name = "customer_uid", length = 26)
     @Setter
     private String customerUid;
+
+    /** P2: lead-qualification estimate (rating/score remains ADR-deferred). */
+    @Column(name = "estimated_value", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal estimatedValue;
+
+    @Column(name = "next_follow_up_date")
+    @Setter
+    private LocalDate nextFollowUpDate;
+
+    @Column(name = "industry", length = 120)
+    @Setter
+    private String industry;
+
+    @Column(name = "region", length = 120)
+    @Setter
+    private String region;
 
     @Column(name = "disqualify_reason", length = 255)
     @Setter

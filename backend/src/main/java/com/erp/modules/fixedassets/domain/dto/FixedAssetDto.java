@@ -30,6 +30,10 @@ public record FixedAssetDto(
         String location,
         Long costCentreId,
         String assetTag,
+        String serialNumber,
+        String model,
+        String manufacturer,
+        String barcode,
         String capitalisedGlEntryUid,
         LocalDate disposedAt
 ) {}

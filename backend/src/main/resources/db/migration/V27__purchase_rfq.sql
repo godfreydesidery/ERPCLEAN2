@@ -54,6 +54,8 @@ CREATE TABLE rfq_lines (
     unit_name               VARCHAR(60)      NOT NULL,            -- snapshot
     quantity                NUMERIC(19,6)    NOT NULL,
     quantity_in_base        NUMERIC(19,6)    NOT NULL,
+    required_by_date        DATE,                                 -- P2: per-line required-by date
+    specification           VARCHAR(2000),                        -- P2: free-text spec / notes solicited from suppliers
     version                 BIGINT           NOT NULL DEFAULT 0,
     created_at              TIMESTAMPTZ      NOT NULL DEFAULT now(),
     created_by              BIGINT,
@@ -81,12 +83,17 @@ CREATE TABLE rfq_supplier (
     company_id              BIGINT           NOT NULL,
     branch_id               BIGINT           NOT NULL,
     sent_at                 TIMESTAMPTZ,
+    responded_at            TIMESTAMPTZ,                          -- P2: when this supplier responded
+    response_status         VARCHAR(20),                          -- P2: PENDING|RESPONDED|DECLINED|NO_RESPONSE
+    supplier_quote_uid      VARCHAR(26),                          -- P2: scalar link to the supplier_quotes uid they submitted
     version                 BIGINT           NOT NULL DEFAULT 0,
     created_at              TIMESTAMPTZ      NOT NULL DEFAULT now(),
     created_by              BIGINT,
 
     CONSTRAINT uq_rfq_supplier_uid UNIQUE (uid),
     CONSTRAINT uq_rfq_supplier     UNIQUE (rfq_id, supplier_id),
+    CONSTRAINT chk_rfq_supplier_response_status                                                            -- P2
+        CHECK (response_status IS NULL OR response_status IN ('PENDING','RESPONDED','DECLINED','NO_RESPONSE')),
     CONSTRAINT fk_rfq_supplier_rfq      FOREIGN KEY (rfq_id)      REFERENCES rfqs (id),
     CONSTRAINT fk_rfq_supplier_supplier FOREIGN KEY (supplier_id) REFERENCES suppliers (id),
     CONSTRAINT fk_rfq_supplier_company  FOREIGN KEY (company_id)  REFERENCES companies (id),

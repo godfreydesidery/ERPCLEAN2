@@ -128,7 +128,8 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
                 t.getId(), t.getUid(), t.getProjectId(),
                 t.getCompanyId(), t.getBranchId(),
                 t.getTaskCode(), t.getName(), t.getParentId(),
-                t.getPlannedHours(), t.isBillable(), t.getStatus()
+                t.getPlannedHours(), t.getPlannedStartDate(), t.getPlannedEndDate(),
+                t.getActualHours(), t.getAssigneeUserId(), t.isBillable(), t.getStatus()
         );
     }
 }

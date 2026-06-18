@@ -68,6 +68,15 @@ public class ApDebitNote extends UidEntity {
     @Setter
     private String origin;
 
+    /**
+     * P2: source-document uid suffix, isolated from the combined {@code KIND:{uid}} value historically
+     * carried in {@link #origin}. Lets the kind move to {@link com.erp.modules.ap.domain.enums.ApDebitNoteOrigin}
+     * without losing the source-document reference. Nullable.
+     */
+    @Column(name = "origin_ref", length = 60)
+    @Setter
+    private String originRef;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

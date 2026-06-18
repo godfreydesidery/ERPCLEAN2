@@ -274,7 +274,7 @@ public class PricingRuleServiceImpl implements PricingRuleService {
     private PriceTierDto toDto(PriceTier t) {
         return new PriceTierDto(t.getId(), t.getUid(), t.getCompanyId(),
                 t.getProductId(), t.getPriceListId(),
-                t.getMinQty(), t.getUnitPriceAmount(), CurrencyCode.value(t.getCurrency()), t.getStatus());
+                t.getMinQty(), t.getMaxQty(), t.getUnitPriceAmount(), CurrencyCode.value(t.getCurrency()), t.getStatus());
     }
 
     private CustomerPriceDto toDto(CustomerPrice cp) {

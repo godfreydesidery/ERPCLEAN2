@@ -220,6 +220,11 @@ public class CashBankAccountServiceImpl implements CashBankAccountService {
                 a.getId(), a.getUid(), a.getCompanyId(), a.getBranchId(),
                 a.getCode(), a.getName(), a.getAccountType(),
                 a.getBankName(), a.getBankAccountNo(), a.getBankBranch(),
+                // P2: bank-identifier detail
+                a.getIban(), a.getSwift(), a.getBic(), a.getSortCode(),
+                // P2: treasury limits + cached reconciliation figures
+                a.getOverdraftLimit(), a.getMinimumBalance(),
+                a.getLastReconciledDate(), a.getLastReconciledBalance(),
                 a.getCurrency().value(), a.getGlAccountId(), a.isDefault(), a.isActive());
     }
 }

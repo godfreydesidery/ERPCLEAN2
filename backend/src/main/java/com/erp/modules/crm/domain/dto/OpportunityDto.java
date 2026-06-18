@@ -1,6 +1,7 @@
 package com.erp.modules.crm.domain.dto;
 
 import com.erp.modules.crm.domain.entity.Opportunity;
+import com.erp.modules.crm.domain.enums.OpportunityLossReason;
 import com.erp.modules.crm.domain.enums.OpportunityStatus;
 import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.domain.MasterStatus;
@@ -30,7 +31,10 @@ public record OpportunityDto(
         LocalDate expectedCloseDate,
         Instant wonAt,
         Instant lostAt,
-        String lossReason,
+        OpportunityLossReason lossReason,
+        String nextStep,
+        LocalDate nextActionDate,
+        Instant stageChangedAt,
         String convertedDocumentKind,
         String convertedDocumentUid,
         Instant convertedAt,
@@ -50,6 +54,7 @@ public record OpportunityDto(
                 o.getSourceLeadId(), o.getSourceLeadUid(), o.getPipelineStageId(),
                 o.getWinProbability(), o.getEstimatedValueAmount(), CurrencyCode.value(o.getCurrency()),
                 o.getExpectedCloseDate(), o.getWonAt(), o.getLostAt(), o.getLossReason(),
+                o.getNextStep(), o.getNextActionDate(), o.getStageChangedAt(),
                 o.getConvertedDocumentKind(), o.getConvertedDocumentUid(), o.getConvertedAt(),
                 o.getStatus(), o.getVersion(), o.getCreatedAt(), o.getCreatedBy(),
                 o.getUpdatedAt(), o.getUpdatedBy(), lines);

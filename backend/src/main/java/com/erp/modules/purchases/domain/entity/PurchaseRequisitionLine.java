@@ -7,6 +7,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -57,6 +58,21 @@ public class PurchaseRequisitionLine extends UidEntity {
     @Column(name = "estimated_unit_cost", precision = 19, scale = 4)
     @Setter
     private BigDecimal estimatedUnitCost;
+
+    /** P2: optional per-line required-by date. */
+    @Column(name = "required_by_date")
+    @Setter
+    private LocalDate requiredByDate;
+
+    /** P2: soft-FK suppliers.id — line-level suggested source. Nullable. */
+    @Column(name = "suggested_supplier_id")
+    @Setter
+    private Long suggestedSupplierId;
+
+    /** P2: per-line traceability scalar uid to the produced PO line. Nullable. */
+    @Column(name = "converted_to_po_line_uid", length = 26)
+    @Setter
+    private String convertedToPoLineUid;
 
     @Column(name = "note", length = 255)
     @Setter

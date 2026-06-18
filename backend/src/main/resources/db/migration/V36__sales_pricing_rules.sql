@@ -14,6 +14,7 @@ CREATE TABLE price_tiers (
     product_id           BIGINT          NOT NULL,
     price_list_id        BIGINT          NOT NULL,
     min_qty              NUMERIC(19,6)   NOT NULL,
+    max_qty              NUMERIC(19,6),                  -- P2-M3: optional quantity-break ceiling
     unit_price_amount    NUMERIC(19,4)   NOT NULL,
     currency             VARCHAR(3)      NOT NULL,
     status               VARCHAR(20)     NOT NULL DEFAULT 'ACTIVE',

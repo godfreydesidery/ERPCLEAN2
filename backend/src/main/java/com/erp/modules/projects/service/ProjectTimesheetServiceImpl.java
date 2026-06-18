@@ -90,7 +90,7 @@ public class ProjectTimesheetServiceImpl implements ProjectTimesheetService {
         return new ProjectTimesheetDto(
                 t.getId(), t.getUid(), t.getProjectId(), t.getProjectTaskId(),
                 t.getCompanyId(), t.getBranchId(), t.getUserId(),
-                t.getWorkDate(), t.getHours(), t.isBillable(),
+                t.getWorkDate(), t.getHours(), t.getOvertimeHours(), t.isBillable(),
                 t.getPlannedRateAmount(), t.getNotes(), t.getStatus()
         );
     }

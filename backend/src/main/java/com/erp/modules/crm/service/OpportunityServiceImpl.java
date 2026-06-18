@@ -269,7 +269,7 @@ public class OpportunityServiceImpl implements OpportunityService {
 
         audit.record(AuditEvent.of(AuditActions.CRM_OPPORTUNITY_LOSE, "opportunities",
                 opp.getId(), opp.getUid())
-                .detail(Map.of("lossReason", req.lossReason())));
+                .detail(Map.of("lossReason", req.lossReason().name())));
         return toDto(opp);
     }
 

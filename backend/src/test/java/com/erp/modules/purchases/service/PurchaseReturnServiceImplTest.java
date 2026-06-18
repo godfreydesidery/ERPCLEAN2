@@ -308,6 +308,7 @@ class PurchaseReturnServiceImplTest {
                 1L, uid, 10L, 20L, 50L, number, null,
                 LocalDate.now(),
                 new BigDecimal("100.00"), new BigDecimal("100.00"), BigDecimal.ZERO,
-                "TZS", "Purchase return test", null, "PURCHASE_RETURN:PRET-UID-1");
+                "TZS", "Purchase return test", null, "PURCHASE_RETURN:PRET-UID-1",
+                null); // P2: originRef (uid suffix) — not split in this stub
     }
 }

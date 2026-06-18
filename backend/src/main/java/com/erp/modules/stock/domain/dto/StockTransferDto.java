@@ -1,5 +1,6 @@
 package com.erp.modules.stock.domain.dto;
 
+import com.erp.modules.stock.domain.enums.StockTransferMode;
 import com.erp.modules.stock.domain.enums.StockTransferStatus;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -14,14 +15,17 @@ public record StockTransferDto(
         Long companyId,
         String transferNumber,
         StockTransferStatus status,
-        String transferMode,
+        StockTransferMode transferMode,
         Long sourceBranchId,
         Long sourceLocationId,
         Long destBranchId,
         Long destLocationId,
         LocalDate transferDate,
+        LocalDate expectedArrivalDate,
         Instant dispatchedAt,
+        Long dispatchedBy,
         Instant receivedAt,
+        Long receivedBy,
         String notes,
         List<StockTransferLineDto> lines
 ) {}

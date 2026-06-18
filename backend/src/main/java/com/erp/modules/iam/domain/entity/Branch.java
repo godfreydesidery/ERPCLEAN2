@@ -1,5 +1,6 @@
 package com.erp.modules.iam.domain.entity;
 
+import com.erp.modules.iam.domain.enums.BranchType;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
@@ -47,6 +48,17 @@ public class Branch extends UidEntity {
     @Column(name = "is_default", nullable = false)
     @Setter
     private boolean isDefault = false;
+
+    /** P2: soft-FK to app_users/employee — scalar, no @ManyToOne (cross-module convention). */
+    @Column(name = "manager_id")
+    @Setter
+    private Long managerId;
+
+    /** P2: typed branch classification (nullable, descriptive only in v1). */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "branch_type", length = 20)
+    @Setter
+    private BranchType branchType;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)

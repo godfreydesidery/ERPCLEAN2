@@ -58,6 +58,16 @@ public class SupplierBill extends UidEntity {
     @Setter
     private LocalDate dueDate;
 
+    /** P2: VAT tax-point (supply) date. Nullable. */
+    @Column(name = "tax_point_date")
+    @Setter
+    private LocalDate taxPointDate;
+
+    /** P2: date the bill was physically received. Nullable. */
+    @Column(name = "received_date")
+    @Setter
+    private LocalDate receivedDate;
+
     @Column(name = "net_amount", nullable = false, precision = 19, scale = 4, updatable = false)
     private BigDecimal netAmount;
 
