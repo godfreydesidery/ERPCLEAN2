@@ -352,14 +352,20 @@ export class ShellComponent {
     },
   ];
 
-  /** Nav groups with permission-filtered items. Reactive: recomputes when permissions change. */
+  /**
+   * Nav groups with permission-filtered items. Reactive: recomputes when permissions change.
+   * Groups whose items are all filtered out are dropped entirely, so a user never sees a group
+   * header with no items under it (UI/UX: no dangling empty groups).
+   */
   readonly nav = computed<readonly NavGroup[]>(() =>
-    this.allNav.map((group) => ({
-      ...group,
-      items: group.items.filter(
-        (item) => !item.permission || this.session.hasPermission(item.permission),
-      ),
-    })),
+    this.allNav
+      .map((group) => ({
+        ...group,
+        items: group.items.filter(
+          (item) => !item.permission || this.session.hasPermission(item.permission),
+        ),
+      }))
+      .filter((group) => group.items.length > 0),
   );
 
   constructor() {
