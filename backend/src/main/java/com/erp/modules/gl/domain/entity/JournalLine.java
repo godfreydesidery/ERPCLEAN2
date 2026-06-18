@@ -7,6 +7,7 @@ import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
 import lombok.Getter;
+import lombok.Setter;
 
 /**
  * One leg of a journal entry (ADR-0013 D-2c/D-3, BR-GL-08).
@@ -76,6 +77,36 @@ public class JournalLine extends UidEntity {
     /** ProjectCostType name (MATERIAL/LABOUR/OVERHEAD/…); nullable. */
     @Column(name = "project_cost_type", length = 20)
     private String projectCostType;
+
+    // --- tax tagging (P2-M1) — informational; does not drive posting logic ---
+    /** Tax code tag (e.g. "VAT-STANDARD"); nullable. */
+    @Column(name = "tax_code", length = 30)
+    private String taxCode;
+
+    /** Tax amount on this line; nullable. */
+    @Column(name = "tax_amount", precision = 19, scale = 4)
+    private BigDecimal taxAmount;
+
+    // --- P3: statistical quantity postings + GL reconciliation marker (all nullable, additive) ---
+    /** Non-monetary statistical quantity carried on this line (e.g. headcount, units); nullable. */
+    @Column(name = "statistical_quantity", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal statisticalQuantity;
+
+    /** Unit of measure for {@link #statisticalQuantity}; nullable. */
+    @Column(name = "statistical_uom", length = 20)
+    @Setter
+    private String statisticalUom;
+
+    /** GL reconciliation / clearing group marker; nullable. */
+    @Column(name = "reconciliation_marker", length = 40)
+    @Setter
+    private String reconciliationMarker;
+
+    /** Reconciliation cleared flag; default false. */
+    @Column(name = "cleared", nullable = false)
+    @Setter
+    private boolean cleared = false;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();

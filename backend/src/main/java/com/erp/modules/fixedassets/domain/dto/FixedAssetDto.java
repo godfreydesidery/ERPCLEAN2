@@ -30,6 +30,15 @@ public record FixedAssetDto(
         String location,
         Long costCentreId,
         String assetTag,
+        String serialNumber,
+        String model,
+        String manufacturer,
+        String barcode,
+        // P2 D7 — componentisation + warranty/insurance
+        Long parentAssetId,
+        LocalDate warrantyExpiry,
+        BigDecimal insuredValue,
+        String insurancePolicyNo,
         String capitalisedGlEntryUid,
         LocalDate disposedAt
 ) {}

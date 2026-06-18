@@ -11,5 +11,10 @@ public record LeaveBalanceDto(
         short asOfYear,
         BigDecimal entitledDays,
         BigDecimal takenDays,
-        BigDecimal balanceDays
+        BigDecimal balanceDays,
+        // Accrual / carry-forward breakdown (P2 D6, ADR-0041)
+        BigDecimal carriedForwardDays,
+        BigDecimal accruedDays,
+        BigDecimal pendingDays,
+        BigDecimal adjustmentDays
 ) {}

@@ -29,6 +29,14 @@ CREATE TABLE fixed_assets (
     location                    VARCHAR(200),
     cost_centre_id              BIGINT,
     asset_tag                   VARCHAR(100),
+    serial_number               VARCHAR(120),   -- P2: manufacturer serial number
+    model                       VARCHAR(120),   -- P2: model designation
+    manufacturer                VARCHAR(120),   -- P2: manufacturer name
+    barcode                     VARCHAR(120),   -- P2: scannable barcode/asset label
+    parent_asset_id             BIGINT,         -- P2 D7: componentisation — self soft-FK (parent asset), no DB FK
+    warranty_expiry             DATE,           -- P2 D7: warranty expiry date
+    insured_value               NUMERIC(19,4),  -- P2 D7: insured value (for insurance schedule)
+    insurance_policy_no         VARCHAR(60),    -- P2 D7: insurance policy reference number
     capitalised_gl_entry_uid    VARCHAR(26),
     disposed_at                 DATE,
     version                     BIGINT          NOT NULL DEFAULT 0,

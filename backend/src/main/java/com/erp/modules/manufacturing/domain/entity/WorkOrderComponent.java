@@ -45,6 +45,14 @@ public class WorkOrderComponent extends UidEntity {
     @Column(name = "issued_qty", nullable = false, precision = 19, scale = 6)
     private BigDecimal issuedQty = BigDecimal.ZERO;
 
+    /** Qty returned to stock from WIP (P2-M5). NULL until first return. */
+    @Column(name = "returned_qty", precision = 19, scale = 6)
+    private BigDecimal returnedQty;
+
+    /** Qty scrapped during consumption (P2-M5). NULL until first scrap. */
+    @Column(name = "scrap_qty", precision = 19, scale = 6)
+    private BigDecimal scrapQty;
+
     /** Σ value debited to WIP for this leaf across all issue events. */
     @Column(name = "issued_value", nullable = false, precision = 19, scale = 4)
     private BigDecimal issuedValue = BigDecimal.ZERO;
@@ -52,6 +60,10 @@ public class WorkOrderComponent extends UidEntity {
     /** Moving-average cost captured at last issue; NULL until first issue or if avg_cost was NULL. */
     @Column(name = "unit_cost_at_issue", precision = 19, scale = 4)
     private BigDecimal unitCostAtIssue;
+
+    /** Unit-of-measure snapshot (P2-M5). Scalar FK → units_of_measure(id). */
+    @Column(name = "unit_id")
+    private Long unitId;
 
     /** true if a costed WIP leg was skipped for this leaf (avg_cost NULL — BR-MFG-06). */
     @Column(name = "cost_skipped", nullable = false)
@@ -132,6 +144,21 @@ public class WorkOrderComponent extends UidEntity {
         touch(actorId);
     }
 
+    /** Set the unit-of-measure snapshot (P2-M5). */
+    public void setUnitId(Long unitId) {
+        this.unitId = unitId;
+    }
+
+    /** Set the returned-to-stock quantity (P2-M5). */
+    public void setReturnedQty(BigDecimal returnedQty) {
+        this.returnedQty = returnedQty;
+    }
+
+    /** Set the scrapped quantity (P2-M5). */
+    public void setScrapQty(BigDecimal scrapQty) {
+        this.scrapQty = scrapQty;
+    }
+
     private void touch(Long actorId) {
         this.updatedAt = Instant.now();
         this.updatedBy = actorId;
@@ -148,8 +175,11 @@ public class WorkOrderComponent extends UidEntity {
     public String               getComponentProductName() { return componentProductName; }
     public BigDecimal           getPlannedQty()           { return plannedQty; }
     public BigDecimal           getIssuedQty()            { return issuedQty; }
+    public BigDecimal           getReturnedQty()          { return returnedQty; }
+    public BigDecimal           getScrapQty()             { return scrapQty; }
     public BigDecimal           getIssuedValue()          { return issuedValue; }
     public BigDecimal           getUnitCostAtIssue()      { return unitCostAtIssue; }
+    public Long                 getUnitId()               { return unitId; }
     public boolean              isCostSkipped()           { return costSkipped; }
     public ComponentLineStatus  getStatus()               { return status; }
     public Instant              getCreatedAt()            { return createdAt; }

@@ -4,7 +4,9 @@ import com.erp.modules.crm.domain.entity.Lead;
 import com.erp.modules.crm.domain.enums.LeadSource;
 import com.erp.modules.crm.domain.enums.LeadStatus;
 import com.erp.platform.common.domain.MasterStatus;
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 
 public record LeadDto(
         Long id,
@@ -22,6 +24,10 @@ public record LeadDto(
         Long ownerUserId,
         Long customerId,
         String customerUid,
+        BigDecimal estimatedValue,
+        LocalDate nextFollowUpDate,
+        String industry,
+        String region,
         String disqualifyReason,
         String notes,
         Instant qualifiedAt,
@@ -40,7 +46,9 @@ public record LeadDto(
                 l.getLeadNumber(), l.getLeadStatus(), l.getLeadSource(),
                 l.getDisplayName(), l.getCompanyName(), l.getContactPerson(),
                 l.getPhone(), l.getEmail(), l.getOwnerUserId(),
-                l.getCustomerId(), l.getCustomerUid(), l.getDisqualifyReason(),
+                l.getCustomerId(), l.getCustomerUid(),
+                l.getEstimatedValue(), l.getNextFollowUpDate(), l.getIndustry(), l.getRegion(),
+                l.getDisqualifyReason(),
                 l.getNotes(), l.getQualifiedAt(), l.getConvertedAt(), l.getDisqualifiedAt(),
                 l.getStatus(), l.getVersion(), l.getCreatedAt(), l.getCreatedBy(),
                 l.getUpdatedAt(), l.getUpdatedBy());

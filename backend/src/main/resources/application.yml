@@ -105,3 +105,8 @@ erp:
     # app refuses to start. Never defaulted.
     admin-password: ${ERP_BOOTSTRAP_ADMIN_PASSWORD:}
     time-zone: ${ERP_BOOTSTRAP_TIME_ZONE:Africa/Dar_es_Salaam}
+    # Currency policy for the bootstrap company (ADR-0039 D-9). Defaults: Classic EAC-6 + USD + EUR.
+    currency:
+      base: ${ERP_BOOTSTRAP_CURRENCY_BASE:TZS}
+      default-currency: ${ERP_BOOTSTRAP_CURRENCY_DEFAULT:TZS}
+      enabled: ${ERP_BOOTSTRAP_CURRENCY_ENABLED:TZS,KES,UGX,RWF,BIF,SSP,USD,EUR}

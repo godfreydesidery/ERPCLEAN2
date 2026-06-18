@@ -92,6 +92,7 @@ public class DepartmentServiceImpl implements DepartmentService {
     }
 
     private DepartmentDto toDto(Department d) {
-        return new DepartmentDto(d.getId(), d.getUid(), d.getCompanyId(), d.getCode(), d.getName(), d.isActive());
+        return new DepartmentDto(d.getId(), d.getUid(), d.getCompanyId(), d.getCode(), d.getName(), d.isActive(),
+                d.getParentDepartmentId(), d.getManagerId(), d.getCostCentreValueId(), d.getBranchId());
     }
 }

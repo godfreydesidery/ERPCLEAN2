@@ -1,5 +1,6 @@
 package com.erp.modules.stock.domain.entity;
 
+import com.erp.modules.stock.domain.enums.StockTransferMode;
 import com.erp.modules.stock.domain.enums.StockTransferStatus;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
@@ -35,8 +36,9 @@ public class StockTransfer extends UidEntity {
     @Column(name = "status", nullable = false, length = 20)
     private StockTransferStatus status;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "transfer_mode", nullable = false, updatable = false, length = 12)
-    private String transferMode;
+    private StockTransferMode transferMode;
 
     @Column(name = "source_branch_id", nullable = false, updatable = false)
     private Long sourceBranchId;
@@ -53,11 +55,23 @@ public class StockTransfer extends UidEntity {
     @Column(name = "transfer_date", nullable = false)
     private LocalDate transferDate;
 
+    /** Planned in-transit arrival date (P2-M5). */
+    @Column(name = "expected_arrival_date")
+    private LocalDate expectedArrivalDate;
+
     @Column(name = "dispatched_at")
     private Instant dispatchedAt;
 
+    /** Actor who dispatched (P2-M5, soft-FK app_users). */
+    @Column(name = "dispatched_by")
+    private Long dispatchedBy;
+
     @Column(name = "received_at")
     private Instant receivedAt;
+
+    /** Actor who received (P2-M5, soft-FK app_users). */
+    @Column(name = "received_by")
+    private Long receivedBy;
 
     @Column(name = "notes", length = 500)
     private String notes;
@@ -84,7 +98,7 @@ public class StockTransfer extends UidEntity {
                          LocalDate transferDate, String notes, Long createdBy) {
         this.companyId        = companyId;
         this.transferNumber   = transferNumber;
-        this.transferMode     = transferMode;
+        this.transferMode     = transferMode != null ? StockTransferMode.valueOf(transferMode) : null;
         this.status           = StockTransferStatus.DRAFT;
         this.sourceBranchId   = sourceBranchId;
         this.sourceLocationId = sourceLocationId;
@@ -107,6 +121,7 @@ public class StockTransfer extends UidEntity {
     public void dispatch(Long actorId) {
         this.status       = StockTransferStatus.DISPATCHED;
         this.dispatchedAt = Instant.now();
+        this.dispatchedBy = actorId;
         this.updatedAt    = Instant.now();
         this.updatedBy    = actorId;
     }
@@ -114,6 +129,7 @@ public class StockTransfer extends UidEntity {
     public void receive(Long actorId) {
         this.status     = StockTransferStatus.RECEIVED;
         this.receivedAt = Instant.now();
+        this.receivedBy = actorId;
         this.updatedAt  = Instant.now();
         this.updatedBy  = actorId;
     }
@@ -137,14 +153,17 @@ public class StockTransfer extends UidEntity {
     public Long               getCompanyId()       { return companyId; }
     public String             getTransferNumber()  { return transferNumber; }
     public StockTransferStatus getStatus()          { return status; }
-    public String             getTransferMode()    { return transferMode; }
+    public StockTransferMode   getTransferMode()    { return transferMode; }
     public Long               getSourceBranchId()  { return sourceBranchId; }
     public Long               getSourceLocationId(){ return sourceLocationId; }
     public Long               getDestBranchId()    { return destBranchId; }
     public Long               getDestLocationId()  { return destLocationId; }
     public LocalDate          getTransferDate()    { return transferDate; }
+    public LocalDate          getExpectedArrivalDate() { return expectedArrivalDate; }
     public Instant            getDispatchedAt()    { return dispatchedAt; }
+    public Long               getDispatchedBy()    { return dispatchedBy; }
     public Instant            getReceivedAt()      { return receivedAt; }
+    public Long               getReceivedBy()      { return receivedBy; }
     public String             getNotes()           { return notes; }
     public Instant            getCreatedAt()       { return createdAt; }
     public Long               getCreatedBy()       { return createdBy; }

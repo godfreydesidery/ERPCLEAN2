@@ -16,6 +16,11 @@ CREATE TABLE stock_locations (
     name          VARCHAR(120)    NOT NULL,
     location_type VARCHAR(20)     NOT NULL,
     is_default    BOOLEAN         NOT NULL DEFAULT false,
+    parent_location_id BIGINT,                              -- P2 D7: self soft-FK — location hierarchy (no DB FK)
+    allow_negative BOOLEAN        NOT NULL DEFAULT false,   -- P2 D7: permit negative on-hand at this location
+    pickable      BOOLEAN         NOT NULL DEFAULT true,    -- P2 D7: stock here is available for picking
+    sellable      BOOLEAN         NOT NULL DEFAULT true,    -- P2 D7: stock here is available to sell
+    gl_account_id BIGINT,                                   -- P2 D7: per-location inventory GL account override (soft-FK)
     status        VARCHAR(20)     NOT NULL DEFAULT 'ACTIVE',
     version       BIGINT          NOT NULL DEFAULT 0,
     created_at    TIMESTAMPTZ     NOT NULL DEFAULT now(),

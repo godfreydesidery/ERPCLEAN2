@@ -17,8 +17,11 @@ CREATE TABLE stock_transfers (
     dest_branch_id      BIGINT          NOT NULL,
     dest_location_id    BIGINT          NOT NULL,
     transfer_date       DATE            NOT NULL,
+    expected_arrival_date DATE,                                  -- P2-M5: planned in-transit arrival date
     dispatched_at       TIMESTAMPTZ,
+    dispatched_by       BIGINT,                                  -- P2-M5: actor who dispatched (soft-FK app_users)
     received_at         TIMESTAMPTZ,
+    received_by         BIGINT,                                  -- P2-M5: actor who received (soft-FK app_users)
     notes               VARCHAR(500),
     version             BIGINT          NOT NULL DEFAULT 0,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT now(),
@@ -62,8 +65,10 @@ CREATE TABLE stock_transfer_lines (
     unit_name            VARCHAR(50),
     qty_transferred      NUMERIC(19,6)   NOT NULL,
     qty_transferred_base NUMERIC(19,6)   NOT NULL,
+    qty_dispatched       NUMERIC(19,6),                       -- P2 D7: qty actually dispatched (partial-transfer tracking)
+    qty_received         NUMERIC(19,6),                       -- P2 D7: qty actually received at destination
     value_amount         NUMERIC(19,4),
-    currency             VARCHAR(10)     NOT NULL DEFAULT 'TZS',
+    currency             VARCHAR(3)      NOT NULL DEFAULT 'TZS',
     version              BIGINT          NOT NULL DEFAULT 0,
     created_at           TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by           BIGINT,

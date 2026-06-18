@@ -1,5 +1,6 @@
 package com.erp.modules.fixedassets.domain.entity;
 
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.modules.fixedassets.domain.enums.DepreciationRunStatus;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
@@ -52,10 +53,28 @@ public class DepreciationRun extends UidEntity {
     private String glEntryUid;
 
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "executed_at", nullable = false)
     private Instant executedAt = Instant.now();
+
+    /** Actor who executed the run (NULLABLE; back-filled going forward). */
+    @Column(name = "executed_by")
+    @Setter
+    private Long executedBy;
+
+    /**
+     * Reversal marker (P3, data-only). Set when this run is reversed.
+     * The reversal POSTING lifecycle (contra GL entry, status transition) is DEFERRED.
+     */
+    @Column(name = "reversed_at")
+    @Setter
+    private Instant reversedAt;
+
+    /** uid of the run this entry reverses (NULL for a normal run). Data-only; posting DEFERRED. */
+    @Column(name = "reversal_of_run_uid", length = 26)
+    @Setter
+    private String reversalOfRunUid;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
@@ -81,7 +100,7 @@ public class DepreciationRun extends UidEntity {
         this.runNumber      = runNumber;
         this.fiscalPeriodId = fiscalPeriodId;
         this.postingDate    = postingDate;
-        this.currency       = currency;
+        this.currency       = CurrencyCode.ofNullable(currency);
         this.createdBy      = createdBy;
     }
 }

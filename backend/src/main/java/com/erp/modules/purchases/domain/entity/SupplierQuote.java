@@ -1,5 +1,6 @@
 package com.erp.modules.purchases.domain.entity;
 
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.modules.purchases.domain.enums.SupplierQuoteStatus;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
@@ -64,7 +65,37 @@ public class SupplierQuote extends UidEntity {
     private BigDecimal quoteTotalAmount = BigDecimal.ZERO;
 
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
+
+    /** P2 D7: quoted Incoterms (e.g. FOB, CIF). */
+    @Column(name = "incoterms", length = 40)
+    @Setter
+    private String incoterms;
+
+    /** P2 D7: quoted payment/delivery terms (free text). */
+    @Column(name = "terms", length = 255)
+    @Setter
+    private String terms;
+
+    /** P2 D7: evaluation score used to compare quotes. */
+    @Column(name = "score", precision = 9, scale = 4)
+    @Setter
+    private BigDecimal score;
+
+    /** P2 D7: ranking among quotes for the RFQ (1 = best). */
+    @Column(name = "rank")
+    @Setter
+    private Integer rank;
+
+    /** P2 D7: warranty offered (free text). */
+    @Column(name = "warranty", length = 120)
+    @Setter
+    private String warranty;
+
+    /** P2 D7: supplier's own quotation reference. */
+    @Column(name = "quote_ref", length = 80)
+    @Setter
+    private String quoteRef;
 
     @Column(name = "notes", length = 500)
     @Setter
@@ -100,7 +131,7 @@ public class SupplierQuote extends UidEntity {
         this.supplierId    = supplierId;
         this.supplierCode  = supplierCode;
         this.supplierName  = supplierName;
-        this.currency      = currency;
+        this.currency      = CurrencyCode.ofNullable(currency);
         this.createdBy     = createdBy;
     }
 }

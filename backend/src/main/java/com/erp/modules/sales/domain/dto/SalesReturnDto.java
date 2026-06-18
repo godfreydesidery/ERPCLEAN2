@@ -38,7 +38,7 @@ public record SalesReturnDto(
                 r.getCreditNoteUid(), r.getCogsReversalGlEntryUid(),
                 r.getReason(),
                 r.getNetAmount(), r.getVatAmount(), r.getGrossAmount(),
-                r.getCurrency(),
+                r.getCurrency().value(),
                 lines);
     }
 }

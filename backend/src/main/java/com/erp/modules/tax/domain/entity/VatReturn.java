@@ -97,6 +97,69 @@ public class VatReturn extends UidEntity {
     @Setter
     private Long filedBy;
 
+    // -------------------------------------------------------------------------
+    // P2-M1 — payment tracking + turnover figures
+    // -------------------------------------------------------------------------
+
+    /** Timestamp when the VAT liability was remitted to the tax authority. */
+    @Column(name = "paid_at")
+    @Setter
+    private Instant paidAt;
+
+    /** Amount actually paid to the tax authority. */
+    @Column(name = "paid_amount", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal paidAmount;
+
+    /** Authority/bank payment reference for the remittance. */
+    @Column(name = "payment_reference", length = 80)
+    @Setter
+    private String paymentReference;
+
+    /** Total (inc. VAT) sales turnover for the period. */
+    @Column(name = "sales_turnover", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal salesTurnover;
+
+    /** Total (inc. VAT) purchases turnover for the period. */
+    @Column(name = "purchases_turnover", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal purchasesTurnover;
+
+    /** Zero-rated sales base for the period. */
+    @Column(name = "zero_rated_sales", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal zeroRatedSales;
+
+    /** Exempt sales base for the period. */
+    @Column(name = "exempt_sales", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal exemptSales;
+
+    // -------------------------------------------------------------------------
+    // P2 D7 — amendment + penalty/interest provenance
+    // -------------------------------------------------------------------------
+
+    /** Self soft-FK → the original return this one amends. NULL = not an amendment. */
+    @Column(name = "amended_return_id")
+    @Setter
+    private Long amendedReturnId;
+
+    /** True when this return is an amended/revised filing. */
+    @Column(name = "is_amendment", nullable = false)
+    @Setter
+    private boolean amendment = false;
+
+    /** Late-filing/payment penalty assessed by the authority. */
+    @Column(name = "penalty_amount", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal penaltyAmount;
+
+    /** Interest assessed on overdue VAT. */
+    @Column(name = "interest_amount", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal interestAmount;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

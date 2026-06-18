@@ -48,6 +48,22 @@ public class RefreshToken {
     @Column(name = "client_branch_id")
     private Long clientBranchId;
 
+    /** P2: session/device-management label. */
+    @Column(name = "device_info", length = 255)
+    private String deviceInfo;
+
+    /** P2: requesting client user-agent. */
+    @Column(name = "user_agent", length = 255)
+    private String userAgent;
+
+    /** P2: issuing/last IP (IPv6-max length). */
+    @Column(name = "ip_address", length = 45)
+    private String ipAddress;
+
+    /** P2: last time this token was presented. */
+    @Column(name = "last_used_at")
+    private Instant lastUsedAt;
+
     protected RefreshToken() {
         // JPA
     }
@@ -98,5 +114,39 @@ public class RefreshToken {
     public void setClientScope(Long companyId, Long branchId) {
         this.clientCompanyId = companyId;
         this.clientBranchId = branchId;
+    }
+
+    // --- P2 session/device-management accessors ---
+
+    public String getDeviceInfo() {
+        return deviceInfo;
+    }
+
+    public void setDeviceInfo(String deviceInfo) {
+        this.deviceInfo = deviceInfo;
+    }
+
+    public String getUserAgent() {
+        return userAgent;
+    }
+
+    public void setUserAgent(String userAgent) {
+        this.userAgent = userAgent;
+    }
+
+    public String getIpAddress() {
+        return ipAddress;
+    }
+
+    public void setIpAddress(String ipAddress) {
+        this.ipAddress = ipAddress;
+    }
+
+    public Instant getLastUsedAt() {
+        return lastUsedAt;
+    }
+
+    public void setLastUsedAt(Instant lastUsedAt) {
+        this.lastUsedAt = lastUsedAt;
     }
 }

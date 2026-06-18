@@ -1,5 +1,6 @@
 package com.erp.modules.hr.domain.entity;
 
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.modules.hr.domain.enums.PayrollLineStatus;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
@@ -90,7 +91,30 @@ public class PayrollLine extends UidEntity {
     private String flagReason;
 
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
+
+    /** Employment-contract snapshot at calculate time (P2-M5, soft-FK employment_contracts). */
+    @Column(name = "contract_id")
+    @Setter
+    private Long contractId;
+
+    // ---- Payee snapshot (set at calculate time, ADR-0040 D-11) ----
+
+    @Column(name = "payee_method", length = 20)
+    @Setter
+    private String payeeMethod;
+
+    @Column(name = "payee_account_ref", length = 60)
+    @Setter
+    private String payeeAccountRef;
+
+    @Column(name = "payee_bank_name", length = 120)
+    @Setter
+    private String payeeBankName;
+
+    @Column(name = "payee_account_name", length = 120)
+    @Setter
+    private String payeeAccountName;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
@@ -117,7 +141,7 @@ public class PayrollLine extends UidEntity {
         this.employeeNumber = employeeNumber;
         this.employeeName   = employeeName;
         this.departmentName = departmentName;
-        this.currency       = currency;
+        this.currency       = CurrencyCode.ofNullable(currency);
         this.createdBy      = createdBy;
     }
 }

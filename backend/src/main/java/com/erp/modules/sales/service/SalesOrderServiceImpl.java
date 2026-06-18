@@ -1,10 +1,17 @@
 package com.erp.modules.sales.service;
 
+import com.erp.modules.ar.domain.dto.ArBalanceDto;
+import com.erp.modules.ar.service.ArBalanceService;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.parties.domain.entity.Agent;
 import com.erp.modules.parties.domain.entity.Customer;
+import com.erp.modules.parties.domain.entity.CustomerAddress;
+import com.erp.modules.parties.domain.enums.CreditStatus;
+import com.erp.modules.parties.domain.enums.CustomerKind;
 import com.erp.modules.parties.repository.AgentRepository;
+import com.erp.modules.parties.repository.CustomerAddressRepository;
 import com.erp.modules.parties.repository.CustomerRepository;
+import com.erp.modules.parties.repository.PaymentTermsRepository;
 import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.domain.entity.ProductPrice;
 import com.erp.modules.products.domain.entity.UnitOfMeasure;
@@ -31,9 +38,13 @@ import com.erp.modules.stock.service.StockReservationService;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
+import com.erp.platform.common.money.CurrencyCode;
+import com.erp.platform.common.money.Money;
 import com.erp.platform.common.repository.Lookups;
+import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -61,6 +72,8 @@ public class SalesOrderServiceImpl implements SalesOrderService {
     private final QuotationRepository      quotations;
     private final QuotationLineRepository  quotationLines;
     private final CustomerRepository       customers;
+    private final CustomerAddressRepository customerAddresses;
+    private final PaymentTermsRepository   paymentTermsRepo;
     private final AgentRepository          agents;
     private final CompanyRepository        companies;
     private final ProductRepository        products;
@@ -73,12 +86,17 @@ public class SalesOrderServiceImpl implements SalesOrderService {
     private final SalesOrderTotalsCalculator totalsCalc;
     private final ScopeGuard               scopeGuard;
     private final AuditService             audit;
+    /** ADR-0040 D-5: credit-limit + status check at SO confirm (mirrors SalesInvoiceServiceImpl). */
+    private final ArBalanceService         arBalanceService;
+    private final PermissionResolver       permissionResolver;
 
     public SalesOrderServiceImpl(SalesOrderRepository orders,
                                  SalesOrderLineRepository orderLines,
                                  QuotationRepository quotations,
                                  QuotationLineRepository quotationLines,
                                  CustomerRepository customers,
+                                 CustomerAddressRepository customerAddresses,
+                                 PaymentTermsRepository paymentTermsRepo,
                                  AgentRepository agents,
                                  CompanyRepository companies,
                                  ProductRepository products,
@@ -90,12 +108,16 @@ public class SalesOrderServiceImpl implements SalesOrderService {
                                  OrderToCashNumberGenerator numberGen,
                                  SalesOrderTotalsCalculator totalsCalc,
                                  ScopeGuard scopeGuard,
-                                 AuditService audit) {
+                                 AuditService audit,
+                                 ArBalanceService arBalanceService,
+                                 PermissionResolver permissionResolver) {
         this.orders           = orders;
         this.orderLines       = orderLines;
         this.quotations       = quotations;
         this.quotationLines   = quotationLines;
         this.customers        = customers;
+        this.customerAddresses = customerAddresses;
+        this.paymentTermsRepo = paymentTermsRepo;
         this.agents           = agents;
         this.companies        = companies;
         this.products         = products;
@@ -108,6 +130,8 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         this.totalsCalc       = totalsCalc;
         this.scopeGuard       = scopeGuard;
         this.audit            = audit;
+        this.arBalanceService = arBalanceService;
+        this.permissionResolver = permissionResolver;
     }
 
     @Override
@@ -130,6 +154,14 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         // ADR-0031 D-7 back-link: set when called from CRM OpportunityConversionService
         order.setSourceOpportunityUid(req.sourceOpportunityUid());
         order.setOrderNumber(numberGen.nextSalesOrder(companyId));
+
+        // ADR-0041 D1 — resolve payment terms: request uid > customer default. Stored at create.
+        Long paymentTermsId = resolvePaymentTermsId(req.paymentTermsUid(), customer);
+        order.setPaymentTermsId(paymentTermsId);
+
+        // ADR-0041 D2 — snapshot ship-to / bill-to addresses when an explicit uid is supplied.
+        // No auto-default when omitted (FORK: leave null).
+        applyAddressSnapshot(order, customer.getId(), req.shipToAddressUid(), req.billToAddressUid());
 
         SalesOrder saved = orders.save(order);
         audit.record(AuditEvent.of(AuditActions.SO_CREATE, "sales_orders",
@@ -177,7 +209,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
                 req.quantity(), qtyInBase,
                 listPrice, appliedPrice,
                 product.getVatStatus(), vatRate,
-                order.getCurrency(), actorId());
+                order.getCurrency().value(), actorId());
         line.setLineDiscountAmount(req.lineDiscountAmount());
         line.setLineDiscountPercent(req.lineDiscountPercent());
 
@@ -233,6 +265,10 @@ public class SalesOrderServiceImpl implements SalesOrderService {
             throw new IllegalStateException("Cannot confirm a sales order with no lines.");
         }
 
+        // ADR-0040 D-5: credit-control hard-block — checked BEFORE stock reservation.
+        // Only applies to CREDIT_ACCOUNT customers; cash/walk-in customers are unaffected.
+        assertCreditClearance(order);
+
         // Reserve stock for each line (D-4/D-5)
         for (SalesOrderLine line : lines) {
             line.setQtyReservedBase(line.getQtyOrderedBase());
@@ -241,6 +277,15 @@ public class SalesOrderServiceImpl implements SalesOrderService {
             reservationService.applyReservationDelta(
                     order.getCompanyId(), order.getBranchId(),
                     line.getProductId(), line.getQtyOrderedBase(), actorId());
+        }
+
+        // ADR-0041 D1 — backfill payment terms from the customer default at confirm if not already
+        // resolved at create (e.g. created before the customer had a default term set).
+        if (order.getPaymentTermsId() == null) {
+            Customer customer = customers.findById(order.getCustomerId()).orElse(null);
+            if (customer != null && customer.getPaymentTermsId() != null) {
+                order.setPaymentTermsId(customer.getPaymentTermsId());
+            }
         }
 
         order.setStatus(SalesOrderStatus.CONFIRMED);
@@ -306,7 +351,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         SalesOrder order = new SalesOrder(
                 quote.getCompanyId(), quote.getBranchId(),
                 quote.getCustomerId(), quote.getAgentId(),
-                quote.getCurrency(), LocalDate.now(), actorId());
+                quote.getCurrency().value(), LocalDate.now(), actorId());
         order.setSourceQuotationUid(quote.getUid());
         order.setDocDiscountAmount(quote.getDocDiscountAmount());
         order.setDocDiscountPercent(quote.getDocDiscountPercent());
@@ -325,7 +370,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
                     ql.getQuantity(), ql.getQtyInBase(),
                     ql.getListPriceAmount(), ql.getUnitPriceAmount(),
                     ql.getVatStatus(), ql.getVatRate(),
-                    ql.getCurrency(), actorId());
+                    ql.getCurrency().value(), actorId());
             ol.setLineDiscountAmount(ql.getLineDiscountAmount());
             ol.setLineDiscountPercent(ql.getLineDiscountPercent());
             ol.setNetAmount(ql.getNetAmount());
@@ -410,6 +455,48 @@ public class SalesOrderServiceImpl implements SalesOrderService {
                 .orElseThrow(() -> new NotFoundException("Customer not found: " + uid));
     }
 
+    /**
+     * ADR-0041 D1 — resolves the PaymentTerms id for an order: the request uid takes priority,
+     * else the customer's default {@code payment_terms_id}. Returns null when neither resolves.
+     */
+    private Long resolvePaymentTermsId(String paymentTermsUid, Customer customer) {
+        if (paymentTermsUid != null && !paymentTermsUid.isBlank()) {
+            return paymentTermsRepo.findByUid(paymentTermsUid)
+                    .map(pt -> pt.getId())
+                    .orElseThrow(() -> new NotFoundException("PaymentTerms not found: " + paymentTermsUid));
+        }
+        return customer != null ? customer.getPaymentTermsId() : null;
+    }
+
+    /**
+     * ADR-0041 D2 — resolves a ship-to / bill-to customer-address uid, validates it belongs to the
+     * order's customer, and snapshots the formatted text (immutable). No auto-default when omitted.
+     */
+    private void applyAddressSnapshot(SalesOrder order, Long customerId,
+                                      String shipToAddressUid, String billToAddressUid) {
+        if (shipToAddressUid != null && !shipToAddressUid.isBlank()) {
+            CustomerAddress addr = resolveCustomerAddress(customerId, shipToAddressUid);
+            order.setShipToAddressId(addr.getId());
+            order.setShipToAddressText(CustomerAddressSnapshot.format(addr));
+        }
+        if (billToAddressUid != null && !billToAddressUid.isBlank()) {
+            CustomerAddress addr = resolveCustomerAddress(customerId, billToAddressUid);
+            order.setBillToAddressId(addr.getId());
+            order.setBillToAddressText(CustomerAddressSnapshot.format(addr));
+        }
+    }
+
+    /** Loads a customer address by uid and asserts it belongs to the document's customer (D2). */
+    private CustomerAddress resolveCustomerAddress(Long customerId, String addressUid) {
+        CustomerAddress addr = customerAddresses.findByUid(addressUid)
+                .orElseThrow(() -> new NotFoundException("Customer address not found: " + addressUid));
+        if (!addr.getCustomerId().equals(customerId)) {
+            throw new ConflictException(
+                    "Customer address " + addressUid + " does not belong to customer id=" + customerId);
+        }
+        return addr;
+    }
+
     private Long resolveAgentId(Long companyId, String agentUid, RequestContext.Principal ctx) {
         if (agentUid != null && !agentUid.isBlank()) {
             return agents.findByCompanyIdAndUid(companyId, agentUid)
@@ -463,6 +550,105 @@ public class SalesOrderServiceImpl implements SalesOrderService {
                 .findFirst()
                 .map(bp -> qty.multiply(bp.getFactorToBase()))
                 .orElse(qty);
+    }
+
+    /**
+     * ADR-0040 D-5 credit-control gate at SO confirm.
+     *
+     * <p>Three independent block conditions — any one suffices to block:
+     * <ol>
+     *   <li>{@code creditStatus IN (ON_HOLD, STOPPED)} — operator or automated status change.</li>
+     *   <li>{@code manualHold = true} — credit-control staff override.</li>
+     *   <li>AR balance + SO gross total exceeds the customer's credit limit.</li>
+     * </ol>
+     *
+     * <p>WARNING is advisory only and never blocks (the operator sees it in the response DTO but
+     * the order proceeds). Cash/walk-in customers bypass this check entirely.
+     *
+     * <p>If the caller holds {@code SALES.CREDIT.OVERRIDE}, the block is lifted and the override
+     * is audited (mirrors SalesInvoiceServiceImpl.finalise credit-limit branch).
+     */
+    private void assertCreditClearance(SalesOrder order) {
+        Customer customer = customers.findById(order.getCustomerId())
+                .orElseThrow(() -> new NotFoundException(
+                        "Customer not found for order " + order.getUid()
+                                + " (id=" + order.getCustomerId() + ")"));
+
+        if (customer.getCustomerKind() != CustomerKind.CREDIT_ACCOUNT) {
+            // Cash / walk-in: no credit restriction (BR-SO-CREDIT-01).
+            return;
+        }
+
+        RequestContext.Principal ctx = RequestContext.get();
+
+        // --- Block condition 1 & 2: status hold or manual hold ---
+        CreditStatus cs = customer.getCreditStatus();
+        boolean statusBlocked = cs == CreditStatus.ON_HOLD || cs == CreditStatus.STOPPED;
+        boolean manualBlocked = customer.isManualHold();
+
+        // --- Block condition 3: credit-limit breach ---
+        boolean limitBreached = false;
+        BigDecimal projectedBalance = null;
+        Money creditLimit = customer.getCreditLimit();
+        if (creditLimit != null && creditLimit.isPresent()
+                && creditLimit.getAmount().compareTo(BigDecimal.ZERO) > 0) {
+            ArBalanceDto balance = arBalanceService.currentBalance(
+                    order.getCompanyId(), order.getCustomerId());
+            projectedBalance = balance.balance().add(order.getGrossTotalAmount());
+            if (projectedBalance.compareTo(creditLimit.getAmount()) > 0) {
+                limitBreached = true;
+            }
+        }
+
+        if (!statusBlocked && !manualBlocked && !limitBreached) {
+            // No block condition met — proceed normally.
+            return;
+        }
+
+        // At least one block condition is active. Check for override permission.
+        boolean hasOverride = permissionResolver.hasPermission(
+                ctx, "SALES.CREDIT.OVERRIDE", System.currentTimeMillis());
+
+        if (!hasOverride) {
+            // Build a clear, actionable message covering whichever conditions fired.
+            StringBuilder msg = new StringBuilder("Sales order ")
+                    .append(order.getOrderNumber())
+                    .append(" blocked by credit control for customer ")
+                    .append(customer.getUid())
+                    .append(".");
+            if (statusBlocked) {
+                msg.append(" Credit status: ").append(cs.name()).append(".");
+            }
+            if (manualBlocked) {
+                msg.append(" Manual hold is active");
+                if (customer.getCreditHoldReason() != null) {
+                    msg.append(" (").append(customer.getCreditHoldReason()).append(")");
+                }
+                msg.append(".");
+            }
+            if (limitBreached && creditLimit != null) {
+                msg.append(" Credit limit ").append(creditLimit.getAmount().toPlainString())
+                   .append(" ").append(CurrencyCode.value(creditLimit.getCurrency()))
+                   .append(" exceeded; projected balance: ")
+                   .append(projectedBalance.toPlainString()).append(".");
+            }
+            msg.append(" Requires SALES.CREDIT.OVERRIDE permission (ADR-0040 D-5).");
+            throw new ConflictException(msg.toString());
+        }
+
+        // Override granted — audit the bypass.
+        java.util.Map<String, Object> detail = new java.util.LinkedHashMap<>();
+        detail.put("customerUid", customer.getUid());
+        detail.put("creditStatus", cs.name());
+        if (manualBlocked) detail.put("manualHold", "true");
+        if (limitBreached && creditLimit != null && projectedBalance != null) {
+            detail.put("creditLimit", creditLimit.getAmount().toPlainString());
+            detail.put("creditLimitCurrency", CurrencyCode.value(creditLimit.getCurrency()));
+            detail.put("projectedBalance", projectedBalance.toPlainString());
+        }
+        audit.record(AuditEvent.of(AuditActions.SALES_CREDIT_OVERRIDE, "sales_orders",
+                order.getId(), order.getUid())
+                .detail(detail));
     }
 
     private void recomputeTotals(SalesOrder order) {

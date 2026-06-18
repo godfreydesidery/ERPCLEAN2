@@ -17,6 +17,10 @@ public record SalesOrderDto(
         Long agentId,
         String currency,
         LocalDate orderDate,
+        String customerPoNumber,
+        LocalDate requestedDeliveryDate,
+        LocalDate promisedDate,
+        Long paymentTermsId,
         String sourceQuotationUid,
         String sourceOpportunityUid,
         BigDecimal docDiscountAmount,
@@ -28,6 +32,10 @@ public record SalesOrderDto(
         Instant cancelledAt,
         String cancelReason,
         String notes,
+        Long shipToAddressId,
+        Long billToAddressId,
+        String shipToAddressText,
+        String billToAddressText,
         List<SalesOrderLineDto> lines
 ) {
     public static SalesOrderDto from(SalesOrder o, List<SalesOrderLineDto> lines) {
@@ -37,14 +45,18 @@ public record SalesOrderDto(
                 o.getOrderNumber(),
                 o.getStatus().name(),
                 o.getCustomerId(), o.getAgentId(),
-                o.getCurrency(),
+                o.getCurrency().value(),
                 o.getOrderDate(),
+                o.getCustomerPoNumber(), o.getRequestedDeliveryDate(), o.getPromisedDate(),
+                o.getPaymentTermsId(),
                 o.getSourceQuotationUid(),
                 o.getSourceOpportunityUid(),
                 o.getDocDiscountAmount(), o.getDocDiscountPercent(),
                 o.getNetTotalAmount(), o.getVatTotalAmount(), o.getGrossTotalAmount(),
                 o.getConfirmedAt(), o.getCancelledAt(), o.getCancelReason(),
                 o.getNotes(),
+                o.getShipToAddressId(), o.getBillToAddressId(),
+                o.getShipToAddressText(), o.getBillToAddressText(),
                 lines);
     }
 }

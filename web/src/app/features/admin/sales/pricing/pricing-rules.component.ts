@@ -12,6 +12,7 @@ import { OrganisationService } from '../../organisation/organisation.service';
 import { CustomerService } from '../../parties/customer.service';
 import { ProductService } from '../../products/product.service';
 import { UidPickerComponent, UidOption } from '../../../../shared/uid-picker/uid-picker.component';
+import { CurrencySelectComponent } from '../../../../shared/currency-select/currency-select.component';
 import {
   CreateCustomerPriceRequest,
   CreatePriceTierRequest,
@@ -31,7 +32,7 @@ type Tab = 'tiers' | 'customer-prices';
  */
 @Component({
   selector: 'app-pricing-rules',
-  imports: [FormsModule, DecimalPipe, UidPickerComponent],
+  imports: [FormsModule, DecimalPipe, UidPickerComponent, CurrencySelectComponent],
   templateUrl: './pricing-rules.component.html',
   styleUrl: './pricing-rules.component.scss',
 })
@@ -53,6 +54,7 @@ export class PricingRulesComponent {
   // ── Company context ──────────────────────────────────────────────────────────
   readonly companies = signal<Company[]>([]);
   readonly selectedCompanyId = signal('');
+  readonly selectedCompanyUid = computed(() => this.companies().find((c) => c.id === this.selectedCompanyId())?.uid ?? '');
   readonly companyState = signal<'loading' | 'idle' | 'error'>('loading');
 
   // ── Product / PriceList options for tiers ────────────────────────────────────

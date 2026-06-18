@@ -21,6 +21,8 @@ CREATE TABLE projects (
     project_status      VARCHAR(20)     NOT NULL DEFAULT 'DRAFT',
     planned_start_date  DATE,
     planned_end_date    DATE,
+    actual_start_date   DATE,           -- P2: realised project start
+    actual_end_date     DATE,           -- P2: realised project end
     budget_amount       NUMERIC(19,4),
     currency            VARCHAR(3)      NOT NULL DEFAULT 'TZS',
     notes               VARCHAR(500),
@@ -62,6 +64,10 @@ CREATE TABLE project_tasks (
     name            VARCHAR(160)    NOT NULL,
     parent_id       BIGINT,
     planned_hours   NUMERIC(9,2),
+    planned_start_date DATE,           -- P2: bare task scheduling dates
+    planned_end_date   DATE,           -- P2: bare task scheduling dates
+    actual_hours    NUMERIC(9,2),      -- P2: actual hours worked
+    assignee_user_id BIGINT,           -- P2: soft-FK app_users (assignee)
     is_billable     BOOLEAN         NOT NULL DEFAULT true,
     status          VARCHAR(32)     NOT NULL DEFAULT 'ACTIVE',
     version         BIGINT          NOT NULL DEFAULT 0,
@@ -91,6 +97,7 @@ CREATE TABLE project_timesheets (
     user_id             BIGINT          NOT NULL,
     work_date           DATE            NOT NULL,
     hours               NUMERIC(9,2)    NOT NULL,
+    overtime_hours      NUMERIC(9,2),   -- P2: overtime portion of the day
     is_billable         BOOLEAN         NOT NULL DEFAULT true,
     planned_rate_amount NUMERIC(19,4),
     notes               VARCHAR(255),

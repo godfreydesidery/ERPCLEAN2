@@ -18,5 +18,14 @@ public record CreatePurchaseOrderRequest(
         String currency,
         String notes,
         LocalDate expectedDate,
+        /** Optional: PaymentTerms master uid (ADR-0041 D1). Null = supplier default at place. */
+        String paymentTermsUid,
         List<AddPurchaseOrderLineRequest> lines
-) {}
+) {
+    /** Back-compat overload: omit paymentTermsUid → null. */
+    public CreatePurchaseOrderRequest(String companyUid, String supplierUid, String currency,
+                                      String notes, LocalDate expectedDate,
+                                      List<AddPurchaseOrderLineRequest> lines) {
+        this(companyUid, supplierUid, currency, notes, expectedDate, null, lines);
+    }
+}

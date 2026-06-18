@@ -100,7 +100,7 @@ public class DropshipServiceImpl implements DropshipService {
                 product.getUid(), unit.getUid(),
                 line.getQtyOrderedBase(), BigDecimal.ZERO, "Drop-ship for SO " + orderUid);
         var poDto = purchaseOrderService.create(new CreatePurchaseOrderRequest(
-                company.getUid(), supplierUid, order.getCurrency(),
+                company.getUid(), supplierUid, order.getCurrency().value(),
                 "Drop-ship for SO " + orderUid, null, List.of(poLineReq)));
 
         // Stamp the drop-ship PO's ship_to_customer_id and source SO uid on the PO entity

@@ -8,6 +8,7 @@ import com.erp.modules.purchases.domain.entity.PurchaseOrder;
 import com.erp.modules.purchases.domain.entity.PurchaseSettings;
 import com.erp.modules.purchases.domain.enums.PoApprovalStatus;
 import com.erp.modules.purchases.repository.PurchaseSettingsRepository;
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.security.RequestContext;
 import java.math.BigDecimal;
 import java.util.Optional;
@@ -82,7 +83,7 @@ public class PoApprovalGate {
                 DOC_TYPE,
                 po.getUid(),
                 po.getOrderTotalAmount() != null ? po.getOrderTotalAmount() : BigDecimal.ZERO,
-                po.getCurrency(),
+                CurrencyCode.value(po.getCurrency()),
                 po.getCompanyId(),
                 branchUid,
                 actorId != null ? actorId : 0L,

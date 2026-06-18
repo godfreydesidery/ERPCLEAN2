@@ -29,6 +29,28 @@ public class Department extends UidEntity {
     @Setter
     private boolean active = true;
 
+    // ---- Org hierarchy + ownership (P2 D6, ADR-0041) — all soft-FK scalars ----
+
+    /** Self soft-FK departments — flat-tolerant (no DB FK). */
+    @Column(name = "parent_department_id")
+    @Setter
+    private Long parentDepartmentId;
+
+    /** Soft-FK employees. */
+    @Column(name = "manager_id")
+    @Setter
+    private Long managerId;
+
+    /** Soft-FK gl dimension_values (cost centre). */
+    @Column(name = "cost_centre_value_id")
+    @Setter
+    private Long costCentreValueId;
+
+    /** Soft-FK branches. */
+    @Column(name = "branch_id")
+    @Setter
+    private Long branchId;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

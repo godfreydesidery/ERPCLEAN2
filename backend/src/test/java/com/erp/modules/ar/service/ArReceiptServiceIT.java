@@ -155,14 +155,14 @@ class ArReceiptServiceIT extends PostgresIntegrationTest {
                 new CreatePriceListRequest(companyUid, "RETAIL", "Retail")).uid();
         productUid   = productService.create(new CreateProductRequest(
                 companyUid, null, "Receipt Widget", null,
-                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD)).uid();
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null)).uid();
         productService.setPrice(productUid,
                 new SetProductPriceRequest(priceListUid, new MoneyDto("1000", TZS)));
 
         var custDto = customerService.create(new CreateCustomerRequest(
                 company.getId(), PartyType.INDIVIDUAL, "Receipt Customer",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CREDIT_ACCOUNT, null, null));
+                CustomerKind.CREDIT_ACCOUNT, null, null, null));
         creditCustomerUid = custDto.uid();
 
         agentUid = agentService.create(new CreateAgentRequest(
@@ -488,7 +488,7 @@ class ArReceiptServiceIT extends PostgresIntegrationTest {
         var cust2 = customerService.create(new CreateCustomerRequest(
                 company2.getId(), PartyType.INDIVIDUAL, "No GL Customer",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CREDIT_ACCOUNT, null, null));
+                CustomerKind.CREDIT_ACCOUNT, null, null, null));
 
         // Deliberately skip chartOfAccountService.seedDefaults and glConfigService.seedDefaults
 

@@ -163,6 +163,10 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         // Stamp settlement rate (ADR-0036 D-4; immutable after persist)
         receipt.setFxRate(settlementRate);
         receipt.setRateAt(settlementConv.rateAt());
+        // ADR-0041 D3: link the funding INBOUND cheque (lets a later bounce locate + reverse this receipt)
+        if (req.chequeUid() != null && !req.chequeUid().isBlank()) {
+            receipt.setChequeUid(req.chequeUid());
+        }
         receipt = receipts.save(receipt);
 
         // 6. Build allocation set
@@ -263,7 +267,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
             whtResult = whtCapture.captureOnReceipt(
                     companyId, receipt.getBranchId(),
                     req.whtTypeUid(),
-                    customer.getId(), customer.getDisplayName(),
+                    customer.getId(), customer.getDisplayName(), customer.getTin(),
                     receipt.getUid(),
                     receipt.getAmount(), req.whtAmount(),
                     currency, receipt.getReceiptDate(),
@@ -446,7 +450,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
 
             ArReceiptAllocation alloc = new ArReceiptAllocation(
                     receipt.getCompanyId(), receipt.getId(), inv.getId(),
-                    line.allocatedAmount(), actorId());
+                    line.allocatedAmount(), line.discountAmount(), line.writeOffAmount(), actorId());
             alloc.setBaseAllocatedAmount(baseSettledSlice);
             alloc.setSettlementRate(settlementRate);
             saved.add(allocations.save(alloc));
@@ -530,7 +534,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                             "ArInvoice not found: " + line.arInvoiceUid()));
             result.add(new ArReceiptAllocation(
                     companyId, receipt.getId(), inv.getId(),
-                    line.allocatedAmount(), actorId()));
+                    line.allocatedAmount(), line.discountAmount(), line.writeOffAmount(), actorId()));
         }
         return result;
     }
@@ -587,7 +591,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         return new ArReceiptDto(
                 r.getId(), r.getUid(), r.getCompanyId(), r.getBranchId(), r.getCustomerId(),
                 r.getReceiptNumber(), r.getReceiptDate(), r.getAmount(), r.getUnallocatedAmount(),
-                r.getCurrency(), r.getTenderType(), r.getBankReference(), r.getGlEntryUid(),
+                r.getCurrency().value(), r.getTenderType(), r.getBankReference(), r.getGlEntryUid(),
                 r.getStatus(), allocDtos);
     }
 }

@@ -2,6 +2,7 @@ package com.erp.modules.sales.domain.entity;
 
 import com.erp.modules.sales.domain.enums.SalesOrderStatus;
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -47,10 +48,30 @@ public class SalesOrder extends UidEntity {
     private Long agentId;
 
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "order_date", nullable = false)
     private LocalDate orderDate;
+
+    /** Customer's own purchase-order reference (P2-M3). Nullable. */
+    @Column(name = "customer_po_number", length = 60)
+    @Setter
+    private String customerPoNumber;
+
+    /** Customer-requested delivery date (P2-M3). Nullable. */
+    @Column(name = "requested_delivery_date")
+    @Setter
+    private LocalDate requestedDeliveryDate;
+
+    /** Promised delivery date (P2-M3). Nullable. */
+    @Column(name = "promised_date")
+    @Setter
+    private LocalDate promisedDate;
+
+    /** Soft-FK → payment_terms(id) (P2 D1, ADR-0041). Resolved + stored at confirm. Nullable. */
+    @Column(name = "payment_terms_id")
+    @Setter
+    private Long paymentTermsId;
 
     @Column(name = "source_quotation_uid", length = 26)
     @Setter
@@ -120,6 +141,27 @@ public class SalesOrder extends UidEntity {
     @Setter
     private Long projectTaskId;
 
+    // --- ADR-0040 D-3 — ship-to / bill-to address snapshot fields ---
+    /** FK → customer_addresses.id; nullable — delivery address used for this order. */
+    @Column(name = "ship_to_address_id")
+    @Setter
+    private Long shipToAddressId;
+
+    /** FK → customer_addresses.id; nullable — billing address used for this order. */
+    @Column(name = "bill_to_address_id")
+    @Setter
+    private Long billToAddressId;
+
+    /** Free-text shipping address override / snapshot (at most 500 chars). */
+    @Column(name = "ship_to_address_text", length = 500)
+    @Setter
+    private String shipToAddressText;
+
+    /** Free-text billing address override / snapshot (at most 500 chars). */
+    @Column(name = "bill_to_address_text", length = 500)
+    @Setter
+    private String billToAddressText;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
@@ -144,7 +186,7 @@ public class SalesOrder extends UidEntity {
         this.branchId = branchId;
         this.customerId = customerId;
         this.agentId = agentId;
-        this.currency = currency;
+        this.currency = CurrencyCode.of(currency);
         this.orderDate = orderDate;
         this.createdBy = createdBy;
     }

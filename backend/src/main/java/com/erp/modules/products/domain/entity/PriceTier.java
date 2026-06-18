@@ -1,5 +1,6 @@
 package com.erp.modules.products.domain.entity;
 
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
@@ -40,13 +41,18 @@ public class PriceTier extends UidEntity {
     @Setter
     private BigDecimal minQty;
 
+    /** Optional quantity-break ceiling, in the product's sell unit (P2-M3). Nullable. */
+    @Column(name = "max_qty", precision = 19, scale = 6)
+    @Setter
+    private BigDecimal maxQty;
+
     /** The tier unit price for lines at >= minQty. CHECK >= 0. */
     @Column(name = "unit_price_amount", nullable = false, precision = 19, scale = 4)
     @Setter
     private BigDecimal unitPriceAmount;
 
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
@@ -79,7 +85,7 @@ public class PriceTier extends UidEntity {
         this.priceListId     = priceListId;
         this.minQty          = minQty;
         this.unitPriceAmount = unitPriceAmount;
-        this.currency        = currency;
+        this.currency        = CurrencyCode.ofNullable(currency);
         this.createdBy       = createdBy;
     }
 }

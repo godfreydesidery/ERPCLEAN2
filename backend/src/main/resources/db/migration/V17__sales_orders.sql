@@ -25,6 +25,10 @@ CREATE TABLE quotations (
     currency             VARCHAR(3)      NOT NULL,
     quote_date           DATE            NOT NULL,
     valid_until          DATE            NOT NULL,
+    customer_po_number   VARCHAR(60),                    -- P2-M3: customer's own PO reference
+    revision_no          INT,                            -- P2-M3: plain revision counter
+    probability          NUMERIC(5,2),                   -- P2-M3: win-probability percent
+    payment_terms_id     BIGINT,                         -- P2 D1: soft-FK payment_terms(id)
     doc_discount_amount  NUMERIC(19,4),
     doc_discount_percent NUMERIC(9,4),
     net_total_amount     NUMERIC(19,4)   NOT NULL DEFAULT 0,
@@ -83,6 +87,8 @@ CREATE TABLE quotation_lines (
     vat_amount           NUMERIC(19,4)   NOT NULL DEFAULT 0,
     gross_amount         NUMERIC(19,4)   NOT NULL DEFAULT 0,
     currency             VARCHAR(3)      NOT NULL,
+    -- P3 (X15): promotion provenance — soft-FK to promotions(id); nullable.
+    promotion_id         BIGINT,
     version              BIGINT          NOT NULL DEFAULT 0,
     created_at           TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by           BIGINT,
@@ -114,6 +120,10 @@ CREATE TABLE sales_orders (
     agent_id             BIGINT,
     currency             VARCHAR(3)      NOT NULL,
     order_date           DATE            NOT NULL,
+    customer_po_number   VARCHAR(60),                    -- P2-M3: customer's own PO reference
+    requested_delivery_date DATE,                        -- P2-M3: customer-requested delivery date
+    promised_date        DATE,                           -- P2-M3: promised delivery date
+    payment_terms_id     BIGINT,                         -- P2 D1: soft-FK payment_terms(id)
     source_quotation_uid VARCHAR(26),
     doc_discount_amount  NUMERIC(19,4),
     doc_discount_percent NUMERIC(9,4),
@@ -168,6 +178,8 @@ CREATE TABLE sales_order_lines (
     overridden_by         BIGINT,
     line_discount_amount  NUMERIC(19,4),
     line_discount_percent NUMERIC(9,4),
+    discount_reason       VARCHAR(160),                  -- P2-M3: free-text reason for the line discount
+    requested_date        DATE,                          -- P2-M3: customer-requested date for this line
     vat_status            VARCHAR(20)     NOT NULL,
     vat_rate              NUMERIC(9,4)    NOT NULL,
     net_amount            NUMERIC(19,4)   NOT NULL DEFAULT 0,

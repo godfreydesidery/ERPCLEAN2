@@ -12,6 +12,7 @@ import { CustomerModel } from '../models/party.model';
 import { CrmService } from './crm.service';
 import { CreateOpportunityRequest, LeadDto, PipelineStageDto } from './models/crm.model';
 import { UidPickerComponent, UidOption } from '../../../shared/uid-picker/uid-picker.component';
+import { CurrencySelectComponent } from '../../../shared/currency-select/currency-select.component';
 
 /**
  * Opportunity create screen. Route: /admin/crm/opportunities/create
@@ -19,7 +20,7 @@ import { UidPickerComponent, UidOption } from '../../../shared/uid-picker/uid-pi
  */
 @Component({
   selector: 'app-opportunity-create',
-  imports: [FormsModule, RouterLink, UidPickerComponent],
+  imports: [FormsModule, RouterLink, UidPickerComponent, CurrencySelectComponent],
   templateUrl: './opportunity-create.component.html',
   styleUrl: './opportunity-create.component.scss',
 })
@@ -36,6 +37,7 @@ export class OpportunityCreateComponent {
   // ── Company context ────────────────────────────────────────────────────────
   readonly companies = signal<Company[]>([]);
   readonly selectedCompanyId = signal('');
+  readonly selectedCompanyUid = computed(() => this.companies().find((c) => c.id === this.selectedCompanyId())?.uid ?? '');
   readonly companyState = signal<'loading' | 'idle' | 'error'>('loading');
 
   // ── Picker option lists ────────────────────────────────────────────────────

@@ -14,6 +14,7 @@ CREATE TABLE price_tiers (
     product_id           BIGINT          NOT NULL,
     price_list_id        BIGINT          NOT NULL,
     min_qty              NUMERIC(19,6)   NOT NULL,
+    max_qty              NUMERIC(19,6),                  -- P2-M3: optional quantity-break ceiling
     unit_price_amount    NUMERIC(19,4)   NOT NULL,
     currency             VARCHAR(3)      NOT NULL,
     status               VARCHAR(20)     NOT NULL DEFAULT 'ACTIVE',
@@ -46,6 +47,8 @@ CREATE TABLE customer_prices (
     product_id           BIGINT          NOT NULL,
     unit_price_amount    NUMERIC(19,4)   NOT NULL,
     currency             VARCHAR(3)      NOT NULL,
+    min_qty              NUMERIC(19,6),                  -- P3: volume-break minimum quantity (null = applies to any qty)
+    price_list_id        BIGINT,                         -- P3: soft-FK → price_lists(id); provenance of this contract price
     effective_from       DATE,
     effective_to         DATE,
     status               VARCHAR(20)     NOT NULL DEFAULT 'ACTIVE',
@@ -84,6 +87,12 @@ CREATE TABLE promotions (
     effective_from       DATE            NOT NULL,
     effective_to         DATE            NOT NULL,
     priority             SMALLINT        NOT NULL DEFAULT 0,
+    target_customer_id   BIGINT,                            -- P2 D5: soft-FK → customers(id); restrict promo to one customer
+    target_branch_id     BIGINT,                            -- P2 D5: soft-FK → branches(id); restrict promo to one branch
+    min_threshold        NUMERIC(19,4),                     -- P2 D5: minimum order/line value to qualify
+    usage_limit          INTEGER,                           -- P2 D5: max number of redemptions (null = unlimited)
+    coupon_code          VARCHAR(40),                       -- P2 D5: optional coupon code gating the promotion
+    combinable           BOOLEAN         NOT NULL DEFAULT false, -- P2 D5: may combine with other promotions (warn-only v1)
     status               VARCHAR(20)     NOT NULL DEFAULT 'ACTIVE',
     version              BIGINT          NOT NULL DEFAULT 0,
     created_at           TIMESTAMPTZ     NOT NULL DEFAULT now(),
@@ -100,6 +109,8 @@ CREATE TABLE promotions (
     CONSTRAINT chk_promotion_pct          CHECK (effect <> 'PERCENT_DISCOUNT' OR effect_value BETWEEN 0 AND 100),
     CONSTRAINT chk_promotion_window       CHECK (effective_to >= effective_from),
     CONSTRAINT chk_promotion_status       CHECK (status IN ('ACTIVE','INACTIVE','ARCHIVED')),
+    CONSTRAINT chk_promotion_min_thresh   CHECK (min_threshold IS NULL OR min_threshold >= 0),
+    CONSTRAINT chk_promotion_usage_limit  CHECK (usage_limit IS NULL OR usage_limit >= 0),
     CONSTRAINT chk_promotion_target_ref   CHECK (
         (target = 'PRODUCT'   AND target_product_id IS NOT NULL)
         OR (target = 'CATEGORY' AND target_category IS NOT NULL)
@@ -109,6 +120,29 @@ CREATE TABLE promotions (
 
 CREATE INDEX ix_promotions_company_id ON promotions (company_id);
 CREATE INDEX ix_promotions_active     ON promotions (company_id, target, effective_from, effective_to);
+
+-- ============================================================================
+-- (3b) promotion_usages — append-only redemption log (owned child of promotions)
+-- One row per redemption; used by usage_limit enforcement + reporting (P2 D5).
+-- ============================================================================
+CREATE TABLE promotion_usages (
+    id                   BIGSERIAL PRIMARY KEY,
+    uid                  VARCHAR(26)     NOT NULL,
+    company_id           BIGINT          NOT NULL,
+    promotion_id         BIGINT          NOT NULL,
+    customer_id          BIGINT,                            -- soft-FK → customers(id); the redeeming customer
+    used_by              BIGINT,                            -- soft-FK → app_users(id); the operator who applied it
+    used_at              TIMESTAMPTZ     NOT NULL DEFAULT now(),
+    order_uid            VARCHAR(26),                       -- the sales document the promotion was applied to
+    amount               NUMERIC(19,4),                     -- discount amount granted on this redemption
+    CONSTRAINT uq_promotion_usage_uid     UNIQUE (uid),
+    CONSTRAINT fk_promotion_usage_company FOREIGN KEY (company_id)   REFERENCES companies(id),
+    CONSTRAINT fk_promotion_usage_promo   FOREIGN KEY (promotion_id) REFERENCES promotions(id),
+    CONSTRAINT chk_promotion_usage_amount CHECK (amount IS NULL OR amount >= 0)
+);
+
+CREATE INDEX ix_promotion_usages_company_id ON promotion_usages (company_id);
+CREATE INDEX ix_promotion_usages_promotion  ON promotion_usages (promotion_id);
 
 -- ============================================================================
 -- (4) ALTER products — add optional category string (OQ-SD-05)

@@ -5,9 +5,12 @@ import com.erp.modules.tax.domain.dto.WhtRegisterRowDto;
 import com.erp.modules.tax.domain.entity.WhtTransaction;
 import com.erp.modules.tax.domain.enums.WhtKind;
 import com.erp.modules.tax.repository.WhtTransactionRepository;
+import com.erp.platform.common.api.ConflictException;
+import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import org.springframework.stereotype.Service;
@@ -58,6 +61,30 @@ public class WhtRegisterServiceImpl implements WhtRegisterService {
         return new WhtRegisterDto(companyId, periodStart, periodEnd,
                 payableDtos, totalPayable,
                 receivableDtos, totalReceivable);
+    }
+
+    @Override
+    @Transactional
+    public void markRemitted(String whtTransactionUid, String remittancePeriod, String remittanceRef) {
+        WhtTransaction txn = whtTransactions.findByUid(whtTransactionUid)
+                .orElseThrow(() -> new NotFoundException(
+                        "WHT transaction not found: " + whtTransactionUid));
+        scopeGuard.assertCanActIn(RequestContext.get(), txn.getCompanyId());
+        if (txn.isRemitted()) {
+            throw new ConflictException(
+                    "WHT transaction already remitted: " + whtTransactionUid);
+        }
+        txn.setRemitted(true);
+        txn.setRemittancePeriod(remittancePeriod);
+        txn.setRemittanceRef(remittanceRef);
+        txn.setRemittedAt(Instant.now());
+        txn.setRemittedBy(actorId());
+        whtTransactions.save(txn);
+    }
+
+    private Long actorId() {
+        RequestContext.Principal p = RequestContext.get();
+        return p != null ? p.userId() : null;
     }
 
     private WhtRegisterRowDto toRow(WhtTransaction t) {

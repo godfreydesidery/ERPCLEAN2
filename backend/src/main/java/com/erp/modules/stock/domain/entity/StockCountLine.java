@@ -1,5 +1,6 @@
 package com.erp.modules.stock.domain.entity;
 
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -56,6 +57,10 @@ public class StockCountLine extends UidEntity {
     @Column(name = "counted_qty", precision = 19, scale = 6)
     private BigDecimal countedQty;
 
+    /** P2 D7: re-count quantity captured when a recount is performed. NULL if no recount. */
+    @Column(name = "recounted_qty", precision = 19, scale = 6)
+    private BigDecimal recountedQty;
+
     /** computed = counted − live-on-hand at post (BR-INVD-09, OQ-INVD-06). */
     @Column(name = "variance_qty", precision = 19, scale = 6)
     private BigDecimal varianceQty;
@@ -76,8 +81,8 @@ public class StockCountLine extends UidEntity {
     @Column(name = "movement_uid", length = 26)
     private String movementUid;
 
-    @Column(name = "currency", nullable = false, length = 10)
-    private String currency;
+    @Column(name = "currency", nullable = false, length = 3)
+    private CurrencyCode currency;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -109,7 +114,7 @@ public class StockCountLine extends UidEntity {
         this.unitId       = unitId;
         this.unitName     = unitName;
         this.systemQty    = systemQty;
-        this.currency     = currency;
+        this.currency     = CurrencyCode.ofNullable(currency);
         this.createdBy    = createdBy;
     }
 
@@ -157,12 +162,15 @@ public class StockCountLine extends UidEntity {
     public String     getUnitName()       { return unitName; }
     public BigDecimal getSystemQty()      { return systemQty; }
     public BigDecimal getCountedQty()     { return countedQty; }
+    public BigDecimal getRecountedQty()   { return recountedQty; }
     public BigDecimal getVarianceQty()    { return varianceQty; }
+
+    public void setRecountedQty(BigDecimal recountedQty) { this.recountedQty = recountedQty; }
     public BigDecimal getUnitCostAmount() { return unitCostAmount; }
     public BigDecimal getVarianceValue()  { return varianceValue; }
     public String     getReasonCode()     { return reasonCode; }
     public String     getMovementUid()    { return movementUid; }
-    public String     getCurrency()       { return currency; }
+    public String     getCurrency()       { return CurrencyCode.value(currency); }
     public Instant    getCreatedAt()      { return createdAt; }
     public Long       getCreatedBy()      { return createdBy; }
     public Instant    getUpdatedAt()      { return updatedAt; }

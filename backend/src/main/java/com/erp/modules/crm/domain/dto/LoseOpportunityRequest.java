@@ -1,7 +1,8 @@
 package com.erp.modules.crm.domain.dto;
 
-import jakarta.validation.constraints.NotBlank;
+import com.erp.modules.crm.domain.enums.OpportunityLossReason;
+import jakarta.validation.constraints.NotNull;
 
 public record LoseOpportunityRequest(
-        @NotBlank String lossReason
+        @NotNull OpportunityLossReason lossReason
 ) {}

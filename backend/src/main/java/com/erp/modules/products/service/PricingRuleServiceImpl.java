@@ -13,11 +13,15 @@ import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.domain.entity.Promotion;
 import com.erp.modules.products.domain.enums.PromotionEffect;
 import com.erp.modules.products.domain.enums.PromotionTarget;
+import com.erp.modules.products.domain.dto.PromotionUsageDto;
+import com.erp.modules.products.domain.dto.RecordPromotionUsageRequest;
+import com.erp.modules.products.domain.entity.PromotionUsage;
 import com.erp.modules.products.repository.CustomerPriceRepository;
 import com.erp.modules.products.repository.PriceListRepository;
 import com.erp.modules.products.repository.PriceTierRepository;
 import com.erp.modules.products.repository.ProductRepository;
 import com.erp.modules.products.repository.PromotionRepository;
+import com.erp.modules.products.repository.PromotionUsageRepository;
 import com.erp.modules.parties.repository.CustomerRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.platform.audit.AuditActions;
@@ -26,6 +30,7 @@ import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.time.Instant;
@@ -43,34 +48,40 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class PricingRuleServiceImpl implements PricingRuleService {
 
-    private final PriceTierRepository     tiers;
-    private final CustomerPriceRepository customerPrices;
-    private final PromotionRepository     promotions;
-    private final ProductRepository       products;
-    private final PriceListRepository     priceLists;
-    private final CustomerRepository      customers;
-    private final CompanyRepository       companies;
-    private final ScopeGuard              scopeGuard;
-    private final AuditService            audit;
+    private final PriceTierRepository      tiers;
+    private final CustomerPriceRepository  customerPrices;
+    private final PromotionRepository      promotions;
+    private final PromotionUsageRepository promotionUsages;
+    private final ProductRepository        products;
+    private final PriceListRepository      priceLists;
+    private final CustomerRepository       customers;
+    private final CompanyRepository        companies;
+    private final ProductBranchGuard       branchGuard;
+    private final ScopeGuard               scopeGuard;
+    private final AuditService             audit;
 
     public PricingRuleServiceImpl(PriceTierRepository tiers,
                                    CustomerPriceRepository customerPrices,
                                    PromotionRepository promotions,
+                                   PromotionUsageRepository promotionUsages,
                                    ProductRepository products,
                                    PriceListRepository priceLists,
                                    CustomerRepository customers,
                                    CompanyRepository companies,
+                                   ProductBranchGuard branchGuard,
                                    ScopeGuard scopeGuard,
                                    AuditService audit) {
-        this.tiers          = tiers;
-        this.customerPrices = customerPrices;
-        this.promotions     = promotions;
-        this.products       = products;
-        this.priceLists     = priceLists;
-        this.customers      = customers;
-        this.companies      = companies;
-        this.scopeGuard     = scopeGuard;
-        this.audit          = audit;
+        this.tiers           = tiers;
+        this.customerPrices  = customerPrices;
+        this.promotions      = promotions;
+        this.promotionUsages = promotionUsages;
+        this.products        = products;
+        this.priceLists      = priceLists;
+        this.customers       = customers;
+        this.companies       = companies;
+        this.branchGuard     = branchGuard;
+        this.scopeGuard      = scopeGuard;
+        this.audit           = audit;
     }
 
     // ---- Price Tiers -----------------------------------------------------------
@@ -196,6 +207,23 @@ public class PricingRuleServiceImpl implements PricingRuleService {
                 req.effect(), req.effectValue(),
                 req.effectiveFrom(), req.effectiveTo(),
                 req.priority(), actorId());
+
+        // P2 D5 targeting + guardrails (all optional)
+        if (req.targetCustomerUid() != null && !req.targetCustomerUid().isBlank()) {
+            var customer = customers.findByUid(req.targetCustomerUid())
+                    .orElseThrow(() -> NotFoundException.of("Customer", req.targetCustomerUid()));
+            promo.setTargetCustomerId(customer.getId());
+        }
+        if (req.targetBranchUid() != null && !req.targetBranchUid().isBlank()) {
+            promo.setTargetBranchId(branchGuard.resolveAndAssertSameCompany(company, req.targetBranchUid()));
+        }
+        promo.setMinThreshold(req.minThreshold());
+        promo.setUsageLimit(req.usageLimit());
+        promo.setCouponCode(req.couponCode());
+        if (req.combinable() != null) {
+            promo.setCombinable(req.combinable());
+        }
+
         promo = promotions.save(promo);
 
         audit.record(AuditEvent.of(AuditActions.PROMOTION_CREATE, "promotions", promo.getId(), promo.getUid())
@@ -226,6 +254,41 @@ public class PricingRuleServiceImpl implements PricingRuleService {
         promo.setUpdatedAt(Instant.now());
         promo.setUpdatedBy(actorId());
         audit.record(AuditEvent.of(AuditActions.PROMOTION_DEACTIVATE, "promotions", promo.getId(), promo.getUid()));
+    }
+
+    /**
+     * Records a single redemption of a promotion and enforces its {@code usage_limit} (P2 D5,
+     * ADR-0041 D5). Exposed so the sales side can call this when it applies a promotion to a
+     * document — the products module owns the {@code promotion_usages} append-only log.
+     *
+     * <p>Enforcement: when the promotion has a non-null {@code usage_limit}, the count of existing
+     * redemptions must be strictly below the limit before a new row is recorded; otherwise a
+     * {@link ConflictException} is thrown (no row is written). The customer is optional
+     * (anonymous/walk-in).
+     */
+    @Override
+    public PromotionUsageDto recordUsage(RecordPromotionUsageRequest req) {
+        Promotion promo = requirePromotionByUid(req.promotionUid());
+        scopeGuard.assertCanActIn(RequestContext.get(), promo.getCompanyId());
+
+        Integer limit = promo.getUsageLimit();
+        if (limit != null && promotionUsages.countByPromotionId(promo.getId()) >= limit) {
+            throw new ConflictException(
+                    "Promotion " + promo.getCode() + " has reached its usage limit of " + limit + ".");
+        }
+
+        Long customerId = null;
+        if (req.customerUid() != null && !req.customerUid().isBlank()) {
+            customerId = customers.findByUid(req.customerUid())
+                    .orElseThrow(() -> NotFoundException.of("Customer", req.customerUid()))
+                    .getId();
+        }
+
+        PromotionUsage usage = new PromotionUsage(
+                promo.getCompanyId(), promo.getId(), customerId,
+                actorId(), req.orderUid(), req.amount());
+        usage = promotionUsages.save(usage);
+        return PromotionUsageDto.from(usage);
     }
 
     // ---- helpers ---------------------------------------------------------------
@@ -273,13 +336,13 @@ public class PricingRuleServiceImpl implements PricingRuleService {
     private PriceTierDto toDto(PriceTier t) {
         return new PriceTierDto(t.getId(), t.getUid(), t.getCompanyId(),
                 t.getProductId(), t.getPriceListId(),
-                t.getMinQty(), t.getUnitPriceAmount(), t.getCurrency(), t.getStatus());
+                t.getMinQty(), t.getMaxQty(), t.getUnitPriceAmount(), CurrencyCode.value(t.getCurrency()), t.getStatus());
     }
 
     private CustomerPriceDto toDto(CustomerPrice cp) {
         return new CustomerPriceDto(cp.getId(), cp.getUid(), cp.getCompanyId(),
                 cp.getCustomerId(), cp.getProductId(),
-                cp.getUnitPriceAmount(), cp.getCurrency(),
+                cp.getUnitPriceAmount(), CurrencyCode.value(cp.getCurrency()),
                 cp.getEffectiveFrom(), cp.getEffectiveTo(), cp.getStatus());
     }
 
@@ -289,6 +352,10 @@ public class PricingRuleServiceImpl implements PricingRuleService {
                 p.getTargetProductId(), p.getTargetCategory(),
                 p.getEffect(), p.getEffectValue(),
                 p.getEffectiveFrom(), p.getEffectiveTo(),
-                p.getPriority(), p.getStatus());
+                p.getPriority(),
+                p.getTargetCustomerId(), p.getTargetBranchId(),
+                p.getMinThreshold(), p.getUsageLimit(),
+                p.getCouponCode(), p.isCombinable(),
+                p.getStatus());
     }
 }

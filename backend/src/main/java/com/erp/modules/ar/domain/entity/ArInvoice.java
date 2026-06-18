@@ -3,6 +3,7 @@ package com.erp.modules.ar.domain.entity;
 import com.erp.modules.ar.domain.enums.ArInvoiceSource;
 import com.erp.modules.ar.domain.enums.ArInvoiceStatus;
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -55,7 +56,7 @@ public class ArInvoice extends UidEntity {
     private BigDecimal outstandingAmount;
 
     @Column(name = "currency", nullable = false, length = 3, updatable = false)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "invoice_date", nullable = false, updatable = false)
     private LocalDate invoiceDate;
@@ -63,6 +64,16 @@ public class ArInvoice extends UidEntity {
     @Column(name = "due_date", nullable = false)
     @Setter
     private LocalDate dueDate;
+
+    /** P2 D1: settlement (early-payment) discount deadline; inherited from the source SI. Nullable. */
+    @Column(name = "settlement_discount_due_date")
+    @Setter
+    private LocalDate settlementDiscountDueDate;
+
+    /** P2 D1: settlement (early-payment) discount amount; data-only, no GL leg (ADR-0041). Nullable. */
+    @Column(name = "settlement_discount_amount", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal settlementDiscountAmount;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
@@ -109,6 +120,44 @@ public class ArInvoice extends UidEntity {
     @Setter
     private Instant rateAt;
 
+    // -------------------------------------------------------------------------
+    // ADR-0040 D-5 — dunning + dispute recording columns (V68). Recording-only;
+    // never used in GL balance calculations.
+    // -------------------------------------------------------------------------
+
+    /** Dunning escalation level (0 = not yet dunned). Incremented by the dunning job. */
+    @Column(name = "dunning_level", nullable = false)
+    @Setter
+    private int dunningLevel = 0;
+
+    /** Date of the most recent dunning reminder sent to the customer. */
+    @Column(name = "last_reminder_date")
+    @Setter
+    private LocalDate lastReminderDate;
+
+    /** Whether the customer has raised a formal dispute on this invoice. */
+    @Column(name = "disputed", nullable = false)
+    @Setter
+    private boolean disputed = false;
+
+    /** Free-text reason for the dispute (AR staff recording). */
+    @Column(name = "dispute_reason", length = 255)
+    @Setter
+    private String disputeReason;
+
+    /**
+     * AR-level hold flag: blocks a receipt allocation being applied while in dispute or under
+     * investigation. Recording-only; does not affect the outstanding balance calculation.
+     */
+    @Column(name = "on_hold", nullable = false)
+    @Setter
+    private boolean onHold = false;
+
+    /** Free-text reason for the AR-level hold. */
+    @Column(name = "hold_reason", length = 255)
+    @Setter
+    private String holdReason;
+
     protected ArInvoice() {
         // JPA
     }
@@ -125,7 +174,7 @@ public class ArInvoice extends UidEntity {
         this.documentNo        = documentNo;
         this.originalAmount    = amount;
         this.outstandingAmount = amount;
-        this.currency          = currency;
+        this.currency          = CurrencyCode.of(currency);
         this.invoiceDate       = invoiceDate;
         this.dueDate           = dueDate;
         this.createdBy         = createdBy;

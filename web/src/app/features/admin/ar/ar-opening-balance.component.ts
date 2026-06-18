@@ -13,6 +13,7 @@ import { CustomerModel } from '../models/party.model';
 import { CustomerService } from '../parties/customer.service';
 import { ArInvoiceDto, SetOpeningBalanceRequest } from './models/ar.model';
 import { ArService } from './ar.service';
+import { CurrencySelectComponent } from '../../../shared/currency-select/currency-select.component';
 
 /**
  * Set AR Opening Balance. Gated AR.OPENING.SET.
@@ -20,7 +21,7 @@ import { ArService } from './ar.service';
  */
 @Component({
   selector: 'app-ar-opening-balance',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, CurrencySelectComponent],
   templateUrl: './ar-opening-balance.component.html',
   styleUrl: './ar-opening-balance.component.scss',
 })
@@ -35,6 +36,7 @@ export class ArOpeningBalanceComponent {
   // ── Company context ────────────────────────────────────────────────────────
   readonly companies = signal<Company[]>([]);
   readonly selectedCompanyId = signal('');
+  readonly selectedCompanyUid = computed(() => this.companies().find((c) => c.id === this.selectedCompanyId())?.uid ?? '');
   readonly companyState = signal<'loading' | 'idle' | 'error'>('loading');
 
   // ── Customer picker ────────────────────────────────────────────────────────

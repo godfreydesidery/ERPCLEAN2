@@ -38,9 +38,21 @@ public class Currency extends UidEntity {
     @Column(name = "minor_units", nullable = false)
     private short minorUnits;
 
+    /** ISO 4217 numeric code (e.g. "840" for USD, "834" for TZS); nullable (P2-M1). */
+    @Column(name = "numeric_code", length = 3)
+    private String numericCode;
+
     @Column(name = "active", nullable = false)
     private boolean active = true;
 
+    /**
+     * Lifecycle status (X3). Kept as a String mapped to {@code MasterStatus} values
+     * ('ACTIVE'/'INACTIVE', per {@code chk_currency_status}). NOT migrated to an
+     * {@code @Enumerated MasterStatus} field because {@code getStatus()} flows into
+     * {@code CurrencyDto.status} (String) via {@code FxRateServiceImpl.toCurrencyDto} in the
+     * platform/common module — typing the field would force an out-of-cluster edit. The
+     * {@code active} boolean is retained for back-compat (do NOT drop); the two are independent.
+     */
     @Column(name = "status", nullable = false, length = 20)
     private String status = "ACTIVE";
 
@@ -70,21 +82,23 @@ public class Currency extends UidEntity {
         this.createdBy   = createdBy;
     }
 
-    public String getCode()       { return code; }
-    public String getName()       { return name; }
-    public String getSymbol()     { return symbol; }
-    public short  getMinorUnits() { return minorUnits; }
-    public boolean isActive()     { return active; }
-    public String getStatus()     { return status; }
-    public Instant getCreatedAt() { return createdAt; }
-    public Long getCreatedBy()    { return createdBy; }
-    public Instant getUpdatedAt() { return updatedAt; }
-    public Long getUpdatedBy()    { return updatedBy; }
+    public String getCode()         { return code; }
+    public String getName()         { return name; }
+    public String getSymbol()       { return symbol; }
+    public short  getMinorUnits()   { return minorUnits; }
+    public String getNumericCode()  { return numericCode; }
+    public boolean isActive()       { return active; }
+    public String getStatus()       { return status; }
+    public Instant getCreatedAt()   { return createdAt; }
+    public Long getCreatedBy()      { return createdBy; }
+    public Instant getUpdatedAt()   { return updatedAt; }
+    public Long getUpdatedBy()      { return updatedBy; }
 
-    public void setName(String name)           { this.name = name; }
-    public void setSymbol(String symbol)       { this.symbol = symbol; }
-    public void setActive(boolean active)      { this.active = active; }
-    public void setStatus(String status)       { this.status = status; }
-    public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
-    public void setUpdatedBy(Long updatedBy)   { this.updatedBy = updatedBy; }
+    public void setName(String name)             { this.name = name; }
+    public void setSymbol(String symbol)         { this.symbol = symbol; }
+    public void setNumericCode(String numericCode) { this.numericCode = numericCode; }
+    public void setActive(boolean active)        { this.active = active; }
+    public void setStatus(String status)         { this.status = status; }
+    public void setUpdatedAt(Instant updatedAt)  { this.updatedAt = updatedAt; }
+    public void setUpdatedBy(Long updatedBy)     { this.updatedBy = updatedBy; }
 }

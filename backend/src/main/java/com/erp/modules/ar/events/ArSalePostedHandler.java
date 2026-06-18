@@ -5,8 +5,10 @@ import com.erp.modules.ar.domain.enums.ArInvoiceSource;
 import com.erp.modules.ar.repository.ArInvoiceRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.parties.domain.entity.Customer;
-import com.erp.modules.parties.domain.enums.CustomerKind;
+import com.erp.modules.parties.domain.entity.PaymentTerms;
 import com.erp.modules.parties.repository.CustomerRepository;
+import com.erp.modules.parties.repository.PaymentTermsRepository;
+import com.erp.modules.parties.service.PaymentTermsDueDateCalculator;
 import com.erp.modules.sales.domain.dto.InvoicePostingTotalsDto;
 import com.erp.modules.sales.domain.dto.SaleFinalisedPayload;
 import com.erp.modules.sales.service.SalesInvoiceService;
@@ -55,6 +57,7 @@ public class ArSalePostedHandler implements DomainEventHandler {
     private final SalesInvoiceService salesInvoiceService;
     private final ArInvoiceRepository arInvoices;
     private final CustomerRepository customers;
+    private final PaymentTermsRepository paymentTermsRepo;
     private final CompanyRepository companies;
     private final AuditService audit;
     private final ObjectMapper objectMapper;
@@ -63,6 +66,7 @@ public class ArSalePostedHandler implements DomainEventHandler {
                                 SalesInvoiceService salesInvoiceService,
                                 ArInvoiceRepository arInvoices,
                                 CustomerRepository customers,
+                                PaymentTermsRepository paymentTermsRepo,
                                 CompanyRepository companies,
                                 AuditService audit,
                                 ObjectMapper objectMapper) {
@@ -70,6 +74,7 @@ public class ArSalePostedHandler implements DomainEventHandler {
         this.salesInvoiceService = salesInvoiceService;
         this.arInvoices          = arInvoices;
         this.customers           = customers;
+        this.paymentTermsRepo    = paymentTermsRepo;
         this.companies           = companies;
         this.audit               = audit;
         this.objectMapper        = objectMapper;
@@ -144,7 +149,8 @@ public class ArSalePostedHandler implements DomainEventHandler {
             return;
         }
 
-        // 3c. Resolve due date from customer payment terms (OQ-AR-01: else net-on-receipt)
+        // 3c. Resolve due date — priority: PaymentTerms master > paymentTermsDays integer > net-on-receipt
+        //     (D-2, ADR-0040: linked term wins; deprecated integer is fallback; net-on-receipt if neither set)
         LocalDate invoiceDate = totals.finalisedAt() != null
                 ? totals.finalisedAt().atZone(ZoneOffset.UTC).toLocalDate()
                 : LocalDate.now();
@@ -152,9 +158,13 @@ public class ArSalePostedHandler implements DomainEventHandler {
         Customer customer = totals.customerId() != null
                 ? customers.findById(totals.customerId()).orElse(null)
                 : null;
-        int termsDays = (customer != null && customer.getPaymentTermsDays() != null)
-                ? customer.getPaymentTermsDays() : 0;
-        LocalDate dueDate = invoiceDate.plusDays(termsDays);
+        // ADR-0041 D1 — resolve the PaymentTerms master once (customer default), then derive the due
+        // date and the inherited settlement-discount fields via the shared calculator.
+        PaymentTerms terms = (customer != null && customer.getPaymentTermsId() != null)
+                ? paymentTermsRepo.findById(customer.getPaymentTermsId()).orElse(null)
+                : null;
+        Integer netDaysFallback = customer != null ? customer.getPaymentTermsDays() : null;
+        LocalDate dueDate = PaymentTermsDueDateCalculator.derive(invoiceDate, terms, netDaysFallback);
 
         // 3d. Create the open item — NO GL POST (D-5, BR-AR-02)
         // Use outstandingAmount from totals if present; fall back to grossTotalAmount (D-10 v1 default)
@@ -186,6 +196,15 @@ public class ArSalePostedHandler implements DomainEventHandler {
                 .setScale(baseScale, RoundingMode.HALF_UP);
         inv.setBaseOriginalAmount(baseReceivable);
         inv.setBaseOutstandingAmount(baseReceivable);
+
+        // ADR-0041 D1 — settlement-discount fields inherited from the customer's payment terms.
+        // Data-only (no GL leg). Null when the term carries no early-payment discount.
+        if (terms != null) {
+            inv.setSettlementDiscountDueDate(
+                    PaymentTermsDueDateCalculator.settlementDiscountDueDate(invoiceDate, terms));
+            inv.setSettlementDiscountAmount(
+                    PaymentTermsDueDateCalculator.settlementDiscountAmount(receivable, terms));
+        }
 
         // Fail loud: a foreign open item must not persist with fxRate=1 / base NULL (I-6 guard).
         if (!totals.currency().equals(baseCurrency)

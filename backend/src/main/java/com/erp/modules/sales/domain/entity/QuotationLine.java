@@ -2,6 +2,7 @@ package com.erp.modules.sales.domain.entity;
 
 import com.erp.modules.products.domain.enums.VatStatus;
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -93,7 +94,15 @@ public class QuotationLine extends UidEntity {
     private BigDecimal grossAmount = BigDecimal.ZERO;
 
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
+
+    /**
+     * P3 (X15): promotion provenance — soft-FK to promotions(id). Nullable; stamped when a
+     * promotion was applied to this line. Scalar Long per cross-module soft-FK convention.
+     */
+    @Column(name = "promotion_id")
+    @Setter
+    private Long promotionId;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
@@ -135,7 +144,7 @@ public class QuotationLine extends UidEntity {
         this.unitPriceAmount = unitPrice;
         this.vatStatus = vatStatus;
         this.vatRate = vatRate;
-        this.currency = currency;
+        this.currency = CurrencyCode.of(currency);
         this.createdBy = createdBy;
     }
 }

@@ -1,6 +1,7 @@
 package com.erp.modules.budgeting.domain.entity;
 
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
@@ -44,9 +45,14 @@ public class BudgetLine extends UidEntity {
     @Setter
     private BigDecimal amount;
 
+    /** P2 D7: optional volume/quantity basis for the line (e.g. units, hours). */
+    @Column(name = "quantity", precision = 19, scale = 6)
+    @Setter
+    private BigDecimal quantity;
+
     @Column(name = "currency", nullable = false, length = 3)
     @Setter
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "line_memo", length = 255)
     @Setter
@@ -70,7 +76,7 @@ public class BudgetLine extends UidEntity {
         this.accountId       = accountId;
         this.fiscalPeriodId  = fiscalPeriodId;
         this.amount          = amount;
-        this.currency        = currency;
+        this.currency        = CurrencyCode.of(currency);
         this.lineMemo        = lineMemo;
         this.createdBy       = createdBy;
     }

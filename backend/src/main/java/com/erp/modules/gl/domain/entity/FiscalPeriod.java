@@ -31,6 +31,11 @@ public class FiscalPeriod extends UidEntity {
     @Column(name = "period_no", nullable = false)
     private int periodNo;
 
+    /** P3: human label (e.g. "Jan 2026"); nullable. */
+    @Column(name = "name", length = 60)
+    @Setter
+    private String name;
+
     @Column(name = "start_date", nullable = false)
     private LocalDate startDate;
 
@@ -49,6 +54,15 @@ public class FiscalPeriod extends UidEntity {
     @Column(name = "closed_by")
     @Setter
     private Long closedBy;
+
+    // P3: reopen audit trail (mirror fiscal_years) — set on each reopen; null if never reopened.
+    @Column(name = "reopened_at")
+    @Setter
+    private Instant reopenedAt;
+
+    @Column(name = "reopened_by")
+    @Setter
+    private Long reopenedBy;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();

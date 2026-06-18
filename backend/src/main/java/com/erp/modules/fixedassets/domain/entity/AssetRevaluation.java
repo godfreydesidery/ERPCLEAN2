@@ -1,5 +1,6 @@
 package com.erp.modules.fixedassets.domain.entity;
 
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.modules.fixedassets.domain.enums.RevaluationDirection;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
@@ -60,10 +61,25 @@ public class AssetRevaluation extends UidEntity {
     private String glEntryUid;
 
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "reason", length = 255)
     private String reason;
+
+    /** P2 D7: name of the professional valuer. */
+    @Column(name = "valuer_name", length = 200)
+    @Setter
+    private String valuerName;
+
+    /** P2 D7: valuation report reference number. */
+    @Column(name = "valuation_ref", length = 80)
+    @Setter
+    private String valuationRef;
+
+    /** P2 D7: approver linkage (app_users.id). */
+    @Column(name = "approved_by")
+    @Setter
+    private Long approvedBy;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
@@ -97,7 +113,7 @@ public class AssetRevaluation extends UidEntity {
         this.deltaAmount    = deltaAmount;
         this.carryingBefore = carryingBefore;
         this.carryingAfter  = carryingAfter;
-        this.currency       = currency;
+        this.currency       = CurrencyCode.ofNullable(currency);
         this.reason         = reason;
         this.createdBy      = createdBy;
     }

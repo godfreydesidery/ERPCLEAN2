@@ -289,6 +289,9 @@ public final class AuditActions {
     public static final String HR_EMPLOYEE_CREATE      = "HR.EMPLOYEE.CREATE";
     public static final String HR_EMPLOYEE_UPDATE      = "HR.EMPLOYEE.UPDATE";
     public static final String HR_EMPLOYEE_ARCHIVE     = "HR.EMPLOYEE.ARCHIVE";
+    public static final String HR_EMPLOYEE_NOK_ADD        = "HR.EMPLOYEE.NOK.ADD";
+    public static final String HR_EMPLOYEE_NOK_UPDATE     = "HR.EMPLOYEE.NOK.UPDATE";
+    public static final String HR_EMPLOYEE_NOK_DEACTIVATE = "HR.EMPLOYEE.NOK.DEACTIVATE";
     public static final String HR_CONTRACT_CREATE      = "HR.CONTRACT.CREATE";
     public static final String HR_CONTRACT_TERMINATE   = "HR.CONTRACT.TERMINATE";
     public static final String HR_PAYCOMPONENT_CREATE  = "HR.PAYCOMPONENT.CREATE";
@@ -404,4 +407,38 @@ public final class AuditActions {
     public static final String FX_RATE_SET             = "FX.RATE.SET";
     /** Emitted when a period-end FX revaluation run is posted. */
     public static final String FX_REVALUATION_RUN      = "FX.REVALUATION.RUN";
+
+    // ---- PaymentTerms master (D-2, ADR-0040) ----
+    public static final String PAYMENTTERMS_CREATE  = "PAYMENTTERMS.CREATE";
+    public static final String PAYMENTTERMS_UPDATE  = "PAYMENTTERMS.UPDATE";
+    public static final String PAYMENTTERMS_ARCHIVE = "PAYMENTTERMS.ARCHIVE";
+    public static final String PAYMENTTERMS_RESTORE = "PAYMENTTERMS.RESTORE";
+
+    // ---- SupplierBankAccount (D-4, ADR-0040) ----
+    public static final String SUPPLIER_BANK_ACCOUNT_CREATE     = "SUPPLIER.BANK_ACCOUNT.CREATE";
+    public static final String SUPPLIER_BANK_ACCOUNT_UPDATE     = "SUPPLIER.BANK_ACCOUNT.UPDATE";
+    public static final String SUPPLIER_BANK_ACCOUNT_ARCHIVE    = "SUPPLIER.BANK_ACCOUNT.ARCHIVE";
+    public static final String SUPPLIER_BANK_ACCOUNT_RESTORE    = "SUPPLIER.BANK_ACCOUNT.RESTORE";
+    public static final String SUPPLIER_BANK_ACCOUNT_SET_DEFAULT = "SUPPLIER.BANK_ACCOUNT.SET_DEFAULT";
+
+    // ---- Currency enablement (ADR-0039 D-9 / OQ-CCY-08) ----
+    /**
+     * Emitted when the company base currency is changed. Gated by admin permission;
+     * only allowed when no GL journal_entries exist for the company (OQ-CCY-08).
+     */
+    public static final String COMPANY_BASE_CURRENCY_CHANGE = "COMPANY.BASE_CURRENCY.CHANGE";
+
+    // ---- Party contacts & addresses (ADR-0040 D-3) ----
+    public static final String CUSTOMER_CONTACT_ADD      = "CUSTOMER.CONTACT.ADD";
+    public static final String CUSTOMER_CONTACT_UPDATE   = "CUSTOMER.CONTACT.UPDATE";
+    public static final String CUSTOMER_CONTACT_DEACTIVATE = "CUSTOMER.CONTACT.DEACTIVATE";
+    public static final String CUSTOMER_ADDRESS_ADD      = "CUSTOMER.ADDRESS.ADD";
+    public static final String CUSTOMER_ADDRESS_UPDATE   = "CUSTOMER.ADDRESS.UPDATE";
+    public static final String CUSTOMER_ADDRESS_DEACTIVATE = "CUSTOMER.ADDRESS.DEACTIVATE";
+    public static final String SUPPLIER_CONTACT_ADD      = "SUPPLIER.CONTACT.ADD";
+    public static final String SUPPLIER_CONTACT_UPDATE   = "SUPPLIER.CONTACT.UPDATE";
+    public static final String SUPPLIER_CONTACT_DEACTIVATE = "SUPPLIER.CONTACT.DEACTIVATE";
+    public static final String SUPPLIER_ADDRESS_ADD      = "SUPPLIER.ADDRESS.ADD";
+    public static final String SUPPLIER_ADDRESS_UPDATE   = "SUPPLIER.ADDRESS.UPDATE";
+    public static final String SUPPLIER_ADDRESS_DEACTIVATE = "SUPPLIER.ADDRESS.DEACTIVATE";
 }

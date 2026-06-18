@@ -1,5 +1,6 @@
 package com.erp.modules.iam.domain.entity;
 
+import com.erp.modules.iam.domain.enums.BranchType;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
@@ -10,6 +11,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import java.time.Instant;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -47,10 +49,64 @@ public class Branch extends UidEntity {
     @Setter
     private boolean isDefault = false;
 
+    /** P2: soft-FK to app_users/employee — scalar, no @ManyToOne (cross-module convention). */
+    @Column(name = "manager_id")
+    @Setter
+    private Long managerId;
+
+    /** P2: typed branch classification (nullable, descriptive only in v1). */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "branch_type", length = 20)
+    @Setter
+    private BranchType branchType;
+
+    // P2 D7 — contact + address block
+    @Column(name = "contact_phone", length = 40)
+    @Setter
+    private String contactPhone;
+
+    @Column(name = "contact_email", length = 160)
+    @Setter
+    private String contactEmail;
+
+    @Column(name = "address_line1", length = 160)
+    @Setter
+    private String addressLine1;
+
+    @Column(name = "address_line2", length = 160)
+    @Setter
+    private String addressLine2;
+
+    @Column(name = "city", length = 80)
+    @Setter
+    private String city;
+
+    @Column(name = "region", length = 80)
+    @Setter
+    private String region;
+
+    @Column(name = "country", length = 80)
+    @Setter
+    private String country;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     @Setter
     private MasterStatus status = MasterStatus.ACTIVE;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt = Instant.now();
+
+    @Column(name = "created_by", updatable = false)
+    private Long createdBy;
+
+    @Column(name = "updated_at")
+    @Setter
+    private Instant updatedAt;
+
+    @Column(name = "updated_by")
+    @Setter
+    private Long updatedBy;
 
     /**
      * F8 (ADR-0004 D-8): a branch is usable for a session only when both the branch itself and its

@@ -8,5 +8,13 @@ public record UpdatePurchaseSettingsRequest(
         @NotBlank String companyUid,
         boolean poApprovalEnabled,
         @PositiveOrZero BigDecimal poApprovalThresholdAmount,
-        String currency
+        String currency,
+        // P2 D7 — procurement policy defaults (all optional; null = leave unchanged)
+        Long       defaultPaymentTermsId,
+        Long       defaultLocationId,
+        @PositiveOrZero BigDecimal matchTolerancePct,
+        @PositiveOrZero BigDecimal matchToleranceAbs,
+        Boolean    autoCloseEnabled,
+        Boolean    requisitionApprovalEnabled,
+        @PositiveOrZero BigDecimal requisitionApprovalThresholdAmount
 ) {}

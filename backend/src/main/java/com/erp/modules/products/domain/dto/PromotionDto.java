@@ -23,6 +23,12 @@ public record PromotionDto(
         LocalDate effectiveFrom,
         LocalDate effectiveTo,
         short priority,
+        Long targetCustomerId,
+        Long targetBranchId,
+        BigDecimal minThreshold,
+        Integer usageLimit,
+        String couponCode,
+        boolean combinable,
         MasterStatus status
 ) {
 }

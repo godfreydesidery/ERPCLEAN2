@@ -59,6 +59,11 @@ public class DimensionValue extends UidEntity {
     @Setter
     private boolean active;
 
+    /** P3: owner/manager reference (scalar soft-FK, nullable — no cross-module JPA association, D-7). */
+    @Column(name = "manager_id")
+    @Setter
+    private Long managerId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     @Setter

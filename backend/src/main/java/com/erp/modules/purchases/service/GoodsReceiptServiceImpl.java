@@ -23,6 +23,7 @@ import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.OutboxPublisher;
@@ -304,7 +305,7 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
                 poLine.getProductId(), poLine.getProductCode(), poLine.getProductName(),
                 poLine.getUnitId(), poLine.getUnitName(),
                 lineReq.receivedQty(), qtyInBase,
-                poLine.getUnitCostAmount(), po.getCurrency(), actorId());
+                poLine.getUnitCostAmount(), CurrencyCode.value(po.getCurrency()), actorId());
     }
 
     private List<StockReceivedPayload.LineItem> buildPayloadLines(List<GoodsReceiptLine> grLines) {

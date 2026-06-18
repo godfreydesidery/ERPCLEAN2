@@ -54,6 +54,7 @@ public class WhtCaptureServiceImpl implements WhtCaptureService {
     public WhtCaptureResultDto captureOnPayment(Long companyId, Long branchId,
                                                  String whtTypeUid,
                                                  Long partySupplierId, String partyName,
+                                                 String partyTin,
                                                  String apPaymentUid,
                                                  BigDecimal taxableBase, BigDecimal whtAmount,
                                                  String currency, LocalDate certificateDate,
@@ -63,7 +64,7 @@ public class WhtCaptureServiceImpl implements WhtCaptureService {
         ChartOfAccount glAccount = glConfig.resolve(companyId, GlConfigKey.WHT_PAYABLE);
 
         return capture(companyId, branchId, whtType, "SUPPLIER",
-                partySupplierId, partyName, apPaymentUid,
+                partySupplierId, partyName, partyTin, apPaymentUid,
                 taxableBase, whtAmount, currency, certificateDate,
                 journalEntryUid, actorId, glAccount);
     }
@@ -72,6 +73,7 @@ public class WhtCaptureServiceImpl implements WhtCaptureService {
     public WhtCaptureResultDto captureOnReceipt(Long companyId, Long branchId,
                                                  String whtTypeUid,
                                                  Long partyCustomerId, String partyName,
+                                                 String partyTin,
                                                  String arReceiptUid,
                                                  BigDecimal taxableBase, BigDecimal whtAmount,
                                                  String currency, LocalDate certificateDate,
@@ -81,7 +83,7 @@ public class WhtCaptureServiceImpl implements WhtCaptureService {
         ChartOfAccount glAccount = glConfig.resolve(companyId, GlConfigKey.WHT_RECEIVABLE);
 
         return capture(companyId, branchId, whtType, "CUSTOMER",
-                partyCustomerId, partyName, arReceiptUid,
+                partyCustomerId, partyName, partyTin, arReceiptUid,
                 taxableBase, whtAmount, currency, certificateDate,
                 journalEntryUid, actorId, glAccount);
     }
@@ -99,6 +101,7 @@ public class WhtCaptureServiceImpl implements WhtCaptureService {
     private WhtCaptureResultDto capture(Long companyId, Long branchId,
                                          WhtType whtType, String partyKind,
                                          Long partyId, String partyName,
+                                         String partyTin,
                                          String sourceRef,
                                          BigDecimal taxableBase, BigDecimal whtAmount,
                                          String currency, LocalDate certificateDate,
@@ -111,7 +114,9 @@ public class WhtCaptureServiceImpl implements WhtCaptureService {
                 whtType.getId(), whtType.getKind(),
                 partyKind, partyId, partyName,
                 sourceRef, taxableBase, whtAmount,
-                currency, certificateDate, actorId);
+                currency, certificateDate,
+                partyTin, whtType.getRatePct(),
+                actorId);
 
         if (journalEntryUid != null) {
             txn.setJournalEntryRef(journalEntryUid);

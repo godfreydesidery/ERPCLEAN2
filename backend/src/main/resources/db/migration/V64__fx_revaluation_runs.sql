@@ -34,6 +34,11 @@ CREATE TABLE fx_revaluation_runs (
     created_by            BIGINT,
     updated_at            TIMESTAMPTZ,
     updated_by            BIGINT,
+    executed_by           BIGINT,                -- P2-M1: actor who posted the run
+    reversal_date         DATE,                  -- P2-M1: effective date of the auto-reversal journal
+    reversal_period_id    BIGINT,                -- P2-M1: fiscal_periods.id of the reversal posting
+    rate_type             VARCHAR(20),           -- P2-M1: rate basis used (SPOT/CLOSING/AVERAGE)
+    scope_summary         VARCHAR(255),          -- P2-M1: human-readable revalued-scope summary
 
     CONSTRAINT uq_fx_revaluation_run_uid    UNIQUE (uid),
     CONSTRAINT uq_fx_revaluation_run_number UNIQUE (company_id, run_number),
@@ -79,6 +84,8 @@ CREATE TABLE fx_revaluation_run_lines (
     created_by             BIGINT,
     updated_at             TIMESTAMPTZ,
     updated_by             BIGINT,
+    prior_rate             NUMERIC(19,8),        -- P2-M1: rate used to derive carrying_base_amount
+    journal_line_id        BIGINT,               -- P2-M1: GL line drill-down (journal_lines.id)
 
     CONSTRAINT uq_fx_revaluation_run_line_uid UNIQUE (uid),
 

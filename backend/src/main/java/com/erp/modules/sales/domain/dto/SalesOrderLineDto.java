@@ -2,6 +2,7 @@ package com.erp.modules.sales.domain.dto;
 
 import com.erp.modules.sales.domain.entity.SalesOrderLine;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 public record SalesOrderLineDto(
         Long id,
@@ -23,6 +24,8 @@ public record SalesOrderLineDto(
         boolean priceOverridden,
         BigDecimal lineDiscountAmount,
         BigDecimal lineDiscountPercent,
+        String discountReason,
+        LocalDate requestedDate,
         String vatStatus,
         BigDecimal vatRate,
         BigDecimal netAmount,
@@ -41,9 +44,10 @@ public record SalesOrderLineDto(
                 l.getListPriceAmount(), l.getUnitPriceAmount(),
                 l.isPriceOverridden(),
                 l.getLineDiscountAmount(), l.getLineDiscountPercent(),
+                l.getDiscountReason(), l.getRequestedDate(),
                 l.getVatStatus() != null ? l.getVatStatus().name() : null,
                 l.getVatRate(),
                 l.getNetAmount(), l.getVatAmount(), l.getGrossAmount(),
-                l.getCurrency());
+                l.getCurrency().value());
     }
 }

@@ -20,6 +20,7 @@ import { UidPickerComponent, UidOption } from '../../../shared/uid-picker/uid-pi
 import { SalesInvoiceDto } from '../models/sales.model';
 import { PosSessionDto, PosSaleLineRequest, PosSaleRequest } from './models/pos.model';
 import { PosService } from './pos.service';
+import { CurrencySelectComponent } from '../../../shared/currency-select/currency-select.component';
 
 /** A single line item in the checkout basket. */
 interface SaleLine {
@@ -47,7 +48,7 @@ function nextLineId(): string { return `line-${++_lineCounter}`; }
  */
 @Component({
   selector: 'app-pos-sale',
-  imports: [FormsModule, RouterLink, DecimalPipe, UidPickerComponent],
+  imports: [FormsModule, RouterLink, DecimalPipe, UidPickerComponent, CurrencySelectComponent],
   templateUrl: './pos-sale.component.html',
   styleUrl: './pos-sale.component.scss',
 })
@@ -64,6 +65,7 @@ export class PosSaleComponent {
   // ── Company context ────────────────────────────────────────────────────────
   readonly companies = signal<Company[]>([]);
   readonly selectedCompanyId = signal('');
+  readonly selectedCompanyUid = computed(() => this.companies().find((c) => c.id === this.selectedCompanyId())?.uid ?? '');
   readonly companyState = signal<'loading' | 'idle' | 'error'>('loading');
 
   // ── Open sessions (for picker) ─────────────────────────────────────────────

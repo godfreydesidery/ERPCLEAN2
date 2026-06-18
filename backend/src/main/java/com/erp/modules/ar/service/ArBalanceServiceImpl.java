@@ -1,6 +1,7 @@
 package com.erp.modules.ar.service;
 
 import com.erp.modules.ar.domain.dto.ArBalanceDto;
+import com.erp.modules.ar.repository.ArCreditNoteRepository;
 import com.erp.modules.ar.repository.ArInvoiceRepository;
 import com.erp.modules.ar.repository.ArReceiptRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
@@ -16,17 +17,20 @@ public class ArBalanceServiceImpl implements ArBalanceService {
 
     private final ArInvoiceRepository invoices;
     private final ArReceiptRepository receipts;
+    private final ArCreditNoteRepository creditNoteRepo;
     private final CompanyRepository companies;
     private final ScopeGuard scopeGuard;
 
     public ArBalanceServiceImpl(ArInvoiceRepository invoices,
                                  ArReceiptRepository receipts,
+                                 ArCreditNoteRepository creditNoteRepo,
                                  CompanyRepository companies,
                                  ScopeGuard scopeGuard) {
-        this.invoices   = invoices;
-        this.receipts   = receipts;
-        this.companies  = companies;
-        this.scopeGuard = scopeGuard;
+        this.invoices        = invoices;
+        this.receipts        = receipts;
+        this.creditNoteRepo  = creditNoteRepo;
+        this.companies       = companies;
+        this.scopeGuard      = scopeGuard;
     }
 
     @Override
@@ -35,7 +39,10 @@ public class ArBalanceServiceImpl implements ArBalanceService {
 
         BigDecimal outstanding  = invoices.sumOutstandingByCompanyAndCustomer(companyId, customerId);
         BigDecimal unallocated  = receipts.sumUnallocatedByCompanyAndCustomer(companyId, customerId);
-        BigDecimal balance      = outstanding.subtract(unallocated);
+        // ADR-0040 D-6: net unapplied CNs — raise posts CR AR full; apply posts nothing,
+        // so the sub-ledger must subtract CN unapplied to equal GL 1200.
+        BigDecimal cnUnapplied  = creditNoteRepo.sumUnappliedByCompanyAndCustomer(companyId, customerId);
+        BigDecimal balance      = outstanding.subtract(unallocated).subtract(cnUnapplied);
 
         // Derive the base currency — company record holds it (V10 ADD COLUMN).
         String currency = companies.findById(companyId)

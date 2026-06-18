@@ -6,6 +6,7 @@ import com.erp.modules.ap.domain.entity.BillMatch;
 import com.erp.modules.ap.domain.entity.SupplierBill;
 import com.erp.modules.ap.domain.entity.SupplierBillLine;
 import com.erp.modules.ap.domain.enums.BillMatchStatus;
+import com.erp.modules.ap.domain.enums.BillMatchType;
 import com.erp.modules.ap.domain.enums.SupplierBillStatus;
 import com.erp.modules.ap.repository.BillMatchRepository;
 import com.erp.modules.ap.repository.SupplierBillLineRepository;
@@ -183,14 +184,20 @@ public class BillMatchServiceImpl implements BillMatchService {
             // Upsert bill_match row (one per line — uq_bill_match_line)
             BillMatch match = matches.findBySupplierBillLineId(line.getId())
                     .orElse(null);
+            // P2 D7: a GR-linked line is a 3-way match; a PO-only (no GR) line is 2-way.
+            BillMatchType matchType = (line.getGrLineUid() != null)
+                    ? BillMatchType.THREE_WAY
+                    : BillMatchType.TWO_WAY;
             if (match == null) {
                 match = new BillMatch(
                         bill.getCompanyId(), bill.getId(), line.getId(),
                         poUnitCost, grReceivedQty, line.getBilledQty(),
                         priceVar, priceVarPct, qtyVar,
                         status, tolerancePct, toleranceAbs, actorId());
+                match.setMatchType(matchType);
             } else {
                 match.setMatchStatus(status);
+                match.setMatchType(matchType);
                 match.setMatchedAt(Instant.now());
             }
             match = matches.save(match);
@@ -323,7 +330,7 @@ public class BillMatchServiceImpl implements BillMatchService {
         // ADR-0036 D-3: convert face amounts to BASE before LineDraft construction.
         // GL engine (GLPostingServiceImpl) is BYTE-UNTOUCHED; only base-currency lines reach it.
         // AP control leg (CR AP) is the BALANCING PLUG to absorb HALF_UP rounding residual. (D-3/D-8)
-        String    docCurrency = bill.getCurrency();
+        String    docCurrency = bill.getCurrency().value();
         Long      companyId   = bill.getCompanyId();
 
         // Convert gross once — used for the D-4 triple stamp and plugScale below.
@@ -360,12 +367,21 @@ public class BillMatchServiceImpl implements BillMatchService {
                 // Goods line: accumulate into single GRNI DR leg
                 baseGoodsNet = baseGoodsNet.add(baseLineNet);
             } else {
-                // Service line: one LineDraft per line with project tag (ADR-0033 D-4b)
-                ChartOfAccount purchasesAcct = glConfig.resolve(companyId, GlConfigKey.PURCHASES);
-                glLines.add(new LineDraft(purchasesAcct.getId(),
+                // Service line: one LineDraft per line with project tag (ADR-0033 D-4b).
+                // ADR-0040 D-8: debit the line's gl_account_id override when set, else the PURCHASES default.
+                Long expenseAccountId = l.getGlAccountId() != null
+                        ? l.getGlAccountId()
+                        : glConfig.resolve(companyId, GlConfigKey.PURCHASES).getId();
+                // ADR-0041 D4: thread the PER-LINE dimension tags onto the P&L leg this line generates,
+                // so a supplier-bill-line cost-centre/department reaches the ledger. Fall back to the
+                // bill HEADER dimension when the line is untagged (preserves the prior behaviour where
+                // every service leg carried the header dimension — zero regression for untagged lines).
+                Long lineCcId   = l.getCostCentreValueId() != null ? l.getCostCentreValueId() : ccId;
+                Long lineDeptId = l.getDepartmentValueId() != null ? l.getDepartmentValueId() : deptId;
+                glLines.add(new LineDraft(expenseAccountId,
                         baseLineNet, BigDecimal.ZERO,
                         postCurrency, "Purchases — " + bill.getSupplierInvoiceNo(),
-                        ccId, deptId, null, null,
+                        lineCcId, lineDeptId, null, null,
                         l.getProjectId(), l.getProjectTaskId(), null));
                 baseServiceTotal = baseServiceTotal.add(baseLineNet);
             }

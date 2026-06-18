@@ -17,6 +17,10 @@ CREATE TABLE purchase_orders (
     supplier_name           VARCHAR(200)     NOT NULL,            -- snapshot at order-placement
     currency                VARCHAR(3)       NOT NULL,
     order_total_amount      NUMERIC(19,4)    NOT NULL DEFAULT 0,
+    buyer_id                BIGINT,                               -- P2: soft-FK app_users.id; assigned purchasing agent
+    invoiced_amount         NUMERIC(19,4),                        -- P2: header roll-up of billed-vs-ordered
+    billing_status          VARCHAR(20),                          -- P2: NOT_BILLED|PARTIALLY_BILLED|FULLY_BILLED (header roll-up)
+    payment_terms_id        BIGINT,                               -- P2 D1: soft-FK payment_terms(id)
     expected_date           DATE,
     notes                   VARCHAR(500),
     ordered_at              TIMESTAMPTZ,
@@ -44,7 +48,11 @@ CREATE TABLE purchase_orders (
     CONSTRAINT chk_purchase_order_number_when_ordered
         CHECK ((status = 'DRAFT' AND order_number IS NULL)
             OR (status <> 'DRAFT' AND order_number IS NOT NULL)),
-    CONSTRAINT chk_purchase_order_total_nonneg    CHECK (order_total_amount >= 0)
+    CONSTRAINT chk_purchase_order_total_nonneg    CHECK (order_total_amount >= 0),
+    CONSTRAINT chk_purchase_order_invoiced_nonneg CHECK (invoiced_amount IS NULL OR invoiced_amount >= 0),  -- P2
+    CONSTRAINT chk_purchase_order_billing_status                                                            -- P2
+        CHECK (billing_status IS NULL OR billing_status IN ('NOT_BILLED','PARTIALLY_BILLED','FULLY_BILLED')),
+    CONSTRAINT fk_purchase_order_buyer            FOREIGN KEY (buyer_id) REFERENCES app_users (id)          -- P2
 );
 
 -- (2) purchase_order_lines — child of purchase_orders
@@ -63,8 +71,16 @@ CREATE TABLE purchase_order_lines (
     ordered_qty             NUMERIC(19,6)    NOT NULL,
     ordered_qty_in_base     NUMERIC(19,6)    NOT NULL,            -- snapshot: ordered_qty × factor_to_base
     received_qty_in_base    NUMERIC(19,6)    NOT NULL DEFAULT 0, -- maintained cumulative received (ADR-0011 D-3)
+    billed_qty_in_base      NUMERIC(19,6),                       -- P2: cumulative billed in base (mirrors received_qty_in_base)
+    cancelled_qty           NUMERIC(19,6),                       -- P2: cancelled quantity (base units)
+    required_by_date        DATE,                                -- P2: per-line required-by date
     unit_cost_amount        NUMERIC(19,4)    NOT NULL,
     line_total_amount       NUMERIC(19,4)    NOT NULL,
+    -- P2-D4 (ADR-0041): per-line dimension tags (mirror supplier_bill_lines / journal_lines).
+    -- Scalar soft-FK BIGINT (no DB FK: dimension_values is created later in V23). Flow onto the
+    -- GL lines the bill (derived from this PO) generates so a line dimension reaches the ledger.
+    cost_centre_value_id    BIGINT,                              -- P2-D4: Cost Centre dimension (soft ref → dimension_values.id), nullable
+    department_value_id     BIGINT,                              -- P2-D4: Department dimension (soft ref → dimension_values.id), nullable
     currency                VARCHAR(3)       NOT NULL,            -- denormalised document currency
     created_at              TIMESTAMPTZ      NOT NULL DEFAULT now(),
     created_by              BIGINT,
@@ -81,7 +97,9 @@ CREATE TABLE purchase_order_lines (
     CONSTRAINT chk_purchase_order_line_qty    CHECK (ordered_qty > 0 AND ordered_qty_in_base > 0),
     CONSTRAINT chk_purchase_order_line_received
         CHECK (received_qty_in_base >= 0 AND received_qty_in_base <= ordered_qty_in_base),
-    CONSTRAINT chk_purchase_order_line_cost   CHECK (unit_cost_amount >= 0 AND line_total_amount >= 0)
+    CONSTRAINT chk_purchase_order_line_cost   CHECK (unit_cost_amount >= 0 AND line_total_amount >= 0),
+    CONSTRAINT chk_purchase_order_line_billed     CHECK (billed_qty_in_base IS NULL OR billed_qty_in_base >= 0),    -- P2
+    CONSTRAINT chk_purchase_order_line_cancelled  CHECK (cancelled_qty IS NULL OR cancelled_qty >= 0)              -- P2
 );
 
 -- (3) goods_receipts — GR header; FK → purchase_orders

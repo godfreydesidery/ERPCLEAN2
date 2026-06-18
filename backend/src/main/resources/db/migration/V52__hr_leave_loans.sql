@@ -15,6 +15,11 @@ CREATE TABLE leave_types (
     is_paid                  BOOLEAN      NOT NULL DEFAULT true,
     annual_entitlement_days  NUMERIC(9,2) NOT NULL DEFAULT 0,
     accrual_method           VARCHAR(16)  NOT NULL DEFAULT 'ANNUAL_GRANT',
+    -- P2 D6 (ADR-0041): leave policy fields
+    carry_forward            BOOLEAN      NOT NULL DEFAULT false,
+    requires_approval        BOOLEAN      NOT NULL DEFAULT true,
+    gender_eligibility       VARCHAR(10),                 -- NULL = ANY; else MALE|FEMALE
+    max_consecutive_days     INT,
     active                   BOOLEAN      NOT NULL DEFAULT true,
     version                  BIGINT       NOT NULL DEFAULT 0,
     created_at               TIMESTAMPTZ  NOT NULL DEFAULT now(),
@@ -76,6 +81,11 @@ CREATE TABLE leave_balances (
     entitled_days   NUMERIC(9,2) NOT NULL DEFAULT 0,
     taken_days      NUMERIC(9,2) NOT NULL DEFAULT 0,
     balance_days    NUMERIC(9,2) NOT NULL DEFAULT 0,
+    -- P2 D6 (ADR-0041): accrual/carry-forward breakdown (columns only; accrual posting DEFERRED)
+    carried_forward_days NUMERIC(9,2) NOT NULL DEFAULT 0,
+    accrued_days         NUMERIC(9,2) NOT NULL DEFAULT 0,
+    pending_days         NUMERIC(9,2) NOT NULL DEFAULT 0,
+    adjustment_days      NUMERIC(9,2) NOT NULL DEFAULT 0,
     version         BIGINT       NOT NULL DEFAULT 0,
     created_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
     created_by      BIGINT,
@@ -106,6 +116,11 @@ CREATE TABLE employee_loans (
     status              VARCHAR(12)   NOT NULL DEFAULT 'ACTIVE',
     start_date          DATE          NOT NULL,
     currency            VARCHAR(3)    NOT NULL DEFAULT 'TZS',
+    -- P2 D6 (ADR-0041): loan terms (single rate v1; dynamic rate schedule DEFERRED)
+    interest_rate       NUMERIC(7,4),                 -- annual %, NULL = interest-free advance
+    loan_type           VARCHAR(20),                  -- enum LoanType
+    approved_by         BIGINT,                       -- soft-FK app_users
+    term_months         INT,
     version             BIGINT        NOT NULL DEFAULT 0,
     created_at          TIMESTAMPTZ   NOT NULL DEFAULT now(),
     created_by          BIGINT,
@@ -117,6 +132,8 @@ CREATE TABLE employee_loans (
     CONSTRAINT chk_employee_loan_installment   CHECK  (installment_amount > 0),
     CONSTRAINT chk_employee_loan_outstanding   CHECK  (outstanding_amount >= 0),
     CONSTRAINT chk_employee_loan_status        CHECK  (status IN ('ACTIVE','SETTLED','CANCELLED')),
+    CONSTRAINT chk_employee_loan_type          CHECK  (loan_type IS NULL OR loan_type IN ('LOAN','SALARY_ADVANCE','EMERGENCY','OTHER')),
+    CONSTRAINT chk_employee_loan_interest_rate CHECK  (interest_rate IS NULL OR interest_rate >= 0),
     CONSTRAINT fk_employee_loan_company     FOREIGN KEY (company_id)    REFERENCES companies(id),
     CONSTRAINT fk_employee_loan_employee    FOREIGN KEY (employee_id)   REFERENCES employees(id),
     CONSTRAINT fk_employee_loan_gl_account  FOREIGN KEY (gl_account_id) REFERENCES chart_of_accounts(id)
@@ -136,6 +153,9 @@ CREATE TABLE employee_loan_installments (
     due_amount          NUMERIC(19,4) NOT NULL,
     due_period          VARCHAR(7)    NOT NULL,
     deducted_in_run_uid VARCHAR(26),
+    deducted_amount     NUMERIC(19,4),                          -- P2-M5: actual amount deducted (snapshot)
+    due_date            DATE,                                   -- P2-M5: scheduled due date
+    paid_at             TIMESTAMPTZ,                            -- P2-M5: timestamp installment was deducted/paid
     status              VARCHAR(12)   NOT NULL DEFAULT 'PENDING',
     version             BIGINT        NOT NULL DEFAULT 0,
     created_at          TIMESTAMPTZ   NOT NULL DEFAULT now(),

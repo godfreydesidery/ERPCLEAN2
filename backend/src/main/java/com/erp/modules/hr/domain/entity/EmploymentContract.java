@@ -1,5 +1,6 @@
 package com.erp.modules.hr.domain.entity;
 
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.modules.hr.domain.enums.ContractType;
 import com.erp.modules.hr.domain.enums.PayFrequency;
 import com.erp.platform.common.domain.UidEntity;
@@ -36,7 +37,7 @@ public class EmploymentContract extends UidEntity {
     private BigDecimal baseSalaryAmount;
 
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "pay_frequency", nullable = false, length = 12)
@@ -69,6 +70,32 @@ public class EmploymentContract extends UidEntity {
     @Setter
     private boolean sdlCounted = true;
 
+    // ---- Contract policy fields (P2 D6, ADR-0041) ----
+
+    @Column(name = "probation_months")
+    @Setter
+    private Integer probationMonths;
+
+    @Column(name = "notice_period_days")
+    @Setter
+    private Integer noticePeriodDays;
+
+    @Column(name = "working_hours_per_day", precision = 5, scale = 2)
+    @Setter
+    private BigDecimal workingHoursPerDay;
+
+    @Column(name = "working_days_per_week")
+    @Setter
+    private Integer workingDaysPerWeek;
+
+    @Column(name = "job_grade", length = 40)
+    @Setter
+    private String jobGrade;
+
+    @Column(name = "signed_document_ref", length = 255)
+    @Setter
+    private String signedDocumentRef;
+
     @Column(name = "active", nullable = false)
     @Setter
     private boolean active = true;
@@ -96,7 +123,7 @@ public class EmploymentContract extends UidEntity {
         this.employeeId        = employeeId;
         this.contractType      = contractType;
         this.baseSalaryAmount  = baseSalaryAmount;
-        this.currency          = currency;
+        this.currency          = CurrencyCode.ofNullable(currency);
         this.startDate         = startDate;
         this.endDate           = endDate;
         this.createdBy         = createdBy;

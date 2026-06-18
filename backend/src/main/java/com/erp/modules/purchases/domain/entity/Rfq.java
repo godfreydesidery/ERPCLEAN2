@@ -52,6 +52,11 @@ public class Rfq extends UidEntity {
     @Setter
     private String awardedPoUid;
 
+    /** P2 D7: rationale for the award decision. */
+    @Column(name = "award_reason", length = 500)
+    @Setter
+    private String awardReason;
+
     @Column(name = "notes", length = 500)
     @Setter
     private String notes;

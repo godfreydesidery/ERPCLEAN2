@@ -61,6 +61,10 @@ public class Notification extends UidEntity {
     @Column(name = "read_at")
     private Instant readAt;
 
+    /** Optional TTL / auto-expiry instant (P3, ADR-0024). NULL = never expires. */
+    @Column(name = "expires_at")
+    private Instant expiresAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -101,6 +105,11 @@ public class Notification extends UidEntity {
         this.readAt = at;
     }
 
+    /** Set the optional TTL/expiry at creation time (P3). */
+    public void setExpiresAt(Instant at) {
+        this.expiresAt = at;
+    }
+
     public Long    getCompanyId()           { return companyId; }
     public Long    getBranchId()            { return branchId; }
     public Long    getNotificationTypeId()  { return notificationTypeId; }
@@ -116,6 +125,7 @@ public class Notification extends UidEntity {
     public String  getTriggerKey()          { return triggerKey; }
     public boolean isRead()                 { return isRead; }
     public Instant getReadAt()              { return readAt; }
+    public Instant getExpiresAt()           { return expiresAt; }
     public Instant getCreatedAt()           { return createdAt; }
     public Long    getCreatedBy()           { return createdBy; }
 }

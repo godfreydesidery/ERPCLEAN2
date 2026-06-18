@@ -1,6 +1,7 @@
 package com.erp.modules.crm.domain.dto;
 
 import com.erp.modules.crm.domain.entity.OpportunityLine;
+import com.erp.platform.common.money.CurrencyCode;
 import java.math.BigDecimal;
 import java.time.Instant;
 
@@ -30,7 +31,7 @@ public record OpportunityLineDto(
                 l.getId(), l.getUid(), l.getOpportunityId(), l.getCompanyId(), l.getBranchId(),
                 l.getLineNo(), l.getProductId(), l.getProductCode(), l.getProductName(),
                 l.getUnitId(), l.getUnitName(), l.getEstimatedQty(), l.getEstimatedUnitPriceAmount(),
-                l.getLineDiscountAmount(), l.getLineDiscountPercent(), l.getCurrency(),
+                l.getLineDiscountAmount(), l.getLineDiscountPercent(), CurrencyCode.value(l.getCurrency()),
                 l.getVersion(), l.getCreatedAt(), l.getCreatedBy());
     }
 }

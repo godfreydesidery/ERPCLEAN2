@@ -11,6 +11,7 @@ import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.time.Instant;
@@ -107,6 +108,7 @@ public class EmployeeLoanServiceImpl implements EmployeeLoanService {
         return new EmployeeLoanDto(l.getId(), l.getUid(), l.getCompanyId(), l.getEmployeeId(),
                 empName, l.getLoanNumber(), l.getPrincipalAmount(),
                 l.getInstallmentAmount(), l.getOutstandingAmount(),
-                l.getGlAccountId(), l.getStatus(), l.getStartDate(), l.getCurrency());
+                l.getGlAccountId(), l.getStatus(), l.getStartDate(), CurrencyCode.value(l.getCurrency()),
+                l.getInterestRate(), l.getLoanType(), l.getApprovedBy(), l.getTermMonths());
     }
 }

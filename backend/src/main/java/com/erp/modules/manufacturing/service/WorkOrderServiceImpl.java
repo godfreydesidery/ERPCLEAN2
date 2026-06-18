@@ -345,7 +345,7 @@ public class WorkOrderServiceImpl implements WorkOrderService {
                 wo.getWipDebitTotal(), wo.getWipCreditTotal(),
                 wo.getLabourAppliedTotal(), wo.getOverheadAppliedTotal(),
                 wo.getComputedUnitCost(), wo.getVarianceAmount(),
-                wo.isIncompleteCost(), wo.getCostCentreValueId(),
+                wo.isIncompleteCost(), wo.getCostCentreValueId(), wo.getTargetLocationId(),
                 wo.getPlannedDate(), wo.getReleasedAt(), wo.getCompletedAt(),
                 wo.getClosedAt(), wo.getCancelledAt(), wo.getNotes(),
                 wo.getCreatedAt(), wo.getCreatedBy(),
@@ -368,7 +368,7 @@ public class WorkOrderServiceImpl implements WorkOrderService {
                 wo.getWipDebitTotal(), wo.getWipCreditTotal(),
                 wo.getLabourAppliedTotal(), wo.getOverheadAppliedTotal(),
                 wo.getComputedUnitCost(), wo.getVarianceAmount(),
-                wo.isIncompleteCost(), wo.getCostCentreValueId(),
+                wo.isIncompleteCost(), wo.getCostCentreValueId(), wo.getTargetLocationId(),
                 wo.getPlannedDate(), wo.getReleasedAt(), wo.getCompletedAt(),
                 wo.getClosedAt(), wo.getCancelledAt(), wo.getNotes(),
                 wo.getCreatedAt(), wo.getCreatedBy(),
@@ -379,8 +379,9 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         return new WorkOrderComponentDto(
                 c.getId(), c.getUid(), c.getWorkOrderId(), c.getLineNo(),
                 c.getComponentProductId(), c.getComponentProductCode(), c.getComponentProductName(),
-                c.getPlannedQty(), c.getIssuedQty(), c.getIssuedValue(),
-                c.getUnitCostAtIssue(), c.isCostSkipped(), c.getStatus());
+                c.getPlannedQty(), c.getIssuedQty(), c.getReturnedQty(), c.getScrapQty(),
+                c.getIssuedValue(),
+                c.getUnitCostAtIssue(), c.getUnitId(), c.isCostSkipped(), c.getStatus());
     }
 
     WorkOrderOperationDto toOpDto(WorkOrderOperation op) {

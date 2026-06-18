@@ -1,6 +1,7 @@
 package com.erp.modules.ar.repository;
 
 import com.erp.modules.ar.domain.entity.ArInvoice;
+import com.erp.platform.common.money.CurrencyCode;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -123,7 +124,7 @@ public interface ArInvoiceRepository extends JpaRepository<ArInvoice, Long> {
             """)
     List<ArInvoice> findOpenForeignForRevaluation(
             @Param("companyId") Long companyId,
-            @Param("baseCurrency") String baseCurrency);
+            @Param("baseCurrency") CurrencyCode baseCurrency);
 
     /**
      * Native patch used by FX integration tests to stamp a foreign currency on an open item

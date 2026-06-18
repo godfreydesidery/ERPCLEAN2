@@ -16,5 +16,11 @@ public record StockLocationDto(
         String name,
         LocationType locationType,
         boolean isDefault,
+        // P2 D7 — location attributes
+        Long parentLocationId,
+        boolean allowNegative,
+        boolean pickable,
+        boolean sellable,
+        Long glAccountId,
         MasterStatus status
 ) {}

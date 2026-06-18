@@ -17,6 +17,7 @@ public class ApBillNumberGenerator {
     private static final String KIND_BILL        = "AP_BILL";
     private static final String KIND_PAYMENT     = "AP_PAYMENT";
     private static final String KIND_DEBIT_NOTE  = "AP_DEBIT_NOTE";
+    private static final String KIND_PAYMENT_RUN = "AP_PAYMENT_RUN";
 
     private final CodeSequenceRepository sequences;
 
@@ -46,5 +47,14 @@ public class ApBillNumberGenerator {
                 .findByCompanyIdAndEntityKindForUpdate(companyId, KIND_DEBIT_NOTE)
                 .orElseGet(() -> sequences.saveAndFlush(new CodeSequence(companyId, KIND_DEBIT_NOTE)));
         return "DBN-" + String.format("%04d", seq.consumeNext());
+    }
+
+    /** Allocates the next payment-run number (ADR-0041 D3); distinct sequence from payments. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public String nextPaymentRun(Long companyId) {
+        CodeSequence seq = sequences
+                .findByCompanyIdAndEntityKindForUpdate(companyId, KIND_PAYMENT_RUN)
+                .orElseGet(() -> sequences.saveAndFlush(new CodeSequence(companyId, KIND_PAYMENT_RUN)));
+        return "RUN-" + String.format("%04d", seq.consumeNext());
     }
 }

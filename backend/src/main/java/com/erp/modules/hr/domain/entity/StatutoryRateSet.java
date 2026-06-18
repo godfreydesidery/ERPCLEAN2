@@ -1,5 +1,6 @@
 package com.erp.modules.hr.domain.entity;
 
+import com.erp.modules.hr.domain.enums.StatutoryBasis;
 import com.erp.modules.hr.domain.enums.StatutoryRateType;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
@@ -35,11 +36,16 @@ public class StatutoryRateSet extends UidEntity {
     @Column(name = "employer_rate", precision = 9, scale = 4)
     private BigDecimal employerRate;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "basis", nullable = false, length = 16, updatable = false)
-    private String basis;
+    private StatutoryBasis basis;
 
     @Column(name = "ceiling_amount", precision = 19, scale = 4)
     private BigDecimal ceilingAmount;
+
+    /** Optional minimum-basis floor (P2-M5). */
+    @Column(name = "floor_amount", precision = 19, scale = 4)
+    private BigDecimal floorAmount;
 
     @Column(name = "headcount_threshold")
     private Short headcountThreshold;
@@ -77,7 +83,7 @@ public class StatutoryRateSet extends UidEntity {
         this.effectiveFrom      = effectiveFrom;
         this.employeeRate       = employeeRate;
         this.employerRate       = employerRate;
-        this.basis              = basis;
+        this.basis              = basis != null ? StatutoryBasis.valueOf(basis) : null;
         this.ceilingAmount      = ceilingAmount;
         this.headcountThreshold = headcountThreshold;
         this.description        = description;

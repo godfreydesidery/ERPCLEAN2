@@ -130,7 +130,7 @@ class ArSalePostedHandlerIT extends PostgresIntegrationTest {
                 new CreatePriceListRequest(company.getUid(), "RETAIL", "Retail")).uid();
         productUid = productService.create(new CreateProductRequest(
                 company.getUid(), null, "AR Widget", null,
-                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD)).uid();
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null)).uid();
         productService.setPrice(productUid,
                 new SetProductPriceRequest(priceListUid, new MoneyDto("1000", "TZS")));
 
@@ -138,13 +138,13 @@ class ArSalePostedHandlerIT extends PostgresIntegrationTest {
         creditCustomerUid = customerService.create(new CreateCustomerRequest(
                 company.getId(), PartyType.INDIVIDUAL, "Credit Customer",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CREDIT_ACCOUNT, null, null)).uid();
+                CustomerKind.CREDIT_ACCOUNT, null, null, null)).uid();
 
         // Cash walk-in customer (no AR open item)
         cashCustomerUid = customerService.create(new CreateCustomerRequest(
                 company.getId(), PartyType.INDIVIDUAL, "Cash Customer",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CASH_WALK_IN, null, null)).uid();
+                CustomerKind.CASH_WALK_IN, null, null, null)).uid();
 
         agentUid = agentService.create(new CreateAgentRequest(
                 company.getId(), PartyType.INDIVIDUAL, "AR Agent",

@@ -11,6 +11,7 @@ import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.time.Instant;
@@ -108,9 +109,11 @@ public class ContractServiceImpl implements ContractService {
 
     private ContractDto toDto(EmploymentContract c) {
         return new ContractDto(c.getId(), c.getUid(), c.getCompanyId(), c.getEmployeeId(),
-                c.getContractType(), c.getBaseSalaryAmount(), c.getCurrency(), c.getPayFrequency(),
+                c.getContractType(), c.getBaseSalaryAmount(), CurrencyCode.value(c.getCurrency()), c.getPayFrequency(),
                 c.getStartDate(), c.getEndDate(),
                 c.isPayeResident(), c.isNssfMember(), c.isHeslbBorrower(),
-                c.isWcfCovered(), c.isSdlCounted(), c.isActive());
+                c.isWcfCovered(), c.isSdlCounted(), c.isActive(),
+                c.getProbationMonths(), c.getNoticePeriodDays(), c.getWorkingHoursPerDay(),
+                c.getWorkingDaysPerWeek(), c.getJobGrade(), c.getSignedDocumentRef());
     }
 }

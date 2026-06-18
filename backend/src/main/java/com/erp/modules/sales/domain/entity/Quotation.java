@@ -2,6 +2,7 @@ package com.erp.modules.sales.domain.entity;
 
 import com.erp.modules.sales.domain.enums.QuotationStatus;
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -48,7 +49,7 @@ public class Quotation extends UidEntity {
     private Long agentId;
 
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "quote_date", nullable = false)
     private LocalDate quoteDate;
@@ -56,6 +57,26 @@ public class Quotation extends UidEntity {
     @Column(name = "valid_until", nullable = false)
     @Setter
     private LocalDate validUntil;
+
+    /** Customer's own purchase-order reference (P2-M3). Nullable. */
+    @Column(name = "customer_po_number", length = 60)
+    @Setter
+    private String customerPoNumber;
+
+    /** Plain revision counter (P2-M3). Nullable. */
+    @Column(name = "revision_no")
+    @Setter
+    private Integer revisionNo;
+
+    /** Win-probability percent, 0.00–100.00 (P2-M3). Nullable. */
+    @Column(name = "probability", precision = 5, scale = 2)
+    @Setter
+    private BigDecimal probability;
+
+    /** Soft-FK → payment_terms(id) (P2 D1, ADR-0041). Nullable. */
+    @Column(name = "payment_terms_id")
+    @Setter
+    private Long paymentTermsId;
 
     @Column(name = "doc_discount_amount", precision = 19, scale = 4)
     @Setter
@@ -130,7 +151,7 @@ public class Quotation extends UidEntity {
         this.branchId = branchId;
         this.customerId = customerId;
         this.agentId = agentId;
-        this.currency = currency;
+        this.currency = CurrencyCode.of(currency);
         this.quoteDate = quoteDate;
         this.validUntil = validUntil;
         this.createdBy = createdBy;

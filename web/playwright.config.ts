@@ -34,7 +34,7 @@ export default defineConfig({
   reporter: process.env['CI'] ? 'github' : 'list',
 
   use: {
-    baseURL: 'http://localhost:4200',
+    baseURL: process.env['PW_BASE_URL'] || 'http://localhost:4200',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
@@ -64,7 +64,7 @@ export default defineConfig({
         storageState: AUTH_FILE,
       },
       dependencies: ['setup'],
-      testMatch: /\/(routes-smoke|conventions)\.spec\.ts/,
+      testMatch: /\/(routes-smoke|conventions|massive-data)\.spec\.ts/,
     },
 
     /**
@@ -87,7 +87,7 @@ export default defineConfig({
    */
   webServer: {
     command: 'npm run start',
-    url: 'http://localhost:4200',
+    url: process.env['PW_BASE_URL'] || 'http://localhost:4200',
     reuseExistingServer: !!process.env['PLAYWRIGHT_REUSE_SERVER'],
     timeout: 120_000,
   },

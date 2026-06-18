@@ -42,6 +42,25 @@ public class LeaveType extends UidEntity {
     @Setter
     private LeaveAccrualMethod accrualMethod = LeaveAccrualMethod.ANNUAL_GRANT;
 
+    // ---- Leave policy fields (P2 D6, ADR-0041) ----
+
+    @Column(name = "carry_forward", nullable = false)
+    @Setter
+    private boolean carryForward = false;
+
+    @Column(name = "requires_approval", nullable = false)
+    @Setter
+    private boolean requiresApproval = true;
+
+    /** NULL = ANY; else MALE|FEMALE. */
+    @Column(name = "gender_eligibility", length = 10)
+    @Setter
+    private String genderEligibility;
+
+    @Column(name = "max_consecutive_days")
+    @Setter
+    private Integer maxConsecutiveDays;
+
     @Column(name = "active", nullable = false)
     @Setter
     private boolean active = true;

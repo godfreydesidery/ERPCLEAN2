@@ -3,6 +3,7 @@ package com.erp.modules.cashbank.domain.entity;
 import com.erp.modules.cashbank.domain.enums.CashTxnDirection;
 import com.erp.modules.cashbank.domain.enums.CashTxnType;
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -38,6 +39,16 @@ public class CashTransaction extends UidEntity {
     @Column(name = "txn_date", nullable = false, updatable = false)
     private LocalDate txnDate;
 
+    /** P2: bank value date (when funds actually cleared). Nullable. */
+    @Column(name = "value_date")
+    @Setter
+    private LocalDate valueDate;
+
+    /** P2: linked cheque (soft ref → cheques.id; no DB FK — cheques created later in V13). Nullable. */
+    @Column(name = "cheque_id")
+    @Setter
+    private Long chequeId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "direction", nullable = false, length = 3, updatable = false)
     private CashTxnDirection direction;
@@ -46,7 +57,7 @@ public class CashTransaction extends UidEntity {
     private BigDecimal amount;
 
     @Column(name = "currency", nullable = false, length = 3, updatable = false)
-    private String currency;
+    private CurrencyCode currency;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "txn_type", nullable = false, length = 20, updatable = false)
@@ -73,6 +84,16 @@ public class CashTransaction extends UidEntity {
     @Column(name = "cleared_in_reconciliation_id")
     @Setter
     private Long clearedInReconciliationId;
+
+    /** P3: free-text counterparty name (e.g. payee/payer). Nullable. */
+    @Column(name = "counterparty_name", length = 160)
+    @Setter
+    private String counterpartyName;
+
+    /** P3: self soft-FK → cash_transactions.id this row reverses (no DB FK). Nullable. */
+    @Column(name = "reversal_of_transaction_id")
+    @Setter
+    private Long reversalOfTransactionId;
 
     @Column(name = "memo", length = 255)
     private String memo;
@@ -107,7 +128,7 @@ public class CashTransaction extends UidEntity {
         this.txnDate             = txnDate;
         this.direction           = direction;
         this.amount              = amount;
-        this.currency            = currency;
+        this.currency            = CurrencyCode.of(currency);
         this.txnType             = txnType;
         this.sourceRef           = sourceRef;
         this.counterGlAccountId  = counterGlAccountId;

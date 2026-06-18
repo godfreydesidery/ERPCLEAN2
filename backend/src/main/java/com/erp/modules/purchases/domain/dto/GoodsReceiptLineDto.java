@@ -1,6 +1,7 @@
 package com.erp.modules.purchases.domain.dto;
 
 import com.erp.modules.purchases.domain.entity.GoodsReceiptLine;
+import com.erp.platform.common.money.CurrencyCode;
 import java.math.BigDecimal;
 
 /**
@@ -33,6 +34,6 @@ public record GoodsReceiptLineDto(
                 l.getUnitId(), l.getUnitName(),
                 l.getReceivedQty(), l.getQtyInBase(),
                 l.getUnitCostAmount(), l.getLineCostAmount(),
-                l.getCurrency());
+                CurrencyCode.value(l.getCurrency()));
     }
 }

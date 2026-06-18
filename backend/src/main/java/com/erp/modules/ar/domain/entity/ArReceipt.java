@@ -2,6 +2,7 @@ package com.erp.modules.ar.domain.entity;
 
 import com.erp.modules.ar.domain.enums.ArReceiptStatus;
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -47,7 +48,7 @@ public class ArReceipt extends UidEntity {
     private BigDecimal unallocatedAmount;
 
     @Column(name = "currency", nullable = false, length = 3, updatable = false)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "tender_type", nullable = false, length = 20, updatable = false)
     private String tenderType;
@@ -55,6 +56,11 @@ public class ArReceipt extends UidEntity {
     @Column(name = "bank_reference", length = 80)
     @Setter
     private String bankReference;
+
+    /** P3: free-text payer name when it differs from the customer master. Nullable. */
+    @Column(name = "payer_name", length = 160)
+    @Setter
+    private String payerName;
 
     /** Scalar uid of the GL journal entry (no FK — cross-module link, ADR-0014 D-11). */
     @Column(name = "gl_entry_uid", length = 26)
@@ -100,6 +106,32 @@ public class ArReceipt extends UidEntity {
     @Setter
     private Instant rateAt;
 
+    // -------------------------------------------------------------------------
+    // ADR-0041 D3 — cheque instrument link + bounce reversal
+    // -------------------------------------------------------------------------
+
+    /** Scalar uid of the INBOUND cheque that funded this receipt (soft-FK to cheques.uid, no DB FK). */
+    @Column(name = "cheque_uid", length = 26)
+    @Setter
+    private String chequeUid;
+
+    /**
+     * Timestamp when this receipt's cash leg was reversed because the funding cheque BOUNCED.
+     * Null while the receipt is live. Set append-only when the reversing JournalEntry posts.
+     */
+    @Column(name = "reversed_at")
+    @Setter
+    private Instant reversedAt;
+
+    /**
+     * Scalar uid of the receipt that this row reverses (self soft-FK). Null on ordinary receipts;
+     * used only if a reversal is itself represented as a receipt row (not used by the bounce path,
+     * which reverses via an append-only JournalEntry and stamps {@link #reversedAt} on the original).
+     */
+    @Column(name = "reversal_of_receipt_uid", length = 26)
+    @Setter
+    private String reversalOfReceiptUid;
+
     protected ArReceipt() {
         // JPA
     }
@@ -114,7 +146,7 @@ public class ArReceipt extends UidEntity {
         this.receiptDate       = receiptDate;
         this.amount            = amount;
         this.unallocatedAmount = amount;
-        this.currency          = currency;
+        this.currency          = CurrencyCode.of(currency);
         this.tenderType        = tenderType;
         this.createdBy         = createdBy;
     }

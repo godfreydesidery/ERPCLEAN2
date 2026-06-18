@@ -166,7 +166,7 @@ public class LeadServiceImpl implements LeadService {
                     details.physicalAddress(), null,
                     details.region(), details.district(),
                     details.customerKind() != null ? details.customerKind() : CustomerKind.CREDIT_ACCOUNT,
-                    null, null
+                    null, null, null  // creditLimit, paymentTermsDays, paymentTermsId (D-2)
             );
             CustomerDto created = customerService.create(createReq);
             customerId = created.id();

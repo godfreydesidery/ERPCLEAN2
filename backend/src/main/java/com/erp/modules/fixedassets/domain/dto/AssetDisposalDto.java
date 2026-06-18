@@ -18,5 +18,10 @@ public record AssetDisposalDto(
         BigDecimal gainLossAmount,
         String glEntryUid,
         String currency,
-        String reason
+        String reason,
+        // P2 D7 — buyer + provenance + approval
+        String buyerName,
+        Long buyerId,
+        String proceedsArInvoiceUid,
+        Long approvedBy
 ) {}

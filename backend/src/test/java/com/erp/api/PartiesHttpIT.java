@@ -204,7 +204,7 @@ class PartiesHttpIT extends PostgresIntegrationTest {
         String body = objectMapper.writeValueAsString(new CreateCustomerRequest(
                 companyA.getId(), PartyType.BUSINESS, "HTTP Created Co", null,
                 "TIN-HTTP1", false, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CREDIT_ACCOUNT, null, null));
+                CustomerKind.CREDIT_ACCOUNT, null, null, null));
 
         mockMvc.perform(post("/api/v1/customers")
                         .header("Authorization", "Bearer " + plainToken)
@@ -248,7 +248,7 @@ class PartiesHttpIT extends PostgresIntegrationTest {
         String body = objectMapper.writeValueAsString(new CreateCustomerRequest(
                 companyA.getId(), PartyType.BUSINESS, "Archive Target", null,
                 "TIN-ARCH1", false, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CREDIT_ACCOUNT, null, null));
+                CustomerKind.CREDIT_ACCOUNT, null, null, null));
 
         String responseJson = mockMvc.perform(post("/api/v1/customers")
                         .header("Authorization", "Bearer " + plainToken)
@@ -307,7 +307,7 @@ class PartiesHttpIT extends PostgresIntegrationTest {
         String body = objectMapper.writeValueAsString(new CreateCustomerRequest(
                 companyA.getId(), PartyType.BUSINESS, "Branch Assign OK", null,
                 "TIN-BAOK", false, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CREDIT_ACCOUNT, null, null));
+                CustomerKind.CREDIT_ACCOUNT, null, null, null));
 
         String responseJson = mockMvc.perform(post("/api/v1/customers")
                         .header("Authorization", "Bearer " + plainToken)
@@ -470,7 +470,7 @@ class PartiesHttpIT extends PostgresIntegrationTest {
             return customerService.create(new CreateCustomerRequest(
                     companyId, PartyType.BUSINESS, name, null,
                     tin, false, null, null, null, null, null, null, null, null, null,
-                    CustomerKind.CREDIT_ACCOUNT, null, null));
+                    CustomerKind.CREDIT_ACCOUNT, null, null, null));
         } finally {
             RequestContext.clear();
         }

@@ -40,6 +40,13 @@ public class RouteCustomer {
     @Column(name = "assigned_by", nullable = false)
     private Long assignedBy;
 
+    /** Soft-unassign flag (P3). A re-add is allowed once an existing link is deactivated. */
+    @Column(name = "active", nullable = false)
+    private boolean active = true;
+
+    @Column(name = "unassigned_at")
+    private Instant unassignedAt;
+
     protected RouteCustomer() {
         // JPA
     }
@@ -49,5 +56,11 @@ public class RouteCustomer {
         this.customerId = customerId;
         this.assignedBy = assignedBy;
         this.assignedAt = Instant.now();
+    }
+
+    /** Soft-unassign this link (P3): clears active and stamps the unassignment time. */
+    public void unassign(Instant at) {
+        this.active = false;
+        this.unassignedAt = at;
     }
 }

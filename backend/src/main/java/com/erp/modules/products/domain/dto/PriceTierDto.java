@@ -13,6 +13,7 @@ public record PriceTierDto(
         Long productId,
         Long priceListId,
         BigDecimal minQty,
+        BigDecimal maxQty,
         BigDecimal unitPriceAmount,
         String currency,
         MasterStatus status

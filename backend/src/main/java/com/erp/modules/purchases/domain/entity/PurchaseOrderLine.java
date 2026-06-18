@@ -1,5 +1,6 @@
 package com.erp.modules.purchases.domain.entity;
 
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.domain.Ulid;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -13,6 +14,7 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -105,6 +107,21 @@ public class PurchaseOrderLine {
     @Setter
     private BigDecimal receivedQtyInBase = BigDecimal.ZERO;
 
+    /** P2: cumulative billed quantity in base units (mirrors received_qty_in_base). Nullable. */
+    @Column(name = "billed_qty_in_base", precision = 19, scale = 6)
+    @Setter
+    private BigDecimal billedQtyInBase;
+
+    /** P2: cancelled quantity in base units. Nullable. */
+    @Column(name = "cancelled_qty", precision = 19, scale = 6)
+    @Setter
+    private BigDecimal cancelledQty;
+
+    /** P2: optional per-line required-by date. */
+    @Column(name = "required_by_date")
+    @Setter
+    private LocalDate requiredByDate;
+
     /** Unit cost per unit_id (a Money amount, ADR-0005). Required; >= 0. */
     @Column(name = "unit_cost_amount", nullable = false, precision = 19, scale = 4)
     @Setter
@@ -115,9 +132,26 @@ public class PurchaseOrderLine {
     @Setter
     private BigDecimal lineTotalAmount;
 
+    // -------------------------------------------------------------------------
+    // P2-D4 (ADR-0041) — per-line dimension tags (mirror supplier_bill_lines /
+    // journal_lines cost_centre_value_id / department_value_id). Scalar soft-FK Long
+    // (no DB FK: dimension_values created in V23). Flow onto the GL lines the bill
+    // derived from this PO generates, so a PO line dimension reaches the ledger.
+    // -------------------------------------------------------------------------
+
+    /** P2-D4: Cost Centre dimension (soft ref → dimension_values.id). Nullable. */
+    @Column(name = "cost_centre_value_id")
+    @Setter
+    private Long costCentreValueId;
+
+    /** P2-D4: Department dimension (soft ref → dimension_values.id). Nullable. */
+    @Column(name = "department_value_id")
+    @Setter
+    private Long departmentValueId;
+
     /** Document currency; denormalised from parent PO (BR-PURCH-04). */
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();

@@ -157,7 +157,7 @@ class SalesReturnServiceIT extends PostgresIntegrationTest {
         customerUid = customerService.create(new CreateCustomerRequest(
                 company.getId(), PartyType.INDIVIDUAL, "Ret IT Customer",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CASH_WALK_IN, null, null)).uid();
+                CustomerKind.CASH_WALK_IN, null, null, null)).uid();
 
         agentUid = agentService.create(new CreateAgentRequest(
                 company.getId(), PartyType.INDIVIDUAL, "Ret IT Agent",
@@ -504,7 +504,7 @@ class SalesReturnServiceIT extends PostgresIntegrationTest {
         setCtx();
         ProductDto p = productService.create(new CreateProductRequest(
                 company.getUid(), null, name, null,
-                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD));
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null));
         productService.setPrice(p.uid(),
                 new SetProductPriceRequest(priceListUid, new MoneyDto(price, "TZS")));
         return p;

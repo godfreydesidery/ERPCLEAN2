@@ -3,6 +3,7 @@ package com.erp.modules.ap.domain.entity;
 import com.erp.modules.ap.domain.enums.SupplierBillSource;
 import com.erp.modules.ap.domain.enums.SupplierBillStatus;
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -57,6 +58,31 @@ public class SupplierBill extends UidEntity {
     @Setter
     private LocalDate dueDate;
 
+    /** P2: VAT tax-point (supply) date. Nullable. */
+    @Column(name = "tax_point_date")
+    @Setter
+    private LocalDate taxPointDate;
+
+    /** P2: date the bill was physically received. Nullable. */
+    @Column(name = "received_date")
+    @Setter
+    private LocalDate receivedDate;
+
+    /** Soft-FK → payment_terms(id) (P2 D1, ADR-0041). Resolved + stored at post. Nullable. */
+    @Column(name = "payment_terms_id")
+    @Setter
+    private Long paymentTermsId;
+
+    /** P2 D1: settlement (early-payment) discount deadline; computed at post from the terms. Nullable. */
+    @Column(name = "settlement_discount_due_date")
+    @Setter
+    private LocalDate settlementDiscountDueDate;
+
+    /** P2 D1: settlement (early-payment) discount amount; data-only, no GL leg (ADR-0041). Nullable. */
+    @Column(name = "settlement_discount_amount", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal settlementDiscountAmount;
+
     @Column(name = "net_amount", nullable = false, precision = 19, scale = 4, updatable = false)
     private BigDecimal netAmount;
 
@@ -71,12 +97,41 @@ public class SupplierBill extends UidEntity {
     private BigDecimal outstandingAmount;
 
     @Column(name = "currency", nullable = false, length = 3, updatable = false)
-    private String currency;
+    private CurrencyCode currency;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 25)
     @Setter
     private SupplierBillStatus status = SupplierBillStatus.DRAFT;
+
+    /**
+     * Captured beneficiary account uid (soft-FK to supplier_bank_accounts.uid, no DB FK — D-4).
+     * Set at bill entry; AP service validates ownership at that point.
+     */
+    @Column(name = "supplier_bank_account_uid", length = 26)
+    @Setter
+    private String supplierBankAccountUid;
+
+    // -------------------------------------------------------------------------
+    // D-7 — WHT plan/snapshot at bill entry (ADR-0040 D-7)
+    // Non-posting: records the intended WHT type and amounts for informational / approval purposes.
+    // Actual WHT capture happens at payment time via WhtCaptureService.
+    // -------------------------------------------------------------------------
+
+    /** Scalar ref to wht_types(id) — no DB FK (cross-module soft ref). Nullable. */
+    @Column(name = "wht_type_id")
+    @Setter
+    private Long whtTypeId;
+
+    /** Taxable base for WHT calculation (plan/snapshot). Nullable. */
+    @Column(name = "wht_taxable_base", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal whtTaxableBase;
+
+    /** Planned/snapshot WHT amount. Nullable. Non-negative when set. */
+    @Column(name = "wht_amount", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal whtAmount;
 
     @Column(name = "posted_gl_entry_uid", length = 26)
     @Setter
@@ -163,7 +218,7 @@ public class SupplierBill extends UidEntity {
         this.vatAmount         = vatAmount;
         this.grossAmount       = grossAmount;
         this.outstandingAmount = BigDecimal.ZERO; // starts zero; set to gross on match/post
-        this.currency          = currency;
+        this.currency          = CurrencyCode.of(currency);
         this.createdBy         = createdBy;
     }
 }

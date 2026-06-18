@@ -1,5 +1,6 @@
 package com.erp.modules.fx.domain.entity;
 
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -32,7 +33,7 @@ public class FxRevaluationRunLine extends UidEntity {
     private String sourceType;
 
     @Column(name = "currency", nullable = false, length = 3, updatable = false)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "control_account_id", nullable = false, updatable = false)
     private Long controlAccountId;
@@ -56,6 +57,22 @@ public class FxRevaluationRunLine extends UidEntity {
     /** revalued_base_amount − carrying_base_amount (signed). */
     @Column(name = "adjustment_amount", nullable = false, precision = 19, scale = 4)
     private BigDecimal adjustmentAmount;
+
+    /**
+     * Exchange rate at which the carrying base was originally computed (P2-M1).
+     * Enables reconstruction of the original conversion on the certificate.
+     */
+    @Column(name = "prior_rate", precision = 19, scale = 8)
+    @Setter
+    private BigDecimal priorRate;
+
+    /**
+     * FK → journal_lines(id): the GL leg posted for this revaluation line (P2-M1).
+     * Enables per-line GL drill-down. Null until the run is POSTED.
+     */
+    @Column(name = "journal_line_id")
+    @Setter
+    private Long journalLineId;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
@@ -83,7 +100,7 @@ public class FxRevaluationRunLine extends UidEntity {
         this.fxRevaluationRunId  = fxRevaluationRunId;
         this.companyId           = companyId;
         this.sourceType          = sourceType;
-        this.currency            = currency;
+        this.currency            = CurrencyCode.ofNullable(currency);
         this.controlAccountId    = controlAccountId;
         this.outstandingTxnAmount = outstandingTxnAmount;
         this.carryingBaseAmount  = carryingBaseAmount;

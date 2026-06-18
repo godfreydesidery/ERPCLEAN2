@@ -30,4 +30,10 @@ public interface JournalEntryRepository extends JpaRepository<JournalEntry, Long
 
     /** Check whether a reversing entry already exists for a given original (BR-GL-11). */
     boolean existsByReversalOfId(Long originalEntryId);
+
+    /**
+     * True when the company has at least one journal entry — used by the base-currency-change
+     * guard (ADR-0039 D-9 / OQ-CCY-08): once any GL posting exists, the base is immutable.
+     */
+    boolean existsByCompanyId(Long companyId);
 }

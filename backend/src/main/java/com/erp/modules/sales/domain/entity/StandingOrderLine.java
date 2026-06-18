@@ -1,6 +1,7 @@
 package com.erp.modules.sales.domain.entity;
 
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
@@ -58,7 +59,7 @@ public class StandingOrderLine extends UidEntity {
     private BigDecimal unitPriceAmount;
 
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
@@ -93,7 +94,7 @@ public class StandingOrderLine extends UidEntity {
         this.qty             = qty;
         this.qtyBase         = qtyBase;
         this.unitPriceAmount = unitPriceAmount;
-        this.currency        = currency;
+        this.currency        = CurrencyCode.of(currency);
         this.createdBy       = createdBy;
     }
 }

@@ -1,15 +1,18 @@
 package com.erp.modules.gl.domain.entity;
 
 import com.erp.modules.gl.domain.enums.AccountType;
+import com.erp.modules.gl.domain.enums.ControlType;
 import com.erp.modules.gl.domain.enums.NormalBalance;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.time.LocalDate;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -56,6 +59,83 @@ public class ChartOfAccount extends UidEntity {
     @Column(name = "is_active", nullable = false)
     @Setter
     private boolean active = true;
+
+    /**
+     * When false, manual journal lines targeting this account are rejected at posting time.
+     * Use for system-controlled accounts (e.g. control accounts, retained earnings) where
+     * direct user entries would break subledger reconciliation.
+     * Defaults to true — all accounts allow manual posting unless explicitly locked.
+     */
+    @Column(name = "allow_manual_posting", nullable = false)
+    @Setter
+    private boolean allowManualPosting = true;
+
+    /**
+     * Control-account classification (D-1, ADR-0040). NULL = ordinary account.
+     * Non-null accounts are owned by a specific sub-ledger; manual journals to them are blocked
+     * by the existing {@code allowManualPosting=false} gate in GLPostingServiceImpl.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "control_type", length = 24)
+    @Setter
+    private ControlType controlType;
+
+    /**
+     * Optional currency lock (P2-M1). Non-null pins this account to a single ISO-4217 currency
+     * (typical use: bank accounts, FX clearing accounts). NULL = multi-currency allowed.
+     * Mapped via {@link com.erp.platform.common.money.CurrencyCodeConverter} (autoApply=true).
+     */
+    @Column(name = "currency", length = 3)
+    @Setter
+    private CurrencyCode currency;
+
+    /**
+     * P2-D4 (ADR-0041): per-account dimension-requirement flags. When true, a user-entered MANUAL
+     * journal line posting to this account MUST carry the corresponding dimension value, else the
+     * post is rejected in GLPostingServiceImpl. Enforced for MANUAL journals only —
+     * system/event-driven posters are exempt (same exemption as the Step-3 mandatory-slot rule and
+     * the control-account gate, ADR-0025). Default false (no requirement, zero-regression).
+     */
+    @Column(name = "require_cost_centre", nullable = false)
+    @Setter
+    private boolean requireCostCentre = false;
+
+    @Column(name = "require_department", nullable = false)
+    @Setter
+    private boolean requireDepartment = false;
+
+    @Column(name = "require_project", nullable = false)
+    @Setter
+    private boolean requireProject = false;
+
+    // --- P3: convenience / reporting columns (all nullable, additive) ---
+    /** Default tax code suggested when posting to this account; nullable (informational). */
+    @Column(name = "default_tax_code", length = 30)
+    @Setter
+    private String defaultTaxCode;
+
+    /** Account availability window start; NULL = always available. */
+    @Column(name = "effective_from")
+    @Setter
+    private LocalDate effectiveFrom;
+
+    /** Account availability window end; NULL = open-ended. */
+    @Column(name = "effective_to")
+    @Setter
+    private LocalDate effectiveTo;
+
+    /** Free-text account description / notes; nullable. */
+    @Column(name = "description", length = 255)
+    @Setter
+    private String description;
+
+    /**
+     * Derived: returns true when this account is a sub-ledger control account (controlType != null).
+     * Used as a belt-and-suspenders guard in GLPostingServiceImpl.validateLine for MANUAL journals.
+     */
+    public boolean isControlAccount() {
+        return controlType != null;
+    }
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)

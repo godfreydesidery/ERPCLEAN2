@@ -26,6 +26,7 @@ INSERT INTO permissions (code, module, description) VALUES
     ('APPROVALS.POLICY.VIEW', 'approvals', 'View approval policies'),
     ('APPROVALS.REQUEST.VIEW', 'approvals', 'View approval requests'),
     ('AR.CREDITNOTE', 'ar', 'Raise a credit note that reduces a customer receivable'),
+    ('AR.DISPUTE.MANAGE', 'ar', 'Mark/clear an AR invoice as disputed or on-hold and manage dunning state (D-5)'),
     ('AR.INVOICE.VIEW', 'ar', 'View AR open items (the receivable detail)'),
     ('AR.OPENING.SET', 'ar', 'Enter AR opening balances at go-live'),
     ('AR.RECEIPT.ALLOCATE', 'ar', 'Allocate or re-allocate a receipt across open items'),
@@ -71,6 +72,7 @@ INSERT INTO permissions (code, module, description) VALUES
     ('CRM.OPPORTUNITY.VIEW', 'crm', 'View CRM opportunities'),
     ('CRM.PIPELINE.VIEW', 'crm', 'View the CRM pipeline, forecast and KPI report'),
     ('CRM.STAGE.MANAGE', 'crm', 'Manage per-company CRM pipeline stages (add, rename, reorder, deactivate)'),
+    ('COMPANY.CURRENCY.CHANGE', 'iam', 'Change the company base (ledger) currency — blocked once GL transactions exist (ADR-0039 OQ-CCY-08)'),
     ('CURRENCY.MANAGE', 'fx', 'Create and maintain currency master and exchange rates'),
     ('CURRENCY.VIEW', 'fx', 'View currencies and exchange rates (read-only)'),
     ('CUSTOMER.MANAGE', 'parties', 'Create, update and archive customers'),
@@ -94,6 +96,7 @@ INSERT INTO permissions (code, module, description) VALUES
     ('GL.VIEW', 'gl', 'View chart of accounts, posted journals, fiscal periods, and the trial balance'),
     ('GL.YEAR.CLOSE', 'gl', 'Close / reopen a fiscal year — the year-end closing entry + the reopen reversal'),
     ('HR.EMPLOYEE.MANAGE', 'hr', 'Create/update employees, contracts, departments, recurring items (salary data)'),
+    ('HR.EMPLOYEE.PAYEE.VIEW', 'hr', 'View sensitive employee payee details (bank account / mobile money) (D-11)'),
     ('HR.EMPLOYEE.VIEW', 'hr', 'View employee, contract, and department records'),
     ('HR.LEAVE.APPROVE', 'hr', 'Approve or reject employee leave requests'),
     ('HR.LEAVE.MANAGE', 'hr', 'Create/manage leave types and balances; submit leave on behalf'),
@@ -224,11 +227,14 @@ INSERT INTO permissions (code, module, description) VALUES
     ('VAT.RETURN.PREPARE', 'tax', 'Open / compute / recompute a DRAFT VAT return'),
     ('VAT.VIEW', 'tax', 'View VAT returns (face + band breakdown) and the WHT register'),
     ('WHT.MANAGE', 'tax', 'Manage WHT rates/types; capture WHT on an AP payment / AR receipt; issue certificates'),
+    ('WHT.REMIT', 'tax', 'Mark a WHT transaction as remitted to the tax authority (flag-on-row, ADR-0040 D-7)'),
     ('WHT.VIEW', 'tax', 'Read WHT transactions / the WHT register'),
     ('WORKORDER.CLOSE', 'manufacturing', 'Close a completed work order (variance-clear, finance act)'),
     ('WORKORDER.MANAGE', 'manufacturing', 'Create / edit draft / issue / apply-cost / complete / cancel work orders + add operations'),
     ('WORKORDER.QC', 'manufacturing', 'RESERVED — no workflow in v1; hook for future QC workflow'),
-    ('WORKORDER.RELEASE', 'manufacturing', 'Release a planned work order (BOM explosion + component plan)')
+    ('WORKORDER.RELEASE', 'manufacturing', 'Release a planned work order (BOM explosion + component plan)'),
+    ('PAYMENTTERMS.VIEW', 'parties', 'View payment terms masters'),
+    ('PAYMENTTERMS.MANAGE', 'parties', 'Create, update and archive payment terms masters')
 ON CONFLICT (code) DO UPDATE
     SET module = EXCLUDED.module, description = EXCLUDED.description;
 

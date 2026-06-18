@@ -1,6 +1,7 @@
 package com.erp.modules.ap.repository;
 
 import com.erp.modules.ap.domain.entity.SupplierBill;
+import com.erp.platform.common.money.CurrencyCode;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -114,5 +115,5 @@ public interface SupplierBillRepository extends JpaRepository<SupplierBill, Long
             """)
     java.util.List<SupplierBill> findOpenForeignForRevaluation(
             @Param("companyId") Long companyId,
-            @Param("baseCurrency") String baseCurrency);
+            @Param("baseCurrency") CurrencyCode baseCurrency);
 }

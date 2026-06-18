@@ -19,6 +19,10 @@ CREATE TABLE pos_tills (
     code                 VARCHAR(30),
     name                 VARCHAR(120)    NOT NULL,
     cash_bank_account_id BIGINT          NOT NULL,
+    -- P3: default selling price list for this till (soft-FK to price_lists(id)); nullable.
+    default_price_list_id BIGINT,
+    -- P3: physical device/terminal identifier (e.g. card-reader serial); nullable.
+    device_terminal_id   VARCHAR(60),
     status               VARCHAR(20)     NOT NULL DEFAULT 'ACTIVE',
     version              BIGINT          NOT NULL DEFAULT 0,
     created_at           TIMESTAMPTZ     NOT NULL DEFAULT now(),

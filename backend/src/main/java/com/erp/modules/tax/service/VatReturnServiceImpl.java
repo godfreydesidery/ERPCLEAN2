@@ -277,6 +277,13 @@ public class VatReturnServiceImpl implements VatReturnService {
                 r.getNetVat(), r.getClosingCredit(),
                 r.getPriorReturnId(), r.getFilingReference(), r.getFilingDate(),
                 r.getPostedJournalUid(), r.getFiledAt(), r.getFiledBy(),
+                // P2-M1: payment tracking + turnover figures
+                r.getPaidAt(), r.getPaidAmount(), r.getPaymentReference(),
+                r.getSalesTurnover(), r.getPurchasesTurnover(),
+                r.getZeroRatedSales(), r.getExemptSales(),
+                // P2 D7: amendment + penalty/interest
+                r.getAmendedReturnId(), r.isAmendment(),
+                r.getPenaltyAmount(), r.getInterestAmount(),
                 bandDtos);
     }
 

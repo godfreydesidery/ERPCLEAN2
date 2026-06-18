@@ -11,6 +11,7 @@ import com.erp.modules.ar.domain.enums.ArInvoiceStatus;
 import com.erp.modules.ar.repository.ArInvoiceRepository;
 import com.erp.modules.fx.domain.dto.UpsertRateRequest;
 import com.erp.modules.gl.domain.entity.ChartOfAccount;
+import com.erp.modules.gl.domain.enums.JournalSourceType;
 import com.erp.modules.gl.repository.ChartOfAccountRepository;
 import com.erp.modules.gl.repository.JournalEntryRepository;
 import com.erp.modules.gl.repository.JournalLineRepository;
@@ -129,7 +130,7 @@ class ArCreditNoteServiceIT extends PostgresIntegrationTest {
         customerUid = customerService.create(new CreateCustomerRequest(
                 company.getId(), PartyType.INDIVIDUAL, "CN Customer",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CREDIT_ACCOUNT, null, null)).uid();
+                CustomerKind.CREDIT_ACCOUNT, null, null, null)).uid();
 
         chartOfAccountService.seedDefaults(company.getId());
         fiscalCalendarService.seedCurrentYear(company.getId());
@@ -144,9 +145,11 @@ class ArCreditNoteServiceIT extends PostgresIntegrationTest {
 
     // =========================================================================
     // Bar 1: foreign CN, rate ROSE since invoice (RATE_HIGHER > RATE_INVOICE)
-    // creditBase = 100 × 2600 = 260,000 ; relievedBase = 100 × 2500 = 250,000
-    // delta = 250k − 260k = −10k → CR REALIZED_FX_GAIN 10k
-    // GL: DR Revenue 260k / CR AR 250k / CR FX_GAIN 10k → ΣDR=260k == ΣCR=260k ✓
+    // D-6 GL timing — two entries:
+    //   RAISE : DR Revenue 260k / CR AR 260k         (full contra at CN rate, no FX leg)
+    //   APPLY : DR AR 10k / CR REALIZED_FX_GAIN 10k  (auto-apply-full realizes FX)
+    //   creditBase = 100 × 2600 = 260,000 ; relievedBase = 100 × 2500 = 250,000
+    //   net AR over both CN entries = 260k CR − 10k DR = 250k = relievedBase ✓
     // =========================================================================
 
     @Test
@@ -161,11 +164,20 @@ class ArCreditNoteServiceIT extends PostgresIntegrationTest {
                 LocalDate.now(), new BigDecimal("100"), BigDecimal.ZERO, USD, "FX CN rate rose");
         ArCreditNoteDto result = creditNoteService.raise(req);
 
+        // RAISE entry: full contra at CN rate — exactly 2 lines, balanced, no FX leg.
         assertGlBalanced(result.glEntryUid());
-        assertArCrEquals(result.glEntryUid(), "250000"); // AR CR at relievedBase (original rate)
-        assertRevenueDrEquals(result.glEntryUid(), "260000"); // Revenue DR at creditBase
+        assertThat(journalLinesOf(result.glEntryUid()))
+                .as("raise posts the full contra only (DR Revenue / CR AR), no FX leg").hasSize(2);
+        assertArCrEquals(result.glEntryUid(), "260000");      // CR AR at CN rate (creditBase)
+        assertRevenueDrEquals(result.glEntryUid(), "260000"); // DR Revenue at CN rate
 
-        // base_outstanding_amount decremented to zero (full CN)
+        // APPLY (auto-apply-full) realizes FX in a separate entry: rate rose → CR REALIZED_FX_GAIN.
+        assertThat(cnAccountCr("4920")).as("realized FX gain (4920)").isEqualByComparingTo("10000");
+        // Net AR relieved across raise + apply == relievedBase (invoice original rate).
+        assertThat(cnAccountNetCr("1200")).as("net AR relieved at invoice rate")
+                .isEqualByComparingTo("250000");
+
+        // invoice fully relieved (base + face) — full CN
         var refreshed = arInvoiceRepo.findByUid(invUid).orElseThrow();
         assertThat(refreshed.getBaseOutstandingAmount()).isEqualByComparingTo(BigDecimal.ZERO);
         assertThat(refreshed.getOutstandingAmount()).isEqualByComparingTo(BigDecimal.ZERO);
@@ -174,9 +186,11 @@ class ArCreditNoteServiceIT extends PostgresIntegrationTest {
 
     // =========================================================================
     // Bar 2: foreign CN, rate FELL since invoice (RATE_LOWER < RATE_INVOICE)
-    // creditBase = 100 × 2400 = 240,000 ; relievedBase = 100 × 2500 = 250,000
-    // delta = 250k − 240k = 10k → DR REALIZED_FX_LOSS 10k
-    // GL: DR Revenue 240k / DR FX_LOSS 10k / CR AR 250k → ΣDR=250k == ΣCR=250k ✓
+    // D-6 GL timing — two entries:
+    //   RAISE : DR Revenue 240k / CR AR 240k          (full contra at CN rate, no FX leg)
+    //   APPLY : DR REALIZED_FX_LOSS 10k / CR AR 10k   (auto-apply-full realizes FX)
+    //   creditBase = 100 × 2400 = 240,000 ; relievedBase = 100 × 2500 = 250,000
+    //   net AR over both CN entries = 240k CR + 10k CR = 250k = relievedBase ✓
     // =========================================================================
 
     @Test
@@ -191,13 +205,23 @@ class ArCreditNoteServiceIT extends PostgresIntegrationTest {
                 LocalDate.now(), new BigDecimal("100"), BigDecimal.ZERO, USD, "FX CN rate fell");
         ArCreditNoteDto result = creditNoteService.raise(req);
 
+        // RAISE entry: full contra at CN rate — exactly 2 lines, balanced, no FX leg.
         assertGlBalanced(result.glEntryUid());
-        assertArCrEquals(result.glEntryUid(), "250000");
-        assertRevenueDrEquals(result.glEntryUid(), "240000");
+        assertThat(journalLinesOf(result.glEntryUid()))
+                .as("raise posts the full contra only (DR Revenue / CR AR), no FX leg").hasSize(2);
+        assertArCrEquals(result.glEntryUid(), "240000");      // CR AR at CN rate (creditBase)
+        assertRevenueDrEquals(result.glEntryUid(), "240000"); // DR Revenue at CN rate
 
-        // 3 lines: Revenue DR + FX_LOSS DR + AR CR
-        var lines = journalLinesOf(result.glEntryUid());
-        assertThat(lines).as("FX loss path must have 3 GL lines").hasSize(3);
+        // APPLY (auto-apply-full) realizes FX in a separate entry: rate fell → DR REALIZED_FX_LOSS.
+        assertThat(cnAccountDr("5190")).as("realized FX loss (5190)").isEqualByComparingTo("10000");
+        // Net AR relieved across raise + apply == relievedBase (invoice original rate).
+        assertThat(cnAccountNetCr("1200")).as("net AR relieved at invoice rate")
+                .isEqualByComparingTo("250000");
+
+        // invoice fully relieved — full CN
+        var refreshed = arInvoiceRepo.findByUid(invUid).orElseThrow();
+        assertThat(refreshed.getStatus()).isEqualTo(ArInvoiceStatus.PAID);
+        assertThat(refreshed.getOutstandingAmount()).isEqualByComparingTo(BigDecimal.ZERO);
     }
 
     // =========================================================================
@@ -360,5 +384,30 @@ class ArCreditNoteServiceIT extends PostgresIntegrationTest {
         assertThat(revDr)
                 .as("Revenue (4000) DR must be %s", expected)
                 .isEqualByComparingTo(new BigDecimal(expected));
+    }
+
+    // -- CN-sourced GL movement helpers ------------------------------------------------
+    // Sum a given account across the credit-note's GL entries only (raise + apply-FX), so the
+    // opening-balance entry — which also touches AR 1200 — does not pollute the assertion.
+    private BigDecimal cnAccountCr(String code)    { return cnAccountMovement(code, false); }
+    private BigDecimal cnAccountDr(String code)    { return cnAccountMovement(code, true);  }
+    private BigDecimal cnAccountNetCr(String code) {
+        return cnAccountMovement(code, false).subtract(cnAccountMovement(code, true));
+    }
+
+    private BigDecimal cnAccountMovement(String accountCode, boolean debit) {
+        Long acctId = accountRepo.findByCompanyIdAndAccountCode(company.getId(), accountCode)
+                .map(ChartOfAccount::getId)
+                .orElseThrow(() -> new AssertionError("Account " + accountCode + " not seeded"));
+        return journalEntryRepo.findByCompanyId(company.getId(), org.springframework.data.domain.Pageable.unpaged())
+                .stream()
+                .filter(e -> e.getSourceType() == JournalSourceType.AR_CREDIT_NOTE)
+                .flatMap(e -> journalLineRepo.findByEntryIdOrderByLineNo(e.getId()).stream())
+                .filter(l -> acctId.equals(l.getAccountId()))
+                .map(l -> {
+                    BigDecimal v = debit ? l.getDebitAmount() : l.getCreditAmount();
+                    return v != null ? v : BigDecimal.ZERO;
+                })
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 }

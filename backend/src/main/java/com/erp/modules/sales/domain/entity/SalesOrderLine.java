@@ -4,6 +4,7 @@ import com.erp.modules.products.domain.enums.PriceSource;
 import com.erp.modules.products.domain.enums.VatStatus;
 import com.erp.modules.sales.domain.enums.FulfilmentMode;
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -100,6 +101,16 @@ public class SalesOrderLine extends UidEntity {
     @Setter
     private BigDecimal lineDiscountPercent;
 
+    /** Free-text reason for the line discount (P2-M3). Nullable. */
+    @Column(name = "discount_reason", length = 160)
+    @Setter
+    private String discountReason;
+
+    /** Customer-requested date for this line (P2-M3). Nullable. */
+    @Column(name = "requested_date")
+    @Setter
+    private java.time.LocalDate requestedDate;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "vat_status", nullable = false, length = 20)
     private VatStatus vatStatus;
@@ -121,7 +132,7 @@ public class SalesOrderLine extends UidEntity {
     private BigDecimal grossAmount = BigDecimal.ZERO;
 
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     // --- projects (ADR-0033 D-3, V66) ---
     @Column(name = "project_id")
@@ -201,7 +212,7 @@ public class SalesOrderLine extends UidEntity {
         this.unitPriceAmount = unitPrice;
         this.vatStatus = vatStatus;
         this.vatRate = vatRate;
-        this.currency = currency;
+        this.currency = CurrencyCode.of(currency);
         this.createdBy = createdBy;
     }
 

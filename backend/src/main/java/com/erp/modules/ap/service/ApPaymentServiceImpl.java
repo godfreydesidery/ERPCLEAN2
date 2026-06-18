@@ -6,11 +6,15 @@ import com.erp.modules.ap.domain.dto.PaySingleBillRequest;
 import com.erp.modules.ap.domain.dto.PaymentRunRequest;
 import com.erp.modules.ap.domain.entity.ApPayment;
 import com.erp.modules.ap.domain.entity.ApPaymentAllocation;
+import com.erp.modules.ap.domain.entity.PaymentRun;
 import com.erp.modules.ap.domain.entity.SupplierBill;
 import com.erp.modules.ap.domain.enums.ApPaymentKind;
+import com.erp.modules.ap.domain.enums.ApPaymentStatus;
+import com.erp.modules.ap.domain.enums.PaymentRunStatus;
 import com.erp.modules.ap.domain.enums.SupplierBillStatus;
 import com.erp.modules.ap.repository.ApPaymentAllocationRepository;
 import com.erp.modules.ap.repository.ApPaymentRepository;
+import com.erp.modules.ap.repository.PaymentRunRepository;
 import com.erp.modules.ap.repository.SupplierBillRepository;
 import com.erp.modules.gl.domain.dto.JournalEntryDraft;
 import com.erp.modules.gl.domain.dto.JournalEntryDraft.LineDraft;
@@ -75,6 +79,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
     private final SupplierBillRepository        bills;
     private final ApPaymentRepository           payments;
     private final ApPaymentAllocationRepository allocations;
+    private final PaymentRunRepository          paymentRuns;
     private final CompanyRepository             companies;
     private final SupplierRepository            suppliers;
     private final ApBillNumberGenerator         numbers;
@@ -90,6 +95,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
     public ApPaymentServiceImpl(SupplierBillRepository bills,
                                  ApPaymentRepository payments,
                                  ApPaymentAllocationRepository allocations,
+                                 PaymentRunRepository paymentRuns,
                                  CompanyRepository companies,
                                  SupplierRepository suppliers,
                                  ApBillNumberGenerator numbers,
@@ -104,6 +110,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         this.bills                   = bills;
         this.payments                = payments;
         this.allocations             = allocations;
+        this.paymentRuns             = paymentRuns;
         this.companies               = companies;
         this.suppliers               = suppliers;
         this.numbers                 = numbers;
@@ -140,7 +147,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
             throw new IllegalStateException("Bill " + req.supplierBillUid() + " has zero outstanding.");
         }
 
-        String currency = bill.getCurrency();
+        String currency = bill.getCurrency().value();
         String payNum   = numbers.nextPayment(companyId);
 
         // Resolve settlement rate (identity short-circuit when currency == base)
@@ -166,9 +173,10 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         BigDecimal baseSettled   = toAllocate.multiply(settlementRate)
                 .setScale(baseScale, RoundingMode.HALF_UP);
 
-        // Allocate to bill — capture base columns (V78)
+        // Allocate to bill — capture base columns (V78) + settlement discount / write-off (D1, data-only)
         ApPaymentAllocation alloc = new ApPaymentAllocation(
-                companyId, payment.getId(), bill.getId(), toAllocate, actorId());
+                companyId, payment.getId(), bill.getId(), toAllocate,
+                req.discountAmount(), req.writeOffAmount(), actorId());
         alloc.setBaseAllocatedAmount(baseSettled);
         alloc.setSettlementRate(settlementRate);
         allocations.save(alloc);
@@ -180,6 +188,12 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         bill.setBaseOutstandingAmount(currentBase.subtract(baseRelieved).max(BigDecimal.ZERO));
         bill.setStatus(billStatusAfterPayment(bill.getOutstandingAmount()));
         bills.save(bill);
+
+        // D-9: set on-account tracking — for a normal single-bill payment, toAllocate == amount
+        // so unallocated == 0 and status == ALLOCATED. For a partial payment the remainder stays.
+        BigDecimal unallocated = payment.getAmount().subtract(toAllocate);
+        payment.setUnallocatedAmount(unallocated);
+        payment.setStatus(derivePaymentStatus(unallocated, payment.getAmount(), toAllocate));
 
         // GL: DR AP / CR Cash (+FX leg if applicable)
         JournalEntryDto posted = postPaymentToGl(
@@ -244,7 +258,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
                     + " distinct currencies. Split the run by currency.");
         }
 
-        String currency = openBills.get(0).getCurrency();
+        String currency = openBills.get(0).getCurrency().value();
         // Resolve settlement rate once for the run
         ConvertedAmount settlementConv = fxConversion.toBase(
                 BigDecimal.ONE, currency, companyId, req.paymentDate());
@@ -257,6 +271,14 @@ public class ApPaymentServiceImpl implements ApPaymentService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         String payNum = numbers.nextPayment(companyId);
 
+        // ADR-0041 D3 — create the grouping PaymentRun (DRAFT) before the member payment. The run
+        // posts NOTHING to GL (balance-neutral); its member payment does. Stamped POSTED below once
+        // the member payment's GL entry succeeds. run_number via the dedicated run sequence.
+        PaymentRun run = new PaymentRun(
+                companyId, branchId(), numbers.nextPaymentRun(companyId), currency, actorId());
+        run.setTotalAmount(totalPaid);
+        run = paymentRuns.save(run);
+
         final Long finalSupplierId = supplierId;
         ApPayment payment = new ApPayment(
                 companyId, branchId(), finalSupplierId,
@@ -265,6 +287,8 @@ public class ApPaymentServiceImpl implements ApPaymentService {
                 req.tenderType(), req.bankReference(), actorId());
         payment.setFxRate(settlementRate);
         payment.setRateAt(settlementConv.rateAt());
+        // ADR-0041 D3 — group this payment under the run (soft-FK).
+        payment.setPaymentRunId(run.getId());
         payment = payments.save(payment);
 
         List<ApPaymentAllocation> allocList = new ArrayList<>();
@@ -294,6 +318,10 @@ public class ApPaymentServiceImpl implements ApPaymentService {
             sumBaseSettled  = sumBaseSettled.add(baseSettled);
         }
 
+        // D-9: payment run always fully allocates — unallocated == 0, status == ALLOCATED
+        payment.setUnallocatedAmount(BigDecimal.ZERO);
+        payment.setStatus(ApPaymentStatus.ALLOCATED);
+
         // For a payment run the WHT applies to the batch total; supplier id from first bill if batch.
         Long runSupplierId = openBills.isEmpty() ? null : openBills.get(0).getSupplierId();
         JournalEntryDto posted = postPaymentToGl(
@@ -304,9 +332,16 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         payment.setGlEntryUid(posted.uid());
         payment = payments.save(payment);
 
+        // ADR-0041 D3 — the member payment posted; flip the run DRAFT→POSTED (balance-neutral).
+        run.setStatus(PaymentRunStatus.POSTED);
+        run.setUpdatedAt(java.time.Instant.now());
+        run.setUpdatedBy(actorId());
+        paymentRuns.save(run);
+
         audit.record(AuditEvent.of(AuditActions.AP_PAYMENT_MAKE, "ap_payments",
                         payment.getId(), payment.getUid())
                 .detail(Map.of("paymentNumber", payNum,
+                        "runNumber", run.getRunNumber(),
                         "totalPaid", totalPaid.toPlainString(),
                         "billCount", String.valueOf(openBills.size()))));
 
@@ -385,12 +420,17 @@ public class ApPaymentServiceImpl implements ApPaymentService {
                 && whtAmount.compareTo(BigDecimal.ZERO) > 0;
 
         // Capture WHT certificate before building the GL draft (ADR-0017 D-9).
+        // D-7: resolve supplier TIN snapshot from party master (no tax→parties import — done here in ap).
         WhtCaptureResultDto whtResult = null;
         if (hasWht) {
+            String supplierTin = supplierId != null
+                    ? suppliers.findById(supplierId).map(s -> s.getTin()).orElse(null)
+                    : null;
             whtResult = whtCapture.captureOnPayment(
                     companyId, branchId,
                     whtTypeUid,
                     supplierId, "Supplier",
+                    supplierTin,
                     payment.getUid(),
                     payment.getAmount(), whtAmount,
                     currency, payment.getPaymentDate(),
@@ -521,7 +561,22 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         return new ApPaymentDto(
                 p.getId(), p.getUid(), p.getCompanyId(), p.getBranchId(), p.getSupplierId(),
                 p.getPaymentNumber(), p.getKind(), p.getPaymentDate(), p.getAmount(),
-                p.getCurrency(), p.getTenderType(), p.getBankReference(), p.getGlEntryUid(),
+                p.getCurrency().value(), p.getTenderType(), p.getBankReference(), p.getGlEntryUid(),
+                p.getWhtAmount(), p.getWhtTransactionUid(),
+                p.getUnallocatedAmount(), p.getStatus(), p.getChequeUid(),
+                p.getPaymentRunId(),
                 dtoAllocs);
+    }
+
+    // -------------------------------------------------------------------------
+    // D-9 — status derivation helper (mirror of ArReceiptServiceImpl)
+    // -------------------------------------------------------------------------
+
+    static ApPaymentStatus derivePaymentStatus(BigDecimal unallocated, BigDecimal amount,
+                                                BigDecimal allocated) {
+        if (unallocated.compareTo(amount) == 0) return ApPaymentStatus.UNALLOCATED;
+        if (allocated.compareTo(BigDecimal.ZERO) > 0
+                && unallocated.compareTo(BigDecimal.ZERO) > 0) return ApPaymentStatus.PARTIAL;
+        return ApPaymentStatus.ALLOCATED;
     }
 }

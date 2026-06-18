@@ -1,7 +1,9 @@
 package com.erp.modules.ap.domain.entity;
 
 import com.erp.modules.ap.domain.enums.ApPaymentKind;
+import com.erp.modules.ap.domain.enums.ApPaymentStatus;
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -47,7 +49,7 @@ public class ApPayment extends UidEntity {
     private BigDecimal amount;
 
     @Column(name = "currency", nullable = false, length = 3, updatable = false)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "tender_type", nullable = false, length = 20, updatable = false)
     private String tenderType;
@@ -56,9 +58,65 @@ public class ApPayment extends UidEntity {
     @Setter
     private String bankReference;
 
+    /**
+     * Captured beneficiary account uid (soft-FK to supplier_bank_accounts.uid, no DB FK — D-4).
+     * Set at payment time; AP service validates ownership at that point.
+     */
+    @Column(name = "supplier_bank_account_uid", length = 26)
+    @Setter
+    private String supplierBankAccountUid;
+
+    // -------------------------------------------------------------------------
+    // D-7 — WHT withheld on payment header (ADR-0040 D-7)
+    // -------------------------------------------------------------------------
+
+    /** WHT amount withheld from this payment. Null when no WHT applies. Positive when set. */
+    @Column(name = "wht_amount", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal whtAmount;
+
+    /**
+     * Scalar uid of the wht_transactions row created at payment time (soft ref, no DB FK).
+     * Set by ApPaymentServiceImpl after WhtCaptureService.captureOnPayment succeeds.
+     */
+    @Column(name = "wht_transaction_uid", length = 26)
+    @Setter
+    private String whtTransactionUid;
+
     @Column(name = "gl_entry_uid", length = 26)
     @Setter
     private String glEntryUid;
+
+    // -------------------------------------------------------------------------
+    // D-9 — on-account (prepayment) tracking (ADR-0040 D-9)
+    // Mirror of ArReceipt.unallocatedAmount / ArReceiptStatus pattern.
+    // -------------------------------------------------------------------------
+
+    /**
+     * Unallocated (on-account) remainder. Starts at 0 for normal bill payments;
+     * starts at {@code amount} for prepayments. Service enforces the invariant
+     * Σ allocated + unallocated == amount under SELECT FOR UPDATE.
+     */
+    @Column(name = "unallocated_amount", nullable = false, precision = 19, scale = 4)
+    @Setter
+    private BigDecimal unallocatedAmount = BigDecimal.ZERO;
+
+    /**
+     * Allocation state derived from unallocated_amount (D-9).
+     * UNALLOCATED = full amount on-account; PARTIAL = some applied; ALLOCATED = fully applied.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 20)
+    @Setter
+    private ApPaymentStatus status = ApPaymentStatus.ALLOCATED;
+
+    /**
+     * Scalar uid of the cheque that funded this payment (soft-FK to cheques.uid, no DB FK — D-9).
+     * Set at payment time for cheque-tender payments.
+     */
+    @Column(name = "cheque_uid", length = 26)
+    @Setter
+    private String chequeUid;
 
     /** FK → cash_bank_accounts(id); nullable for back-compat rows pre-V13 (ADR-0016 D-13). */
     @Column(name = "cash_bank_account_id")
@@ -94,6 +152,28 @@ public class ApPayment extends UidEntity {
     @Setter
     private Instant rateAt;
 
+    // -------------------------------------------------------------------------
+    // ADR-0041 D3 — payment-run grouping + cheque bounce reversal
+    // -------------------------------------------------------------------------
+
+    /** Soft-FK to {@code payment_runs.id} when this payment is part of a bulk run; null otherwise. */
+    @Column(name = "payment_run_id")
+    @Setter
+    private Long paymentRunId;
+
+    /**
+     * Timestamp when this payment's cash leg was reversed because the funding OUTBOUND cheque
+     * BOUNCED. Null while the payment is live. Set append-only when the reversing JournalEntry posts.
+     */
+    @Column(name = "reversed_at")
+    @Setter
+    private Instant reversedAt;
+
+    /** Scalar uid of the payment that this row reverses (self soft-FK); unused by the bounce path. */
+    @Column(name = "reversal_of_payment_uid", length = 26)
+    @Setter
+    private String reversalOfPaymentUid;
+
     protected ApPayment() {
         // JPA
     }
@@ -109,7 +189,7 @@ public class ApPayment extends UidEntity {
         this.kind           = kind;
         this.paymentDate    = paymentDate;
         this.amount         = amount;
-        this.currency       = currency;
+        this.currency       = CurrencyCode.of(currency);
         this.tenderType     = tenderType;
         this.bankReference  = bankReference;
         this.createdBy      = createdBy;

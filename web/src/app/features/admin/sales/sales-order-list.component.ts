@@ -18,6 +18,7 @@ import { AgentService } from '../parties/agent.service';
 import { SalesOrdersService } from './sales-orders.service';
 import type { SalesOrderPage } from './sales-orders.service';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
+import { CurrencySelectComponent } from '../../../shared/currency-select/currency-select.component';
 
 const DEFAULT_SIZE = 20;
 
@@ -29,7 +30,7 @@ interface LoadTrigger { page: number }
  */
 @Component({
   selector: 'app-sales-order-list',
-  imports: [FormsModule, RouterLink, DecimalPipe, PaginatorComponent],
+  imports: [FormsModule, RouterLink, DecimalPipe, PaginatorComponent, CurrencySelectComponent],
   templateUrl: './sales-order-list.component.html',
   styleUrl: './sales-order-list.component.scss',
 })
@@ -45,6 +46,7 @@ export class SalesOrderListComponent {
   // ── Company context ─────────────────────────────────────────────────────────
   readonly companies = signal<Company[]>([]);
   readonly selectedCompanyId = signal('');
+  readonly selectedCompanyUid = computed(() => this.companies().find((c) => c.id === this.selectedCompanyId())?.uid ?? '');
   readonly companyState = signal<'loading' | 'idle' | 'error'>('loading');
 
   // ── List state ──────────────────────────────────────────────────────────────

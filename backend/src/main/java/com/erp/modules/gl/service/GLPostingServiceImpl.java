@@ -23,6 +23,7 @@ import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.money.CurrencyCode;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -99,9 +100,12 @@ public class GLPostingServiceImpl implements GLPostingService {
         //    postings, so the close must still be able to clear it). BR-GL-04 stays enforced for every
         //    other source type. (Year-End Close adversarial review, ISSUES-REGISTER #14.)
         String baseCurrency = resolveBaseCurrency(draft.companyId());
-        boolean allowInactive = draft.sourceType() == JournalSourceType.YEAR_END_CLOSE;
+        boolean allowInactive       = draft.sourceType() == JournalSourceType.YEAR_END_CLOSE;
+        // Only user-entered MANUAL journals are subject to the allowManualPosting gate.
+        // System/event-driven sources post to control accounts by design (ADR-0013 D-3).
+        boolean isManualJournal     = draft.sourceType() == JournalSourceType.MANUAL;
         for (JournalEntryDraft.LineDraft ld : draftLines) {
-            validateLine(ld, draft.companyId(), baseCurrency, allowInactive);
+            validateLine(ld, draft.companyId(), baseCurrency, allowInactive, isManualJournal);
         }
 
         // 2b. Dimension validation (ADR-0025 D-4 steps 2-3, BR-CC-04, FR-CC-08).
@@ -269,15 +273,29 @@ public class GLPostingServiceImpl implements GLPostingService {
             assertDimensionValueValid(companyId, DimensionSlot.DIMENSION_4, ld.dimension4ValueId());
         }
 
-        // Step 3: mandatory-slot enforcement (ADR-0025 amendment, ISSUES-REGISTER #20d) — applies ONLY
-        // to user-entered MANUAL journals. Automated/system posters do not carry operator dimension
-        // context; enforcing mandatory slots on them poisons event-driven postings. The operator who
-        // enters a manual journal CAN supply the dimension, so the BR-CC-03/FR-CC-08 control is kept
-        // exactly where it is actionable.
+        // Step 3 (MANUAL-only) — dimension REQUIREDNESS. Two complementary controls, both applying ONLY to
+        // user-entered MANUAL journals. Automated/system posters do not carry operator dimension context;
+        // enforcing requiredness on them poisons event-driven postings (ISSUES-REGISTER #20d, ADR-0025).
+        // The operator who enters a manual journal CAN supply the dimension, so the controls are kept
+        // exactly where they are actionable. Neither control adds/removes/alters a leg → Σ-gate untouched.
         if (sourceType != JournalSourceType.MANUAL) {
             return;
         }
 
+        // Step 3a — per-account dimension requirement flags (ADR-0041 D4). MANUAL-only (we are past the
+        // sourceType guard above). For each line whose target account carries a require_* flag, assert the
+        // line supplies the matching dimension value; else reject naming the account + the missing slot.
+        // Same exemption rationale as the company mandatory-slot rule below and the control-account gate:
+        // system/event-driven posters do not carry operator dimension context (ADR-0025). No balance
+        // impact — this is a pre-persist validation only. No-op when no account sets any flag
+        // (zero-regression for existing manual journals, NFR-CC-01).
+        enforceAccountDimensionRequirements(draftLines);
+
+        // Step 3b — company-wide mandatory-slot enforcement (ADR-0025 amendment, ISSUES-REGISTER #20d) —
+        // applies ONLY to user-entered MANUAL journals. Automated/system posters do not carry operator
+        // dimension context; enforcing mandatory slots on them poisons event-driven postings. The operator
+        // who enters a manual journal CAN supply the dimension, so the BR-CC-03/FR-CC-08 control is kept
+        // exactly where it is actionable.
         // Skip entirely if no mandatory dimension exists (NFR-CC-01 zero-regression guard).
         List<DimensionSlot> mandatory = dimensionTypes.findMandatorySlots(companyId);
         if (mandatory.isEmpty()) {
@@ -301,6 +319,45 @@ public class GLPostingServiceImpl implements GLPostingService {
                                     + " (FR-CC-08 / BR-CC-03). Journal line for account "
                                     + ld.accountId() + " is missing a value for this slot.");
                 }
+            }
+        }
+    }
+
+    /**
+     * ADR-0041 D4: per-account dimension-requirement enforcement. For each posting line whose target
+     * account sets {@code require_cost_centre}/{@code require_department}/{@code require_project}=true,
+     * assert the line carries the corresponding dimension value (cost-centre value, department value,
+     * project id respectively); else throw {@link com.erp.platform.common.api.ConflictException} naming
+     * the account code and the missing dimension.
+     *
+     * <p>MANUAL-only by construction — this is reached only after the {@code sourceType==MANUAL} guard in
+     * {@link #validateDimensions}. System/event-driven posters are exempt for the same reason as the
+     * company mandatory-slot rule and the control-account gate (no operator dimension context, ADR-0025).
+     *
+     * <p>No balance impact: pre-persist validation only — it never alters, adds, or removes a leg, so the
+     * Σ debit==Σ credit gate is untouched. No-op when no account on the draft sets any flag (NFR-CC-01).
+     */
+    private void enforceAccountDimensionRequirements(List<JournalEntryDraft.LineDraft> draftLines) {
+        for (JournalEntryDraft.LineDraft ld : draftLines) {
+            ChartOfAccount account = accounts.findById(ld.accountId())
+                    .orElseThrow(() -> new NotFoundException("Account not found: " + ld.accountId()));
+            if (account.isRequireCostCentre() && ld.costCentreValueId() == null) {
+                throw new com.erp.platform.common.api.ConflictException(
+                        "Account " + account.getAccountCode()
+                                + " requires a cost-centre dimension on every manual journal line "
+                                + "(ADR-0041 D4). This line is missing a cost-centre value.");
+            }
+            if (account.isRequireDepartment() && ld.departmentValueId() == null) {
+                throw new com.erp.platform.common.api.ConflictException(
+                        "Account " + account.getAccountCode()
+                                + " requires a department dimension on every manual journal line "
+                                + "(ADR-0041 D4). This line is missing a department value.");
+            }
+            if (account.isRequireProject() && ld.projectId() == null) {
+                throw new com.erp.platform.common.api.ConflictException(
+                        "Account " + account.getAccountCode()
+                                + " requires a project dimension on every manual journal line "
+                                + "(ADR-0041 D4). This line is missing a project value.");
             }
         }
     }
@@ -342,7 +399,7 @@ public class GLPostingServiceImpl implements GLPostingService {
     }
 
     private void validateLine(JournalEntryDraft.LineDraft ld, Long companyId, String baseCurrency,
-                              boolean allowInactiveAccount) {
+                              boolean allowInactiveAccount, boolean enforceManualPostingGate) {
         BigDecimal debit  = ld.debitAmount()  != null ? ld.debitAmount()  : BigDecimal.ZERO;
         BigDecimal credit = ld.creditAmount() != null ? ld.creditAmount() : BigDecimal.ZERO;
 
@@ -374,6 +431,27 @@ public class GLPostingServiceImpl implements GLPostingService {
                     "Account " + account.getAccountCode() + " is inactive; cannot post to it (BR-GL-04).");
         }
 
+        // Manual-posting gate: only user-entered MANUAL journals are subject to this check.
+        // System/event-driven posters (YEAR_END_CLOSE, inventory, AP/AR settlement, payroll, FX)
+        // are exempted — they post to control accounts by design and do not carry operator context.
+        if (enforceManualPostingGate && !account.isAllowManualPosting()) {
+            throw new com.erp.platform.common.api.ConflictException(
+                    "Account " + account.getAccountCode()
+                            + " does not allow manual posting. Update the account's allowManualPosting flag to permit direct entries.");
+        }
+        // Belt-and-suspenders (D-1, ADR-0040): even if allowManualPosting was inadvertently left true
+        // on a sub-ledger control account, reject the MANUAL journal at the control-type gate. Only
+        // control types that block manual posting apply here — CASH/BANK are classified controls but
+        // stay manually postable (reconciled via the cash/bank module), see ControlType.blocksManualPosting().
+        if (enforceManualPostingGate
+                && account.getControlType() != null
+                && account.getControlType().blocksManualPosting()) {
+            throw new com.erp.platform.common.api.ConflictException(
+                    "Account " + account.getAccountCode()
+                            + " is a control account (" + account.getControlType()
+                            + ") and cannot be the target of a manual journal entry (D-1).");
+        }
+
         // Base currency (BR-GL-06, D-9)
         if (!baseCurrency.equals(ld.currency())) {
             throw new IllegalArgumentException(
@@ -391,7 +469,8 @@ public class GLPostingServiceImpl implements GLPostingService {
                             acct != null ? acct.getAccountCode() : null,
                             acct != null ? acct.getName() : null,
                             l.getDebitAmount(), l.getCreditAmount(),
-                            l.getCurrency(), l.getLineMemo());
+                            l.getCurrency(), l.getLineMemo(),
+                            l.getTaxCode(), l.getTaxAmount());
                 })
                 .toList();
 
@@ -400,6 +479,9 @@ public class GLPostingServiceImpl implements GLPostingService {
                 batchNumber, entry.getPostingDate(), entry.getFiscalPeriodId(),
                 entry.getDescription(), entry.getSourceType(),
                 entry.getSourceRef(), entry.getReversalOfId(),
+                entry.getReversedByEntryId(), entry.isReversed(),
+                CurrencyCode.value(entry.getHeaderCurrency()),
+                entry.getTotalDebit(), entry.getTotalCredit(),
                 entry.getPostedAt(), lineDtos);
     }
 }

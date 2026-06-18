@@ -1,6 +1,7 @@
 package com.erp.modules.ar.domain.entity;
 
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
@@ -37,7 +38,7 @@ public class ArWriteOff extends UidEntity {
     private BigDecimal amount;
 
     @Column(name = "currency", nullable = false, length = 3, updatable = false)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "reason", nullable = false, length = 255)
     private String reason;
@@ -46,6 +47,21 @@ public class ArWriteOff extends UidEntity {
     @Column(name = "gl_entry_uid", length = 26)
     @Setter
     private String glEntryUid;
+
+    // -------------------------------------------------------------------------
+    // P3 — FX capture for foreign-currency write-offs (base relievable off
+    // ar_invoices.base_outstanding_amount). Additive columns; DEFAULT 1 / nullable.
+    // -------------------------------------------------------------------------
+
+    /** P3: settlement rate (units of base per 1 foreign unit) at write-off; immutable. DEFAULT 1. */
+    @Column(name = "fx_rate", nullable = false, precision = 19, scale = 8, updatable = false)
+    @Setter
+    private BigDecimal fxRate = BigDecimal.ONE;
+
+    /** P3: amount in base currency at {@link #fxRate}. Nullable for back-compat rows. */
+    @Column(name = "base_amount", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal baseAmount;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
@@ -74,7 +90,7 @@ public class ArWriteOff extends UidEntity {
         this.arInvoiceId  = arInvoiceId;
         this.writeOffDate = writeOffDate;
         this.amount       = amount;
-        this.currency     = currency;
+        this.currency     = CurrencyCode.of(currency);
         this.reason       = reason;
         this.createdBy    = createdBy;
     }

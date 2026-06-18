@@ -3,6 +3,7 @@ package com.erp.modules.approvals.domain.entity;
 import com.erp.modules.approvals.domain.enums.PolicyBranchScope;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -10,6 +11,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -61,7 +63,17 @@ public class ApprovalPolicy extends UidEntity {
     private BigDecimal maxAmount;
 
     @Column(name = "currency", nullable = false, length = 3, updatable = false)
-    private String currency;
+    private CurrencyCode currency;
+
+    /** P2: policy validity window start (nullable, open-ended). */
+    @Column(name = "effective_from")
+    @Setter
+    private LocalDate effectiveFrom;
+
+    /** P2: policy validity window end (nullable, open-ended). */
+    @Column(name = "effective_to")
+    @Setter
+    private LocalDate effectiveTo;
 
     /** Active flag: only active policies match new submissions. Does not affect in-flight requests. */
     @Column(name = "is_active", nullable = false)
@@ -113,7 +125,7 @@ public class ApprovalPolicy extends UidEntity {
         this.branchId     = branchId;
         this.minAmount    = minAmount;
         this.maxAmount    = maxAmount;
-        this.currency     = currency;
+        this.currency     = CurrencyCode.of(currency);
         this.notes        = notes;
         this.createdBy    = createdBy;
     }

@@ -13,8 +13,10 @@ public record BankReconciliationDto(
         Long cashBankAccountId,
         String reconciliationNumber,
         LocalDate statementDate,
+        BigDecimal statementOpeningBalance,
         BigDecimal statementClosingBalance,
         BigDecimal clearedBookBalance,
+        BigDecimal unreconciledAmount,
         ReconciliationStatus status,
         Long reconciledBy,
         Instant completedAt

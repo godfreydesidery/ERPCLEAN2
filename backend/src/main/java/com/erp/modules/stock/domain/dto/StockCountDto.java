@@ -1,6 +1,7 @@
 package com.erp.modules.stock.domain.dto;
 
 import com.erp.modules.stock.domain.enums.StockCountStatus;
+import com.erp.modules.stock.domain.enums.StockCountType;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -15,7 +16,7 @@ public record StockCountDto(
         Long branchId,
         String countNumber,
         StockCountStatus status,
-        String countType,
+        StockCountType countType,
         Long locationId,
         LocalDate countDate,
         Instant frozenAt,

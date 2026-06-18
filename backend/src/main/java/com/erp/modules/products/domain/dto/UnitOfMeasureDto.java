@@ -1,6 +1,7 @@
 package com.erp.modules.products.domain.dto;
 
 import com.erp.modules.products.domain.entity.UnitOfMeasure;
+import com.erp.modules.products.domain.enums.DimensionType;
 import com.erp.platform.common.domain.MasterStatus;
 
 /**
@@ -13,6 +14,10 @@ public record UnitOfMeasureDto(
         Long companyId,
         String code,
         String name,
+        String symbol,
+        DimensionType dimensionType,
+        short decimalPlaces,
+        boolean fractional,
         MasterStatus status,
         Long version,
         String createdAt,
@@ -28,6 +33,10 @@ public record UnitOfMeasureDto(
                 u.getCompanyId(),
                 u.getCode(),
                 u.getName(),
+                u.getSymbol(),
+                u.getDimensionType(),
+                u.getDecimalPlaces(),
+                u.isFractional(),
                 u.getStatus(),
                 u.getVersion(),
                 u.getCreatedAt() != null ? u.getCreatedAt().toString() : null,

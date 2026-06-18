@@ -4,6 +4,7 @@ import com.erp.modules.sales.domain.enums.DocumentOrigin;
 import com.erp.modules.sales.domain.enums.DocumentType;
 import com.erp.modules.sales.domain.enums.InvoiceStatus;
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -66,7 +67,17 @@ public class SalesInvoice extends UidEntity {
 
     /** Document currency (ISO 4217). All monetary columns share this currency (BR-SALES-04). */
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
+
+    /** Customer's own purchase-order reference (P2-M3). Nullable. */
+    @Column(name = "customer_po_number", length = 60)
+    @Setter
+    private String customerPoNumber;
+
+    /** Soft-FK → payment_terms(id) (P2 D1, ADR-0041). Resolved + stored at finalise. Nullable. */
+    @Column(name = "payment_terms_id")
+    @Setter
+    private Long paymentTermsId;
 
     /** Document-level discount amount (optional). Apportioned across lines before VAT. */
     @Column(name = "doc_discount_amount", precision = 19, scale = 4)
@@ -220,6 +231,27 @@ public class SalesInvoice extends UidEntity {
     @Setter
     private Long posSessionId;
 
+    // --- ADR-0040 D-3 — ship-to / bill-to address snapshot fields ---
+    /** FK → customer_addresses.id; nullable — delivery address used for this invoice. */
+    @Column(name = "ship_to_address_id")
+    @Setter
+    private Long shipToAddressId;
+
+    /** FK → customer_addresses.id; nullable — billing address used for this invoice. */
+    @Column(name = "bill_to_address_id")
+    @Setter
+    private Long billToAddressId;
+
+    /** Free-text shipping address override / snapshot (at most 500 chars). */
+    @Column(name = "ship_to_address_text", length = 500)
+    @Setter
+    private String shipToAddressText;
+
+    /** Free-text billing address override / snapshot (at most 500 chars). */
+    @Column(name = "bill_to_address_text", length = 500)
+    @Setter
+    private String billToAddressText;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
@@ -244,7 +276,7 @@ public class SalesInvoice extends UidEntity {
         this.branchId = branchId;
         this.customerId = customerId;
         this.agentId = agentId;
-        this.currency = currency;
+        this.currency = CurrencyCode.of(currency);
         this.createdBy = createdBy;
     }
 }

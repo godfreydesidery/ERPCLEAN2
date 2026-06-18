@@ -110,6 +110,42 @@ public class FixedAsset extends UidEntity {
     @Setter
     private String assetTag;
 
+    @Column(name = "serial_number", length = 120)
+    @Setter
+    private String serialNumber;
+
+    @Column(name = "model", length = 120)
+    @Setter
+    private String model;
+
+    @Column(name = "manufacturer", length = 120)
+    @Setter
+    private String manufacturer;
+
+    @Column(name = "barcode", length = 120)
+    @Setter
+    private String barcode;
+
+    /** P2 D7: componentisation — parent asset id (self soft-FK; no @ManyToOne). NULL = top-level asset. */
+    @Column(name = "parent_asset_id")
+    @Setter
+    private Long parentAssetId;
+
+    /** P2 D7: warranty expiry date. */
+    @Column(name = "warranty_expiry")
+    @Setter
+    private LocalDate warrantyExpiry;
+
+    /** P2 D7: insured value for the insurance schedule. */
+    @Column(name = "insured_value", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal insuredValue;
+
+    /** P2 D7: insurance policy reference number. */
+    @Column(name = "insurance_policy_no", length = 60)
+    @Setter
+    private String insurancePolicyNo;
+
     /** The capitalisation journal uid — audit trace, set on IN_SERVICE. */
     @Column(name = "capitalised_gl_entry_uid", length = 26)
     @Setter

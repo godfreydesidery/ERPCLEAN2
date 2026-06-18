@@ -18,6 +18,8 @@ CREATE TABLE purchase_requisitions (
     branch_id               BIGINT           NOT NULL,
     requisition_number      VARCHAR(30),                          -- PR-####; NULL while DRAFT
     status                  VARCHAR(20)      NOT NULL DEFAULT 'DRAFT',
+    priority                VARCHAR(10),                          -- P2: LOW|NORMAL|HIGH|URGENT
+    preferred_supplier_id   BIGINT,                               -- P2: soft-FK suppliers.id; requester's preferred source
     required_by_date        DATE,
     cost_centre_code        VARCHAR(40),                          -- free-text in v1 (OQ-PROC-06)
     approval_request_uid    VARCHAR(26),                          -- approvals-engine request (scalar, no FK)
@@ -52,7 +54,11 @@ CREATE TABLE purchase_requisitions (
         CHECK (status IN ('DRAFT','SUBMITTED','APPROVED','REJECTED','CONVERTED','CANCELLED')),
     CONSTRAINT chk_purchase_requisition_number_when_submitted
         CHECK ((status = 'DRAFT' AND requisition_number IS NULL)
-            OR (status <> 'DRAFT' AND requisition_number IS NOT NULL))
+            OR (status <> 'DRAFT' AND requisition_number IS NOT NULL)),
+    CONSTRAINT chk_purchase_requisition_priority                                                            -- P2
+        CHECK (priority IS NULL OR priority IN ('LOW','NORMAL','HIGH','URGENT')),
+    CONSTRAINT fk_purchase_requisition_pref_supplier                                                        -- P2
+        FOREIGN KEY (preferred_supplier_id) REFERENCES suppliers (id)
 );
 
 -- ============================================================================
@@ -73,6 +79,9 @@ CREATE TABLE purchase_requisition_lines (
     requested_qty           NUMERIC(19,6)    NOT NULL,
     requested_qty_in_base   NUMERIC(19,6)    NOT NULL,
     estimated_unit_cost     NUMERIC(19,4),                        -- optional; CHECK >= 0
+    required_by_date        DATE,                                 -- P2: per-line required-by date
+    suggested_supplier_id   BIGINT,                               -- P2: soft-FK suppliers.id; line-level suggested source
+    converted_to_po_line_uid VARCHAR(26),                         -- P2: per-line traceability to the produced PO line
     note                    VARCHAR(255),
     currency                VARCHAR(3),
     version                 BIGINT           NOT NULL DEFAULT 0,
@@ -89,7 +98,9 @@ CREATE TABLE purchase_requisition_lines (
     CONSTRAINT fk_purchase_requisition_line_company FOREIGN KEY (company_id)   REFERENCES companies (id),
     CONSTRAINT fk_purchase_requisition_line_branch FOREIGN KEY (branch_id)     REFERENCES branches (id),
     CONSTRAINT chk_purchase_requisition_line_qty   CHECK (requested_qty > 0 AND requested_qty_in_base > 0),
-    CONSTRAINT chk_purchase_requisition_line_cost  CHECK (estimated_unit_cost IS NULL OR estimated_unit_cost >= 0)
+    CONSTRAINT chk_purchase_requisition_line_cost  CHECK (estimated_unit_cost IS NULL OR estimated_unit_cost >= 0),
+    CONSTRAINT fk_purchase_requisition_line_sugg_supplier                                                    -- P2
+        FOREIGN KEY (suggested_supplier_id) REFERENCES suppliers (id)
 );
 
 -- ============================================================================
@@ -102,6 +113,14 @@ CREATE TABLE purchase_settings (
     po_approval_threshold_amount NUMERIC(19,4),
     po_approval_enabled         BOOLEAN          NOT NULL DEFAULT false,
     currency                    VARCHAR(3)       NOT NULL DEFAULT 'TZS',
+    -- P2 D7: company-wide procurement policy defaults (one row/company)
+    default_payment_terms_id    BIGINT,                          -- soft-FK → payment_terms (no DB FK — additive)
+    default_location_id         BIGINT,                          -- soft-FK → stock_locations (default receiving location)
+    match_tolerance_pct         NUMERIC(9,4),                    -- default 3-way price-match tolerance %
+    match_tolerance_abs         NUMERIC(19,4),                   -- default absolute match tolerance
+    auto_close_enabled          BOOLEAN          NOT NULL DEFAULT false,  -- auto-close fully-received/billed POs
+    requisition_approval_enabled BOOLEAN         NOT NULL DEFAULT false,  -- require PR approval before RFQ/PO
+    requisition_approval_threshold_amount NUMERIC(19,4),         -- PR value above which approval is required
     version                     BIGINT           NOT NULL DEFAULT 0,
     created_at                  TIMESTAMPTZ      NOT NULL DEFAULT now(),
     created_by                  BIGINT,

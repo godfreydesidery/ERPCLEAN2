@@ -154,7 +154,7 @@ class PurchasesServiceImplIT extends PostgresIntegrationTest {
         SupplierDto supplier = supplierService.create(new CreateSupplierRequest(
                 companyA.getId(), PartyType.INDIVIDUAL, "Test Supplier",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                SupplierKind.GOODS));
+                SupplierKind.GOODS, null, null));
         supplierUid = supplier.uid();
     }
 
@@ -495,7 +495,7 @@ class PurchasesServiceImplIT extends PostgresIntegrationTest {
         SupplierDto supplierB = supplierService.create(new CreateSupplierRequest(
                 companyB.getId(), PartyType.INDIVIDUAL, "B-Supplier",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                SupplierKind.GOODS));
+                SupplierKind.GOODS, null, null));
 
         // Back to company A context
         setContext(companyA, branchA);
@@ -687,7 +687,7 @@ class PurchasesServiceImplIT extends PostgresIntegrationTest {
     private ProductDto stockableProduct(String name) {
         return productService.create(new CreateProductRequest(
                 companyA.getUid(), null, name, null,
-                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD));
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null));
     }
 
     private PurchaseOrderDto createDraftWithLine(String productUid, BigDecimal qty,

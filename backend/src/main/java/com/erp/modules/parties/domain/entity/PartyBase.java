@@ -86,6 +86,26 @@ public abstract class PartyBase extends UidEntity {
     @Setter
     private String district;
 
+    /** P2: ISO-3166 alpha-2 country code (nullable). Shared across all four party master tables. */
+    @Column(name = "country", length = 2)
+    @Setter
+    private String country;
+
+    /** P3: profile website URL (nullable). Shared across all four party master tables. */
+    @Column(name = "website", length = 200)
+    @Setter
+    private String website;
+
+    /** P3: free-text notes (nullable). Shared across all four party master tables. */
+    @Column(name = "notes", length = 1000)
+    @Setter
+    private String notes;
+
+    /** P3: logo/photo URL (nullable). Shared across all four party master tables. */
+    @Column(name = "image_url", length = 500)
+    @Setter
+    private String imageUrl;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     @Setter

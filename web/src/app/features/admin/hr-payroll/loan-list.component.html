@@ -86,9 +86,10 @@
             </div>
             <div class="erp-field">
               <label class="form-label" for="lnCurrency">Currency</label>
-              <input id="lnCurrency" name="lnCurrency" type="text" class="form-control"
-                     [ngModel]="fCurrency()" (ngModelChange)="fCurrency.set($event)"
-                     [disabled]="saving()" />
+              <app-currency-select id="lnCurrency" name="lnCurrency"
+                                   [(ngModel)]="fCurrency"
+                                   [companyUid]="selectedCompanyUid()"
+                                   [disabled]="saving()" />
             </div>
             <div class="erp-field">
               <label class="form-label" for="lnGl">

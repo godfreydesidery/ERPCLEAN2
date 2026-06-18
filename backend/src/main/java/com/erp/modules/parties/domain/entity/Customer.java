@@ -1,7 +1,10 @@
 package com.erp.modules.parties.domain.entity;
 
+import com.erp.modules.parties.domain.enums.CreditStatus;
 import com.erp.modules.parties.domain.enums.CustomerKind;
+import com.erp.modules.parties.domain.enums.CustomerSegment;
 import com.erp.modules.parties.domain.enums.PartyType;
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.money.Money;
 import jakarta.persistence.AttributeOverride;
 import jakarta.persistence.AttributeOverrides;
@@ -47,6 +50,101 @@ public class Customer extends PartyBase {
     @Column(name = "payment_terms_days")
     @Setter
     private Integer paymentTermsDays;
+
+    /**
+     * Soft-FK to payment_terms(id) — scalar, no @ManyToOne (cross-module soft-FK convention).
+     * When set, overrides payment_terms_days for due-date derivation (D-2, ADR-0040).
+     * payment_terms_days is retained as deprecated fallback.
+     */
+    @Column(name = "payment_terms_id")
+    @Setter
+    private Long paymentTermsId;
+
+    // -------------------------------------------------------------------------
+    // ADR-0040 D-5 — credit-control status (V68)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Machine-driven credit status. WARNING is advisory; ON_HOLD and STOPPED are hard blocks at SO
+     * confirm. Defaults to OK; updated by a credit-review job or manually by credit-control staff.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "credit_status", nullable = false, length = 20)
+    @Setter
+    private CreditStatus creditStatus = CreditStatus.OK;
+
+    /** Manual hold flag; set by credit-control staff independently of the computed credit_status. */
+    @Column(name = "manual_hold", nullable = false)
+    @Setter
+    private boolean manualHold = false;
+
+    /** Free-text reason recorded when manualHold is set or credit_status is changed by staff. */
+    @Column(name = "credit_hold_reason", length = 255)
+    @Setter
+    private String creditHoldReason;
+
+    // -------------------------------------------------------------------------
+    // P2 mechanical — tax exemption + default currency
+    // -------------------------------------------------------------------------
+
+    /** P2: customer tax-exemption flag. */
+    @Column(name = "tax_exempt", nullable = false)
+    @Setter
+    private boolean taxExempt = false;
+
+    /** P2: tax-exemption certificate/reference (set when taxExempt). */
+    @Column(name = "tax_exemption_ref", length = 80)
+    @Setter
+    private String taxExemptionRef;
+
+    /** P2: customer default transaction currency (CurrencyCode value type → VARCHAR(3)). */
+    @Column(name = "default_currency", length = 3)
+    @Setter
+    private CurrencyCode defaultCurrency;
+
+    // -------------------------------------------------------------------------
+    // P2 D5 — master-data defaults (ADR-0041 D5 Tier-1)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Soft-FK → price_lists(id) — scalar, no @ManyToOne (cross-module soft-FK convention).
+     * Default selling price list applied to this customer's sales documents.
+     */
+    @Column(name = "default_price_list_id")
+    @Setter
+    private Long defaultPriceListId;
+
+    /**
+     * Soft-FK → agents(id) — scalar, no @ManyToOne. Default sales agent for this customer.
+     */
+    @Column(name = "default_agent_id")
+    @Setter
+    private Long defaultAgentId;
+
+    /** P2 D5: coarse commercial segment (Tier-2 rich master deferred; simple enum only). */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "segment", nullable = false, length = 20)
+    @Setter
+    private CustomerSegment segment = CustomerSegment.OTHER;
+
+    // -------------------------------------------------------------------------
+    // P3 CRM — nice-to-have profile columns. All nullable/defaulted, additive-safe.
+    // -------------------------------------------------------------------------
+
+    /** P3: free-text/coded credit rating (e.g. "A", "B-"). Nullable. */
+    @Column(name = "credit_rating", length = 20)
+    @Setter
+    private String creditRating;
+
+    /** P3: date this customer was onboarded. Nullable. */
+    @Column(name = "onboarding_date")
+    @Setter
+    private java.time.LocalDate onboardingDate;
+
+    /** P3: accrued loyalty points. Defaults to 0. */
+    @Column(name = "loyalty_points", nullable = false)
+    @Setter
+    private int loyaltyPoints = 0;
 
     protected Customer() {
         // JPA

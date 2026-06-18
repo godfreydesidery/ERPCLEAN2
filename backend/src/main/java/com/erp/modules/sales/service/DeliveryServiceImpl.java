@@ -142,6 +142,9 @@ public class DeliveryServiceImpl implements DeliveryService {
                 order.getCustomerId(), req.deliveryDate(), actorId());
         delivery.setDeliveryNumber(numberGen.nextDelivery(order.getCompanyId()));
         delivery.setNotes(req.notes());
+        // ADR-0041 D2 — inherit the ship-to address snapshot from the source sales order (immutable).
+        delivery.setShipToAddressId(order.getShipToAddressId());
+        delivery.setShipToAddressText(order.getShipToAddressText());
         Delivery saved = deliveries.save(delivery);
 
         List<DeliveryLine> savedLines = new ArrayList<>();
@@ -179,7 +182,7 @@ public class DeliveryServiceImpl implements DeliveryService {
                     sol.getProductId(), sol.getProductCode(), sol.getProductName(),
                     sol.getUnitId(), sol.getUnitName(),
                     qtyDeliveredBase, qtyDeliveredBase,   // qty + qty_base (same in v1)
-                    sol.getCurrency(), actorId());
+                    sol.getCurrency().value(), actorId());
             savedLines.add(deliveryLines.save(dl));
 
             // Release the corresponding reservation (delta = negative)
@@ -352,10 +355,17 @@ public class DeliveryServiceImpl implements DeliveryService {
         SalesInvoice invoice = new SalesInvoice(
                 delivery.getCompanyId(), delivery.getBranchId(),
                 delivery.getCustomerId(), agentId,
-                order.getCurrency(), actorId());
+                order.getCurrency().value(), actorId());
         invoice.setOrigin(DocumentOrigin.SALES_ORDER);
         invoice.setSourceOrderUid(order.getUid());
         invoice.setSourceDeliveryUid(delivery.getUid());
+        // ADR-0041 D1/D2 — a SALES_ORDER-origin invoice inherits the SO's payment terms and the
+        // ship-to / bill-to address ids + snapshots (immutable).
+        invoice.setPaymentTermsId(order.getPaymentTermsId());
+        invoice.setShipToAddressId(order.getShipToAddressId());
+        invoice.setShipToAddressText(order.getShipToAddressText());
+        invoice.setBillToAddressId(order.getBillToAddressId());
+        invoice.setBillToAddressText(order.getBillToAddressText());
         invoice.setDocDiscountAmount(invoiceDocDiscountAmount);
         // Percent is copied verbatim: same rate × invoiced lines' raw net = correct share
         invoice.setDocDiscountPercent(order.getDocDiscountPercent());

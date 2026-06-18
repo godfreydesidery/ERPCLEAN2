@@ -25,6 +25,11 @@ CREATE TABLE supplier_bills (
     purchase_order_uid   VARCHAR(26),
     bill_date            DATE            NOT NULL,
     due_date             DATE            NOT NULL,
+    tax_point_date       DATE,                               -- P2: VAT tax-point (supply date), nullable
+    received_date        DATE,                               -- P2: date the bill was physically received, nullable
+    payment_terms_id     BIGINT,                             -- P2 D1: soft-FK payment_terms(id)
+    settlement_discount_due_date DATE,                       -- P2 D1: early-payment discount deadline
+    settlement_discount_amount   NUMERIC(19,4),              -- P2 D1: early-payment discount amount (data-only)
     net_amount           NUMERIC(19,4)   NOT NULL,
     vat_amount           NUMERIC(19,4)   NOT NULL DEFAULT 0,
     gross_amount         NUMERIC(19,4)   NOT NULL,
@@ -34,6 +39,11 @@ CREATE TABLE supplier_bills (
     posted_gl_entry_uid  VARCHAR(26),
     matched_at           TIMESTAMPTZ,
     matched_by           BIGINT,
+    supplier_bank_account_uid VARCHAR(26),    -- captured beneficiary (soft ref, no FK — ADR-0040 D-4)
+    -- D-7: WHT plan/snapshot at bill entry (non-posting; captured on payment) — ADR-0040 D-7
+    wht_type_id          BIGINT,             -- scalar, no FK (cross-module soft ref)
+    wht_taxable_base     NUMERIC(19,4),      -- taxable base for WHT calculation
+    wht_amount           NUMERIC(19,4),      -- planned/snapshot WHT amount
     version              BIGINT          NOT NULL DEFAULT 0,
     created_at           TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by           BIGINT,
@@ -58,7 +68,8 @@ CREATE TABLE supplier_bills (
     CONSTRAINT chk_supplier_bill_dates         CHECK (due_date >= bill_date),
     CONSTRAINT chk_supplier_bill_number_when_posted CHECK (
         (status = 'DRAFT' AND bill_number IS NULL)
-        OR (status <> 'DRAFT' AND bill_number IS NOT NULL))
+        OR (status <> 'DRAFT' AND bill_number IS NOT NULL)),
+    CONSTRAINT chk_supplier_bill_wht_amount    CHECK (wht_amount IS NULL OR wht_amount >= 0)
 );
 
 -- ============================================================================
@@ -75,21 +86,38 @@ CREATE TABLE supplier_bill_lines (
     po_line_uid      VARCHAR(26),
     gr_line_uid      VARCHAR(26),
     description      VARCHAR(200)    NOT NULL,
+    -- P3: unit of measure snapshot + per-line discount (asset_id/capitalization deferred → FA integration)
+    uom                  VARCHAR(20),                     -- P3: UoM code snapshot at bill entry, nullable
     billed_qty       NUMERIC(19,6)   NOT NULL,
     unit_cost_amount NUMERIC(19,4)   NOT NULL,
+    line_discount_amount NUMERIC(19,4)   NOT NULL DEFAULT 0,  -- P3: per-line discount amount; informational, nullable-safe
     line_net_amount  NUMERIC(19,4)   NOT NULL,
+    -- D-8: per-line VAT (ADR-0040 D-8) — reuses products.VatStatus enum values
+    vat_status       VARCHAR(20),            -- STANDARD | ZERO_RATED | EXEMPT; null = inherit from product
+    vat_rate         NUMERIC(9,4),           -- rate snapshot at bill entry (e.g. 0.1800 for 18%)
+    line_vat_amount  NUMERIC(19,4)   NOT NULL DEFAULT 0,   -- lineNetAmount × vatRate; 0 if no VAT
+    -- D-8: optional per-line GL account override for service / non-stock lines
+    gl_account_id    BIGINT,                 -- intra-DB FK → chart_of_accounts(id); null = use PURCHASES config key
+    -- P2: per-line dimension tags (mirror journal_lines cost_centre_value_id/department_value_id).
+    -- Scalar soft-FK BIGINT (no DB FK here: dimension_values is created later in V23).
+    cost_centre_value_id BIGINT,             -- P2: Cost Centre dimension (soft ref → dimension_values.id), nullable
+    department_value_id  BIGINT,             -- P2: Department dimension (soft ref → dimension_values.id), nullable
     currency         VARCHAR(3)      NOT NULL,
     created_at       TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by       BIGINT,
 
     CONSTRAINT uq_supplier_bill_line_uid    UNIQUE (uid),
     CONSTRAINT uq_supplier_bill_line_no     UNIQUE (supplier_bill_id, line_no),
-    CONSTRAINT fk_supplier_bill_line_bill   FOREIGN KEY (supplier_bill_id) REFERENCES supplier_bills (id),
-    CONSTRAINT fk_supplier_bill_line_company FOREIGN KEY (company_id)       REFERENCES companies (id),
-    CONSTRAINT fk_supplier_bill_line_branch  FOREIGN KEY (branch_id)        REFERENCES branches (id),
-    CONSTRAINT fk_supplier_bill_line_product FOREIGN KEY (product_id)       REFERENCES products (id),
+    CONSTRAINT fk_supplier_bill_line_bill   FOREIGN KEY (supplier_bill_id)  REFERENCES supplier_bills (id),
+    CONSTRAINT fk_supplier_bill_line_company FOREIGN KEY (company_id)        REFERENCES companies (id),
+    CONSTRAINT fk_supplier_bill_line_branch  FOREIGN KEY (branch_id)         REFERENCES branches (id),
+    CONSTRAINT fk_supplier_bill_line_product FOREIGN KEY (product_id)        REFERENCES products (id),
+    CONSTRAINT fk_supplier_bill_line_gl_acct FOREIGN KEY (gl_account_id)     REFERENCES chart_of_accounts (id),
     CONSTRAINT chk_supplier_bill_line_qty   CHECK (billed_qty > 0),
-    CONSTRAINT chk_supplier_bill_line_cost  CHECK (unit_cost_amount >= 0 AND line_net_amount >= 0)
+    CONSTRAINT chk_supplier_bill_line_cost  CHECK (unit_cost_amount >= 0 AND line_net_amount >= 0),
+    CONSTRAINT chk_supplier_bill_line_vat_status CHECK (
+        vat_status IS NULL OR vat_status IN ('STANDARD','ZERO_RATED','EXEMPT')),
+    CONSTRAINT chk_supplier_bill_line_vat_amount CHECK (line_vat_amount >= 0)
 );
 
 -- ============================================================================
@@ -107,6 +135,13 @@ CREATE TABLE bill_match (
     price_variance_pct     NUMERIC(9,4)    NOT NULL DEFAULT 0,
     qty_variance           NUMERIC(19,6)   NOT NULL DEFAULT 0,
     match_status           VARCHAR(25)     NOT NULL,
+    match_type             VARCHAR(10)     NOT NULL DEFAULT 'THREE_WAY',  -- P2 D7: 2-way vs 3-way match
+    variance_reason        VARCHAR(100),                                  -- P2 D7: free-text reason for an accepted variance
+    -- P3: audit-convenience scalar refs captured at match time (no FK — cross-module soft refs)
+    po_line_uid            VARCHAR(26),                                   -- P3: PO line uid the bill line matched, nullable
+    gr_line_uid            VARCHAR(26),                                   -- P3: GR line uid drawn against, nullable
+    grni_entry_uid         VARCHAR(26),                                   -- P3: GRNI clearing entry uid, nullable
+    currency               VARCHAR(3),                                    -- P3: currency snapshot for the variance amounts, nullable
     tolerance_pct          NUMERIC(9,4),
     tolerance_abs_amount   NUMERIC(19,4),
     accepted_by            BIGINT,
@@ -121,7 +156,8 @@ CREATE TABLE bill_match (
     CONSTRAINT fk_bill_match_line           FOREIGN KEY (supplier_bill_line_id) REFERENCES supplier_bill_lines (id),
     CONSTRAINT fk_bill_match_accepted_by    FOREIGN KEY (accepted_by)           REFERENCES app_users (id),
     CONSTRAINT chk_bill_match_status        CHECK (match_status IN (
-        'MATCHED','HELD_PRICE_VARIANCE','HELD_QTY_VARIANCE','VARIANCE_ACCEPTED'))
+        'MATCHED','HELD_PRICE_VARIANCE','HELD_QTY_VARIANCE','VARIANCE_ACCEPTED')),
+    CONSTRAINT chk_bill_match_type          CHECK (match_type IN ('TWO_WAY','THREE_WAY'))
 );
 
 -- ============================================================================
@@ -141,6 +177,21 @@ CREATE TABLE ap_payments (
     tender_type      VARCHAR(20)     NOT NULL,
     bank_reference   VARCHAR(80),
     gl_entry_uid     VARCHAR(26),
+    supplier_bank_account_uid VARCHAR(26),    -- captured beneficiary (soft ref, no FK — ADR-0040 D-4)
+    -- D-7: WHT withheld on payment header (ADR-0040 D-7)
+    wht_amount           NUMERIC(19,4),      -- withheld amount (null = no WHT on this payment)
+    wht_transaction_uid  VARCHAR(26),        -- scalar ref to wht_transactions.uid; no FK (cross-module soft ref)
+    -- D-9: on-account (prepayment) tracking (ADR-0040 D-9)
+    unallocated_amount   NUMERIC(19,4)   NOT NULL DEFAULT 0,   -- on-account remainder; starts == amount for prepayments
+    status               VARCHAR(20)     NOT NULL DEFAULT 'ALLOCATED',  -- UNALLOCATED|PARTIAL|ALLOCATED
+    cheque_uid           VARCHAR(26),        -- scalar ref to cheques.uid; no FK (cross-module soft ref)
+    -- NOTE: fx_rate / rate_at (V62) and cash_bank_account_id + FK (V13) are added by later
+    -- migrations via ADD COLUMN IF NOT EXISTS; not duplicated here.
+    -- ADR-0041 D3: grouping for a bulk payment run (soft FK to payment_runs.id, no DB FK)
+    payment_run_id       BIGINT,
+    -- ADR-0041 D3: cheque-bounce reversal (closes the deferred D-9 follow-up)
+    reversed_at              TIMESTAMPTZ,    -- set when an OUTBOUND cheque bounced and the cash leg was reversed
+    reversal_of_payment_uid  VARCHAR(26),    -- scalar ref to the payment being reversed (self soft ref), if any
     version          BIGINT          NOT NULL DEFAULT 0,
     created_at       TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by       BIGINT,
@@ -154,7 +205,11 @@ CREATE TABLE ap_payments (
     CONSTRAINT fk_ap_payment_supplier       FOREIGN KEY (supplier_id) REFERENCES suppliers (id),
     CONSTRAINT chk_ap_payment_amount        CHECK (amount > 0),
     CONSTRAINT chk_ap_payment_kind          CHECK (kind IN ('SINGLE','PAYMENT_RUN')),
-    CONSTRAINT chk_ap_payment_tender        CHECK (tender_type IN ('CASH','BANK_TRANSFER','MOBILE_MONEY'))
+    -- ADR-0041 D3: widen tender to admit CHEQUE + CARD; keep prior values for back-compat
+    CONSTRAINT chk_ap_payment_tender        CHECK (tender_type IN ('CASH','BANK_TRANSFER','MOBILE_MONEY','CHEQUE','CARD')),
+    CONSTRAINT chk_ap_payment_wht_amount    CHECK (wht_amount IS NULL OR wht_amount > 0),
+    CONSTRAINT chk_ap_payment_unallocated   CHECK (unallocated_amount >= 0 AND unallocated_amount <= amount),
+    CONSTRAINT chk_ap_payment_status        CHECK (status IN ('UNALLOCATED','PARTIAL','ALLOCATED'))
 );
 
 -- ============================================================================
@@ -166,6 +221,10 @@ CREATE TABLE ap_payment_allocations (
     ap_payment_id    BIGINT          NOT NULL,
     supplier_bill_id BIGINT          NOT NULL,
     allocated_amount NUMERIC(19,4)   NOT NULL,
+    discount_amount  NUMERIC(19,4),                      -- P2 D1: settlement discount taken (immutable, data-only, no GL leg)
+    write_off_amount NUMERIC(19,4),                      -- P2 D1: residual write-off (immutable, data-only, no GL leg)
+    allocated_at     TIMESTAMPTZ,                        -- P2: when this allocation was made (mirrors AR), nullable
+    allocated_by     BIGINT,                             -- P2: actor who made this allocation (mirrors AR), nullable
     created_at       TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by       BIGINT,
 
@@ -173,7 +232,9 @@ CREATE TABLE ap_payment_allocations (
     CONSTRAINT fk_ap_payment_allocation_company  FOREIGN KEY (company_id)      REFERENCES companies (id),
     CONSTRAINT fk_ap_payment_allocation_payment  FOREIGN KEY (ap_payment_id)   REFERENCES ap_payments (id),
     CONSTRAINT fk_ap_payment_allocation_bill     FOREIGN KEY (supplier_bill_id) REFERENCES supplier_bills (id),
-    CONSTRAINT chk_ap_payment_allocation_amount  CHECK (allocated_amount > 0)
+    CONSTRAINT chk_ap_payment_allocation_amount  CHECK (allocated_amount > 0),
+    CONSTRAINT chk_ap_payment_allocation_discount CHECK (discount_amount IS NULL OR discount_amount >= 0),
+    CONSTRAINT chk_ap_payment_allocation_writeoff CHECK (write_off_amount IS NULL OR write_off_amount >= 0)
 );
 
 -- ============================================================================
@@ -194,6 +255,26 @@ CREATE TABLE ap_debit_notes (
     currency            VARCHAR(3)      NOT NULL,
     reason              VARCHAR(255)    NOT NULL,
     gl_entry_uid        VARCHAR(26),
+    -- P2: clean-origin support. `origin` (free-text above) historically carries a combined
+    -- "KIND:{uid}" tag (e.g. PURCHASE_RETURN:{uid}); origin_ref isolates the uid suffix so the
+    -- kind can move to the ApDebitNoteOrigin enum without losing the source-document reference.
+    origin_ref          VARCHAR(60),                          -- P2: source-document uid suffix, nullable
+    -- P3: structured purchase-return reference (origin/origin_ref carry it today as free text);
+    --     dedicated typed column so a PURCHASE_RETURN-originated DN can be queried directly. Nullable.
+    purchase_return_ref VARCHAR(60),                          -- P3: purchase_returns.uid this DN was raised for, nullable
+    -- P3: per-line dimension tags at header level (mirror supplier_bill_lines cost/dept dimensions).
+    --     Scalar soft-FK BIGINT (no DB FK: dimension_values created in V23). Nullable.
+    cost_centre_value_id BIGINT,                              -- P3: Cost Centre dimension (soft ref → dimension_values.id), nullable
+    department_value_id  BIGINT,                              -- P3: Department dimension (soft ref → dimension_values.id), nullable
+    -- ADR-0041 D3: unapplied/applied tracking + base capture + FX rate + status
+    --              (parity with ar_credit_notes D-6: raise posts full contra; apply = sub-ledger
+    --               move + realized-FX plug). All NULLABLE/DEFAULT-ed for back-compat.
+    unapplied_amount      NUMERIC(19,4)   NOT NULL DEFAULT 0,  -- remaining unapplied face; starts == amount at raise
+    base_amount           NUMERIC(19,4),                       -- total in base at the DN's fx_rate (set at raise)
+    base_unapplied_amount NUMERIC(19,4),                       -- remaining unapplied in base
+    fx_rate               NUMERIC(19,8)   NOT NULL DEFAULT 1,  -- DN document rate (immutable; used as settlement rate)
+    rate_at               TIMESTAMPTZ,                         -- when the rate was stamped
+    status                VARCHAR(20)     NOT NULL DEFAULT 'UNAPPLIED',  -- UNAPPLIED|PARTIAL|APPLIED
     version             BIGINT          NOT NULL DEFAULT 0,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by          BIGINT,
@@ -207,7 +288,63 @@ CREATE TABLE ap_debit_notes (
     CONSTRAINT fk_ap_debit_note_supplier       FOREIGN KEY (supplier_id)    REFERENCES suppliers (id),
     CONSTRAINT fk_ap_debit_note_bill           FOREIGN KEY (supplier_bill_id) REFERENCES supplier_bills (id),
     CONSTRAINT chk_ap_debit_note_amount        CHECK (
-        amount > 0 AND net_amount >= 0 AND vat_amount >= 0)
+        amount > 0 AND net_amount >= 0 AND vat_amount >= 0),
+    -- ADR-0041 D3: unapplied invariant + status domain (mirror chk_ar_credit_note_*)
+    CONSTRAINT chk_ap_debit_note_unapplied     CHECK (
+        unapplied_amount >= 0 AND unapplied_amount <= amount),
+    CONSTRAINT chk_ap_debit_note_status        CHECK (
+        status IN ('UNAPPLIED','PARTIAL','APPLIED'))
+);
+
+-- ============================================================================
+-- (6b) ap_debit_note_allocations — junction: DN ↔ open bill (ADR-0041 D3)
+--      No uid (junction convention, mirrors ar_credit_note_allocations).
+--      Append-only; reapply = delete + re-insert; posts nothing to GL (only realized-FX plug).
+-- ============================================================================
+CREATE TABLE ap_debit_note_allocations (
+    id                    BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    company_id            BIGINT          NOT NULL,
+    debit_note_id         BIGINT          NOT NULL,
+    supplier_bill_id      BIGINT          NOT NULL,
+    allocated_amount      NUMERIC(19,4)   NOT NULL,
+    base_allocated_amount NUMERIC(19,4),
+    settlement_rate       NUMERIC(19,8),
+    allocated_at          TIMESTAMPTZ     NOT NULL DEFAULT now(),
+    allocated_by          BIGINT,
+    created_at            TIMESTAMPTZ     NOT NULL DEFAULT now(),
+    created_by            BIGINT,
+
+    CONSTRAINT uq_ap_debit_note_allocation_pair UNIQUE (debit_note_id, supplier_bill_id),
+    CONSTRAINT fk_ap_dn_allocation_company       FOREIGN KEY (company_id)       REFERENCES companies (id),
+    CONSTRAINT fk_ap_dn_allocation_debit_note    FOREIGN KEY (debit_note_id)    REFERENCES ap_debit_notes (id),
+    CONSTRAINT fk_ap_dn_allocation_bill          FOREIGN KEY (supplier_bill_id) REFERENCES supplier_bills (id),
+    CONSTRAINT chk_ap_dn_allocation_amount       CHECK (allocated_amount > 0)
+);
+
+-- ============================================================================
+-- (6c) payment_runs — lightweight master grouping for bulk AP payment runs (ADR-0041 D3)
+-- ============================================================================
+CREATE TABLE payment_runs (
+    id            BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    uid           VARCHAR(26)     NOT NULL,
+    company_id    BIGINT          NOT NULL,
+    branch_id     BIGINT,
+    run_number    VARCHAR(30)     NOT NULL,
+    status        VARCHAR(20)     NOT NULL DEFAULT 'DRAFT',   -- DRAFT|POSTED
+    total_amount  NUMERIC(19,4)   NOT NULL DEFAULT 0,
+    currency      VARCHAR(3),
+    version       BIGINT          NOT NULL DEFAULT 0,
+    created_at    TIMESTAMPTZ     NOT NULL DEFAULT now(),
+    created_by    BIGINT,
+    updated_at    TIMESTAMPTZ,
+    updated_by    BIGINT,
+
+    CONSTRAINT uq_payment_run_uid            UNIQUE (uid),
+    CONSTRAINT uq_payment_run_company_number UNIQUE (company_id, run_number),
+    CONSTRAINT fk_payment_run_company        FOREIGN KEY (company_id) REFERENCES companies (id),
+    CONSTRAINT fk_payment_run_branch         FOREIGN KEY (branch_id)  REFERENCES branches (id),
+    CONSTRAINT chk_payment_run_status        CHECK (status IN ('DRAFT','POSTED')),
+    CONSTRAINT chk_payment_run_total         CHECK (total_amount >= 0)
 );
 
 -- ============================================================================
@@ -256,6 +393,11 @@ CREATE INDEX ix_supplier_bill_lines_company
 CREATE INDEX ix_supplier_bill_lines_po_line
     ON supplier_bill_lines (po_line_uid);
 
+-- D-8: partial index on supplier_bill_lines.gl_account_id when set
+CREATE INDEX ix_supplier_bill_lines_gl_account
+    ON supplier_bill_lines (gl_account_id)
+    WHERE gl_account_id IS NOT NULL;
+
 -- bill_match
 CREATE INDEX ix_bill_match_bill
     ON bill_match (supplier_bill_id);
@@ -272,6 +414,14 @@ CREATE INDEX ix_ap_payments_company_supplier
     ON ap_payments (company_id, supplier_id);
 CREATE INDEX ix_ap_payments_company_date
     ON ap_payments (company_id, payment_date);
+-- D-9: on-account remainder query (supplier balance netting)
+CREATE INDEX ix_ap_payments_onaccount
+    ON ap_payments (company_id, supplier_id)
+    WHERE unallocated_amount > 0;
+-- D-9: cheque back-link
+CREATE INDEX ix_ap_payments_cheque
+    ON ap_payments (cheque_uid)
+    WHERE cheque_uid IS NOT NULL;
 
 -- ap_payment_allocations
 CREATE INDEX ix_ap_payment_allocations_payment
@@ -289,6 +439,29 @@ CREATE INDEX ix_ap_debit_notes_company_supplier
 CREATE INDEX ix_ap_debit_notes_bill
     ON ap_debit_notes (supplier_bill_id)
     WHERE supplier_bill_id IS NOT NULL;
+-- ADR-0041 D3: open DN lookup for balance netting (mirror ix_ar_credit_notes_open)
+CREATE INDEX ix_ap_debit_notes_open
+    ON ap_debit_notes (company_id, supplier_id)
+    WHERE unapplied_amount > 0;
+
+-- ap_debit_note_allocations (ADR-0041 D3)
+CREATE INDEX ix_ap_debit_note_allocations_debit_note
+    ON ap_debit_note_allocations (debit_note_id);
+CREATE INDEX ix_ap_debit_note_allocations_bill
+    ON ap_debit_note_allocations (supplier_bill_id);
+CREATE INDEX ix_ap_debit_note_allocations_company
+    ON ap_debit_note_allocations (company_id);
+
+-- ap_payments: payment_run grouping lookup (ADR-0041 D3)
+CREATE INDEX ix_ap_payments_run
+    ON ap_payments (payment_run_id)
+    WHERE payment_run_id IS NOT NULL;
+
+-- payment_runs (ADR-0041 D3)
+CREATE INDEX ix_payment_runs_company
+    ON payment_runs (company_id);
+CREATE INDEX ix_payment_runs_company_status
+    ON payment_runs (company_id, status);
 
 -- ============================================================================
 -- (9) CoA seed — add 5150 Purchases (EXPENSE/DEBIT) per existing company

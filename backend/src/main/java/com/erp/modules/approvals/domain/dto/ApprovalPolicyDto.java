@@ -3,6 +3,7 @@ package com.erp.modules.approvals.domain.dto;
 import com.erp.modules.approvals.domain.enums.PolicyBranchScope;
 import com.erp.platform.common.domain.MasterStatus;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -20,6 +21,8 @@ public record ApprovalPolicyDto(
         BigDecimal minAmount,
         BigDecimal maxAmount,
         String currency,
+        LocalDate effectiveFrom,
+        LocalDate effectiveTo,
         boolean active,
         MasterStatus status,
         String notes,

@@ -1,6 +1,8 @@
 package com.erp.modules.purchases.domain.entity;
 
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.modules.purchases.domain.enums.PoApprovalStatus;
+import com.erp.modules.purchases.domain.enums.PoBillingStatus;
 import com.erp.modules.purchases.domain.enums.PurchaseOrderStatus;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
@@ -64,12 +66,33 @@ public class PurchaseOrder extends UidEntity {
 
     /** Document currency (ISO 4217). All Money on this PO shares this currency (BR-PURCH-04). */
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     /** Computed roll-up: Σ line totals (ADR-0011 D-5). DEFAULT 0. */
     @Column(name = "order_total_amount", nullable = false, precision = 19, scale = 4)
     @Setter
     private BigDecimal orderTotalAmount = BigDecimal.ZERO;
+
+    /** P2: soft-FK app_users.id — the assigned purchasing agent (buyer). Nullable. */
+    @Column(name = "buyer_id")
+    @Setter
+    private Long buyerId;
+
+    /** P2: header roll-up of amount billed against this PO. Nullable. */
+    @Column(name = "invoiced_amount", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal invoicedAmount;
+
+    /** P2: header billing roll-up status. Nullable (no maintenance logic in P2). */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "billing_status", length = 20)
+    @Setter
+    private PoBillingStatus billingStatus;
+
+    /** Soft-FK → payment_terms(id) (P2 D1, ADR-0041). Resolved + stored at confirm. Nullable. */
+    @Column(name = "payment_terms_id")
+    @Setter
+    private Long paymentTermsId;
 
     /** Optional expected-delivery date (operational convenience). */
     @Column(name = "expected_date")
@@ -168,7 +191,7 @@ public class PurchaseOrder extends UidEntity {
         this.supplierId   = supplierId;
         this.supplierCode = supplierCode;
         this.supplierName = supplierName;
-        this.currency     = currency;
+        this.currency     = CurrencyCode.ofNullable(currency);
         this.createdBy    = createdBy;
     }
 }

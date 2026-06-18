@@ -2,6 +2,7 @@ package com.erp.modules.approvals.domain.entity;
 
 import com.erp.modules.approvals.domain.enums.ApprovalRequestStatus;
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -52,12 +53,17 @@ public class ApprovalRequest extends UidEntity {
     private BigDecimal amount;
 
     @Column(name = "currency", nullable = false, length = 3, updatable = false)
-    private String currency;
+    private CurrencyCode currency;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     @Setter
     private ApprovalRequestStatus status = ApprovalRequestStatus.PENDING;
+
+    /** P2: denormalised sequence of the currently-open step (derived listing convenience). */
+    @Column(name = "current_step_sequence")
+    @Setter
+    private Integer currentStepSequence;
 
     /** True iff no policy matched — terminal APPROVED with no steps (BR-APR-09). */
     @Column(name = "auto_approved", nullable = false, updatable = false)
@@ -125,7 +131,7 @@ public class ApprovalRequest extends UidEntity {
         this.documentType    = documentType;
         this.documentUid     = documentUid;
         this.amount          = amount;
-        this.currency        = currency;
+        this.currency        = CurrencyCode.of(currency);
         this.sourcePolicyId  = sourcePolicyId;
         this.sourcePolicyUid = sourcePolicyUid;
         this.summary         = summary;
@@ -149,7 +155,7 @@ public class ApprovalRequest extends UidEntity {
         this.documentType = documentType;
         this.documentUid  = documentUid;
         this.amount       = amount;
-        this.currency     = currency;
+        this.currency     = CurrencyCode.of(currency);
         this.summary      = summary;
         this.submittedBy  = submittedBy;
         this.createdBy    = createdBy;

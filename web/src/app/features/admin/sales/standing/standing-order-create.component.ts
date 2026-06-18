@@ -14,6 +14,7 @@ import { OrganisationService } from '../../organisation/organisation.service';
 import { CustomerService } from '../../parties/customer.service';
 import { ProductService } from '../../products/product.service';
 import { UidPickerComponent, UidOption } from '../../../../shared/uid-picker/uid-picker.component';
+import { CurrencySelectComponent } from '../../../../shared/currency-select/currency-select.component';
 import {
   CreateStandingOrderLineRequest,
   CreateStandingOrderRequest,
@@ -38,7 +39,7 @@ interface LineEntry {
  */
 @Component({
   selector: 'app-standing-order-create',
-  imports: [FormsModule, RouterLink, UidPickerComponent],
+  imports: [FormsModule, RouterLink, UidPickerComponent, CurrencySelectComponent],
   templateUrl: './standing-order-create.component.html',
   styleUrl: './standing-order-create.component.scss',
 })

@@ -4,6 +4,7 @@ import com.erp.modules.gl.domain.dto.JournalEntryDraft;
 import com.erp.modules.gl.domain.dto.JournalEntryDto;
 import com.erp.modules.gl.domain.dto.JournalLineDto;
 import com.erp.modules.gl.domain.dto.PostJournalRequest;
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.modules.gl.domain.entity.ChartOfAccount;
 import com.erp.modules.gl.domain.entity.JournalEntry;
 import com.erp.modules.gl.domain.entity.JournalLine;
@@ -135,7 +136,8 @@ public class JournalServiceImpl implements JournalService {
                             acct != null ? acct.getAccountCode() : null,
                             acct != null ? acct.getName() : null,
                             l.getDebitAmount(), l.getCreditAmount(),
-                            l.getCurrency(), l.getLineMemo());
+                            l.getCurrency(), l.getLineMemo(),
+                            l.getTaxCode(), l.getTaxAmount());
                 })
                 .toList();
         return new JournalEntryDto(
@@ -143,6 +145,9 @@ public class JournalServiceImpl implements JournalService {
                 batchNumber, entry.getPostingDate(), entry.getFiscalPeriodId(),
                 entry.getDescription(), entry.getSourceType(),
                 entry.getSourceRef(), entry.getReversalOfId(),
+                entry.getReversedByEntryId(), entry.isReversed(),
+                CurrencyCode.value(entry.getHeaderCurrency()),
+                entry.getTotalDebit(), entry.getTotalCredit(),
                 entry.getPostedAt(), lineDtos);
     }
 }

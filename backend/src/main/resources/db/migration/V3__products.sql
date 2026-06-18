@@ -20,6 +20,16 @@ CREATE TABLE products (
     base_unit       VARCHAR(40)         NOT NULL,
     cost_amount     NUMERIC(19,4),
     cost_currency   VARCHAR(3),
+    brand           VARCHAR(120),                       -- P2-M3: product brand
+    manufacturer    VARCHAR(160),                       -- P2-M3: manufacturer name
+    weight          NUMERIC(19,6),                      -- P2-M3: unit weight
+    volume          NUMERIC(19,6),                      -- P2-M3: unit volume
+    dimensions      VARCHAR(80),                        -- P2-M3: free-text dimensions (e.g. LxWxH)
+    hs_code         VARCHAR(20),                        -- P2-M3: harmonised-system customs code
+    image_url       VARCHAR(500),                       -- P3: product image URL
+    notes           VARCHAR(1000),                      -- P3: free-text notes
+    sales_unit_id   BIGINT,                             -- P3: default sales UoM (soft-FK → units_of_measure(id))
+    purchase_unit_id BIGINT,                            -- P3: default purchase UoM (soft-FK → units_of_measure(id))
     status          VARCHAR(32)         NOT NULL DEFAULT 'ACTIVE',
     version         BIGINT              NOT NULL DEFAULT 0,
     created_at      TIMESTAMPTZ         NOT NULL DEFAULT now(),
@@ -36,7 +46,26 @@ CREATE TABLE products (
         CHECK (
             (cost_amount IS NULL AND cost_currency IS NULL) OR
             (cost_amount IS NOT NULL AND cost_currency IS NOT NULL)
-        )
+        ),
+    -- D-10: product planning + sourcing (ADR-0040)
+    reorder_level           NUMERIC(19,6),
+    reorder_qty             NUMERIC(19,6),
+    min_stock               NUMERIC(19,6),
+    max_stock               NUMERIC(19,6),
+    safety_stock            NUMERIC(19,6),
+    lead_time_days          INTEGER,
+    purchasable             BOOLEAN             NOT NULL DEFAULT true,
+    preferred_supplier_id   BIGINT,
+    CONSTRAINT chk_product_reorder_level    CHECK (reorder_level   IS NULL OR reorder_level   >= 0),
+    CONSTRAINT chk_product_reorder_qty      CHECK (reorder_qty     IS NULL OR reorder_qty     >= 0),
+    CONSTRAINT chk_product_min_stock        CHECK (min_stock       IS NULL OR min_stock       >= 0),
+    CONSTRAINT chk_product_max_stock        CHECK (max_stock       IS NULL OR max_stock       >= 0),
+    CONSTRAINT chk_product_safety_stock     CHECK (safety_stock    IS NULL OR safety_stock    >= 0),
+    CONSTRAINT chk_product_lead_time        CHECK (lead_time_days  IS NULL OR lead_time_days  >= 0),
+    CONSTRAINT chk_product_stock_range
+        CHECK (min_stock IS NULL OR max_stock IS NULL OR max_stock >= min_stock),
+    CONSTRAINT fk_product_preferred_supplier
+        FOREIGN KEY (preferred_supplier_id) REFERENCES suppliers (id)
 );
 
 -- ---------------------------------------------------------------------------
@@ -61,6 +90,12 @@ CREATE TABLE price_lists (
     company_id  BIGINT          NOT NULL,
     code        VARCHAR(20)     NOT NULL,
     name        VARCHAR(120)    NOT NULL,
+    currency          VARCHAR(3),                          -- P2 D5: price-list currency (CurrencyCode); null = company default
+    effective_from    DATE,                                -- P2 D5: validity window start (null = open)
+    effective_to      DATE,                                -- P2 D5: validity window end (null = open)
+    price_includes_vat BOOLEAN        NOT NULL DEFAULT false, -- P2 D5: whether listed prices are VAT-inclusive
+    is_default        BOOLEAN        NOT NULL DEFAULT false,  -- P2 D5: company default price list
+    scope             VARCHAR(20)    NOT NULL DEFAULT 'GLOBAL', -- P2 D5: PriceListScope (GLOBAL/CUSTOMER/BRANCH/SEGMENT)
     status      VARCHAR(32)     NOT NULL DEFAULT 'ACTIVE',
     version     BIGINT          NOT NULL DEFAULT 0,
     created_at  TIMESTAMPTZ     NOT NULL DEFAULT now(),
@@ -69,7 +104,9 @@ CREATE TABLE price_lists (
     updated_by  BIGINT,
     CONSTRAINT uq_price_list_uid            UNIQUE (uid),
     CONSTRAINT uq_price_list_company_code   UNIQUE (company_id, code),
-    CONSTRAINT fk_price_list_company        FOREIGN KEY (company_id) REFERENCES companies (id)
+    CONSTRAINT fk_price_list_company        FOREIGN KEY (company_id) REFERENCES companies (id),
+    CONSTRAINT chk_price_list_scope         CHECK (scope IN ('GLOBAL','CUSTOMER','BRANCH','SEGMENT')),
+    CONSTRAINT chk_price_list_window        CHECK (effective_to IS NULL OR effective_from IS NULL OR effective_to >= effective_from)
 );
 
 -- ---------------------------------------------------------------------------
@@ -83,6 +120,9 @@ CREATE TABLE product_bulk_packs (
     product_id      BIGINT              NOT NULL,
     name            VARCHAR(40)         NOT NULL,
     factor_to_base  NUMERIC(19,6)       NOT NULL,
+    barcode         VARCHAR(40),                        -- P2-M3: pack-level barcode
+    is_purchase_default BOOLEAN         NOT NULL DEFAULT false, -- P2-M3: default pack on purchases
+    is_sale_default     BOOLEAN         NOT NULL DEFAULT false, -- P2-M3: default pack on sales
     created_at      TIMESTAMPTZ         NOT NULL DEFAULT now(),
     created_by      BIGINT,
     updated_at      TIMESTAMPTZ,
@@ -100,13 +140,17 @@ CREATE TABLE product_barcodes (
     product_id  BIGINT          NOT NULL,
     company_id  BIGINT          NOT NULL,
     barcode     VARCHAR(64)     NOT NULL,
+    barcode_type VARCHAR(20)    NOT NULL DEFAULT 'OTHER', -- P2-M3: symbology (EAN/UPC/CODE128/OTHER)
+    uom_id      BIGINT,                                  -- P2-M3: optional unit this barcode addresses
     is_primary  BOOLEAN         NOT NULL DEFAULT false,
     created_at  TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by  BIGINT,
     CONSTRAINT uq_product_barcode_uid           UNIQUE (uid),
     CONSTRAINT uq_product_barcode_company_value UNIQUE (company_id, barcode),
     CONSTRAINT fk_product_barcode_product       FOREIGN KEY (product_id) REFERENCES products (id),
-    CONSTRAINT fk_product_barcode_company       FOREIGN KEY (company_id) REFERENCES companies (id)
+    CONSTRAINT fk_product_barcode_company       FOREIGN KEY (company_id) REFERENCES companies (id),
+    -- uom_id is a scalar soft-FK (units_of_measure is created later in V4); no DB FK to avoid ordering break
+    CONSTRAINT chk_product_barcode_type         CHECK (barcode_type IN ('EAN','UPC','CODE128','OTHER'))  -- P2-M3
 );
 
 -- product_prices (company_id denormalised; bare amount/currency — no @AttributeOverride)
@@ -117,11 +161,14 @@ CREATE TABLE product_prices (
     company_id      BIGINT          NOT NULL,
     amount          NUMERIC(19,4)   NOT NULL,
     currency        VARCHAR(3)      NOT NULL,
+    effective_from  DATE,                               -- P2-M3: price validity start
+    effective_to    DATE,                               -- P2-M3: price validity end
     created_at      TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by      BIGINT,
     updated_at      TIMESTAMPTZ,
     updated_by      BIGINT,
     CONSTRAINT uq_product_price             UNIQUE (product_id, price_list_id),
+    CONSTRAINT chk_product_price_window     CHECK (effective_to IS NULL OR effective_from IS NULL OR effective_to >= effective_from),  -- P2-M3
     CONSTRAINT fk_product_price_product     FOREIGN KEY (product_id)    REFERENCES products (id),
     CONSTRAINT fk_product_price_pricelist   FOREIGN KEY (price_list_id) REFERENCES price_lists (id),
     CONSTRAINT fk_product_price_company     FOREIGN KEY (company_id)    REFERENCES companies (id)
@@ -150,8 +197,14 @@ CREATE TABLE product_branch (
     id          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
     product_id  BIGINT          NOT NULL,
     branch_id   BIGINT          NOT NULL,
+    -- P3: branch-level overrides (simple association columns; richer model deferred).
+    active        BOOLEAN       NOT NULL DEFAULT true,  -- product enabled at this branch
+    reorder_level NUMERIC(19,6),                        -- branch-specific reorder level (null = inherit product)
+    branch_price  NUMERIC(19,4),                        -- branch-specific selling price override (null = inherit)
     assigned_at TIMESTAMPTZ     NOT NULL DEFAULT now(),
     assigned_by BIGINT          NOT NULL,
+    CONSTRAINT chk_product_branch_reorder CHECK (reorder_level IS NULL OR reorder_level >= 0),
+    CONSTRAINT chk_product_branch_price   CHECK (branch_price  IS NULL OR branch_price  >= 0),
     CONSTRAINT uq_product_branch_pair   UNIQUE (product_id, branch_id),
     CONSTRAINT fk_product_branch_product FOREIGN KEY (product_id)  REFERENCES products (id),
     CONSTRAINT fk_product_branch_br      FOREIGN KEY (branch_id)   REFERENCES branches (id),

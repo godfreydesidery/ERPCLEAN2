@@ -22,6 +22,7 @@ import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -192,6 +193,7 @@ public class AssetDisposalServiceImpl implements AssetDisposalService {
                 d.getId(), d.getUid(), d.getCompanyId(), d.getBranchId(),
                 d.getFixedAssetId(), d.getDisposalType(), d.getDisposalDate(),
                 d.getFiscalPeriodId(), d.getProceedsAmount(), d.getNbvAtDisposal(),
-                d.getGainLossAmount(), d.getGlEntryUid(), d.getCurrency(), d.getReason());
+                d.getGainLossAmount(), d.getGlEntryUid(), CurrencyCode.value(d.getCurrency()), d.getReason(),
+                d.getBuyerName(), d.getBuyerId(), d.getProceedsArInvoiceUid(), d.getApprovedBy());
     }
 }

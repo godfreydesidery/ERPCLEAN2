@@ -162,13 +162,13 @@ class PartyCodeGeneratorIT extends PostgresIntegrationTest {
         return new CreateCustomerRequest(
                 companyId, PartyType.BUSINESS, "Business " + tin, null,
                 tin, false, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CREDIT_ACCOUNT, null, null);
+                CustomerKind.CREDIT_ACCOUNT, null, null, null);
     }
 
     private static CreateSupplierRequest minimalSupplier(Long companyId, String tin) {
         return new CreateSupplierRequest(
                 companyId, PartyType.BUSINESS, "Supplier " + tin, null,
                 tin, false, null, null, null, null, null, null, null, null, null,
-                SupplierKind.GOODS);
+                SupplierKind.GOODS, null, null);
     }
 }

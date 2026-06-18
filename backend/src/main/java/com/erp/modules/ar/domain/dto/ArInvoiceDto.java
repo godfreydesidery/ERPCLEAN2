@@ -20,5 +20,8 @@ public record ArInvoiceDto(
         String currency,
         LocalDate invoiceDate,
         LocalDate dueDate,
+        // P2 D1: settlement discount (data-only, inherited from the source SI's payment terms)
+        LocalDate settlementDiscountDueDate,
+        BigDecimal settlementDiscountAmount,
         ArInvoiceStatus status
 ) {}

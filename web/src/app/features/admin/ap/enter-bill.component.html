@@ -270,11 +270,11 @@
                 <label class="form-label" for="currency">
                   Currency <span class="text-danger" aria-hidden="true">*</span>
                 </label>
-                <input id="currency" name="currency" type="text"
-                       class="form-control" placeholder="TZS"
-                       [ngModel]="currency()"
-                       (ngModelChange)="currency.set($event)"
-                       [disabled]="submitting()" autocomplete="off" required />
+                <app-currency-select id="currency" name="currency"
+                                     [(ngModel)]="currency"
+                                     [companyUid]="selectedCompanyUid()"
+                                     [required]="true"
+                                     [disabled]="submitting()" />
               </div>
 
               <!-- Purchase Order (optional) -->

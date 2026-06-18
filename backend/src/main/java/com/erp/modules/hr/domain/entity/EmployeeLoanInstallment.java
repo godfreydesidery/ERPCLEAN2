@@ -1,11 +1,15 @@
 package com.erp.modules.hr.domain.entity;
 
+import com.erp.modules.hr.domain.enums.LoanInstallmentStatus;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -34,9 +38,25 @@ public class EmployeeLoanInstallment extends UidEntity {
     @Setter
     private String deductedInRunUid;
 
+    /** Actual amount deducted at run time (P2-M5 snapshot). */
+    @Column(name = "deducted_amount", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal deductedAmount;
+
+    /** Scheduled due date for this installment (P2-M5). */
+    @Column(name = "due_date")
+    @Setter
+    private LocalDate dueDate;
+
+    /** Timestamp the installment was deducted/paid (P2-M5). */
+    @Column(name = "paid_at")
+    @Setter
+    private Instant paidAt;
+
+    @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 12)
     @Setter
-    private String status = "PENDING";
+    private LoanInstallmentStatus status = LoanInstallmentStatus.PENDING;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();

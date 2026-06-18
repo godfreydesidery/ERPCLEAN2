@@ -59,5 +59,11 @@ public record InvoicePostingTotalsDto(
         /**
          * Instant when rate was stamped (sales_invoices.rate_at). Null for legacy rows.
          */
-        Instant rateAt
+        Instant rateAt,
+        /**
+         * ADR-0041 D1 — the payment_terms_id stamped on the invoice at finalise (override or customer
+         * default; nullable). Exposed so the AR consumer can derive the open-item due date from the
+         * SAME term the invoice carries, honouring a direct-SI payment-terms override.
+         */
+        Long paymentTermsId
 ) {}

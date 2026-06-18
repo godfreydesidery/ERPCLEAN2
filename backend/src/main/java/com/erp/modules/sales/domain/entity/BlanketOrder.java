@@ -2,6 +2,7 @@ package com.erp.modules.sales.domain.entity;
 
 import com.erp.modules.sales.domain.enums.BlanketStatus;
 import com.erp.platform.common.domain.UidEntity;
+import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -37,7 +38,7 @@ public class BlanketOrder extends UidEntity {
     private Long customerId;
 
     @Column(name = "currency", nullable = false, length = 3, updatable = false)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "valid_from", nullable = false)
     private LocalDate validFrom;
@@ -63,6 +64,16 @@ public class BlanketOrder extends UidEntity {
     @Setter
     private String notes;
 
+    /** P3: when true, blanket line prices are locked for all draw-down sales orders. */
+    @Column(name = "fixed_price", nullable = false)
+    @Setter
+    private boolean fixedPrice = false;
+
+    /** P3: when true, draw-down sales orders may not exceed the blanket line price. */
+    @Column(name = "price_protection", nullable = false)
+    @Setter
+    private boolean priceProtection = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
@@ -85,7 +96,7 @@ public class BlanketOrder extends UidEntity {
         this.companyId  = companyId;
         this.branchId   = branchId;
         this.customerId = customerId;
-        this.currency   = currency;
+        this.currency   = CurrencyCode.of(currency);
         this.validFrom  = validFrom;
         this.validTo    = validTo;
         this.createdBy  = createdBy;

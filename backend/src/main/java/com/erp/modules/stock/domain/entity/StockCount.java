@@ -1,6 +1,7 @@
 package com.erp.modules.stock.domain.entity;
 
 import com.erp.modules.stock.domain.enums.StockCountStatus;
+import com.erp.modules.stock.domain.enums.StockCountType;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -38,8 +39,9 @@ public class StockCount extends UidEntity {
     @Column(name = "status", nullable = false, length = 20)
     private StockCountStatus status;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "count_type", nullable = false, length = 12)
-    private String countType;
+    private StockCountType countType;
 
     @Column(name = "location_id", nullable = false, updatable = false)
     private Long locationId;
@@ -59,6 +61,18 @@ public class StockCount extends UidEntity {
     /** The net-variance journal uid posted on the post action (diagnostic). */
     @Column(name = "variance_gl_entry_uid", length = 26)
     private String varianceGlEntryUid;
+
+    /** P2 D7: actor who performed the physical count (soft-FK to app_users). */
+    @Column(name = "counted_by")
+    private Long countedBy;
+
+    /** P2 D7: actor who approved the count (soft-FK to app_users). */
+    @Column(name = "approved_by")
+    private Long approvedBy;
+
+    /** P2 D7: a recount is required before this count may be posted. */
+    @Column(name = "recount_required", nullable = false)
+    private boolean recountRequired = false;
 
     @Column(name = "notes", length = 500)
     private String notes;
@@ -84,7 +98,7 @@ public class StockCount extends UidEntity {
         this.companyId   = companyId;
         this.branchId    = branchId;
         this.countNumber = countNumber;
-        this.countType   = countType;
+        this.countType   = countType != null ? StockCountType.valueOf(countType) : null;
         this.status      = StockCountStatus.DRAFT;
         this.locationId  = locationId;
         this.countDate   = countDate;
@@ -133,14 +147,21 @@ public class StockCount extends UidEntity {
     public Long             getBranchId()           { return branchId; }
     public String           getCountNumber()        { return countNumber; }
     public StockCountStatus getStatus()             { return status; }
-    public String           getCountType()          { return countType; }
+    public StockCountType   getCountType()          { return countType; }
     public Long             getLocationId()         { return locationId; }
     public LocalDate        getCountDate()          { return countDate; }
     public Instant          getFrozenAt()           { return frozenAt; }
     public Instant          getPostedAt()           { return postedAt; }
     public Instant          getCancelledAt()        { return cancelledAt; }
     public String           getVarianceGlEntryUid() { return varianceGlEntryUid; }
+    public Long             getCountedBy()          { return countedBy; }
+    public Long             getApprovedBy()         { return approvedBy; }
+    public boolean          isRecountRequired()     { return recountRequired; }
     public String           getNotes()              { return notes; }
+
+    public void setCountedBy(Long countedBy)               { this.countedBy = countedBy; }
+    public void setApprovedBy(Long approvedBy)             { this.approvedBy = approvedBy; }
+    public void setRecountRequired(boolean recountRequired){ this.recountRequired = recountRequired; }
     public Instant          getCreatedAt()          { return createdAt; }
     public Long             getCreatedBy()          { return createdBy; }
     public Instant          getUpdatedAt()          { return updatedAt; }

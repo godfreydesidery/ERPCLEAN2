@@ -36,6 +36,17 @@ public class ApPaymentAllocation {
     @Column(name = "allocated_amount", nullable = false, precision = 19, scale = 4, updatable = false)
     private BigDecimal allocatedAmount;
 
+    // ADR-0041 D1 — settlement-discount / residual write-off captured at allocation.
+    // Immutable (no setter, set via constructor); sub-ledger only — NO GL leg (data-only v1).
+
+    /** Settlement discount taken on this allocation (data-only, no GL impact). Nullable. */
+    @Column(name = "discount_amount", precision = 19, scale = 4, updatable = false)
+    private BigDecimal discountAmount;
+
+    /** Residual write-off recorded on this allocation (data-only, no GL impact). Nullable. */
+    @Column(name = "write_off_amount", precision = 19, scale = 4, updatable = false)
+    private BigDecimal writeOffAmount;
+
     // ADR-0036 D-4 — per-allocation base capture (V78, graft from Proposal B).
     // base_allocated_amount : face allocated × settlement rate, HALF_UP (Tranche 3 realized-FX).
     // settlement_rate       : the payment's fx_rate at the time of allocation (immutable snapshot).
@@ -50,6 +61,16 @@ public class ApPaymentAllocation {
     @Setter
     private BigDecimal settlementRate;
 
+    /** P2: when this allocation was made (mirrors AR allocation). Nullable. */
+    @Column(name = "allocated_at")
+    @Setter
+    private Instant allocatedAt;
+
+    /** P2: actor who made this allocation (mirrors AR allocation). Nullable. */
+    @Column(name = "allocated_by")
+    @Setter
+    private Long allocatedBy;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
@@ -62,10 +83,22 @@ public class ApPaymentAllocation {
 
     public ApPaymentAllocation(Long companyId, Long apPaymentId, Long supplierBillId,
                                 BigDecimal allocatedAmount, Long createdBy) {
+        this(companyId, apPaymentId, supplierBillId, allocatedAmount, null, null, createdBy);
+    }
+
+    /**
+     * ADR-0041 D1 — full constructor capturing the immutable settlement discount / write-off
+     * at allocation. Both amounts are sub-ledger only (no GL leg).
+     */
+    public ApPaymentAllocation(Long companyId, Long apPaymentId, Long supplierBillId,
+                                BigDecimal allocatedAmount, BigDecimal discountAmount,
+                                BigDecimal writeOffAmount, Long createdBy) {
         this.companyId       = companyId;
         this.apPaymentId     = apPaymentId;
         this.supplierBillId  = supplierBillId;
         this.allocatedAmount = allocatedAmount;
+        this.discountAmount  = discountAmount;
+        this.writeOffAmount  = writeOffAmount;
         this.createdBy       = createdBy;
     }
 }

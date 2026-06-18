@@ -26,7 +26,20 @@ CREATE TABLE chart_of_accounts (
     normal_balance   VARCHAR(10)     NOT NULL,  -- DEBIT|CREDIT; stored, derived-from-type at write
     parent_id        BIGINT,                    -- self-FK; reserved for later grouping; NULL in v1
     is_active        BOOLEAN         NOT NULL DEFAULT true,
+    allow_manual_posting BOOLEAN     NOT NULL DEFAULT true,
     status           VARCHAR(32)     NOT NULL DEFAULT 'ACTIVE',
+    currency         VARCHAR(3),                 -- P2-M1: locks account to one currency (NULL = multi-currency)
+    -- P2-D4 (ADR-0041): per-account dimension-requirement flags. When true, a MANUAL journal line
+    -- to this account must carry the corresponding dimension value (enforced in GLPostingServiceImpl,
+    -- MANUAL-only — system/event-driven posters are exempt, mirroring the Step-3 mandatory-slot rule).
+    require_cost_centre  BOOLEAN     NOT NULL DEFAULT false,
+    require_department   BOOLEAN     NOT NULL DEFAULT false,
+    require_project      BOOLEAN     NOT NULL DEFAULT false,
+    -- P3: convenience/reporting columns (all nullable, additive).
+    default_tax_code VARCHAR(30),                -- default tax tag suggested when posting to this account
+    effective_from   DATE,                       -- account availability window (NULL = always)
+    effective_to     DATE,
+    description      VARCHAR(255),               -- free-text account description / notes
     version          BIGINT          NOT NULL DEFAULT 0,
     created_at       TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by       BIGINT,
@@ -39,10 +52,15 @@ CREATE TABLE chart_of_accounts (
         REFERENCES companies (id),
     CONSTRAINT fk_chart_of_account_parent       FOREIGN KEY (parent_id)
         REFERENCES chart_of_accounts (id),
+    control_type     VARCHAR(24),                -- D-1: NULL = ordinary account; non-null = control
+
     CONSTRAINT chk_chart_of_account_type        CHECK (
         account_type IN ('ASSET','LIABILITY','EQUITY','INCOME','EXPENSE')),
     CONSTRAINT chk_chart_of_account_normal_balance CHECK (
-        normal_balance IN ('DEBIT','CREDIT'))
+        normal_balance IN ('DEBIT','CREDIT')),
+    CONSTRAINT chk_chart_of_account_control_type CHECK (
+        control_type IS NULL OR control_type IN (
+            'AR','AP','BANK','CASH','INVENTORY','TAX','PAYROLL_CLEARING','FX_CLEARING'))
 );
 
 -- ============================================================================
@@ -53,6 +71,7 @@ CREATE TABLE fiscal_years (
     uid          VARCHAR(26)     NOT NULL,
     company_id   BIGINT          NOT NULL,
     year_code    VARCHAR(12)     NOT NULL,
+    name         VARCHAR(120),                   -- P3: human label (e.g. "Fiscal Year 2026"); nullable
     start_month  INTEGER         NOT NULL,
     start_date   DATE            NOT NULL,
     end_date     DATE            NOT NULL,
@@ -62,6 +81,8 @@ CREATE TABLE fiscal_years (
     created_by   BIGINT,
     updated_at   TIMESTAMPTZ,
     updated_by   BIGINT,
+    reopened_at  TIMESTAMPTZ,                    -- P2-M1: reopen audit trail (last reopen action)
+    reopened_by  BIGINT,                         -- P2-M1: app_users.id of the reopening actor
 
     CONSTRAINT uq_fiscal_year_uid              UNIQUE (uid),
     CONSTRAINT uq_fiscal_year_company_code     UNIQUE (company_id, year_code),
@@ -79,11 +100,14 @@ CREATE TABLE fiscal_periods (
     company_id     BIGINT          NOT NULL,
     fiscal_year_id BIGINT          NOT NULL,
     period_no      INTEGER         NOT NULL,
+    name           VARCHAR(60),                  -- P3: human label (e.g. "Jan 2026"); nullable
     start_date     DATE            NOT NULL,
     end_date       DATE            NOT NULL,
     status         VARCHAR(20)     NOT NULL DEFAULT 'OPEN',
     closed_at      TIMESTAMPTZ,
     closed_by      BIGINT,
+    reopened_at    TIMESTAMPTZ,                  -- P3: reopen audit trail (mirror fiscal_years); last reopen action
+    reopened_by    BIGINT,                       -- P3: app_users.id of the reopening actor
     version        BIGINT          NOT NULL DEFAULT 0,
     created_at     TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by     BIGINT,
@@ -117,12 +141,16 @@ CREATE TABLE journal_batches (
     version       BIGINT          NOT NULL DEFAULT 0,
     created_at    TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by    BIGINT,
+    total_debit   NUMERIC(19,4),                 -- P2-M1: denormalised control totals (populated on post)
+    total_credit  NUMERIC(19,4),
+    reversed_by_batch_id BIGINT,                  -- P3: self soft-FK to the batch that reverses THIS one (batch-level reversal linkage)
 
     CONSTRAINT uq_journal_batch_uid            UNIQUE (uid),
     CONSTRAINT uq_journal_batch_company_number UNIQUE (company_id, batch_number),
     CONSTRAINT fk_journal_batch_company        FOREIGN KEY (company_id) REFERENCES companies (id),
     CONSTRAINT fk_journal_batch_branch         FOREIGN KEY (branch_id)  REFERENCES branches (id),
     CONSTRAINT fk_journal_batch_posted_by      FOREIGN KEY (posted_by)  REFERENCES app_users (id),
+    CONSTRAINT fk_journal_batch_reversed_by    FOREIGN KEY (reversed_by_batch_id) REFERENCES journal_batches (id),
     CONSTRAINT chk_journal_batch_source_type   CHECK (
         source_type IN ('MANUAL','SALES','SALES_REVERSAL','OPENING_BALANCE'))
 );
@@ -149,6 +177,16 @@ CREATE TABLE journal_entries (
     version          BIGINT          NOT NULL DEFAULT 0,
     created_at       TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by       BIGINT,
+    reversed_by_entry_id BIGINT,                 -- P2-M1: self-ref id of the entry that reversed THIS one
+    reversed         BOOLEAN         NOT NULL DEFAULT false,  -- P2-M1: denormalised "has been reversed" flag
+    header_currency  VARCHAR(3),                 -- P2-M1: informational source-doc currency (ledger stays base-only)
+    total_debit      NUMERIC(19,4),              -- P2-M1: denormalised control totals
+    total_credit     NUMERIC(19,4),
+    -- P3: classification / convenience columns (all nullable, additive).
+    entry_type       VARCHAR(20),                -- GENERAL|ADJUSTING|REVERSING|OPENING|CLOSING|ACCRUAL (informational; CHECK below)
+    value_date       DATE,                       -- business value/effective date (distinct from posting_date)
+    external_ref     VARCHAR(60),                -- external system / document reference
+    attachment_ref   VARCHAR(255),               -- link/uid to a supporting attachment
 
     CONSTRAINT uq_journal_entry_uid        UNIQUE (uid),
     CONSTRAINT uq_journal_entry_batch_no   UNIQUE (batch_id, entry_no),
@@ -164,7 +202,10 @@ CREATE TABLE journal_entries (
     CONSTRAINT fk_journal_entry_reversal_of FOREIGN KEY (reversal_of_id)  REFERENCES journal_entries (id),
     CONSTRAINT fk_journal_entry_posted_by  FOREIGN KEY (posted_by)        REFERENCES app_users (id),
     CONSTRAINT chk_journal_entry_source_type CHECK (
-        source_type IN ('MANUAL','SALES','SALES_REVERSAL','OPENING_BALANCE'))
+        source_type IN ('MANUAL','SALES','SALES_REVERSAL','OPENING_BALANCE')),
+    CONSTRAINT chk_journal_entry_entry_type CHECK (
+        entry_type IS NULL OR entry_type IN (
+            'GENERAL','ADJUSTING','REVERSING','OPENING','CLOSING','ACCRUAL'))
 );
 
 -- Drop the overly broad unique and replace with a proper partial unique (ADR-0013 D-2c).
@@ -192,6 +233,13 @@ CREATE TABLE journal_lines (
     version        BIGINT          NOT NULL DEFAULT 0,
     created_at     TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by     BIGINT,
+    tax_code       VARCHAR(30),                  -- P2-M1: informational tax tag (does not drive posting)
+    tax_amount     NUMERIC(19,4),
+    -- P3: statistical quantity postings + GL reconciliation marker (all nullable, additive).
+    statistical_quantity NUMERIC(19,4),          -- non-monetary quantity carried on the line (e.g. headcount, units)
+    statistical_uom      VARCHAR(20),            -- unit for statistical_quantity
+    reconciliation_marker VARCHAR(40),           -- GL reconciliation/clearing group marker
+    cleared              BOOLEAN     NOT NULL DEFAULT false,  -- reconciliation cleared flag
 
     CONSTRAINT uq_journal_line_uid      UNIQUE (uid),
     CONSTRAINT uq_journal_line_entry_no UNIQUE (entry_id, line_no),
@@ -246,6 +294,8 @@ CREATE INDEX ix_chart_of_accounts_company_type
     ON chart_of_accounts (company_id, account_type);
 CREATE INDEX ix_chart_of_accounts_active
     ON chart_of_accounts (company_id) WHERE is_active = true;
+CREATE INDEX ix_chart_of_accounts_control
+    ON chart_of_accounts (company_id, control_type) WHERE control_type IS NOT NULL;
 
 -- fiscal_years
 CREATE INDEX ix_fiscal_years_company
@@ -326,6 +376,26 @@ CROSS JOIN (VALUES
     ('5400', 'Utilities',               'EXPENSE',   'DEBIT')
 ) AS a(code, name, account_type, normal_balance)
 ON CONFLICT (company_id, account_code) DO NOTHING;
+
+-- D-1 (ADR-0040): classify the seeded sub-ledger control accounts. CASH/BANK are classified yet
+-- stay manually postable (reconciled via the cash/bank module + bank reconciliation, which expect
+-- manual journals for bank charges/interest/corrections); the genuine reconciliation controls
+-- (AR/AP/INVENTORY/TAX) block direct manual journals. Mirrors ChartOfAccountServiceImpl.seedDefaults
+-- so the migrate-seeded path and the new-company path agree. (No-op on a fresh DB with no companies.)
+UPDATE chart_of_accounts SET
+    control_type = CASE account_code
+        WHEN '1000' THEN 'CASH'
+        WHEN '1100' THEN 'BANK'
+        WHEN '1200' THEN 'AR'
+        WHEN '1300' THEN 'INVENTORY'
+        WHEN '2100' THEN 'AP'
+        WHEN '2200' THEN 'TAX'
+    END,
+    allow_manual_posting = CASE
+        WHEN account_code IN ('1200','1300','2100','2200') THEN false
+        ELSE allow_manual_posting
+    END
+WHERE account_code IN ('1000','1100','1200','1300','2100','2200');
 
 -- ============================================================================
 -- (12) Fiscal year + 12 period seed — current FY per existing company (ADR-0013 D-4/D-16)

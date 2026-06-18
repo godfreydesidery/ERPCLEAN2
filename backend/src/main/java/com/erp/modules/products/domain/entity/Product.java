@@ -85,6 +85,31 @@ public class Product extends UidEntity {
     private Money cost;
 
     /**
+     * Lot/batch tracking enabled (V35, ADR-0028 D-7). When true, every stock movement for
+     * this product must reference a batch/lot. Mutually exclusive with serialTracked
+     * (DB CHECK chk_product_tracking_exclusive).
+     */
+    @Column(name = "lot_tracked", nullable = false)
+    @Setter
+    private boolean lotTracked = false;
+
+    /**
+     * Serial-number tracking enabled (V35, ADR-0028 D-7). When true, every stock movement
+     * must reference a serial. Mutually exclusive with lotTracked.
+     */
+    @Column(name = "serial_tracked", nullable = false)
+    @Setter
+    private boolean serialTracked = false;
+
+    /**
+     * Expiry-date tracking enabled. When true, batch/lot records must carry an expiry date
+     * and FEFO picking is applied. Only meaningful when lotTracked = true.
+     */
+    @Column(name = "expiry_tracked", nullable = false)
+    @Setter
+    private boolean expiryTracked = false;
+
+    /**
      * VAT classification of this product (FR-SALES-10, ADR-0008 D-5a).
      * Default STANDARD — additive safe; existing rows become standard-rated.
      * Stored as VARCHAR(20) matching every other enum column.
@@ -106,6 +131,118 @@ public class Product extends UidEntity {
     @Column(name = "category", length = 60)
     @Setter
     private String category;
+
+    // -------------------------------------------------------------------------
+    // P2-M3 — descriptive / logistics attributes. All nullable, additive-safe.
+    // -------------------------------------------------------------------------
+
+    /** Product brand (P2-M3). Nullable. */
+    @Column(name = "brand", length = 120)
+    @Setter
+    private String brand;
+
+    /** Manufacturer name (P2-M3). Nullable. */
+    @Column(name = "manufacturer", length = 160)
+    @Setter
+    private String manufacturer;
+
+    /** Unit weight (P2-M3). Nullable. */
+    @Column(name = "weight", precision = 19, scale = 6)
+    @Setter
+    private java.math.BigDecimal weight;
+
+    /** Unit volume (P2-M3). Nullable. */
+    @Column(name = "volume", precision = 19, scale = 6)
+    @Setter
+    private java.math.BigDecimal volume;
+
+    /** Free-text dimensions, e.g. LxWxH (P2-M3). Nullable. */
+    @Column(name = "dimensions", length = 80)
+    @Setter
+    private String dimensions;
+
+    /** Harmonised-system customs code (P2-M3). Nullable. */
+    @Column(name = "hs_code", length = 20)
+    @Setter
+    private String hsCode;
+
+    // -------------------------------------------------------------------------
+    // P3 — image/notes + default sales/purchase UoM. All nullable, additive-safe.
+    // -------------------------------------------------------------------------
+
+    /** P3: product image URL. Nullable. */
+    @Column(name = "image_url", length = 500)
+    @Setter
+    private String imageUrl;
+
+    /** P3: free-text notes. Nullable. */
+    @Column(name = "notes", length = 1000)
+    @Setter
+    private String notes;
+
+    /**
+     * P3: default sales unit — soft-FK → units_of_measure(id). Nullable (defaults to base unit).
+     * Scalar Long, not @ManyToOne; intra-DB but kept scalar for additive simplicity.
+     */
+    @Column(name = "sales_unit_id")
+    @Setter
+    private Long salesUnitId;
+
+    /**
+     * P3: default purchase unit — soft-FK → units_of_measure(id). Nullable (defaults to base unit).
+     */
+    @Column(name = "purchase_unit_id")
+    @Setter
+    private Long purchaseUnitId;
+
+    // -------------------------------------------------------------------------
+    // D-10 — Product planning + sourcing (ADR-0040)
+    // All nullable — not required on initial creation. Quantities in base UoM.
+    // -------------------------------------------------------------------------
+
+    /** Minimum on-hand quantity that triggers a replenishment order (ADR-0040 D-10). */
+    @Column(name = "reorder_level", precision = 19, scale = 6)
+    @Setter
+    private java.math.BigDecimal reorderLevel;
+
+    /** Standard replenishment order quantity (ADR-0040 D-10). */
+    @Column(name = "reorder_qty", precision = 19, scale = 6)
+    @Setter
+    private java.math.BigDecimal reorderQty;
+
+    /** Safety buffer below which stock is considered critical (ADR-0040 D-10). */
+    @Column(name = "safety_stock", precision = 19, scale = 6)
+    @Setter
+    private java.math.BigDecimal safetyStock;
+
+    /** Minimum allowable on-hand quantity (ADR-0040 D-10). */
+    @Column(name = "min_stock", precision = 19, scale = 6)
+    @Setter
+    private java.math.BigDecimal minStock;
+
+    /** Maximum allowable on-hand quantity; must be >= min_stock when both set (ADR-0040 D-10). */
+    @Column(name = "max_stock", precision = 19, scale = 6)
+    @Setter
+    private java.math.BigDecimal maxStock;
+
+    /** Typical supplier lead time in calendar days (ADR-0040 D-10). */
+    @Column(name = "lead_time_days")
+    @Setter
+    private Integer leadTimeDays;
+
+    /** When false, product cannot appear on a purchase order line (ADR-0040 D-10). */
+    @Column(name = "purchasable", nullable = false)
+    @Setter
+    private boolean purchasable = true;
+
+    /**
+     * Preferred supplier soft-FK (ADR-0040 D-10).
+     * Intra-DB FK → suppliers(id). Service enforces same-company before setting.
+     * Stored as scalar Long (not @ManyToOne) per cross-module soft-FK convention.
+     */
+    @Column(name = "preferred_supplier_id")
+    @Setter
+    private Long preferredSupplierId;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();

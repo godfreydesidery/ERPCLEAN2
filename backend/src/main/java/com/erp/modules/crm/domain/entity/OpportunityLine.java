@@ -1,5 +1,6 @@
 package com.erp.modules.crm.domain.entity;
 
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -64,7 +65,7 @@ public class OpportunityLine extends UidEntity {
     private BigDecimal lineDiscountPercent;
 
     @Column(name = "currency", nullable = false, length = 3)
-    private String currency;
+    private CurrencyCode currency;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
@@ -97,7 +98,7 @@ public class OpportunityLine extends UidEntity {
         this.unitName = unitName;
         this.estimatedQty = estimatedQty;
         this.estimatedUnitPriceAmount = estimatedUnitPriceAmount;
-        this.currency = currency;
+        this.currency = CurrencyCode.ofNullable(currency);
         this.createdBy = createdBy;
     }
 }

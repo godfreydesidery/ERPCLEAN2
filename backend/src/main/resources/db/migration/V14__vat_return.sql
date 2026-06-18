@@ -42,12 +42,24 @@ CREATE TABLE vat_returns (
     created_by          BIGINT,
     updated_at          TIMESTAMPTZ,
     updated_by          BIGINT,
+    paid_at             TIMESTAMPTZ,             -- P2-M1: VAT remittance (cash settlement to authority)
+    paid_amount         NUMERIC(19,4),
+    payment_reference   VARCHAR(80),
+    sales_turnover      NUMERIC(19,4),           -- P2-M1: statutory turnover figures for the return face form
+    purchases_turnover  NUMERIC(19,4),
+    zero_rated_sales    NUMERIC(19,4),
+    exempt_sales        NUMERIC(19,4),
+    amended_return_id   BIGINT,                  -- P2 D7: self soft-FK → the original return this amends
+    is_amendment        BOOLEAN         NOT NULL DEFAULT false,  -- P2 D7: this is an amended/revised return
+    penalty_amount      NUMERIC(19,4),           -- P2 D7: late-filing/payment penalty assessed
+    interest_amount     NUMERIC(19,4),           -- P2 D7: interest assessed on overdue VAT
 
     CONSTRAINT uq_vat_return_uid                UNIQUE (uid),
     CONSTRAINT uq_vat_return_company_number     UNIQUE (company_id, return_number),
     CONSTRAINT uq_vat_return_company_period     UNIQUE (company_id, period_year, period_month),
     CONSTRAINT fk_vat_return_company            FOREIGN KEY (company_id)      REFERENCES companies (id),
     CONSTRAINT fk_vat_return_prior              FOREIGN KEY (prior_return_id) REFERENCES vat_returns (id),
+    CONSTRAINT fk_vat_return_amended            FOREIGN KEY (amended_return_id) REFERENCES vat_returns (id),
     CONSTRAINT fk_vat_return_filed_by           FOREIGN KEY (filed_by)        REFERENCES app_users (id),
     CONSTRAINT chk_vat_return_status            CHECK (status IN ('DRAFT','FILED')),
     CONSTRAINT chk_vat_return_period_month      CHECK (period_month BETWEEN 1 AND 12),
@@ -159,6 +171,14 @@ CREATE TABLE wht_transactions (
     currency            VARCHAR(3)      NOT NULL,
     certificate_date    DATE            NOT NULL,
     journal_entry_ref   VARCHAR(26),
+    -- D-7: TIN snapshot + rate snapshot + remittance tracking (ADR-0040 D-7)
+    tin                 VARCHAR(40),            -- party tax-id snapshot at capture time
+    rate_pct            NUMERIC(9,4),           -- WHT rate snapshot (e.g. 5.0000 for 5%); guards against type rate changes
+    remitted            BOOLEAN         NOT NULL DEFAULT FALSE,
+    remittance_period   VARCHAR(7),             -- YYYY-MM format; set when remitted
+    remittance_ref      VARCHAR(80),            -- TRA/authority reference number; set when remitted
+    remitted_at         TIMESTAMPTZ,            -- timestamp of remittance action
+    remitted_by         BIGINT,                 -- app_users.id of the actor who remitted
     version             BIGINT          NOT NULL DEFAULT 0,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT now(),
     created_by          BIGINT,
@@ -172,7 +192,11 @@ CREATE TABLE wht_transactions (
     CONSTRAINT fk_wht_transaction_type              FOREIGN KEY (wht_type_id) REFERENCES wht_types (id),
     CONSTRAINT chk_wht_transaction_kind             CHECK (kind IN ('WHT_ON_PAYMENT','WHT_ON_RECEIPT')),
     CONSTRAINT chk_wht_transaction_party_kind       CHECK (party_kind IN ('SUPPLIER','CUSTOMER')),
-    CONSTRAINT chk_wht_transaction_amounts          CHECK (taxable_base >= 0 AND wht_amount > 0)
+    CONSTRAINT chk_wht_transaction_amounts          CHECK (taxable_base >= 0 AND wht_amount > 0),
+    -- D-7: remittance integrity: unremitted rows carry no ref/timestamp; remitted rows require both
+    CONSTRAINT chk_wht_transaction_remittance CHECK (
+        (NOT remitted AND remittance_ref IS NULL AND remitted_at IS NULL)
+        OR (remitted AND remittance_ref IS NOT NULL AND remitted_at IS NOT NULL))
 );
 
 -- ============================================================================
@@ -212,6 +236,9 @@ CREATE INDEX ix_wht_transactions_source
     ON wht_transactions (company_id, source_ref);
 CREATE INDEX ix_wht_transactions_party
     ON wht_transactions (company_id, party_kind, party_id);
+-- D-7: remittance query index (find unremitted / by period)
+CREATE INDEX ix_wht_transactions_remittance
+    ON wht_transactions (company_id, remitted, remittance_period);
 
 -- ============================================================================
 -- (7) CoA seed — add 4 new accounts per existing company

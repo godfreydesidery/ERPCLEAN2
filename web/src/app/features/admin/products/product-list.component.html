@@ -246,10 +246,10 @@
               </div>
               <div class="col-sm-2">
                 <label class="form-label small text-muted mb-1" for="newCostCurrency">Currency</label>
-                <input id="newCostCurrency" name="newCostCurrency" type="text" class="form-control"
-                       placeholder="TZS"
-                       [ngModel]="newCostCurrency()" (ngModelChange)="newCostCurrency.set($event)"
-                       [disabled]="saving()" autocomplete="off" />
+                <app-currency-select id="newCostCurrency" name="newCostCurrency"
+                                     [(ngModel)]="newCostCurrency"
+                                     [companyUid]="selectedCompanyUid()"
+                                     [disabled]="saving()" />
               </div>
             </div>
 

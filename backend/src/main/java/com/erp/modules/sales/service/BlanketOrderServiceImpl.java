@@ -182,7 +182,7 @@ public class BlanketOrderServiceImpl implements BlanketOrderService {
         // Create the SO via SalesOrderService
         var soDto = salesOrderService.create(new CreateSalesOrderRequest(
                 company.getUid(), customer.getUid(), null,
-                blanket.getCurrency(), LocalDate.now(), null, null, null, null));
+                blanket.getCurrency().value(), LocalDate.now(), null, null, null, null));
 
         // Stamp source_blanket_uid on the SO entity
         var soEntity = salesOrders.findByUid(soDto.uid())
@@ -235,7 +235,7 @@ public class BlanketOrderServiceImpl implements BlanketOrderService {
 
     private BlanketOrderDto toDto(BlanketOrder b, List<BlanketOrderLine> lines) {
         return new BlanketOrderDto(b.getId(), b.getUid(), b.getCompanyId(), b.getBranchId(),
-                b.getOrderNumber(), b.getCustomerId(), b.getCurrency(),
+                b.getOrderNumber(), b.getCustomerId(), b.getCurrency().value(),
                 b.getValidFrom() == null ? null : b.getValidFrom().toString(),
                 b.getValidTo() == null ? null : b.getValidTo().toString(),
                 b.getTotalCommittedAmount(), b.getTotalDrawnAmount(),
@@ -248,6 +248,6 @@ public class BlanketOrderServiceImpl implements BlanketOrderService {
                 l.getLineNo(), l.getProductId(), l.getProductCode(), l.getProductName(),
                 l.getUnitId(), l.getUnitName(),
                 l.getCommittedQtyBase(), l.getDrawnQtyBase(), l.remainingQtyBase(),
-                l.getUnitPriceAmount(), l.getCurrency());
+                l.getUnitPriceAmount(), l.getCurrency().value());
     }
 }

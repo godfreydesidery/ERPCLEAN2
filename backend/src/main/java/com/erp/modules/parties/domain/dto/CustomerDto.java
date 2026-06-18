@@ -2,6 +2,7 @@ package com.erp.modules.parties.domain.dto;
 
 import com.erp.modules.parties.domain.entity.Customer;
 import com.erp.modules.parties.domain.enums.CustomerKind;
+import com.erp.modules.parties.domain.enums.CustomerSegment;
 import com.erp.modules.parties.domain.enums.PartyType;
 import com.erp.platform.common.domain.MasterStatus;
 
@@ -28,9 +29,17 @@ public record CustomerDto(
         String postalAddress,
         String region,
         String district,
+        String country,
         CustomerKind customerKind,
         MoneyDto creditLimit,
         Integer paymentTermsDays,
+        Long paymentTermsId,
+        boolean taxExempt,
+        String taxExemptionRef,
+        String defaultCurrency,
+        Long defaultPriceListId,
+        Long defaultAgentId,
+        CustomerSegment segment,
         MasterStatus status,
         Long version,
         String createdAt,
@@ -59,9 +68,17 @@ public record CustomerDto(
                 c.getPostalAddress(),
                 c.getRegion(),
                 c.getDistrict(),
+                c.getCountry(),
                 c.getCustomerKind(),
                 MoneyDto.from(c.getCreditLimit()),
                 c.getPaymentTermsDays(),
+                c.getPaymentTermsId(),
+                c.isTaxExempt(),
+                c.getTaxExemptionRef(),
+                c.getDefaultCurrency() != null ? c.getDefaultCurrency().value() : null,
+                c.getDefaultPriceListId(),
+                c.getDefaultAgentId(),
+                c.getSegment(),
                 c.getStatus(),
                 c.getVersion(),
                 c.getCreatedAt() != null ? c.getCreatedAt().toString() : null,

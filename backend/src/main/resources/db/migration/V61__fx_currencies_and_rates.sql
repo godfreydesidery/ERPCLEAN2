@@ -31,6 +31,7 @@ CREATE TABLE currencies (
     code            VARCHAR(3)       NOT NULL,
     name            VARCHAR(60)      NOT NULL,
     symbol          VARCHAR(8),
+    numeric_code    VARCHAR(3),                  -- P2-M1: ISO-4217 numeric code (e.g. 840=USD, 834=TZS)
     minor_units     SMALLINT         NOT NULL,
     active          BOOLEAN          NOT NULL DEFAULT true,
     status          VARCHAR(20)      NOT NULL DEFAULT 'ACTIVE',
@@ -65,6 +66,7 @@ CREATE TABLE currency_rates (
     to_currency     VARCHAR(3)       NOT NULL,
     rate            NUMERIC(19,8)    NOT NULL,
     effective_date  DATE             NOT NULL,
+    effective_to    DATE,            -- P2 D7: end of this rate's validity window; NULL = still active
     rate_type       VARCHAR(20)      NOT NULL DEFAULT 'SPOT',
     source          VARCHAR(40),
     active          BOOLEAN          NOT NULL DEFAULT true,
@@ -96,11 +98,15 @@ CREATE INDEX ix_currency_rates_lookup
 -- ============================================================================
 INSERT INTO currencies (uid, code, name, symbol, minor_units, active, status, version, created_at)
 VALUES
-    ('CUR_PLACEHOLDER_TZS', 'TZS', 'Tanzanian Shilling', 'TSh', 0, true, 'ACTIVE', 0, now()),
-    ('CUR_PLACEHOLDER_USD', 'USD', 'US Dollar',           '$',   2, true, 'ACTIVE', 0, now()),
-    ('CUR_PLACEHOLDER_EUR', 'EUR', 'Euro',                '€',   2, true, 'ACTIVE', 0, now()),
-    ('CUR_PLACEHOLDER_KES', 'KES', 'Kenyan Shilling',     'KSh', 2, true, 'ACTIVE', 0, now()),
-    ('CUR_PLACEHOLDER_GBP', 'GBP', 'Pound Sterling',      '£',   2, true, 'ACTIVE', 0, now())
+    ('CUR_PLACEHOLDER_TZS', 'TZS', 'Tanzanian Shilling',    'TSh', 0, true, 'ACTIVE', 0, now()),
+    ('CUR_PLACEHOLDER_USD', 'USD', 'US Dollar',              '$',   2, true, 'ACTIVE', 0, now()),
+    ('CUR_PLACEHOLDER_EUR', 'EUR', 'Euro',                   '€',   2, true, 'ACTIVE', 0, now()),
+    ('CUR_PLACEHOLDER_KES', 'KES', 'Kenyan Shilling',        'KSh', 2, true, 'ACTIVE', 0, now()),
+    ('CUR_PLACEHOLDER_GBP', 'GBP', 'Pound Sterling',         '£',   2, true, 'ACTIVE', 0, now()),
+    ('CUR_PLACEHOLDER_UGX', 'UGX', 'Ugandan Shilling',       'USh', 0, true, 'ACTIVE', 0, now()),
+    ('CUR_PLACEHOLDER_RWF', 'RWF', 'Rwandan Franc',          'RF',  0, true, 'ACTIVE', 0, now()),
+    ('CUR_PLACEHOLDER_BIF', 'BIF', 'Burundian Franc',        'Fr',  0, true, 'ACTIVE', 0, now()),
+    ('CUR_PLACEHOLDER_SSP', 'SSP', 'South Sudanese Pound',   '£',   2, true, 'ACTIVE', 0, now())
 ON CONFLICT (code) DO NOTHING;
 
 -- Fix uid to the #12-safe pattern: 'CUR' || lpad(id,6,'0') || code = 3+6+3 = 12 chars

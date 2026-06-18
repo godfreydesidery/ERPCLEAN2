@@ -19,6 +19,10 @@ CREATE TABLE units_of_measure (
     company_id  BIGINT          NOT NULL,
     code        VARCHAR(20)     NOT NULL,
     name        VARCHAR(60)     NOT NULL,
+    symbol      VARCHAR(20),                              -- P3: display symbol (e.g. "kg", "L", "pcs")
+    dimension_type VARCHAR(20)  NOT NULL DEFAULT 'COUNT', -- P2 D5: UoM dimension family (COUNT/WEIGHT/VOLUME/LENGTH/TIME)
+    decimal_places SMALLINT     NOT NULL DEFAULT 0,        -- P2 D5: display/rounding scale for quantities
+    is_fractional  BOOLEAN      NOT NULL DEFAULT true,     -- P2 D5: whether fractional quantities are allowed
     status      VARCHAR(32)     NOT NULL DEFAULT 'ACTIVE',
     version     BIGINT          NOT NULL DEFAULT 0,
     created_at  TIMESTAMPTZ     NOT NULL DEFAULT now(),
@@ -27,7 +31,9 @@ CREATE TABLE units_of_measure (
     updated_by  BIGINT,
     CONSTRAINT uq_unit_of_measure_uid           UNIQUE (uid),
     CONSTRAINT uq_unit_of_measure_company_code  UNIQUE (company_id, code),
-    CONSTRAINT fk_unit_of_measure_company       FOREIGN KEY (company_id) REFERENCES companies (id)
+    CONSTRAINT fk_unit_of_measure_company       FOREIGN KEY (company_id) REFERENCES companies (id),
+    CONSTRAINT chk_unit_of_measure_dimension    CHECK (dimension_type IN ('COUNT','WEIGHT','VOLUME','LENGTH','TIME')),
+    CONSTRAINT chk_unit_of_measure_decimals     CHECK (decimal_places >= 0 AND decimal_places <= 6)
 );
 
 CREATE INDEX ix_units_of_measure_company

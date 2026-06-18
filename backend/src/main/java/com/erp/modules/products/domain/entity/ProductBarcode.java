@@ -1,8 +1,11 @@
 package com.erp.modules.products.domain.entity;
 
+import com.erp.modules.products.domain.enums.BarcodeType;
 import com.erp.platform.common.domain.Ulid;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -48,6 +51,20 @@ public class ProductBarcode {
 
     @Column(name = "barcode", nullable = false, length = 64)
     private String barcode;
+
+    /**
+     * Barcode symbology (P2-M3). Default OTHER — additive-safe; existing rows map to OTHER
+     * via the DB DEFAULT.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "barcode_type", nullable = false, length = 20)
+    @Setter
+    private BarcodeType barcodeType = BarcodeType.OTHER;
+
+    /** Optional unit-of-measure this barcode addresses (P2-M3). Scalar soft-FK → units_of_measure.id. */
+    @Column(name = "uom_id")
+    @Setter
+    private Long uomId;
 
     /** At most one primary per product; enforced by partial unique index uq_product_barcode_primary. */
     @Column(name = "is_primary", nullable = false)

@@ -28,6 +28,11 @@ public class FiscalYear extends UidEntity {
     @Setter
     private String yearCode;
 
+    /** P3: human label (e.g. "Fiscal Year 2026"); nullable. */
+    @Column(name = "name", length = 120)
+    @Setter
+    private String name;
+
     @Column(name = "start_month", nullable = false)
     @Setter
     private int startMonth = 1;
@@ -57,6 +62,15 @@ public class FiscalYear extends UidEntity {
     @Column(name = "closing_journal_uid", length = 26)
     @Setter
     private String closingJournalUid;
+
+    // Reopen audit trail (P2-M1) — set on each reopen; null if never reopened.
+    @Column(name = "reopened_at")
+    @Setter
+    private Instant reopenedAt;
+
+    @Column(name = "reopened_by")
+    @Setter
+    private Long reopenedBy;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();

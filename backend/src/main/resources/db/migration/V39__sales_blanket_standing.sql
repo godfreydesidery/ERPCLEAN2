@@ -22,6 +22,11 @@ CREATE TABLE blanket_orders (
     total_drawn_amount     NUMERIC(19,4)  NOT NULL DEFAULT 0,
     status                 VARCHAR(20)    NOT NULL DEFAULT 'ACTIVE',
     notes                  VARCHAR(500),
+    -- P3: frame-contract pricing terms.
+    -- fixed_price: line prices on the blanket are locked for draw-down SOs.
+    fixed_price            BOOLEAN        NOT NULL DEFAULT FALSE,
+    -- price_protection: draw-down SOs may not exceed the blanket line price.
+    price_protection       BOOLEAN        NOT NULL DEFAULT FALSE,
     version                BIGINT         NOT NULL DEFAULT 0,
     created_at             TIMESTAMPTZ    NOT NULL DEFAULT now(),
     created_by             BIGINT,
@@ -87,6 +92,10 @@ CREATE TABLE standing_orders (
     start_date     DATE          NOT NULL,
     end_date       DATE,
     next_run_date  DATE          NOT NULL,
+    last_run_date  DATE,                                 -- P2-M3: date of the most recent generation run
+    occurrences_generated INT,                           -- P2-M3: running count of SOs generated
+    max_occurrences INT,                                 -- P2-M3: optional cap on total generations
+    auto_confirm   BOOLEAN       NOT NULL DEFAULT false, -- P2-M3: auto-confirm generated SOs
     status         VARCHAR(20)   NOT NULL DEFAULT 'ACTIVE',
     notes          VARCHAR(500),
     version        BIGINT        NOT NULL DEFAULT 0,

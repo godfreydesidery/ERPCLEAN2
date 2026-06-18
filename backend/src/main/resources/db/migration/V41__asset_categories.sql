@@ -15,6 +15,7 @@ CREATE TABLE asset_categories (
     asset_account_id        BIGINT              NOT NULL,
     accum_dep_account_id    BIGINT              NOT NULL,
     dep_expense_account_id  BIGINT              NOT NULL,
+    parent_category_id      BIGINT,             -- P3: self soft-FK for category hierarchy (flat in v1)
     status                  VARCHAR(32)         NOT NULL DEFAULT 'ACTIVE',
     version                 BIGINT              NOT NULL DEFAULT 0,
     created_at              TIMESTAMPTZ         NOT NULL DEFAULT now(),
@@ -38,7 +39,9 @@ CREATE TABLE asset_categories (
         default_reducing_rate IS NULL
         OR (default_reducing_rate > 0 AND default_reducing_rate <= 100)
     ),
-    CONSTRAINT chk_asset_category_status        CHECK (status IN ('ACTIVE','INACTIVE','ARCHIVED'))
+    CONSTRAINT chk_asset_category_status        CHECK (status IN ('ACTIVE','INACTIVE','ARCHIVED')),
+    CONSTRAINT fk_asset_category_parent         FOREIGN KEY (parent_category_id)
+                                                REFERENCES asset_categories(id)
 );
 
 CREATE INDEX ix_asset_categories_company ON asset_categories (company_id);

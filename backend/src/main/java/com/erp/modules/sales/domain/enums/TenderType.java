@@ -2,11 +2,14 @@ package com.erp.modules.sales.domain.enums;
 
 /**
  * Payment tender type (ADR-0008 D-8, FR-SALES-17).
- * v1 admits CASH and MOBILE_MONEY; CARD and CREDIT are reserved for future channels.
+ *
+ * <p>v1 admits CASH and MOBILE_MONEY; ADR-0041 D3 adds CHEQUE and CARD so the immediate-payment
+ * path can capture structured instrument links (cheque_id / card_ref) on sales_invoice_payments.
+ * Only CASH accepts over-tender change (BR-SALES-07) — the paid-in-full invariant is unchanged.
  */
 public enum TenderType {
     CASH,
-    MOBILE_MONEY
-    // CARD,   // reserved — deferred (FR-SALES-17)
-    // CREDIT  // reserved — deferred (FR-SALES-20)
+    MOBILE_MONEY,
+    CHEQUE,
+    CARD
 }

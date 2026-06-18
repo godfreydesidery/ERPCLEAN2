@@ -80,6 +80,40 @@ public class Promotion extends UidEntity {
     @Setter
     private short priority = 0;
 
+    // -------------------------------------------------------------------------
+    // P2 D5 — targeting + guardrails (ADR-0041 D5 Tier-1)
+    // -------------------------------------------------------------------------
+
+    /** Soft-FK → customers(id); when set, restricts the promotion to a single customer. */
+    @Column(name = "target_customer_id")
+    @Setter
+    private Long targetCustomerId;
+
+    /** Soft-FK → branches(id); when set, restricts the promotion to a single branch. */
+    @Column(name = "target_branch_id")
+    @Setter
+    private Long targetBranchId;
+
+    /** P2 D5: minimum order/line value to qualify (null = no threshold). */
+    @Column(name = "min_threshold", precision = 19, scale = 4)
+    @Setter
+    private BigDecimal minThreshold;
+
+    /** P2 D5: max number of redemptions (null = unlimited). */
+    @Column(name = "usage_limit")
+    @Setter
+    private Integer usageLimit;
+
+    /** P2 D5: optional coupon code gating the promotion. */
+    @Column(name = "coupon_code", length = 40)
+    @Setter
+    private String couponCode;
+
+    /** P2 D5: may combine with other promotions (warn-only at SO-confirm in v1, ADR-0041 D5 FORK). */
+    @Column(name = "combinable", nullable = false)
+    @Setter
+    private boolean combinable = false;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     @Setter

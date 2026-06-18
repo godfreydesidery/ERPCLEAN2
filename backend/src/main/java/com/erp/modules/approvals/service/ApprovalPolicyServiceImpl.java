@@ -236,7 +236,8 @@ public class ApprovalPolicyServiceImpl implements ApprovalPolicyService {
                 policy.getId(), policy.getUid(), policy.getCompanyId(),
                 policy.getDocumentType(), policy.getName(), policy.getBranchScope(),
                 policy.getBranchId(), policy.getMinAmount(), policy.getMaxAmount(),
-                policy.getCurrency(), policy.isActive(), policy.getStatus(),
+                policy.getCurrency().value(), policy.getEffectiveFrom(), policy.getEffectiveTo(),
+                policy.isActive(), policy.getStatus(),
                 policy.getNotes(), stepDtos);
     }
 }

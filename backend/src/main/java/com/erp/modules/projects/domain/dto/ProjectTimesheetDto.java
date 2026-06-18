@@ -15,6 +15,7 @@ public record ProjectTimesheetDto(
         Long userId,
         LocalDate workDate,
         BigDecimal hours,
+        BigDecimal overtimeHours,
         boolean billable,
         BigDecimal plannedRateAmount,
         String notes,

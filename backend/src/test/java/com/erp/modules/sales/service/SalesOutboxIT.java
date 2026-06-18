@@ -131,7 +131,7 @@ class SalesOutboxIT extends PostgresIntegrationTest {
 
         ProductDto prod = productService.create(new CreateProductRequest(
                 companyA.getUid(), null, "SO Widget", null,
-                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD));
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null));
         productAUid = prod.uid();
         productService.setPrice(productAUid,
                 new SetProductPriceRequest(priceListAUid, new MoneyDto("1000", "TZS")));
@@ -139,7 +139,7 @@ class SalesOutboxIT extends PostgresIntegrationTest {
         CustomerDto cust = customerService.create(new CreateCustomerRequest(
                 companyA.getId(), PartyType.INDIVIDUAL, "SO Customer",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CASH_WALK_IN, null, null));
+                CustomerKind.CASH_WALK_IN, null, null, null));
         customerAUid = cust.uid();
 
         AgentDto ag = agentService.create(new CreateAgentRequest(
@@ -208,7 +208,7 @@ class SalesOutboxIT extends PostgresIntegrationTest {
         // Add a second product at 500 TZS STANDARD
         ProductDto prod2 = productService.create(new CreateProductRequest(
                 companyA.getUid(), null, "SO Widget 2", null,
-                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD));
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null));
         productService.setPrice(prod2.uid(),
                 new SetProductPriceRequest(priceListAUid, new MoneyDto("500", "TZS")));
 

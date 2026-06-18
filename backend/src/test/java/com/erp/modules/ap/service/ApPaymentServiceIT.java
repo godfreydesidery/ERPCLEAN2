@@ -103,7 +103,7 @@ class ApPaymentServiceIT extends PostgresIntegrationTest {
         supplierUid = supplierService.create(new CreateSupplierRequest(
                 company.getId(), PartyType.INDIVIDUAL, "Pay Supplier Ltd",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                SupplierKind.GOODS)).uid();
+                SupplierKind.GOODS, null, null)).uid();
 
         chartOfAccountService.seedDefaults(company.getId());
         fiscalCalendarService.seedCurrentYear(company.getId());

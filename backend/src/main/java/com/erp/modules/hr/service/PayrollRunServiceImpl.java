@@ -23,6 +23,7 @@ import com.erp.modules.hr.domain.entity.Payslip;
 import com.erp.modules.hr.domain.enums.EmploymentStatus;
 import com.erp.modules.hr.domain.enums.PayComponentBasis;
 import com.erp.modules.hr.domain.enums.PayComponentKind;
+import com.erp.modules.hr.domain.enums.PaymentMethod;
 import com.erp.modules.hr.domain.enums.PayrollLineStatus;
 import com.erp.modules.hr.domain.enums.PayrollRunStatus;
 import com.erp.modules.hr.domain.event.PayrollFinalisedPayload;
@@ -45,6 +46,7 @@ import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.OutboxPublisher;
 import com.erp.platform.security.RequestContext;
@@ -56,6 +58,7 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -215,7 +218,7 @@ public class PayrollRunServiceImpl implements PayrollRunService {
 
             EmploymentContract contract = contractOpt.get();
             BigDecimal basicSalary = contract.getBaseSalaryAmount();
-            String currency = contract.getCurrency();
+            String currency = CurrencyCode.value(contract.getCurrency());
 
             // --- Fix #9: snapshot department name ---
             String departmentName = null;
@@ -320,6 +323,11 @@ public class PayrollRunServiceImpl implements PayrollRunService {
             line.setSdlEmployerAmount(sdlAmt);
             line.setUpdatedAt(Instant.now());
             line.setUpdatedBy(p.userId());
+
+            // --- Payee snapshot (ADR-0040 D-11) ---
+            // Snapshot the employee's payee target onto the line at calculate time.
+            // If the method is set but the required target is missing/blank, FLAG the line.
+            snapshotPayee(emp, line);
 
             // Statutory snapshot for reproducibility (NFR-HR-02)
             PayrollStatutorySnapshot snap = new PayrollStatutorySnapshot(
@@ -471,7 +479,85 @@ public class PayrollRunServiceImpl implements PayrollRunService {
         return lines.findByPayrollRunIdOrderByEmployeeIdAsc(run.getId()).stream().map(this::toLineDto).toList();
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public String exportEftBatch(String runUid) {
+        PayrollRun run = requireByUid(runUid);
+        scopeGuard.assertCanActIn(RequestContext.get(), run.getCompanyId());
+
+        List<PayrollLine> runLines = lines.findByPayrollRunIdOrderByEmployeeIdAsc(run.getId());
+
+        String header = "employee_number,employee_name,payee_method,payee_bank_name,"
+                + "payee_account_name,payee_account_ref,net_amount,currency";
+
+        String rows = runLines.stream()
+                .map(l -> Stream.of(
+                        csvEscape(l.getEmployeeNumber()),
+                        csvEscape(l.getEmployeeName()),
+                        csvEscape(l.getPayeeMethod()),
+                        csvEscape(l.getPayeeBankName()),
+                        csvEscape(l.getPayeeAccountName()),
+                        csvEscape(l.getPayeeAccountRef()),
+                        l.getNetAmount().toPlainString(),
+                        csvEscape(CurrencyCode.value(l.getCurrency()))
+                ).collect(Collectors.joining(",")))
+                .collect(Collectors.joining("\n"));
+
+        return rows.isEmpty() ? header : header + "\n" + rows;
+    }
+
     // --- private helpers ---
+
+    /**
+     * Snapshots the employee's payee details onto the payroll line.
+     * If the payment_method is set but its required account target is blank, flags the line.
+     */
+    private void snapshotPayee(Employee emp, PayrollLine line) {
+        PaymentMethod method = emp.getPaymentMethod();
+        if (method == null) {
+            // No payment method configured — leave snapshot fields null, line stays OK.
+            return;
+        }
+
+        line.setPayeeMethod(method.name());
+        line.setPayeeBankName(emp.getBankName());
+        line.setPayeeAccountName(emp.getBankAccountName());
+
+        switch (method) {
+            case BANK_TRANSFER -> {
+                String acct = emp.getBankAccountNo();
+                if (acct == null || acct.isBlank()) {
+                    line.setStatus(PayrollLineStatus.FLAGGED);
+                    line.setFlagReason("Payment method is BANK_TRANSFER but bank_account_no is missing on employee "
+                            + emp.getEmployeeNumber());
+                } else {
+                    line.setPayeeAccountRef(acct);
+                }
+            }
+            case MOBILE_MONEY -> {
+                String mno = emp.getMobileMoneyNo();
+                if (mno == null || mno.isBlank()) {
+                    line.setStatus(PayrollLineStatus.FLAGGED);
+                    line.setFlagReason("Payment method is MOBILE_MONEY but mobile_money_no is missing on employee "
+                            + emp.getEmployeeNumber());
+                } else {
+                    line.setPayeeAccountRef(mno);
+                }
+            }
+            case CASH, CHEQUE -> {
+                // No account reference required for CASH/CHEQUE.
+            }
+        }
+    }
+
+    private static String csvEscape(String value) {
+        if (value == null) return "";
+        // Wrap in quotes if the value contains a comma, quote, or newline.
+        if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
+            return "\"" + value.replace("\"", "\"\"") + "\"";
+        }
+        return value;
+    }
 
     private void generatePayslips(PayrollRun run, Long userId) {
         List<PayrollLine> runLines = lines.findByPayrollRunIdOrderByEmployeeIdAsc(run.getId());
@@ -520,6 +606,8 @@ public class PayrollRunServiceImpl implements PayrollRunService {
                 l.getPayeAmount(), l.getNssfEmployeeAmount(), l.getHeslbAmount(),
                 l.getVoluntaryDeductionTotal(), l.getLoanDeductionTotal(),
                 l.getNssfEmployerAmount(), l.getWcfEmployerAmount(), l.getSdlEmployerAmount(),
-                l.getStatus(), l.getFlagReason(), l.getCurrency());
+                l.getStatus(), l.getFlagReason(), CurrencyCode.value(l.getCurrency()),
+                l.getContractId(),
+                l.getPayeeMethod(), l.getPayeeAccountRef(), l.getPayeeBankName(), l.getPayeeAccountName());
     }
 }

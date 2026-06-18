@@ -234,6 +234,41 @@ class AgentServiceImplIT extends PostgresIntegrationTest {
     }
 
     // -----------------------------------------------------------------------
+    // P2 D5 — performance targets + country settable via create/update
+    // -----------------------------------------------------------------------
+
+    @Test
+    void create_withD5Targets_persistsCountrySalesTargetAndQuota() {
+        CreateAgentRequest req = new CreateAgentRequest(
+                company.getId(), PartyType.INDIVIDUAL, "Target Agent", null,
+                null, false, null, null, null, null, null, null, null, null, null,
+                AgentKind.EXTERNAL, null,
+                "TZ", new java.math.BigDecimal("50000.00"), new java.math.BigDecimal("60000.00"));
+
+        AgentDto dto = agentService.create(req);
+
+        assertThat(dto.country()).isEqualTo("TZ");
+        assertThat(dto.salesTarget()).isEqualByComparingTo("50000.00");
+        assertThat(dto.quota()).isEqualByComparingTo("60000.00");
+    }
+
+    @Test
+    void update_withD5Targets_overwritesFields() {
+        AgentDto created = agentService.create(externalRequest("Edit Agent", null));
+
+        var updated = agentService.updateByUid(created.uid(),
+                new com.erp.modules.parties.domain.dto.UpdateAgentRequest(
+                        PartyType.INDIVIDUAL, "Edit Agent", null, null, false, null,
+                        null, null, null, null, null, null, null, null,
+                        AgentKind.EXTERNAL, null,
+                        "KE", new java.math.BigDecimal("100.00"), new java.math.BigDecimal("200.00")));
+
+        assertThat(updated.country()).isEqualTo("KE");
+        assertThat(updated.salesTarget()).isEqualByComparingTo("100.00");
+        assertThat(updated.quota()).isEqualByComparingTo("200.00");
+    }
+
+    // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------
 

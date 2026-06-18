@@ -21,6 +21,9 @@ CREATE TABLE pipeline_stages (
     display_order        SMALLINT        NOT NULL,
     default_probability  NUMERIC(5,2)    NOT NULL,
     is_active            BOOLEAN         NOT NULL DEFAULT true,
+    is_won_stage         BOOLEAN         NOT NULL DEFAULT false,  -- P3: terminal won funnel position
+    is_lost_stage        BOOLEAN         NOT NULL DEFAULT false,  -- P3: terminal lost funnel position
+    stage_type           VARCHAR(20),    -- P3: reconciles with Opportunity.opportunity_status (OPEN/WON/LOST)
     status               VARCHAR(32)     NOT NULL DEFAULT 'ACTIVE',
     version              BIGINT          NOT NULL DEFAULT 0,
     created_at           TIMESTAMPTZ     NOT NULL DEFAULT now(),
@@ -32,7 +35,8 @@ CREATE TABLE pipeline_stages (
     CONSTRAINT uq_pipeline_stage_company_order UNIQUE (company_id, display_order),
     CONSTRAINT fk_pipeline_stage_company      FOREIGN KEY (company_id) REFERENCES companies(id),
     CONSTRAINT chk_pipeline_stage_probability CHECK (default_probability BETWEEN 0 AND 100),
-    CONSTRAINT chk_pipeline_stage_status      CHECK (status IN ('ACTIVE','INACTIVE','ARCHIVED'))
+    CONSTRAINT chk_pipeline_stage_status      CHECK (status IN ('ACTIVE','INACTIVE','ARCHIVED')),
+    CONSTRAINT chk_pipeline_stage_type        CHECK (stage_type IS NULL OR stage_type IN ('OPEN','WON','LOST'))
 );
 
 -- ============================================================================
@@ -55,6 +59,10 @@ CREATE TABLE leads (
     owner_user_id        BIGINT,
     customer_id          BIGINT,
     customer_uid         VARCHAR(26),
+    estimated_value      NUMERIC(19,4),     -- P2: lead-qualification estimate
+    next_follow_up_date  DATE,              -- P2: next planned follow-up
+    industry             VARCHAR(120),      -- P2: lead industry classification
+    region               VARCHAR(120),      -- P2: lead region
     disqualify_reason    VARCHAR(255),
     notes                VARCHAR(1000),
     qualified_at         TIMESTAMPTZ,
@@ -105,6 +113,9 @@ CREATE TABLE opportunities (
     won_at                      TIMESTAMPTZ,
     lost_at                     TIMESTAMPTZ,
     loss_reason                 VARCHAR(255),
+    next_step                   VARCHAR(255),   -- P2: planned next step toward close
+    next_action_date            DATE,           -- P2: date of next action
+    stage_changed_at            TIMESTAMPTZ,    -- P2: funnel ageing (days-in-stage)
     converted_document_kind     VARCHAR(20),
     converted_document_uid      VARCHAR(26),
     converted_at                TIMESTAMPTZ,
@@ -129,6 +140,9 @@ CREATE TABLE opportunities (
     CONSTRAINT chk_opportunity_probability         CHECK (win_probability BETWEEN 0 AND 100),
     CONSTRAINT chk_opportunity_won_at              CHECK (opportunity_status <> 'WON'  OR won_at IS NOT NULL),
     CONSTRAINT chk_opportunity_lost                CHECK (opportunity_status <> 'LOST' OR (lost_at IS NOT NULL AND loss_reason IS NOT NULL)),
+    -- P2: loss_reason swapped from free-text to OpportunityLossReason enum (kept column name)
+    CONSTRAINT chk_opportunity_loss_reason         CHECK (loss_reason IS NULL OR loss_reason IN (
+        'PRICE','COMPETITOR','NO_BUDGET','NO_DECISION','TIMING','NO_REQUIREMENT','LOST_CONTACT','PRODUCT_FIT','OTHER')),
     CONSTRAINT chk_opportunity_converted           CHECK (
         (converted_document_uid IS NULL AND converted_document_kind IS NULL)
         OR (converted_document_uid IS NOT NULL AND converted_document_kind IS NOT NULL)),
@@ -188,6 +202,9 @@ CREATE TABLE activities (
     occurred_at          TIMESTAMPTZ     NOT NULL DEFAULT now(),
     due_date             DATE,
     assignee_user_id     BIGINT,
+    outcome              VARCHAR(255),   -- P2: interaction result/outcome
+    reminder_at          TIMESTAMPTZ,    -- P2: reminder timestamp
+    duration_minutes     INTEGER,        -- P2: interaction duration in minutes
     done                 BOOLEAN         NOT NULL DEFAULT false,
     done_at              TIMESTAMPTZ,
     status               VARCHAR(32)     NOT NULL DEFAULT 'ACTIVE',

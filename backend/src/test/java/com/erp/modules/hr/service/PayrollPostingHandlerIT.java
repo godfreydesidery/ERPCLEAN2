@@ -119,7 +119,10 @@ class PayrollPostingHandlerIT extends PostgresIntegrationTest {
                 "Amina", "Hassan", null, null, null, null,
                 LocalDate.of(1990, 5, 15), "F",
                 LocalDate.of(2024, 1, 1),
-                null, "Accountant", branch.getId(), null)).uid();
+                null, "Accountant", branch.getId(), null,
+                // contact + payee fields (ADR-0040 D-11) — not required here
+                null, null, null, null, null, null,
+                null, null, null, null, null, null)).uid();
 
         contractService.createForEmployee(employeeUid, new CreateContractRequest(
                 ContractType.PERMANENT,

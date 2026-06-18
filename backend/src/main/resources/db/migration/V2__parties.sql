@@ -26,10 +26,23 @@ CREATE TABLE customers (
     postal_address          VARCHAR(255),
     region                  VARCHAR(80),
     district                VARCHAR(80),
+    country                 VARCHAR(2),                 -- P2: PartyBase country (ISO-3166 alpha-2)
+    website                 VARCHAR(200),               -- P3: PartyBase profile website URL
+    notes                   VARCHAR(1000),              -- P3: PartyBase free-text notes
+    image_url               VARCHAR(500),               -- P3: PartyBase logo/photo URL
     customer_kind           VARCHAR(20)     NOT NULL,
     credit_limit_amount     NUMERIC(19,4),
     credit_limit_currency   VARCHAR(3),
     payment_terms_days      INTEGER,
+    tax_exempt              BOOLEAN         NOT NULL DEFAULT false,  -- P2: customer tax-exemption flag
+    tax_exemption_ref       VARCHAR(80),                -- P2: tax-exemption certificate/reference
+    default_currency        VARCHAR(3),                 -- P2: customer default transaction currency (CurrencyCode)
+    default_price_list_id   BIGINT,                     -- P2 D5: soft-FK → price_lists(id) (no DB FK, cross-module)
+    default_agent_id        BIGINT,                     -- P2 D5: soft-FK → agents(id) (no DB FK, cross-module)
+    segment                 VARCHAR(20)     NOT NULL DEFAULT 'OTHER', -- P2 D5: CustomerSegment enum (Tier-2 deferred; simple enum only)
+    credit_rating           VARCHAR(20),                -- P3 CRM: free-text/coded credit rating
+    onboarding_date         DATE,                       -- P3 CRM: date customer was onboarded
+    loyalty_points          INTEGER         NOT NULL DEFAULT 0, -- P3 CRM: accrued loyalty points
     status                  VARCHAR(32)     NOT NULL DEFAULT 'ACTIVE',
     version                 BIGINT          NOT NULL DEFAULT 0,
     created_at              TIMESTAMPTZ     NOT NULL DEFAULT now(),
@@ -41,6 +54,7 @@ CREATE TABLE customers (
     CONSTRAINT fk_customer_company      FOREIGN KEY (company_id) REFERENCES companies (id),
     CONSTRAINT chk_customer_party_type  CHECK (party_type IN ('INDIVIDUAL','BUSINESS')),
     CONSTRAINT chk_customer_kind        CHECK (customer_kind IN ('CASH_WALK_IN','CREDIT_ACCOUNT')),
+    CONSTRAINT chk_customer_segment     CHECK (segment IN ('RETAIL','WHOLESALE','GOVERNMENT','OTHER')),
     CONSTRAINT chk_customer_vrn_vat     CHECK (vrn IS NULL OR vat_registered = true),
     CONSTRAINT chk_customer_credit_pair CHECK (
         (credit_limit_amount IS NULL AND credit_limit_currency IS NULL) OR
@@ -70,7 +84,18 @@ CREATE TABLE suppliers (
     postal_address          VARCHAR(255),
     region                  VARCHAR(80),
     district                VARCHAR(80),
+    country                 VARCHAR(2),                 -- P2: PartyBase country (ISO-3166 alpha-2)
+    website                 VARCHAR(200),               -- P3: PartyBase profile website URL
+    notes                   VARCHAR(1000),              -- P3: PartyBase free-text notes
+    image_url               VARCHAR(500),               -- P3: PartyBase logo/photo URL
     supplier_kind           VARCHAR(20)     NOT NULL,
+    payment_terms_days      INTEGER,
+    default_currency        VARCHAR(3),                 -- P2 D5: supplier default transaction currency (CurrencyCode)
+    lead_time_days          INTEGER,                    -- P2 D5: typical procurement lead time in days
+    min_order_value         NUMERIC(19,4),              -- P2 D5: minimum order value threshold
+    default_wht_type_id     BIGINT,                     -- P2 D5: soft-FK → wht_types(id) (no DB FK, cross-module)
+    our_credit_limit        NUMERIC(19,4),              -- P3: credit limit THEY extend to us (purchasing terms)
+    price_list_id           BIGINT,                     -- P3: soft-FK → price_lists(id) supplier purchase price list (no DB FK)
     status                  VARCHAR(32)     NOT NULL DEFAULT 'ACTIVE',
     version                 BIGINT          NOT NULL DEFAULT 0,
     created_at              TIMESTAMPTZ     NOT NULL DEFAULT now(),
@@ -82,6 +107,8 @@ CREATE TABLE suppliers (
     CONSTRAINT fk_supplier_company      FOREIGN KEY (company_id) REFERENCES companies (id),
     CONSTRAINT chk_supplier_party_type  CHECK (party_type IN ('INDIVIDUAL','BUSINESS')),
     CONSTRAINT chk_supplier_kind        CHECK (supplier_kind IN ('GOODS','SERVICE')),
+    CONSTRAINT chk_supplier_lead_time   CHECK (lead_time_days IS NULL OR lead_time_days >= 0),
+    CONSTRAINT chk_supplier_min_order   CHECK (min_order_value IS NULL OR min_order_value >= 0),
     CONSTRAINT chk_supplier_vrn_vat     CHECK (vrn IS NULL OR vat_registered = true)
 );
 
@@ -107,8 +134,14 @@ CREATE TABLE agents (
     postal_address          VARCHAR(255),
     region                  VARCHAR(80),
     district                VARCHAR(80),
+    country                 VARCHAR(2),                 -- P2: PartyBase country (ISO-3166 alpha-2)
+    website                 VARCHAR(200),               -- P3: PartyBase profile website URL
+    notes                   VARCHAR(1000),              -- P3: PartyBase free-text notes
+    image_url               VARCHAR(500),               -- P3: PartyBase logo/photo URL
     agent_kind              VARCHAR(20)     NOT NULL,
     app_user_id             BIGINT,
+    sales_target            NUMERIC(19,4),              -- P2 D5: periodic sales target value
+    quota                   NUMERIC(19,4),              -- P2 D5: assigned quota value
     status                  VARCHAR(32)     NOT NULL DEFAULT 'ACTIVE',
     version                 BIGINT          NOT NULL DEFAULT 0,
     created_at              TIMESTAMPTZ     NOT NULL DEFAULT now(),
@@ -122,6 +155,8 @@ CREATE TABLE agents (
     CONSTRAINT chk_agent_party_type      CHECK (party_type IN ('INDIVIDUAL','BUSINESS')),
     CONSTRAINT chk_agent_kind            CHECK (agent_kind IN ('INTERNAL','EXTERNAL')),
     CONSTRAINT chk_agent_vrn_vat         CHECK (vrn IS NULL OR vat_registered = true),
+    CONSTRAINT chk_agent_sales_target    CHECK (sales_target IS NULL OR sales_target >= 0),
+    CONSTRAINT chk_agent_quota           CHECK (quota IS NULL OR quota >= 0),
     CONSTRAINT chk_agent_user_kind       CHECK (
         (agent_kind = 'INTERNAL' AND app_user_id IS NOT NULL) OR
         (agent_kind = 'EXTERNAL' AND app_user_id IS NULL)
@@ -150,6 +185,10 @@ CREATE TABLE other_parties (
     postal_address          VARCHAR(255),
     region                  VARCHAR(80),
     district                VARCHAR(80),
+    country                 VARCHAR(2),                 -- P2: PartyBase country (ISO-3166 alpha-2)
+    website                 VARCHAR(200),               -- P3: PartyBase profile website URL
+    notes                   VARCHAR(1000),              -- P3: PartyBase free-text notes
+    image_url               VARCHAR(500),               -- P3: PartyBase logo/photo URL
     other_kind              VARCHAR(40),
     status                  VARCHAR(32)     NOT NULL DEFAULT 'ACTIVE',
     version                 BIGINT          NOT NULL DEFAULT 0,
@@ -235,8 +274,90 @@ CREATE TABLE other_party_branch (
 );
 
 -- ---------------------------------------------------------------------------
+-- (3e) payment_terms master (D-2, shared across customers and suppliers)
+-- ---------------------------------------------------------------------------
+CREATE TABLE payment_terms (
+    id                  BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    uid                 VARCHAR(26)     NOT NULL,
+    company_id          BIGINT          NOT NULL,
+    code                VARCHAR(30)     NOT NULL,
+    name                VARCHAR(120)    NOT NULL,
+    basis               VARCHAR(30)     NOT NULL,
+    net_days            INTEGER         NOT NULL DEFAULT 0,
+    discount_days       INTEGER,
+    discount_percent    NUMERIC(5,2),
+    status              VARCHAR(32)     NOT NULL DEFAULT 'ACTIVE',
+    version             BIGINT          NOT NULL DEFAULT 0,
+    created_at          TIMESTAMPTZ     NOT NULL DEFAULT now(),
+    created_by          BIGINT,
+    updated_at          TIMESTAMPTZ,
+    updated_by          BIGINT,
+    CONSTRAINT uq_payment_terms_uid             UNIQUE (uid),
+    CONSTRAINT uq_payment_term_company_code     UNIQUE (company_id, code),
+    CONSTRAINT fk_payment_terms_company         FOREIGN KEY (company_id) REFERENCES companies (id),
+    CONSTRAINT chk_payment_terms_basis          CHECK (basis IN ('DAYS_AFTER_INVOICE','DAYS_AFTER_MONTH_END','DUE_ON_RECEIPT')),
+    CONSTRAINT chk_payment_terms_net_days       CHECK (net_days >= 0),
+    CONSTRAINT chk_payment_terms_discount_pair  CHECK (
+        (discount_days IS NULL AND discount_percent IS NULL) OR
+        (discount_days IS NOT NULL AND discount_percent IS NOT NULL)
+    ),
+    CONSTRAINT chk_payment_terms_discount_days  CHECK (discount_days IS NULL OR discount_days >= 0),
+    CONSTRAINT chk_payment_terms_discount_pct   CHECK (discount_percent IS NULL OR discount_percent >= 0)
+);
+
+-- Add payment_terms_id soft-FK to customers (scalar, no DB FK — soft-FK cross-module convention)
+ALTER TABLE customers ADD COLUMN payment_terms_id BIGINT;
+
+-- Add payment_terms_id soft-FK to suppliers (scalar, no DB FK — soft-FK cross-module convention)
+ALTER TABLE suppliers ADD COLUMN payment_terms_id BIGINT;
+
+-- ---------------------------------------------------------------------------
 -- (4) Indexes
 -- ---------------------------------------------------------------------------
+
+-- payment_terms
+CREATE INDEX ix_payment_terms_company
+    ON payment_terms (company_id);
+CREATE INDEX ix_payment_terms_company_name
+    ON payment_terms (company_id, lower(name));
+
+-- ---------------------------------------------------------------------------
+-- (3f) supplier_bank_accounts — addressable child sub-master (has uid, D-4)
+-- ---------------------------------------------------------------------------
+CREATE TABLE supplier_bank_accounts (
+    id              BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    uid             VARCHAR(26)     NOT NULL,
+    company_id      BIGINT          NOT NULL,
+    supplier_id     BIGINT          NOT NULL,
+    bank_name       VARCHAR(120)    NOT NULL,
+    account_name    VARCHAR(120)    NOT NULL,
+    account_no      VARCHAR(60),
+    bank_branch     VARCHAR(120),
+    iban            VARCHAR(34),
+    swift_bic       VARCHAR(11),
+    currency        VARCHAR(3),
+    is_default      BOOLEAN         NOT NULL DEFAULT false,
+    status          VARCHAR(32)     NOT NULL DEFAULT 'ACTIVE',
+    version         BIGINT          NOT NULL DEFAULT 0,
+    created_at      TIMESTAMPTZ     NOT NULL DEFAULT now(),
+    created_by      BIGINT,
+    updated_at      TIMESTAMPTZ,
+    updated_by      BIGINT,
+    CONSTRAINT uq_supplier_bank_account_uid     UNIQUE (uid),
+    CONSTRAINT fk_sba_company                   FOREIGN KEY (company_id) REFERENCES companies (id),
+    CONSTRAINT fk_sba_supplier                  FOREIGN KEY (supplier_id) REFERENCES suppliers (id),
+    CONSTRAINT chk_sba_account_or_iban          CHECK (account_no IS NOT NULL OR iban IS NOT NULL)
+);
+
+-- Partial unique index: at most one is_default per supplier
+CREATE UNIQUE INDEX uq_supplier_bank_account_default
+    ON supplier_bank_accounts (supplier_id)
+    WHERE is_default = true;
+
+CREATE INDEX ix_supplier_bank_accounts_supplier
+    ON supplier_bank_accounts (supplier_id);
+CREATE INDEX ix_supplier_bank_accounts_company
+    ON supplier_bank_accounts (company_id);
 
 -- customers: tenant, name (expression), tin, phone; link table pair/direction indexes
 CREATE INDEX ix_customers_company

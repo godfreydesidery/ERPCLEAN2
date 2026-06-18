@@ -4,6 +4,7 @@ import com.erp.modules.parties.domain.entity.Supplier;
 import com.erp.modules.parties.domain.enums.PartyType;
 import com.erp.modules.parties.domain.enums.SupplierKind;
 import com.erp.platform.common.domain.MasterStatus;
+import java.math.BigDecimal;
 
 /** Response DTO for a Supplier (ADR-0006 D-11). */
 public record SupplierDto(
@@ -25,7 +26,14 @@ public record SupplierDto(
         String postalAddress,
         String region,
         String district,
+        String country,
         SupplierKind supplierKind,
+        Integer paymentTermsDays,
+        Long paymentTermsId,
+        String defaultCurrency,
+        Integer leadTimeDays,
+        BigDecimal minOrderValue,
+        Long defaultWhtTypeId,
         MasterStatus status,
         Long version,
         String createdAt,
@@ -54,7 +62,14 @@ public record SupplierDto(
                 s.getPostalAddress(),
                 s.getRegion(),
                 s.getDistrict(),
+                s.getCountry(),
                 s.getSupplierKind(),
+                s.getPaymentTermsDays(),
+                s.getPaymentTermsId(),
+                s.getDefaultCurrency() != null ? s.getDefaultCurrency().value() : null,
+                s.getLeadTimeDays(),
+                s.getMinOrderValue(),
+                s.getDefaultWhtTypeId(),
                 s.getStatus(),
                 s.getVersion(),
                 s.getCreatedAt() != null ? s.getCreatedAt().toString() : null,
