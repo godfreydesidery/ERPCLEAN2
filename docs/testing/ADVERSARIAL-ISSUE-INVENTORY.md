@@ -4,6 +4,67 @@
 
 **Confirmed defects:** 56 (raw reported 63) — CRITICAL 4 · HIGH 11 · MEDIUM 17 · LOW 14
 
+## Remediation status (2026-06-18) — CLOSED-OUT TRACKER
+
+Fixes shipped on `main` via PR #97 (`2b8406a`) — remediation Waves 1–3 + an optimistic-lock follow-up. Full `mvn verify` green at every wave (final: 806 IT tests, 0 failures). Code-only except two schema changes (V52 in-place edit, new V69) requiring a DB recreate (done on local + QA).
+
+**Legend:** ✅ Fixed · ➖ Folded (duplicate) · ⏸ Deferred (low value / conscious)
+**Commits:** W1 `4f14695` (CRITICAL + global exception-handler) · W2 `d4f6bbf` (HIGH) · W3 `b30c8ac` (MEDIUM/LOW) · OptLock `3e03d62`
+
+| # | Sev | Status | Where |
+|---|-----|--------|-------|
+| 1 | CRIT | ✅ | W1 — cross-customer AR allocation guard |
+| 2 | CRIT | ✅ | W1 — control-account guard (all sourceTypes + cash path) |
+| 3 | CRIT | ✅ | W1 — 3-way match HELD bill-number |
+| 4 | HIGH | ✅ | W2 — system-role permission-strip guard |
+| 5 | HIGH | ✅ | W2 — SO-confirm location-aware stock lookup |
+| 6 | HIGH | ✅ | W2 — negative unitPriceOverride reject |
+| 7 | HIGH | ➖ | folded into #16 (duplicate) |
+| 8 | HIGH | ✅ | W1 — cross-supplier bill guard |
+| 9 | HIGH | ✅ | W2 — GL reversal idempotency + flag |
+| 10 | HIGH | ✅ | W1 — reserved sourceTypes (auto-closed by #2: postManual forces MANUAL) |
+| 11 | HIGH | ✅ | W1 — control-account post now 409 (guard + handler) |
+| 12 | HIGH | ✅ | W2 — stock on-hand/allowNegative + cost-moves-with-units |
+| 13 | HIGH | ✅ | W2 — leave-type CRUD + graceful FK |
+| 14 | HIGH | ✅ | W2 — loan PENDING→approve lifecycle |
+| 15 | MED | ✅ | W2 (SO) + W3 (quotation) — @Positive line qty |
+| 16 | MED | ✅ | W3 — @Positive receipt/allocation amount |
+| 17 | MED | ✅ | W3 — quotation validUntil≥quoteDate guard |
+| 18 | MED | ✅ | W3 — bill cost @PositiveOrZero + dueDate≥billDate |
+| 19 | MED | ✅ | W3 — purchase-return @Valid/@Positive |
+| 20 | MED | ✅ | W3 — contract endDate≥startDate |
+| 21 | MED | ✅ | W2 (leaveTypeId→404) + W3 (fromDate≤toDate) |
+| 22 | MED | ✅ | W3 — department/branch existence check |
+| 23 | MED | ✅ | W3 — glAccount existence check |
+| 24 | MED | ✅ | W3 — V69 unique national_id/tin |
+| 25 | MED | ✅ | W3 — installmentAmount≤principal |
+| 26 | MED | ✅ | W3 — statutory-rate range (+W1 handler net) |
+| 27 | MED | ✅ | W3 — PAYE-band range validation |
+| 28 | MED | ✅ | W3 — @Digits(15,4) on journal amounts |
+| 29 | MED | ✅ | W3 — @NotEmpty journal lines |
+| 30 | MED | ✅ | W3 — reverse honours date/reason |
+| 31 | MED | ✅ | W3 — FX self-currency rate must=1 |
+| 32 | LOW | ✅ | W3 — V69 unique email |
+| 33 | LOW | ✅ | W3 — username @Pattern |
+| 34 | MED | ⏸ | deferred — Angular auto-escapes on render; input sanitization not added |
+| 35 | LOW | ⏸ | deferred — unknown currency code not validated |
+| 36 | LOW | ⏸ | deferred — 404-vs-403 ordering (conscious; 403-for-nonexistent is safe) |
+| 37 | LOW | ✅ | W3 — employee @Email + gender validation |
+| 38 | LOW | ⏸ | deferred — DOB far-future/after-hire not validated |
+| 39 | LOW | ✅ | W1 — enum FQCN scrubbed |
+| 40 | LOW | ⏸ | deferred — param-binding-before-authz ordering (conscious) |
+| 41 | LOW | ✅ | W1 — 'date null' leak suppressed (explicit postingDate @NotNull not added) |
+| 42 | LOW | ✅ | W1 — over-length → 400 via handler (explicit @Size not added) |
+| 43 | LOW | ⏸ | deferred — far-future transferDate not validated |
+| 44 | LOW | ⏸ | accepted — companyId ignored, no cross-tenant leak (no security impact) |
+| 45 | LOW | ⏸ | deferred — null DTO product/location fields (cosmetic enrichment) |
+| 46 | LOW | ⏸ | deferred — inverted report date range not validated |
+| 47 | LOW | ✅ | W1 — unsupported Content-Type → 415 |
+
+**Plus (new, not in original inventory):** optimistic-lock conflict → 409 instead of 500 (`3e03d62`) — surfaced by concurrent stock-on-hand writes during re-seed.
+
+**Totals:** 37 fixed · 1 folded · 9 deferred (8 LOW + 1 MED #34 mitigated by Angular output-encoding). The 9 deferred are low-value/edge validations + two conscious error-ordering items — a candidate "Wave 4" if a fully-closed list is wanted.
+
 ## Root-cause themes
 
 1. Unhandled DB/JPA exceptions surface as generic HTTP 500 instead of 4xx: the global @ControllerAdvice does not translate DataIntegrityViolationException (CHECK/UNIQUE/FK/varchar-length/numeric-overflow), HttpMediaTypeNotSupportedException, or NullPointerException. ~18 distinct 500s collapse to this one root cause across GL, AR, AP, Sales, Quotations, HR, Stock, and Auth.
