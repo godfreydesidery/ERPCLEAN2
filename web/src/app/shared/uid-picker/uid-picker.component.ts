@@ -27,10 +27,11 @@ export interface UidOption {
   standalone: true,
   imports: [FormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  // Strip the id from the host element so it never lands on <app-uid-picker> —
-  // the consumer-supplied id must resolve to the inner <select> (the real form control)
-  // so that <label for="X"> associates correctly (WCAG 2.1 AA, SC 1.3.1 / 4.1.2).
-  host: { '[attr.id]': 'null' },
+  // Strip the id and aria-labelledby from the host element so they never linger on
+  // <app-uid-picker> — the consumer-supplied values must resolve to the inner <select>
+  // (the real form control) so that <label for="X"> / aria-labelledby associate
+  // correctly (WCAG 2.1 AA, SC 1.3.1 / 4.1.2).
+  host: { '[attr.id]': 'null', '[attr.aria-labelledby]': 'null' },
   providers: [
     { provide: NG_VALUE_ACCESSOR, useExisting: forwardRef(() => UidPickerComponent), multi: true },
   ],
@@ -51,6 +52,7 @@ export interface UidOption {
               (ngModelChange)="onPick($event)"
               [disabled]="disabledState()"
               [required]="required()"
+              [attr.aria-labelledby]="ariaLabelledby() ?? null"
               [attr.aria-label]="placeholder() || 'Select a resource'">
         <option value="">{{ placeholder() || '— select —' }}</option>
         @for (o of filtered(); track o.uid) {
@@ -73,6 +75,15 @@ export class UidPickerComponent implements ControlValueAccessor {
    * The host id attribute is nulled out via host:{} above.
    */
   readonly id = input<string | undefined>(undefined);
+  /**
+   * Consumer-supplied aria-labelledby forwarded to the inner <select>.
+   * Bind via the input: [ariaLabelledby]="'someId'" on <app-uid-picker> (NOT a bare
+   * aria-labelledby="..." attribute — that lands on the host and is nulled out via host:{}
+   * above, so it would never reach the <select>).
+   * aria-labelledby takes precedence over aria-label per ARIA spec; the existing
+   * aria-label remains as fallback when this is not set.
+   */
+  readonly ariaLabelledby = input<string | undefined>(undefined);
 
   protected readonly value = signal<string>('');
   protected readonly query = signal<string>('');

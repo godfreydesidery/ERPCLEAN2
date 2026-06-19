@@ -287,7 +287,7 @@
                                 [options]="poOptions()"
                                 placeholder="Select PO or leave blank"
                                 name="purchaseOrderUid"
-                                [attr.aria-labelledby]="'poPickerLabel'" />
+                                [ariaLabelledby]="'poPickerLabel'" />
               </div>
 
             </div>
@@ -359,7 +359,7 @@
                                         [options]="poLineOptions()"
                                         placeholder="Select PO line"
                                         [name]="'poline_' + i"
-                                        [attr.aria-labelledby]="'poLineLabel_' + i" />
+                                        [ariaLabelledby]="'poLineLabel_' + i" />
                       </td>
                       <td>
                         @if (lines().length > 1) {
