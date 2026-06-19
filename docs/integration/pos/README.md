@@ -174,6 +174,7 @@ That is the full loop: **login → context → till → session → catalog → 
 | 09 | [Sales, Payments & Receipts](./09-sales-payments-receipts.md) | `POST /pos/sales` in depth, the synchronous vs. eventual side effects, receipt data. |
 | 10 | [Returns & Refunds](./10-returns-refunds.md) | Why the POS API has no sale-reversal/refund endpoint, and the office-side return path. |
 | 11 | [Errors, Offline & Idempotency](./11-errors-offline-idempotency.md) | Full HTTP error table, the no-idempotency caveat, safe-retry and offline guidance. |
+| 12 | [Known Limitations & API Gaps](./12-known-limitations.md) | **Read before production:** no sale idempotency, no POS reversal/refund, cash-only single tender, `unitPrice` ignored — with recommended fixes. |
 
 ---
 
