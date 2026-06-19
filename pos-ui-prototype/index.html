@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OrbixPOS — UI Prototype</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<!-- =====================================================================
+     POS UI PROTOTYPE — static mock, no API. Three business modes:
+     Supermarket · Restaurant · Pharmacy. Register body is rendered per
+     mode by app.js. Grounded in docs/integration/pos/prd. Mock data only.
+====================================================================== -->
+
+<div id="app">
+
+  <!-- ============ SCREEN: LOGIN ============ -->
+  <section class="screen screen--auth" data-screen="login" hidden>
+    <div class="auth-card">
+      <div class="brand brand--lg"><span class="brand__mark">◧</span><span class="brand__name">Orbix<b>POS</b></span></div>
+      <p class="auth-sub">Sign in to your register</p>
+      <form id="loginForm" class="auth-form" autocomplete="off">
+        <label class="field"><span>Server</span><input type="text" value="https://qa.orbix.erp" /></label>
+        <label class="field"><span>Username</span><input type="text" id="loginUser" value="cashier1" autofocus /></label>
+        <label class="field"><span>Password</span><input type="password" value="••••••••" /></label>
+        <div class="auth-row"><label class="check"><input type="checkbox" checked /> Remember this device</label></div>
+        <button class="btn btn--primary btn--block" type="submit">Sign in</button>
+      </form>
+      <p class="auth-foot">Provisioning (users, roles, tills) is managed in the ERP back office.</p>
+    </div>
+    <div class="auth-aside"><div class="auth-aside__inner">
+      <h2>One till app, every counter</h2>
+      <ul class="ticks">
+        <li>🛒 Supermarket — fast scan &amp; line entry</li>
+        <li>🍽 Restaurant — tables, menu &amp; kitchen</li>
+        <li>💊 Pharmacy — batch, expiry &amp; Rx</li>
+        <li>Server-authoritative price, VAT &amp; totals</li>
+      </ul>
+    </div></div>
+  </section>
+
+  <!-- ============ SCREEN: OPEN SHIFT ============ -->
+  <section class="screen screen--auth" data-screen="openshift" hidden>
+    <div class="auth-card auth-card--wide">
+      <div class="ctx-head">
+        <div><h1>Open a shift</h1><p class="muted">Choose a business mode, pick a register, declare your float.</p></div>
+        <div class="ctx-user"><span class="avatar">JK</span>
+          <div><strong>Joseph Kimaro</strong><br><small class="muted">Head Office · ERP QA</small></div></div>
+      </div>
+
+      <h3 class="section-label">Business mode</h3>
+      <div class="mode-cards" id="modeCards">
+        <button class="mode-card is-active" data-mode="supermarket"><span class="mode-card__ic">🛒</span><b>Supermarket</b><small>Fast scan · spreadsheet line entry</small></button>
+        <button class="mode-card" data-mode="restaurant"><span class="mode-card__ic">🍽</span><b>Restaurant</b><small>Tables · menu · send to kitchen</small></button>
+        <button class="mode-card" data-mode="pharmacy"><span class="mode-card__ic">💊</span><b>Pharmacy</b><small>Batch · expiry · prescription</small></button>
+      </div>
+
+      <h3 class="section-label">Select a till <span class="hint">ACTIVE only</span></h3>
+      <div class="till-grid" id="tillGrid"></div>
+
+      <div class="float-row">
+        <label class="field field--inline"><span>Opening float (TZS)</span><input type="text" id="openFloat" inputmode="decimal" value="100,000" /></label>
+        <button class="btn btn--primary btn--lg" id="openSessionBtn" disabled>Open session</button>
+      </div>
+      <p class="muted small">A till may have only one OPEN session. Float is fixed at open — there is no mid-shift cash-in.</p>
+    </div>
+  </section>
+
+  <!-- ============ SCREEN: REGISTER (mode-rendered) ============ -->
+  <section class="screen screen--register" data-screen="register" hidden>
+    <header class="topbar">
+      <div class="brand"><span class="brand__mark">◧</span><span class="brand__name">Orbix<b>POS</b></span></div>
+      <div class="modesw" id="modeSwitch">
+        <button data-mode="supermarket" class="is-active">🛒 Supermarket</button>
+        <button data-mode="restaurant">🍽 Restaurant</button>
+        <button data-mode="pharmacy">💊 Pharmacy</button>
+      </div>
+      <div class="topbar__chips">
+        <span class="chip"><i class="ic">▦</i> <b id="tbTill">Till 1</b></span>
+        <span class="chip chip--ok"><i class="ic">◴</i> Online</span>
+      </div>
+      <div class="topbar__right">
+        <span class="clock" id="tbClock">--:--</span>
+        <button class="iconbtn" id="sessionMenuBtn" title="Session">☰</button>
+        <span class="avatar avatar--sm" title="Joseph Kimaro">JK</span>
+      </div>
+    </header>
+    <div class="register" id="registerBody"><!-- rendered per mode by app.js --></div>
+  </section>
+
+  <!-- ============ SCREEN: CLOSE SESSION ============ -->
+  <section class="screen screen--sheet" data-screen="close" hidden>
+    <div class="sheet">
+      <div class="sheet__head"><h2>Close session</h2><button class="iconbtn" data-back="register">✕</button></div>
+      <p class="muted">Count the drawer and declare the cash. Close is <b>one-way</b> — no re-open.</p>
+      <div class="recon-grid">
+        <div class="recon-cell"><small>Opening float</small><b>TZS 100,000</b></div>
+        <div class="recon-cell"><small>Cash sales</small><b>TZS 486,500</b></div>
+        <div class="recon-cell"><small>Payouts</small><b>− TZS 20,000</b></div>
+        <div class="recon-cell recon-cell--accent"><small>Expected cash</small><b>TZS 566,500</b></div>
+      </div>
+      <label class="field field--big"><span>Counted cash (TZS)</span><input type="text" inputmode="decimal" value="565,000" /></label>
+      <div class="variance"><span>Variance</span><b class="neg">− TZS 1,500 (short)</b></div>
+      <textarea class="field-area" placeholder="Notes (optional)"></textarea>
+      <div class="sheet__foot"><button class="btn btn--ghost" data-back="register">Cancel</button><button class="btn btn--primary" id="confirmCloseBtn">Close session</button></div>
+    </div>
+  </section>
+
+  <!-- ============ SCREEN: RECONCILE / Z-READ ============ -->
+  <section class="screen screen--sheet" data-screen="reconcile" hidden>
+    <div class="sheet">
+      <div class="sheet__head"><h2>Reconcile · Z-read <span class="pill pill--lock">Supervisor</span></h2><button class="iconbtn" data-back="register">✕</button></div>
+      <p class="muted">Variance is posted to the GL by the ERP. This action is segregated from the cashier.</p>
+      <div class="zread">
+        <div class="zrow"><span>Counted cash</span><b>TZS 565,000</b></div>
+        <div class="zrow"><span>Expected cash</span><b>TZS 566,500</b></div>
+        <div class="zrow zrow--var"><span>Variance</span><b class="neg">− TZS 1,500 (short)</b></div>
+        <div class="zrow"><span>Invoices</span><b>37</b></div>
+        <div class="zrow"><span>Variance journal</span><b class="muted">JRN-0091</b></div>
+      </div>
+      <div class="status-banner status-banner--ok">✓ Session RECONCILED — variance posted to GL.</div>
+      <div class="sheet__foot"><button class="btn btn--ghost" data-back="register">Close</button><button class="btn btn--primary" id="printZBtn">Print Z-read</button></div>
+    </div>
+  </section>
+
+  <!-- ============ SCREEN: SALES LOOKUP ============ -->
+  <section class="screen screen--sheet" data-screen="sales" hidden>
+    <div class="sheet sheet--wide">
+      <div class="sheet__head"><h2>Today’s sales</h2><button class="iconbtn" data-back="register">✕</button></div>
+      <div class="searchbar searchbar--inline"><span class="searchbar__ic">⌕</span><input type="text" placeholder="Invoice no., customer…" /></div>
+      <table class="tbl" id="salesTable"><thead><tr><th>Invoice</th><th>Time</th><th>Customer</th><th class="r">Total</th><th></th></tr></thead><tbody></tbody></table>
+    </div>
+  </section>
+
+</div><!-- /#app -->
+
+
+<!-- =========================== MODALS =========================== -->
+
+<!-- PAYMENT -->
+<div class="modal" data-modal="payment" hidden>
+  <div class="modal__panel modal__panel--pay">
+    <div class="modal__head"><h2>Take payment</h2><button class="iconbtn" data-close>✕</button></div>
+    <div class="pay">
+      <div class="pay__left">
+        <div class="pay__due"><small>Amount due</small><div class="pay__due-amt" id="payDue">TZS 0.00</div></div>
+        <div class="tender-types" id="tenderTypes">
+          <button class="ttype is-active" data-tender="CASH">💵<span>Cash</span></button>
+          <button class="ttype" data-tender="CARD">💳<span>Card</span></button>
+          <button class="ttype" data-tender="MOBILE_MONEY">📱<span>Mobile</span></button>
+          <button class="ttype" data-tender="CHEQUE">🧾<span>Cheque</span></button>
+        </div>
+        <div class="tender-list" id="tenderList"></div>
+        <div class="pay__summary">
+          <div class="trow"><span>Tendered</span><span id="payTendered">TZS 0.00</span></div>
+          <div class="trow trow--grand"><span id="changeLabel">Remaining</span><span id="payChange">TZS 0.00</span></div>
+        </div>
+      </div>
+      <div class="pay__right">
+        <div class="amount-display" id="payInput">0</div>
+        <div class="quick-cash" id="quickCash"></div>
+        <div class="keypad" id="keypad">
+          <button>1</button><button>2</button><button>3</button>
+          <button>4</button><button>5</button><button>6</button>
+          <button>7</button><button>8</button><button>9</button>
+          <button data-k=".">.</button><button>0</button><button data-k="del">⌫</button>
+        </div>
+        <button class="btn btn--ghost btn--block" id="addTenderBtn">+ Add tender</button>
+      </div>
+    </div>
+    <div class="modal__foot">
+      <span class="muted small">Single exact cash is the simplest path; split &amp; card are supported.</span>
+      <button class="btn btn--pay btn--lg" id="completeSaleBtn" disabled>Complete sale</button>
+    </div>
+  </div>
+</div>
+
+<!-- RECEIPT -->
+<div class="modal" data-modal="receipt" hidden>
+  <div class="modal__panel modal__panel--receipt">
+    <div class="modal__head"><h2>Receipt</h2><button class="iconbtn" data-close>✕</button></div>
+    <div class="receipt" id="receiptBody"></div>
+    <div class="modal__foot modal__foot--split">
+      <div class="receipt-actions">
+        <button class="btn btn--ghost" id="giftReceiptBtn">🎁 Gift</button>
+        <button class="btn btn--ghost" id="reprintBtn">⎙ Reprint</button>
+        <button class="btn btn--ghost btn--danger" id="refundBtn">↩ Refund</button>
+      </div>
+      <button class="btn btn--primary" id="newSaleBtn">New sale</button>
+    </div>
+  </div>
+</div>
+
+<!-- CUSTOMER PICKER -->
+<div class="modal" data-modal="customer" hidden>
+  <div class="modal__panel modal__panel--sm">
+    <div class="modal__head"><h2 id="custModalTitle">Customer</h2><button class="iconbtn" data-close>✕</button></div>
+    <div class="searchbar searchbar--inline"><span class="searchbar__ic">⌕</span><input type="text" placeholder="Name, phone or TIN…" /></div>
+    <ul class="picklist" id="customerList"></ul>
+    <button class="btn btn--ghost btn--block">+ New</button>
+  </div>
+</div>
+
+<!-- DISCOUNT -->
+<div class="modal" data-modal="discount" hidden>
+  <div class="modal__panel modal__panel--sm">
+    <div class="modal__head"><h2>Line discount</h2><button class="iconbtn" data-close>✕</button></div>
+    <p class="muted small">Reductions are an absolute amount in the document currency. Server is authoritative.</p>
+    <div class="seg"><button class="seg__b is-active">Amount</button><button class="seg__b">Percent</button></div>
+    <div class="amount-display amount-display--sm">0</div>
+    <div class="modal__foot"><button class="btn btn--ghost" data-close>Cancel</button><button class="btn btn--primary" data-close>Apply</button></div>
+  </div>
+</div>
+
+<!-- SESSION MENU -->
+<div class="modal modal--drawer" data-modal="session" hidden>
+  <div class="modal__panel modal__panel--drawer">
+    <div class="modal__head"><h2>Session</h2><button class="iconbtn" data-close>✕</button></div>
+    <div class="sess-info">
+      <div><small>Till</small><b>Till 1 · Counter</b></div>
+      <div><small>Session</small><b>POS-0042</b></div>
+      <div><small>Opened</small><b>08:02 · today</b></div>
+      <div><small>Status</small><b class="pill pill--ok">OPEN</b></div>
+    </div>
+    <nav class="sess-actions">
+      <button data-go="xread"><i>📊</i><span>X-read<small>Mid-shift drawer report</small></span></button>
+      <button data-go="payout"><i>💸</i><span>Cash payout<small>Drawer drop / refund</small></span></button>
+      <button data-go="sales"><i>🧾</i><span>Today’s sales<small>Lookup &amp; reprint</small></span></button>
+      <button data-go="close"><i>🔒</i><span>Close session<small>Count drawer</small></span></button>
+      <button data-go="reconcile" class="lock"><i>⚖️</i><span>Reconcile · Z-read<small>Supervisor only</small></span></button>
+    </nav>
+    <button class="btn btn--ghost btn--block btn--danger" id="logoutBtn">Sign out</button>
+  </div>
+</div>
+
+<!-- X-READ -->
+<div class="modal" data-modal="xread" hidden>
+  <div class="modal__panel modal__panel--sm">
+    <div class="modal__head"><h2>X-read <span class="pill">Drawer report</span></h2><button class="iconbtn" data-close>✕</button></div>
+    <div class="zread">
+      <div class="zrow"><span>Opening float</span><b>TZS 100,000</b></div>
+      <div class="zrow"><span>Cash sales</span><b>TZS 486,500</b></div>
+      <div class="zrow"><span>Payouts</span><b>− TZS 20,000</b></div>
+      <div class="zrow zrow--var"><span>Expected cash</span><b>TZS 566,500</b></div>
+      <div class="zrow"><span>Invoices</span><b>37</b></div>
+    </div>
+    <p class="muted small">Cash-drawer report — not a ledger report. Stock / GL / AR post asynchronously.</p>
+    <div class="modal__foot"><button class="btn btn--ghost" data-close>Close</button><button class="btn btn--primary" data-close>⎙ Print</button></div>
+  </div>
+</div>
+
+<!-- PAYOUT -->
+<div class="modal" data-modal="payout" hidden>
+  <div class="modal__panel modal__panel--sm">
+    <div class="modal__head"><h2>Cash payout</h2><button class="iconbtn" data-close>✕</button></div>
+    <div class="seg"><button class="seg__b is-active">Paid out</button><button class="seg__b">Refund</button></div>
+    <label class="field field--big"><span>Amount (TZS)</span><input type="text" inputmode="decimal" placeholder="0.00" /></label>
+    <label class="field"><span>Reason</span><input type="text" placeholder="e.g. supplier delivery, INV-1042 refund" /></label>
+    <div class="status-banner status-banner--warn">Drawer bookkeeping only — a refund posts no stock / VAT / revenue reversal.</div>
+    <div class="modal__foot"><button class="btn btn--ghost" data-close>Cancel</button><button class="btn btn--primary" data-close>Record payout</button></div>
+  </div>
+</div>
+
+<!-- REFUND / REVERSE -->
+<div class="modal" data-modal="refund" hidden>
+  <div class="modal__panel modal__panel--sm">
+    <div class="modal__head"><h2>Refund / reverse sale</h2><button class="iconbtn" data-close>✕</button></div>
+    <div class="refund-inv" id="refundInv">INV-100237 · TZS 0.00</div>
+    <label class="field"><span>Reason</span><input type="text" value="Customer changed mind" /></label>
+    <div class="status-banner status-banner--ok">Reverses revenue, VAT, cash &amp; stock atomically. The session must be OPEN.</div>
+    <div class="modal__foot"><button class="btn btn--ghost" data-close>Cancel</button><button class="btn btn--danger" id="confirmRefundBtn">Reverse sale</button></div>
+  </div>
+</div>
+
+<!-- FLOOR / TABLES (restaurant) -->
+<div class="modal" data-modal="floor" hidden>
+  <div class="modal__panel modal__panel--floor">
+    <div class="modal__head"><h2>Tables · floor</h2><button class="iconbtn" data-close>✕</button></div>
+    <div class="floor-legend"><span><i class="dot dot--free"></i>Free</span><span><i class="dot dot--occ"></i>Occupied</span><span><i class="dot dot--bill"></i>Bill printed</span></div>
+    <div class="floor" id="floorGrid"></div>
+  </div>
+</div>
+
+<!-- =================== SUPERMARKET FUNCTIONS (design only) =================== -->
+
+<!-- FUNCTIONS launcher -->
+<div class="modal" data-modal="functions" hidden>
+  <div class="modal__panel modal__panel--fn">
+    <div class="modal__head"><h2>Functions</h2><button class="iconbtn" data-close>✕</button></div>
+    <div class="fn-grid">
+      <button class="fn-tile" data-fn="weigh"><i aria-hidden="true">⚖</i><span>Weigh item</span></button>
+      <button class="fn-tile" data-fn="pricecheck"><i aria-hidden="true">🔍</i><span>Price check</span></button>
+      <button class="fn-tile" data-fn="coupon"><i aria-hidden="true">🎫</i><span>Coupon</span></button>
+      <button class="fn-tile" data-fn="park"><i aria-hidden="true">⏸</i><span>Park sale</span></button>
+      <button class="fn-tile" data-fn="parked"><i aria-hidden="true">↺</i><span>Recall parked</span></button>
+      <button class="fn-tile" data-fn="reprint"><i aria-hidden="true">⎙</i><span>Reprint</span></button>
+      <button class="fn-tile" data-fn="refund"><i aria-hidden="true">↩</i><span>Refund</span></button>
+      <button class="fn-tile" data-fn="nosale"><i aria-hidden="true">💵</i><span>No sale</span></button>
+      <button class="fn-tile" data-fn="manager"><i aria-hidden="true">🔑</i><span>Manager</span></button>
+      <button class="fn-tile" data-fn="age"><i aria-hidden="true">🔞</i><span>Manual age check</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- WEIGH item (scale) -->
+<div class="modal" data-modal="weigh" hidden>
+  <div class="modal__panel modal__panel--sm">
+    <div class="modal__head"><h2>Weigh item</h2><button class="iconbtn" data-close>✕</button></div>
+    <div class="weigh">
+      <div class="weigh__item"><b>Bananas (loose)</b><span>PLU 4011 · TZS 2,500 / kg</span></div>
+      <div class="weigh__scale">
+        <small>NET WEIGHT</small>
+        <div class="weigh__kg">1.250 <span>kg</span></div>
+        <div class="weigh__row"><span class="weigh__stable">● stable</span><button class="weigh__tare">⟲ Tare</button></div>
+      </div>
+      <div class="weigh__amt"><span>Amount</span><b>TZS 3,125</b></div>
+      <button class="weigh__manual" data-close>⌨ Scale offline — enter weight manually</button>
+    </div>
+    <div class="modal__foot"><button class="btn btn--ghost" data-close>Cancel</button><button class="btn btn--primary" data-close>Add to sale</button></div>
+  </div>
+</div>
+
+<!-- PARKED sales (recall) -->
+<div class="modal" data-modal="parked" hidden>
+  <div class="modal__panel modal__panel--sm">
+    <div class="modal__head"><h2>Parked sales</h2><button class="iconbtn" data-close>✕</button></div>
+    <table class="tbl tbl--modal"><thead><tr><th>Ticket</th><th>Time</th><th class="r">Items</th><th class="r">Total</th><th></th></tr></thead>
+      <tbody>
+        <tr><td><b>PK-014</b></td><td>14:02</td><td class="r">6</td><td class="r">TZS 18,400</td><td class="r r-acts"><button class="linkbtn" data-close aria-label="Recall ticket PK-014">Recall</button><button class="linkbtn linkbtn--danger" data-close aria-label="Discard ticket PK-014">Discard</button></td></tr>
+        <tr><td><b>PK-013</b></td><td>13:48</td><td class="r">3</td><td class="r">TZS 7,100</td><td class="r r-acts"><button class="linkbtn" data-close aria-label="Recall ticket PK-013">Recall</button><button class="linkbtn linkbtn--danger" data-close aria-label="Discard ticket PK-013">Discard</button></td></tr>
+        <tr><td><b>PK-011</b></td><td>13:20</td><td class="r">11</td><td class="r">TZS 42,650</td><td class="r r-acts"><button class="linkbtn" data-close aria-label="Recall ticket PK-011">Recall</button><button class="linkbtn linkbtn--danger" data-close aria-label="Discard ticket PK-011">Discard</button></td></tr>
+      </tbody></table>
+    <p class="muted small">Parked baskets live on this till only until recalled or end of shift.</p>
+    <div class="modal__foot"><button class="btn btn--ghost" data-close>Close</button></div>
+  </div>
+</div>
+
+<!-- PRICE CHECK -->
+<div class="modal" data-modal="pricecheck" hidden>
+  <div class="modal__panel modal__panel--sm">
+    <div class="modal__head"><h2>Price check</h2><button class="iconbtn" data-close>✕</button></div>
+    <div class="searchbar searchbar--inline"><span class="searchbar__ic">⌕</span><input type="text" placeholder="Scan or type item…" value="Coca-Cola 500ml" /></div>
+    <div class="pc-card">
+      <div class="pc-card__h"><b>Coca-Cola 500ml</b><small>8900000000 · EA</small></div>
+      <div class="pc-price">TZS 1,500</div>
+      <div class="pc-stock">● In stock</div>
+    </div>
+    <div class="status-banner status-banner--info">Price check only — the item is not added to the sale.</div>
+    <div class="modal__foot"><button class="btn btn--primary" data-close>Done</button></div>
+  </div>
+</div>
+
+<!-- COUPON / voucher -->
+<div class="modal" data-modal="coupon" hidden>
+  <div class="modal__panel modal__panel--sm">
+    <div class="modal__head"><h2>Coupon / voucher</h2><button class="iconbtn" data-close>✕</button></div>
+    <div class="searchbar searchbar--inline"><span class="searchbar__ic">▦</span><input type="text" value="SAVE500" placeholder="Scan or enter coupon code…" /></div>
+    <ul class="picklist">
+      <li class="is-active"><span><b>SAVE500</b><br><small>TZS 500 off groceries</small></span><span class="badge">− 500</span></li>
+    </ul>
+    <p class="muted small">Scan or key a coupon to validate it. Unknown / expired codes are rejected.</p>
+    <div class="modal__foot"><button class="btn btn--ghost" data-close>Cancel</button><button class="btn btn--primary" data-close>Apply SAVE500 (− 500)</button></div>
+  </div>
+</div>
+
+<!-- NO SALE / open drawer -->
+<div class="modal" data-modal="nosale" hidden>
+  <div class="modal__panel modal__panel--sm">
+    <div class="modal__head"><h2>No sale — open drawer</h2><button class="iconbtn" data-close>✕</button></div>
+    <label class="field"><span>Reason</span><input type="text" placeholder="e.g. give change, drawer check" /></label>
+    <div class="status-banner status-banner--warn">Opening the drawer with no sale is logged for audit.</div>
+    <div class="modal__foot"><button class="btn btn--ghost" data-close>Cancel</button><button class="btn btn--primary" data-close>Open drawer</button></div>
+  </div>
+</div>
+
+<!-- MANAGER override -->
+<div class="modal" data-modal="manager" hidden>
+  <div class="modal__panel modal__panel--sm">
+    <div class="modal__head"><h2>Manager override</h2><button class="iconbtn" data-close>✕</button></div>
+    <p class="muted small">Log in as supervisor to unlock restricted actions (void · price override · refund) for this transaction.</p>
+    <label class="field"><span>Supervisor</span><input type="text" placeholder="ID or scan badge" /></label>
+    <label class="field"><span>PIN</span><input type="password" inputmode="numeric" autocomplete="off" placeholder="4–6 digits" /></label>
+    <div class="modal__foot"><button class="btn btn--ghost" data-close>Cancel</button><button class="btn btn--primary" data-close>Approve</button></div>
+  </div>
+</div>
+
+<!-- AGE verification -->
+<div class="modal" data-modal="age" hidden>
+  <div class="modal__panel modal__panel--sm">
+    <div class="modal__head"><h2>Age-restricted item</h2><button class="iconbtn" data-close>✕</button></div>
+    <div class="age-item"><b>Tusker Lager 500ml</b><span>Alcohol · 18+ required</span></div>
+    <label class="field"><span>Date of birth (or scan ID)</span><input type="text" inputmode="numeric" placeholder="DD / MM / YYYY" /></label>
+    <label class="check check--gutter"><input type="checkbox" /> ID inspected and confirms 18+</label>
+    <div class="status-banner status-banner--warn">Verify a valid ID. Selling to under-18 is an offence.</div>
+    <div class="modal__foot"><button class="btn btn--ghost" data-close>Decline sale</button><button class="btn btn--primary" data-close>Verified 18+</button></div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast" class="toast" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>
