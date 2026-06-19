@@ -101,7 +101,7 @@
                       placeholder="Select product"
                       [required]="true"
                       [name]="'product_' + i"
-                      [attr.aria-label]="'Product for line ' + (i + 1)"
+                      [ariaLabel]="'Product for line ' + (i + 1)"
                       [disabled]="saving()" />
                   </td>
                   <td>
@@ -112,7 +112,7 @@
                       placeholder="Select unit"
                       [required]="true"
                       [name]="'unit_' + i"
-                      [attr.aria-label]="'Unit for line ' + (i + 1)"
+                      [ariaLabel]="'Unit for line ' + (i + 1)"
                       [disabled]="saving()" />
                   </td>
                   <td>
