@@ -261,7 +261,8 @@ These conventions hold across all POS DTOs.
 - Validation seen on POS request DTOs:
   - `PosSaleRequest.LineItem.quantity` — `@NotNull @DecimalMin("0.0001")`
   - `PosSaleRequest.LineItem.unitPrice` — `@NotNull @DecimalMin("0.00")`
-    (client-submitted; **validated against list price by the service**)
+    (required by the validator but **ignored by the sale path** — the server resolves the list price
+    itself; see [04](./04-pricing-tax-currency.md) and [12](./12-known-limitations.md))
   - `PosSaleRequest.LineItem.lineDiscountAmount` — nullable `BigDecimal`
   - `OpenSessionRequest.openingFloatAmount` — `@NotNull @DecimalMin("0.00")`
   - `CloseSessionRequest.countedCashAmount` — `@NotNull`
@@ -485,8 +486,8 @@ curl -sS -X POST "$BASE/api/v1/pos/sessions/uid/sess_4d2e/close" \
   - `lines` (`@NotEmpty @Valid List<LineItem>`), each `LineItem`:
     - `productId` (`@NotNull` Long), `unitId` (`@NotNull` Long)
     - `quantity` (`@NotNull @DecimalMin("0.0001")` BigDecimal)
-    - `unitPrice` (`@NotNull @DecimalMin("0.00")` BigDecimal — validated against list price by the
-      service)
+    - `unitPrice` (`@NotNull @DecimalMin("0.00")` BigDecimal — required by the validator but
+      **ignored**; the server resolves the list price itself, see [12](./12-known-limitations.md))
     - `lineDiscountAmount` (nullable BigDecimal)
   - `tenderedAmount` (nullable BigDecimal — **receipt-only, not stored on the invoice**)
   - `notes` (`@Size(max=500)` String, nullable)
