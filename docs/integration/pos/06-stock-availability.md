@@ -26,7 +26,7 @@ The ERP holds stock at two nested levels:
 
 Two scoping rules matter for a POS client:
 
-1. **The active-branch endpoints take NO branch parameter.** `GET /api/v1/stock/on-hand` resolves the company **and** branch from your token's `RequestContext` (minted `companyId`/`branchId`, optionally overridden by the `X-Branch-Uid` header per the shared auth contract). The service literally does `onHands.findByCompanyIdAndBranchId(principal.companyId(), principal.branchId(), pageable)`. If your token has no active company/branch it returns **500** (`IllegalStateException: "No active company/branch in request context."`) — a POS terminal must be logged in to a session-usable branch (`hasBranch=true`).
+1. **The active-branch endpoints take NO branch parameter.** `GET /api/v1/stock/on-hand` resolves the company **and** branch from your token's `RequestContext` (minted `companyId`/`branchId`, optionally overridden by the `X-Branch-Uid` header per the shared auth contract). The service literally does `onHands.findByCompanyIdAndBranchId(principal.companyId(), principal.branchId(), pageable)`. If your token has no active company/branch it returns **409 Conflict** (`IllegalStateException: "No active company/branch in request context."` — `IllegalStateException` is mapped to 409 by the global handler) — a POS terminal must be logged in to a session-usable branch (`hasBranch=true`).
 
 2. **The location / batch / serial endpoints take `companyId` (and `branchId`/`locationId`) as explicit query params.** These are validated against your scope by `ScopeGuard.assertCanActIn(principal, companyId)` — passing a `companyId` you cannot act in yields **403**. So pass the same `companyId` your token is scoped to. (Get it from `GET /api/v1/auth/me` → `activeCompanyUid`, but note these stock endpoints want the numeric `companyId`/`branchId`/`locationId` **ids**, not uids — you obtain branch/location ids from `GET /api/v1/stock-locations` and on-hand rows.)
 
@@ -111,7 +111,7 @@ curl -s "https://erp.example.com/api/v1/stock/on-hand?page=0&size=50&sort=produc
   -H "X-Request-Id: $(uuidgen)"
 ```
 
-**Notable errors:** `401` (missing/expired token, or user no longer ACTIVE); `403` (lacks `STOCK.VIEW`); `500` with `"An unexpected error occurred."` if the token carries no active company/branch (the underlying `IllegalStateException` text is not echoed).
+**Notable errors:** `401` (missing/expired token, or user no longer ACTIVE); `403` (lacks `STOCK.VIEW`); `409 Conflict` if the token carries no active company/branch (`IllegalStateException: "No active company/branch in request context."`, mapped to 409 by the global handler; the user-safe message text is not the raw exception text).
 
 ---
 

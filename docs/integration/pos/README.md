@@ -178,6 +178,16 @@ That is the full loop: **login → context → till → session → catalog → 
 
 ---
 
+## Use cases — scenario catalogue
+
+The numbered sections above are the **endpoint reference** (each endpoint, DTO, permission and error in isolation). For end-to-end **journeys** — "provision a cashier", "open a shift and ring sales", "apply a discount", "reprint a receipt", "recover from a dropped sale", and honest notes where a retail action is **not supported today** — see the companion scenario catalogue, which composes these endpoints into a working till:
+
+| | Section | What it covers |
+|---|---|---|
+| ★ | [Use Cases — Catalogue](./use-cases/README.md) | Grouped A–E end-to-end scenarios (Setup & Provisioning, Shift Lifecycle, Selling, Returns & Refunds, Exceptions & Operations) with the realistic call order, load-bearing fields, failure branches, and a "supported today?" verdict per scenario. Read it alongside the 00–12 reference. |
+
+---
+
 ## Typical day — sequence (text)
 
 ```
