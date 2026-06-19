@@ -40,6 +40,19 @@ public class CompanyController {
         return companies.listByOrganisationUid(organisationUid);
     }
 
+    /**
+     * Companies the current user may act in — the auth-only source for the company picker that
+     * appears on feature pages. A non-admin must NOT need {@code COMPANY.VIEW} just to load a page
+     * (the picker is cross-cutting, COMPANY.VIEW is an admin permission). Admins/root get every
+     * company in the org (same as {@link #list}); everyone else gets only the companies they are
+     * assigned to via an active role grant — so no enumeration of companies they cannot access.
+     */
+    @GetMapping("/accessible")
+    @PreAuthorize("isAuthenticated()")
+    public List<CompanyDto> accessible(@RequestParam String organisationUid) {
+        return companies.listAccessibleByOrganisationUid(organisationUid);
+    }
+
     @GetMapping("/uid/{uid}")
     @PreAuthorize("@perm.scoped(#uid, 'company', 'COMPANY.VIEW')")
     public CompanyDto get(@PathVariable String uid) {
