@@ -1,5 +1,6 @@
 package com.erp.modules.sales.domain.dto;
 
+import com.erp.modules.sales.domain.enums.TenderType;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
@@ -16,20 +17,54 @@ import java.util.List;
 public record PosSaleRequest(
         @NotBlank String sessionUid,
         @NotNull  Long customerId,
-        @NotNull  Long agentId,
+        /**
+         * Optional (ADR-0042 D-4). Currently informational — a POS sale is recorded against the
+         * logged-in cashier; the submitted value is not applied.
+         */
+        Long agentId,
         @NotBlank String currency,
         @NotEmpty @Valid List<LineItem> lines,
+        /**
+         * Optional tenders (ADR-0042 D-3). When present, each is recorded as an invoice payment
+         * (CASH / CARD / MOBILE_MONEY / CHEQUE) and their sum must cover the gross total. When absent
+         * or empty, the sale is settled as a single exact CASH payment — the original behaviour.
+         */
+        @Valid List<PosTender> tenders,
         /** Total tendered (for receipt printing, not stored on invoice). */
         BigDecimal tenderedAmount,
         @Size(max = 500) String notes
 ) {
 
+    /** Backward-compatible constructor (no tenders) — existing callers/clients are unaffected. */
+    public PosSaleRequest(String sessionUid, Long customerId, Long agentId, String currency,
+                          List<LineItem> lines, BigDecimal tenderedAmount, String notes) {
+        this(sessionUid, customerId, agentId, currency, lines, null, tenderedAmount, notes);
+    }
+
     public record LineItem(
             @NotNull Long productId,
             @NotNull Long unitId,
             @NotNull @DecimalMin("0.0001") BigDecimal quantity,
-            /** Client-submitted price; validated against list price by service. */
-            @NotNull @DecimalMin("0.00") BigDecimal unitPrice,
+            /**
+             * Optional (ADR-0042 D-4). IGNORED — pricing is server-authoritative (resolved from the
+             * product's price list); the submitted value has no effect. Express negotiated reductions
+             * via {@code lineDiscountAmount}.
+             */
+            BigDecimal unitPrice,
             BigDecimal lineDiscountAmount
+    ) {}
+
+    /**
+     * A single POS tender (ADR-0042 D-3). The optional instrument fields mirror
+     * {@code AddPaymentRequest} (ADR-0041 D3) — populate the one relevant to the tender type.
+     */
+    public record PosTender(
+            @NotNull TenderType tenderType,
+            @NotNull @DecimalMin("0.0001") BigDecimal amount,
+            String reference,
+            Long cashBankAccountId,
+            Long chequeId,
+            String mobileMoneyRef,
+            String cardRef
     ) {}
 }

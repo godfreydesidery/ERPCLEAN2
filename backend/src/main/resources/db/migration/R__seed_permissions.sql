@@ -126,6 +126,7 @@ INSERT INTO permissions (code, module, description) VALUES
     ('PARTY.BRANCH.ASSIGN', 'parties', 'Associate/dissociate any party with branches of its company'),
     ('PERMISSION.VIEW', 'iam', 'View the permission catalogue'),
     ('POS.SALE.CREATE', 'sales', 'Ring a POS sale on an open session'),
+    ('POS.SALE.VOID', 'sales', 'Reverse / void a POS sale at the till (refund)'),
     ('POS.SESSION.CLOSE', 'sales', 'Close an open POS cashier session'),
     ('POS.SESSION.OPEN', 'sales', 'Open a POS cashier session on a till'),
     ('POS.SESSION.RECONCILE', 'sales', 'Reconcile a closed POS session (posts variance to GL)'),

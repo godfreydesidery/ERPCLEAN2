@@ -343,6 +343,7 @@ public final class AuditActions {
     // POS sale / refund
     public static final String POS_SALE_RING             = "POS.SALE.RING";
     public static final String POS_SALE_FINALISE         = "POS.SALE.FINALISE";
+    public static final String POS_SALE_REVERSE          = "POS.SALE.REVERSE";
     public static final String POS_REFUND                = "POS.REFUND";
     // Pricing rules
     public static final String PRICING_TIER_CREATE       = "PRICING.TIER.CREATE";
