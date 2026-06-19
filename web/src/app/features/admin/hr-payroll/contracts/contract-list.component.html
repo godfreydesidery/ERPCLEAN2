@@ -41,7 +41,7 @@
   <!-- Employee picker -->
   @if (selectedCompanyId()) {
     <div class="mb-3" style="max-width:400px">
-      <span class="form-label d-block small text-muted mb-1" id="employeePickerLabel" aria-hidden="true">Employee</span>
+      <span class="form-label d-block small text-muted mb-1" id="employeePickerLabel">Employee</span>
       @if (employeesState() === 'loading') {
         <output class="d-block text-muted small" aria-live="polite">
           <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Loading employees…
@@ -50,10 +50,11 @@
         <app-uid-picker
           [options]="employeeOptions()"
           placeholder="Select employee"
+          name="selectedEmployee"
           [ngModel]="selectedEmployeeUid()"
           (ngModelChange)="onEmployeePick($event)"
           [required]="false"
-          aria-labelledby="employeePickerLabel"
+          [ariaLabelledby]="'employeePickerLabel'"
         />
       }
     </div>

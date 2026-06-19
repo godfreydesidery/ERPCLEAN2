@@ -61,7 +61,7 @@
                   placeholder="Select source branch"
                   [required]="true"
                   name="sourceBranchUid"
-                  aria-labelledby="srcBranchLabel" />
+                  [ariaLabelledby]="'srcBranchLabel'" />
               </div>
               <div class="erp-field">
                 <label class="form-label" id="srcLocLabel">Source Location <span aria-hidden="true">*</span></label>
@@ -72,7 +72,7 @@
                   placeholder="Select source location"
                   [required]="true"
                   name="sourceLocationUid"
-                  aria-labelledby="srcLocLabel" />
+                  [ariaLabelledby]="'srcLocLabel'" />
               </div>
             </div>
           </fieldset>
@@ -90,7 +90,7 @@
                   placeholder="Select destination branch"
                   [required]="true"
                   name="destBranchUid"
-                  aria-labelledby="destBranchLabel" />
+                  [ariaLabelledby]="'destBranchLabel'" />
               </div>
               <div class="erp-field">
                 <label class="form-label" id="destLocLabel">Destination Location <span aria-hidden="true">*</span></label>
@@ -101,7 +101,7 @@
                   placeholder="Select destination location"
                   [required]="true"
                   name="destLocationUid"
-                  aria-labelledby="destLocLabel" />
+                  [ariaLabelledby]="'destLocLabel'" />
               </div>
             </div>
           </fieldset>
