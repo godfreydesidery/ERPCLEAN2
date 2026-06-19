@@ -34,6 +34,8 @@ Walk-in cash sales skip the first three steps and begin directly with a Sales In
 
 Contact your administrator if an expected menu item is missing.
 
+**Concurrent edits.** If two people act on the same document at the same time (for example, both try to confirm the same order), the second action is rejected with a conflict message asking you to reload and retry, rather than failing silently or corrupting the record. Reload the screen to see the current state and act again.
+
 ---
 
 ## 1. Quotations
@@ -53,17 +55,18 @@ Navigate to **Sales › Quotations** (`/admin/quotations`).
 1. Navigate to **Sales › Quotations** (`/admin/quotations`).
 2. Click **New Quotation**.
 3. In the **Customer** field, type part of the customer name or code and select the correct entry from the list. Do not type or paste a raw ID.
-4. Set **Quote Date** (today by default) and **Valid Until** (the date the offer expires).
-5. Click **Save**. The quotation is saved in **DRAFT** status. A quote number is assigned later when you send it.
+4. Choose the **Currency** from the Currency Picker (see *Common UI Patterns* in chapter 00 — only the company's enabled currencies are offered, defaulting to the company default).
+5. Set **Quote Date** (today by default) and **Valid Until** (the date the offer expires; it must be on or after the Quote Date).
+6. Click **Create Quotation**. The quotation is saved in **DRAFT** status. A quote number is assigned later when you send it.
 
-**Required fields:** Customer, Quote Date, Valid Until.
+**Required fields:** Customer, Currency, Quote Date, Valid Until.
 
 ### 1.2 Add lines to a quotation
 
-1. Open the draft quotation (navigate to **Sales › Quotations** then click the quotation row, or go to `/admin/quotations/uid/{uid}`).
+1. Open the draft quotation (navigate to **Sales › Quotations** then click the **Open** action on the quotation row, or go to `/admin/quotations/uid/{uid}`).
 2. In the **Lines** section, search for the product by name or code and select it.
-3. Choose a **Unit**, enter **Quantity**, and optionally enter a **Line Discount** (either a percentage or a fixed amount — not both).
-4. Click **Add Line**. The system calculates net amount, VAT, and gross from the configured price list.
+3. Choose a **Unit**, enter **Quantity**, optionally enter a **Price Override** (otherwise the list price is used), and optionally enter a **Disc %** (line discount as a percentage — the quotation and Sales Order line forms only offer a percentage discount, not a fixed amount).
+4. Click the **+** (Add line) button. The system calculates net amount, VAT, and gross from the configured price list.
 
 Repeat for each product. You can also add **Service** products; these are priced the same way but do not affect stock.
 
@@ -74,7 +77,7 @@ To remove a line, click the delete icon on the line row. Lines can only be chang
 When the quotation is ready to share with the customer:
 
 1. Open the draft quotation.
-2. Click **Send**.
+2. Click **Send to Customer**.
 3. The status changes to **SENT** and a quote number (QUOTE-####) is assigned.
 
 **Prerequisites:** The quotation must have at least one line, and the Valid Until date must be today or in the future.
@@ -83,7 +86,7 @@ When the quotation is ready to share with the customer:
 
 When the customer responds:
 
-- **Accept** — click **Accept** on the sent quotation. A **Sales Order** is created automatically with the same lines and discounts. The quotation status changes to **ACCEPTED**. A success message shows the new order number and provides a link to it.
+- **Accept** — click **Accept & Convert to Order** on the sent quotation. A **Sales Order** is created automatically with the same lines and discounts. The quotation status changes to **ACCEPTED**. A success message shows the new order number and provides a link to it.
 - **Reject** — click **Reject**. The quotation status changes to **REJECTED**.
 
 Both actions require the `SALES.QUOTE.ACCEPT` permission. If the Valid Until date has already passed, the system prevents acceptance and marks the quotation **EXPIRED**.
@@ -108,9 +111,9 @@ Ali adds two lines:
 - Product **Unga wa Ngano 2kg**, Unit **CARTON (12 pcs)**, Qty **50**, Line Discount **0%** — system prices at TZS 18,000 per carton = TZS 900,000 net.
 - Product **Mafuta ya Kupikia 1L**, Unit **CARTON (12 pcs)**, Qty **30**, Line Discount **5%** — list price TZS 22,000; after 5% = TZS 20,900 per carton = TZS 627,000 net.
 
-VAT at 18% is added by the system: total gross = TZS 1,535,400 + VAT. Ali clicks **Send** — status becomes SENT and the number **QUOTE-0047** is assigned.
+VAT at 18% is added by the system: total gross = TZS 1,535,400 + VAT. Ali clicks **Send to Customer** — status becomes SENT and the number **QUOTE-0047** is assigned.
 
-Karibu calls back and accepts. Ali clicks **Accept**. The system creates **Sales Order SO-0112** from the same lines and shows a link. Quotation status is now ACCEPTED.
+Karibu calls back and accepts. Ali clicks **Accept & Convert to Order**. The system creates **Sales Order SO-0112** from the same lines and shows a link. Quotation status is now ACCEPTED.
 
 ---
 
@@ -131,10 +134,11 @@ Navigate to **Sales › Sales Orders** (`/admin/sales-orders`).
 ### 2.1 Create a standalone Sales Order
 
 1. Navigate to **Sales › Sales Orders** (`/admin/sales-orders`).
-2. Click **New Order**.
+2. Click **New Sales Order**.
 3. Pick the **Customer** by name.
-4. Set **Order Date**. Optionally set a **Document Discount** (percentage or amount — not both).
-5. Click **Save**. The order is created in **DRAFT**.
+4. Choose the **Currency** from the Currency Picker (see *Common UI Patterns* in chapter 00 — the list is limited to the company's enabled currencies and defaults to the company default).
+5. Set **Order Date**. Optionally pick an **Agent** by name and add **Notes**.
+6. Click **Create Order**. The order is created in **DRAFT**.
 
 ### 2.2 Add lines to a Sales Order
 
@@ -144,19 +148,30 @@ The same process as adding quotation lines. Lines can only be added, edited, or 
 
 Confirming an order reserves stock for every GOODS line.
 
-1. Open the draft order at **Sales › Sales Orders** then click the order row (or navigate to `/admin/sales-orders/uid/{uid}`).
+1. Open the draft order at **Sales › Sales Orders** then click the **Open** action on the order row (or navigate to `/admin/sales-orders/uid/{uid}`).
 2. The order must have at least one line.
-3. Click **Confirm**.
-4. The status changes to **CONFIRMED** and each line shows its reserved quantity.
+3. Click **Confirm Order**. A confirmation dialog appears explaining that confirming will attempt to reserve stock for all order lines, and that **if insufficient stock is available the order will confirm with a backorder**.
+4. Click **Yes, Confirm**.
+5. The status changes to **CONFIRMED** and each line shows its reserved quantity. Where stock was short, the line keeps an **Open (backorder)** quantity that you fulfil with a later delivery.
 
 This requires the `SALES.ORDER.CONFIRM` permission. A user who can create orders but not confirm them will not see this button.
+
+**Credit-control hard block.** When the customer is a **Credit Account** customer, confirming the order runs a credit-control check. Confirmation is blocked (the order stays in DRAFT and the system returns a clear conflict message) if **any one** of these three independent conditions is true:
+
+- the customer's **credit status** is `ON_HOLD` or `STOPPED`;
+- the customer is on a **manual hold** (a credit-control staff override — the hold reason, if recorded, is shown in the message); or
+- the order's gross total, added to the customer's current outstanding balance, would **exceed their credit limit**.
+
+The block is overridable only by a user holding the `SALES.CREDIT.OVERRIDE` permission; every override is recorded in the audit trail. **Cash / walk-in customers are exempt** — this check never applies to them.
+
+> A separate, advisory credit warning may also appear without blocking confirmation; it is informational only and the order still confirms.
 
 ### 2.4 Cancel an order
 
 Cancelling an order releases any stock reservations.
 
 1. Open the order.
-2. Click **Cancel**, enter an optional reason, and confirm.
+2. Click **Cancel Order**, enter an optional reason, and click **Confirm Cancel**.
 
 Cancellation is allowed from any status except **CANCELLED** and **CLOSED**.
 
@@ -190,11 +205,13 @@ Navigate to **Sales › Deliveries** (`/admin/deliveries`).
 
 ### 3.1 Create a delivery
 
-1. Navigate to **Sales › Deliveries** (`/admin/deliveries`) and click **New Delivery**, or open a confirmed Sales Order and use the **Create Delivery** action.
-2. The delivery create form is at `/admin/deliveries/create`. Pick the **Sales Order** by order number.
-3. The form shows all open (undelivered) lines with the remaining quantity pre-filled.
-4. Adjust individual line quantities if you are making a **partial delivery** (backorder). The quantity you enter cannot exceed the open balance.
-5. Set **Delivery Date** and click **Submit**.
+Deliveries are always created from a Sales Order. The **Deliveries** list (`/admin/deliveries`) is view-only — it has no "New Delivery" button (its subtitle reads *"Create deliveries from the Sales Order detail screen."*).
+
+1. Open a **CONFIRMED** (or **PARTIALLY_FULFILLED**) Sales Order and click its **Create Delivery** action. This opens the delivery create form at `/admin/deliveries/create` for that order; there is no Sales Order picker — the order is carried through from the button.
+2. The form's **Lines to Deliver** table lists all open (undelivered) lines with the remaining (Open Qty) quantity pre-filled in **Deliver Qty**.
+3. Untick a line's **Include** checkbox to leave it out, or lower its **Deliver Qty** if you are making a **partial delivery** (backorder). The quantity you enter cannot exceed the open balance.
+4. Set **Delivery Date** (required) and optionally enter **Notes**.
+5. Click **Create Delivery**.
 
 Deliveries are created immediately in **CONFIRMED** status and cannot be undone. Each delivery is assigned a DELIVERY-#### number.
 
@@ -206,8 +223,8 @@ Enter a quantity less than the open balance on any line to create a partial deli
 
 Once goods are delivered, you can invoice the customer for that delivery:
 
-1. Open the delivery (navigate to **Sales › Deliveries**, click the row, or go to `/admin/deliveries/uid/{uid}`).
-2. Click **Create Invoice from Delivery**.
+1. Open the delivery (navigate to **Sales › Deliveries** and click the **Open** action on the delivery row, or go to `/admin/deliveries/uid/{uid}`).
+2. Click **Invoice this Delivery**.
 3. A draft **Sales Invoice** is created automatically with the delivered lines. The doc discount from the source order is pro-rated to the delivered quantity.
 
 Proceed to section 4 to finalise the invoice.
@@ -233,14 +250,14 @@ Navigate to **Sales › Invoices** (`/admin/sales-invoices`).
 
 **Price snapshots.** When you add a product line to an invoice (or any sales document), the system reads the current price from the price list and records it permanently on that line. If the price list is updated tomorrow, the historical invoice is unaffected — it retains the price that applied at sale time. This is called a "price snapshot" and is mandatory for any document that is legally an audit record.
 
-An invoice is an offer sent to a customer. When accepted it becomes a Sales Order automatically.
-
 ### 4.1 Create a direct (walk-in) invoice
 
 1. Navigate to **Sales › Invoices** (`/admin/sales-invoices`).
 2. Click **New Invoice**.
-3. Pick the **Customer** by name. Optionally pick an **Agent** and a **Route**; if omitted the system uses the logged-in user's linked agent and that agent's primary route.
-4. Click **Save**. A draft invoice is created.
+3. Pick the **Customer** by name.
+4. Choose the **Currency** from the Currency Picker (see *Common UI Patterns* in chapter 00 — enabled currencies only, defaulting to the company default).
+5. Optionally pick an **Agent** and a **Route**; if omitted the system uses the logged-in user's linked agent and that agent's primary route.
+6. Click **Create Invoice**. A draft invoice is created.
 
 ### 4.2 Add lines to an invoice
 
@@ -250,10 +267,10 @@ Same process as adding lines to a quotation or order. Lines can only be added, e
 
 Payments can be recorded on a draft invoice before it is finalised.
 
-1. In the **Payments** panel, click **Add Payment**.
-2. Choose the **Tender Type**: Cash or Mobile Money.
-3. Enter the **Amount**. For Mobile Money, enter the transaction reference.
-4. Click **Add**.
+1. In the **Record Payment** panel (shown on a DRAFT invoice).
+2. Choose the **Tender type**: Cash or Mobile Money.
+3. Enter the **Amount**, and optionally a **Reference** (for example, the M-Pesa transaction reference for Mobile Money).
+4. Click **Record**.
 
 Recording payments requires the `SALES.INVOICE.SETTLE` permission (separate from the permission to create lines).
 
@@ -272,7 +289,7 @@ After finalisation:
 
 **Paid-in-full rule:** walk-in (cash) customers must be fully paid before finalisation is allowed.
 
-**Credit limit:** if a credit customer's outstanding balance plus this invoice would exceed their credit limit, finalisation is blocked unless you hold the `SALES.CREDIT.OVERRIDE` permission.
+**Credit limit:** if a credit customer's outstanding balance plus this invoice would exceed their credit limit, finalisation is blocked unless you hold the `SALES.CREDIT.OVERRIDE` permission. (This is a credit-limit check at finalisation. For SO-sourced sales, the broader credit-control hard block — covering credit status, manual hold, and the limit — already runs earlier, at Sales Order confirm; see section 2.3.)
 
 ### 4.5 Void an invoice
 
@@ -280,8 +297,8 @@ After finalisation:
 
 A finalised invoice can be voided if it was issued in error:
 
-1. Open the finalised invoice (navigate to **Sales › Invoices**, click the row, or go to `/admin/sales-invoices/uid/{uid}`).
-2. Click **Void**, enter a mandatory reason, and confirm.
+1. Open the finalised invoice (navigate to **Sales › Invoices**, open it from its row action, or go to `/admin/sales-invoices/uid/{uid}`).
+2. Click **Void Invoice**, enter a mandatory reason, and confirm.
 3. The invoice status changes to **VOID** and a reversing credit note is posted.
 
 The original invoice number is retained on the voided record. Voiding is not the same as deletion.
@@ -300,15 +317,15 @@ The original invoice number is retained on the voided record. Voiding is not the
 
 Continuing from section 1's example, Sales Order **SO-0112** was created from the accepted quotation. The warehouse confirms goods are ready.
 
-1. **Confirm SO:** Ali opens **Sales › Sales Orders** (`/admin/sales-orders`), clicks SO-0112, and clicks **Confirm**. Status becomes CONFIRMED; stock reserved — 50 cartons Unga + 30 cartons Mafuta.
+1. **Confirm SO:** Ali opens **Sales › Sales Orders** (`/admin/sales-orders`), clicks the **Open** action on the SO-0112 row, clicks **Confirm Order**, and clicks **Yes, Confirm** in the dialog. Karibu is within its credit limit and not on hold, so the credit-control check passes. Status becomes CONFIRMED; stock reserved — 50 cartons Unga + 30 cartons Mafuta.
 
-2. **Deliver:** Ali navigates to **Sales › Deliveries** (`/admin/deliveries`), clicks **New Delivery**, picks **SO-0112**. He delivers the full quantity (50 + 30 cartons) on 2026-06-15 and submits. Delivery **DELIVERY-0089** is created; SO status → FULFILLED.
+2. **Deliver:** From the confirmed **SO-0112** detail page, Ali clicks **Create Delivery**. The delivery form opens with both lines pre-filled at their full open quantity. He keeps both lines included (50 + 30 cartons), sets Delivery Date 2026-06-15, and clicks **Create Delivery**. Delivery **DELIVERY-0089** is created; SO status → FULFILLED.
 
-3. **Invoice from delivery:** Ali opens DELIVERY-0089 at `/admin/deliveries/uid/{uid}` and clicks **Create Invoice from Delivery**. A DRAFT invoice is created. Since Karibu is a CREDIT_ACCOUNT customer, Ali clicks **Finalise** without adding a payment — the unpaid balance of TZS 1,535,400 (plus 18% VAT = TZS 1,811,772 gross) becomes an open AR item. Invoice number **INV-0203** is assigned.
+3. **Invoice from delivery:** Ali opens DELIVERY-0089 at `/admin/deliveries/uid/{uid}` and clicks **Invoice this Delivery**. A DRAFT invoice is created. Since Karibu is a CREDIT_ACCOUNT customer, Ali clicks **Finalise** without adding a payment — the unpaid balance of TZS 1,535,400 (plus 18% VAT = TZS 1,811,772 gross) becomes an open AR item. Invoice number **INV-0203** is assigned.
 
 **Example — Walk-in direct invoice (cash customer):**
 
-Cashier Fatuma opens **Sales › Invoices** (`/admin/sales-invoices`) and clicks **New Invoice**. She picks customer **Amina Hassan (walk-in)**. She adds one line: **Sukari 1kg**, Unit **KG**, Qty **5**, price TZS 2,200/kg = TZS 11,000 net; VAT 18% = TZS 1,980; gross = TZS 12,980. In the Payments panel she adds **Cash, Amount TZS 12,980**. She clicks **Finalise** — status becomes FINALISED, invoice number **INV-0204** is assigned, stock is issued, and the cash is recorded.
+Cashier Fatuma opens **Sales › Invoices** (`/admin/sales-invoices`) and clicks **New Invoice**. She picks customer **Amina Hassan (walk-in)**. She adds one line: **Sukari 1kg**, Unit **KG**, Qty **5**, price TZS 2,200/kg = TZS 11,000 net; VAT 18% = TZS 1,980; gross = TZS 12,980. In the **Record Payment** panel she sets Tender type **Cash**, Amount **TZS 12,980**, and clicks **Record**. She clicks **Finalise** — status becomes FINALISED, invoice number **INV-0204** is assigned, stock is issued, and the cash is recorded.
 
 ---
 
@@ -328,11 +345,15 @@ Navigate to **Sales › Sales Returns** (`/admin/sales-returns`).
 
 ### 5.1 Create a return
 
-1. Navigate to **Sales › Sales Returns** (`/admin/sales-returns`) and click **New Return**, or go directly to `/admin/sales-returns/create`.
-2. Pick the **Delivery** by its delivery number.
-3. The form shows the delivered lines. Enter the **Quantity Returned** for each line being returned (cannot exceed the quantity delivered minus what has already been returned).
-4. Set the **Return Date** and enter a **Reason**.
-5. Click **Submit**.
+The **Sales Returns** list (`/admin/sales-returns`) is view-only — it has no "New Return" button (its subtitle reads *"Create a return from the Delivery detail screen."*). There are two ways to reach the create form:
+
+- Open the relevant CONFIRMED delivery and click **Create Return** (the delivery is pre-loaded), or
+- Go directly to `/admin/sales-returns/create` and select the **Delivery** from the picker, then click **Load** to pull in its lines.
+
+1. With the delivery loaded, the form shows the delivered lines with **Delivered**, **Already Returned**, and **Returnable** columns.
+2. Enter the **Return Qty** for each line being returned (cannot exceed the **Returnable** balance — delivered minus what has already been returned).
+3. Set the **Return Date** and optionally enter a **Reason**.
+4. Click **Confirm Return**.
 
 Returns are created directly in **CONFIRMED** status. Stock is returned to the branch. A credit note is raised automatically (pro-rated to the returned quantity).
 
@@ -344,7 +365,7 @@ Each return reduces the returnable balance for that delivery line. You can proce
 
 **Example — Partial sales return (Karibu Supermarkets):**
 
-Two days after delivery, Karibu reports 5 cartons of Mafuta ya Kupikia arrived leaking. The stock controller opens **Sales › Sales Returns** (`/admin/sales-returns`), clicks **New Return**, and picks delivery **DELIVERY-0089**. She enters **Qty Returned = 5** on the Mafuta line, sets return date **2026-06-17**, reason **"Damaged packaging — leaking oil"**, and submits. Return **RET-0031** is created in CONFIRMED status. Five cartons of Mafuta stock are returned to the warehouse and a credit note for TZS 104,500 (5 × TZS 20,900) plus VAT is automatically raised against INV-0203.
+Two days after delivery, Karibu reports 5 cartons of Mafuta ya Kupikia arrived leaking. The stock controller opens delivery **DELIVERY-0089** and clicks **Create Return** (which pre-loads that delivery). She enters **Return Qty = 5** on the Mafuta line, sets return date **2026-06-17**, reason **"Damaged packaging — leaking oil"**, and clicks **Confirm Return**. Return **RET-0031** is created in CONFIRMED status. Five cartons of Mafuta stock are returned to the warehouse and a credit note for TZS 104,500 (5 × TZS 20,900) plus VAT is automatically raised against INV-0203.
 
 ---
 
@@ -365,10 +386,10 @@ Navigate to **Sales › Blanket Orders** (`/admin/blanket-orders`).
 1. Navigate to **Sales › Blanket Orders** (`/admin/blanket-orders`) and click **New Blanket Order**, or go directly to `/admin/blanket-orders/create`.
 2. Select the **Company** and **Branch**.
 3. Pick the **Customer** by name.
-4. Set **Currency**, **Valid From**, and **Valid To** dates.
+4. Choose the **Currency** from the Currency Picker (see *Common UI Patterns* in chapter 00 — enabled currencies only, defaulting to the company default), then set **Valid From** and **Valid To** dates.
 5. Add one or more **Lines**: for each, pick the product by name, choose a unit, and enter the committed quantity and unit price.
 6. Optionally add notes (up to 500 characters).
-7. Click **Save**.
+7. Click **Create Blanket Order**.
 
 The blanket order is created with status **ACTIVE** and assigned an order number.
 
@@ -421,11 +442,11 @@ Navigate to **Sales › Standing Orders** (`/admin/standing-orders`).
 ### 7.1 Create a standing order
 
 1. Navigate to **Sales › Standing Orders** (`/admin/standing-orders`) and click **New Standing Order**, or go directly to `/admin/standing-orders/create`.
-2. Pick the **Branch**, **Customer**, and set **Currency**.
+2. Pick the **Branch** and **Customer**, then choose the **Currency** from the Currency Picker (see *Common UI Patterns* in chapter 00 — enabled currencies only, defaulting to the company default).
 3. Choose a **Frequency**: Daily, Weekly, Bi-Weekly, or Monthly.
 4. Set a **Start Date**. Optionally set an **End Date**; leave it blank for open-ended.
 5. Add lines: pick each product and unit by name, enter quantity and unit price.
-6. Click **Save**.
+6. Click **Create Standing Order**.
 
 The standing order is created with status **ACTIVE** and the first `Next Run Date` is set.
 
@@ -491,10 +512,10 @@ A price tier gives a lower unit price when a customer orders at least a minimum 
 **To create a tier:**
 
 1. Open **Sales › Pricing Rules** (`/admin/pricing-rules`) and go to the **Price Tiers** tab.
-2. Click **New Tier**.
+2. Click **Add Price Tier**.
 3. Pick the **Product** and **Price List** by name.
-4. Enter **Min Quantity**, **Unit Price**, and **Currency**.
-5. Click **Save**.
+4. Enter **Min Quantity** and **Unit Price**, and choose the **Currency** from the Currency Picker (see *Common UI Patterns* in chapter 00 — enabled currencies only, defaulting to the company default).
+5. Click **Save Tier**.
 
 The tier status is **ACTIVE**. To deactivate a tier, click the **Deactivate** button on the row; the tier is soft-deactivated and no longer applied to new transactions.
 
@@ -511,11 +532,11 @@ A customer price sets a fixed unit price for a specific product for a specific c
 **To create a customer price:**
 
 1. Open **Sales › Pricing Rules** (`/admin/pricing-rules`) and go to the **Customer Prices** tab.
-2. Click **New Customer Price**.
+2. Click **Add Customer Price**.
 3. Pick the **Customer** and **Product** by name.
-4. Enter the **Unit Price** and **Currency**.
+4. Enter the **Unit Price** and choose the **Currency** from the Currency Picker (see *Common UI Patterns* in chapter 00 — enabled currencies only, defaulting to the company default).
 5. Optionally set **Effective From** and **Effective To** dates for a time-limited contract.
-6. Click **Save**.
+6. Click **Save Price**.
 
 Only one customer price record can exist per customer-and-product pair. Deactivate the existing record before creating a new one is not possible (the unique constraint is status-agnostic); raise a support request to change an existing contract price.
 
@@ -533,7 +554,7 @@ When a sale line is priced the system applies the first matching rule in this pr
 
 **Example — Volume tier for cement:**
 
-The sales manager opens **Sales › Pricing Rules** (`/admin/pricing-rules`), goes to **Price Tiers**, and clicks **New Tier**. He picks product **Saruji 50kg**, Price List **Wholesale TZS**, Min Quantity **100**, Unit Price **TZS 14,500**, Currency **TZS**. Any order for 100+ bags on the Wholesale price list will now use TZS 14,500 instead of the standard TZS 15,200.
+The sales manager opens **Sales › Pricing Rules** (`/admin/pricing-rules`), goes to **Price Tiers**, and clicks **Add Price Tier**. He picks product **Saruji 50kg**, Price List **Wholesale TZS**, Min Quantity **100**, Unit Price **TZS 14,500**, Currency **TZS**. Any order for 100+ bags on the Wholesale price list will now use TZS 14,500 instead of the standard TZS 15,200.
 
 **Example — Contract price for Karibu Supermarkets:**
 
@@ -553,7 +574,9 @@ Navigate to the **Point of Sale** group in the sidebar.
 
 **What a session is.** A session is the till's working period — typically one business day or one shift. Before a cashier can ring sales, they open a session by declaring the opening float (the cash placed in the drawer to make change). During the session every POS sale, refund, and payout is tracked against that session. At end of day the cashier or manager closes the session by counting the cash in the drawer, and then a manager reconciles the session to post any variance to the General Ledger.
 
-**What a POS sale is.** A POS sale is a cash counter transaction. It produces a finalised `DIRECT`-origin sales invoice: stock is issued from the branch and revenue is posted in the same step. The invoice number (`INV-####`) is assigned on the spot. No quotation, sales order, or delivery step is involved — POS is designed for speed at the counter.
+**What a POS sale is.** A POS sale is a cash counter transaction. It produces a finalised sales invoice with origin `POS` (it is stamped with the originating POS session), the cash payment is recorded automatically for the full amount, and revenue is posted on finalisation. The invoice number (`INV-####`) is assigned on the spot. No quotation, sales order, or delivery step is involved — POS is designed for speed at the counter.
+
+> **Note on stock.** Unlike a walk-in `DIRECT` invoice, a `POS`-origin invoice does **not** trigger the stock-issue step at finalisation under the current code — the stock-issue handler issues stock only for `DIRECT`-origin invoices. Treat POS stock movement as a known limitation pending confirmation; do not rely on a POS sale decrementing on-hand stock the way a direct walk-in invoice does.
 
 POS is used for face-to-face retail transactions. A **till** is a physical cash register position. Each till must be opened in a **session** before sales can be processed. The session is closed and reconciled at end of day.
 
@@ -592,17 +615,17 @@ A new session is created with status **OPEN**. Only one session can be open on a
 
 ### 9.4 Ring a sale
 
-**What "ringing a sale" means.** This is the cashier's checkout step: entering the products and quantities the customer is buying, taking the cash the customer hands over, and completing the transaction. The system calculates the total, computes the change due, and — on completion — finalises the sales invoice, issues the stock, posts the revenue, and issues the receipt.
+**What "ringing a sale" means.** This is the cashier's checkout step: entering the products and quantities the customer is buying, taking the cash the customer hands over, and completing the transaction. The system calculates the total, computes the change due, and — on completion — records the cash payment, finalises the sales invoice, posts the revenue, and issues the receipt. (See the stock note above: a `POS`-origin invoice does not currently run the stock-issue step that a `DIRECT` walk-in invoice does.)
 
 **What the tendered amount is.** The tendered amount is the cash the customer physically hands to the cashier — often a round number larger than the total. If the total is TZS 13,000 and the customer hands over TZS 20,000, the tendered amount is TZS 20,000 and the change is TZS 7,000. The system calculates the change and the cashier returns it. A sale cannot be submitted if the tendered amount is less than the total.
 
 1. Navigate to **Point of Sale › Point of Sale** (`/admin/pos/sell`) — this is the checkout screen.
 2. If your organisation has more than one company, select the correct company.
-3. Pick the **Session** — only OPEN sessions are listed.
-4. Pick the **Customer** by name.
-5. Pick the **Agent** by name (required — leaving Agent blank will cause the sale to be rejected).
-6. Set the **Currency**.
-7. Click **Add Line**. Pick the **Product** by name; confirm or adjust the **Unit**, enter **Quantity** and **Unit Price**, and optionally a line **Discount**.
+3. Pick the **Session** — only OPEN sessions are listed. Each option is labelled *"Session &lt;…&gt; (Till &lt;till id&gt;)"* (a short fragment of the session's UID plus its till id), not the `POS-####` session number.
+4. Pick the **Customer** (type in the search box above the picker to filter the list, then select).
+5. Pick the **Agent** (search then select) — required; leaving Agent blank will cause the sale to be rejected.
+6. Choose the **Currency** from the Currency Picker (see *Common UI Patterns* in chapter 00 — enabled currencies only, defaulting to the company default).
+7. Click **Add Line**. Pick the **Product**; confirm or adjust the **Unit**, enter **Quantity** and **Unit Price**, and optionally a line **Discount** (entered as an amount).
 8. Add further lines as needed. The **Total** updates in the footer.
 9. Enter the **Tendered Amount** (the cash handed over by the customer). The **Change** is calculated immediately. The sale cannot be submitted if the tendered amount is less than the total.
 10. Click **Complete Sale**.
@@ -612,6 +635,7 @@ A success receipt is displayed showing the invoice number and total. Click **Vie
 **Notes:**
 - POS sales are always settled in cash. There is no tender-type selector; payment is recorded as Cash automatically.
 - The agent field is mandatory on the backend; leaving it blank will cause the sale to be rejected.
+- If the chosen session has been closed in the meantime, the sale is rejected with a message of the form *"POS session &lt;session-uid&gt; is not OPEN."* (the message quotes the session's internal UID, not its `POS-####` number) so you know to re-open or re-select an OPEN session.
 
 ### 9.5 Record a payout
 
@@ -656,7 +680,7 @@ Closing records the physical cash count.
 2. Click **Close Session**.
 3. Enter the **Counted Cash** — the amount physically in the drawer.
 4. Optionally add closing notes.
-5. Click **Close**.
+5. Click **Close Session**.
 
 The session status changes to **CLOSED** and a **variance** is computed:
 
@@ -726,11 +750,11 @@ Transitions are one-way: OPEN → CLOSED → RECONCILED. A session cannot be re-
 
 **Example — Walk-in cash sale (full POS day):**
 
-Cashier Jane starts her shift at Duka Moja. She navigates to **Point of Sale › POS Sessions** (`/admin/pos/sessions`) and clicks **Open Session**. She picks till **Counter 1** (Branch: Dar es Salaam Main) and enters Opening Float **TZS 100,000**. Session **SES-0041** opens with status OPEN.
+Cashier Jane starts her shift at Duka Moja. She navigates to **Point of Sale › POS Sessions** (`/admin/pos/sessions`) and clicks **Open Session**. She picks till **Counter 1** (Branch: Dar es Salaam Main) and enters Opening Float **TZS 100,000**. Session **POS-0041** opens with status OPEN.
 
 During the morning Jane processes three customers at **Point of Sale › Point of Sale** (`/admin/pos/sell`):
 
-1. She picks session **SES-0041**, customer **Mteja wa Kawaida**, agent **Omar Salim**, currency TZS. She adds: **Sukari 1kg** × 2 @ TZS 2,500 = TZS 5,000; **Mafuta ya Kupikia 1L** × 1 @ TZS 8,000 = TZS 8,000. Total TZS 13,000. Customer hands over TZS 20,000 — Change shown as TZS 7,000. Jane clicks **Complete Sale** — Invoice **INV-0211** issued.
+1. She picks her open session from the Session picker (shown as *"Session … (Till …)"* — the picker does not display the `POS-0041` number), customer **Mteja wa Kawaida**, agent **Omar Salim**, currency TZS. She adds: **Sukari 1kg** × 2 @ TZS 2,500 = TZS 5,000; **Mafuta ya Kupikia 1L** × 1 @ TZS 8,000 = TZS 8,000. Total TZS 13,000. Customer hands over TZS 20,000 — Change shown as TZS 7,000. Jane clicks **Complete Sale** — Invoice **INV-0211** issued.
 
 2. Second sale: **Unga wa Ngano 2kg** × 3 @ TZS 3,200 = TZS 9,600. Tendered TZS 10,000, change TZS 400. Invoice INV-0212 issued.
 

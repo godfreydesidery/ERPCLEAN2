@@ -3,7 +3,7 @@
 The CRM module helps your sales team track every potential customer from first contact through to a closed sale. It is organised around three concepts:
 
 - **Leads** — an initial expression of interest, before you know whether the person will become a customer.
-- **Opportunities** — a qualified, qualified sales chance with an estimated value and a pipeline stage.
+- **Opportunities** — a qualified sales chance with an estimated value and a pipeline stage.
 - **Activities** — any interaction logged against a lead or opportunity (calls, emails, meetings, notes, and tasks).
 
 The CRM section also provides a **Pipeline Dashboard** showing deal value across stages, a **Forecast** for a chosen date range, and **Pipeline Stages** settings where an administrator can customise the stage list.
@@ -56,24 +56,22 @@ Once a lead reaches **Converted** or **Disqualified** it is locked: you cannot e
 
 1. Navigate to **CRM › Leads** (`/admin/crm/leads`).
 2. Click **New Lead**. An inline form appears.
-3. Enter the **Display Name** (required).
-4. Select the **Lead Source** from the dropdown (Website, Referral, Walk-in, Campaign, Cold Call, Existing Customer, or Other).
-5. Optionally enter Company Name, Contact, Phone, Email, and Notes.
-6. Click **Submit**.
+3. Enter the **Name** (required).
+4. Select the **Source** from the dropdown (Website, Referral, Walk-in, Campaign, Cold Call, Existing Customer, or Other).
+5. Optionally enter **Company / Org**, **Contact Person**, **Phone**, **Email**, and **Notes**.
+6. Click **Create Lead**.
 
 The system assigns a **Lead Number** (for example, `LEAD-0001`) and sets the status to **New**. The lead is stamped with your active branch.
 
 ### How to mark a lead as contacted
 
 1. Open the lead from the list (`/admin/crm/leads/uid/:uid`).
-2. Click **Mark as Contacted** (only available when status is New).
+2. Click **Mark Contacted** (only available when status is New).
 3. The status changes to **Contacted**.
 
 ### How to qualify a lead
 
 **Qualification** is the process of confirming that a lead represents a real sales opportunity. This step links the lead to a customer record — either an existing customer already in the system, or a newly created one — and moves the lead to **Qualified** status. You need the `CRM.LEAD.QUALIFY` permission.
-
-Qualifying a lead links it to a customer record and moves it to **Qualified** status. You need the `CRM.LEAD.QUALIFY` permission.
 
 1. Open a New or Contacted lead (`/admin/crm/leads/uid/:uid`).
 2. Click **Qualify**.
@@ -82,15 +80,25 @@ Qualifying a lead links it to a customer record and moves it to **Qualified** st
 **Link an existing customer:**
 - Select **Link existing customer**.
 - Choose the customer by name from the picker. The customer must belong to the same company as the lead.
-- Click **Submit**.
+- Click **Qualify Lead**.
 
 **Create a new customer from this lead:**
 - Select **Create new customer**.
-- Enter the new customer's **Name** (required) and select **Customer Kind** (Cash / Walk-in or Credit Account).
+- Enter the new customer's **Customer Name** (required) and select **Kind** (Credit Account or Cash Walk-in).
 - Optionally enter Phone, Email, and Address.
-- Click **Submit**. A new customer record is created automatically and the lead is linked to it.
+- Click **Qualify Lead**. A new customer record is created automatically and the lead is linked to it.
 
 After qualifying, the status badge changes to **Qualified** and the linked customer name is shown on the detail page.
+
+### How to convert a qualified lead to an opportunity
+
+Once a lead is **Qualified**, a green **Convert to Opportunity** button appears in the action row on the lead detail page. This button is shown only while the lead is Qualified.
+
+1. Open the qualified lead (`/admin/crm/leads/uid/:uid`).
+2. Click **Convert to Opportunity**.
+3. The opportunity create form opens with the **Source Lead** and **Customer** already pre-filled from this lead. Complete the remaining fields (Title, Pipeline Stage, Currency, and so on) as described under **How to create an opportunity**, then click **Create Opportunity**.
+
+Creating the opportunity with this lead as its source moves the lead to **Converted** status.
 
 ### How to disqualify a lead
 
@@ -99,17 +107,19 @@ After qualifying, the status badge changes to **Qualified** and the linked custo
 1. Open any non-terminal lead (New, Contacted, or Qualified) at `/admin/crm/leads/uid/:uid`.
 2. Click **Disqualify**.
 3. Enter a **Reason** (required — for example, "Budget too low" or "Not the right fit").
-4. Click **Submit**.
+4. Click **Confirm Disqualify**.
 
 The status changes to **Disqualified**. The reason is stored and displayed on the detail page.
 
 ### Editing a lead
 
-Open the lead detail page and change any editable fields (display name, source, contact details, notes). Click **Save**. Editing is not available once the lead is Converted or Disqualified.
+Open the lead detail page and change any editable fields (Name, Source, Company / Org, Contact Person, Phone, Email, Notes) in the **Lead Details** card. Click **Save Changes**. Editing is not available once the lead is Converted or Disqualified — terminal leads show a read-only view instead.
 
-### Searching leads
+### Browsing the leads list
 
-On the Leads list, the search box filters by name. Pagination controls appear when the list exceeds 20 rows. Use the NEXT / PREVIOUS / page-number / FIRST / LAST controls to move between pages.
+The Leads list has a company selector, a **New Lead** button, and the table of leads. There is no name-search box on this screen. Each row ends with an **Open** button (eye icon) that navigates to the lead detail page; there is no row-click. Pagination controls appear when the list exceeds 20 rows; use the First / Previous / page-number / Next / Last controls to move between pages.
+
+**A note on how Source is displayed.** When you create or edit a lead you pick the Source from a dropdown with friendly labels (Referral, Walk-in, Cold Call, and so on). In the leads list and on the lead detail page, however, the Source is shown as the stored code — for example `REFERRAL`, `WALK_IN`, or `COLD_CALL` — rather than the friendly label.
 
 ---
 
@@ -118,12 +128,12 @@ On the Leads list, the search box filters by name. Pagination controls appear wh
 Sales executive Amina Msangi at Kijenge branch receives a phone call from Juma Banda, who was referred by an existing client and wants to discuss buying office furniture in bulk.
 
 1. Navigate to **CRM › Leads** (`/admin/crm/leads`). Click **New Lead**.
-2. Display Name: `Juma Banda`; Lead Source: `Referral`; Phone: `+255754001122`; Notes: `Referred by Baraka Supplies — bulk office furniture interest`.
-3. Click **Submit**. System creates `LEAD-0005`, status **New**.
-4. Next day, Amina calls Juma. She opens `LEAD-0005` and clicks **Mark as Contacted**. Status becomes **Contacted**.
-5. After the call confirms he runs a legitimate business, Amina clicks **Qualify**. She selects **Create new customer**, enters Name: `Banda Office Solutions`, Customer Kind: `Credit Account`, Phone: `+255754001122`. Clicks **Submit**.
+2. Name: `Juma Banda`; Source: `Referral`; Phone: `+255754001122`; Notes: `Referred by Baraka Supplies — bulk office furniture interest`.
+3. Click **Create Lead**. System creates `LEAD-0005`, status **New**.
+4. Next day, Amina calls Juma. She opens `LEAD-0005` and clicks **Mark Contacted**. Status becomes **Contacted**.
+5. After the call confirms he runs a legitimate business, Amina clicks **Qualify**. She selects **Create new customer**, enters Customer Name: `Banda Office Solutions`, Kind: `Credit Account`, Phone: `+255754001122`. Clicks **Qualify Lead**.
 6. A new customer record "Banda Office Solutions" is created. Lead status flips to **Qualified**. The linked customer name appears on the detail page.
-7. Amina can now create an opportunity from this lead (see Opportunities section).
+7. Amina now clicks **Convert to Opportunity** on the qualified lead to start a pre-filled opportunity (see Opportunities section).
 
 ---
 
@@ -139,7 +149,7 @@ An **opportunity** is a specific, identifiable sales deal being pursued with a k
 
 **When an opportunity is created.** A sales representative or manager creates an opportunity when a qualified lead turns into a real, pursuable deal, or directly against a known customer when a sales initiative begins. The opportunity must always be attached to a customer record (not a raw lead contact).
 
-**How an opportunity works — lifecycle.** An opportunity starts **Open** and has two possible terminal outcomes: **Won** (the deal was closed in your favour) or **Lost** (the deal did not proceed). While Open, the opportunity moves through **pipeline stages** — configurable steps such as Qualification, Needs Analysis, Proposal, and Negotiation — each with a default win probability percentage. The stage drives the weighted pipeline forecast. Once Won, the opportunity can be **converted** to a quotation or sales order in the order-to-cash module.
+**How an opportunity works — lifecycle.** An opportunity starts **Open** and has two possible terminal outcomes: **Won** (the deal was closed in your favour) or **Lost** (the deal did not proceed). While Open, the opportunity moves through **pipeline stages** — configurable steps; the default seeded stages are `QUALIFICATION`, `NEEDS_ANALYSIS`, `PROPOSAL`, `NEGOTIATION`, and `CLOSING` — each with a default win probability percentage. The stage drives the weighted pipeline forecast. Once Won, the opportunity can be **converted** to a quotation or sales order in the order-to-cash module.
 
 ### Opportunity status lifecycle
 
@@ -155,12 +165,12 @@ Once an opportunity is Won or Lost it is closed. Closed opportunities cannot be 
 1. Navigate to **CRM › Opportunities** (`/admin/crm/opportunities`).
 2. Click **New Opportunity** (or navigate to **CRM › Opportunities › Create** at `/admin/crm/opportunities/create`).
 3. Select the **Customer** using the picker. Type part of the customer name to search; select from the results.
-4. Select the **Pipeline Stage** from the dropdown. Only active stages are offered. The stage's default win probability is applied automatically unless you override it.
+4. Select the **Pipeline Stage** from the dropdown. Only active stages are offered, each listed by its stored name (for a default-seeded company these read `QUALIFICATION`, `NEEDS_ANALYSIS`, and so on). The stage's default win probability is applied automatically unless you override it.
 5. Enter the **Title** (required).
-6. Select the **Currency** (defaults to TZS).
-7. Optionally enter an **Estimated Value**, **Expected Close Date**, and **Win Probability** override.
-8. Optionally select a **Source Lead** using the picker — only Qualified leads appear in this list. Selecting a source lead converts that lead to **Converted** status.
-9. Click **Submit**.
+6. Pick the **Currency** from the Currency Picker. It offers only the currencies enabled for the company and pre-selects the company's default currency — see the **Common UI Patterns** section in *Getting Started* (ch00). The picker is disabled until a company is selected.
+7. Optionally enter an **Est. Value**, a **Win % (0–100)** override (blank uses the stage default), and an **Expected Close Date**.
+8. Optionally select a **Source Lead** using the picker — only Qualified leads appear in this list. Selecting a source lead converts that lead to **Converted** status. (When you reach this form via the **Convert to Opportunity** button on a qualified lead, the Source Lead and Customer are already pre-filled for you.)
+9. Click **Create Opportunity**.
 
 The opportunity is created with status **Open** and an automatically assigned number (for example, `OPP-0001`). You land on the opportunity detail page (`/admin/crm/opportunities/uid/:uid`).
 
@@ -171,41 +181,41 @@ The opportunity is created with status **Open** and an automatically assigned nu
 Lines represent the products or services you expect to sell. You can add them while the opportunity is Open.
 
 1. Open the opportunity detail page.
-2. In the **Lines** section, type a product name into the search box and select the product (shown as `code — name`).
+2. In the **Opportunity Lines** panel, type a product name or code into the **Product** search box and select the product (shown as `code — name`).
 3. Select the **Unit** from the units dropdown.
-4. Enter the **Quantity** (must be greater than zero).
+4. Enter the **Qty** (must be greater than zero).
 5. Optionally enter the **Unit Price** and a **Discount %** (0–100).
 6. Click **Add**.
 
-To remove a line, click **Remove** on the row.
+To remove a line, click the trash (Remove) icon on the row.
 
 ### How to advance the pipeline stage
 
-**Advancing the stage** moves the opportunity forward in the sales funnel. Each stage represents a milestone in the sales process — for example, moving from "Needs Analysis" to "Proposal" means you have finished diagnosing the customer's requirements and are now ready to present a formal proposal. The stage's default win probability is suggested automatically; you can override it to reflect the specific circumstances of this deal.
+**Advancing the stage** moves the opportunity forward in the sales funnel. Each stage represents a milestone in the sales process — for example, moving from `NEEDS_ANALYSIS` to `PROPOSAL` means you have finished diagnosing the customer's requirements and are now ready to present a formal proposal. (Stages appear under their stored names; a default-seeded company shows the code-style names shown here.) The stage's default win probability is suggested automatically; you can override it to reflect the specific circumstances of this deal.
 
 1. Open the opportunity detail page (must be Open).
 2. Click **Advance Stage**.
 3. Select the **Target Stage** from the active-stages dropdown.
-4. Optionally set a **Win Probability** to override the stage default.
-5. Click **Submit**.
+4. Optionally set a **Win % override** to override the stage default.
+5. Click **Advance Stage**.
 
 The stage and win probability update immediately.
 
 ### How to mark an opportunity as Won
 
 1. Open the opportunity detail page (must be Open).
-2. Click **Won**.
-3. Optionally set the **Won Date** (defaults to today).
-4. Click **Submit**.
+2. Click **Mark Won**.
+3. Optionally set **Won At** (defaults to now).
+4. Click **Confirm Won**.
 
 Status changes to **Won**. Edit, add-line, advance-stage, win, and lose actions are no longer available. The Convert action remains available.
 
 ### How to mark an opportunity as Lost
 
 1. Open an Open opportunity.
-2. Click **Lose**.
+2. Click **Mark Lost**.
 3. Enter a **Loss Reason** (required — for example, "Lost to competitor on price").
-4. Click **Submit**.
+4. Click **Confirm Lost**.
 
 Status changes to **Lost**.
 
@@ -226,17 +236,17 @@ Conversion creates a Sales document (Quotation or Sales Order) pre-populated wit
 **Steps:**
 1. Open the opportunity detail page.
 2. Click **Convert**.
-3. Select the **Target** (Quotation or Sales Order).
-4. For a Quotation, optionally set a **Valid Until** date (defaults to today + 30 days).
+3. In **Convert To**, choose **Quotation** or **Sales Order (requires WON)**.
+4. For a Quotation, optionally set a **Valid Until (optional)** date. The field is blank by default; if you leave it blank, the resulting quotation is given a validity of today + 30 days by the server (this default is not pre-filled in the form).
 5. Click **Convert**.
 
-The system creates the document and shows a link to it (referenced by the document number, not a uid). Clicking the link navigates to the new Quotation or Sales Order.
+On success the form shows a confirmation with the created document's kind and number, plus a **View Document** button that opens the new Quotation or Sales Order. (Once converted, an info banner on the detail page also links to the document.)
 
 Conversion is idempotent: if you click Convert a second time, the system returns the document that was already created rather than making a duplicate.
 
 ### Editing an opportunity
 
-Open the detail page (must be Open). Change title, estimated value, expected close date, win probability, or stage. Click **Save**. Editing is blocked once the opportunity is Won or Lost.
+Open the detail page (must be Open). In the **Opportunity Details** card you can change the Title, Est. Value, Win % (0–100), Expected Close Date, and Notes; click **Save Changes**. (The pipeline stage is not changed here — use **Advance Stage** for that.) Editing is blocked once the opportunity is Won or Lost, where the detail page shows a read-only summary instead.
 
 ---
 
@@ -245,15 +255,15 @@ Open the detail page (must be Open). Change title, estimated value, expected clo
 Sales manager Benson Kileo at Dar es Salaam branch handles a qualified lead for Banda Office Solutions (created in the lead example above).
 
 1. Navigate to **CRM › Opportunities › Create** (`/admin/crm/opportunities/create`).
-2. Customer: `Banda Office Solutions`; Pipeline Stage: `Qualification`; Title: `Bulk Office Furniture — Q3 2026`; Currency: `TZS`; Estimated Value: `4,500,000`; Expected Close Date: `2026-09-30`; Source Lead: `LEAD-0005 — Juma Banda` (auto-converts that lead to Converted).
-3. Click **Submit**. Opportunity `OPP-0012` created, status **Open**.
+2. Customer: `Banda Office Solutions`; Pipeline Stage: `QUALIFICATION` (this company still uses the default seeded stages, so the dropdown lists the stored code names); Title: `Bulk Office Furniture — Q3 2026`; Currency: picked from the company's enabled currencies (here the company default, `TZS`); Estimated Value: `4,500,000`; Expected Close Date: `2026-09-30`; Source Lead: `LEAD-0005 — Juma Banda` (auto-converts that lead to Converted).
+3. Click **Create Opportunity**. Opportunity `OPP-0012` created, status **Open**.
 4. Add lines to `OPP-0012`:
    - Executive Desk EXD-01, Unit: EA, Qty: 5, Unit Price: 480,000 = TZS 2,400,000.
    - Ergonomic Chair CHR-02, Unit: EA, Qty: 20, Unit Price: 105,000 = TZS 2,100,000.
-5. After a needs-analysis call, Benson clicks **Advance Stage**, selects `Needs Analysis` (default probability 25%). Clicks **Submit**.
-6. After sending a detailed proposal, Benson advances to `Proposal` (50%). After negotiation the stage moves to `Negotiation` (75%).
-7. Juma accepts the quote. Benson opens the opportunity, clicks **Won**, sets Won Date: `2026-08-15`. Status becomes **Won**.
-8. Click **Convert**, Target: `Sales Order`. System creates `SO-0034` with all lines pre-filled. Benson clicks the link to open the new Sales Order and proceeds with delivery.
+5. After a needs-analysis call, Benson clicks **Advance Stage**, selects Target Stage `NEEDS_ANALYSIS` (default probability 25%). Clicks **Advance Stage** to confirm.
+6. After sending a detailed proposal, Benson advances to `PROPOSAL` (50%). After negotiation the stage moves to `NEGOTIATION` (75%).
+7. Juma accepts the quote. Benson opens the opportunity, clicks **Mark Won**, sets Won At: `2026-08-15`, then clicks **Confirm Won**. Status becomes **Won**.
+8. Click **Convert**, Convert To: `Sales Order (requires WON)`. System creates `SO-0034` with all lines pre-filled. Benson clicks **View Document** to open the new Sales Order and proceeds with delivery.
 
 ---
 
@@ -269,39 +279,41 @@ The pipeline dashboard shows the current state of all open opportunities across 
 
 ### Board summary
 
-The board shows each active pipeline stage with the count of open opportunities in that stage and their combined estimated value.
+The **Pipeline Board** shows each active pipeline stage with the count of open opportunities in that stage, their combined **Total Value**, and the **Weighted Value** (value × win probability).
 
 ### Weighted forecast
 
 The **weighted forecast** is a more realistic estimate of expected revenue than a simple sum of all open deal values. It multiplies each open opportunity's estimated value by its win probability (expressed as a percentage) and sums the results. For example, an opportunity worth TZS 10,000,000 at a 50% probability stage contributes TZS 5,000,000 to the weighted forecast. This gives sales managers a probability-adjusted revenue estimate that accounts for the fact that not all open deals will close.
 
-The forecast section calculates expected revenue for a date range, weighting each opportunity's estimated value by its win probability. Set the **From** and **To** dates and click **Apply**.
+The Forecast section calculates expected revenue for a date range, weighting each opportunity's estimated value by its win probability. The panel shows two tiles: **Open Opportunities** (the count of open deals in the period) and **Weighted Value** (the probability-weighted total). Set the **From** and **To** dates at the top of the dashboard and click **Refresh**. (This single date range drives both the Forecast and the KPI panels.)
 
 ### Win-rate and cycle-time KPIs
 
-The KPI panel shows:
+The **Win-Rate KPIs** panel shows four tiles:
+- **Won** — the count of opportunities marked Won in the selected period.
+- **Lost** — the count of opportunities marked Lost in the selected period.
 - **Win Rate** — the percentage of closed opportunities marked Won in the selected period.
-- **Average Cycle Time** — the average number of days from opportunity creation to close.
+- **Avg Cycle (days)** — the average number of days from opportunity creation to close.
 
-**Win Rate** measures the sales team's effectiveness at closing deals. A low win rate may indicate that the team is pursuing too many unqualified leads, that the product-market fit is poor, or that competitors are winning on price. **Average Cycle Time** measures how long deals take to close — a rising cycle time may indicate bottlenecks in the proposal or approval process. Both KPIs are calculated for a user-selected date range so that trends over time can be observed.
+**Win Rate** measures the sales team's effectiveness at closing deals. A low win rate may indicate that the team is pursuing too many unqualified leads, that the product-market fit is poor, or that competitors are winning on price. **Avg Cycle (days)** measures how long deals take to close — a rising cycle time may indicate bottlenecks in the proposal or approval process. Both KPIs are calculated for the date range you set at the top of the dashboard so that trends over time can be observed.
 
-Set the date range and click **Apply** to recalculate.
+Adjust the date range and click **Refresh** to recalculate.
 
 ---
 
 **Example — Reading the pipeline board and setting a forecast:**
 
-Branch manager Zawadi Ngowi opens the **CRM › Pipeline Dashboard** (`/admin/crm/pipeline`), selects company `Kijenge Trading Ltd` and branch `DSM Main`. The board shows:
+Branch manager Zawadi Ngowi opens the **CRM › Pipeline Dashboard** (`/admin/crm/pipeline`), selects company `Kijenge Trading Ltd` and branch `DSM Main`. The board shows (this company still uses the default seeded stages, so the stage names appear in their stored code form):
 
-| Stage | Open deals | Combined value |
-|---|---|---|
-| Qualification | 3 | TZS 8,200,000 |
-| Needs Analysis | 5 | TZS 21,500,000 |
-| Proposal | 4 | TZS 18,750,000 |
-| Negotiation | 2 | TZS 9,600,000 |
-| Closing | 1 | TZS 4,500,000 |
+| Stage | Open Opps | Total Value | Weighted Value |
+|---|---|---|---|
+| QUALIFICATION | 3 | TZS 8,200,000 | TZS 820,000 |
+| NEEDS_ANALYSIS | 5 | TZS 21,500,000 | TZS 5,375,000 |
+| PROPOSAL | 4 | TZS 18,750,000 | TZS 9,375,000 |
+| NEGOTIATION | 2 | TZS 9,600,000 | TZS 7,200,000 |
+| CLOSING | 1 | TZS 4,500,000 | TZS 4,050,000 |
 
-Zawadi sets From: `2026-07-01`, To: `2026-09-30` and clicks **Apply** on the Forecast panel. The weighted forecast shows TZS 29,340,000 (each deal's estimated value × its win probability). The KPI panel shows Win Rate: 62% and Average Cycle Time: 34 days for deals closed in Q2 2026.
+Zawadi sets From: `2026-07-01`, To: `2026-09-30` and clicks **Refresh**. The Forecast panel shows Open Opportunities: 15 and a Weighted Value of TZS 29,340,000 (each deal's estimated value × its win probability). The Win-Rate KPIs panel shows four tiles — Won: 8, Lost: 5, Win Rate: 62%, and Avg Cycle (days): 34 — for deals closed in the selected period.
 
 ---
 
@@ -313,30 +325,30 @@ Navigate to **CRM › Pipeline Stages** (`/admin/crm/settings/pipeline-stages`).
 
 **Why stages are configurable.** Every business has a different sales process. A fixed, one-size-fits-all set of stages would force companies to map their real process onto arbitrary labels, making the pipeline board meaningless. Configurable stages mean the board reflects the actual milestones the sales team uses, making stage-based reporting and coaching practical.
 
-**The default stages.** When a company is first created, five stages are seeded automatically: Qualification (10% probability), Needs Analysis (25%), Proposal (50%), Negotiation (75%), and Closing (90%). These cover the most common B2B sales process and can be used immediately. They can be renamed, reordered, supplemented, or deactivated without affecting historical opportunity records.
+**The default stages.** When a company is first created, five stages are seeded automatically. They are stored — and therefore displayed everywhere in the UI — under code-style names: `QUALIFICATION` (10% probability), `NEEDS_ANALYSIS` (25%), `PROPOSAL` (50%), `NEGOTIATION` (75%), and `CLOSING` (90%). These cover the most common B2B sales process and can be used immediately. They can be renamed (for example to a friendlier "Needs Analysis"), reordered, supplemented, or deactivated without affecting historical opportunity records, so once you rename a default stage it appears under the new name.
 
 **The default probability.** Each stage has a **default win probability** — the system's best guess at the likelihood of closing a deal that has reached this stage. This default is applied automatically when an opportunity is placed at that stage and drives the weighted forecast calculation. Sales reps can override the probability on individual opportunities to reflect the specific situation.
 
-Pipeline stages define the steps in your sales process. Five stages are seeded per company: Qualification, Needs Analysis, Proposal, Negotiation, and Closing. You can add, rename, reorder, change probabilities, and deactivate stages.
+Pipeline stages define the steps in your sales process. Five stages are seeded per company under stored code names: `QUALIFICATION`, `NEEDS_ANALYSIS`, `PROPOSAL`, `NEGOTIATION`, and `CLOSING`. You can add, rename, reorder, change probabilities, and deactivate stages.
 
 ### How to create a stage
 
 1. Navigate to **CRM › Pipeline Stages** (`/admin/crm/settings/pipeline-stages`).
 2. Click **New Stage**.
-3. Enter the **Name** (must be unique within the company).
-4. Enter the **Display Order** (a number; must be unique within the company).
-5. Enter the **Default Probability** (0–100).
-6. Click **Submit**.
+3. Enter the **Stage Name** (must be unique within the company).
+4. Enter the **Order** (a number; must be unique within the company).
+5. Enter the **Default Win %** (0–100).
+6. Click **Create Stage**.
 
 ### How to edit a stage
 
-Click **Edit** on a row. Change the name, display order, default probability, or the **Active** toggle. Click **Save**.
+Click the pencil (Edit) icon button at the end of a row — it has no visible "Edit" text (its accessible label is "Edit stage <name>"). The row becomes an inline edit row where you can change the display order, name, default probability, or the **Active** checkbox. Click the check (Save) icon button to save (accessible label "Save changes"), or the **×** button to cancel.
 
 ### How to deactivate a stage
 
 **Deactivating** a stage removes it from the stage selection dropdown when creating or advancing an opportunity, while keeping all historical opportunities that were in that stage intact. This is the correct action when a stage is no longer part of the sales process — for example, if a "Demo" stage is eliminated because demos are now handled differently. Deactivation is reversible.
 
-Click **Deactivate** (or use the Active toggle in the edit form). The stage record is kept but marked inactive. Inactive stages:
+Click the toggle (Deactivate) icon button on the row — it has no visible "Deactivate" text (its accessible label is "Deactivate stage <name>") and is shown only while the stage is active. Alternatively, clear the **Active** checkbox in the inline edit row and save. The stage record is kept but marked inactive. Inactive stages:
 - No longer appear in the stage selection dropdowns when creating or advancing an opportunity.
 - Are rejected if you attempt to use them via the API.
 - Still appear in historical records.
@@ -382,13 +394,13 @@ Only **Task** activities appear in the open-task inbox. Only Tasks can be comple
 ### How to log an activity on a lead or opportunity
 
 1. Open the lead (`/admin/crm/leads/uid/:uid`) or opportunity (`/admin/crm/opportunities/uid/:uid`) detail page.
-2. Scroll to the **Activity** panel.
-3. Click **Log Activity**.
+2. Scroll to the **Activities** panel.
+3. Click **Log Activity**. The **Log New Activity** form appears.
 4. Select the **Type** (Call, Email, Meeting, Note, or Task).
 5. Enter the **Subject** (required).
-6. Optionally enter a **Body** / notes and an **Occurred At** date.
-7. If Type is **Task**, enter the **Due Date** (required for Tasks).
-8. Click **Submit**.
+6. For Call, Email, Meeting, and Note, optionally set an **Occurred At** date. For a **Task**, the Occurred At field is replaced by a **Due Date** field (required for Tasks).
+7. Optionally enter **Notes**.
+8. Click **Log Activity**.
 
 The activity appears at the top of the panel list (latest first), and the system assigns an activity number (for example, `ACT-0001`).
 
@@ -403,7 +415,9 @@ The activity panel on a lead or opportunity detail page shows 10 activities per 
 A task can be completed from the open-task inbox or from the activity panel on the parent lead or opportunity.
 
 1. Find the task (either on the detail page or in **CRM › CRM Activities** at `/admin/crm/activities`).
-2. Click **Complete** on the task row.
+2. Click the complete control on the task row. The two surfaces look different:
+   - In the open-task inbox (**CRM › CRM Activities**), this is a green button labelled **Complete** (with a check icon).
+   - In the **Activities** panel embedded on a lead or opportunity detail page, it is an icon-only green check button with no visible text (its accessible label is "Complete task: <subject>"). The button appears only on open Task rows.
 
 The task is marked done and disappears from the open-task inbox. You cannot complete an activity that is not a Task, and you cannot complete a Task that is already done.
 
@@ -413,7 +427,7 @@ Navigate to **CRM › CRM Activities** (`/admin/crm/activities`). **Permission:*
 
 The **open-task inbox** is a unified list of all incomplete tasks across every lead and opportunity in the company — a personal and team-wide to-do list for the sales pipeline. It allows a sales manager to see at a glance what follow-up actions are pending, and allows each rep to check what they need to do today without opening every individual lead or opportunity record.
 
-The CRM Activities screen lists all open (not-yet-done) Tasks for the selected company, across all leads and opportunities. It is scoped to the company you select; you can optionally filter by assignee.
+The CRM Activities screen lists all open (not-yet-done) Tasks for the selected company, across all leads and opportunities. It is scoped to the company you select via the company selector at the top of the screen.
 
 The list is paginated (20 per page). Use the paginator controls to browse. When you complete a task, it is removed from the inbox and the list refreshes.
 
@@ -423,7 +437,7 @@ The list is paginated (20 per page). Use the paginator controls to browse. When 
 
 Sales rep Farida Hassan is managing opportunity `OPP-0012` (Banda Office Solutions). She logs activities at each step.
 
-1. After the initial qualification call, she opens `OPP-0012` at `/admin/crm/opportunities/uid/:uid`, scrolls to the Activity panel, clicks **Log Activity**: Type `Call`, Subject `Initial qualification call — confirmed budget TZS 4.5M`, Occurred At `2026-07-03`. Clicks **Submit**. Activity `ACT-0018` appears.
+1. After the initial qualification call, she opens `OPP-0012` at `/admin/crm/opportunities/uid/:uid`, scrolls to the Activities panel, clicks **Log Activity**: Type `Call`, Subject `Initial qualification call — confirmed budget TZS 4.5M`, Occurred At `2026-07-03`. Clicks **Log Activity** to save. Activity `ACT-0018` appears.
 2. She sends a proposal by email: Type `Email`, Subject `Proposal email sent — 5 desks + 20 chairs`, Occurred At `2026-07-10`.
 3. After the proposal, she needs a follow-up. She creates a task: Type `Task`, Subject `Follow up on proposal — confirm decision`, Due Date `2026-07-17`. Activity `ACT-0021` created.
 4. On 2026-07-17, Farida opens **CRM › CRM Activities** (`/admin/crm/activities`). She sees `ACT-0021` in the open-task inbox. After a productive call, she clicks **Complete**. The task disappears from the inbox.

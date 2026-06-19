@@ -58,14 +58,14 @@ A requisition starts as a DRAFT (being prepared) and must be submitted before it
 2. Click **New Requisition**, or go directly to `/admin/purchase-requisitions/create`.
 3. Set the **Required By** date and optionally a cost centre and notes.
 4. Add lines: for each item, pick the **Product** by name, choose a **Unit**, and enter the **Requested Quantity** and an **Estimated Unit Cost**.
-5. Click **Save**. The requisition is saved in **DRAFT**.
+5. Click **Create Requisition**. The requisition is saved in **DRAFT**.
 
 ### 1.2 Submit a requisition
 
 When the requisition is complete and ready for approval:
 
 1. Open the draft requisition (navigate to `/admin/purchase-requisitions/uid/{uid}`).
-2. Click **Submit**.
+2. Click **Submit for Approval**.
 3. The status changes to **SUBMITTED** and the requisition is routed for approval.
 
 ### 1.3 Approve or reject a requisition
@@ -80,15 +80,15 @@ An approver (a user with `PURCHASE.REQUISITION.APPROVE`) reviews submitted requi
 An approved requisition can be converted into either a Purchase Order or an RFQ:
 
 1. Open the approved requisition (navigate to `/admin/purchase-requisitions/uid/{uid}`).
-2. Click **Convert**.
+2. Click **Convert**. An inline conversion form opens.
 3. Choose the target type:
    - **Purchase Order** — a DRAFT PO is created immediately from the requisition lines.
    - **RFQ** — a DRAFT RFQ is created; proceed to section 2 to send it to suppliers.
-4. Confirm. A link to the created document appears. The requisition status changes to **CONVERTED**.
+4. Click **Confirm Convert**. A link to the created document appears. The requisition status changes to **CONVERTED**.
 
 ### 1.5 Cancel a requisition
 
-A requisition can be cancelled from any non-final status (DRAFT, SUBMITTED, APPROVED):
+A requisition can be cancelled while it is still DRAFT or SUBMITTED:
 
 1. Open the requisition.
 2. Click **Cancel**, enter an optional reason, and confirm. Status → **CANCELLED**.
@@ -113,9 +113,9 @@ Store clerk Amani opens **Purchasing › Purchase Requisitions** (`/admin/purcha
 - Product **Karatasi A4 (Ream)**, Unit **REAM**, Qty **20**, Estimated Cost **TZS 8,500** each.
 - Product **Kalamu Nyeusi**, Unit **BOX**, Qty **5**, Estimated Cost **TZS 3,200** each.
 
-He saves — requisition **REQ-0072** is created in DRAFT. He clicks **Submit** — status → SUBMITTED.
+He clicks **Create Requisition** — requisition **REQ-0072** is created in DRAFT. He opens it and clicks **Submit for Approval** — status → SUBMITTED.
 
-Purchasing manager Neema opens the requisition and clicks **Approve** — status → APPROVED, estimated total TZS 186,000. She clicks **Convert** and picks **RFQ** — RFQ **RFQ-0031** is created in DRAFT.
+Purchasing manager Neema opens the requisition and clicks **Approve** — status → APPROVED, estimated total TZS 186,000. She clicks **Convert**, picks **RFQ**, and clicks **Confirm Convert** — RFQ **RFQ-0031** is created in DRAFT.
 
 ---
 
@@ -143,14 +143,14 @@ An RFQ can be created directly or by converting an approved requisition (see sec
 
 1. Navigate to **Purchasing › RFQs / Sourcing** (`/admin/rfqs`) and click **New RFQ**, or go to `/admin/rfqs/create`.
 2. Set the **Response Due Date** and optionally add notes.
-3. In the **Invited Suppliers** section, pick each supplier by name. Invite at least one supplier.
+3. In the **Invite Suppliers** section, choose a supplier in the **Add a supplier** picker and click the **+** button to add it to the invite list. Repeat for each supplier; invite at least one.
 4. Add lines: pick each product by name, choose a unit, and enter the required quantity.
-5. Click **Save**. The RFQ is created in **DRAFT**.
+5. Click **Create RFQ**. The RFQ is created in **DRAFT**.
 
 ### 2.2 Send an RFQ to suppliers
 
 1. Open the DRAFT RFQ (navigate to `/admin/rfqs/uid/{uid}`).
-2. Click **Send**. Status → **SENT**. Suppliers are notified that they should submit a quote.
+2. Click **Send to Suppliers**. Status → **SENT**. Suppliers are notified that they should submit a quote.
 
 ### 2.3 Capture supplier quotes
 
@@ -160,11 +160,11 @@ A supplier quote (also called a quotation or bid) is the formal price response a
 When a supplier responds with a price:
 
 1. Open the SENT RFQ (navigate to `/admin/rfqs/uid/{uid}`).
-2. Click **Capture Quote**.
+2. Click **Capture Supplier Quote**. The capture form opens.
 3. Pick the **Supplier** by name (only invited suppliers are listed).
 4. Optionally set a valid-until date, lead time in days, and notes.
 5. For each RFQ line, enter the **Quoted Quantity** and **Unit Price**.
-6. Click **Save**. The quote is recorded with status **RECEIVED** and the RFQ status moves to **QUOTES_RECEIVED**.
+6. Click **Save Quote**. The quote is recorded with status **RECEIVED** and the RFQ status moves to **QUOTES_RECEIVED**.
 
 Repeat for each responding supplier. You can compare their prices side-by-side in the quotes panel on the RFQ detail page.
 
@@ -179,7 +179,7 @@ To select the winning supplier and create a Purchase Order:
 
 ### 2.5 Cancel an RFQ
 
-Open the RFQ (navigate to `/admin/rfqs/uid/{uid}`) and click **Cancel**. Status → **CANCELLED**. An awarded RFQ cannot be cancelled.
+Open the RFQ (navigate to `/admin/rfqs/uid/{uid}`) and click **Cancel RFQ**. Status → **CANCELLED**. An awarded RFQ cannot be cancelled.
 
 ### 2.6 RFQ status reference
 
@@ -195,7 +195,7 @@ Open the RFQ (navigate to `/admin/rfqs/uid/{uid}`) and click **Cancel**. Status 
 
 **Example — RFQ for cement (continuing from requisition example, fresh scenario):**
 
-A warehouse requisition for 500 bags of **Saruji 50kg** has been approved and converted to RFQ **RFQ-0031**. Purchasing officer Zawadi opens **Purchasing › RFQs / Sourcing** (`/admin/rfqs`), opens RFQ-0031, and adds two invited suppliers: **Tanzania Cement Distributors** and **Simba Cement Ltd**. Response Due Date is set to **2026-06-17**. She clicks **Send** — RFQ goes to SENT.
+A warehouse requisition for 500 bags of **Saruji 50kg** has been approved and converted to RFQ **RFQ-0031**. Purchasing officer Zawadi opens **Purchasing › RFQs / Sourcing** (`/admin/rfqs`), opens RFQ-0031, and adds two invited suppliers: **Tanzania Cement Distributors** and **Simba Cement Ltd**. Response Due Date is set to **2026-06-17**. She clicks **Send to Suppliers** — RFQ goes to SENT.
 
 Both suppliers respond. Zawadi captures two quotes:
 - **Tanzania Cement Distributors**: 500 bags @ TZS 14,800 each = TZS 7,400,000 (lead time 3 days).
@@ -216,51 +216,65 @@ A Purchase Order (PO) is the formal, legally binding document that a business se
 Without a PO, the business has no formal record of what it committed to buy. The supplier could deliver the wrong quantity or charge a different price, and there would be no agreed baseline to dispute it. POs provide commitment control (approvals before spending), a budget anchor (the ordered amount is known), an audit trail (who ordered what, when, at what price), and the document foundation for both the goods receipt (what was ordered versus what arrived) and the 3-way match (ordered, received, billed — all three must agree). They also protect the business legally: a supplier cannot claim an order was placed if no PO exists.
 
 **When a PO is raised.**
-A PO is raised after a purchase has been authorised — either by converting an approved requisition directly into a PO, or by awarding an RFQ which creates the PO automatically at the winning supplier's quoted prices. There is no standalone "New PO" form in the UI; every PO originates from one of these two paths.
+A PO is raised after a purchase has been authorised. There are three ways a PO can originate:
+
+- By converting an approved requisition directly into a PO (see section 1.4).
+- By awarding an RFQ, which creates the PO automatically at the winning supplier's quoted prices (see section 2.4).
+- By creating one directly on the Purchase Orders list using the inline **New Order** form (see section 3.1), without a requisition or RFQ — useful for direct purchases where the supplier and prices are already known.
 
 **How a PO flows.**
-A PO starts as a DRAFT (lines can be edited freely). When the lines are finalised, the PO is placed (ORDERED), which sends it to the supplier, locks the lines, and assigns the PO number. Goods arrive and are recorded against the PO via Goods Receipts — the PO tracks how many units remain outstanding and moves through PARTIALLY_RECEIVED to RECEIVED as deliveries arrive. Once fully received (or if the business accepts a shortfall), the PO can be closed (CLOSED). If the PO is no longer needed before all goods are received, it can be voided (VOID). If a PO approval threshold is enabled in Purchase Settings, POs above the configured amount require an additional approval before goods can be received.
+A PO starts as a DRAFT (lines can be edited freely). When the lines are finalised, the PO is placed (ORDERED), which sends it to the supplier, locks the lines, and assigns the PO number. Goods arrive and are recorded against the PO via Goods Receipts — the PO tracks how many units remain outstanding and moves through PARTIALLY_RECEIVED to RECEIVED as deliveries arrive. Once fully received (or if the business accepts a shortfall), the PO can be closed (CLOSED). If the PO is no longer needed before all goods are received, it can be voided (VOID). If a PO approval threshold is enabled in Purchase Settings, a DRAFT PO above the configured amount must be approved before it can be PLACED — the system refuses to place an over-threshold PO that has not yet been approved.
 
-### 3.1 View and manage a DRAFT Purchase Order
+### 3.1 Create a Purchase Order directly
+
+The Purchase Orders list (`/admin/purchase-orders`) has an inline create form for raising a PO without a requisition or RFQ (requires `PURCHASE.ORDER.CREATE`).
+
+1. Navigate to **Purchasing › Purchase Orders** (`/admin/purchase-orders`).
+2. Click **New Order**. The **New Purchase Order** form opens above the list.
+3. Pick the **Supplier** (search by name or code; only active suppliers are listed).
+4. Choose the **Currency** from the Currency Picker — the list is limited to the company's enabled currencies and defaults to the company default (see "Common UI Patterns" in the Getting Started chapter).
+5. Optionally set an **Expected Date** and **Notes**.
+6. Click **Create Order**. A DRAFT PO is created (with no lines yet) and a success notification appears. Open it to add lines (section 3.2).
+
+### 3.2 View and manage a DRAFT Purchase Order
 
 1. Navigate to **Purchasing › Purchase Orders** (`/admin/purchase-orders`).
 2. Open the DRAFT PO (navigate to `/admin/purchase-orders/uid/{uid}`).
 3. While the PO is in DRAFT you can:
    - **Add a line** — pick the product by name, choose a unit, enter the ordered quantity and unit cost.
-   - **Edit a line** — change quantity or cost on an existing line.
-   - **Remove a line** — click the delete icon on the line row.
+   - **Remove a line** — click the delete icon on the line row. (Lines cannot be edited in place; to change a line, remove it and add it again.)
 
-### 3.2 Place a Purchase Order
+### 3.3 Place a Purchase Order
 
 Placing the PO sends it to the supplier and locks the lines.
 
 1. Open the DRAFT PO (it must have at least one line).
-2. Click **Place**.
+2. Click **Place Order**.
 3. Status → **ORDERED** and a PO number (PO-####) is assigned.
 
-### 3.3 Close a Purchase Order
+### 3.4 Close a Purchase Order
 
 Closing finalises the PO without receiving all goods (for example, if a partial shipment is accepted as complete).
 
 1. Open the PO (navigate to `/admin/purchase-orders/uid/{uid}`) — status ORDERED, PARTIALLY_RECEIVED, or RECEIVED.
-2. Click **Close**.
+2. Click **Close Order**.
 3. Status → **CLOSED**. The PO is read-only.
 
-### 3.4 Void a Purchase Order
+### 3.5 Void a Purchase Order
 
 Voiding cancels the PO if goods have not all been received.
 
 1. Open the PO (status DRAFT, ORDERED, or PARTIALLY_RECEIVED).
-2. Click **Void**, enter a mandatory reason, and confirm.
+2. Click **Void Order**. An inline reason form opens — enter a mandatory reason and click **Confirm Void**.
 3. Status → **VOID**.
 
-### 3.5 PO approval (if enabled)
+### 3.6 PO approval (if enabled)
 
-If your administrator has enabled PO approval thresholds in Purchase Settings, Purchase Orders above the configured amount enter a **PENDING** approval state after being placed. An approver with `PURCHASE.ORDER.APPROVE` must then approve or reject the PO before goods can be received.
+If your administrator has enabled PO approval thresholds in Purchase Settings, a DRAFT Purchase Order whose total is at or above the configured amount cannot be placed until it is approved. An approver with `PURCHASE.ORDER.APPROVE` must approve the PO first; attempting to place an unapproved over-threshold PO is rejected with a message asking you to submit it for approval and wait for APPROVED status before placing.
 
 PO approval actions are currently only available via the API; contact your administrator or a system manager if a PO is stuck awaiting approval.
 
-### 3.6 PO status reference
+### 3.7 PO status reference
 
 | Status | Meaning |
 |---|---|
@@ -275,7 +289,7 @@ PO approval actions are currently only available via the API; contact your admin
 
 **Example — Placing the cement PO:**
 
-Zawadi opens **Purchasing › Purchase Orders** (`/admin/purchase-orders`), finds PO-0088 (DRAFT, 500 bags @ TZS 14,500), reviews the line, and clicks **Place**. Status → ORDERED. The formal PO number is confirmed and the document is locked for editing. A PDF can be generated and sent to Simba Cement Ltd.
+Zawadi opens **Purchasing › Purchase Orders** (`/admin/purchase-orders`), finds PO-0088 (DRAFT, 500 bags @ TZS 14,500), reviews the line, and clicks **Place Order**. Status → ORDERED. The formal PO number is confirmed and the document is locked for editing. A PDF can be generated and sent to Simba Cement Ltd.
 
 ---
 
@@ -293,16 +307,16 @@ A Goods Receipt serves three critical purposes. First, it records what actually 
 A GR is created by the storekeeper or receiving officer each time a supplier delivers goods against an outstanding Purchase Order. If a supplier delivers in multiple shipments, a separate GR is created for each delivery. The permission required is `PURCHASE.RECEIVE`. Only placed Purchase Orders (ORDERED or PARTIALLY_RECEIVED) can have a GR raised against them.
 
 **How it flows.**
-The storekeeper picks the PO and the system shows all outstanding (unreceived) lines pre-filled with the remaining quantities. The storekeeper adjusts the quantities if the delivery is partial, sets the receipt date, and submits. The GR is created with status RECEIVED, a GRN number is assigned, stock increases at the branch, and the PO's outstanding quantities are updated. The PO moves to PARTIALLY_RECEIVED or RECEIVED depending on whether all lines are now complete. A GR cannot be edited after submission; errors are corrected by voiding the GR (an API-level operation) or by raising a Purchase Return (section 7).
+The storekeeper picks the PO and the system shows all outstanding (unreceived) lines pre-filled with the remaining quantities. The storekeeper adjusts the quantities if the delivery is partial (and unchecks any lines not included in this delivery), optionally adds notes, and records the receipt. The GR is created with status RECEIVED, a GRN number is assigned, stock increases at the branch, and the PO's outstanding quantities are updated. The PO moves to PARTIALLY_RECEIVED or RECEIVED depending on whether all lines are now complete. A GR cannot be edited after submission; errors are corrected by voiding the GR (an API-level operation) or by raising a Purchase Return (section 7).
 
 ### 4.1 Receive goods
 
-1. Navigate to **Purchasing › Goods Receipts** (`/admin/goods-receipts`) and click **New Goods Receipt**, or go directly to `/admin/goods-receipts/create`.
+1. Navigate to **Purchasing › Goods Receipts** (`/admin/goods-receipts`) and click **New Receipt**, or go directly to `/admin/goods-receipts/create`.
 2. Pick the **Purchase Order** by its PO number.
-3. The form lists all open (unreceived) lines with the outstanding quantity pre-filled.
-4. Adjust individual quantities if you are receiving a **partial shipment**. The quantity cannot exceed the outstanding balance on each line.
-5. Set the **Receipt Date**.
-6. Click **Submit**.
+3. The form lists all open (unreceived) lines, each with a tick box (included by default) and the outstanding quantity pre-filled in the **Receive Qty** field.
+4. Adjust individual quantities if you are receiving a **partial shipment**, and untick any lines not in this delivery. The quantity cannot exceed the outstanding balance on each line.
+5. Optionally add **Notes**.
+6. Click **Record Receipt**.
 
 The goods receipt is created with status **RECEIVED** and assigned a GRN-#### number. Stock is added to the branch. The PO status updates:
 
@@ -324,7 +338,7 @@ If the supplier delivers in stages, create a separate goods receipt for each del
 
 **Example — Receiving cement:**
 
-Simba Cement delivers 500 bags on 2026-06-22. Storekeeper John opens **Purchasing › Goods Receipts** (`/admin/goods-receipts`), clicks **New Goods Receipt**, and picks PO **PO-0088**. The form shows 500 bags Saruji 50kg outstanding. John enters Receipt Date **2026-06-22** and keeps all 500 bags. He submits — GRN **GRN-0061** is created (status RECEIVED), 500 bags added to stock at the branch, PO-0088 status → RECEIVED.
+Simba Cement delivers 500 bags on 2026-06-22. Storekeeper John opens **Purchasing › Goods Receipts** (`/admin/goods-receipts`), clicks **New Receipt**, and picks PO **PO-0088**. The form shows 500 bags Saruji 50kg outstanding. John keeps all 500 bags and clicks **Record Receipt** — GRN **GRN-0061** is created (status RECEIVED), 500 bags added to stock at the branch, PO-0088 status → RECEIVED.
 
 **Partial receipt scenario:** If Simba had delivered only 300 bags on day 1, John would receive 300 bags (GRN-0061), PO → PARTIALLY_RECEIVED, outstanding = 200 bags. When the remaining 200 arrive, John creates GRN-0062 for 200 bags, PO → RECEIVED.
 
@@ -354,14 +368,14 @@ A landed cost document is created (DRAFT) with the allocation basis (By Value or
    - **By Quantity** — charges are spread proportionally to the quantity received on each GR line.
 3. Pick the **Goods Receipt(s)** by GRN number. You can include multiple GRNs in one landed cost document.
 4. Add one or more **Charges**: select the charge type (Freight, Duty, Clearing, Insurance, or Other) and enter the amount.
-5. Click **Save**. The landed cost is created in **DRAFT**.
+5. Click **Create Landed Cost**. The landed cost is created in **DRAFT**.
 
 ### 5.2 Confirm a landed cost
 
 Confirming allocates the charges to the GR lines and posts the cost adjustment to the GL.
 
 1. Open the DRAFT landed cost (navigate to `/admin/landed-costs/uid/{uid}`).
-2. Click **Confirm**.
+2. Click **Confirm & Allocate**.
 3. Status → **CONFIRMED**. The allocation per GR line is shown in the detail.
 
 A confirmed landed cost cannot be edited. If there is an error, contact your administrator.
@@ -382,7 +396,7 @@ The cement shipment also incurred TZS 850,000 in port clearing fees and TZS 600,
 - Type **Clearing**, Amount TZS 850,000.
 - Type **Freight**, Amount TZS 600,000.
 
-Total landed cost TZS 1,450,000. She saves (DRAFT), reviews the per-bag allocation (TZS 2,900/bag), and clicks **Confirm**. Status → CONFIRMED. The moving-average cost for Saruji 50kg increases by TZS 2,900/bag, and the GL is posted accordingly.
+Total landed cost TZS 1,450,000. She clicks **Create Landed Cost** (DRAFT), reviews the per-bag allocation (TZS 2,900/bag), and clicks **Confirm & Allocate**. Status → CONFIRMED. The moving-average cost for Saruji 50kg increases by TZS 2,900/bag, and the GL is posted accordingly.
 
 ---
 
@@ -405,12 +419,13 @@ The system compares each bill line against the corresponding PO line (agreed pri
 ### 6.1 Enter a supplier bill
 
 1. Navigate to **Accounting › Enter Bill** (`/admin/ap/supplier-bills/enter`).
-2. Pick the **Supplier** by name.
-3. Enter the supplier's own **Invoice Number**, **Bill Date**, and **Due Date**.
-4. Set the **Currency**.
-5. Optionally pick the **Purchase Order** by number. Linking the PO enables the 3-way match (see section 6.2). For service bills with no PO, leave this blank.
-6. Add **Bill Lines**: for each, pick the product, enter the billed quantity and unit price.
-7. Click **Enter Bill & Match**. The bill is created and the 3-way match runs automatically.
+2. Pick the **Supplier** by name or code (search-as-you-type).
+3. Enter the supplier's own **Supplier Invoice No.**, **Bill Date**, and **Due Date**.
+4. Optionally enter the **VAT Amount** (leave 0 if none).
+5. Choose the **Currency** from the Currency Picker — the list is limited to the company's enabled currencies and defaults to the company default (see "Common UI Patterns" in the Getting Started chapter).
+6. Optionally pick the **Purchase Order** from the picker. Linking the PO enables the 3-way match (see section 6.2). For service bills with no PO, leave this blank.
+7. Add **Bill Lines** with **Add Line**. Each line is a free-text **Description**, a **Billed Qty**, and a **Unit Cost**; the **Line Net** is computed for you. To match a line to the order, choose the corresponding **PO Line** in the optional picker on that row. (There is no product picker on the bill line — the description is free text.)
+8. Click **Enter Bill & Match**. The bill is created and the 3-way match runs automatically; the per-line match result panel appears.
 
 ### 6.2 Understanding the 3-way match
 
@@ -441,20 +456,15 @@ The overall bill status depends on its lines:
 
 If a bill line is HELD due to a price or quantity variance:
 
-1. Open the bill (navigate to `/admin/ap/supplier-bills/uid/{uid}`) or use the **Match** action on the bills list at **Accounting › Payables** (`/admin/ap/supplier-bills`).
-2. Review the variance amount and percentage shown on the held line.
-3. If the variance is acceptable, click **Accept Variance** on that line.
-4. When all held lines are resolved, the bill status moves to **MATCHED**.
+1. On the per-line match result panel shown immediately after **Enter Bill & Match** (section 6.1), review the variance amount and percentage shown on each held line.
+2. If the variance is acceptable, click **Accept Variance** on that line.
+3. When all held lines are resolved, the bill status moves to **MATCHED**.
 
-Accepting variances requires the `AP.BILL.MATCH` permission.
+Accepting variances requires the `AP.BILL.MATCH` permission. The **Accept Variance** control appears only on the match-result panel that follows entering the bill — the read-only bill detail page does not offer it.
 
-### 6.4 Re-run match from the bills list
+### 6.4 Reviewing a matched or held bill
 
-For a bill that was entered without running a match (or needs re-matching after a correction):
-
-1. Navigate to **Accounting › Payables** (`/admin/ap/supplier-bills`).
-2. Click **Match** on the bill row.
-3. The match result is displayed inline.
+The 3-way match runs once, automatically, when the bill is entered (see section 6.1); there is no UI to re-run a match after entry. On the bills list at **Accounting › Payables** (`/admin/ap/supplier-bills`), a **Match** action appears for DRAFT and HELD bills — it is a link that opens the read-only bill detail page (`/admin/ap/supplier-bills/uid/{uid}`) where you can review the bill header and lines. Variances are accepted on the match-result panel at entry time (section 6.3), not from this page.
 
 ### 6.5 Service bills (no PO)
 
@@ -488,7 +498,7 @@ Payments against supplier bills are managed in the Accounts Payable module. Navi
 
 Simba Cement sends Invoice **SIM/2026/1041**, Bill Date 2026-06-22, Due Date 2026-07-22, for 500 bags @ TZS 14,500 each = TZS 7,250,000 net.
 
-Sarah opens **Accounting › Enter Bill** (`/admin/ap/supplier-bills/enter`), picks supplier **Simba Cement Ltd**, enters Invoice No **SIM/2026/1041**, Bill Date 2026-06-22, Due Date 2026-07-22. She links PO **PO-0088** and adds one bill line: **Saruji 50kg**, Qty 500, Unit Price TZS 14,500. She clicks **Enter Bill & Match**.
+Sarah opens **Accounting › Enter Bill** (`/admin/ap/supplier-bills/enter`), picks supplier **Simba Cement Ltd**, enters Supplier Invoice No **SIM/2026/1041**, Bill Date 2026-06-22, Due Date 2026-07-22, and selects Currency **TZS** from the Currency Picker. She links PO **PO-0088** and adds one bill line: Description **Saruji 50kg**, Billed Qty 500, Unit Cost TZS 14,500, and selects the matching **PO Line** on that row. She clicks **Enter Bill & Match**.
 
 The system runs the 3-way match:
 - Bill line: 500 bags @ 14,500
@@ -499,7 +509,7 @@ All lines → **MATCHED**. Bill status → MATCHED. Bill **BILL-0051** is ready 
 
 **Example — Bill with price variance (held):**
 
-A different shipment arrives and the supplier bills at TZS 14,900/bag (TZS 400 over the PO price). After 3-way match, the bill line shows **HELD_PRICE_VARIANCE** with variance TZS 200,000. The AP manager opens the bill, reviews the variance, decides it is within business tolerance, and clicks **Accept Variance**. Line moves to VARIANCE_ACCEPTED; bill → MATCHED.
+A different shipment arrives and the supplier bills at TZS 14,900/bag (TZS 400 over the PO price). When the AP manager clicks **Enter Bill & Match**, the match-result panel shows the bill line as **HELD_PRICE_VARIANCE** with variance TZS 200,000. She reviews the variance, decides it is within business tolerance, and clicks **Accept Variance** on that line. Line moves to VARIANCE_ACCEPTED; bill → MATCHED.
 
 ---
 
@@ -508,7 +518,7 @@ A different shipment arrives and the supplier bills at TZS 14,900/bag (TZS 400 o
 Navigate to **Purchasing › Purchase Returns** (`/admin/purchase-returns`).
 
 **What a purchase return is.**
-A purchase return is the formal process of sending goods back to the supplier — typically because the goods arrived damaged, were incorrect, failed quality inspection, or are surplus to requirements. It is the reverse of a goods receipt: where a GR increases stock, a confirmed purchase return decreases stock and triggers the AP module to expect a credit note from the supplier.
+A purchase return is the formal process of sending goods back to the supplier — typically because the goods arrived damaged, were incorrect, failed quality inspection, or are surplus to requirements. It is the reverse of a goods receipt: where a GR increases stock, a confirmed purchase return decreases stock and triggers the AP module to raise a debit note against the supplier.
 
 **Why it exists.**
 Without a formal return process, the business would need to adjust stock manually (which lacks a clear link to the supplier transaction) and would have no systematic way to claim money back from the supplier. A purchase return document creates an auditable record of what was returned, why, and at what value — forming the basis for the AP debit note that reduces the amount owed to the supplier. It also keeps inventory accurate: goods sent back should not remain in the stock count.
@@ -521,18 +531,18 @@ A purchase return starts as a DRAFT referencing the original GRN and specifying 
 
 ### 7.1 Create a purchase return
 
-1. Navigate to **Purchasing › Purchase Returns** (`/admin/purchase-returns`) and click **New Purchase Return**, or go directly to `/admin/purchase-returns/create`.
+1. Navigate to **Purchasing › Purchase Returns** (`/admin/purchase-returns`) and click **New Return**, or go directly to `/admin/purchase-returns/create`.
 2. Pick the **Goods Receipt** by GRN number (the GR must have status RECEIVED).
 3. Enter a mandatory **Reason**.
 4. For each line being returned, enter the **Returned Quantity** (cannot exceed the quantity originally received on that GR line).
-5. Click **Save**. The return is created in **DRAFT**.
+5. Click **Create Return**. The return is created in **DRAFT**.
 
 ### 7.2 Confirm a purchase return
 
 Confirming the return physically ships the goods back and adjusts stock.
 
 1. Open the DRAFT purchase return (navigate to `/admin/purchase-returns/uid/{uid}`).
-2. Click **Confirm**.
+2. Click **Confirm Return**.
 3. Status → **CONFIRMED**. Stock is removed from the branch and a purchase return event is posted.
 
 ### 7.3 Purchase return status reference
@@ -546,9 +556,9 @@ Confirming the return physically ships the goods back and adjusts stock.
 
 **Example — Purchase return for damaged cement:**
 
-After receiving GRN-0061, the storekeeper discovers 20 bags of cement arrived wet and unusable. He opens **Purchasing › Purchase Returns** (`/admin/purchase-returns`), clicks **New Purchase Return**, picks GRN **GRN-0061**, enters Reason **"20 bags arrived wet — product damaged"**, and sets Returned Quantity **20** on the Saruji 50kg line. He saves — return **PRET-0018** is created in DRAFT.
+After receiving GRN-0061, the storekeeper discovers 20 bags of cement arrived wet and unusable. He opens **Purchasing › Purchase Returns** (`/admin/purchase-returns`), clicks **New Return**, picks GRN **GRN-0061**, enters Reason **"20 bags arrived wet — product damaged"**, and sets Returned Quantity **20** on the Saruji 50kg line. He clicks **Create Return** — return **PRET-0018** is created in DRAFT.
 
-The purchasing manager reviews and clicks **Confirm** — status → CONFIRMED. Stock decreases by 20 bags (480 bags remain). The AP module is notified to expect a supplier credit note for 20 × TZS 14,500 = TZS 290,000 from Simba Cement.
+The purchasing manager reviews and clicks **Confirm Return** — status → CONFIRMED. Stock decreases by 20 bags (480 bags remain). The AP module raises a supplier debit note for 20 × TZS 14,500 = TZS 290,000 against Simba Cement.
 
 ---
 
@@ -557,7 +567,7 @@ The purchasing manager reviews and clicks **Confirm** — status → CONFIRMED. 
 Navigate to **Purchasing › Purchase Settings** (`/admin/purchase-settings`).
 
 **What purchase settings are.**
-Purchase settings are the company-level configuration controls that govern how the procurement workflow operates — specifically, whether Purchase Orders above a certain value require a second-level approval before goods can be received.
+Purchase settings are the company-level configuration controls that govern how the procurement workflow operates — specifically, whether Purchase Orders above a certain value require a second-level approval before they can be placed.
 
 **Why a PO approval threshold exists.**
 For low-value purchases, requiring a manager to approve every PO would create unnecessary bottlenecks. For high-value purchases, however, committing the business without a second review is a financial control risk. The approval threshold is the balance: below the threshold, POs flow through automatically; above it, they pause for authorisation. This is a common internal control required by auditors and risk frameworks.
@@ -568,11 +578,11 @@ Purchase settings control the PO approval workflow.
 
 | Setting | Description |
 |---|---|
-| PO Approval Enabled | When turned on, Purchase Orders above the threshold amount require approval before goods can be received |
-| PO Approval Threshold | The minimum order total that triggers the approval requirement |
-| Currency | The currency of the threshold amount |
+| Enable PO Approval Workflow | When turned on, Purchase Orders above the threshold amount require approval before they can be placed |
+| Approval Threshold Amount | The minimum order total that triggers the approval requirement (shown only when the workflow is enabled) |
+| Currency | The currency of the threshold amount, chosen from the Currency Picker (limited to the company's enabled currencies, defaulting to the company default — see "Common UI Patterns" in the Getting Started chapter) |
 
-To change these settings, navigate to **Purchasing › Purchase Settings** (`/admin/purchase-settings`), click **Edit**, update the values, and click **Save**.
+To change these settings, navigate to **Purchasing › Purchase Settings** (`/admin/purchase-settings`), pick the **Company**, update the values, and click **Save Settings**.
 
 When PO approval is enabled, a user with `PURCHASE.ORDER.APPROVE` must approve or reject POs that exceed the threshold.
 
@@ -580,7 +590,7 @@ When PO approval is enabled, a user with `PURCHASE.ORDER.APPROVE` must approve o
 
 **Example — Enabling PO approval:**
 
-The CFO wants all purchase orders above TZS 5,000,000 to require a second-level approval. She opens **Purchasing › Purchase Settings** (`/admin/purchase-settings`), clicks **Edit**, sets **PO Approval Enabled** to ON, **PO Approval Threshold** to **5,000,000**, **Currency** to **TZS**, and saves. From now on any placed PO with a total above TZS 5,000,000 enters PENDING approval status and cannot proceed to goods receipt until an authorised approver acts on it.
+The CFO wants all purchase orders above TZS 5,000,000 to require a second-level approval. She opens **Purchasing › Purchase Settings** (`/admin/purchase-settings`), turns on **Enable PO Approval Workflow**, sets **Approval Threshold Amount** to **5,000,000**, selects **Currency** **TZS** from the Currency Picker, and clicks **Save Settings**. From now on any DRAFT PO with a total above TZS 5,000,000 must be approved before it can be placed; the system refuses to place such a PO until an authorised approver has approved it.
 
 ---
 
@@ -594,7 +604,7 @@ The following steps illustrate a complete P2P cycle for a stock purchase with re
 
 **Step 1 — Raise a Requisition**
 
-Storekeeper John opens **Purchasing › Purchase Requisitions** (`/admin/purchase-requisitions`), clicks **New Requisition**, sets Required By **2026-06-18**, notes "Stock replenishment — cement for construction projects". He adds one line: **Saruji 50kg**, Unit **BAG**, Qty **500**, Estimated Cost **TZS 14,800**. He saves (REQ-0080 = DRAFT) and clicks **Submit** (status → SUBMITTED).
+Storekeeper John opens **Purchasing › Purchase Requisitions** (`/admin/purchase-requisitions`), clicks **New Requisition**, sets Required By **2026-06-18**, notes "Stock replenishment — cement for construction projects". He adds one line: **Saruji 50kg**, Unit **BAG**, Qty **500**, Estimated Cost **TZS 14,800**. He clicks **Create Requisition** (REQ-0080 = DRAFT), then opens it and clicks **Submit for Approval** (status → SUBMITTED).
 
 **Step 2 — Approve**
 
@@ -602,11 +612,11 @@ Purchasing manager Neema opens REQ-0080 and clicks **Approve** (status → APPRO
 
 **Step 3 — Convert to RFQ**
 
-Neema clicks **Convert**, selects **RFQ** — RFQ-0031 is created in DRAFT.
+Neema clicks **Convert**, selects **RFQ**, and clicks **Confirm Convert** — RFQ-0031 is created in DRAFT.
 
 **Step 4 — Invite suppliers and send**
 
-Neema opens **Purchasing › RFQs / Sourcing** (`/admin/rfqs`), opens RFQ-0031, adds invited suppliers **Tanzania Cement Distributors** and **Simba Cement Ltd**, sets Response Due Date **2026-06-17**, and clicks **Send** (status → SENT).
+Neema opens **Purchasing › RFQs / Sourcing** (`/admin/rfqs`), opens RFQ-0031, adds invited suppliers **Tanzania Cement Distributors** and **Simba Cement Ltd**, sets Response Due Date **2026-06-17**, and clicks **Send to Suppliers** (status → SENT).
 
 **Step 5 — Capture supplier quotes**
 
@@ -622,19 +632,19 @@ Zawadi clicks **Award** on the Simba Cement quote (lower price). RFQ status → 
 
 **Step 7 — Place the PO**
 
-Zawadi opens **Purchasing › Purchase Orders** (`/admin/purchase-orders`), finds PO-0088, reviews the line, and clicks **Place** (status → ORDERED, total TZS 7,250,000).
+Zawadi opens **Purchasing › Purchase Orders** (`/admin/purchase-orders`), finds PO-0088, reviews the line, and clicks **Place Order** (status → ORDERED, total TZS 7,250,000).
 
 **Step 8 — Receive goods**
 
-On 2026-06-22, 500 bags arrive. Storekeeper John opens **Purchasing › Goods Receipts** (`/admin/goods-receipts`), clicks **New Goods Receipt**, picks PO-0088, enters Receipt Date 2026-06-22, keeps 500 bags, and submits. GRN-0061 created (RECEIVED); PO-0088 status → RECEIVED; 500 bags added to stock.
+On 2026-06-22, 500 bags arrive. Storekeeper John opens **Purchasing › Goods Receipts** (`/admin/goods-receipts`), clicks **New Receipt**, picks PO-0088, keeps 500 bags, and clicks **Record Receipt**. GRN-0061 created (RECEIVED); PO-0088 status → RECEIVED; 500 bags added to stock.
 
 **Step 9 — Allocate landed costs**
 
-Port clearing TZS 850,000 + freight TZS 600,000 are entered as a landed cost against GRN-0061 (Basis: By Quantity). Accountant Sarah opens **Purchasing › Landed Costs** (`/admin/landed-costs`), creates the landed cost, and clicks **Confirm** — TZS 2,900/bag added to the moving-average cost.
+Port clearing TZS 850,000 + freight TZS 600,000 are entered as a landed cost against GRN-0061 (Basis: By Quantity). Accountant Sarah opens **Purchasing › Landed Costs** (`/admin/landed-costs`), creates the landed cost, and clicks **Confirm & Allocate** — TZS 2,900/bag added to the moving-average cost.
 
 **Step 10 — Enter the supplier bill and run 3-way match**
 
-Simba Cement's invoice arrives: SIM/2026/1041, 500 bags @ TZS 14,500. Sarah opens **Accounting › Enter Bill** (`/admin/ap/supplier-bills/enter`), links PO-0088, enters the bill, and clicks **Enter Bill & Match**. All lines → MATCHED. BILL-0051 is ready for payment.
+Simba Cement's invoice arrives: SIM/2026/1041, 500 bags @ TZS 14,500. Sarah opens **Accounting › Enter Bill** (`/admin/ap/supplier-bills/enter`), picks the supplier, selects Currency **TZS** from the Currency Picker, links PO-0088, adds a bill line (Description **Saruji 50kg**, Billed Qty 500, Unit Cost TZS 14,500) and selects the matching **PO Line**, then clicks **Enter Bill & Match**. All lines → MATCHED. BILL-0051 is ready for payment.
 
 **Step 11 — Record AP payment**
 
@@ -642,4 +652,4 @@ Finance officer David opens **Accounting › Record Payment** (`/admin/ap/paymen
 
 **Step 12 — Purchase return (if needed)**
 
-If 20 bags arrived damaged, John opens **Purchasing › Purchase Returns** (`/admin/purchase-returns`), creates a return against GRN-0061 for 20 bags, and the manager confirms it — stock decreases by 20 bags and the AP module notes a TZS 290,000 credit note expected from Simba Cement.
+If 20 bags arrived damaged, John opens **Purchasing › Purchase Returns** (`/admin/purchase-returns`), creates a return against GRN-0061 for 20 bags, and the manager confirms it — stock decreases by 20 bags and the AP module raises a TZS 290,000 debit note against Simba Cement.

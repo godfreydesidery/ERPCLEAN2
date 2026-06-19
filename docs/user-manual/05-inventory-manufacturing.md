@@ -21,6 +21,8 @@ Before starting, confirm that the required permission codes have been granted to
 | View stock counts | `STOCK.COUNT.VIEW` |
 | Create / enter / cancel stock counts | `STOCK.COUNT.CREATE` |
 | Post a stock count | `STOCK.COUNT.POST` |
+| View stock batches (by-location / detail) | `STOCK.BATCH.VIEW` * |
+| View stock serials (by-location / by-product / lookup) | `STOCK.SERIAL.VIEW` * |
 | View expiring batches | `INVENTORY.EXPIRY.VIEW` |
 | View inventory valuation report | `INVENTORY.VALUATION.VIEW` |
 | Set opening valuation | `INVENTORY.OPENING.SET` |
@@ -31,6 +33,8 @@ Before starting, confirm that the required permission codes have been granted to
 | Complete / close a Work Order | `WORKORDER.CLOSE` |
 
 Navigation items are hidden when the corresponding permission is absent. Attempting to access a route directly without the permission shows a **Forbidden** message.
+
+\* The Stock Batches and Stock Serials screens are gated on `STOCK.BATCH.VIEW` / `STOCK.SERIAL.VIEW`, but these two codes are **not present in the seeded permission catalogue** (it seeds `INVENTORY.BATCH.VIEW` / `INVENTORY.SERIAL.VIEW` instead). As a result no ordinary role can hold them, so today these screens are reachable by the superuser (`rootadmin`) only. See the Known limitation note in section 6 and the FAQ in section 12.
 
 ---
 
@@ -46,18 +50,18 @@ The system stores both a maintained on-hand balance and an append-only movement 
 
 Navigate to **Inventory > Stock On-Hand** (`/admin/stock`).
 
-The table shows every stockable product that has had at least one movement at the active branch. Each row contains the product code, product name, unit of measure, quantity on-hand (to three decimal places), reorder level, and two derived flags:
+The table shows every stockable product that has had at least one movement at the active branch. The columns are **Product** (code and name shown together), **Quantity** (on-hand, to three decimal places), **Reorder Level**, **Flags**, and an actions column. There is no separate unit-of-measure column. Two derived flags can appear in the **Flags** column:
 
 - **Negative** — the quantity has gone below zero (an overselling indicator; the system does not hard-block it).
-- **Low stock** — the quantity is at or below the reorder level. This flag is blank when no reorder level has been set.
+- **Low** — the quantity is at or below the reorder level. This flag is blank when no reorder level has been set.
 
 **Filtering and pagination.** Use the search box to filter by product name or code (the list refreshes after a short pause). Use the paginator controls (First, Previous, page numbers, Next, Last) to move between pages. The paginator hides itself when there is only one page.
 
-**Switching views.** The list offers three view modes via a toggle at the top:
+**Switching views.** The list offers three view modes via the tabs at the top:
 
-- **By product** (default) — one row per product, summed across all locations.
-- **By location** — one row per product-location combination. A branch must be selected.
-- **By product (single product drill-down)** — pick a product from the search picker to see its quantity broken down by every location holding it.
+- **On-Hand** (default) — one row per product, summed across all locations.
+- **By Location** — one row per product-location combination. A branch must be selected.
+- **By Product** — pick a product from the search picker to see its quantity broken down by every location holding it.
 
 ### 2.2 Recording a manual adjustment
 
@@ -83,7 +87,7 @@ Use an adjustment to correct a stock quantity that is wrong for any reason other
 
 3. Enter the **Quantity** — positive to increase, negative to decrease.
 4. Optionally add a free-text note.
-5. Click **Submit**.
+5. Click **Save**.
 
 The system creates a new stock movement (`ADJUSTMENT`) and reloads the on-hand list. Adjustments are permanent records; they cannot be deleted or edited after posting.
 
@@ -103,7 +107,7 @@ An opening balance sets the initial quantity for a product that has never had an
 2. Pick the product from the picker (search by name or code).
 3. Enter the quantity. Must be greater than zero.
 4. Optionally add a note such as `go-live`.
-5. Click **Submit**.
+5. Click **Record**.
 
 **Important.** The system rejects an opening balance if the product already has any prior movement at the active branch. A second opening balance on the same product at the same branch is not permitted. To adjust existing stock, use the Adjust flow (section 2.2).
 
@@ -124,7 +128,7 @@ The Low Stock flag recalculates immediately after saving.
 **What the movement ledger is.**
 The movement ledger is the append-only record of every quantity change for a product at a branch — every goods receipt, every sale issue, every adjustment, every transfer in or out, every opening balance, every production issue and receipt. It is the audit trail for on-hand. Because movements are append-only (never edited or deleted), the ledger is tamper-evident: the on-hand balance can always be recomputed by summing all movements.
 
-Click **Movements** on a product row to open the movement ledger drawer. Movements are displayed in chronological order with:
+Click **Ledger** on a product row to open the movement ledger drawer (its header reads **Ledger — <product>**). Movements are displayed in chronological order with:
 
 - Movement type (Goods Receipt, Sale Issue, Adjustment, Opening Balance, Transfer In/Out, etc.)
 - Direction (IN or OUT)
@@ -158,12 +162,12 @@ Without locations, the business knows only how much stock is at a branch in aggr
 
 ### 3.1 Creating a location
 
-1. Click **Create**.
+1. Click **New Location** (the button toggles to **Cancel** while the form is open).
 2. Enter a short **Code** (up to 30 characters, unique within the branch) and a **Name** (up to 120 characters).
-3. Choose the **Location Type**.
+3. Choose the **Type**.
 4. Pick the **Branch** from the picker.
-5. Tick **Make default** if this should be the primary location for the branch. There can be only one default location per branch — making a new location the default automatically clears the prior one.
-6. Click **Submit**.
+5. Tick **Set as default** if this should be the primary location for the branch. There can be only one default location per branch — making a new location the default automatically clears the prior one.
+6. Click **Create Location**.
 
 New locations are created in **Active** status.
 
@@ -173,13 +177,13 @@ Click the edit icon on a row. You can change the name and location type. The cod
 
 ### 3.3 Marking as default
 
-Click **Set default** on any active, non-default location. The previous default is cleared automatically.
+In the row's Actions column, click the star icon button (its accessible label is "Set <code> as default") on any active, non-default location. The previous default is cleared automatically.
 
 ### 3.4 Deactivating and reactivating
 
-Click **Deactivate** to set the location to **Inactive**. It no longer appears in pickers used by transfers and counts. Click **Reactivate** to restore it to Active.
+In the row's Actions column, click the pause-circle icon button (accessible label "Deactivate <code>") to set the location to **Inactive**. It no longer appears in pickers used by transfers and counts. Click the play-circle icon button (accessible label "Reactivate <code>") to restore it to Active.
 
-Locations are never hard-deleted. An Inactive location and its history remain in the list (visible with the status filter).
+Locations are never hard-deleted. The list always shows every location, both Active and Inactive — there is no status filter, so an Inactive location and its history simply remain visible in the list.
 
 ---
 
@@ -220,8 +224,8 @@ DRAFT
 3. Pick the **Destination Branch** and **Destination Location**. Source and destination must be different locations.
 4. Set the **Transfer Date**.
 5. Choose the **Transfer Mode**: Instant (same-branch) or In-transit (cross-branch).
-6. Click **Add Line** for each product to transfer. Pick the product by name and enter the quantity.
-7. Click **Submit**.
+6. Click **Add line** for each product to transfer. Pick the product by name and enter the quantity.
+7. Click **Create Transfer**.
 
 The transfer is created with status **Draft** and a system-generated transfer number. The screen navigates to the transfer detail.
 
@@ -233,6 +237,8 @@ On a Draft, In-transit transfer, click **Dispatch**. The status changes to **Dis
 
 The Dispatch button is only available when the transfer is in Draft status and the mode is In-transit. Dispatching requires the `STOCK.TRANSFER.CREATE` permission.
 
+**Insufficient source stock.** If the source location does not allow negative stock, dispatch is rejected (409 Conflict) when the available quantity at the source is less than the quantity being transferred — the message names the product, the available quantity, and the requested quantity. The transfer stays in Draft so you can correct the lines or top up the source. (A source location whose `allowNegative` flag is set will let the dispatch proceed and the source on-hand can go negative.)
+
 ### 4.3 Receiving an in-transit transfer
 
 On a Dispatched transfer, the destination operator clicks **Receive**. The status changes to **Received** and the destination location's stock increases.
@@ -241,7 +247,7 @@ Receiving requires the `STOCK.TRANSFER.RECEIVE` permission. This allows organisa
 
 ### 4.4 Completing an instant transfer
 
-On a Draft, Instant transfer, click **Complete instant**. The transfer completes in a single step; both locations update simultaneously.
+On a Draft, Instant transfer, click **Complete (Instant)**. The transfer completes in a single step; both locations update simultaneously. As with dispatch, completion is rejected (409 Conflict) if the source location does not allow negative stock and the available quantity is less than the quantity being transferred.
 
 ### 4.5 Cancelling a transfer
 
@@ -249,7 +255,7 @@ On a Draft transfer, click **Cancel**. The status changes to **Cancelled** and n
 
 ### 4.6 Viewing the transfer list and detail
 
-The list shows transfer number, source and destination, transfer date, mode, and status. Click any row to open the detail view. The transfer is referenced by its human transfer number throughout the UI; the internal identifier appears only in the browser address bar.
+The list shows transfer number, transfer date, mode, status, source location, and destination location. To open the detail view, click the **View** action (eye icon) in the row's Actions column — there is no row-click. The transfer is referenced by its human transfer number throughout the UI; the internal identifier appears only in the browser address bar.
 
 ---
 
@@ -264,9 +270,9 @@ Storekeeper Grace Mwenda at Arusha branch needs to send 200 bags of Pembe Flour 
 5. Add lines:
    - Product: `Pembe Flour 2kg (FLR-002)`, Qty: `200`.
    - Product: `Cooking Oil 3L (OIL-003)`, Qty: `50`.
-6. Click **Submit**. Transfer `TRF-0042` is created with status **Draft**.
+6. Click **Create Transfer**. Transfer `TRF-0042` is created with status **Draft**.
 7. Grace reviews the lines and clicks **Dispatch**. Status becomes **Dispatched**. The Arusha Warehouse stock for both items decreases immediately (200 bags and 50 cartons deducted).
-8. The following day, DSM storekeeper Omari Njau opens **Inventory › Stock Transfers** (`/admin/stock-transfers`), finds `TRF-0042` with status Dispatched, and clicks the row to open the detail.
+8. The following day, DSM storekeeper Omari Njau opens **Inventory › Stock Transfers** (`/admin/stock-transfers`), finds `TRF-0042` with status Dispatched, and clicks the **View** action (eye icon) in its Actions column to open the detail.
 9. Omari counts the physical delivery — both lines match — and clicks **Receive**. Status becomes **Received**. DSM Main Store stock increases by 200 bags and 50 cartons.
 10. Both storekeepers can now see `TRF-0042` with status **Received** in the transfer list. No cancellation is possible at this stage.
 
@@ -302,13 +308,15 @@ When a count is created the system immediately freezes the on-hand quantities (t
 ### 5.1 Creating a stock count
 
 1. Navigate to **Stock Counts > Create** (`/admin/stock-counts/create`).
-2. Select the **Company** and **Branch**.
-3. Pick the **Location** from the picker.
+2. Select the **Company** and **Branch**. (The Company selector appears only when you have access to more than one company, and the Branch selector only when the chosen company has more than one branch; otherwise the single company/branch is used automatically and no selector is shown.)
+3. Pick the **Stock Location** from the picker.
 4. Set the **Count Date** (defaults to today).
 5. Choose the **Count Type**:
    - **Full** — all products held at the location are included.
-   - **Cycle** — a subset of products. Use the product pickers to choose which products to count.
-6. Click **Submit**.
+   - **Cycle** — recorded as a cycle count for reporting/classification. The on-screen hint reads *"FULL = entire location. CYCLE = selected products."*
+
+   > **Current limitation — cycle scoping.** The create screen has **no product picker**. It collects only Location, Count Date, Count Type, and Notes. Whether you choose **Full** or **Cycle**, the count is currently snapshotted over **all** products held at the location — there is no UI control to restrict a cycle count to a chosen subset of products. The **Count Type** value is stored and shown on the document, but it does not change which lines are created. To count only a few products, either run a full count and enter quantities for just those lines, or use a single-product Adjustment (section 2.2) instead.
+6. Click **Create Count**.
 
 The count is created with status **Counting** and a system-generated count number. The system records the current on-hand quantity for each product as the **System Qty** snapshot. This snapshot is frozen and cannot change.
 
@@ -317,10 +325,10 @@ The count is created with status **Counting** and a system-generated count numbe
 Open the count detail. For each product line:
 
 1. Enter the physically counted quantity in the **Counted Qty** column.
-2. Optionally choose a reason code for lines that have a variance.
-3. Click **Enter / Save**.
+2. Optionally type a free-text reason in the **Reason** box on lines that have a variance.
+3. Click **Save Counted Qtys**.
 
-The **Variance** column shows `Counted Qty − System Qty`. A positive variance means more stock was found than expected; a negative variance means less was found.
+After posting, the **Variance Qty** column shows `Counted Qty − System Qty`. A positive variance means more stock was found than expected; a negative variance means less was found.
 
 The document stays in Counting status after saving. You can enter counts in multiple sessions.
 
@@ -329,32 +337,32 @@ The document stays in Counting status after saving. You can enter counts in mult
 Posting creates stock adjustment movements for every line with a variance and generates a single GL variance journal.
 
 1. Open a count in Counting status.
-2. Click **Post**.
+2. Click **Post Count** to reveal the posting form.
 3. Enter the **Posting Date**.
-4. Confirm.
+4. Click **Confirm Post**.
 
 Posting requires the `STOCK.COUNT.POST` permission (typically held by an accountant or supervisor). After posting, the document is read-only.
 
 ### 5.4 Cancelling a count
 
-Open a Counting count and click **Cancel**. No stock movements or GL entries are created. A Posted count cannot be cancelled. If corrections are needed after posting, create a new count.
+Open a Counting count and click **Cancel Count**. No stock movements or GL entries are created. A Posted count cannot be cancelled. If corrections are needed after posting, create a new count.
 
 ---
 
 **Example — Cycle count of sugar and rice with a variance posted:**
 
-Accountant supervisor Boniface Kessy schedules a cycle count of two fast-moving products at the DSM Main Store.
+Accountant supervisor Boniface Kessy wants to reconcile two fast-moving products at the DSM Main Store. Because the create screen has no product picker (see the limitation note in section 5.1), the count snapshots every product at the location; Boniface simply leaves the other lines un-entered and enters counts only for the two products he is interested in.
 
 1. Navigate to **Inventory › Stock Counts › Create** (`/admin/stock-counts/create`).
 2. Company: `Kijenge Trading Ltd`; Branch: `DSM Branch`; Location: `DSM Main Store`; Count Date: `2026-06-12`; Count Type: **Cycle**.
-3. Add products to count: `Sembe Sugar 1kg (SGR-001)` and `Jasmine Rice 5kg (RCE-005)`. Click **Submit**.
-4. Count `CNT-0009` is created with status **Counting**. The system records the snapshot quantities: Sugar = 850 bags, Rice = 240 bags.
-5. Storekeeper Omari Njau physically counts the shelves. He opens `CNT-0009` and enters:
+3. Click **Create Count**.
+4. Count `CNT-0009` is created with status **Counting**. The system records snapshot quantities for **every** product at DSM Main Store, including Sugar = 850 bags and Rice = 240 bags.
+5. Storekeeper Omari Njau physically counts the two shelves he is responsible for. He opens `CNT-0009` and, leaving every other line blank, enters:
    - Sugar counted: `843` (variance: −7 bags).
    - Rice counted: `245` (variance: +5 bags).
-   - For Sugar he selects Reason: `SHRINKAGE`. For Rice no reason is needed (positive variance — unrecorded receipt correction).
-   Click **Enter / Save**.
-6. Boniface reviews the variances and clicks **Post**. Posting Date: `2026-06-12`. Confirms.
+   - In the **Reason** box on the Sugar line he types `SHRINKAGE`. For Rice no reason is needed (positive variance — unrecorded receipt correction).
+   Click **Save Counted Qtys**.
+6. Boniface reviews the variances and clicks **Post Count**. Posting Date: `2026-06-12`. Confirms. Lines with no counted quantity entered are treated as no-variance and post nothing.
 7. The system posts two stock adjustment movements:
    - Sugar: −7 bags (ADJUSTMENT, reason SHRINKAGE).
    - Rice: +5 bags (ADJUSTMENT).
@@ -393,7 +401,7 @@ Click the **Expiring Soon** tab. Set a horizon date (default: 30 days from today
 
 The expiring batches tab requires the `INVENTORY.EXPIRY.VIEW` permission.
 
-> **Known limitation.** The batch detail screen (`STOCK.BATCH.VIEW`) and serial detail screen (`STOCK.SERIAL.VIEW`) are accessible to superuser (`rootadmin`) only on seeded data. ORG_ADMIN and other roles will see a Forbidden message on those views until a permission-code fix is deployed. The Expiring Soon tab is unaffected and works for ORG_ADMIN.
+> **Known limitation — Batches and Serials are superuser-only.** The Stock Batches and Stock Serials screens, and the routes and navigation links that lead to them, are gated on the permission codes `STOCK.BATCH.VIEW` and `STOCK.SERIAL.VIEW`. These two codes **do not exist in the seeded permission catalogue** — the catalogue instead seeds `INVENTORY.BATCH.VIEW` and `INVENTORY.SERIAL.VIEW`. Because no role (not even ORG_ADMIN, which is granted the entire catalogue) can hold a code that is not in the table, this affects **all** of these views — the by-location batch view, the by-location / by-product / lookup serial views, and the batch/serial detail lookups — not just the detail screens. For every non-root role the **Stock Batches** and **Serial Numbers** navigation links are hidden, and visiting the routes directly shows a Forbidden message. Only the superuser (`rootadmin`), who passes all permission checks, can open these screens. The Expiring Soon tab is gated separately on `INVENTORY.EXPIRY.VIEW` (which **is** seeded) and works for ORG_ADMIN. This permission-code fix has **not** yet been deployed.
 
 ---
 
@@ -412,20 +420,22 @@ Serial numbers are created and updated automatically by the purchasing (goods re
 
 Serial numbers are assigned to individual units of serialised products. This screen is read-only; serials are created and updated by the purchasing, sales, and transfer flows.
 
+The screen has two view-mode tabs: **By Location** and **Product History**.
+
 ### 7.1 Viewing serials by location
 
-1. Select **By Location** mode.
+1. Select the **By Location** tab.
 2. Pick a **Location** and a **Product**.
-3. Optionally filter by **Status**: All, In Stock, Issued, Returned.
+3. Optionally filter by **Status**: All, IN_STOCK, ISSUED, RETURNED.
 4. The table shows serial number, current status, and the related documents.
 
 ### 7.2 Viewing serial history by product
 
-Switch to **By Product** mode. Pick a product to see all of its serials across all statuses and locations.
+Switch to the **Product History** tab. Pick a product to see all of its serials across all statuses and locations.
 
 ### 7.3 Looking up a serial number
 
-Switch to **Lookup** mode. Pick a product, then type the serial number and click **Look up**. The system returns the current status and location, or shows a Not Found message if the serial does not exist for that product.
+There is no separate lookup tab. In the **By Location** tab, once a product is selected, a **Lookup by serial #** panel appears above the table. Type the serial number and click **Lookup**. The system returns the current status and related documents, or shows a "Serial number not found for this product" message if the serial does not exist for that product.
 
 ---
 
@@ -439,12 +449,12 @@ When a goods receipt is posted, the system computes the new average as: `(existi
 
 ### 8.1 Valuation report
 
-Navigate to **Inventory > Valuation** (`/admin/stock/valuation`). Requires the `INVENTORY.VALUATION.VIEW` permission.
+Navigate to **Inventory > Stock Valuation** (`/admin/stock/valuation`). Requires the `INVENTORY.VALUATION.VIEW` permission.
 
-The report shows every stockable product with its average cost, quantity, and calculated inventory value. A reconciliation bar at the top compares the sum of on-hand values (the stock ledger) against the GL inventory account balance:
+The report is not loaded automatically — the initial screen shows an empty state ("Click Refresh to load the current valuation"). Click **Refresh** to build the report. It then shows every stockable product with its average cost, quantity, and calculated inventory value. A reconciliation bar at the top compares the sum of on-hand values (the stock ledger) against the GL inventory account balance:
 
 - **Reconciled to GL** (green) — the stock ledger and GL agree.
-- **Does not reconcile** (red) — there is a discrepancy. The difference amount is shown. Finance review is required.
+- A red **Finance-grade alarm — Stock ledger and GL are out of sync** banner — there is a discrepancy. The stock total, the GL 1300 balance, and the difference amount are shown, and the GL Reconciliation card's status tag reads **Out of balance**. Finance review is required.
 
 ### 8.2 Setting an opening valuation
 
@@ -453,11 +463,11 @@ Opening valuation is the one-time act of assigning an initial monetary cost to s
 
 Navigate to **Inventory > Opening Valuation** (`/admin/stock/valuation/opening`). Requires the `INVENTORY.OPENING.SET` permission.
 
-Use this screen to assign an initial cost to products that have a quantity on-hand but no established average cost.
+Use this screen to assign an initial cost to products that have a quantity on-hand but no established average cost. It is a single form, not a per-row entry table.
 
-1. The screen lists all on-hand rows that are currently unvalued.
-2. Find the product row and enter the **Opening Cost per unit**.
-3. Click **Submit**.
+1. Pick a product from the **Product (unvalued on-hand rows)** dropdown — only products with on-hand quantity but no cost appear in it.
+2. Enter the **Opening Unit Cost** for that product.
+3. Click **Set Opening Valuation**.
 
 The system posts a GL entry (DR Inventory / CR Opening Balance Equity) and the product's average cost is established. Opening valuation is a one-time operation per on-hand row. Once a row has been valued it no longer appears on this screen.
 
@@ -492,10 +502,10 @@ Only a DRAFT BOM can be activated. ARCHIVED is a permanent terminal state.
 ### 9.1 Creating a BOM
 
 1. On the BOM list, click **New BOM**.
-2. Pick the **Finished Product** from the picker (search by name or code). The product must be a GOODS type and must be active.
+2. Pick the **Parent Product** from the picker (its placeholder reads "Select finished product"; search by name or code). The product must be a GOODS type and must be active.
 3. Enter the **Output Quantity** (how many units the BOM produces per run) and optionally the **Yield %** (default 100%).
 4. Optionally add notes.
-5. Click **Submit**.
+5. Click **Create BOM**.
 
 The BOM is created in **Draft** status with the next version number for that finished product (v1 for the first BOM, v2 for the next, etc.).
 
@@ -516,13 +526,13 @@ Open a Draft BOM detail and click **Add Component**.
    - **Auto (derive)** — the system determines whether the component is made internally (MAKE) or purchased (BUY) based on whether it has an Active BOM.
    - **MAKE** — the component is itself manufactured.
    - **BUY** — the component is purchased from a supplier.
-6. Click **Submit**.
+6. Click **Add**.
 
 Components can be added, edited, or removed only while the BOM is in Draft status.
 
 ### 9.3 Editing a BOM header
 
-On a Draft BOM detail, click **Edit**. You can change Output Quantity, Yield %, and Notes. On an Active BOM only Notes can be changed; structural fields are frozen.
+There is no Edit button. The **BOM Header** form is always shown inline on the BOM detail. On a Draft BOM its Output Qty, Yield %, and Notes fields are editable; on an Active BOM only Notes can be changed (the structural fields are disabled). Make your changes and click **Save Header**.
 
 ### 9.4 Activating a BOM
 
@@ -539,7 +549,7 @@ Activating a BOM automatically archives the current Active BOM (if any) for the 
 
 ### 9.5 Archiving a BOM
 
-On a Draft or Active BOM, click **Archive**. The BOM moves to Archived status permanently. Header and component editing controls disappear.
+On an Active BOM, click **Archive**. The **Archive** button is shown only while the BOM is Active — it does not appear on a Draft BOM. The BOM moves to Archived status permanently, and header and component editing controls disappear. (A Draft BOM that is never needed is simply left in Draft; archiving applies to Active BOMs, consistent with the DRAFT → ACTIVE → ARCHIVED lifecycle above.)
 
 ---
 
@@ -581,16 +591,16 @@ CANCELLED, COMPLETED (after close), and CLOSED are terminal. A COMPLETED Work Or
 1. On the Work Orders list, click **New Work Order**.
 2. Pick the **Finished Product** from the picker.
 3. Pick the **Branch** from the picker.
-4. Enter the **Planned Quantity**.
-5. Optionally pin a specific **BOM version** via the picker (if blank, the system uses the product's current Active BOM at release time).
+4. Enter the **Planned Qty**.
+5. Optionally pin a specific BOM by typing its UID into the **BOM UID (optional)** field — this is a plain text input (placeholder "pin specific BOM…"), not a picker. If blank, the system uses the product's current Active BOM at release time.
 6. Optionally enter a **Planned Date** and **Notes**.
-7. Click **Submit**.
+7. Click **Create Work Order**.
 
 The Work Order is created in **Planned** status with a generated Work Order number.
 
 ### 10.2 Editing a Work Order
 
-A Work Order can only be edited while in Planned status. Open the Work Order detail and click **Edit**. You can change the Planned Quantity, Branch, Planned Date, and Notes.
+A Work Order can only be edited while in Planned status. There is no Edit button — while the order is Planned, the **Edit Work Order** form is shown inline on the detail page. You can change the Planned Qty, **BOM UID (override)**, Branch, Planned Date, and Notes, then click **Save**.
 
 ### 10.3 Adding and removing operations
 
@@ -599,8 +609,8 @@ Operations are the discrete steps in the production process — for example, Cut
 
 Operations represent discrete production steps (e.g. Cutting, Assembly) with associated labour and overhead cost estimates. They can be added to a Work Order at any status before it is Closed or Cancelled.
 
-- **Add operation**: Enter sequence number, description, work centre, and optional labour/overhead amounts. Click **Submit**.
-- **Remove operation**: Click **Remove** on an operation row. An operation that has already had costs applied to it cannot be removed.
+- **Add operation**: In the **Add Operation** form, enter Seq, Description, Work Centre, and optional Labour Amt / Overhead Amt. Click **Add**.
+- **Remove operation**: Click the trash-icon button in the operation row's Actions column. An operation that has already had costs applied to it cannot be removed.
 
 ### 10.4 Releasing a Work Order
 
@@ -610,9 +620,8 @@ Releasing a Work Order is the act of committing to produce. At this point the sy
 Releasing a Work Order locks the BOM and generates the component plan.
 
 1. Open a Planned Work Order.
-2. Click **Release**.
-3. Optionally override the BOM via the picker.
-4. Confirm.
+2. In the **Release Work Order** section, optionally override the BOM by typing its UID into the **BOM UID (optional override)** field — this is a plain text input (placeholder "leave blank for active BOM"), not a picker.
+3. Click **Release**.
 
 Status changes to **Released**. The system emits a production event. No stock movements or GL entries are posted yet.
 
@@ -627,7 +636,7 @@ Issuing deducts the component materials from stock and accumulates costs in the 
 
 1. Open a Released or In-Progress Work Order.
 2. Enter the **Posting Date**.
-3. Click **Issue Components**.
+3. Click **Issue All Components**.
 
 The system issues all un-issued component lines simultaneously (full issue). Status moves to **In-Progress** on the first issue.
 
@@ -641,9 +650,9 @@ Stock movements of type `PRODUCTION_ISSUE` are posted for each component. GL ent
 Labour costs are the wages and salaries paid to the workers who produce the goods. Overhead costs are the indirect production costs that cannot be assigned to a single unit but are incurred as part of running the factory — energy, depreciation of machinery, supervision, etc. Both are debited to WIP when applied to a Work Order: **DR WIP / CR the relevant cost account**. Applying these costs ensures that the finished good's cost reflects all the inputs that went into making it, not just the raw materials.
 
 1. Open a Released or In-Progress Work Order.
-2. In the **Apply Cost** section, enter a **Labour Amount** and/or an **Overhead Amount** and a **Posting Date**.
+2. In the **Apply Labour / Overhead Cost** section, enter a **Labour Amount** and/or an **Overhead Amount** and a **Posting Date**.
 3. Optionally link the cost to a specific operation via the Operation picker.
-4. Click **Submit**.
+4. Click **Apply Cost**.
 
 GL entries: DR WIP / CR the relevant cost account. An operation can only have costs applied to it once; a second attempt is rejected.
 
@@ -655,13 +664,13 @@ Completing a Work Order records that production has finished and the finished go
 Completing records the finished goods receipt and calculates the unit cost.
 
 1. Open an In-Progress Work Order.
-2. In the **Complete** section, enter **Good Quantity** produced, **Scrap Quantity** (if any), and a **Posting Date**.
-3. If the combined good and scrap quantities exceed the planned quantity, tick **Allow Over-run**.
-4. Click **Submit**.
+2. In the **Complete Work Order** section, enter **Good Quantity** produced, **Scrap Quantity** (if any), and a **Posting Date**.
+3. If the combined good and scrap quantities exceed the planned quantity, tick **Allow overrun**.
+4. Click **Complete**.
 
 Status changes to **Completed**. A `PRODUCTION_RECEIPT` stock movement is posted for the finished goods. The computed unit cost is the total WIP debit divided by the good quantity. GL entries: DR Finished Goods / CR WIP.
 
-**Validation.** Good quantity must be positive. If good + scrap exceeds planned quantity and Allow Over-run is not ticked, the submission is rejected.
+**Validation.** Good quantity must be positive. If good + scrap exceeds planned quantity and Allow overrun is not ticked, the submission is rejected.
 
 ### 10.8 Closing a Work Order
 
@@ -671,8 +680,8 @@ Closing a Work Order is the final step that clears any remaining WIP balance. Af
 Closing clears any residual WIP balance (rounding or variance) and marks the order as final.
 
 1. Open a Completed Work Order.
-2. In the **Close** section, enter a **Posting Date**.
-3. Click **Submit**.
+2. In the **Close Work Order** section, enter a **Posting Date**.
+3. Click **Close**.
 
 Status changes to **Closed**. Any residual WIP is posted to the Manufacturing Variance account. GL entries: DR or CR Manufacturing Variance / CR or DR WIP (depending on sign).
 
@@ -717,9 +726,9 @@ Navigate to **Manufacturing > WIP Reconciliation** (`/admin/manufacturing/wip-re
 The WIP reconciliation report is the manufacturing equivalent of the inventory valuation report's GL reconciliation bar. It compares the total WIP balance accumulated across all open Work Orders (RELEASED, IN_PROGRESS, and COMPLETED orders that have not yet been closed) against the WIP account balance (account 1320) in the General Ledger. They must agree at all times — if they do not, it means a posting was made to the WIP account that was not recorded on a Work Order, or vice versa, which indicates a data integrity problem requiring investigation.
 
 1. Select the **Company**.
-2. The report compares the sum of open Work Order WIP balances (the manufacturing ledger) against the WIP Inventory GL account balance (account 1320).
+2. The report is not loaded automatically — click **Refresh** to run it. It compares the sum of open Work Order WIP balances (the manufacturing ledger) against the WIP Inventory GL account balance (account 1320).
 
-A **Balanced** indicator means the two totals agree. A **Does Not Balance** alert means there is a discrepancy and a finance review is required.
+When the two totals agree, a green **WIP balances reconcile — computed equals expected** banner is shown and the difference row carries a **Reconciled** status tag. When they do not, a red **Finance-grade defect: WIP per work orders does not match the WIP Inventory GL balance** alert is shown and the difference row carries a **Defect** status tag — a finance review is required.
 
 ---
 
@@ -732,7 +741,7 @@ Yes. The system records negative on-hand and flags the row with the Negative ind
 An adjustment corrects a single product's quantity immediately. A stock count covers all products at a location, freezes the system quantities as a snapshot, lets you enter physical counts across multiple sessions, and only posts variances when you explicitly post the count.
 
 **Why do I see Forbidden on the Batches and Serials screens?**
-There is a known permission-code mismatch in the current seed data. Only the superuser (`rootadmin`) can access the by-location and by-detail views for batches and serials until a fix is deployed. The Expiring Batches tab remains functional for ORG_ADMIN.
+There is a known permission-code mismatch in the current seed data. The screens and their routes/nav links require `STOCK.BATCH.VIEW` / `STOCK.SERIAL.VIEW`, but the seeded catalogue only contains `INVENTORY.BATCH.VIEW` / `INVENTORY.SERIAL.VIEW`, so no ordinary role can hold the required codes. As a result, **every** batch/serial view (by-location, by-product, lookup, and detail) is Forbidden for non-root roles and the nav links are hidden — only the superuser (`rootadmin`) can open them, until the fix is deployed. The Expiring Batches tab is gated on `INVENTORY.EXPIRY.VIEW` and remains functional for ORG_ADMIN.
 
 **Can I have more than one active BOM for a product?**
 No. Only one BOM can be active at a time per product. Activating a new version automatically archives the previous one. Historical archived versions remain visible.
