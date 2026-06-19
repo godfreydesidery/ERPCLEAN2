@@ -104,11 +104,28 @@ public record PosSaleRequest(
 | --- | --- | --- | --- |
 | `sessionUid` | string | yes (`@NotBlank`) | The open POS session uid (string, e.g. `pos-sess_…`). Resolved via `PosSessionRepository.findByUid`; must exist (else **404** `PosSession`) and be **OPEN** (else **409** `POS session <uid> is not OPEN.`). |
 | `customerId` | number (long) | yes (`@NotNull`) | Numeric DB id of the customer (not a uid). `customers.findById(customerId)`; unknown → **404** `Customer`. For a true walk-in, pass your configured cash/walk-in customer id. |
-| `agentId` | number (long) | yes (`@NotNull`) | Numeric DB id of the selling agent (cashier/clerk). **Carried in the DTO** for receipt/audit attribution. |
+| `agentId` | number (long) | yes (`@NotNull`) | Numeric DB id of the selling agent (cashier/clerk). **Required by the validator but NOT forwarded** — see the important note below. The invoice's agent always defaults to the logged-in user, so the submitted `agentId` has no effect on attribution. |
 | `currency` | string | yes (`@NotBlank`) | ISO currency code, e.g. `"TZS"`. Must match the session company's enabled currencies, otherwise **422** `CurrencyNotEnabledException`. Becomes both the invoice header currency and the CASH payment currency. |
 | `lines` | array | yes (`@NotEmpty`, each `@Valid`) | At least one line. Empty array → **400** bean-validation. |
 | `tenderedAmount` | number (decimal) | no | Cash the customer handed over. **Receipt-printing aid only** — see §6 (change). The server does **not** store it on the invoice and does **not** use it to compute the payment amount. |
 | `notes` | string | no (`@Size(max=500)`) | Free-text note copied onto the invoice header (`createReq.notes`). >500 chars → **400**. |
+
+> **Critical attribution behaviour — `agentId` is required but currently ignored by the POS path.**
+> Like `unitPrice` (§2.2), `agentId` must pass validation (`@NotNull`) but is **not forwarded** to
+> the invoice. The "resolve agent" step is unimplemented: in `PosSaleServiceImpl.processSale` the
+> create call passes `null` for the agent slot —
+>
+> ```java
+> var createReq = new CreateSalesInvoiceRequest(
+>         company.getUid(), customer.getUid(), null, req.currency(), req.notes(), null);
+> //                                          ^^^^ agent slot — always null, agentId is never used
+> ```
+>
+> The invoice service then **defaults the agent to the logged-in user**. So a submitted `agentId`
+> has **no effect** on attribution: the recorded agent always reflects the **cashier who is
+> authenticated**, not the `agentId` in your request. Send `agentId` (it must satisfy `@NotNull`),
+> but do **not** rely on it to attribute the sale to a different agent — and treat the returned
+> `agentId`/`agentName` (§5) as the cashier, not as an echo of what you submitted.
 
 ### 2.2 Line fields — `PosSaleRequest.LineItem`
 
@@ -241,7 +258,7 @@ Selected fields you will use for the receipt (full list in `SalesInvoiceDto.java
 | `status` | enum | `FINALISED` on success. |
 | `documentType` | enum | The sales document type. |
 | `customerId` / `customerName` | long / string | Bill-to display. |
-| `agentId` / `agentName` | long / string | Cashier/clerk display. |
+| `agentId` / `agentName` | long / string | The recorded selling agent — which, on the POS path, is always the **logged-in user** (the `agentId` you submitted is ignored; see §2.1). In the example below `agentId` equals `finalisedBy` because both are the authenticated cashier. |
 | `currency` | string | e.g. `TZS`. |
 | `netTotalAmount` | decimal | Sum of line nets (pre-VAT). |
 | `vatTotalAmount` | decimal | Total VAT. |
@@ -320,6 +337,12 @@ Selected fields you will use for the receipt (full list in `SalesInvoiceDto.java
 (`id`, `companyId`, `branchId`, `customerId`, `agentId`, `finalisedBy`,
 `createdBy`, `updatedBy`, `version` serialise as JSON strings under the global
 Long-as-string config; the decimals are numbers.)
+
+> **Note on `agentId`/`agentName` in this example.** They reflect the **logged-in
+> cashier** (here id `7`, "Jane Cashier") — *not* an `agentId` you submitted. The POS
+> path ignores the request `agentId` and defaults the invoice agent to the authenticated
+> user (§2.1), which is why `agentId` equals `finalisedBy` (`7`) above. Do not read these
+> fields as confirmation that a submitted agent was recorded.
 
 ---
 

@@ -188,6 +188,16 @@ The numbered sections above are the **endpoint reference** (each endpoint, DTO, 
 
 ---
 
+## Building the POS client — the Product Requirements Document (PRD)
+
+The 00–12 reference above is the **endpoint contract** and the use-cases catalogue is the **journey** catalogue. If you are **building the external POS client application** (deciding what to build, in what order, and which retail behaviours are backend-gated), start from the PRD, which is written against this API exactly as it exists today and traces every requirement back to the `§nn` reference and the `UC-xx` use cases.
+
+| | Section | What it covers |
+|---|---|---|
+| ★ | [POS Client PRD](./prd/README.md) | The full Product Requirements Document for the external POS client (functional + non-functional requirements, UX/screen inventory, architecture, the BR-1…BR-8 backend asks, risks, and the phased roadmap). Read it alongside the 00–12 reference and the use-cases catalogue. |
+
+---
+
 ## Typical day — sequence (text)
 
 ```

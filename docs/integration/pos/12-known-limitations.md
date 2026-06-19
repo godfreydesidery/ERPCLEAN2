@@ -14,7 +14,7 @@ reality falls short of what a full retail POS typically needs.
 | 1 | No idempotency / dedup on `POST /pos/sales` | **High** | data integrity (double-posting) |
 | 2 | No POS reversal / refund / void endpoint | **High** | returns, mistake correction |
 | 3 | Single exact **cash** tender only | **Medium–High** | payments (card, mobile money, split, change) |
-| 4 | `unitPrice` is required but ignored; no manual price override | **Medium** | API clarity, price overrides |
+| 4 | Required-but-ignored fields (`unitPrice`, `agentId`); no manual price override | **Medium** | API clarity, price overrides, agent attribution |
 
 ---
 
@@ -82,9 +82,22 @@ breakdown on the invoice/receipt DTO.
 
 ---
 
-## 4. `unitPrice` is required but ignored; no manual price override
+## 4. Required-but-ignored fields (`unitPrice`, `agentId`); no manual price override
 
-**Current behaviour.** `PosSaleRequest.LineItem.unitPrice` is `@NotNull @DecimalMin("0.00")` —
+**Both `unitPrice` and `agentId` are required-but-ignored fields on `PosSaleRequest`:** the validator
+forces the client to send them, but `PosSaleServiceImpl` forwards neither. Pricing is
+server-authoritative (`unitPrice` ignored — detailed below) and agent attribution always defaults to
+the logged-in user (`agentId` ignored — there is **no way to attribute a POS sale to a different
+agent today**).
+
+**`agentId` (ignored).** `PosSaleRequest.agentId` is `@NotNull`, but `PosSaleServiceImpl.processSale`
+builds the create call as
+`new CreateSalesInvoiceRequest(company.getUid(), customer.getUid(), null, currency, notes, null)` —
+passing `null` for the agent slot (the "resolve agent" step is not implemented). The invoice service
+then defaults the agent to the **logged-in user**, so the submitted `agentId` has no effect; the
+recorded `agentId`/`agentName` on the returned `SalesInvoiceDto` is always the authenticated cashier.
+
+**`unitPrice` (ignored).** `PosSaleRequest.LineItem.unitPrice` is `@NotNull @DecimalMin("0.00")` —
 the client **must** send it — but `PosSaleServiceImpl` **never passes it through**: each line is
 rebuilt as `new AddInvoiceLineRequest(productUid, unitUid, quantity, lineDiscountAmount, null)`
 (the trailing `null` is `lineDiscountPercent`; `AddInvoiceLineRequest` has **no price field**). The
@@ -101,11 +114,15 @@ validators, yet it does nothing); (b) there is **no manual price-override at the
 to reduce a line is `lineDiscountAmount`; the back-office invoice's permission-gated
 `overrideLinePrice` has no POS equivalent; (c) the line **fails** if the product has no price row for
 the company. Always treat fetched price-list/tier/customer prices as a *preview* and the returned
-`SalesInvoiceDto` as the source of truth for the receipt.
+`SalesInvoiceDto` as the source of truth for the receipt. The same misleading-required-field problem
+applies to `agentId`: you must send it, but the recorded agent is always the logged-in cashier, so a
+POS sale cannot be attributed to a different agent today.
 
-**Recommended server-side fix.** Either honour `unitPrice` as a permission-gated manual override
-(`POS.SALE.PRICE_OVERRIDE`, audited) **or** drop the field and correct the Javadoc — and document
-that negotiated reductions must be expressed as `lineDiscountAmount`.
+**Recommended server-side fix.** For `unitPrice`: either honour it as a permission-gated manual
+override (`POS.SALE.PRICE_OVERRIDE`, audited) **or** drop the field and correct the Javadoc — and
+document that negotiated reductions must be expressed as `lineDiscountAmount`. For `agentId`: forward
+the submitted value through to the invoice (the "resolve agent" step), or drop the field if POS sales
+are intentionally always attributed to the logged-in cashier.
 
 ---
 
