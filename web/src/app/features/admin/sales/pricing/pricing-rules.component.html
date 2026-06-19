@@ -65,7 +65,7 @@
         <div class="erp-toolbar mb-3">
           <div class="erp-field" style="min-width:200px">
             <label for="tierProduct">Product</label>
-            <app-uid-picker id="tierProduct"
+            <app-uid-picker id="tierProduct" name="tierProduct"
                             [(ngModel)]="tierProductUid"
                             [options]="productOptions()"
                             placeholder="Select product"
@@ -73,7 +73,7 @@
           </div>
           <div class="erp-field" style="min-width:200px">
             <label for="tierPriceList">Price List</label>
-            <app-uid-picker id="tierPriceList"
+            <app-uid-picker id="tierPriceList" name="tierPriceList"
                             [(ngModel)]="tierPriceListUid"
                             [options]="priceListOptions()"
                             placeholder="Select price list"
@@ -257,7 +257,7 @@
         <div class="erp-toolbar mb-3">
           <div class="erp-field" style="min-width:240px">
             <label for="cpCustomer">Customer</label>
-            <app-uid-picker id="cpCustomer"
+            <app-uid-picker id="cpCustomer" name="cpCustomer"
                             [(ngModel)]="cpCustomerUid"
                             [options]="customerOptions()"
                             placeholder="Select customer"
