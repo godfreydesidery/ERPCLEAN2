@@ -39,7 +39,11 @@ public class CurrencyController {
 
     /** List all active currencies (global reference data). */
     @GetMapping("/currencies")
-    @PreAuthorize("@perm.has('CURRENCY.VIEW')")
+    // Global currency reference data — the shared currency picker on every money form needs it, so
+    // any authenticated user may read it (a non-FX-admin must not need CURRENCY.VIEW to fill an
+    // amount). CURRENCY.VIEW still gates the FX-admin reads (rates, single currency); CURRENCY.MANAGE
+    // gates writes.
+    @PreAuthorize("isAuthenticated()")
     public List<CurrencyDto> listCurrencies() {
         return fxRateService.listActiveCurrencies();
     }
