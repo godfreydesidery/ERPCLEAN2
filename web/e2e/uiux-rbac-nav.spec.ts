@@ -170,20 +170,29 @@ test.describe('UI/UX RBAC nav — permission-driven sidebar', () => {
         return;
       }
 
-      // 2. Discover company UID — list all companies, take the first.
-      const companiesRes = await apiReq(ctx, 'GET', '/companies?size=5', token);
+      // 2. Discover organisation -> company (/companies REQUIRES organisationUid).
+      const orgsRes = await apiReq(ctx, 'GET', '/organisations?size=5', token);
+      const orgs = listOf(orgsRes) as Array<Record<string, unknown>>;
+      if (orgs.length === 0) {
+        setupFailReason = `No organisations found (status ${orgsRes.status}) — is the backend bootstrapped?`;
+        return;
+      }
+      const orgUid = String(orgs[0]['uid']);
+
+      const companiesRes = await apiReq(ctx, 'GET', `/companies?organisationUid=${orgUid}&size=5`, token);
       const companies = listOf(companiesRes) as Array<Record<string, unknown>>;
       if (companies.length === 0) {
-        setupFailReason = 'No companies found — is the backend bootstrapped?';
+        setupFailReason = `No companies found for org ${orgUid} (status ${companiesRes.status})`;
         return;
       }
       const companyUid = String(companies[0]['uid']);
 
-      // 3. Discover a branch for the company.
-      const branchesRes = await apiReq(ctx, 'GET', `/companies/${companyUid}/branches?size=5`, token);
+      // 3. Discover a branch for the company (branches are listed via /branches?companyUid=...;
+      //    there is no /companies/{uid}/branches endpoint).
+      const branchesRes = await apiReq(ctx, 'GET', `/branches?companyUid=${companyUid}&size=5`, token);
       const branches = listOf(branchesRes) as Array<Record<string, unknown>>;
       if (branches.length === 0) {
-        setupFailReason = `No branches found for company ${companyUid}`;
+        setupFailReason = `No branches found for company ${companyUid} (status ${branchesRes.status})`;
         return;
       }
       const branchUid = String(branches[0]['uid']);
