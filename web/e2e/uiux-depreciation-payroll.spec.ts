@@ -713,15 +713,9 @@ test.describe('UI/UX: Payroll run list (/admin/hr/payroll-runs)', () => {
       return;
     }
 
-    // Set year directly via Angular signal to avoid NumberValueAccessor converting the
-    // string to a number (which would cause create() to crash on .trim() and silently
-    // suppress the validation error we are trying to verify).
-    await page.evaluate(() => {
-      const appEl = document.querySelector('app-payroll-run-list');
-      if (!appEl) return;
-      const comp = (window as any).ng?.getComponent?.(appEl);
-      if (comp?.fPeriodYear) comp.fPeriodYear.set('2025');
-    });
+    // Type the year normally — create() now coerces the numeric (NumberValueAccessor) value to a
+    // string before trimming, so the real user path works (previously it crashed silently).
+    await page.locator('#prYear').fill('2025');
     await page.waitForTimeout(100);
     // Leave month as the placeholder "— select —" (fPeriodMonth signal stays '').
     await page.locator('#prMonth').selectOption('');  // placeholder (empty value)
@@ -767,15 +761,9 @@ test.describe('UI/UX: Payroll run list (/admin/hr/payroll-runs)', () => {
       return;
     }
 
-    // Set year directly via Angular signal to avoid NumberValueAccessor converting the
-    // string to a number (which crashes create() on .trim(), silently eating the validation).
+    // Type the year normally — create() now coerces the numeric input to a string before trimming.
     const currentYear = new Date().getFullYear();
-    await page.evaluate((yr) => {
-      const appEl = document.querySelector('app-payroll-run-list');
-      if (!appEl) return;
-      const comp = (window as any).ng?.getComponent?.(appEl);
-      if (comp?.fPeriodYear) comp.fPeriodYear.set(String(yr));
-    }, currentYear);
+    await page.locator('#prYear').fill(String(currentYear));
     await page.waitForTimeout(100);
     await page.locator('#prMonth').selectOption('1');  // January — selectOption emits a string, safe
     await page.locator('#prPayDate').fill('');         // leave empty
