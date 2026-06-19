@@ -150,8 +150,12 @@ export class PayrollRunListComponent {
   }
 
   create(): void {
-    const periodYear = parseInt(this.fPeriodYear().trim(), 10);
-    const periodMonth = parseInt(this.fPeriodMonth().trim(), 10);
+    // The Year field is <input type="number">, so Angular's NumberValueAccessor emits a NUMBER into
+    // the (string-typed) signal; coerce to string before trimming so create() never throws a
+    // TypeError (which previously aborted submit silently and suppressed the validation messages).
+    // Month is a <select> (string) but is coerced defensively too.
+    const periodYear = parseInt(String(this.fPeriodYear() ?? '').trim(), 10);
+    const periodMonth = parseInt(String(this.fPeriodMonth() ?? '').trim(), 10);
     const payDate = this.fPayDate().trim();
 
     if (!periodYear || isNaN(periodYear)) { this.formError.set('Period year is required.'); return; }
