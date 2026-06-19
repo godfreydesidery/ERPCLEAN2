@@ -259,6 +259,38 @@ class RbacEnforcementHttpIT extends PostgresIntegrationTest {
     }
 
     // ===================================================================
+    // Test 5b — GET /companies/accessible is AUTH-ONLY and scoped (the company-picker source).
+    //           A non-root user with NO COMPANY.VIEW but assigned (any role) to company A gets
+    //           ONLY company A — not company B — and crucially NOT a 403. Root gets every company.
+    //           This is the fix for "Could not load companies" on every feature page.
+    // ===================================================================
+
+    @Test
+    void nonRootToken_accessibleCompanies_returnsOnlyAssignedCompany_notForbidden() throws Exception {
+        // Assign the non-root user to company A via a non-company role (so they are scoped to A but
+        // lack COMPANY.VIEW). Without the fix the picker endpoint would 403; with it, they see A only.
+        Role bomRole = buildRole("HTTP_BOM_VIEWER", "BOM.VIEW");
+        grantRoleAsRoot(nonRootUser, bomRole, companyA);
+
+        mockMvc.perform(get("/api/v1/companies/accessible")
+                        .param("organisationUid", org.getUid())
+                        .header("Authorization", "Bearer " + nonRootToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").isArray())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].uid").value(companyA.getUid()));
+    }
+
+    @Test
+    void rootToken_accessibleCompanies_returnsEveryCompanyInOrg() throws Exception {
+        mockMvc.perform(get("/api/v1/companies/accessible")
+                        .param("organisationUid", org.getUid())
+                        .header("Authorization", "Bearer " + rootToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(2));
+    }
+
+    // ===================================================================
     // Test 6 — Cross-company scope over HTTP.
     //          NON-ROOT user (active scope = company A) even with COMPANY.MANAGE in A cannot
     //          PUT a company-B resource → 403 (@perm.scoped denies different company).

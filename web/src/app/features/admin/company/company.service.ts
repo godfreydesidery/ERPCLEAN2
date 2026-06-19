@@ -14,8 +14,15 @@ export class CompanyService {
   private readonly http = inject(HttpClient);
   private readonly base = `${environment.apiBaseUrl}/companies`;
 
+  /**
+   * Companies the current user may act in — used by the company picker on feature pages.
+   * Auth-only and scoped (admins/root get every company in the org; everyone else gets only the
+   * companies they are assigned to), so loading a feature page does NOT require COMPANY.VIEW.
+   * The admin company-management screen still relies on this; admins hold COMPANY.VIEW so they
+   * continue to see all companies.
+   */
   list(organisationUid: string): Observable<Company[]> {
-    return this.http.get<Company[]>(this.base, { params: { organisationUid } });
+    return this.http.get<Company[]>(`${this.base}/accessible`, { params: { organisationUid } });
   }
 
   get(uid: string): Observable<Company> {

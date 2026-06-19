@@ -8,8 +8,10 @@ import com.erp.modules.iam.domain.dto.CreateCompanyRequest;
 import com.erp.modules.iam.domain.dto.UpdateCompanyRequest;
 import com.erp.modules.iam.domain.entity.Company;
 import com.erp.modules.iam.domain.entity.Organisation;
+import com.erp.modules.iam.domain.entity.UserRole;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.repository.OrganisationRepository;
+import com.erp.modules.iam.repository.UserRoleRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -18,8 +20,12 @@ import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.repository.Lookups;
+import com.erp.platform.security.PermissionResolver;
+import com.erp.platform.security.RequestContext;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,19 +39,25 @@ public class CompanyServiceImpl implements CompanyService {
     private final CurrencyRepository        currencies;
     private final CompanyCurrencyRepository companyCurrencies;
     private final AuditService              audit;
+    private final PermissionResolver        permissions;
+    private final UserRoleRepository        userRoles;
 
     public CompanyServiceImpl(CompanyRepository         companies,
                                OrganisationRepository    organisations,
                                JournalEntryRepository    journalEntries,
                                CurrencyRepository        currencies,
                                CompanyCurrencyRepository companyCurrencies,
-                               AuditService              audit) {
+                               AuditService              audit,
+                               PermissionResolver        permissions,
+                               UserRoleRepository        userRoles) {
         this.companies         = companies;
         this.organisations     = organisations;
         this.journalEntries    = journalEntries;
         this.currencies        = currencies;
         this.companyCurrencies = companyCurrencies;
         this.audit             = audit;
+        this.permissions       = permissions;
+        this.userRoles         = userRoles;
     }
 
     @Override
@@ -81,6 +93,34 @@ public class CompanyServiceImpl implements CompanyService {
         Organisation org = Lookups.orNotFound(
                 organisations.findByUid(organisationUid), "Organisation", organisationUid);
         return companies.findByOrganisationIdOrderByName(org.getId()).stream()
+                .map(CompanyDto::from)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<CompanyDto> listAccessibleByOrganisationUid(String organisationUid) {
+        Organisation org = Lookups.orNotFound(
+                organisations.findByUid(organisationUid), "Organisation", organisationUid);
+        List<Company> all = companies.findByOrganisationIdOrderByName(org.getId());
+
+        // Admins (COMPANY.VIEW) and root see every company in the org — identical to the admin list.
+        // hasPermission short-circuits true for root.
+        if (permissions.hasPermission(RequestContext.get(), "COMPANY.VIEW", System.currentTimeMillis())) {
+            return all.stream().map(CompanyDto::from).toList();
+        }
+
+        // Everyone else (the cross-cutting company picker) sees only the companies they are assigned
+        // to via an active role grant — so a non-admin gets their own company WITHOUT COMPANY.VIEW,
+        // and cannot enumerate companies they have no access to.
+        RequestContext.Principal principal = RequestContext.get();
+        Set<Long> assignedCompanyIds = (principal == null || principal.userId() == null)
+                ? Set.of()
+                : userRoles.findByUserIdAndRevokedAtIsNull(principal.userId()).stream()
+                        .map(UserRole::getCompanyId)
+                        .collect(Collectors.toSet());
+        return all.stream()
+                .filter(c -> assignedCompanyIds.contains(c.getId()))
                 .map(CompanyDto::from)
                 .toList();
     }

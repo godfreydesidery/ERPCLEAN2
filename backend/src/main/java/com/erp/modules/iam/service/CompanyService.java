@@ -17,6 +17,13 @@ public interface CompanyService {
 
     List<CompanyDto> listByOrganisationUid(String organisationUid);
 
+    /**
+     * Companies the current user may act in (the company-picker source). Admins/root see every
+     * company in the org; everyone else sees only the companies they are assigned to via an active
+     * role grant. Auth-only — does not require {@code COMPANY.VIEW}.
+     */
+    List<CompanyDto> listAccessibleByOrganisationUid(String organisationUid);
+
     CompanyDto updateByUid(String uid, UpdateCompanyRequest request);
 
     /**
