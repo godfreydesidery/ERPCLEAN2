@@ -291,6 +291,29 @@ class RbacEnforcementHttpIT extends PostgresIntegrationTest {
     }
 
     // ===================================================================
+    // Test 5d — Cross-cutting CONFIG lookups are AUTH-ONLY (no resource VIEW perm needed):
+    //           a non-root user with NO CURRENCY.VIEW / UOM.VIEW can still load the currency master
+    //           and the unit-of-measure list (the pickers on every money form / transaction line).
+    //           Fix for "Could not load currencies/units" on unrelated feature pages.
+    // ===================================================================
+
+    @Test
+    void nonRootToken_listCurrencies_authOnly_returns200() throws Exception {
+        mockMvc.perform(get("/api/v1/fx/currencies")
+                        .header("Authorization", "Bearer " + nonRootToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").isArray());
+    }
+
+    @Test
+    void nonRootToken_listUnits_authOnly_returns200() throws Exception {
+        mockMvc.perform(get("/api/v1/units")
+                        .param("companyId", String.valueOf(companyA.getId()))
+                        .header("Authorization", "Bearer " + nonRootToken))
+                .andExpect(status().isOk());
+    }
+
+    // ===================================================================
     // Test 6 — Cross-company scope over HTTP.
     //          NON-ROOT user (active scope = company A) even with COMPANY.MANAGE in A cannot
     //          PUT a company-B resource → 403 (@perm.scoped denies different company).

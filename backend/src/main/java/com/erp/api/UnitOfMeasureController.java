@@ -38,7 +38,10 @@ public class UnitOfMeasureController {
     }
 
     @GetMapping
-    @PreAuthorize("@perm.has('UOM.VIEW')")
+    // Units of measure are reference data picked on every sales/purchase line — any authenticated
+    // user may list them (a user with SALES.INVOICE.CREATE / PURCHASE.ORDER.CREATE must not need
+    // UOM.VIEW to add a line). UOM.MANAGE still gates create/update; the single-uid read keeps UOM.VIEW.
+    @PreAuthorize("isAuthenticated()")
     public ApiResponse<List<UnitOfMeasureDto>> list(@RequestParam Long companyId,
                                                     @RequestParam(required = false) String q,
                                                     Pageable pageable) {

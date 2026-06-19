@@ -55,7 +55,10 @@ public class CurrencyEnablementController {
      * If the branch has no own rows it inherits the company list — the response shape is identical.
      */
     @GetMapping("/currencies/enabled")
-    @PreAuthorize("@perm.has('CURRENCY.VIEW')")
+    // The currency picker on every money form needs the company's enabled list — any authenticated
+    // user may read it (no CURRENCY.VIEW). assertCanActIn below still scopes it to a company the
+    // caller can act in; CURRENCY.MANAGE gates the enable/deactivate/set-default writes.
+    @PreAuthorize("isAuthenticated()")
     public EnabledCurrenciesDto getEnabled(
             @RequestParam String companyUid,
             @RequestParam(required = false) String branchUid) {
