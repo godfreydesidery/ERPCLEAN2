@@ -9,6 +9,8 @@ import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { BudgetingService } from './budgeting.service';
 import { AccountType, VarianceReportDto } from './models/budgeting.model';
+import { GlService } from '../gl/gl.service';
+import { UidOption, UidPickerComponent } from '../../../shared/uid-picker/uid-picker.component';
 
 type LoadState = 'idle' | 'loading' | 'error' | 'forbidden';
 
@@ -18,12 +20,13 @@ type LoadState = 'idle' | 'loading' | 'error' | 'forbidden';
  */
 @Component({
   selector: 'app-budget-variance-report',
-  imports: [FormsModule, DecimalPipe],
+  imports: [FormsModule, DecimalPipe, UidPickerComponent],
   templateUrl: './budget-variance-report.component.html',
   styleUrl: './budget-variance-report.component.scss',
 })
 export class BudgetVarianceReportComponent {
   private readonly budgetingService = inject(BudgetingService);
+  private readonly glService = inject(GlService);
   private readonly companyService = inject(CompanyService);
   private readonly organisationService = inject(OrganisationService);
   private readonly alerts = inject(AlertService);
@@ -33,6 +36,9 @@ export class BudgetVarianceReportComponent {
   readonly companies = signal<Company[]>([]);
   readonly selectedCompanyId = signal('');
   readonly companyState = signal<'loading' | 'idle' | 'error'>('loading');
+
+  // ── Picker options ────────────────────────────────────────────────────────
+  readonly fiscalYearOptions = signal<UidOption[]>([]);
 
   // ── Report params ─────────────────────────────────────────────────────────
   readonly fFiscalYearUid = signal('');
@@ -70,7 +76,10 @@ export class BudgetVarianceReportComponent {
           next: (list) => {
             this.companies.set(list);
             this.companyState.set('idle');
-            if (list.length > 0) this.selectedCompanyId.set(list[0].id);
+            if (list.length > 0) {
+              this.selectedCompanyId.set(list[0].id);
+              this.loadFiscalYears(list[0].id);
+            }
           },
           error: () => this.companyState.set('error'),
         });
@@ -79,11 +88,20 @@ export class BudgetVarianceReportComponent {
     });
   }
 
+  private loadFiscalYears(companyId: string): void {
+    this.glService.listFiscalYears(companyId).subscribe({
+      next: (list) => this.fiscalYearOptions.set(
+        list.map((fy) => ({ uid: fy.uid, label: fy.yearCode, hint: fy.status })),
+      ),
+      error: () => {},
+    });
+  }
+
   run(): void {
     const companyId = this.selectedCompanyId();
     const fiscalYearUid = this.fFiscalYearUid().trim();
     if (!companyId) { this.alerts.error('Validation', 'Select a company.'); return; }
-    if (!fiscalYearUid) { this.alerts.error('Validation', 'Fiscal Year UID is required.'); return; }
+    if (!fiscalYearUid) { this.alerts.error('Validation', 'Fiscal year is required.'); return; }
 
     const fromPeriod = parseInt(this.fFromPeriod(), 10) || 1;
     const toPeriod = parseInt(this.fToPeriod(), 10) || 12;

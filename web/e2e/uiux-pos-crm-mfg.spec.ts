@@ -994,9 +994,8 @@ test.describe('UI/UX Budgeting', () => {
       return;
     }
 
-    // Leave name and fiscal year UID empty and submit.
+    // Leave the name empty (the fiscal-year picker is unselected by default) and submit.
     await nameInput.fill('');
-    await page.locator('#fFiscalYearUid').fill('');
     await page.locator('#createBudgetForm button[type="submit"]').click();
     await page.waitForTimeout(600);
 
@@ -1234,6 +1233,98 @@ test.describe('UI/UX FX rates', () => {
         newRateBtn,
         'FX-4: "New Rate" button remains disabled after cancelling the form',
       ).toBeEnabled({ timeout: DOM_SETTLE });
+    }
+  });
+
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BUDGETING — FISCAL YEAR PICKER REGRESSION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+test.describe('UI/UX Budgeting: fiscal-year picker regression', () => {
+
+  /**
+   * BUD-FY-1: the "New Budget" create form must expose fiscal year as a
+   * SELECT-based uid-picker (app-uid-picker renders a <select>), not a
+   * free-text input asking the user to paste a raw UID.
+   *
+   * Asserts:
+   *   - No `input[placeholder*="Paste fiscal year UID" i]` anywhere on the page.
+   *   - The #fFiscalYearUid control is a <select> element (rendered by app-uid-picker).
+   *   - When fiscal years are seeded the <select> has at least one non-placeholder option.
+   *
+   * Resilience: annotates and returns if the create form / BUDGETING.BUDGET.MANAGE
+   * permission is absent, or if no fiscal years are seeded (picker present but empty
+   * is still acceptable — the control-type assertion still passes).
+   */
+  test('BUD-FY-1: budget create form fiscal-year field is a picker select, not a paste-UID input', async ({ page }) => {
+    const { ok } = await gotoAndGuard(page, '/admin/budgets', 'Budget create fiscal-year picker');
+    if (!ok) return;
+
+    // ── prerequisite: New Budget button visible (requires BUDGETING.BUDGET.MANAGE) ──
+    const newBudgetBtn = page.getByRole('button', { name: /New Budget/i });
+    const btnVisible = await newBudgetBtn.isVisible().catch(() => false);
+    if (!btnVisible) {
+      test.info().annotations.push({
+        type: 'skip-reason',
+        description: 'BUD-FY-1: "New Budget" button not visible — BUDGETING.BUDGET.MANAGE absent or company context missing',
+      });
+      return;
+    }
+
+    await newBudgetBtn.click();
+    await expect(
+      page.locator('#createBudgetForm'),
+      'BUD-FY-1: #createBudgetForm not visible after clicking New Budget',
+    ).toBeVisible({ timeout: DOM_SETTLE });
+
+    // ── core assertion 1: the old paste-UID input must NOT exist ──
+    const pasteInput = page.locator('input[placeholder*="Paste fiscal year UID" i]');
+    await expect(
+      pasteInput,
+      'BUD-FY-1: free-text "Paste fiscal year UID" input still present — picker not applied',
+    ).toHaveCount(0);
+
+    // ── core assertion 2: #fFiscalYearUid must resolve to a <select> inside app-uid-picker ──
+    // app-uid-picker renders: <div class="position-relative"><select ...></select></div>
+    // The host element carries id/name; the select is the first descendant select.
+    // We locate by the label's for= wiring → the labelled control group.
+    const fiscalYearField = page.locator('.erp-field').filter({
+      has: page.locator('label', { hasText: /Fiscal Year/i }),
+    });
+    const fieldVisible = await fiscalYearField.isVisible().catch(() => false);
+    if (!fieldVisible) {
+      test.info().annotations.push({
+        type: 'skip-reason',
+        description: 'BUD-FY-1: .erp-field containing Fiscal Year label not visible — form may still be loading',
+      });
+      return;
+    }
+
+    // The picker must contain a <select> (not just a raw <input type="text">).
+    const pickerSelect = fiscalYearField.locator('select').first();
+    await expect(
+      pickerSelect,
+      'BUD-FY-1: <select> element not found in fiscal-year field — app-uid-picker not rendered',
+    ).toBeVisible({ timeout: DOM_SETTLE });
+
+    // ── optional assertion 3: if fiscal years are seeded, at least one real option exists ──
+    const optionCount = await pickerSelect.locator('option').count();
+    // optionCount includes the placeholder "Select fiscal year" option (value="").
+    // A seeded environment will have > 1 options.
+    if (optionCount <= 1) {
+      test.info().annotations.push({
+        type: 'info',
+        description: `BUD-FY-1: picker present but has only ${optionCount} option(s) — no fiscal years seeded; control-type assertion still passed`,
+      });
+    } else {
+      // Verify at least one real (non-empty) option value exists.
+      const realOptions = await pickerSelect.locator('option:not([value=""])').count();
+      expect(
+        realOptions,
+        'BUD-FY-1: fiscal-year picker has options but none have a non-empty value',
+      ).toBeGreaterThan(0);
     }
   });
 
