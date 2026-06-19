@@ -47,3 +47,6 @@ backend/src/main/resources/static/
 
 # Workflow agent worktrees (alt path) — never commit
 .claire/
+
+# Microsoft Office lock/temp files (e.g. ~$USER-MANUAL.docx — created while a doc is open)
+~$*
