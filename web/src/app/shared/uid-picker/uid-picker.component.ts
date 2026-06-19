@@ -27,6 +27,10 @@ export interface UidOption {
   standalone: true,
   imports: [FormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  // Strip the id from the host element so it never lands on <app-uid-picker> —
+  // the consumer-supplied id must resolve to the inner <select> (the real form control)
+  // so that <label for="X"> associates correctly (WCAG 2.1 AA, SC 1.3.1 / 4.1.2).
+  host: { '[attr.id]': 'null' },
   providers: [
     { provide: NG_VALUE_ACCESSOR, useExisting: forwardRef(() => UidPickerComponent), multi: true },
   ],
@@ -35,12 +39,14 @@ export interface UidOption {
       @if (options().length > searchThreshold()) {
         <!-- Large list: a filter box (filters by NAME, never accepts a raw uid) + a select. -->
         <input type="text" class="form-control form-control-sm mb-1"
+               [attr.id]="id() ? id() + '-filter' : null"
                [ngModel]="query()" (ngModelChange)="query.set($event)"
                [attr.aria-label]="(placeholder() || 'Search') + ' — filter by name'"
                placeholder="Type to filter by name…"
                [disabled]="disabledState()" />
       }
       <select class="form-select form-select-sm"
+              [attr.id]="id() ?? null"
               [ngModel]="value()"
               (ngModelChange)="onPick($event)"
               [disabled]="disabledState()"
@@ -61,6 +67,12 @@ export class UidPickerComponent implements ControlValueAccessor {
   readonly required = input<boolean>(false);
   /** Above this many options, show the filter box. */
   readonly searchThreshold = input<number>(12);
+  /**
+   * Consumer-supplied id forwarded to the inner <select> so that a sibling
+   * <label for="X"> associates with the real focusable control, not the host.
+   * The host id attribute is nulled out via host:{} above.
+   */
+  readonly id = input<string | undefined>(undefined);
 
   protected readonly value = signal<string>('');
   protected readonly query = signal<string>('');
