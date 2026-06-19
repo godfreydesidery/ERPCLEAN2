@@ -68,6 +68,10 @@ let viewOnlyToken = '';
 /** UID of the first company found (needed when crafting a product create body). */
 let firstCompanyUid = '';
 
+/** UID of a base unit (so A5 can POST a VALID product body — the permission gate (403) only
+ *  fires after @Valid passes; a body missing baseUnitUid would 400 before reaching the gate. */
+let firstUnitUid = '';
+
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 /** Minimal Playwright request context wrapper. */
@@ -139,25 +143,42 @@ test.describe('UI/UX RBAC actions — PRODUCT.VIEW-only user on /admin/products'
         return;
       }
 
-      // 2. Discover company + branch.
-      const companiesRes = await apiReq(ctx, 'GET', '/companies?size=5', adminToken);
+      // 2. Discover organisation -> company -> branch.
+      //    /companies REQUIRES organisationUid; branches are listed via /branches?companyUid=...
+      //    (there is no /companies/{uid}/branches endpoint).
+      const orgsRes = await apiReq(ctx, 'GET', '/organisations?size=5', adminToken);
+      const orgs = listOf(orgsRes) as Array<Record<string, unknown>>;
+      if (orgs.length === 0) {
+        setupFailReason = `No organisations found (status ${orgsRes.status}) — is the backend bootstrapped?`;
+        return;
+      }
+      const orgUid = String(orgs[0]['uid']);
+
+      const companiesRes = await apiReq(ctx, 'GET', `/companies?organisationUid=${orgUid}&size=5`, adminToken);
       const companies = listOf(companiesRes) as Array<Record<string, unknown>>;
       if (companies.length === 0) {
-        setupFailReason = 'No companies found — is the backend bootstrapped?';
+        setupFailReason = `No companies found for org ${orgUid} (status ${companiesRes.status})`;
         return;
       }
       firstCompanyUid = String(companies[0]['uid']);
 
       const branchesRes = await apiReq(
-        ctx, 'GET', `/companies/${firstCompanyUid}/branches?size=5`, adminToken,
+        ctx, 'GET', `/branches?companyUid=${firstCompanyUid}&size=5`, adminToken,
       );
       const branches = listOf(branchesRes) as Array<Record<string, unknown>>;
       if (branches.length === 0) {
-        setupFailReason = `No branches found for company ${firstCompanyUid}`;
+        setupFailReason = `No branches found for company ${firstCompanyUid} (status ${branchesRes.status})`;
         return;
       }
       const branchUid = String(branches[0]['uid']);
       const companyUid = firstCompanyUid;
+
+      // Fetch a base unit so A5 can POST a VALID product body (the 403 permission gate only fires
+      // after @Valid passes; a body missing baseUnitUid would 400 first). companies[0].id = numeric id.
+      const companyNumericId = String(companies[0]['id'] ?? '');
+      const unitsRes = await apiReq(ctx, 'GET', `/units?companyId=${companyNumericId}&size=1`, adminToken);
+      const units = listOf(unitsRes) as Array<Record<string, unknown>>;
+      if (units.length > 0) firstUnitUid = String(units[0]['uid']);
 
       // 3. Resolve PRODUCT.VIEW from the permission catalogue.
       //    Only PRODUCT.VIEW goes into the role.  PRODUCT.MANAGE must not be added.
@@ -472,23 +493,32 @@ test.describe('UI/UX RBAC actions — PRODUCT.VIEW-only user on /admin/products'
       });
       return;
     }
+    if (!firstUnitUid) {
+      test.info().annotations.push({
+        type: 'skip-reason',
+        description: 'No base unit available — cannot build a VALID product body to isolate the 403 gate.',
+      });
+      return;
+    }
 
     const appBase = process.env['PW_BASE_URL'] ?? 'http://localhost:4200';
     const ctx = await pwRequest.newContext({ baseURL: appBase });
     try {
+      // Send a VALID product body so the ONLY reason to reject is the missing PRODUCT.MANAGE
+      // permission -> 403. (@Valid runs before @PreAuthorize in Spring, so an invalid body would
+      // 400 before reaching the gate — which is why baseUnitUid must be present here.)
       const res = await apiReq(ctx, 'POST', '/products', viewOnlyToken, {
         companyUid: firstCompanyUid,
         name: `Forbidden-${TAG}`,
         type: 'GOODS',
         sellable: true,
         stockable: true,
-        // baseUnitUid intentionally omitted — even a structurally invalid payload
-        // must be rejected at the permission gate (403), not processed (201) or crash (500).
+        purchasable: true,
+        baseUnitUid: firstUnitUid,
         vatStatus: 'STANDARD',
       });
 
-      // A user with PRODUCT.VIEW and no PRODUCT.MANAGE must be rejected at the
-      // authorization layer before reaching any business-rule validation.
+      // A user with PRODUCT.VIEW and no PRODUCT.MANAGE must be rejected at the authorization layer.
       expect(
         res.status,
         `POST /api/v1/products with PRODUCT.VIEW-only token returned ${res.status} — ` +
