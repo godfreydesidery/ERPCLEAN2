@@ -160,10 +160,11 @@
                   @if (fBranchScope() === 'BRANCH') {
                     <div class="erp-field">
                       <span id="fBranchUidLabel" class="erp-field__label-text">Branch <span class="text-danger" aria-hidden="true">*</span></span>
-                      <div aria-labelledby="fBranchUidLabel">
+                      <div>
                         <app-uid-picker [(ngModel)]="fBranchUid" [options]="branchOptions()"
                                         placeholder="Select branch" [required]="true"
-                                        name="fBranchUid" />
+                                        name="fBranchUid"
+                                        [ariaLabelledby]="'fBranchUidLabel'" />
                       </div>
                     </div>
                   }

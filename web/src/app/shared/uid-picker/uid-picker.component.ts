@@ -27,6 +27,11 @@ export interface UidOption {
   standalone: true,
   imports: [FormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  // Strip id / aria-labelledby / aria-label from the host element so they never linger on
+  // <app-uid-picker> — the consumer-supplied values must resolve to the inner <select>
+  // (the real form control) so that <label for="X"> / aria-labelledby / aria-label associate
+  // correctly (WCAG 2.1 AA, SC 1.3.1 / 4.1.2).
+  host: { '[attr.id]': 'null', '[attr.aria-labelledby]': 'null', '[attr.aria-label]': 'null' },
   providers: [
     { provide: NG_VALUE_ACCESSOR, useExisting: forwardRef(() => UidPickerComponent), multi: true },
   ],
@@ -35,17 +40,20 @@ export interface UidOption {
       @if (options().length > searchThreshold()) {
         <!-- Large list: a filter box (filters by NAME, never accepts a raw uid) + a select. -->
         <input type="text" class="form-control form-control-sm mb-1"
+               [attr.id]="id() ? id() + '-filter' : null"
                [ngModel]="query()" (ngModelChange)="query.set($event)"
-               [attr.aria-label]="(placeholder() || 'Search') + ' — filter by name'"
+               [attr.aria-label]="(ariaLabel() || placeholder() || 'Search') + ' — filter by name'"
                placeholder="Type to filter by name…"
                [disabled]="disabledState()" />
       }
       <select class="form-select form-select-sm"
+              [attr.id]="id() ?? null"
               [ngModel]="value()"
               (ngModelChange)="onPick($event)"
               [disabled]="disabledState()"
               [required]="required()"
-              [attr.aria-label]="placeholder() || 'Select a resource'">
+              [attr.aria-labelledby]="ariaLabelledby() ?? null"
+              [attr.aria-label]="ariaLabel() ?? ((id() || ariaLabelledby()) ? null : (placeholder() || 'Select a resource'))">
         <option value="">{{ placeholder() || '— select —' }}</option>
         @for (o of filtered(); track o.uid) {
           <option [value]="o.uid">{{ o.label }}{{ o.hint ? ' (' + o.hint + ')' : '' }}</option>
@@ -61,6 +69,27 @@ export class UidPickerComponent implements ControlValueAccessor {
   readonly required = input<boolean>(false);
   /** Above this many options, show the filter box. */
   readonly searchThreshold = input<number>(12);
+  /**
+   * Consumer-supplied id forwarded to the inner <select> so that a sibling
+   * <label for="X"> associates with the real focusable control, not the host.
+   * The host id attribute is nulled out via host:{} above.
+   */
+  readonly id = input<string | undefined>(undefined);
+  /**
+   * Consumer-supplied aria-labelledby forwarded to the inner <select>.
+   * Bind via the input: [ariaLabelledby]="'someId'" on <app-uid-picker> (NOT a bare
+   * aria-labelledby="..." attribute — that lands on the host and is nulled out via host:{}
+   * above, so it would never reach the <select>).
+   * aria-labelledby takes precedence over aria-label per ARIA spec; the existing
+   * aria-label remains as fallback when this is not set.
+   */
+  readonly ariaLabelledby = input<string | undefined>(undefined);
+  /**
+   * Consumer-supplied explicit aria-label for the inner <select>, for pickers with no visible
+   * label (e.g. table line-item cells). Bind via [ariaLabel]="'…'". Takes precedence over the
+   * placeholder fallback; a bare aria-label="…" on the host is nulled out (use the input).
+   */
+  readonly ariaLabel = input<string | undefined>(undefined);
 
   protected readonly value = signal<string>('');
   protected readonly query = signal<string>('');

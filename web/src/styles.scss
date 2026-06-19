@@ -44,7 +44,7 @@
   --erp-sidebar-deep: #111827;
   --erp-text:      #14181d;   /* near-black headings/body */
   --erp-text-2:    #4b5563;   /* AA-safe secondary        */
-  --erp-text-3:    #6b7280;   /* AA-safe muted (≥4.5 on white) */
+  --erp-text-3:    #636b75;   /* AA-safe muted (≥4.5 on the #f4f6f9 canvas AND white) */
 
   /* ---- Density / shape ---- */
   --erp-row-h:     40px;
@@ -87,6 +87,13 @@ body {
   background: var(--erp-canvas);
   color: var(--erp-text);
   -webkit-font-smoothing: antialiased;
+}
+
+/* a11y: Bootstrap's .text-muted hardcodes #6c757d, which is only 4.33:1 on the --erp-canvas
+   (#f4f6f9) — below WCAG AA 4.5:1. Map it to the AA-safe muted token (Bootstrap uses !important
+   on text utilities, so the override must too). Fixes axe color-contrast app-wide. */
+.text-muted {
+  color: var(--erp-text-3) !important;
 }
 
 /* Tabular figures everywhere numbers matter (Bootstrap's monospace helper is used widely). */

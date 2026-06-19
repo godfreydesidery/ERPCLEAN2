@@ -42,7 +42,7 @@
                   <label class="form-label" for="companyPicker">Company</label>
                   <select id="companyPicker" name="companyPicker" class="form-select"
                           [ngModel]="selectedCompanyId()"
-                          (ngModelChange)="selectedCompanyId.set($event)">
+                          (ngModelChange)="onCompanyChange($event)">
                     @for (c of companies(); track c.uid) {
                       <option [value]="c.id">{{ c.name }}</option>
                     }
@@ -51,12 +51,13 @@
               }
               <div class="erp-field">
                 <label class="form-label" for="fFiscalYearUid">
-                  Fiscal Year UID <span class="text-danger" aria-hidden="true">*</span>
+                  Fiscal Year <span class="text-danger" aria-hidden="true">*</span>
                 </label>
-                <input id="fFiscalYearUid" name="fFiscalYearUid" type="text" class="form-control"
-                       placeholder="Paste UID"
-                       [ngModel]="fFiscalYearUid()" (ngModelChange)="fFiscalYearUid.set($event)"
-                       autocomplete="off" />
+                <app-uid-picker id="fFiscalYearUid" name="fFiscalYearUid"
+                                [ngModel]="fFiscalYearUid()" (ngModelChange)="fFiscalYearUid.set($event)"
+                                [options]="fiscalYearOptions()"
+                                placeholder="Select fiscal year"
+                                [required]="true" />
               </div>
               <div class="erp-field">
                 <label class="form-label" for="fFromPeriod">From Period</label>

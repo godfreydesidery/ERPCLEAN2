@@ -101,7 +101,8 @@
                       <app-uid-picker [ngModel]="line.accountUid"
                                       (ngModelChange)="updateDirectLine($index, 'accountUid', $event)"
                                       [options]="accountOptions()" placeholder="Select account"
-                                      [required]="true" [name]="'accUid' + $index" />
+                                      [required]="true" [name]="'accUid' + $index"
+                                      [id]="'accUid' + $index" />
                     </div>
                     <div class="col-sm-3">
                       <label class="form-label small text-muted mb-1" [for]="'perUid' + $index">
@@ -110,7 +111,8 @@
                       <app-uid-picker [ngModel]="line.fiscalPeriodUid"
                                       (ngModelChange)="updateDirectLine($index, 'fiscalPeriodUid', $event)"
                                       [options]="fiscalPeriodOptions()" placeholder="Select period"
-                                      [required]="true" [name]="'perUid' + $index" />
+                                      [required]="true" [name]="'perUid' + $index"
+                                      [id]="'perUid' + $index" />
                     </div>
                     <div class="col-sm-2">
                       <label class="form-label small text-muted mb-1" [for]="'amt' + $index">
@@ -155,7 +157,7 @@
                     </label>
                     <app-uid-picker [(ngModel)]="fSpreadAccountUid" [options]="accountOptions()"
                                     placeholder="Select account" [required]="true"
-                                    name="fSpreadAccUid" inputId="fSpreadAccUid" />
+                                    name="fSpreadAccUid" [id]="'fSpreadAccUid'" />
                   </div>
                   <div class="erp-field">
                     <label class="form-label" for="fAnnualAmt">
@@ -177,7 +179,7 @@
                   </label>
                   <app-uid-picker [(ngModel)]="fSeedVersionUid" [options]="budgetVersionOptions()"
                                   placeholder="Select version" [required]="true"
-                                  name="fSeedUid" inputId="fSeedUid" />
+                                  name="fSeedUid" [id]="'fSeedUid'" />
                 </div>
                 <p class="text-muted small">Lines will be copied wholesale from the specified version.</p>
               }

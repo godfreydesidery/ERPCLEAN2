@@ -26,46 +26,52 @@ Every customer record has two classification fields set at creation time:
 
 | Field | Options | Notes |
 |---|---|---|
-| **Party Type** | Individual, Business | Business customers must have a TIN. |
-| **Customer Kind** | Cash / Walk-in, Credit Account | Credit account customers carry a credit limit and payment terms. |
+| **Party type** | Individual, Business | A Business party must have a TIN at creation. |
+| **Kind** | Cash / Walk-in, Credit Account | Credit-account customers carry a credit limit and payment terms (set on the detail page). |
 
-**Party Type** distinguishes a private individual from a registered legal entity. For a business, a Tax Identification Number (TIN) — the government-issued taxpayer reference — is required because it must appear on formal tax invoices. Individuals are exempt.
+**Party type** distinguishes a private individual from a registered legal entity. For a business, a Tax Identification Number (TIN) — the government-issued taxpayer reference — is required at creation because it must appear on formal tax invoices. Individuals are exempt. On the detail/edit page the TIN is no longer blocked for businesses; the label there reads *(recommended for businesses)*.
 
-**Customer Kind** describes the trading relationship. A **Cash / Walk-in** customer pays at the point of sale; no ongoing credit account is maintained. A **Credit Account** customer is extended a line of credit: the business ships goods or delivers services now and expects payment within agreed terms (for example, 30 days). Credit account customers therefore carry a **credit limit** (the maximum outstanding balance the business will allow) and **payment terms** (the number of days before payment is due). These two fields appear only when Credit Account is selected and are absent for walk-in customers.
+**Kind** describes the trading relationship. A **Cash / Walk-in** customer pays at the point of sale; no ongoing credit account is maintained. A **Credit Account** customer is extended a line of credit: the business ships goods or delivers services now and expects payment within agreed terms (for example, 30 days). Credit-account customers therefore carry a **credit limit** (the maximum outstanding balance the business will allow) and **payment terms** (the number of days before payment is due). These fields are **not** part of the create form — they appear on the customer detail page when the Kind is set to Credit Account, and are hidden for Cash / Walk-in customers.
 
-Once saved, Party Type and Customer Kind can be changed on the detail edit form.
+Once saved, Party type and Kind can be changed on the detail edit form.
 
 ### How to create a customer
 
+The create form is deliberately **minimal** — it captures only the fields needed to identify the party. Everything else (credit terms, contact details, addresses) is added afterwards on the customer detail page.
+
 1. Navigate to **Parties › Customers** (`/admin/customers`).
 2. Click **New Customer**. An inline form appears below the toolbar.
-3. Enter the **Display Name** (required).
-4. Select **Party Type** (Individual or Business).
-   - If you choose Business, a **TIN** field becomes required.
-5. Select **Customer Kind** (Cash / Walk-in or Credit Account).
-   - If you choose Credit Account, a **Credit Limit** (amount and currency) and a **Payment Terms (days)** field appear. These are optional — you can leave them blank and set them later.
-6. Optionally fill in Phone, Email, Address, Region, District.
-7. If the customer is VAT-registered, tick **VAT Registered** and then enter the **VRN**. You cannot enter a VRN unless VAT Registered is ticked.
-8. Click **Submit**.
+3. Enter the **Display name** (required).
+4. Select **Party type** (Individual or Business).
+5. Select **Kind** (Cash / Walk-in or Credit Account).
+6. If **Party type** is **Business**, an identity row appears with a required **TIN** plus optional **Legal name**, **Business reg. no.**, and a **VAT registered** checkbox. If you tick **VAT registered**, a **VRN** field appears — you cannot enter a VRN unless VAT registered is ticked. (For an Individual, only an optional **TIN** is shown.)
+7. Click **Create**.
 
 The system assigns a unique code and sets the status to **Active**. The new row appears in the list immediately.
+
+> **No credit, contact, or address fields at create time.** Selecting **Credit Account** here does **not** reveal credit-limit or payment-terms inputs, and there are no phone, email, or address fields on the create form. To set a credit limit, payment terms, contact details, or addresses, open the new customer's detail page after creating it (see *How to view and edit a customer* below).
 
 ### How to search for a customer
 
 On the **Parties › Customers** (`/admin/customers`) list:
 
-- Type in the **Search** box. Name search is case-insensitive and matches any part of the name.
-- Searching by **TIN**, **Phone**, or **Code** requires an exact match.
+- Type in the **Search** box (placeholder **Name, code…**). Typing filters the list automatically after a short pause; pressing Enter or clicking the search button applies it immediately. The search matches on name or code and is case-insensitive.
 - The list resets to the first page when you start a new search.
 - Click **Clear** to return to the full unfiltered list.
+- The list is paginated; use the pager at the bottom (First / Previous / page numbers / Next / Last) to move between pages. See *List screens — search and pagination* in **Getting Started › Common UI Patterns**.
 
 ### How to view and edit a customer
 
-1. Click on any row in the customer list to open the detail page (`/admin/customers/uid/<uid>`).
+1. Click the **Edit** action on any row in the customer list to open the detail page (`/admin/customers/uid/<uid>`).
 2. The URL contains the customer's uid — you do not need to read or type this.
-3. Edit any field in the form. The **Code** and **Company** fields are read-only (they are set at creation and cannot change).
-4. If Customer Kind is **Cash / Walk-in**, the Credit Limit and Payment Terms fields are hidden. Switch to Credit Account to reveal them.
-5. Click **Save** to apply changes.
+3. The detail page carries the **full** set of customer fields — far more than the create form. In addition to Display name, Legal name, Party type, Kind, TIN, VAT registered and VRN, and Business reg. no., you can set:
+   - **Contact:** Phone, Mobile money no., Email.
+   - **Address:** Physical address, Postal address, Region, District.
+4. If Kind is **Credit Account**, three more fields appear: **Credit limit amount**, **Currency**, and **Payment terms (days)**. If Kind is **Cash / Walk-in**, these are hidden — switch to Credit Account to reveal them.
+5. The credit-limit **Currency** is chosen with the **Currency Picker** (a dropdown of the company's enabled currencies, defaulting to the company default) rather than free-typed — see **Getting Started › Common UI Patterns**.
+6. Click **Save changes** to apply.
+
+The header status badge, the Kind tag, and the **Archive** / **Restore** controls sit above the form.
 
 ### How to archive and restore a customer
 
@@ -98,13 +104,12 @@ You need the `PARTY.BRANCH.ASSIGN` permission to assign or remove branches. You 
 Scenario: Sales admin Fatuma Msongo is on-boarding Karibu Wholesale Ltd, a new B2B buyer on 30-day credit terms.
 
 1. Navigate to **Parties › Customers** (`/admin/customers`). Click **New Customer**.
-2. Enter Display Name `Karibu Wholesale Ltd`, Party Type `Business`, TIN `100-456-789`.
-3. Select Customer Kind `Credit Account`. Enter Credit Limit `TZS 5,000,000`, Payment Terms `30` days.
-4. Enter Phone `+255 22 211 0099`, Email `orders@karibuwholesale.co.tz`, Region `Dar es Salaam`.
-5. Tick **VAT Registered**, enter VRN `40-045678-H`.
-6. Click **Submit**. The system assigns code `CUST-0012` and status **Active**.
-7. Click the `CUST-0012` row to open `/admin/customers/uid/<uid>`.
-8. In the **Branch Associations** panel, select Company `Orbix Trading Co.`, Branch `DSM — Dar es Salaam Branch`. Click **Assign**. The branch association is saved.
+2. Enter Display name `Karibu Wholesale Ltd`, Party type `Business`, Kind `Credit Account`.
+3. In the Business identity row, enter TIN `100-456-789`, Legal name `Karibu Wholesale Limited`. Tick **VAT registered** and enter VRN `40-045678-H`.
+4. Click **Create**. The system assigns code `CUST-0012` and status **Active**. (No credit-limit, payment-terms, contact, or address fields appear at this stage.)
+5. Click the **Edit** action on the `CUST-0012` row to open `/admin/customers/uid/<uid>`.
+6. In the **Details** form, the credit-account fields are now shown. Enter Credit limit amount `5000000`, leave **Currency** at the pre-selected company default (or pick another enabled currency from the **Currency Picker**), and Payment terms (days) `30`. Optionally fill in Phone `+255 22 211 0099`, Email `orders@karibuwholesale.co.tz`, Region `Dar es Salaam`. Click **Save changes**.
+7. In the **Branch Associations** panel, select Company `Orbix Trading Co.`, Branch `DSM — Dar es Salaam Branch`. Click **Assign**. The branch association is saved.
 
 Karibu Wholesale Ltd is now available as a customer on all sales flows for the DSM branch.
 
@@ -128,14 +133,15 @@ Supplier codes are prefixed `SUPP-` (for example, `SUPP-0001`).
 
 ### How to create a supplier
 
+The supplier create form mirrors the customer one and is equally **minimal**.
+
 1. Navigate to **Parties › Suppliers** (`/admin/suppliers`).
 2. Click **New Supplier**.
-3. Enter **Display Name** (required), **Party Type**, and **Supplier Kind** (Goods or Service).
-4. If Party Type is Business, enter the **TIN**.
-5. Fill in optional contact details and VAT fields as described in the Customers section above.
-6. Click **Submit**.
+3. Enter **Display name** (required), **Party type**, and **Kind** (Goods or Service).
+4. If Party type is Business, an identity row appears with a required **TIN** plus optional **Legal name**, **Business reg. no.**, and a **VAT registered** checkbox (which reveals a **VRN** field). For an Individual, only an optional **TIN** is shown.
+5. Click **Create**.
 
-The same rules apply: TIN required for Business parties, VRN only when VAT Registered is ticked.
+The same rules apply: TIN required at creation for Business parties, VRN only when **VAT registered** is ticked. Contact details and addresses (where applicable) are added on the supplier detail page after creation, exactly as for customers.
 
 ### Search, edit, archive, restore, and branch associations
 
@@ -148,10 +154,10 @@ These work exactly as described for Customers above, substituting the **Parties 
 Scenario: Procurement officer Hassan Kamau adds Tembo Industries Ltd as a VAT-registered goods supplier.
 
 1. Navigate to **Parties › Suppliers** (`/admin/suppliers`). Click **New Supplier**.
-2. Enter Display Name `Tembo Industries Ltd`, Party Type `Business`, TIN `100-789-321`, Supplier Kind `Goods`.
-3. Tick **VAT Registered**, enter VRN `40-078901-T`.
-4. Enter Phone `+255 27 254 4400`, Region `Arusha`.
-5. Click **Submit**. System assigns code `SUPP-0008` and status **Active**.
+2. Enter Display name `Tembo Industries Ltd`, Party type `Business`, Kind `Goods`.
+3. In the Business identity row, enter TIN `100-789-321`. Tick **VAT registered** and enter VRN `40-078901-T`.
+4. Click **Create**. System assigns code `SUPP-0008` and status **Active**.
+5. Open the supplier from its **Edit** action to add contact details (Phone `+255 27 254 4400`, Region `Arusha`) and any branch associations.
 
 ---
 
@@ -165,11 +171,11 @@ An **other party** is any third party that your business has a financial or oper
 
 **When it is used.** A finance administrator or master-data manager creates an other-party record when a new type of expenditure or relationship arises that is not covered by the supplier master — for example, when setting up a monthly rent payment to a landlord for the first time.
 
-**How it works.** Other parties follow the same lifecycle as customers and suppliers: created **Active**, assigned an `OTHR-####` code, scoped to one company, and archivable. The only structural difference is the **Other Kind** field, which is free text rather than a fixed list. You can type any descriptive label (for example, `Landlord`, `Utility`, `Freight Forwarder`) to classify the party informally.
+**How it works.** Other parties follow the same lifecycle as customers and suppliers: created **Active**, assigned an `OTHR-####` code, scoped to one company, and archivable. The only structural difference is the **Kind / category** field (shown as **Kind** in the list column), which is free text rather than a fixed list. You can type any descriptive label (for example, `Landlord`, `Utility`, `Freight Forwarder`) to classify the party informally.
 
 Other Parties covers any third party that is not a customer, supplier, or agent — for example, landlords, regulatory bodies, utility providers, or freight companies. Other Party codes are prefixed `OTHR-`.
 
-The key difference from customers and suppliers is the **Other Kind** field, which is free text (not a fixed list). You can type any label, such as "Landlord", "Utility", or "Freight Forwarder". The field is optional.
+The key difference from customers and suppliers is the **Kind / category** field (the *Kind* column in the list), which is free text (not a fixed list). You can type any label, such as "Landlord", "Utility", or "Freight Forwarder". The field is optional.
 
 All other behaviour — TIN rule for Business parties, VAT/VRN pairing, archive/restore lifecycle, and branch associations — is identical to Customers and Suppliers. The detail page for an other party is at `/admin/other-parties/uid/<uid>`.
 
@@ -204,10 +210,10 @@ An **External** agent is a freelance representative, a distributor, or a third-p
 
 1. Navigate to **Parties › Sales Agents** (`/admin/agents`).
 2. Click **New Agent**.
-3. Enter **Display Name**, **Party Type**, and **Agent Kind** (Internal or External).
-4. If Kind is **Internal**, a **User** selector appears. Choose the user by name from the list. The system stores the link internally — you do not type a user id.
-5. If Kind is **External**, the user selector is hidden.
-6. Click **Submit**.
+3. Enter **Display name**, **Party type**, and **Agent kind** (the dropdown options read **External** and **Internal (IAM user)**).
+4. If Kind is **Internal (IAM user)**, an **App user** selector appears. Choose the user from the list (each option shows the display name and username). The system stores the link internally — you do not type a user id.
+5. If Kind is **External**, the App user selector is hidden.
+6. Click **Create**.
 
 ### Switching an agent between Internal and External
 
@@ -224,9 +230,9 @@ These work as described for Customers, using the **Parties › Sales Agents** (`
 Scenario: Operations manager registers Juma Rashidi as a freelance distribution agent for the Coast route.
 
 1. Navigate to **Parties › Sales Agents** (`/admin/agents`). Click **New Agent**.
-2. Enter Display Name `Juma Rashidi`, Party Type `Individual`, Agent Kind `External`.
-3. Click **Submit**. System assigns code `AGNT-0004`.
-4. Open the route at **Parties › Routes** (`/admin/routes`), click the **Coast Distribution Route** row.
+2. Enter Display name `Juma Rashidi`, Party type `Individual`, Agent kind `External`.
+3. Click **Create**. System assigns code `AGNT-0004`.
+4. Open the route at **Parties › Routes** (`/admin/routes`), click the **Edit** (pencil) action on the **Coast Distribution Route** row.
 5. In the **Agents** panel, type `Juma` and select `AGNT-0004 — Juma Rashidi`. Tick **Primary**. Click **Assign**.
 
 ---
@@ -266,13 +272,14 @@ Products are the items you sell, buy, or manufacture. Each product belongs to on
 
 1. Navigate to **Products › Products** (`/admin/products`).
 2. Click **New Product**.
-3. Optionally enter a **Code**. If you leave it blank the system assigns `PROD-####`. If you type a code it is trimmed of spaces and converted to upper case.
+3. Optionally enter a **Code**. If you leave it blank the system assigns `PROD-####` (the hint reads *Blank = PROD-####*). If you type a code it is trimmed of spaces and converted to upper case.
 4. Enter the **Name** (required).
-5. Select **Type** (Goods or Service). If you select Service, the Stockable checkbox becomes unavailable.
-6. Select the **Base Unit** from the dropdown by its code and name (for example, `EA — Each`). Only active units of measure are offered.
-7. Enter the **Cost** (amount and currency).
-8. Select the **VAT Status**.
-9. Click **Submit**.
+5. Select **Type** (Goods or Service). If you select Service, the **Stockable** checkbox becomes unavailable (shown as *N/A for service*).
+6. Select the **Base unit** from the dropdown by its code and name (for example, `EA — Each`). Only active units of measure are offered. (If no units exist yet, a *Create units first* link appears.)
+7. Tick **Sellable** and/or **Stockable** as required.
+8. Optionally enter a **Description**, then set the **VAT Status**.
+9. Enter the **Cost amount**. The **Currency** beside it is the **Currency Picker** — a dropdown of the company's enabled currencies, pre-set to the company default — not a free-text code (see **Getting Started › Common UI Patterns**).
+10. Click **Create**.
 
 ### How to set a custom code
 
@@ -280,15 +287,24 @@ Type the code in the **Code** field. The system converts it to upper case (so `s
 
 ### How to edit a product
 
-1. Click a product row to open the detail page (`/admin/products/uid/<uid>`).
+1. Click the **Edit** (pencil) action on any product row to open the detail page (`/admin/products/uid/<uid>`).
 2. Modify fields as needed. The **Code** field is read-only on the detail page.
-3. Click **Save**.
+3. Click **Save changes**.
 
 If you change Type from Goods to Service, the Stockable checkbox is forced off automatically.
 
 ### How to archive and restore a product
 
 Open the product detail page (`/admin/products/uid/<uid>`) and click **Archive** (to make it unavailable) or **Restore** (to make it active again). Archived products are excluded from order lines and component pickers.
+
+### How to search for a product
+
+The Products list toolbar has two lookups:
+
+- A **Search** box (placeholder **Name, code…**) that filters the list by name or code as you type, with **Search** and **Clear** buttons.
+- A **Barcode** lookup with the icon and placeholder **Scan or enter barcode…**. Scan or type a barcode and click the barcode button: a match opens an info banner showing the product code, name, and type with a **View** link; if nothing matches you see *No product found for that barcode*.
+
+The list is paginated — use the pager at the bottom to move between pages.
 
 ### Branch associations
 
@@ -300,10 +316,12 @@ A **barcode** is a scannable value printed on product packaging — EAN-13, UPC,
 
 In the **Barcodes** panel on the product detail page:
 
-1. Type the barcode value.
-2. Tick **Primary** if this is the product's primary barcode.
+1. Type the **Barcode value**.
+2. Tick **Set as primary** if this is the product's primary barcode.
 3. Click **Add Barcode**.
 4. To remove a barcode, click **Remove** on the relevant row.
+
+Each barcode row shows a **Primary** or **Secondary** tag.
 
 ### Bulk packs
 
@@ -312,8 +330,8 @@ A **bulk pack** defines how a product is packaged for storage or sale in larger 
 Bulk packs define how many base units fit into a larger packaging unit (for example, 24 `EA` in a `CTN — Carton`).
 
 1. In the **Bulk Packs** panel, select the **Unit** (the larger packaging unit) from the dropdown by code and name.
-2. Enter the **Factor** — the number of base units in one pack (must be greater than zero).
-3. Click **Add**.
+2. Enter the **Factor to base** — the number of base units in one pack (must be greater than zero).
+3. Click **Add Bulk Pack**.
 4. To remove a bulk pack, click **Remove**.
 
 ### Product prices
@@ -322,8 +340,8 @@ A **product price** is the selling price of this product on a specific price lis
 
 You can set a selling price for this product on each of your price lists.
 
-1. In the **Prices** panel, select the **Price List** by its code and name.
-2. Enter the **Amount** and **Currency**.
+1. In the **Prices** panel, select the **Price list** by its code and name.
+2. Enter the **Amount**. The **Currency** beside it is the **Currency Picker** (the company's enabled currencies, defaulting to the company default) — you pick from the list rather than typing a code (see **Getting Started › Common UI Patterns**).
 3. Click **Set Price**.
 
 Setting a price on a price list that already has a price for this product overwrites the existing price. To remove a price, click **Remove** on the row.
@@ -347,12 +365,12 @@ Components define the ingredients or sub-products that make up this product — 
 Scenario: Catalogue manager sets up a new FMCG line before the first purchase order.
 
 1. Navigate to **Products › Products** (`/admin/products`). Click **New Product**.
-2. Leave Code blank. Enter Name `Sugar 1kg`, Type `Goods`, Base Unit `KG — Kilogram`, Cost `TZS 1,800`, VAT Status `Standard`. Click **Submit**. System assigns `PROD-0034`.
-3. Click `PROD-0034` to open `/admin/products/uid/<uid>`.
-4. **Barcodes panel:** Enter `6009876543210`, tick **Primary**, click **Add Barcode**.
-5. **Bulk Packs panel:** Select Unit `CTN — Carton`, Factor `50`. Click **Add**. (50 kg bags per carton.)
-6. **Prices panel:** Select Price List `RETAIL — Retail Price List`, Amount `TZS 2,500`, Currency `TZS`. Click **Set Price**.
-7. **Prices panel:** Select Price List `WHOLESALE — Wholesale Price List`, Amount `TZS 2,200`, Currency `TZS`. Click **Set Price**.
+2. Leave Code blank. Enter Name `Sugar 1kg`, Type `Goods`, Base unit `KG — Kilogram`, tick **Sellable** and **Stockable**, VAT Status `Standard`, Cost amount `1800`. Leave **Currency** at the pre-selected company default. Click **Create**. System assigns `PROD-0034`.
+3. Click the **Edit** action on `PROD-0034` to open `/admin/products/uid/<uid>`.
+4. **Barcodes panel:** Enter `6009876543210`, tick **Set as primary**, click **Add Barcode**.
+5. **Bulk Packs panel:** Select Unit `CTN — Carton`, Factor to base `50`. Click **Add Bulk Pack**. (50 kg bags per carton.)
+6. **Prices panel:** Select Price list `RETAIL — Retail Price List`, Amount `2500`, leave **Currency** at the default. Click **Set Price**.
+7. **Prices panel:** Select Price list `WHOLESALE — Wholesale Price List`, Amount `2200`, leave **Currency** at the default. Click **Set Price**.
 
 The product `PROD-0034 — Sugar 1kg` is now available for sale at the correct retail price and will appear in stock movements tracked in kilograms.
 
@@ -377,7 +395,7 @@ Units of measure (UoM) are the quantity labels used on products, bulk packs, and
 1. Navigate to **Products › Units of Measure** (`/admin/units`).
 2. Click **New Unit**.
 3. Enter the **Code** (for example, `CTN`) and the **Name** (for example, `Carton`). Both are required and the code must be unique within the company.
-4. Click **Submit**.
+4. Click **Create**.
 
 ### How to edit a unit
 
@@ -408,7 +426,7 @@ Price lists group selling prices. You might have a Retail list (`RETAIL`), a Who
 1. Navigate to **Products › Price Lists** (`/admin/price-lists`).
 2. Click **New Price List**.
 3. Enter a **Code** (for example, `RETAIL`) and a **Name** (for example, `Retail Price List`). Both are required and the code must be unique within the company.
-4. Click **Submit**.
+4. Click **Create**.
 
 ### Edit, archive, restore
 
@@ -422,7 +440,9 @@ Click **Edit** on a row to change the name (code is read-only after creation). A
 
 A **currency** is a monetary unit of account — Tanzanian Shillings (TZS), US Dollars (USD), Euros (EUR), Kenyan Shillings (KES), and so on. Every monetary amount in this system is recorded as a pair: a number and a currency code. This means the system is currency-aware from the start, so transactions in foreign currencies are recorded correctly alongside local-currency ones.
 
-**Why currencies are always explicit.** Storing a bare number without a currency — for example, "1,000" with an implied TZS — is a source of silent errors: import prices in USD would be compared directly with local costs in TZS, and reports would add unlike amounts. Every price, cost, credit limit, and invoice total in this system therefore carries its currency code alongside the number. The base (home) currency is **TZS**.
+**Why currencies are always explicit.** Storing a bare number without a currency — for example, "1,000" with an implied TZS — is a source of silent errors: import prices in USD would be compared directly with local costs in TZS, and reports would add unlike amounts. Every price, cost, credit limit, and invoice total in this system therefore carries its currency code alongside the number.
+
+**The enabled-currency allow-list and default document currency.** Each company has a **base currency** (seeded as **TZS**) and an admin-configured **allow-list of enabled currencies**, optionally refined per branch, together with a **default document currency**. Anywhere a form asks for a currency, you choose from a filtered **Currency Picker** that offers only the company's enabled currencies and is pre-set to the resolved default — you no longer type a free-text three-letter code. This is the same picker used for the customer credit-limit currency, product cost and price currencies, and every other currency field across Sales, Procurement, and Finance; it is documented once in **Getting Started › Common UI Patterns**. The enabled list and default are maintained by an administrator with the `CURRENCY.MANAGE` permission. The base currency itself **cannot be changed once journal entries exist**.
 
 An **FX rate** (foreign exchange rate) is the conversion factor between two currencies on a given date. When you receive a supplier invoice in USD, or raise a customer invoice in USD, the system needs to know how many TZS equal one USD on that particular day in order to record the correct local-currency equivalent in the general ledger and for reporting.
 
@@ -430,23 +450,25 @@ An **FX rate** (foreign exchange rate) is the conversion factor between two curr
 
 **When they are used.** The finance officer or treasury administrator enters FX rates each day (or each time a foreign-currency transaction is expected). The system uses the most recent effective-dated rate for each currency pair when converting amounts.
 
-**How it works.** Currencies are global reference data — you cannot create or delete them. FX rates are **append-only**: you add a new row for each rate change; you never edit a past rate. If you discover an error, you add a corrected row with the right date and value. The list is sorted newest-first. A rate between two currencies is selected by finding the row with the latest effective date on or before the transaction date.
+**How it works.** Currencies are global reference data — you cannot create or delete them; an administrator instead enables a subset per company (the allow-list above). FX rates are **append-only**: you add a new row for each rate change; you never edit a past rate. If you discover an error, you add a corrected row with the right date and value. The list is sorted newest-first. A rate between two currencies is selected by finding the row with the latest effective date on or before the transaction date.
 
-The system's base currency is **TZS**. You can record foreign exchange rates to support transactions in other currencies (USD, EUR, KES, and others).
+The seeded base currency is **TZS**. You can enable additional currencies (USD, EUR, KES, and others) for a company and record foreign exchange rates to support transactions in them.
 
 ### Currency list
 
-Currencies are global reference data — you cannot create or delete them. The available currencies (TZS, USD, EUR, KES, and others) are seeded by the system and visible in the From / To pickers on the FX Rates screen.
+Currencies are global reference data — you cannot create or delete them. The system-seeded currencies (TZS, USD, EUR, KES, and others) appear in the **From** / **To** dropdowns on this screen. Unlike the filtered **Currency Picker** used elsewhere, these two dropdowns list **all** active currencies (the full global reference set), **not** only the company's enabled allow-list — so you may record a rate for any currency pair. (If the currency list fails to load, each dropdown falls back to a free-text three-letter ISO-code input.) Which currencies a company may use *on documents* — and the default — is still controlled by the admin-managed enabled-currency allow-list described above.
 
 ### How to add an FX rate
 
+The on-screen page heading is **Currency Exchange Rates** (subtitle *Effective-dated rates used for multi-currency transactions*).
+
 1. Navigate to **FX / Currency › Exchange Rates** (`/admin/fx/rates`).
 2. Click **New Rate**.
-3. Select the **From** currency and the **To** currency. They must be different.
-4. Enter the **Rate** (must be greater than zero).
-5. Set the **Effective Date** (required; format `YYYY-MM-DD`).
-6. Set **Rate Type** (for example, `SPOT`) and **Source** (for example, `MANUAL`).
-7. Click **Submit**.
+3. Select the **From Currency** and the **To Currency** from the dropdowns. They must be different.
+4. Enter the **Rate** (must be greater than zero). The hint reads *Units of To-currency per 1 unit of From-currency*.
+5. Set the **Effective Date** (required; use the date picker).
+6. Optionally choose a **Rate Type** from the dropdown (— none —, Spot, Forward, or Official) and a free-text **Source** (for example, `Central Bank`).
+7. Click **Save Rate**.
 
 FX rates are **append-only**: you cannot edit a rate in place. To correct a rate, add a new row with the corrected value and the correct effective date. The system uses the latest effective-dated rate for each currency pair when converting amounts.
 
@@ -459,8 +481,8 @@ The rates list is sorted newest-first and is paginated.
 Scenario: Finance officer records the Bank of Tanzania mid-rate on 14 June 2026 for USD invoices received from an overseas supplier.
 
 1. Navigate to **FX / Currency › Exchange Rates** (`/admin/fx/rates`). Click **New Rate**.
-2. From `USD`, To `TZS`, Rate `2542.50`, Effective Date `2026-06-14`, Rate Type `SPOT`, Source `MANUAL`.
-3. Click **Submit**. The row `USD → TZS @ 2,542.50 (2026-06-14)` appears at the top of the list.
+2. From Currency `USD`, To Currency `TZS`, Rate `2542.50`, Effective Date `2026-06-14`, Rate Type `Spot`, Source `Central Bank`.
+3. Click **Save Rate**. The row `USD → TZS @ 2,542.50 (2026-06-14)` appears at the top of the list.
 
 Tomorrow, if the rate changes to `2,548.00`, simply click **New Rate** again and submit the new row — the old record is preserved for historical reporting.
 
@@ -523,13 +545,13 @@ Routes represent geographic or logical delivery areas used to group customers an
 1. Navigate to **Parties › Routes** (`/admin/routes`).
 2. Click **New Route**.
 3. Enter the **Name** (required) and optionally a **Location Identifier**.
-4. Click **Submit**.
+4. Click **Save**.
 
 The system assigns a code. Status defaults to Active.
 
 ### How to edit a route
 
-1. Click a route row to open the detail page (`/admin/routes/uid/<uid>`).
+1. Click the **Edit** (pencil) action on any route row to open the detail page (`/admin/routes/uid/<uid>`).
 2. Change the name or location identifier (code and company are read-only).
 3. Click **Save**.
 
@@ -572,8 +594,8 @@ You need the `ROUTE.MANAGE` permission (not `ROUTE.ASSIGN`) to manage branch ass
 Scenario: Operations manager creates the Arusha / Moshi distribution route before the first delivery run.
 
 1. Navigate to **Parties › Routes** (`/admin/routes`). Click **New Route**.
-2. Enter Name `Northern Route`, Location Identifier `Arusha–Moshi Corridor`. Click **Submit**. System assigns code `RTE-0003`.
-3. Click `RTE-0003` to open `/admin/routes/uid/<uid>`.
+2. Enter Name `Northern Route`, Location Identifier `Arusha–Moshi Corridor`. Click **Save**. System assigns code `RTE-0003`.
+3. Click the **Edit** (pencil) action on the `RTE-0003` row to open `/admin/routes/uid/<uid>`.
 4. **Branches panel:** Company `Orbix Trading Co.`, Branch `ARU — Arusha Branch`. Click **Assign**.
 5. **Customers panel:** type `Kilimanjaro`, select `CUST-0007 — Kilimanjaro Stores Ltd`. Click **Assign**. Repeat for `CUST-0011 — Moshi Distributors`.
 6. **Agents panel:** type `Baraka`, select `AGNT-0004 — Baraka Hamisi` (External). Tick **Primary**. Click **Assign**.

@@ -17,7 +17,7 @@ Welcome to the ERP system. This chapter explains how to sign in, find your way a
 1. Open your browser and navigate to the URL your administrator gave you (for example, `http://erp.yourcompany.com`). The login page appears automatically.
 2. Enter your **username** in the first field. Usernames are not case-sensitive.
 3. Enter your **password** in the second field.
-4. Click **Sign In**.
+4. Click **Sign in**.
 
 If your credentials are correct you are taken straight to the main dashboard. The system reads your assigned permissions and builds your personal menu — you will only see the sections you are allowed to use.
 
@@ -25,7 +25,7 @@ If your credentials are correct you are taken straight to the main dashboard. Th
 
 | What you see | What to do |
 |---|---|
-| "Invalid credentials" | Check your username and password. The message is the same whether the username or the password is wrong — this is intentional. |
+| "Invalid username or password." | Check your username and password. The message is the same whether the username or the password is wrong — this is intentional. |
 | "Account is locked. Try again later or contact an administrator." | Your account was locked after too many failed attempts. Ask an administrator to unlock it for you. |
 | "Your session has expired. Please sign in again." | Your session timed out. Sign in again. Any unsaved work will be lost. |
 
@@ -33,7 +33,7 @@ If your credentials are correct you are taken straight to the main dashboard. Th
 
 ### Signing out
 
-Click your name or initials in the top-right corner of the screen, then click **Logout**. You are returned to the login page and your session is ended immediately.
+Click your name or initials in the top-right corner of the screen to open the account menu, then click **Sign out**. (On wider screens a dedicated **Sign out** icon button is also shown in the top bar, so you can sign out in one click.) You are returned to the login page and your session is ended immediately.
 
 ---
 
@@ -46,15 +46,15 @@ Once signed in you see three main areas.
 The horizontal bar across the top of every screen contains:
 
 - **Brand / logo** on the left.
-- **Active branch indicator** — a button showing the name of the branch you are currently working in. Click it to switch to a different branch if you are assigned to more than one (see the Branch Switcher section below).
-- **Your name / initials** on the right. Click to open a small menu with a **Logout** option.
-- A small coloured dot showing whether the system service is reachable (green = healthy).
+- **Active branch indicator** — a chip showing the name of the branch you are currently working in (with its branch code shown beside the name on wider screens). Click it to switch to a different branch if you are assigned to more than one (see the Branch Switcher section below). If you have no assigned branch the chip reads **No branch**.
+- A small coloured dot showing whether the system service is reachable (the indicator reads **API: UP** in green when healthy).
+- **Your name / initials** on the right. Click to open the account menu, which shows your display name, your **@username**, a **Root administrator** badge if you are signed in as `rootadmin`, and a **Sign out** action. On medium and larger screens a separate **Sign out** icon button also sits in the top bar for one-click sign-out.
 
 ### Sidebar navigation
 
-A dark panel on the left (or opened by the menu icon on small screens) groups all available screens by business area, for example **Administration**, **Sales**, **Inventory**, **Accounting**, and so on. Click any group heading to expand it, then click the screen name to navigate there.
+A dark slate panel on the left (or opened by the menu icon on small screens) groups all available screens by business area — for example **Administration**, **Sales**, **Inventory**, **Accounting**, and so on — with each screen listed under its group heading. Click a screen name to navigate there.
 
-The sidebar is **personalised** — items you do not have permission to see are simply not shown. If you cannot find a screen you expect, you probably lack the required permission. Contact your system administrator.
+The sidebar is **personalised** — items you do not have permission to see are simply not shown, and a group whose every item is hidden disappears entirely. If you cannot find a screen you expect, you probably lack the required permission. Contact your system administrator. (If a screen is part of the system but not yet released, it appears greyed-out with a small **soon** badge instead of a working link.)
 
 Press **Escape** at any time to close the sidebar on a small screen.
 
@@ -64,12 +64,12 @@ The large area to the right of the sidebar is where each screen loads. The curre
 
 ### The home page
 
-When you sign in — or click the **ERP** logo in the top bar, or are redirected after trying to open a screen you cannot access — you land on the **home page** (`/admin`).
+When you sign in — or are redirected after trying to open a screen you cannot access — you land on the **home page** (`/admin/home`).
 
 What you see depends on your account:
 
-- **System administrators (`rootadmin`)** see a **System setup** panel: an ordered set of configuration steps — *Companies & branches → Roles & permissions → Users → Audit log* — for standing the platform up. Each step links straight to that area.
-- **Everyone else** sees a brief welcome. The home page does **not** repeat the menu — use the sidebar on the left to reach your work. (Personalised shortcuts on this page are planned for a future release.)
+- **System administrators (`rootadmin`)** see a **System setup** panel — its heading reads "System setup", under the page subtitle "System administrator — configure the platform below to get started." It presents an ordered set of configuration steps as cards — *1 Companies & branches → 2 Roles & permissions → 3 Users → 4 Audit log* — for standing the platform up. Each card links straight to that area.
+- **Everyone else** sees a brief, calm welcome ("Your workspace is ready"). The home page does **not** repeat the menu — use the sidebar on the left to reach your work. (Personalised shortcuts on this page are planned for a future release.)
 
 The home page never requires a permission and never loads business data, so it is always safe to land on; this is why the system uses it as the silent redirect target for screens you cannot access.
 
@@ -86,7 +86,7 @@ The home page never requires a permission and never loads business data, so it i
 **How it works.** Switching branches does not re-issue your login token. Instead the system records your active branch choice and attaches it to every subsequent request. Your effective permissions are re-resolved for the new branch's company on the very next call — permissions can differ between branches if your roles are scoped differently.
 
 - On login the system activates your **default branch** automatically.
-- If you are assigned to more than one branch, click the branch name in the top bar to open a dropdown. Click any branch in the list to switch to it. The list shows only your active, assigned branches — by name, not by any internal code.
+- If you are assigned to more than one branch, click the branch chip in the top bar to open a dropdown. Click any branch in the list to switch to it. The list shows only your active, assigned branches; each row shows the branch **name** with its short branch **code** beside it (the code is a human-readable identifier, never a raw internal identifier).
 - Switching branches takes effect immediately; your permissions and the data you see may change depending on your role grants.
 - Selecting the branch you are already in is a no-op — the menu simply closes.
 
@@ -106,7 +106,7 @@ The home page never requires a permission and never loads business data, so it i
 
 - **Nav items** you lack permission for are hidden entirely — you will not see a greyed-out item, just no item at all.
 - If you type a URL directly for a screen you cannot access, the system redirects you to the home page quietly.
-- If you are on a screen and try to perform an action you lack permission for (for example, clicking a button that is visible to you), the system prevents it.
+- If you are on a screen and try to perform an action you lack permission for, the system declines it without an alarming pop-up — the relevant part of the screen shows a calm "no permission" message instead. (See "When something goes wrong" under Common UI Patterns.)
 
 The special account **rootadmin** is the system superuser and sees every screen and every action regardless of role assignment. This account is used by IT administrators only.
 
@@ -114,17 +114,31 @@ The special account **rootadmin** is the system superuser and sees every screen 
 
 ## Common UI Patterns
 
-### Name pickers — choosing a related record
+### Resource pickers — choosing a related record by name
 
-Throughout the system, whenever one record links to another (for example, a sales order links to a customer, or a user is assigned to a branch), you choose the related record **by name** — you never type codes or internal identifiers.
+Throughout the system, whenever one record links to another (for example, a sales order links to a customer, a journal line links to an account, or a user is assigned to a branch), you choose the related record **by name** from a list. You **never type a code or an internal identifier**. This applies everywhere — fiscal year, customer, supplier, product, account, branch, agent, task, and so on.
 
-The picker works like this:
+The picker is a dropdown labelled with what you are choosing (for example **Customer**):
 
-1. Click or focus the picker field (labelled with what you are choosing, for example **Customer**).
-2. Start typing the name. The list filters as you type.
-3. Click the matching item in the list.
+1. Click or focus the picker field.
+2. Pick the matching item from the dropdown list.
+3. For longer lists (more than 12 options) a **"Type to filter by name…"** box appears automatically above the dropdown — type part of the name to narrow the list, then pick the item.
 
-If there are more than 12 options a filter input appears automatically; just keep typing to narrow the list.
+Because raw identifiers are never accepted as input, you cannot pick a record that does not exist or mistype an identifier. Internal identifiers (the long machine codes the system uses behind the scenes) are not shown anywhere in the interface; records are always presented by their human-readable name, code, or a link.
+
+### The Currency Picker — choosing a currency on a form
+
+Wherever a form asks you for a currency — for example when entering a supplier bill, recording a customer receipt, setting an opening balance, raising a credit note, creating a sales order, invoice, quotation, blanket or standing order, ringing up a POS sale, raising a purchase order, setting up pricing tiers or a customer price, entering a product's cost or selling price, an opportunity value, an HR loan, a customer credit limit, or purchase settings — you choose it from a **Currency Picker**, not by typing a 3-letter code.
+
+The Currency Picker is a dropdown that lists currencies as **"CODE — Name"** (for example, `TZS — Tanzanian Shilling`, `USD — US Dollar`):
+
+- It shows **only the currencies enabled for your company** (and, where relevant, your branch). You cannot choose a currency that has not been enabled.
+- It **defaults to your company's default document currency**, so for everyday single-currency work you can simply leave it as-is.
+- If the list is long, a small filter box lets you type part of the code or name to narrow it.
+
+The set of enabled currencies and the default document currency are configured by your administrator (per company, and optionally per branch). The **base currency** — the home currency your accounts are kept in — is set once for the company and **cannot be changed once any journal entries exist**, so plan it carefully at setup time. If you ever need a currency that is not in the list, ask your administrator to enable it.
+
+> You will never be asked to "type a 3-letter currency code" or told that a field "defaults to TZS" — those are out of date. Always pick the currency from the dropdown.
 
 ### List screens — search and pagination
 
@@ -140,10 +154,19 @@ Every data screen can be in one of four states. The system displays a distinct v
 
 | State | What you see |
 |---|---|
-| **Loading** | A spinner or skeleton while data is being fetched. |
+| **Loading** | A spinner or skeleton while data is being fetched. A thin progress stripe also runs across the top of the screen whenever the system is talking to the server. |
 | **Empty** | A clear message that there are no records matching your criteria. This is not an error. |
 | **Error** | A message explaining that something went wrong, with a prompt to try again. |
-| **No access** | If you navigate directly to a screen you cannot use, you are redirected to the home page silently. |
+| **No access** | If you navigate directly to a screen you cannot use, you are redirected to the home page silently. If you can open a screen but lack permission for a particular *action* on it, that part of the screen shows a calm "no permission" message rather than an alarming pop-up. |
+
+### When something goes wrong — errors and conflicts
+
+The system aims to tell you plainly what happened and what to do, rather than showing a raw technical failure:
+
+- A genuine failure (the server is unreachable, or an unexpected error) appears as a centered **"Something went wrong"** alert that you acknowledge with **OK**. The message is written in plain language.
+- A **validation** problem (a missing required field, a value out of range, an unsupported file) is reported clearly so you can correct it and try again — you will not see a raw internal error.
+- A **conflict** — for example, two people edited the same record at the same time — appears through the same centered **"Something went wrong"** alert, with the body explaining that the record was modified by another transaction and asking you to reload and try again. Reopen the record to get the latest version, re-apply your change, and save again.
+- A session that has expired returns you to the login page with the toast "Your session has expired. Please sign in again." (see the Signing In section).
 
 ### Money and date formats
 
@@ -151,7 +174,7 @@ Every data screen can be in one of four states. The system displays a distinct v
 
 **Why this design.** The system is built for organisations that may trade in multiple currencies. Attaching the currency to every amount from the start prevents a class of errors where amounts in different currencies are accidentally compared or summed. It also allows a second company under the same organisation to operate in a different base currency without any data migration.
 
-- **Money** is always shown with the currency code and two decimal places, for example `TZS 1,234.56` or `USD 200.00`. You never need to type a currency symbol — the system knows the currency from context.
+- **Money** is always shown with the currency code and two decimal places, for example `TZS 1,234.56` or `USD 200.00`. You never type a currency symbol or a free-text currency code — when a form needs a currency you choose it from the **Currency Picker** (see above), which is pre-set to your company's default.
 - **Dates** are shown in your local timezone. When entering dates use the date picker provided — never type raw date strings.
 
 ### Creating, editing, and saving records
@@ -170,6 +193,8 @@ The general flow for creating or editing a record is:
 **Why this exists.** Business records have legal and operational significance beyond their active life. A cancelled invoice must still be traceable; a former employee's username must still appear in audit logs. Keeping the record preserves that history. It also means mistakes can be corrected by re-enabling a record rather than recreating it.
 
 **How statuses work.** Most master records (users, roles, companies, branches) follow the `ACTIVE → INACTIVE / ARCHIVED` lifecycle. An `INACTIVE` record cannot be used in new transactions. An `ARCHIVED` record is additionally excluded from selection pickers and branch-switching lists. You can view inactive and archived records in the relevant administration screens by adjusting the status filter.
+
+A record's status is shown throughout the system as a small coloured **status pill** (a status tag) — for example a green pill for active records and a muted pill for inactive or archived ones — so you can see at a glance where each record stands in a list.
 
 > The system does not hard-delete records. Deactivating a user, archiving a product, or cancelling an order leaves the record in the system in an inactive or historical state. You can always review past records.
 

@@ -50,15 +50,17 @@ DRAFT
 
 ## 3. Creating a project
 
-Navigate to **Projects > Projects** (`/admin/projects`) and click **New Project**.
+Navigate to **Projects > Projects** (`/admin/projects`) and click **New Project**. An inline create form opens.
 
-1. Enter the **Project Name** (required, up to 160 characters).
-2. Optionally enter **Planned Start** and **End** dates, a **Budget**, and **Notes**.
-3. Click **Submit**.
+1. Enter the **Name** (required, up to 160 characters).
+2. Optionally enter a **Budget Amount**, a **Start Date** and **End Date**, and **Notes**.
+3. Click **Create Project**.
 
-The project is created with status **Draft** and a system-generated project number (e.g. `PRJ-0001`). The success alert shows the project number.
+The create form has only these five fields — there is no customer, manager, or currency input at create time. The budget amount is recorded in the company's base currency.
 
-To set the customer and project manager, open the project detail after creation (see section 4.2).
+The project is created with status **Draft** and a system-generated project number (e.g. `PRJ-0001`). A success alert shows the project number.
+
+To set the customer, open the project detail after creation (see section 4.2). (The project manager cannot currently be set from the UI — see section 4.2.)
 
 **Validation.** Project name is required. Name must not exceed 160 characters.
 
@@ -66,21 +68,22 @@ To set the customer and project manager, open the project detail after creation 
 
 ## 4. Project detail
 
-Click any project row to navigate to the project detail screen (`/admin/projects/uid/:uid`). The detail screen is divided into panels:
+Click the **Open** button on any project row to navigate to the project detail screen (`/admin/projects/uid/:uid`). The detail screen is divided into panels:
 
-- **Header** — project number, name, status badge, dates, budget.
+- **Header** — project number, name, and two status tags (the lifecycle status and the master record status), with the lifecycle action buttons.
+- **Project Details** — the always-visible inline edit form (see section 4.2).
 - **Tasks** — the list of tasks assigned to this project.
 - **Timesheets** — paged list of time entries.
-- **Issue to Job** — material and cost issue panel.
-- **P&L** — project profit and loss button (requires `PROJECTS.COSTING.VIEW`).
+- **Issue Materials to Job** — material and cost issue panel.
+- **Project P&L Report** — project profit and loss panel (requires `PROJECTS.COSTING.VIEW`).
 
 The project number is the human identifier shown throughout the UI. The internal identifier appears only in the browser address bar.
 
 ### 4.1 Lifecycle actions
 
-The buttons shown depend on the current status:
+The lifecycle-transition buttons shown depend on the current status:
 
-| Current status | Buttons available |
+| Current status | Lifecycle-transition buttons available |
 |---|---|
 | Draft | Activate, Cancel |
 | Active | Hold, Complete, Cancel |
@@ -88,28 +91,36 @@ The buttons shown depend on the current status:
 | Completed | (none — terminal) |
 | Cancelled | (none — terminal) |
 
-Click the relevant button and confirm. A reason is not required for any transition.
+Click the relevant button to apply the transition immediately. A reason is not required for any transition. The lifecycle buttons appear only when the user holds `PROJECTS.PROJECT.MANAGE`.
+
+The table above lists only the **lifecycle-transition** buttons. The header also shows an **Archive** button independently of the lifecycle status: it appears for any project whose master status is not already **Archived** — including terminal (Completed and Cancelled) projects — whenever the user holds `PROJECTS.PROJECT.MANAGE`. See section 4.3.
 
 ### 4.2 Editing the project
 
-Click **Edit** on the project header (available when the user has `PROJECTS.PROJECT.MANAGE`).
+There is no separate Edit button. The detail screen always shows an inline **Project Details** card. When the user holds `PROJECTS.PROJECT.MANAGE`, the fields are editable and a **Save Changes** button appears; otherwise the fields are read-only (disabled) and no Save button is shown.
 
-The following fields can be edited at any time before the project becomes terminal:
+The card contains the following fields:
 
 - **Name**
-- **Planned Start Date** and **End Date**
-- **Budget** (in base currency)
-- **Notes** (up to 500 characters)
-- **Customer** — chosen via the customer picker (search by display name).
-- **Project Manager** — chosen via the user picker (search by name; hint shows username).
+- **Budget Amount** (in base currency)
+- **Start Date** and **End Date**
+- **Notes**
+- **Customer (optional)** — chosen via the customer picker.
+- **Manager (optional)** — chosen via the user picker (hint shows username).
 
-Click **Save** to apply changes. Clearing the Customer or Manager picker removes the link.
+Click **Save Changes** to apply.
+
+> **Known limitation — the Manager picker does not work.** Although the **Manager** picker is shown on the form, the project manager is **never saved**. The backend ignores the submitted manager when creating or updating a project, so picking a manager has no effect and no project manager can be set from the UI today.
+
+> **Known limitation — the Customer and Manager pickers do not pre-fill on load.** When you open a project, the Project Details card loads the Name, Budget, dates, and Notes, but the **Customer** and **Manager** pickers always start blank — even when the project already has a customer linked. Because saving the form sends whatever the picker currently shows, **clicking Save Changes without re-selecting the customer will clear the existing customer link.** If you only need to change another field, re-pick the customer first, or make the edit through a workflow that does not require Save. (Setting the Customer to a value and saving does persist that customer.)
 
 ### 4.3 Archiving a project
 
-Click **Archive** to move the project to **Archived** master status. Archived projects are hidden from the default list view. They can be retrieved by selecting **Archived** in the status filter.
+Click **Archive** (in the header action buttons, available when the user has `PROJECTS.PROJECT.MANAGE`) to move the project to **Archived** master status. Archived projects are hidden from the project list.
 
-Archiving does not change the project status (a DRAFT project stays DRAFT; it is simply hidden from the normal list).
+Archiving does not change the lifecycle status (a DRAFT project stays DRAFT; it is simply hidden from the list).
+
+> **Note.** The project list has no status filter. It always shows the company's **Active**-master-status projects, so once a project is archived there is currently no way to view it again from the project list UI. (The status tag in the list reflects the lifecycle status — Draft/Active/On Hold/Completed/Cancelled — not the master status.)
 
 ---
 
@@ -123,20 +134,20 @@ Tasks are managed within the **Tasks** panel on the project detail screen. There
 ### 5.1 Creating a task
 
 1. In the Tasks panel, click **Add Task**.
-2. Enter a **Task Code** (up to 30 characters, unique within the project) and a **Task Name** (up to 160 characters).
+2. Enter a **Code** (the task code, up to 30 characters, unique within the project) and a **Name** (up to 160 characters).
 3. Enter optional **Planned Hours**.
 4. Tick **Billable** if time spent on this task is billable to the customer.
-5. Click **Submit**.
+5. Click **Create Task**.
 
 The task is created with **Active** status.
 
 ### 5.2 Editing a task
 
-Click the edit icon on a task row. You can change the task code, name, planned hours, and billable flag. Click **Save**.
+Click the pencil (edit) icon on a task row. The task form reopens pre-filled. You can change the code, name, planned hours, and billable flag. Click **Update Task**.
 
 ### 5.3 Deactivating a task
 
-Click **Deactivate** on a task row. The task moves to **Inactive** status and disappears from the default (Active) task list. Inactive tasks are not deleted and can be viewed by filtering for Inactive tasks via the API. Deactivation is a soft operation.
+Click the **deactivate** (x) icon on an Active task row. The task moves to **Inactive** status and disappears from the default (Active) task list. Inactive tasks are not deleted and can be viewed by filtering for Inactive tasks via the API. Deactivation is a soft operation. (The x icon is shown only on rows whose status is Active.)
 
 ---
 
@@ -153,9 +164,11 @@ Timesheets record hours worked against a project (and optionally a specific task
 2. Enter the **User ID** (the numeric user identifier — ask your administrator if you do not know it).
 3. Enter the **Work Date** (yyyy-MM-dd).
 4. Enter the **Hours** (decimal; minimum 0.01).
-5. Tick **Billable** if the time is billable.
-6. Optionally pick a **Task** from the picker to link the entry to a specific task.
-7. Click **Submit**.
+5. Optionally enter a **Rate (optional)** — an informational planned rate; it is stored but does not post any GL entry.
+6. Optionally pick a **Task (optional)** from the picker to link the entry to a specific task.
+7. Optionally enter **Notes**.
+8. Tick **Billable** if the time is billable.
+9. Click **Record**.
 
 The timesheet entry is appended to the panel list. Time entries are permanent; they cannot be edited or deleted after recording.
 
@@ -163,7 +176,7 @@ The timesheet entry is appended to the panel list. Time entries are permanent; t
 
 ### 6.2 Viewing timesheets
 
-The Timesheets panel shows entries in pages of 20. Use the paginator (First, Previous, page numbers, Next, Last) to move between pages.
+The Timesheets panel lists entries with columns **Date**, **User** (shown as the user's display name), **Hours**, **Billable**, and **Notes**. Entries are shown in pages of 20; use the paginator (First, Previous, page numbers, Next, Last) to move between pages.
 
 ---
 
@@ -172,21 +185,22 @@ The Timesheets panel shows entries in pages of 20. Use the paginator (First, Pre
 **What is a material issue to a job?**
 Issuing materials to a project is the act of transferring stock items from the warehouse to a specific job. When you issue materials, three things happen simultaneously: (1) the stock quantity is reduced at the current branch; (2) the stock value (based on the product's current moving-average cost) is transferred from the Inventory balance sheet account to Cost of Sales on the profit and loss account; and (3) the GL entry is tagged with the project identifier, so the cost appears in the project P&L under the "Material" cost type. This is how the cost of physical materials consumed on a job is tracked. Without issuing materials, materials pulled from the store for a job would remain as stock on the balance sheet even though they have been consumed, overstating inventory and understating job costs.
 
-The **Issue to Job** panel on the project detail screen records the issue of stock items to the project. The issue deducts stock and posts a COGS entry tagged to the project.
+The **Issue Materials to Job** panel on the project detail screen records the issue of stock items to the project. The issue deducts stock and posts a COGS entry tagged to the project.
 
-Materials can only be issued to **Active** or **On Hold** projects. The Issue panel is hidden for Draft, Completed, and Cancelled projects.
+Materials can only be issued to **Active** or **On Hold** projects. The panel is hidden for Draft, Completed, and Cancelled projects (and also requires `PROJECTS.ISSUE.CREATE`).
 
 ### 7.1 Recording an issue
 
 1. Open the project detail (status must be Active or On Hold).
-2. In the Issue to Job panel, click **Issue Materials**.
-3. Click **Add Line** for each item:
-   - Pick the **Product** from the picker (search by name; hint shows product code). Only GOODS (stockable) products are valid.
-   - Enter the **Quantity**.
-4. Optionally enter an **Issue Date** and a **Reason**.
-5. Click **Submit**.
+2. In the Issue Materials to Job panel, click **Issue Materials**.
+3. For each item line:
+   - Pick the **Product** from the picker (hint shows the product code). Only GOODS (stockable) products are valid.
+   - Enter the **Qty**.
+   - Click **Add Line** to add another line.
+4. Optionally enter an **Issue Date (optional)** and a **Reason (optional)**.
+5. Click **Issue to Job**.
 
-The system generates an issue number (e.g. `PJI-0001`). The success alert shows the issue number.
+The system generates an issue number (e.g. `PJI-0001`). A success banner then appears in the panel showing the issue number, the **total value** issued (with its currency), and a **View COGS Entry** link that opens the posted GL journal entry.
 
 For each line, the system:
 
@@ -205,12 +219,12 @@ For each line, the system:
 
 Project manager Salma Abdallah is running project `PRJ-0007` (Kariakoo Office Fit-Out), status **Active**. The site team needs electrical cables and paint for the first week.
 
-1. Navigate to **Projects › Projects** (`/admin/projects`), click on `PRJ-0007` to open the detail at `/admin/projects/uid/:uid`.
-2. Scroll to the **Issue to Job** panel. Click **Issue Materials**.
+1. Navigate to **Projects › Projects** (`/admin/projects`), click **Open** on `PRJ-0007` to open the detail at `/admin/projects/uid/:uid`.
+2. Scroll to the **Issue Materials to Job** panel. Click **Issue Materials**.
 3. Add lines:
    - Product: `Electrical Cable 2.5mm (ELC-025)`, Qty: `150` (metres).
    - Product: `Interior Paint 20L (PNT-INT)`, Qty: `8` (tins).
-4. Issue Date: `2026-06-10`; Reason: `Week 1 site works`. Click **Submit**.
+4. Issue Date: `2026-06-10`; Reason: `Week 1 site works`. Click **Issue to Job**.
 5. System generates issue `PJI-0014`. For each line:
    - 150 metres of cable deducted from stock at DSM Branch at the cable's current moving-average cost (TZS 4,200/m = TZS 630,000).
    - 8 tins of paint deducted at TZS 38,500/tin = TZS 308,000.
@@ -224,21 +238,20 @@ Project manager Salma Abdallah is running project `PRJ-0007` (Kariakoo Office Fi
 **What is the Project P&L, and what does it show?**
 The Project P&L (Profit and Loss) is a filtered view of the General Ledger that shows only the income and costs tagged to a single project. Revenue is the total of sales invoices tagged to the project; cost is broken down by type — Material (stock issues and goods purchases), Labour (payroll entries tagged to the project), Subcontract (service supplier bills), Overhead (other expense bills), and Other. The margin is the difference between revenue and total cost. The **WIP (Work in Progress)** figure shows how much cost has been incurred that has not yet been matched by billing: it represents work done but not yet invoiced, which sits as an asset on the balance sheet until the customer is billed. The budget variance shows whether the job is tracking above or below its planned cost. A Reconciliation bar confirms that the P&L figures are consistent with the underlying GL postings.
 
-From the project detail screen, click **View P&L** (requires `PROJECTS.COSTING.VIEW`). The P&L report loads as a panel showing:
+The **Project P&L Report** panel is shown when the user holds `PROJECTS.COSTING.VIEW`. Click **Load P&L** in the panel to run the report. It then displays as a set of KPI tiles plus a cost-by-type table and a reconciliation bar:
 
-| Section | Contents |
+| KPI / section | Contents |
 |---|---|
 | Revenue | Total income tagged to this project from GL |
-| Cost by type | Subtotals per cost type (Material, Labour, Overhead, Subcontract, Other) |
-| Total cost | Sum of all cost lines |
-| Gross margin | Revenue − Total cost |
-| Margin % | Gross margin / Revenue × 100 (blank if no revenue) |
+| Total Cost | Sum of all cost lines |
+| Margin | Revenue − Total Cost, with the margin % shown beneath (blank if no revenue) |
+| WIP (unbooked) | max(0, Total Cost − Revenue) — unbilled cost |
 | Budget | The planned budget set on the project |
-| Budget variance | Budget − Total cost |
-| WIP | max(0, Total cost − Revenue) — unbilled cost |
-| Reconciliation | Computed cost from the project ledger vs GL account totals |
+| Budget Variance | Budget − Total Cost |
+| Cost by Type | A table of subtotals per cost type (Material, Labour, Overhead, Subcontract, Other) |
+| Reconciliation | Computed totals from the project ledger vs GL account totals |
 
-The reconciliation bar shows **Balanced** when the two totals agree. A mismatch here indicates a data integrity issue requiring finance review.
+The reconciliation bar shows **Reconciliation OK** when the computed figures match the GL figures. If they do not, it shows **Reconciliation MISMATCH** with the computed-vs-GL revenue and cost figures — this indicates a system defect requiring finance/support review.
 
 ---
 
@@ -247,7 +260,7 @@ The reconciliation bar shows **Balanced** when the two totals agree. A mismatch 
 Three weeks into project `PRJ-0007` (Kariakoo Office Fit-Out), Salma Abdallah wants to check profitability before the final billing.
 
 1. Open the project detail at `/admin/projects/uid/:uid` for `PRJ-0007`.
-2. Click **View P&L** (requires `PROJECTS.COSTING.VIEW`). The P&L panel loads:
+2. In the Project P&L Report panel, click **Load P&L** (requires `PROJECTS.COSTING.VIEW`). The panel loads:
 
 | Section | Amount (TZS) |
 |---|---|
@@ -262,7 +275,7 @@ Three weeks into project `PRJ-0007` (Kariakoo Office Fit-Out), Salma Abdallah wa
 | Budget Variance | +1,065,000 (cost below budget) |
 | WIP | 0 (Revenue > Cost) |
 
-The Reconciliation bar shows **Balanced** — the project ledger ties to the GL account totals. Revenue of TZS 3.5M was posted via a sales invoice tagged to this project; costs include the two material issues (TZS 938,000 from week 1 + TZS 1,237,000 from week 2) plus labour timesheets. Since revenue exceeds total cost, WIP is zero. Salma notes the healthy margin and continues to the next billing milestone.
+The reconciliation bar shows **Reconciliation OK** — the project ledger ties to the GL account totals. Revenue of TZS 3.5M was posted via a sales invoice tagged to this project; costs include the two material issues (TZS 938,000 from week 1 + TZS 1,237,000 from week 2) plus labour timesheets. Since revenue exceeds total cost, WIP is zero. Salma notes the healthy margin and continues to the next billing milestone.
 
 ---
 
@@ -271,12 +284,12 @@ The Reconciliation bar shows **Balanced** — the project ledger ties to the GL 
 **What is the WIP report, and who uses it?**
 The WIP (Work in Progress) report is a company-wide summary that shows, for every project, how much cost has been incurred versus how much has been billed. WIP represents costs that have been spent but not yet recovered from the customer — it is an asset (money owed back to the company through future billing) and it appears on the balance sheet. Finance managers and project directors use the WIP report at month-end to understand the total unbilled exposure across all jobs, to flag jobs that are heavily over-cost relative to billing, and to support the preparation of interim billing or progress claims. A project with high WIP and low revenue may indicate that billing is overdue.
 
-Navigate to **Projects > WIP Report** (`/admin/projects/wip-report`). Requires `PROJECTS.COSTING.VIEW`.
+Navigate to **Projects > WIP Report** (`/admin/projects/wip-report`); the screen is titled **Cross-Project WIP Report**. Requires `PROJECTS.COSTING.VIEW`.
 
-1. Select the **Company**.
-2. Click **Load Report**.
+1. Select the **Company** (the selector is shown only when you belong to more than one company).
+2. Click **Run Report**.
 
-The report lists all projects for the company that have cost incurred, showing:
+The report lists the company's active projects that have WIP (cost incurred greater than billed), showing:
 
 | Column | Contents |
 |---|---|
@@ -285,8 +298,9 @@ The report lists all projects for the company that have cost incurred, showing:
 | Cost Incurred | Total cost posted to the project |
 | Billed | Total revenue or billings tagged to the project |
 | WIP | max(0, Cost Incurred − Billed) |
+| (Actions) | An **Open** button (eye icon) that navigates to the project detail |
 
-A footer row shows the totals across all projects.
+A footer row shows the totals (Cost Incurred, Billed, WIP) across all listed projects. When no project has WIP, the panel shows "No active projects with WIP for the selected company."
 
 The WIP report is not paginated. All projects are shown in a single list.
 

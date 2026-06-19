@@ -3,7 +3,7 @@
 **What is the Fixed Assets module?**
 A fixed asset is a tangible item a business buys and uses over multiple years — machinery, vehicles, computers, office furniture. Unlike stock, which is sold and replaced constantly, a fixed asset sits on the company's balance sheet as long as it is in use. Because the asset is consumed gradually over its useful life, its cost is spread across accounting periods as **depreciation**: a periodic charge that reduces the asset's book value and recognises the consumption on the profit and loss account. Without a formal asset register, capital purchases get mis-coded as expenses (overstating costs and understating the balance sheet), depreciation goes unrecorded, and the financial statements do not reflect the real value of the business. The Fixed Assets module (ADR-0030) provides the register, the depreciation engine, and the GL integration that keeps the balance sheet and the profit and loss account accurate.
 
-This chapter covers registering and managing fixed assets, running depreciation, transferring assets between branches, and disposing of or writing off assets. All screens are available from the **Fixed Assets** navigation group.
+This chapter covers registering and managing fixed assets, running depreciation, transferring assets between branches, and disposing of or writing off assets. All screens are available from the **Finance / Fixed Assets** navigation group in the sidebar.
 
 ---
 
@@ -24,7 +24,7 @@ Navigation items are hidden when the corresponding permission is absent.
 
 ## 2. Asset categories
 
-Navigate to **Fixed Assets > Asset Categories** (`/admin/asset-categories`).
+Navigate to **Finance / Fixed Assets > Asset Categories** (`/admin/asset-categories`).
 
 **What is an asset category, and why does it exist?**
 An asset category is a classification template that groups assets of the same type together — for example "Motor Vehicles", "Machinery", or "Office Furniture". It is used because assets of the same type typically depreciate at the same rate, have the same useful life, and should post to the same General Ledger (GL) accounts. Rather than setting the depreciation method, useful life, and three GL account codes on every individual asset, you set them once on the category and every asset in that category inherits them. This ensures consistency, reduces data-entry errors, and means a change in accounting policy (such as adjusting the useful life for a class of machinery) can be applied at the category level without re-editing each asset. Before any asset can be registered the relevant category must exist.
@@ -43,30 +43,30 @@ An asset category defines the depreciation method, useful life, and GL accounts 
    - Asset Account (the balance-sheet asset account, e.g. 1510)
    - Accumulated Depreciation Account (the contra account, e.g. 1515)
    - Depreciation Expense Account (the P&L charge account, e.g. 6510)
-6. Click **Submit**.
+6. Click **Create Category** (the button shows **Saving…** while the request is in flight).
 
-New categories are created with **Active** status.
+New categories are created with status **ACTIVE** (the status is shown throughout the UI as the raw uppercase value, `ACTIVE` or `INACTIVE`).
 
 **Validation.** Code must be unique within the company. Reducing Balance requires a Reducing Rate. All three GL account IDs are required.
 
 ### 2.2 Editing a category
 
-Open the category detail (navigate from the list). Click **Edit**, change the name, method, life, or account IDs, and save. The code is not editable after creation.
+Open the category detail (from the list, click **Open** on the category's row). If you have the `FA.CATEGORY.MANAGE` permission the detail screen shows the edit form directly (under the heading **Edit Category**) — there is no separate "Edit" button to click. Change the name, method, life, or account IDs, then click **Save** (the button shows **Saving…** while in flight). The code is not editable after creation.
 
 ### 2.3 Archiving a category
 
-Open the category detail and click **Archive**. The status changes to **Archived**. Archived categories are hidden from the category dropdown on the asset-registration form. An archived category is not deleted; its history and associated assets remain.
+Open the category detail and click **Archive** (this button appears, in the heading of the Edit Category card, only while the category is still active; it shows **Archiving…** while in flight). The status changes to **INACTIVE** (the UI has no separate "Archived" label — an archived category simply shows status `INACTIVE`). Inactive categories are hidden from the category dropdown on the asset-registration form. An archived category is not deleted; its history and associated assets remain.
 
 ---
 
 ## 3. Asset register
 
-Navigate to **Fixed Assets > Fixed Assets** (`/admin/fixed-assets`).
+Navigate to **Finance / Fixed Assets > Fixed Assets** (`/admin/fixed-assets`).
 
 **What is the asset register?**
 The asset register is the master list of every fixed asset the company owns. It is the single source of truth for capital investment: it records the original cost of each asset, the depreciation accumulated against it so far, and the resulting **net book value (NBV)** — the carrying value shown on the balance sheet. Every purchase of a capital item must be entered here (not coded to expense) so that the balance sheet correctly shows the asset, the profit and loss account receives only the proportionate depreciation charge each period, and the year-end accounts accurately reflect the company's capital base. The register is used by the finance team and reviewed by auditors to verify that assets exist, are in service, and are depreciated appropriately. The system keeps the register in step with the GL: every capitalisation, depreciation run, revaluation, and disposal posts a matching GL entry, and the FA-to-GL reconciliation screen (section 9) confirms the two agree.
 
-The register lists all fixed assets for the selected company. Use the status filter to show assets by state: Draft, In Service, Disposed, or Written Off.
+The register lists all fixed assets for the selected company. Use the status filter to show assets by state: Draft, In Service, Disposed, or Written Off. The list is paginated; use the pager controls (first / previous / page numbers / next / last) beneath the table to move through large registers.
 
 ### Asset status lifecycle
 
@@ -82,7 +82,7 @@ DISPOSED and WRITTEN_OFF are terminal states.
 
 ### 3.1 Registering an asset
 
-1. Navigate to **Fixed Assets > Register Asset** (`/admin/fixed-assets/create`).
+1. Navigate to **Finance / Fixed Assets > Fixed Assets** and click **Register Asset** (`/admin/fixed-assets/create`).
 2. Select the **Company**.
 3. Choose the **Category** from the dropdown (only Active categories are listed).
 4. Pick the **Branch** from the picker (search by name).
@@ -93,16 +93,18 @@ DISPOSED and WRITTEN_OFF are terminal states.
 9. For Reducing Balance, enter the **Reducing Rate**.
 10. Enter the **Life Periods** (can be overridden from the category default).
 11. Enter the **Acquisition Date** and **Depreciation Start Date** (ISO format yyyy-MM-dd).
-12. Optionally enter an **Asset Tag**, **Location**, **Cost Centre ID**, and **Notes**.
-13. Click **Submit**.
+12. Optionally enter a **Location**, **Asset Tag**, and **Cost Centre ID**.
+13. Click **Register Asset**.
 
 The asset is created with status **Draft** and a system-generated asset number (e.g. `AST-0001`). No GL posting occurs at this stage.
 
 **Validation.** All required fields must be present. Reducing Balance requires a Reducing Rate. Life Periods must be at least 1.
 
+> **Acquiring an asset from a supplier bill.** When a capital item arrives through procurement, an asset can be created directly from a matched AP supplier bill line rather than re-keying the figures. This takes the bill line's net amount as the acquisition cost, registers the asset against the same company, and posts its own capitalisation journal. An asset created this way carries a **Source Bill** link on its detail screen (see section 3.3) so the audit trail back to the original purchase is preserved. This requires the `FA.REGISTER.MANAGE` permission.
+
 ### 3.2 Editing asset details
 
-Non-financial fields (name, location, asset tag, cost centre) can only be edited while the asset is in **Draft** status. Open the asset detail, click **Edit**, make changes, and save.
+Non-financial fields (name, location, asset tag, cost centre) can only be edited while the asset is in **Draft** status. Open the asset detail; while the asset is in Draft (and you have `FA.REGISTER.MANAGE`) the **Edit Asset** form is shown directly on the detail screen — there is no separate "Edit" button to click. Make your changes, then click **Save Changes** (the button shows **Saving…** while in flight).
 
 Financial fields (acquisition cost, method, life, dates) cannot be changed after the asset is registered. To correct these, you must dispose of or write off the asset and register a new one.
 
@@ -110,9 +112,11 @@ Financial fields (acquisition cost, method, life, dates) cannot be changed after
 
 Open any asset from the list. The detail screen shows:
 
-- Header: asset number, name, category, branch, status badge, acquisition cost, accumulated depreciation, net book value (NBV), and (if revalued) the revaluation reserve balance.
-- **Depreciation Schedule** tab (available when In Service) — a line for each period showing planned charge, accumulated depreciation after, NBV after, and a posted flag.
-- **Revaluations** tab (available when In Service) — history of all revaluations in date order.
+- Header: asset number, name, and status badge.
+- A **key-metrics row** of four figures: **Acquisition Cost**, **Carrying Cost**, **Accumulated Depreciation**, and **NBV (Net Book Value)**. Carrying Cost equals the acquisition cost until the asset is revalued, after which it diverges to reflect the revised carrying value; NBV is the carrying cost less accumulated depreciation.
+- An **Asset Details** panel listing category, branch, depreciation method, life periods, dates, and (where set) salvage value, the revaluation reserve balance, location, and asset tag. If the asset was capitalised from an AP supplier bill, this panel also shows a **Source Bill** link (**View Source Bill**) to the originating bill.
+- **Depreciation Schedule** (shown when In Service, or once a schedule exists) — a line for each period showing the planned charge, accumulated depreciation after, NBV after, and a posted flag.
+- **Revaluation History** (shown when revaluations exist) — every revaluation in date order with its direction, delta, carrying-before and carrying-after values, and reason.
 
 The asset number is the human identifier shown throughout the UI. The internal identifier appears only in the browser address bar.
 
@@ -130,7 +134,7 @@ Placing an asset in service capitalises it: the system posts a GL entry and gene
 3. Enter the **Posting Date** (must fall in an open fiscal period).
 4. Confirm.
 
-Status changes to **In Service**. A capitalisation GL entry is posted (DR Asset Account / CR Cash or AP Clearing). The depreciation schedule is generated for the full useful life.
+Status changes to **In Service**. A capitalisation GL entry is posted: **DR Asset Account / CR Fixed Asset Clearing account** (the dedicated clearing account configured for the company, default code 1650 — the place-in-service form labels this "CR Clearing account"). The depreciation schedule is generated for the full useful life.
 
 **Validation.** Posting date is required. The fiscal period containing the posting date must be open. The action is available only on Draft assets.
 
@@ -175,7 +179,7 @@ A preview is a read-only simulation: it shows you exactly which assets would be 
 
 Before posting, preview the run to see what charges will be created.
 
-1. Navigate to **Fixed Assets > Run Depreciation** (`/admin/depreciation-runs/post`).
+1. Navigate to **Finance / Fixed Assets > Run Depreciation** (`/admin/depreciation-runs/post`).
 2. Select the **Company**.
 3. Enter the **Fiscal Period UID** for the period you want to depreciate.
 4. Click **Preview**.
@@ -185,20 +189,20 @@ The preview table lists each eligible asset with its planned charge for the peri
 ### 6.3 Posting a depreciation run
 
 **What happens when you post a depreciation run?**
-Posting a depreciation run does four things at once: (1) it creates a `DEPR-####` run record that acts as the audit trail for the period; (2) it posts a single consolidated GL journal — one Debit to Depreciation Expense and one Credit to Accumulated Depreciation per asset category — covering every eligible asset; (3) it marks each asset's schedule line for the period as posted and increases each asset's accumulated depreciation balance; and (4) it makes the run idempotent: re-running the same period is a safe no-op (the system returns the existing run without posting twice). This idempotency guarantee means you can safely retry a run if a network error occurs during posting, with no risk of double-charging.
+Posting a depreciation run does three things at once: (1) it creates a `DEPR-####` run record that acts as the audit trail for the period; (2) it posts a single consolidated GL journal — one Debit to Depreciation Expense and one Credit to Accumulated Depreciation per asset category — covering every eligible asset; and (3) it marks each asset's schedule line for the period as posted and increases each asset's accumulated depreciation balance. Only one run is permitted per company per fiscal period: if a run already exists for that company and period, a second attempt is **hard-rejected** with the message *"Depreciation run already posted … Duplicate runs are not allowed"* (HTTP 409). The run is rejected, not silently returned — so always confirm a period has not already been run before posting, and use the preview step first.
 
 After reviewing the preview:
 
 1. Enter the **Posting Date** (must fall within the selected open fiscal period).
-2. Click **Post**.
+2. Click **Post Run**.
 
 The system creates a depreciation run with status **Posted** and a run number (e.g. `DEPR-0001`). A single consolidated GL entry is posted covering all eligible assets. Each asset's accumulated depreciation balance increases. The schedule lines for the period are marked as posted.
 
-**Validation.** Only one depreciation run is allowed per company per fiscal period. Attempting a second run for the same period is rejected.
+**Validation.** Only one depreciation run is allowed per company per fiscal period. Attempting a second run for the same period is rejected with a 409 conflict ("Duplicate runs are not allowed"); it is not a safe no-op. The fiscal period containing the posting date must also be open.
 
 ### 6.4 Viewing depreciation runs
 
-Navigate to **Fixed Assets > Depreciation Runs** (`/admin/depreciation-runs`). The list shows all posted runs in reverse date order. Click a run to see the detail, which includes per-asset lines showing the charge amount, accumulated depreciation after the run, and NBV after the run.
+Navigate to **Finance / Fixed Assets > Depreciation Runs** (`/admin/depreciation-runs`). The list shows all posted runs in reverse date order. Click a run to see the detail, which includes per-asset lines showing the charge amount, accumulated depreciation after the run, and NBV after the run.
 
 ---
 
@@ -213,7 +217,7 @@ Revaluation adjusts the carrying cost of an In Service asset to its current fair
 2. Click **Revalue**.
 3. Choose the **Direction**: Up or Down.
 4. Enter the **Delta Amount** (the change in carrying cost, always a positive number).
-5. Enter the **Revaluation Date**.
+5. Enter the **Revaluation Date** (the fiscal period containing this date must be open, as the revaluation posts a GL entry).
 6. Enter a **Reason** (e.g. market appraisal).
 7. Confirm.
 
@@ -266,18 +270,23 @@ The loss equals the full NBV at the write-off date (proceeds are forced to zero)
 ## 9. FA to GL reconciliation
 
 **What is the FA-to-GL reconciliation, and why does it matter?**
-The reconciliation screen confirms that the asset register and the General Ledger agree. Because every capitalisation, depreciation run, revaluation, and disposal in this module posts a matching GL journal, the sum of all asset costs in the register should always equal the balance on the Fixed Assets GL account, and the sum of all accumulated depreciation in the register should always equal the balance on the Accumulated Depreciation GL account. A discrepancy means someone has posted a manual journal directly to one of those GL accounts, bypassing the register — a data-integrity problem that must be investigated. A green "Ties" indicator confirms the books are clean; a red "Does Not Tie" indicator is a flag for the finance team to investigate before month-end or year-end close.
+The reconciliation screen confirms that the asset register and the General Ledger agree. Because every capitalisation, depreciation run, revaluation, and disposal in this module posts a matching GL journal, the carrying cost of the in-service assets in the register should always equal the debit balance on the Fixed Assets GL account, and the accumulated depreciation of the in-service assets in the register should always equal the balance on the Accumulated Depreciation GL account. A discrepancy means someone has posted a manual journal directly to one of those GL accounts, bypassing the register — a data-integrity problem that must be investigated. A green **TIED** badge confirms the books are clean; a red **MISMATCH** badge is a flag for the finance team to investigate before month-end or year-end close.
 
-Navigate to **Fixed Assets > Reconciliation** (`/admin/fixed-assets/reconciliation`). Requires the `FA.VIEW` permission.
+Navigate to **Finance / Fixed Assets > FA Reconciliation** (`/admin/fixed-assets/reconciliation`). Requires the `FA.VIEW` permission.
 
 1. Select the **Company**.
-2. The report compares two balances:
-   - **Register Cost** — the sum of acquisition costs in the asset register.
-   - **GL Cost Balance** — the total of all asset GL accounts.
-   - **Register Accumulated Depreciation** — the sum of accumulated depreciation in the register.
-   - **GL Accumulated Depreciation Balance** — the total of all accumulated-depreciation GL accounts.
+2. Click **Refresh** to load (or reload) the figures.
+3. The report shows two cards, **Asset Cost** and **Accumulated Depreciation**, each comparing a register figure against the matching GL balance:
+   - **Asset Cost** card:
+     - **Register: Σ carrying_cost (IN_SERVICE)** — the sum of the *carrying cost* of all **in-service** assets in the register. This is the post-revaluation carrying value, not the original acquisition cost, and it excludes Draft, Disposed, and Written-Off assets.
+     - **GL: Fixed Assets debit balance** — the debit balance on the Fixed Assets GL account.
+     - **Difference** — register figure minus GL figure.
+   - **Accumulated Depreciation** card:
+     - **Register: Σ accumulated_depreciation (IN_SERVICE)** — the sum of accumulated depreciation across all **in-service** assets in the register.
+     - **GL: Accum Dep balance (negated for positive presentation)** — the Accumulated Depreciation GL account balance, sign-flipped so it shows as a positive figure.
+     - **Difference** — register figure minus GL figure.
 
-Both bars show a green **Ties** indicator when the register and GL agree. A red **Does Not Tie** indicator means there is a discrepancy. A mismatch typically indicates a manual GL journal was posted directly to an asset account, which bypasses the register.
+Each card shows a green **TIED** badge when its register and GL figures agree, or a red **MISMATCH** badge when they do not. A mismatch typically indicates a manual GL journal was posted directly to an asset account, which bypasses the register.
 
 ---
 
@@ -293,7 +302,7 @@ No. Method and financial parameters are fixed at registration time. If a correct
 The system automatically posts any depreciation that is scheduled and not yet posted, up to the disposal date. This ensures NBV is accurate before the gain/loss is calculated.
 
 **Can I run depreciation more than once for the same period?**
-No. The system enforces one run per company per fiscal period. Use the preview function first to confirm the charges before posting.
+No. The system enforces exactly one run per company per fiscal period. A repeat attempt for a period that has already been run is **hard-rejected** with a 409 conflict ("Duplicate runs are not allowed") — it is *not* a safe idempotent no-op, so retrying after a posted run will not silently return the existing run. Use the preview function first to confirm the charges before you post.
 
 **Does a branch transfer post a GL entry?**
 No. A transfer is a location update only and has no accounting effect.

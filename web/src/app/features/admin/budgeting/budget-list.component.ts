@@ -18,6 +18,8 @@ import {
   CreateBudgetRequest,
 } from './models/budgeting.model';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
+import { UidOption, UidPickerComponent } from '../../../shared/uid-picker/uid-picker.component';
+import { GlService } from '../gl/gl.service';
 
 const DEFAULT_SIZE = 20;
 
@@ -29,12 +31,13 @@ interface LoadTrigger { page: number }
  */
 @Component({
   selector: 'app-budget-list',
-  imports: [FormsModule, RouterLink, PaginatorComponent],
+  imports: [FormsModule, RouterLink, PaginatorComponent, UidPickerComponent],
   templateUrl: './budget-list.component.html',
   styleUrl: './budget-list.component.scss',
 })
 export class BudgetListComponent {
   private readonly budgetingService = inject(BudgetingService);
+  private readonly glService = inject(GlService);
   private readonly companyService = inject(CompanyService);
   private readonly organisationService = inject(OrganisationService);
   private readonly alerts = inject(AlertService);
@@ -44,6 +47,9 @@ export class BudgetListComponent {
   readonly companies = signal<Company[]>([]);
   readonly selectedCompanyId = signal('');
   readonly companyState = signal<'loading' | 'idle' | 'error'>('loading');
+
+  // ── Picker options ────────────────────────────────────────────────────────────
+  readonly fiscalYearOptions = signal<UidOption[]>([]);
 
   // ── Filters ───────────────────────────────────────────────────────────────────
   readonly filterStatus = signal<BudgetVersionStatus | ''>('');
@@ -121,6 +127,7 @@ export class BudgetListComponent {
             this.companyState.set('idle');
             if (list.length > 0) {
               this.selectedCompanyId.set(list[0].id);
+              this.loadFiscalYears(list[0].id);
               this.load(0);
             }
           },
@@ -131,9 +138,21 @@ export class BudgetListComponent {
     });
   }
 
+  private loadFiscalYears(companyId: string): void {
+    this.glService.listFiscalYears(companyId).subscribe({
+      next: (list) => this.fiscalYearOptions.set(
+        list.map((fy) => ({ uid: fy.uid, label: fy.yearCode, hint: fy.status })),
+      ),
+      error: () => {},
+    });
+  }
+
   onCompanyChange(id: string): void {
     this.selectedCompanyId.set(id);
-    if (id) this.load(0);
+    if (id) {
+      this.loadFiscalYears(id);
+      this.load(0);
+    }
   }
 
   load(page: number): void {
@@ -165,7 +184,7 @@ export class BudgetListComponent {
     const fiscalYearUid = this.fFiscalYearUid().trim();
 
     if (!name) { this.formError.set('Budget name is required.'); return; }
-    if (!fiscalYearUid) { this.formError.set('Fiscal Year UID is required.'); return; }
+    if (!fiscalYearUid) { this.formError.set('Fiscal year is required.'); return; }
 
     const companyId = this.selectedCompanyId();
     if (!companyId) { this.formError.set('Select a company first.'); return; }

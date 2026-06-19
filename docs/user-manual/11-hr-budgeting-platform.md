@@ -18,6 +18,7 @@ The HR & Payroll module is accessible from the **HR & Payroll** navigation group
 | Departments | `HR.EMPLOYEE.VIEW` | `HR.EMPLOYEE.MANAGE` |
 | Employees | `HR.EMPLOYEE.VIEW` | `HR.EMPLOYEE.MANAGE` |
 | Employee Contracts | `HR.EMPLOYEE.VIEW` | `HR.EMPLOYEE.MANAGE` |
+| Leave Types | `HR.LEAVE.VIEW` | `HR.LEAVE.MANAGE` |
 | Leave Requests | `HR.LEAVE.VIEW` | `HR.LEAVE.MANAGE` (submit), `HR.LEAVE.APPROVE` (decide) |
 | Employee Loans | `HR.LOAN.MANAGE` | `HR.LOAN.MANAGE` |
 | Pay Components | `HR.PAYCOMPONENT.MANAGE` | `HR.PAYCOMPONENT.MANAGE` |
@@ -39,11 +40,11 @@ Departments are company-level reference data. They are assigned to employees and
 
 **Creating a department:**
 
-1. Click **New department**.
+1. Click **New Department**.
 2. Enter a **Code** (up to 30 characters) and a **Name** (up to 120 characters).
-3. Click **Save**.
+3. Click **Create Department**.
 
-**Editing a department:** click the department row to open the edit form, change the name, and save.
+**Editing a department:** click the **Edit** action on the department row. The row turns into an inline edit form where both the **Code** and the **Name** can be changed; click **Save** to apply.
 
 **Deactivating a department:** click **Deactivate** on the department row. The record is soft-deactivated, not deleted. Active employees in that department are not affected — the department reference is retained for historical records.
 
@@ -60,15 +61,16 @@ The list shows employee number, name, department name, and employment status. Us
 
 **Creating an employee (minimum required fields):**
 
-1. Click **New employee**.
-2. Enter **First name**, **Last name**, and **Hire date**.
-3. Choose a **Department** by searching for its name in the department picker.
-4. Optionally fill in national ID, TIN, NSSF number, HESLB number, date of birth, gender, and job title.
-5. Click **Save**.
+1. Click **New Employee**.
+2. Enter **First Name**, **Last Name**, and **Hire Date**.
+3. Optionally fill in **Job Title**, **Gender**, **National ID**, **Department ID**, and **Branch ID**. The **Department ID** and **Branch ID** fields are free-text numeric-id entries (each shows the placeholder "Numeric id"), not name pickers — obtain the ids from your administrator.
+4. Click **Create Employee**.
+
+> TIN, NSSF number, HESLB number, and date of birth are not part of the create form; they are added later on the employee detail/edit page.
 
 The system assigns an **employee number** automatically (format `EMP-000001`). The employee's status is set to **ACTIVE** on creation.
 
-**Viewing and editing an employee:** click the employee row in the list to open the detail page. If you hold `HR.EMPLOYEE.MANAGE`, you can edit the employee's fields and save changes.
+**Viewing and editing an employee:** click the **Open** action on the employee row to open the detail page. If you hold `HR.EMPLOYEE.MANAGE`, you can edit the employee's fields and save changes.
 
 **Archiving an employee:** on the employee detail page, click **Archive**. This changes the status to **TERMINATED** and marks the record inactive. The employee record is retained for historical and payroll purposes. There is no way to restore an archived employee through the UI — contact your system administrator if this is needed.
 
@@ -79,7 +81,7 @@ The system assigns an **employee number** automatically (format `EMP-000001`). T
 ### Employment Contracts
 
 **What is an employment contract, and why are contract types important?**
-An employment contract records the formal terms under which a person is employed: their type of engagement, base salary, start date, and — for fixed-term arrangements — end date. The contract type (PERMANENT, FIXED_TERM, CASUAL, or PROBATION) matters for statutory compliance: permanent and confirmed employees are typically subject to full PAYE and NSSF deductions, while casual workers may be treated differently. The statutory flags on the contract (PAYE resident, NSSF member, HESLB member) directly control which deductions are calculated during the payroll run. An employee can have at most one active contract at a time; when terms change (a salary review, a change from probation to permanent), the current contract is terminated and a new one is created — preserving the full history of contractual changes.
+An employment contract records the formal terms under which a person is employed: their type of engagement, base salary, start date, and — for fixed-term arrangements — end date. The contract type (PERMANENT, FIXED_TERM, CASUAL, or PROBATION) matters for statutory compliance: permanent and confirmed employees are typically subject to full PAYE and NSSF deductions, while casual workers may be treated differently. The statutory flags on the contract (PAYE Resident, NSSF Member, HESLB Borrower, WCF Covered, SDL Counted) directly control which deductions and employer contributions are calculated during the payroll run. An employee can have at most one active contract at a time; when terms change (a salary review, a change from probation to permanent), the current contract is terminated and a new one is created — preserving the full history of contractual changes.
 
 Navigate to **HR & Payroll > Employee Contracts** (`/admin/hr/contracts`).
 
@@ -99,12 +101,33 @@ An employee may have at most one active contract at a time. Creating a second co
 2. Choose the **Contract type**: PERMANENT, FIXED_TERM, CASUAL, or PROBATION.
 3. Enter the **Base salary** (stored in TZS) and **Start date**.
 4. For FIXED_TERM contracts, enter an **End date**.
-5. Set the statutory flags: **PAYE resident**, **NSSF member**, **HESLB member**. These control which statutory deductions are applied during payroll calculation.
-6. Click **Save**.
+5. Set the statutory flags: **PAYE Resident**, **NSSF Member**, **HESLB Borrower**, **WCF Covered**, and **SDL Counted**. These control which statutory deductions and employer contributions are applied during payroll calculation.
+6. Click **Create Contract**.
 
 The pay frequency is fixed at MONTHLY (v1). Currency is fixed at TZS.
 
 **Terminating a contract:** click **Terminate** on the contract row. The contract becomes inactive (`active = false`). Once the active contract is terminated, a new one can be created for the employee.
+
+---
+
+### Leave Types
+
+**What is a leave type, and why is it configured?**
+A leave type is the named category of time off an employee can apply for — for example Annual Leave, Sick Leave, Maternity Leave, or Unpaid Leave. Each leave type carries the policy that governs requests of that kind: whether the leave is paid or unpaid, the annual entitlement (how many days an employee accrues per year), how that entitlement accrues, whether days carry forward to the next year, whether the type requires approval, any gender eligibility restriction, and an optional cap on the maximum number of consecutive days. Defining leave types up front means every leave request is applied against a consistent, auditable policy rather than ad-hoc rules. A default set of leave types is seeded for each company.
+
+**Where leave types are managed.** Leave Types are company-level reference data managed by an administrator. There is no dedicated leave-types screen in this version of the UI — create, edit, and deactivate are performed through the leave-types API (`/api/v1/hr/leave-types`). Viewing requires `HR.LEAVE.VIEW`; creating, editing, and deactivating require `HR.LEAVE.MANAGE`.
+
+**Creating or editing a leave type:** an administrator supplies:
+
+- **Code** (up to 30 characters) and **Name** (up to 120 characters).
+- **Paid** — whether days of this type are paid. If a type is **not** paid (unpaid leave), approved days that overlap a payroll period reduce the employee's basic salary pro-rata (see Leave Requests).
+- **Annual entitlement days** and the **accrual method**.
+- **Carry forward** — whether unused days roll into the next year.
+- **Requires approval** — whether requests of this type must be approved.
+- **Gender eligibility** — an optional restriction (for example, maternity leave).
+- **Max consecutive days** — an optional cap on the length of a single request.
+
+A leave-type **code** must be unique within the company; a duplicate code is rejected. Deactivating a leave type is a soft-deactivation — the type is retained for historical records but is no longer offered for new requests.
 
 ---
 
@@ -119,21 +142,21 @@ The list shows employee name, leave type, dates, number of days, and status. Use
 
 **Submitting a leave request (requires `HR.LEAVE.MANAGE`):**
 
-Leave types are configured by the system administrator in the database. The leave type's ID is required when submitting.
+Leave types are managed by an administrator (see **Leave Types** below). When submitting a request you identify the leave type by its numeric ID, which the administrator can supply.
 
-1. Click **New leave request**.
-2. Pick the **employee** by name.
-3. Select the **leave type** from the dropdown (leave types are seeded by your administrator).
-4. Enter **From date**, **To date**, and the number of **Days**.
+1. Click **Submit Leave Request**.
+2. Pick the **Employee** by name.
+3. Enter the **Leave Type ID** (the numeric id of the leave type). This is a free-text numeric field, not a dropdown; the resolved leave-type name is shown back to you in the list once the request is saved.
+4. Enter **From** date, **To** date, and the number of **Days**.
 5. Optionally enter a **Reason**.
 6. Click **Submit**. The request status is set to **PENDING**.
 
 **Deciding a leave request (requires `HR.LEAVE.APPROVE`):**
 
 1. Open the leave request from the list (link goes to `/admin/hr/leave-requests/uid/:uid`).
-2. Click **Approve** or **Reject**.
-3. Enter a decision note (required for Reject, optional for Approve).
-4. Confirm.
+2. In the **Decision** dropdown, choose **Approve** or **Reject**.
+3. Optionally enter a **Decision Note** (the note is optional for both Approve and Reject).
+4. Click **Submit Decision**.
 
 The only valid decisions are **APPROVED** or **REJECTED**. PENDING and CANCELLED are not valid decision values and will be rejected.
 
@@ -153,28 +176,39 @@ The only valid decisions are **APPROVED** or **REJECTED**. PENDING and CANCELLED
 ### Employee Loans
 
 **What is an employee loan, and how does repayment work?**
-An employee loan is a cash advance made by the company to an employee, to be repaid through regular deductions from their net pay. Examples include salary advances, housing loans, or emergency personal loans. The loan record tracks the original principal, the agreed monthly instalment, and the outstanding balance. Once the loan is approved and becomes ACTIVE, the payroll calculation engine automatically includes the instalment as a deduction in each payroll run until the balance reaches zero — at which point only the remaining balance is deducted rather than the full instalment. This prevents payroll errors caused by forgetting to stop a deduction. The GL account linked to the loan records the outstanding balance on the balance sheet as an asset (money owed to the company by the employee).
+An employee loan is a cash advance made by the company to an employee, to be repaid through regular deductions from their net pay. Examples include salary advances, housing loans, or emergency personal loans. The loan record tracks the original principal, the agreed monthly instalment, and the outstanding balance. A new loan starts in **PENDING** status and is **not** deducted in payroll until it is approved and becomes **ACTIVE**. Once ACTIVE, the payroll calculation engine automatically includes the instalment as a deduction in each payroll run until the balance reaches zero — at which point only the remaining balance is deducted rather than the full instalment. This prevents payroll errors caused by forgetting to stop a deduction. The GL account linked to the loan records the outstanding balance on the balance sheet as an asset (money owed to the company by the employee).
 
 Navigate to **HR & Payroll > Employee Loans** (`/admin/hr/loans`).
 
-The list shows employee name, loan number, principal, installment amount, outstanding balance, and status. Viewing and managing loans both require `HR.LOAN.MANAGE`.
+The list shows loan number, employee name, principal, installment amount, outstanding balance, start date, and status. Viewing and managing loans both require `HR.LOAN.MANAGE`.
 
 **Creating a loan:**
 
-1. Click **New loan**.
-2. Pick the **employee** by name.
-3. Enter **Principal**, **Monthly installment**, and **Start date**.
-4. Pick the **GL account** by name (the loan will be posted to this account).
-5. Click **Save**. The loan is created with its outstanding balance equal to the principal.
+1. Click **New Loan**.
+2. Pick the **Employee** by name.
+3. Enter the **Principal** and the monthly **Installment** (the installment must not exceed the principal).
+4. Choose the **Currency** from the Currency Picker. This is the filtered currency picker (only the company's enabled currencies are listed, pre-set to the company default) — see *Common UI Patterns* in Chapter 00 (Getting Started). You no longer type a 3-letter currency code.
+5. Enter the **GL Account ID** — the numeric id of the GL account the loan is posted to. (This field is a numeric id entry; obtain the id from your administrator. An unknown id is rejected.)
+6. Enter the **Start Date**.
+7. Click **Create**. The loan is created in **PENDING** status with its outstanding balance equal to the principal.
 
 **Approving a loan:**
 
 1. Open the loan from the list (`/admin/hr/loans/uid/:uid`).
-2. Click **Approve**. The loan status changes to **ACTIVE**.
+2. Click **Approve Loan**. The loan status changes from PENDING to **ACTIVE**.
 
-Once ACTIVE, the loan installment is automatically deducted from the employee's net pay during each payroll calculation. If the outstanding balance is less than the installment, only the remaining outstanding amount is deducted.
+Approval is only valid for a loan in PENDING status; attempting to approve a loan that is already ACTIVE (or SETTLED/CANCELLED) is rejected. Once ACTIVE, the loan installment is automatically deducted from the employee's net pay during each payroll calculation. If the outstanding balance is less than the installment, only the remaining outstanding amount is deducted.
 
-**Loan statuses:** ACTIVE loans are picked up by payroll. SETTLED and CANCELLED statuses exist in the system but can only be set by the system administrator — there is no Settle or Cancel button on the UI in this version.
+**Loan statuses:**
+
+| Status | Meaning |
+|---|---|
+| PENDING | Created but not yet approved; **not** picked up by payroll |
+| ACTIVE | Approved; the installment is deducted in each payroll run until settled |
+| SETTLED | Fully repaid |
+| CANCELLED | Voided |
+
+SETTLED and CANCELLED statuses exist in the system but can only be set by the system administrator — there is no Settle or Cancel button on the UI in this version.
 
 ---
 
@@ -189,16 +223,16 @@ Pay components define the earnings and deductions applied to employees during pa
 
 **Creating a pay component:**
 
-1. Click **New pay component**.
+1. Click **New Pay Component**.
 2. Enter a **Code** and a **Name**.
 3. Set the **Kind**: EARNING (adds to gross) or DEDUCTION (reduces net).
 4. Set the **Basis**: FIXED (a fixed amount per run) or PERCENT\_OF\_BASIC (a percentage of the employee's basic salary).
-5. Check **Taxable** if this component is subject to PAYE.
-6. Check **Pensionable** if this component is included in the pension-contribution base.
-7. Pick the **GL account** by name (earnings and deductions post to this account).
-8. Click **Save**.
+5. Enter the **GL Account ID** — earnings and deductions post to this account. This is a free-text numeric-id entry (placeholder "Numeric id"), not a name picker; obtain the id from your administrator.
+6. Check **Taxable** if this component is subject to PAYE.
+7. Check **Pensionable** if this component is included in the pension-contribution base.
+8. Click **Create**.
 
-**Editing and deactivating:** open the component by clicking its row (`/admin/hr/pay-components/uid/:uid`). Edit the fields and save, or click **Deactivate** to soft-deactivate the component (it becomes inactive and will no longer appear in payroll calculations going forward).
+**Editing and deactivating:** open the component by clicking the **Open** action on its row (`/admin/hr/pay-components/uid/:uid`). Edit the fields and save, or click **Deactivate** to soft-deactivate the component (it becomes inactive and will no longer appear in payroll calculations going forward).
 
 **Per-employee recurring items** (the amounts for PERCENT\_OF\_BASIC components and any fixed amounts applied to specific employees) are configured by the administrator directly in the system. These are applied automatically during payroll calculation and do not have a separate UI screen.
 
@@ -225,10 +259,10 @@ Each step requires a different permission. Only one active run can exist per per
 
 **Step 1 — Create a run (requires `HR.PAYROLL.RUN`):**
 
-1. Click **New payroll run**.
-2. Enter **Period month** (1–12), **Period year**, and **Pay date**.
-3. Optionally pick a **Branch** by name if the run covers a specific branch.
-4. Click **Save**. The run is created in **DRAFT** status with zero totals.
+1. Click **New Payroll Run**.
+2. Enter the **Year**, choose the **Month** from the dropdown, and enter the **Pay Date**. (The company is taken from your active session.)
+3. Optionally enter a **Branch ID** if the run covers a specific branch. This is a free-text field (placeholder "Optional"), not a name picker.
+4. Click **Create**. The run is created in **DRAFT** status with zero totals.
 
 **Step 2 — Calculate (requires `HR.PAYROLL.RUN`):**
 
@@ -237,16 +271,16 @@ Each step requires a different permission. Only one active run can exist per per
    - Basic salary earning.
    - PAYE income tax (from the effective PAYE band set for the pay date, if `payeResident = true`).
    - NSSF deduction (employee share, if `nssfMember = true`).
-   - HESLB deduction (if `heslbMember = true`).
+   - HESLB deduction (if `heslbBorrower = true`).
    - Employer contributions (NSSF/WCF/SDL employer shares from the effective statutory rate sets).
    - Any voluntary pay-component recurring items configured for the employee.
    - Loan repayment deductions for any ACTIVE loans with an outstanding balance.
    - Pro-rata reduction for any approved unpaid leave overlapping the period.
-3. The run status moves to **CALCULATED** and the Lines tab populates.
+3. The run status moves to **CALCULATED** and the **Payroll Lines** table populates.
 
 You can recalculate from DRAFT, CALCULATED, or APPROVED status — recalculation rebuilds all lines from scratch.
 
-**Reviewing lines:** click the **Lines** tab to review each employee's line. A line showing a **FLAGGED** badge means the employee's net pay is negative after deductions. You must resolve flagged lines before the run can be approved — for example by reducing a loan installment and then recalculating.
+**Reviewing lines:** the **Payroll Lines** table lists each employee's line. A line showing a **FLAGGED** badge means the line needs attention before approval — typically because the employee's net pay is negative after deductions, or because a payment target (payee/bank details) is missing for that employee. The reason is shown in the line's **Flag Reason** column. You must resolve flagged lines before the run can be approved — for example by reducing a loan installment, supplying the missing payee details, and then recalculating.
 
 **Step 3 — Approve (requires `HR.PAYROLL.APPROVE`):**
 
@@ -255,15 +289,15 @@ You can recalculate from DRAFT, CALCULATED, or APPROVED status — recalculation
 
 **Step 4 — Post (requires `HR.PAYROLL.POST`):**
 
-1. With the run in APPROVED status, click **Post**.
+1. With the run in APPROVED status, click **Post to GL**.
 2. Status moves to **POSTED**. The GL journal is written asynchronously via the payroll posting handler. Payslips are generated (one per employee line).
 
 **Step 5 — Disburse (requires `HR.PAYROLL.DISBURSE`):**
 
 1. With the run in POSTED status, click **Disburse**.
-2. Pick the **Cash or bank account** by name from which the net wages will be paid.
-3. Optionally enter a **Transaction date** (defaults to the run's pay date).
-4. Click **Submit**. Status moves to **PAID**. A Cash & Bank OUT entry is recorded (debit Net Wages Payable, credit the chosen bank/cash account).
+2. Enter the **Cash / Bank Account UID** of the account from which the net wages will be paid. (This is a UID text field on this screen; obtain the account UID from your administrator or the Chart of Accounts.)
+3. Optionally enter a **Transaction Date** (defaults to the run's pay date).
+4. Click **Disburse**. Status moves to **PAID**. A Cash & Bank OUT entry is recorded (debit Net Wages Payable, credit the chosen bank/cash account).
 
 **Reversing a run (requires `HR.PAYROLL.REVERSE`):**
 
@@ -295,10 +329,10 @@ The statutory setup screen shows two sections: **PAYE band sets** and **Statutor
 
 **What is a PAYE band set?** A PAYE band set is a schedule of income tax rates that applies a progressive rate to different slices of monthly income. For example, the first TZS 270,000 per month might be tax-free, the next slice taxed at 9%, the next at 20%, and so on. Each band defines the lower income threshold at which the rate starts and the cumulative tax already payable on income up to that threshold (to avoid re-computing all lower bands for every employee). The system selects the most recently effective band set whose effective date is on or before the payroll run's pay date, ensuring the correct bands apply to each period.
 
-1. Click **New PAYE band set**.
-2. Enter an **Effective from** date, a **Tax-free threshold** (the monthly income amount below which no PAYE applies), and an optional description.
-3. Add one or more bands. Each band requires: band number (ascending), lower bound (monthly income where this rate starts), marginal rate (decimal, e.g. `0.20` for 20%), and cumulative fixed tax (the tax already accumulated on income up to this band's lower bound).
-4. Click **Save**.
+1. Click **New Band Set**.
+2. Enter an **Effective From** date, a **Tax-Free Threshold** (the monthly income amount below which no PAYE applies), and an optional **Description**.
+3. Add one or more bands. Each band requires: band number (ascending), lower bound (monthly income where this rate starts), **Marginal Rate (%)** (entered as a percentage, e.g. `20` for 20%; the field accepts 0–100), and cumulative fixed tax (the tax already accumulated on income up to this band's lower bound).
+4. Click **Create Band Set**.
 
 The system uses the **most recently effective** band set whose effective date is on or before the payroll run's pay date.
 
@@ -306,18 +340,20 @@ The system uses the **most recently effective** band set whose effective date is
 
 **What is a statutory rate set?** A statutory rate set holds the percentage rates for one of the non-PAYE levies: NSSF, WCF, SDL, or HESLB. Each set records the employee rate, the employer rate (where applicable), the basis for the calculation (gross salary or basic salary), and — for SDL — a headcount threshold (SDL only applies to companies above a minimum employee count). Like PAYE band sets, rate sets are effective-dated so that rate changes can be scheduled in advance without software updates.
 
-1. Click **New rate set**.
-2. Choose the **Rate type**: NSSF, WCF, SDL, or HESLB.
-3. Enter the **Effective from** date and **Basis** (e.g. GROSS or BASIC).
-4. Enter the applicable rates (employee rate and/or employer rate, as a decimal).
-5. For SDL, enter a **Headcount threshold** (SDL applies only when the company headcount equals or exceeds this number).
-6. Click **Save**.
+1. Click **New Rate Set**.
+2. Choose the **Type**: NSSF, WCF, SDL, or HESLB.
+3. Enter the **Effective From** date and the **Basis** — a free-text field (placeholder "e.g. GROSS").
+4. Enter the applicable rates: **Employee Rate (%)** and/or **Employer Rate (%)**, entered as percentages (e.g. `20` for 20%; each field accepts 0–100).
+5. Optionally enter a **Ceiling Amount** (the income cap above which the rate no longer applies).
+6. For SDL, enter a **Headcount Threshold** (SDL applies only when the company headcount equals or exceeds this number).
+7. Click **Create Rate Set**.
 
 Contract statutory flags control which rate sets apply to each employee:
-- `NSSF member` → NSSF deductions apply.
-- `PAYE resident` → PAYE income tax applies.
-- `HESLB member` → HESLB deduction applies.
-- WCF and SDL are employer-only contributions; no contract flag controls them (they apply to the run if an effective rate set exists and the SDL headcount threshold is met).
+- `NSSF Member` → NSSF deductions apply.
+- `PAYE Resident` → PAYE income tax applies.
+- `HESLB Borrower` → HESLB deduction applies.
+- `WCF Covered` → the employer WCF contribution is included for this employee.
+- `SDL Counted` → the employee is counted towards SDL (the employer SDL levy applies to the run if an effective rate set exists and the SDL headcount threshold is met).
 
 ---
 
@@ -348,15 +384,17 @@ Navigate to **Budgeting > Budgets** (`/admin/budgets`). Requires `BUDGETING.BUDG
 
 A budget covers a specific fiscal year and may be scoped to a specific cost centre (dimension value) or set as company-wide.
 
-1. Click **New budget**.
+1. Click **New Budget**.
 2. Enter a **Name** for the budget.
-3. Enter the **Fiscal Year UID** of the fiscal year you are budgeting for. (This is a direct text entry — obtain the UID from your administrator or from the fiscal-year setup screen.)
-4. Optionally enter a **Cost Centre UID** to scope the budget to a department or cost centre. Leave blank for a company-wide budget.
-5. Click **Create**.
+3. Choose the **Fiscal Year** from the Fiscal-Year picker. This is a dropdown of the company's fiscal years (each option shows the year code with its status); select the year you are budgeting for. You no longer type a Fiscal Year UID.
+4. Optionally enter a **Version label** (the label for the first version) and **Notes**.
+5. Click **Create Budget**.
 
 The system creates the budget and automatically creates **Version 1** in DRAFT status. There can be only one budget per fiscal year and cost-centre scope combination.
 
-The budget list shows each budget's name, fiscal year, latest version number, and latest version status.
+**Cost-centre scope.** The Create Budget screen creates company-wide budgets only — it does not expose a cost-centre field. A cost-centre-scoped budget cannot be created from this screen in this version; if you need one, contact your system administrator.
+
+The budget list shows each budget's number, name, fiscal year, cost centre, latest version status, and the number of versions. A **Status filter** at the top narrows the list, and a pager appears at the bottom for long lists.
 
 ---
 
@@ -390,11 +428,11 @@ APPROVED, REJECTED, and SUPERSEDED are terminal — no further edits or lifecycl
 
 **Opening the budget detail:**
 
-Click a budget row in the list to open its detail (`/admin/budgets/uid/:uid`). The detail shows the budget header and all versions, listed newest first. Each version row shows its version number ("V1", "V2", etc.), label, status badge, and line count.
+Click the **Open** action on the budget row to open its detail (`/admin/budgets/uid/:uid`). The detail shows the budget header and all versions, listed newest first. Each version row shows its version number ("V1", "V2", etc.), label, status badge, and line count.
 
 **Creating a new version (Re-plan):**
 
-1. On the budget detail, click **New version**.
+1. On the budget detail, click **New Version / Re-plan**.
 2. Optionally enter a **label** for this version.
 3. To start from a prior version's lines, pick the source version from the **Seed from version** picker by its version label and status (e.g. "V1 — FY2026 base"). Leave blank to start with an empty version.
 4. Click **Create**. The new version is created in DRAFT status.
@@ -406,7 +444,7 @@ Click a budget row in the list to open its detail (`/admin/budgets/uid/:uid`). T
 **What is a budget line?**
 A budget line is the atomic planning unit: it links one GL account to one fiscal period and states the planned amount for that account in that period. For example, a line might say "Account: 5400 Fuel & Transport, Period: March 2026, Amount: TZS 3,200,000". The sum of all lines for an account across all periods is that account's annual budget. Lines are stored at the period grain (month by month) so that the variance report can show monthly deviations, not just annual totals. Lines can only be added, changed, or deleted when the version is in DRAFT status.
 
-Open the version detail by clicking a version row (`/admin/budget-versions/uid/:uid`). The lines table shows account, period, amount (TZS), and memo. Lines are editable only when the version is in DRAFT status.
+Open the version detail by clicking **View Lines** on the version (`/admin/budget-versions/uid/:uid`). The lines table shows account, period, amount (TZS), and memo. Lines are editable only when the version is in DRAFT status.
 
 Click **Edit Lines (Replace All)** to open the line editor. Choose one of three entry modes:
 
@@ -414,7 +452,7 @@ Click **Edit Lines (Replace All)** to open the line editor. Choose one of three 
 
 1. Click **Add line**.
 2. In the **Account** picker, choose the GL account by name.
-3. In the **Period** picker, choose the fiscal period (e.g. "P3 – March 2026").
+3. In the **Period** picker, choose the fiscal period. Each option is labelled in the format `P{number} (start date – end date)` — for example "P3 (2026-03-01 – 2026-03-31)" — with the period's status shown as a hint.
 4. Enter the **Amount** in TZS (must be ≥ 0).
 5. Optionally enter a **Memo**.
 6. Repeat for additional lines.
@@ -445,13 +483,13 @@ The fiscal year must have exactly 12 periods to use ANNUAL\_SPREAD mode.
 
 **Submit (requires `BUDGETING.BUDGET.SUBMIT`):**
 
-1. On the budget detail, click **Submit** next to the DRAFT version.
+1. On the budget detail, click **Submit for Approval** next to the DRAFT version.
 2. The version must have at least one line. If it has no lines, submission is rejected.
 3. Status moves to SUBMITTED. Lines are locked.
 
 **Recall (requires `BUDGETING.BUDGET.SUBMIT`):**
 
-If you need to revise a SUBMITTED version, click **Recall** to return it to DRAFT. The submission timestamp is cleared and lines become editable again.
+If you need to revise a SUBMITTED version, click **Recall to Draft** to return it to DRAFT. The submission timestamp is cleared and lines become editable again.
 
 **Approve (requires `BUDGETING.BUDGET.APPROVE`):**
 
@@ -480,23 +518,23 @@ Both reports require `BUDGETING.REPORT.VIEW` and are accessible from the **Budge
 Compares the approved budget lines against actual GL postings for the selected period range.
 
 1. Select the **Company**.
-2. Enter the **Fiscal Year UID**.
-3. Set the **From period** and **To period** (1–12; from must be ≤ to).
-4. Optionally filter by **Account Type** (Income, Expense, Asset, Liability, Equity) and enter a **Cost Centre UID** to limit results to a specific centre.
-5. Click **Run**.
+2. Choose the **Fiscal Year** from the Fiscal-Year picker (a dropdown of the company's fiscal years; no UID is typed). Switching company clears the fiscal-year selection and reloads the picker for the newly selected company.
+3. Set the **From Period** and **To Period** (1–12; from must be ≤ to). These default to 1 and 12.
+4. Optionally filter by **Account type** (Income, Expense, Asset, Liability, Equity) and enter a **Cost Centre UID** to limit results to a specific centre.
+5. Click **Run Report**.
 
-The report shows account-level rows with budget amount, actual amount, variance (actual − budget), and a Favourable/Adverse label. For income accounts, actual > budget is favourable. For expense accounts, actual < budget is favourable.
+The report shows account-level rows with budget amount, actual amount, variance (actual − budget), a variance percentage, and a Favourable/Adverse assessment, plus a Totals-by-Account-Type summary. For income accounts, actual > budget is favourable. For expense accounts, actual < budget is favourable.
 
-If no APPROVED version exists for the selected scope, the report is returned with all budget amounts as zero and a "no approved budget" notice — the report is never silently wrong.
+If no APPROVED version exists for the selected scope, the report is returned with all budget amounts as zero and an on-screen "No APPROVED budget version found for this scope" warning banner — the report is never silently wrong.
 
 **Departmental Actuals Report** (`/admin/budgeting/departmental-actuals`):
 
 Shows actual GL postings grouped by cost centre and account, with no budget comparison. Useful for monitoring departmental spending.
 
 1. Select the **Company**.
-2. Enter the **Fiscal Year UID**.
-3. Set the **From period** and **To period**.
-4. Click **Run**.
+2. Choose the **Fiscal Year** from the Fiscal-Year picker (a dropdown of the company's fiscal years; no UID is typed). As on the Variance report, switching company clears and reloads the picker.
+3. Set the **From Period** and **To Period**.
+4. Click **Run Report**.
 
 A null cost centre (transactions posted without a cost-centre dimension) appears as an **Unallocated** row.
 

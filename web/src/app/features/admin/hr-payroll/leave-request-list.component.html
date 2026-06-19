@@ -61,12 +61,12 @@
         <div class="erp-card__body">
           <div class="erp-form-grid">
             <div class="erp-field">
-              <span class="form-label d-block" id="lrEmpLabel" aria-hidden="true">
+              <span class="form-label d-block" id="lrEmpLabel">
                 Employee <span class="text-danger" aria-hidden="true">*</span>
               </span>
               <app-uid-picker [(ngModel)]="fEmployeeUid" [options]="employeeOptions()"
                               placeholder="Select employee" [required]="true"
-                              name="lrEmpUid" aria-labelledby="lrEmpLabel" />
+                              name="lrEmpUid" [ariaLabelledby]="'lrEmpLabel'" />
             </div>
             <div class="erp-field">
               <label class="form-label" for="lrLeaveTypeId">
