@@ -64,7 +64,7 @@ export default defineConfig({
         storageState: AUTH_FILE,
       },
       dependencies: ['setup'],
-      testMatch: /\/(routes-smoke|conventions|massive-data|uiux-forms-validation|uiux-empty-error-states|uiux-journeys-a11y)\.spec\.ts/,
+      testMatch: /\/(routes-smoke|conventions|massive-data|uiux-forms-validation|uiux-empty-error-states|uiux-journeys-a11y|uiux-ar-ap-posting|uiux-cash-bank|uiux-gl-lifecycle|uiux-depreciation-payroll|uiux-purchasing-journey|uiux-approvals|uiux-edit-forms-409|uiux-inventory-transactions|uiux-tax-sales-downstream|uiux-finance-states-a11y|uiux-pos-crm-mfg|uiux-cross-cutting)\.spec\.ts/,
     },
 
     /**
@@ -76,7 +76,7 @@ export default defineConfig({
     {
       name: 'chromium-unauthenticated',
       use: { ...devices['Desktop Chrome'] },
-      testMatch: /\/(smoke|uiux-auth-session|uiux-rbac-nav)\.spec\.ts/,
+      testMatch: /\/(smoke|uiux-auth-session|uiux-rbac-nav|uiux-rbac-actions)\.spec\.ts/,
     },
   ],
 
