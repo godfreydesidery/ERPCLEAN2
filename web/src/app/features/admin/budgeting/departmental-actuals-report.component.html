@@ -42,7 +42,7 @@
                   <label class="form-label" for="companyPicker">Company</label>
                   <select id="companyPicker" name="companyPicker" class="form-select"
                           [ngModel]="selectedCompanyId()"
-                          (ngModelChange)="selectedCompanyId.set($event)">
+                          (ngModelChange)="onCompanyChange($event)">
                     @for (c of companies(); track c.uid) {
                       <option [value]="c.id">{{ c.name }}</option>
                     }

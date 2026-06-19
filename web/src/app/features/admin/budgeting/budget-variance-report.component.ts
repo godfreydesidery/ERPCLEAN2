@@ -88,6 +88,13 @@ export class BudgetVarianceReportComponent {
     });
   }
 
+  /** Company switch: re-select, clear the previous company's fiscal-year selection, and reload the picker. */
+  onCompanyChange(companyId: string): void {
+    this.selectedCompanyId.set(companyId);
+    this.fFiscalYearUid.set('');
+    this.loadFiscalYears(companyId);
+  }
+
   private loadFiscalYears(companyId: string): void {
     this.glService.listFiscalYears(companyId).subscribe({
       next: (list) => this.fiscalYearOptions.set(
