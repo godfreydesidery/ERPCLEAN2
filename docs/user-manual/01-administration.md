@@ -4,6 +4,8 @@ This chapter is for administrators — typically users who hold the **ORG_ADMIN*
 
 > **Permissions required.** You need specific permissions for each section below. If a menu item or button is not visible to you, your role does not include that permission. See the table in each section.
 
+> **The sidebar adapts to your permissions.** Navigation items you cannot use are hidden, and a navigation group whose every item is hidden disappears entirely — you will never see an empty group header. If a whole section of this chapter seems to be missing from your sidebar, your role lacks the permissions for it.
+
 ---
 
 ## Organisation, Companies, and Branches
@@ -31,7 +33,9 @@ The system is structured in three levels:
 
 Navigate to **Administration › Companies** (`/admin/companies`) in the sidebar.
 
-The list shows each company's code, name, and status (Active or Archived). Your view is limited to companies within your active organisation and, for non-admin users, to companies you are scoped to act in.
+The list shows each company's code, name, status (Active or Archived), and a **Manage branches** link in the last column. Above the list, the organisation name for this deployment is shown. Your view is limited to companies within your active organisation and, for non-admin users, to companies you are scoped to act in.
+
+> The Companies screen is intentionally lean: it lets you create a company (code and name) and open each company's branches. There is no company detail or edit screen — the company code can never be changed after creation.
 
 ### Creating a company
 
@@ -41,30 +45,20 @@ The list shows each company's code, name, and status (Active or Archived). Your 
 
 **Required permission:** `COMPANY.MANAGE`
 
-1. On the Companies list, click **Create Company**.
-2. Fill in the form:
-   - **Code** — a short, unique code (up to 20 characters). Cannot be changed after creation.
-   - **Name** — the company display name (up to 160 characters).
-   - Optional: **Legal Name**, **Tax ID**, **Timezone**.
-3. Click **Save**.
+The create form is an inline card at the top of the Companies list (it appears only if you hold `COMPANY.MANAGE`).
 
-The new company appears in the list with status **Active**. The organisation is resolved automatically; you do not choose it.
+1. On the Companies list, in the create card fill in:
+   - **Code** — a short, unique code. Cannot be changed after creation.
+   - **Name** — the company display name.
+2. Click **Add company**.
 
-### Editing a company
+The new company appears in the list with status **Active**. The organisation is resolved automatically; you do not choose it. Code and name are the only fields you enter — there is no Legal Name, Tax ID, or Timezone field on this screen.
 
-1. Click the company row to open its details.
-2. Update the fields you want to change (name, legal name, tax ID, timezone). The code and organisation cannot be changed.
-3. Click **Save**.
+> A duplicate code is rejected with a conflict (409) error shown beneath the form.
 
-### Archiving a company
+### Editing or archiving a company
 
-**What archiving means.** Archiving a company marks its status as `ARCHIVED`. The record and all its data are preserved — nothing is deleted. An archived company cannot be used for new transactions, and its branches are removed from users' branch-switching lists.
-
-**When to archive.** Archive a company when a legal entity is wound down, dissolved, or otherwise ceases operations. Do not archive a company simply because it is inactive for a period — use this as a permanent marker.
-
-Click **Archive** on the company detail screen. The company's status changes to **Archived** (the record is not deleted). Archived companies cannot be used for new transactions, and their branches become unavailable for user sessions.
-
-> Archiving a company affects all users whose default branch belongs to that company — they will have no active branch on their next login.
+There is no company detail or edit screen in the current interface. A company's code, name, and other attributes are fixed at creation, and there is no Archive control on the Companies list. (Editing and archiving exist in the underlying API but are not exposed in the admin UI.) The only action available on a company row is the **Manage branches** link.
 
 ---
 
@@ -72,7 +66,7 @@ Click **Archive** on the company detail screen. The company's status changes to 
 
 **Required permission:** `BRANCH.VIEW`
 
-Navigate to **Administration › Companies** (`/admin/companies`), click a company to open its detail, then click **Branches** to open the branch list at `/admin/companies/<companyUid>/branches`.
+Navigate to **Administration › Companies** (`/admin/companies`), then click the **Manage branches** link on the company's row to open its branch list at `/admin/companies/<companyUid>/branches`. The branch list shows each branch's code, name, default flag, and status.
 
 ### Creating a branch
 
@@ -86,13 +80,15 @@ Navigate to **Administration › Companies** (`/admin/companies`), click a compa
 
 **Required permission:** `BRANCH.MANAGE`
 
-1. From the branch list of a company, click **Create Branch**.
-2. Fill in:
-   - **Code** — a unique code within this company (up to 20 characters).
-   - **Name** — the branch display name (up to 160 characters).
-   - **Timezone** — optional, defaults to the company timezone.
+The create form is an inline card at the top of the branch list.
+
+1. From the branch list of a company, in the create card fill in:
+   - **Code** — a unique code within this company.
+   - **Name** — the branch display name.
    - **Set as default** — check this to make the new branch the company's default branch. If another branch was already the default, that branch's default flag is cleared automatically.
-3. Click **Save**.
+2. Click **Add branch**.
+
+There is no Timezone field on the form — branches inherit the company's settings.
 
 ### Setting the company default branch
 
@@ -103,16 +99,17 @@ Navigate to **Administration › Companies** (`/admin/companies`), click a compa
 Only one branch per company can be the default. The default branch is the one users are taken to on login when no other preference is active.
 
 1. On the branch list, find the branch you want to make default.
-2. Click **Set Default** on that row.
+2. Click **Make default** on that row.
 
-The previously default branch is cleared automatically.
+The current default branch shows a **Default** status tag instead of a button. The previously default branch is cleared automatically.
 
-### Editing and archiving a branch
+### Archiving a branch
 
-- To edit: click the branch row, update the name or timezone, and click **Save**.
-- To archive: click **Archive** on the branch detail. The branch status changes to **Archived** and is removed from branch-selector lists. Any users whose default was this branch will lose their active branch on next login.
+There is no branch detail or edit screen, and the branch row is not clickable to edit — a branch's code and name are fixed at creation. The only per-row actions are **Make default** and **Archive**.
 
-> The default flag can only be changed through the dedicated **Set Default** action, not through the general edit form.
+To archive a branch, click **Archive** on its row. The branch status changes to **Archived** and it is removed from branch-selector lists. Any users whose default was this branch will lose their active branch on next login.
+
+> The current default branch cannot be archived directly — its row shows the **Default** tag and no Archive button. Make another branch the default first, then archive the former default.
 
 ---
 
@@ -133,25 +130,25 @@ Navigate to **Administration › Users** (`/admin/users`) in the sidebar.
 
 ### The users list
 
-The list shows each user's username, display name, and status. Use the search bar to filter by name. Click **Manage branches** on any row to open the user's detail page at `/admin/users/uid/<uid>`.
+The list shows columns for **Username**, **Display name**, **Status**, **Locked**, and **Root** (a marker on the `rootadmin` account), plus a per-row action area. The actions on each row are **Disable**/**Enable**, **Unlock** (only when the account is locked), **Password** (an inline set-password form), and **Branches** (a link that opens the user's detail page at `/admin/users/uid/<uid>`). Root accounts do not show a Disable action.
 
 ### Creating a user
 
-1. On the Users list, click **Create User**.
-2. Fill in the create form:
-   - **Username** — must be unique. Stored in lowercase. Up to 80 characters.
-   - **Display Name** — the name shown in the UI. Up to 160 characters.
-   - **Password** — a temporary password. Must be at least 8 characters and contain at least one letter and one number. Common passwords (such as `password1` or `admin123`) are rejected.
-   - **Email** and **Phone** are optional contact fields.
-3. Click **Save**.
+The create form is an inline card (**Add User**) at the top of the Users list.
 
-The user is created with status **Active** and no role or branch assignments. Assign roles and branches next (see below).
+1. On the Users list, in the **Add User** card fill in:
+   - **Username** — must be unique. Stored in lowercase. May contain only letters, digits, dots (`.`), underscores (`_`), and hyphens (`-`); spaces and other characters are rejected. Up to 80 characters.
+   - **Display name** — the name shown in the UI. Up to 160 characters.
+   - **Temporary password** — must be at least 8 characters and contain at least one letter and one number. Common passwords (such as `password1` or `admin123`) are rejected.
+2. Click **Add user**.
 
-> Usernames are compared case-insensitively. `Alice.Smith` and `alice.smith` refer to the same account.
+The user is created with status **Active** and no role or branch assignments. The create form captures only the username, display name, and temporary password — there are no email or phone fields here. Assign roles and branches next (see below).
+
+> Usernames are compared case-insensitively. `Alice.Smith` and `alice.smith` refer to the same account. Creating a user whose username already exists is rejected with a conflict (409) error.
 
 ### Disabling and enabling a user
 
-- **Disable** — click **Disable** on the user's row. The user's status changes to **Inactive** and they can no longer sign in. The account and its history are preserved.
+- **Disable** — click **Disable** on the user's row. The user's persisted status changes to **Inactive** and they can no longer sign in. The account and its history are preserved. (Immediately after you click, the row may briefly show **Disabled** as an optimistic in-memory label; on the next refresh it settles to the stored **Inactive** status.)
 - **Enable** — click **Enable** on the row to restore the user to **Active** status.
 
 The **rootadmin** account cannot be disabled.
@@ -168,15 +165,15 @@ If a user has been locked out after too many failed sign-in attempts, a locked i
 
 **When to reset.** Reset a password when a user forgets theirs, when you suspect a password has been compromised, or when a new user needs to change the temporary password set on account creation.
 
-1. On the Users list, expand the row's **Set Password** form.
+1. On the Users list, click **Password** on the user's row to expand the inline set-password form.
 2. Enter a new password that meets the policy (at least 8 characters, at least one letter and one number, not a common password).
 3. Click **Save**.
 
 The user can sign in immediately with the new password. Passwords are never stored in plain text and are not shown in audit logs.
 
-### Editing user contact details
+### The user detail page
 
-Navigate to the user's detail page (`/admin/users/uid/<uid>`) by clicking **Manage branches** from the list. You can update the display name, email, and phone number. The username and status are changed via their dedicated actions, not here.
+Click **Branches** on a user's row to open their detail page (`/admin/users/uid/<uid>`). This page shows a **read-only header** (username, display name, and status, locked, and root tags) followed by two management panels: **Branch Assignments** and **Role Assignments** (see the sections below). It does not contain a form for editing display name, email, or phone — there is no contact-details edit screen in the current interface.
 
 ---
 
@@ -184,7 +181,7 @@ Navigate to the user's detail page (`/admin/users/uid/<uid>`) by clicking **Mana
 
 **What a role is.** A role is a named, reusable bundle of permissions. For example, an `ACCOUNTANT` role might include permissions such as `GL.POST`, `AR.VIEW`, `AP.BILL.ENTER`, and `CASH.RECONCILE`. Once defined, the role can be granted to any number of users. If the business needs to change what accountants can do, the administrator updates the role once and the change takes effect for every holder immediately.
 
-**Why roles exist — RBAC.** This design is called Role-Based Access Control (RBAC). It exists because managing permissions per-user does not scale: a company with 50 staff and 185 permission codes would require thousands of individual permission grants, each needing manual maintenance. With roles you manage a small set of job functions, not a large matrix of individual grants. RBAC also makes compliance simpler: you can demonstrate to an auditor exactly which capabilities any given role confers.
+**Why roles exist — RBAC.** This design is called Role-Based Access Control (RBAC). It exists because managing permissions per-user does not scale: a company with 50 staff and over 220 permission codes would require thousands of individual permission grants, each needing manual maintenance. With roles you manage a small set of job functions, not a large matrix of individual grants. RBAC also makes compliance simpler: you can demonstrate to an auditor exactly which capabilities any given role confers.
 
 **When roles are created.** Roles are created during initial setup (to match the job functions in your organisation) and updated whenever those functions evolve. A small set of **system roles** (such as `ORG_ADMIN`) are seeded during deployment and cannot be archived; custom roles can be freely created and modified.
 
@@ -193,7 +190,7 @@ Navigate to the user's detail page (`/admin/users/uid/<uid>`) by clicking **Mana
 **The effective permission set.** A user may hold multiple roles. Their effective permissions at any moment are the **union** of all permissions from all their active role grants in the current company and branch context. If Role A grants `GL.VIEW` and Role B grants `GL.POST`, a user with both roles has both.
 
 **Required permission to view:** `ROLE.VIEW`
-**Required permission to create/edit/set permissions/archive:** `ROLE.MANAGE`
+**Required permission to create / edit / set permissions:** `ROLE.MANAGE`
 
 Navigate to **Administration › Roles** (`/admin/roles`) in the sidebar.
 
@@ -201,18 +198,21 @@ Roles are named bundles of permissions. A user can be granted one or more roles;
 
 ### The roles list
 
-The list shows each role's code, name, and whether it is a **System** role (pre-defined and cannot be archived) or a custom role. Click a role's code or name to open its edit page at `/admin/roles/uid/<uid>`.
+The list shows each role's code, name, a permission count, and its status, plus a marker on **system** roles (pre-defined and cannot be archived). The code and name cells are plain text — they are not clickable. To open a role's edit page at `/admin/roles/uid/<uid>`, click the **Edit** button in the row's actions column.
 
 ### Creating a role
 
-1. Click **Create Role**.
-2. Fill in:
-   - **Code** — a short identifier, unique within the organisation (up to 40 characters). Cannot be changed after creation.
-   - **Name** — a human-readable label (up to 120 characters).
+The create form is an inline card at the top of the Roles list.
+
+1. In the create card, fill in:
+   - **Code** — a short identifier, unique within the organisation. Cannot be changed after creation.
+   - **Name** — a human-readable label.
    - **Description** — optional notes.
-3. Click **Save**.
+2. Click **Add role**.
 
 The new role is created with no permissions. Assign permissions next.
+
+> A duplicate role code is rejected with a conflict (409) error.
 
 ### Editing a role's name or description
 
@@ -220,7 +220,9 @@ Open the role's edit page (`/admin/roles/uid/<uid>`) and update the name or desc
 
 ### Setting a role's permissions
 
-**What the permission catalogue is.** A permission is the finest-grained unit of access control in the system — a named capability that says "the holder may perform this specific action." Permissions are grouped by module (for example, all `GL.*` permissions belong to the General Ledger module). The full catalogue contains over 185 codes covering every module.
+**What the permission catalogue is.** A permission is the finest-grained unit of access control in the system — a named capability that says "the holder may perform this specific action." Permissions are grouped by module (for example, all `GL.*` permissions belong to the General Ledger module). The full catalogue contains over 220 codes covering every module.
+
+> **System roles cannot have their permissions changed.** Built-in system roles (such as **ORG_ADMIN**) are marked with a notice on their edit page — *"This is a built-in system role. The code cannot be changed."* Their permission set is fixed: attempting to save a changed permission selection on a system role is rejected with a conflict (409) error (*"System role permissions cannot be modified"*). Only custom roles can have their permissions edited.
 
 **How the "replace" save works.** When you click **Save permissions**, the system replaces the role's entire permission set with exactly the codes you have checked. Unchecking a box removes that permission. This means saving an empty selection leaves the role with no permissions — which is valid and means the role grants no access.
 
@@ -232,11 +234,11 @@ On the role edit page, the permissions panel lists every available permission gr
 
 Saving replaces the role's entire permission set with the checked selections. Removing a permission takes effect for users who hold this role on their next request (the system re-resolves permissions promptly after changes).
 
-> The permission catalogue contains over 185 codes across all modules. An empty permission set is valid — it means the role grants no access.
+> The permission catalogue contains over 220 codes across all modules. An empty permission set is valid — it means the role grants no access.
 
 ### Archiving a role
 
-Click **Archive** on the role edit page. The role status changes to **Archived** (not deleted). System roles (for example **ORG_ADMIN**) cannot be archived.
+There is no Archive control in the current interface. The role edit page offers only **Save details** and **Save permissions**, and the roles list has no Archive action — its only per-row action is **Edit**. (Archiving exists in the underlying API but is not exposed in the admin UI; system roles such as **ORG_ADMIN** cannot be archived in any case.)
 
 ---
 
@@ -256,12 +258,14 @@ Navigate to **Administration › Role Grants** (`/admin/role-grants`) in the sid
 
 This screen lets you grant a role to a user for a specific company, optionally restricted to a single branch.
 
+> You can also manage one user's role grants directly from their detail page. The **Role Assignments** panel on `/admin/users/uid/<uid>` (reached via **Branches** on the user's row) has the same **Grant Role** form (Role, Company, optional Branch) and a per-row **Revoke** action, scoped to that single user.
+
 ### Granting a role
 
-1. On the Role Grants screen (`/admin/role-grants`), choose the **User** by typing their name in the picker.
-2. Choose the **Role** by name.
-3. Choose the **Company** by name (the system resolves this to your active company by default).
-4. Optionally choose a **Branch** to restrict the grant to one branch. Leave blank to grant the role across all branches of that company.
+1. On the Role Grants screen (`/admin/role-grants`), choose the **User** in the picker (placeholder *Select user*).
+2. Choose the **Role** from the dropdown — each option is shown as `code — name` (for example `ACCOUNTANT — Accountant`).
+3. Choose the **Company** in the picker. It starts empty (placeholder *Select company*) and is required — there is no default company; you must pick one.
+4. Optionally choose a **Branch** to restrict the grant to one branch. Leave it blank (the picker reads *Leave blank for company-level*) to grant the role across all branches of that company.
 5. Click **Grant**.
 
 The grant appears in the grants list. The user's effective permissions update on their next request.
@@ -291,7 +295,7 @@ The grant is revoked immediately. The user loses those permissions on their next
 **Required permission to view branch assignments:** `USER.VIEW`
 **Required permission to assign / change default / remove:** `BRANCH.ASSIGN`
 
-Branch assignments control which branches a user can switch to and which data they can access. Open a user's detail page (`/admin/users/uid/<uid>`) by clicking **Manage branches** from the **Administration › Users** (`/admin/users`) list.
+Branch assignments control which branches a user can switch to and which data they can access. Open a user's detail page (`/admin/users/uid/<uid>`) by clicking **Branches** on the user's row in the **Administration › Users** (`/admin/users`) list.
 
 ### Assigning a user to a branch
 
@@ -325,23 +329,21 @@ This example walks through the complete new-staff onboarding flow for Amina Juma
 **Step 1 — Create the role (if it does not already exist)**
 
 1. Navigate to **Administration › Roles** (`/admin/roles`).
-2. Click **Create Role**.
-3. Enter Code `ACCOUNTANT`, Name `Accountant`, Description `GL posting, AR, AP, Cash & Bank, Tax`.
-4. Click **Save**. The role is created with no permissions.
-5. Click the `ACCOUNTANT` row to open `/admin/roles/uid/<uid>`.
-6. In the permissions panel, check the following codes: `GL.VIEW`, `GL.POST`, `AR.VIEW`, `AR.RECEIPT.RECORD`, `AR.STATEMENT.VIEW`, `AP.VIEW`, `AP.BILL.ENTER`, `AP.PAYMENT.RUN`, `CASH.VIEW`, `CASH.ENTRY.RECORD`, `CASH.TRANSFER`, `CASH.RECONCILE`, `VAT.VIEW`, `TAXRATE.VIEW`, `REPORT.PL.VIEW`, `REPORT.BS.VIEW`, `REPORT.CASHFLOW.VIEW`, `REPORT.LEDGER.VIEW`.
-7. Click **Save permissions**. The panel refreshes showing 18 codes saved.
+2. In the create card, enter Code `ACCOUNTANT`, Name `Accountant`, Description `GL posting, AR, AP, Cash & Bank, Tax`.
+3. Click **Add role**. The role is created with no permissions.
+4. Click **Edit** on the `ACCOUNTANT` row to open `/admin/roles/uid/<uid>`.
+5. In the permissions panel, check the following codes: `GL.VIEW`, `GL.POST`, `AR.VIEW`, `AR.RECEIPT.RECORD`, `AR.STATEMENT.VIEW`, `AP.VIEW`, `AP.BILL.ENTER`, `AP.PAYMENT.RUN`, `CASH.VIEW`, `CASH.ENTRY.RECORD`, `CASH.TRANSFER`, `CASH.RECONCILE`, `VAT.VIEW`, `TAXRATE.VIEW`, `REPORT.PL.VIEW`, `REPORT.BS.VIEW`, `REPORT.CASHFLOW.VIEW`, `REPORT.LEDGER.VIEW`.
+6. Click **Save permissions**. The panel refreshes showing 18 of the total codes selected.
 
 **Step 2 — Create the user account**
 
 1. Navigate to **Administration › Users** (`/admin/users`).
-2. Click **Create User**.
-3. Enter Username `amina.juma`, Display Name `Amina Juma`, Password `Amina2024#`, Email `amina.juma@orbixtrading.co.tz`.
-4. Click **Save**. The row appears with status **Active**.
+2. In the **Add User** card, enter Username `amina.juma`, Display name `Amina Juma`, Temporary password `Amina2024#`.
+3. Click **Add user**. The row appears with status **Active**. (Email and phone are not collected on this form.)
 
 **Step 3 — Assign the Head Office branch**
 
-1. Click **Manage branches** on Amina Juma's row to open `/admin/users/uid/<uid>`.
+1. Click **Branches** on Amina Juma's row to open `/admin/users/uid/<uid>`.
 2. In the **Branch Assignments** panel, select Company `Orbix Trading Co.`, Branch `HO — Head Office`.
 3. Check **Make default**.
 4. Click **Assign**. The branch appears in the list marked as default.
@@ -355,7 +357,7 @@ This example walks through the complete new-staff onboarding flow for Amina Juma
 **Step 5 — Verify**
 
 1. Navigate to **Administration › Audit** (`/admin/audit`).
-2. Filter by Actor `rootadmin` (or whichever admin performed these steps). Confirm four audit entries: `ROLE.CREATE`, `ROLE.PERMISSIONS.SET`, `USER.CREATE`, `ROLE.GRANT`.
+2. Filter by Actor `rootadmin` (or whichever admin performed these steps). Confirm five audit entries: `ROLE.CREATE` and `ROLE.PERMISSIONS_SET` (Step 1), `USER.CREATE` (Step 2), `BRANCH.ASSIGN` (Step 3), and `ROLE.GRANT` (Step 4).
 3. Sign in as `amina.juma` / `Amina2024#`. Confirm the **Accounting** sidebar group is visible and items such as **Chart of Accounts** (`/admin/gl/accounts`) and **Payables** (`/admin/ap/supplier-bills`) are accessible.
 
 ---
@@ -380,19 +382,26 @@ The audit trail is an append-only log of every significant action performed in t
 
 Every create, update, state change (such as enabling or disabling a user), grant, and revoke generates an audit record. Records include:
 
-- The **action** (for example, `USER.CREATE`, `ROLE.GRANT`, `BRANCH_UNASSIGN`).
-- The **actor** — the username who performed the action.
-- The **target** — the type and identifier of the affected record.
+- The **action** (for example, `USER.CREATE`, `ROLE.GRANT`, `BRANCH.UNASSIGN`). Action codes are dotted throughout.
+- The **actor** — the username who performed the action (shown as *system* when there is no signed-in user).
+- The **target** — the type of the affected record (for example `USER`, `user_branch`).
 - The **timestamp** (date and time).
 - For cross-company actions by `rootadmin`, a special `ROOT.BYPASS` entry is also recorded.
+
+The audit list is a table with columns **When**, **Actor**, **Action**, **Target**, **Scope** (Company or Branch), **IP**, and **Detail** (an expandable *view* link for any extra context). It is paginated.
 
 ### Reviewing the audit log
 
 1. Navigate to **Administration › Audit** (`/admin/audit`).
-2. Use the filters at the top to narrow by action type, actor, date range, or target type.
+2. Use the filter bar at the top to narrow the results:
+   - **Action** — a dropdown of known action codes (choose *Any action* for all).
+   - **Target type** — a free-text field (for example `USER`).
+   - **Actor** — a name picker that resolves to the chosen user.
+   - **From** and **To** — a date-and-time range.
+   Click **Filter** to apply, or **Clear filters** to reset.
 3. The list shows the most recent events first. Use the pager to browse older records.
 
-Audit records show usernames and action codes — not raw internal identifiers. Sensitive data (such as password hashes) is never included in audit details.
+Audit records show the actor's username and the action and target *type* — not raw internal identifiers. Sensitive data (such as password hashes) is never included in audit details; for profile-field edits only the fact of the change is recorded, not the old or new values.
 
 ---
 
