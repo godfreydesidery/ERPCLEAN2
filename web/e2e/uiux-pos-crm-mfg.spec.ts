@@ -1309,6 +1309,17 @@ test.describe('UI/UX Budgeting: fiscal-year picker regression', () => {
       'BUD-FY-1: <select> element not found in fiscal-year field — app-uid-picker not rendered',
     ).toBeVisible({ timeout: DOM_SETTLE });
 
+    // ── core assertion 2b: the consumer id must forward to the inner <select> (not the host) so
+    // <label for="fFiscalYearUid"> programmatically associates with the real control (WCAG 1.3.1/4.1.2).
+    await expect(
+      page.locator('app-uid-picker[id="fFiscalYearUid"]'),
+      'BUD-FY-1: id lingered on the <app-uid-picker> host — it must be forwarded to the inner <select>',
+    ).toHaveCount(0);
+    await expect(
+      page.locator('select#fFiscalYearUid'),
+      'BUD-FY-1: inner <select> did not receive id="fFiscalYearUid" — <label for> would dangle',
+    ).toHaveCount(1);
+
     // ── optional assertion 3: if fiscal years are seeded, at least one real option exists ──
     const optionCount = await pickerSelect.locator('option').count();
     // optionCount includes the placeholder "Select fiscal year" option (value="").

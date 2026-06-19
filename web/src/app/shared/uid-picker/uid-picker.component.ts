@@ -53,7 +53,7 @@ export interface UidOption {
               [disabled]="disabledState()"
               [required]="required()"
               [attr.aria-labelledby]="ariaLabelledby() ?? null"
-              [attr.aria-label]="placeholder() || 'Select a resource'">
+              [attr.aria-label]="(id() || ariaLabelledby()) ? null : (placeholder() || 'Select a resource')">
         <option value="">{{ placeholder() || '— select —' }}</option>
         @for (o of filtered(); track o.uid) {
           <option [value]="o.uid">{{ o.label }}{{ o.hint ? ' (' + o.hint + ')' : '' }}</option>
