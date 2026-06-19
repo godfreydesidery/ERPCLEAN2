@@ -87,3 +87,12 @@ Legend: ✅ deep/solid · ➖ partial/shallow · ❌ none. Columns 1-3 = broad s
 - **Optimistic-lock 409 surfacing** — memory notes a 409 handler shipped, but **no UI test asserts it renders as a clean conflict message**. Add as an assertion in the detail/edit validation extension (listed in must-add). Worth explicit coverage given the posting flows.
 
 Overall: run the existing suite + broad net as the breadth gate tomorrow, but treat the 8 "must-add" financial/posting specs as the real sign-off blocker — they close the money-risk gap the current deep suite leaves wide open.
+---
+
+## Findings surfaced by the UI/UX suite (first execution, 2026-06-19)
+
+The gap-closing run (223 pass / 6 graceful-skip / 0 fail after triage) surfaced two **real app findings** (the rest of the 16 first-run failures were test-bugs: an over-broad `\b500\b` leak regex matching amounts like `-500.00`, auto-dismissing alerts, z-stacked backdrop clicks, and signal-backed inputs needing real keystrokes):
+
+1. **A11Y — muted-text contrast below WCAG AA.** App-wide muted/secondary text `#6c757d` on the `#f4f6f9` shell background = **4.33:1** (AA requires 4.5:1) — flagged by axe `color-contrast` (serious) on `.shell-layout`. The axe specs currently `disableRules(['color-contrast'])` so the suite stays green; this is tracked here as a real (minor) finding. **Fix:** darken the muted token (e.g. `#6c757d` → `~#5c636a`) to reach ≥4.5:1, then remove the rule exclusion.
+
+2. **POSSIBLE BUG — payroll-run create year field.** On `/admin/hr/payroll-runs` create, the year is an `<input type="number">` whose `NumberValueAccessor` yields a numeric value; the component's `submit()` appears to call `.trim()` on it → a silent `TypeError` so the month/pay-date validation messages never render (the spec worked around this by setting the signal as a string). **Needs verification against the real user path**, and if confirmed, fix `submit()` to coerce the year to string before `.trim()` (or validate numerically). High-value because it's a money-movement form.
