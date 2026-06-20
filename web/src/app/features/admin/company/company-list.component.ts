@@ -7,6 +7,7 @@ import { Organisation } from '../models/organisation.model';
 import { CompanyService } from './company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { AlertService } from '../../../core/feedback/alert.service';
+import { SessionStore } from '../../../core/auth/session.store';
 
 /**
  * Lists companies for the deployment's organisation and creates new ones. The organisation is
@@ -24,6 +25,7 @@ export class CompanyListComponent {
   private readonly companyService = inject(CompanyService);
   private readonly organisationService = inject(OrganisationService);
   private readonly alerts = inject(AlertService);
+  private readonly session = inject(SessionStore);
 
   readonly organisation = signal<Organisation | null>(null);
   readonly orgState = signal<'loading' | 'ready' | 'error'>('loading');
@@ -38,6 +40,61 @@ export class CompanyListComponent {
   readonly saving = signal(false);
 
   readonly canEdit = computed(() => this.orgState() === 'ready' && this.organisation() !== null);
+
+  /** Rename is gated on COMPANY.MANAGE (the page itself only needs COMPANY.VIEW). */
+  readonly canManage = computed(() => this.session.hasPermission('COMPANY.MANAGE'));
+
+  // Inline rename: at most one row is editable at a time (keyed by uid).
+  readonly editingUid = signal<string | null>(null);
+  readonly editName = signal('');
+  readonly savingEdit = signal(false);
+  readonly editError = signal<string | null>(null);
+
+  startEdit(c: Company): void {
+    this.editError.set(null);
+    this.editName.set(c.name);
+    this.editingUid.set(c.uid);
+  }
+
+  cancelEdit(): void {
+    this.editingUid.set(null);
+    this.editError.set(null);
+  }
+
+  saveEdit(c: Company): void {
+    const name = this.editName().trim();
+    if (!name) {
+      this.editError.set('Name is required.');
+      return;
+    }
+    if (name === c.name) {
+      this.cancelEdit();
+      return;
+    }
+    this.savingEdit.set(true);
+    this.editError.set(null);
+    // updateByUid overwrites legalName/taxId from the request, so echo the current values back —
+    // a name-only edit must not blank them. timeZone is preserved server-side if blank; sent for clarity.
+    this.companyService
+      .update(c.uid, {
+        name,
+        legalName: c.legalName ?? undefined,
+        taxId: c.taxId ?? undefined,
+        timeZone: c.timeZone,
+      })
+      .subscribe({
+        next: (updated) => {
+          this.companies.update((list) => list.map((x) => (x.uid === updated.uid ? updated : x)));
+          this.savingEdit.set(false);
+          this.editingUid.set(null);
+          this.alerts.success('Company updated', updated.name);
+        },
+        error: (err) => {
+          this.editError.set(this.messageFrom(err));
+          this.savingEdit.set(false);
+        },
+      });
+  }
 
   constructor() {
     this.organisationService.current().subscribe({
