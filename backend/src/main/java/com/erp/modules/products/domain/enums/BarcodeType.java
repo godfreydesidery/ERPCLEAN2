@@ -8,5 +8,9 @@ public enum BarcodeType {
     EAN,
     UPC,
     CODE128,
-    OTHER
+    OTHER,
+    /** Embedded-weight scale label (type-2 / EAN-13 variant). ADR-0044 D-1a / BR-9. */
+    EMBEDDED_WEIGHT,
+    /** Embedded-price scale label (type-2 / EAN-13 variant). ADR-0044 D-1a / BR-9. */
+    EMBEDDED_PRICE
 }

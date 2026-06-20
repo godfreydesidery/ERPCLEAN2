@@ -138,6 +138,7 @@ INSERT INTO permissions (code, module, description) VALUES
     ('PRICELIST.VIEW', 'products', 'View price lists'),
     ('PRODUCT.BRANCH.ASSIGN', 'products', 'Associate/dissociate a product with branches of its company'),
     ('PRODUCT.MANAGE', 'products', 'Create, update, archive products; manage units, barcodes, prices and recipes'),
+    ('PRODUCT.SYMBOLOGY.MANAGE', 'products', 'Manage barcode symbology rules (embedded weight/price barcode decoding)'),
     ('PRODUCT.VIEW', 'products', 'View and select products'),
     ('PROJECTS.COSTING.VIEW', 'projects', 'View the project P&L, WIP, and job-cost roll-up'),
     ('PROJECTS.ISSUE.CREATE', 'projects', 'Issue materials from stock to a project'),
