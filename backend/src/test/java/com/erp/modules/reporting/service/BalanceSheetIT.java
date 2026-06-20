@@ -119,7 +119,7 @@ class BalanceSheetIT extends PostgresIntegrationTest {
         priceListUid = priceListService.create(new CreatePriceListRequest(company.getUid(), "RETAIL", "Retail")).uid();
         productUid   = productService.create(new CreateProductRequest(
                 company.getUid(), null, "BS Widget", null,
-                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null)).uid();
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null, null)).uid();
         productService.setPrice(productUid,
                 new SetProductPriceRequest(priceListUid, new MoneyDto("1000", "TZS")));
 

@@ -124,8 +124,12 @@ public class IamTestData {
         // 4f. Clear products tables (FK children first, then masters, then sequence counter).
         //     units_of_measure is included here because products.base_unit_id and
         //     product_bulk_packs.unit_id FK into it (UoM cutover V4).
+        //     barcode_symbology_rules FK → companies; no children; cleared here with products.
         em.createNativeQuery(
                 "TRUNCATE product_branch, product_barcodes, product_prices, product_components, product_bulk_packs RESTART IDENTITY CASCADE")
+                .executeUpdate();
+        em.createNativeQuery(
+                "TRUNCATE barcode_symbology_rules RESTART IDENTITY CASCADE")
                 .executeUpdate();
         em.createNativeQuery(
                 "TRUNCATE products, price_lists, units_of_measure, code_sequence RESTART IDENTITY CASCADE")

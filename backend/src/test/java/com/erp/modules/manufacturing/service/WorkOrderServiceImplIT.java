@@ -130,13 +130,13 @@ class WorkOrderServiceImplIT extends PostgresIntegrationTest {
         // Create raw material product
         rawMatProductUid = productService.create(new CreateProductRequest(
                 company.getUid(), "RM001", "Raw Material One", null,
-                ProductType.GOODS, true, true, uomUid, null, VatStatus.EXEMPT, null, null, null, null, null, null, null, null))
+                ProductType.GOODS, true, true, uomUid, null, VatStatus.EXEMPT, null, null, null, null, null, null, null, null, null))
                 .uid();
 
         // Create finished-goods product
         fgProductUid = productService.create(new CreateProductRequest(
                 company.getUid(), "FG001", "Finished Good One", null,
-                ProductType.GOODS, true, true, uomUid, null, VatStatus.EXEMPT, null, null, null, null, null, null, null, null))
+                ProductType.GOODS, true, true, uomUid, null, VatStatus.EXEMPT, null, null, null, null, null, null, null, null, null))
                 .uid();
 
         // Create and activate BOM: 2 units RM001 → 1 FG001

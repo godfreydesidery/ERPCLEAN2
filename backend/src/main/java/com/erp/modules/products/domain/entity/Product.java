@@ -1,6 +1,7 @@
 package com.erp.modules.products.domain.entity;
 
 import com.erp.modules.products.domain.enums.ProductType;
+import com.erp.modules.products.domain.enums.RestrictedKind;
 import com.erp.modules.products.domain.enums.VatStatus;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.domain.UidEntity;
@@ -118,6 +119,16 @@ public class Product extends UidEntity {
     @Column(name = "vat_status", nullable = false, length = 20)
     @Setter
     private VatStatus vatStatus = VatStatus.STANDARD;
+
+    /**
+     * Age-restriction classification (ADR-0044 D-3a, BR-11).
+     * Default NONE — V71 backfills all existing rows; no POS sale is gated until explicitly set.
+     * Stored as VARCHAR(20), mirroring vatStatus.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "restricted_kind", nullable = false, length = 20)
+    @Setter
+    private RestrictedKind restrictedKind = RestrictedKind.NONE;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)

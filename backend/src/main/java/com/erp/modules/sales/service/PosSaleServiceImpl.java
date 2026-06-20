@@ -25,6 +25,7 @@ import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.parties.repository.CustomerRepository;
+import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -54,6 +55,8 @@ public class PosSaleServiceImpl implements PosSaleService {
     private final ScopeGuard             scopeGuard;
     private final AuditService           audit;
     private final PosSaleIdempotencyRepository idempotency;
+    /** ADR-0044 D-3a: runtime permission check for POS.SALE.AGE_OVERRIDE. */
+    private final PermissionResolver     permissionResolver;
 
     public PosSaleServiceImpl(PosSessionRepository posSessionRepo,
                                SalesInvoiceRepository invoiceRepo,
@@ -64,17 +67,19 @@ public class PosSaleServiceImpl implements PosSaleService {
                                CompanyRepository companies,
                                ScopeGuard scopeGuard,
                                AuditService audit,
-                               PosSaleIdempotencyRepository idempotency) {
-        this.posSessionRepo = posSessionRepo;
-        this.invoiceRepo    = invoiceRepo;
-        this.invoiceService = invoiceService;
-        this.products       = products;
-        this.units          = units;
-        this.customers      = customers;
-        this.companies      = companies;
-        this.scopeGuard     = scopeGuard;
-        this.audit          = audit;
-        this.idempotency    = idempotency;
+                               PosSaleIdempotencyRepository idempotency,
+                               PermissionResolver permissionResolver) {
+        this.posSessionRepo    = posSessionRepo;
+        this.invoiceRepo       = invoiceRepo;
+        this.invoiceService    = invoiceService;
+        this.products          = products;
+        this.units             = units;
+        this.customers         = customers;
+        this.companies         = companies;
+        this.scopeGuard        = scopeGuard;
+        this.audit             = audit;
+        this.idempotency       = idempotency;
+        this.permissionResolver = permissionResolver;
     }
 
     @Override
@@ -132,10 +137,21 @@ public class PosSaleServiceImpl implements PosSaleService {
         // flush so finalise sees origin=POS
         invoiceRepo.saveAndFlush(invoice);
 
-        // 5 — Add lines
+        // 5 — Age-restriction gate (ADR-0044 D-3a, BR-11).
+        // Resolve once: verified flag from request; override from caller's permission set.
+        boolean ageVerified = Boolean.TRUE.equals(req.ageVerified());
+        boolean ageOverride = permissionResolver.hasPermission(
+                RequestContext.get(), "POS.SALE.AGE_OVERRIDE", System.currentTimeMillis());
+
+        // 5 — Add lines (resolve products first to run the age gate before any invoice mutation)
         for (var line : req.lines()) {
             var product = products.findById(line.productId())
                     .orElseThrow(() -> NotFoundException.of("Product", String.valueOf(line.productId())));
+            if (product.getRestrictedKind().isRestricted() && !ageVerified && !ageOverride) {
+                throw new ConflictException(
+                        "Age-restricted item '" + product.getName() + "' requires age verification"
+                        + " — resend with ageVerified=true, or the cashier needs POS.SALE.AGE_OVERRIDE.");
+            }
             var unit = units.findById(line.unitId())
                     .orElseThrow(() -> NotFoundException.of("Unit", String.valueOf(line.unitId())));
             var lineReq = new AddInvoiceLineRequest(
@@ -178,11 +194,13 @@ public class PosSaleServiceImpl implements PosSaleService {
             idempotency.stampInvoiceUid(companyId, idempotencyKey, invoiceUid);
         }
 
-        // 8 — Audit POS sale
+        // 8 — Audit POS sale (includes age-gate decision for ADR-0044 D-3a traceability)
         audit.record(AuditEvent.of(AuditActions.POS_SALE_FINALISE, "sales_invoices",
                 reloaded.getId(), invoiceUid)
-                .detail(Map.of("sessionUid", req.sessionUid(),
-                               "gross", grossTotal.toPlainString())));
+                .detail(Map.of("sessionUid",  req.sessionUid(),
+                               "gross",       grossTotal.toPlainString(),
+                               "ageVerified", String.valueOf(ageVerified),
+                               "ageOverride", String.valueOf(ageOverride))));
 
         return invoiceService.getByUid(invoiceUid);
     }

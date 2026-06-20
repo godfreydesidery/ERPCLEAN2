@@ -154,14 +154,14 @@ class SalesInvoiceFxPostingIT extends PostgresIntegrationTest {
         // USD-priced product (STANDARD 18% VAT)
         productUsdUid = productService.create(new CreateProductRequest(
                 company.getUid(), null, "USD Widget", null,
-                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null)).uid();
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null, null)).uid();
         productService.setPrice(productUsdUid,
                 new SetProductPriceRequest(priceListUid, new MoneyDto("1000", "USD")));
 
         // TZS-priced product (STANDARD 18% VAT) — for the base-path no-regression test
         productTzsUid = productService.create(new CreateProductRequest(
                 company.getUid(), null, "TZS Widget", null,
-                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null)).uid();
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null, null)).uid();
         productService.setPrice(productTzsUid,
                 new SetProductPriceRequest(priceListUid, new MoneyDto("1000", "TZS")));
 
@@ -405,7 +405,7 @@ class SalesInvoiceFxPostingIT extends PostgresIntegrationTest {
         // EUR product (price in EUR — no EUR→TZS rate seeded)
         String productEurUid = productService.create(new CreateProductRequest(
                 company.getUid(), null, "EUR Widget", null,
-                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null)).uid();
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null, null)).uid();
         productService.setPrice(productEurUid,
                 new SetProductPriceRequest(priceListUid, new MoneyDto("1000", "EUR")));
 

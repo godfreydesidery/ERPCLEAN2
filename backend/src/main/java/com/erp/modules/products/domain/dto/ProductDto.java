@@ -2,6 +2,7 @@ package com.erp.modules.products.domain.dto;
 
 import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.domain.enums.ProductType;
+import com.erp.modules.products.domain.enums.RestrictedKind;
 import com.erp.modules.products.domain.enums.VatStatus;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.money.MoneyDto;
@@ -54,7 +55,9 @@ public record ProductDto(
         BigDecimal maxStock,
         Integer leadTimeDays,
         boolean purchasable,
-        Long preferredSupplierId
+        Long preferredSupplierId,
+        // ADR-0044 D-3a age-restriction gate
+        RestrictedKind restrictedKind
 ) {
 
     public static ProductDto from(Product p) {
@@ -97,7 +100,8 @@ public record ProductDto(
                 p.getMaxStock(),
                 p.getLeadTimeDays(),
                 p.isPurchasable(),
-                p.getPreferredSupplierId()
+                p.getPreferredSupplierId(),
+                p.getRestrictedKind()
         );
     }
 }

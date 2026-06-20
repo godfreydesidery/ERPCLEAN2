@@ -687,7 +687,7 @@ class PurchasesServiceImplIT extends PostgresIntegrationTest {
     private ProductDto stockableProduct(String name) {
         return productService.create(new CreateProductRequest(
                 companyA.getUid(), null, name, null,
-                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null));
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null, null));
     }
 
     private PurchaseOrderDto createDraftWithLine(String productUid, BigDecimal qty,

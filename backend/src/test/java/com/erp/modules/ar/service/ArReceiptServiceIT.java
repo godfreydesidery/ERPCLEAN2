@@ -155,7 +155,7 @@ class ArReceiptServiceIT extends PostgresIntegrationTest {
                 new CreatePriceListRequest(companyUid, "RETAIL", "Retail")).uid();
         productUid   = productService.create(new CreateProductRequest(
                 companyUid, null, "Receipt Widget", null,
-                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null)).uid();
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null, null)).uid();
         productService.setPrice(productUid,
                 new SetProductPriceRequest(priceListUid, new MoneyDto("1000", TZS)));
 

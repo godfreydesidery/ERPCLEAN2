@@ -7,6 +7,7 @@ import com.erp.modules.products.domain.dto.AddComponentRequest;
 import com.erp.modules.products.domain.dto.AssignProductBranchRequest;
 import com.erp.modules.products.domain.dto.CreateBulkPackRequest;
 import com.erp.modules.products.domain.dto.CreateProductRequest;
+import com.erp.modules.products.domain.dto.EmbeddedBarcodeDecode;
 import com.erp.modules.products.domain.dto.ProductBarcodeDto;
 import com.erp.modules.products.domain.dto.ProductBranchDto;
 import com.erp.modules.products.domain.dto.ProductBulkPackDto;
@@ -22,6 +23,7 @@ import com.erp.modules.products.domain.entity.ProductBulkPack;
 import com.erp.modules.products.domain.entity.ProductComponent;
 import com.erp.modules.products.domain.entity.ProductPrice;
 import com.erp.modules.products.domain.entity.UnitOfMeasure;
+import com.erp.modules.products.domain.enums.RestrictedKind;
 import com.erp.modules.products.domain.enums.VatStatus;
 import com.erp.modules.products.repository.PriceListRepository;
 import com.erp.modules.products.repository.ProductBarcodeRepository;
@@ -75,6 +77,7 @@ public class ProductServiceImpl implements ProductService {
     private final ProductCompositionGuard compositionGuard;
     private final ScopeGuard scopeGuard;
     private final AuditService audit;
+    private final BarcodeSymbologyRuleService symbologyRules;
 
     public ProductServiceImpl(ProductRepository products,
                               ProductBranchRepository productBranches,
@@ -90,7 +93,8 @@ public class ProductServiceImpl implements ProductService {
                               ProductBranchGuard branchGuard,
                               ProductCompositionGuard compositionGuard,
                               ScopeGuard scopeGuard,
-                              AuditService audit) {
+                              AuditService audit,
+                              BarcodeSymbologyRuleService symbologyRules) {
         this.products = products;
         this.productBranches = productBranches;
         this.bulkPacks = bulkPacks;
@@ -106,6 +110,7 @@ public class ProductServiceImpl implements ProductService {
         this.compositionGuard = compositionGuard;
         this.scopeGuard = scopeGuard;
         this.audit = audit;
+        this.symbologyRules = symbologyRules;
     }
 
     // -------------------------------------------------------------------------
@@ -130,6 +135,7 @@ public class ProductServiceImpl implements ProductService {
         p.setDescription(req.description());
         p.setCost(MoneyDto.toMoney(req.cost()));
         p.setVatStatus(req.vatStatus() != null ? req.vatStatus() : VatStatus.STANDARD);
+        p.setRestrictedKind(req.restrictedKind() != null ? req.restrictedKind() : RestrictedKind.NONE);
         applyPlanningFields(p, companyId, req.reorderLevel(), req.reorderQty(), req.safetyStock(),
                 req.minStock(), req.maxStock(), req.leadTimeDays(), req.purchasable(),
                 req.preferredSupplierId());
@@ -188,6 +194,7 @@ public class ProductServiceImpl implements ProductService {
         p.setBaseUnit(baseUnit);
         p.setCost(MoneyDto.toMoney(req.cost()));
         p.setVatStatus(req.vatStatus() != null ? req.vatStatus() : VatStatus.STANDARD);
+        p.setRestrictedKind(req.restrictedKind() != null ? req.restrictedKind() : RestrictedKind.NONE);
         applyPlanningFields(p, p.getCompanyId(), req.reorderLevel(), req.reorderQty(),
                 req.safetyStock(), req.minStock(), req.maxStock(), req.leadTimeDays(),
                 req.purchasable(), req.preferredSupplierId());
@@ -348,9 +355,52 @@ public class ProductServiceImpl implements ProductService {
     public ProductBarcodeDto lookupBarcode(Long companyId, String barcode) {
         // Security fix (barcode lookup): constrain by active company — cross-tenant leak if not.
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
-        return barcodes.findByCompanyIdAndBarcode(companyId, barcode)
-                .map(ProductBarcodeDto::from)
+
+        // Fast path: exact-match against product_barcodes (covers standard EAN/UPC/CODE128).
+        // Derived fields are null — backward-compatible for POS clients (ADR-0044 D-1a v1).
+        java.util.Optional<com.erp.modules.products.domain.entity.ProductBarcode> exact =
+                barcodes.findByCompanyIdAndBarcode(companyId, barcode);
+        if (exact.isPresent()) {
+            return ProductBarcodeDto.from(exact.get());
+        }
+
+        // Slow path: attempt embedded-weight/price decode via per-company symbology rules (BR-9).
+        // Only reached when the exact-match 404s (variable-digit scale labels never exact-match).
+        EmbeddedBarcodeDecode decode = symbologyRules.decode(companyId, barcode)
                 .orElseThrow(() -> new NotFoundException("Barcode not found in company: " + barcode));
+
+        // Resolve the product using the item_match strategy of the matched rule.
+        // decode.itemCode() is the substring extracted from the scanned barcode.
+        // We need the ProductBarcode row so the response DTO shape is consistent.
+        // BARCODE  → look up product_barcodes by barcode value (the item-code barcode).
+        // PRODUCT_CODE → look up products.code, then return its primary (or first) barcode row.
+        com.erp.modules.products.domain.entity.ProductBarcode resolvedBarcode =
+                resolveEmbeddedItemCode(companyId, barcode, decode);
+
+        return ProductBarcodeDto.fromDecode(resolvedBarcode, decode);
+    }
+
+    /**
+     * Resolves the item-code extracted from an embedded barcode to a ProductBarcode row.
+     * Strategy: try BARCODE lookup first (item code is a stored barcode value), then fall back
+     * to PRODUCT_CODE (item code is products.code). Both paths are O(index).
+     * The original scanned barcode string is used in 404 messages for diagnostics.
+     */
+    private ProductBarcode resolveEmbeddedItemCode(Long companyId, String scannedBarcode,
+                                                   EmbeddedBarcodeDecode decode) {
+        // BARCODE path: item code is itself a barcode value stored on a product.
+        var byBarcode = barcodes.findByCompanyIdAndBarcode(companyId, decode.itemCode());
+        if (byBarcode.isPresent()) {
+            return byBarcode.get();
+        }
+        // PRODUCT_CODE path: item code matches products.code; return primary/first barcode row.
+        Product product = products.findByCompanyIdAndCode(companyId, decode.itemCode())
+                .orElseThrow(() -> new NotFoundException(
+                        "Product not found for embedded barcode: " + scannedBarcode));
+        return barcodes.findByProductId(product.getId()).stream()
+                .min(java.util.Comparator.comparing(b -> b.isPrimary() ? 0 : 1))
+                .orElseThrow(() -> new NotFoundException(
+                        "Product has no barcode row for embedded decode: " + scannedBarcode));
     }
 
     // -------------------------------------------------------------------------

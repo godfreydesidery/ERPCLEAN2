@@ -285,7 +285,7 @@ class SalesOrderCreditBlockIT extends PostgresIntegrationTest {
         ProductDto product = productService.create(new CreateProductRequest(
                 company.getUid(), null, "Credit Widget " + System.nanoTime(), null,
                 ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD,
-                null, null, null, null, null, null, null, null));
+                null, null, null, null, null, null, null, null, null));
         productService.setPrice(product.uid(),
                 new SetProductPriceRequest(priceListUid, new MoneyDto("1000", "TZS")));
 

@@ -1,6 +1,7 @@
 package com.erp.modules.products.domain.dto;
 
 import com.erp.modules.products.domain.enums.ProductType;
+import com.erp.modules.products.domain.enums.RestrictedKind;
 import com.erp.modules.products.domain.enums.VatStatus;
 import com.erp.platform.common.money.MoneyDto;
 import jakarta.validation.constraints.Min;
@@ -32,6 +33,8 @@ public record UpdateProductRequest(
         BigDecimal maxStock,
         @Min(0) Integer leadTimeDays,
         Boolean purchasable,
-        Long preferredSupplierId
+        Long preferredSupplierId,
+        // ADR-0044 D-3a — optional; null → NONE (safe default, existing callers unaffected)
+        RestrictedKind restrictedKind
 ) {
 }

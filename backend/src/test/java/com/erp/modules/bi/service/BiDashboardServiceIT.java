@@ -180,7 +180,7 @@ class BiDashboardServiceIT extends PostgresIntegrationTest {
                 companyA.getUid(), "RETAIL", "Retail")).uid();
         productUid   = productService.create(new CreateProductRequest(
                 companyA.getUid(), null, "BI Widget", null,
-                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null)).uid();
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null, null)).uid();
         productService.setPrice(productUid,
                 new SetProductPriceRequest(priceListUid, new MoneyDto(SALE_PRICE.toPlainString(), TZS)));
 
