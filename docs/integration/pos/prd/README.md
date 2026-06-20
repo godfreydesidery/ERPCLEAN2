@@ -10,6 +10,18 @@
 > with the ERP authoritative for price, VAT, totals, stock, and all postings. This PRD is the build
 > specification for that client, written against the API **exactly as it exists today**.
 
+> **NOTE (2026-06-20) — four backend gaps have since CLOSED (commit `f08fb08`, ADR-0042).** This PRD
+> was written against an earlier API surface in which GAP-1 (sale idempotency), GAP-2 (POS
+> reversal/refund/void), GAP-3 (single exact-cash tender), and GAP-4 (`unitPrice` required-but-ignored)
+> were open. **GAP-1/2/3 are now CLOSED** (an `Idempotency-Key` header; a whole-sale
+> `POST /pos/sales/uid/{uid}/reverse`; an optional multi/split `tenders[]` list), **BR-1/BR-2/BR-3 are
+> DELIVERED**, and GAP-4 is **resolved by design** (pricing is server-authoritative; `unitPrice`/`agentId`
+> are now optional/informational). **Still genuinely open:** partial / line-level POS refunds (explicitly
+> deferred by ADR-0042) and client-side offline ingest. The §12 gap summary below has been corrected to
+> reflect this, **but the roadmap, phasing, scope (v1 cash-only), risk ratings, and backend-ask register
+> in this PRD predate the change and have *not* been re-planned** — several phases/recommendations were
+> gated on these now-closed gaps and are flagged inline for the owner to revisit deliberately.
+
 ---
 
 ## Executive Summary
@@ -22,6 +34,14 @@ absence of server-side sale idempotency). Without a purpose-built client, a reta
 a till. A thin, fast, error-tolerant POS client turns that API into a working register and captures
 the retry, reconcile, and receipt-integrity discipline the server explicitly delegates to the
 client.
+
+> **NOTE (2026-06-20):** GAP-1/2/3 are now CLOSED (`f08fb08`, ADR-0042) — server idempotency,
+> whole-sale reversal/refund/void, and multi/split non-cash tenders all ship today. The **cash-only v1
+> scope**, the "reconcile-before-resend in place of the server idempotency the API does not provide"
+> recommendation, and the "full retail capability is backend-gated … cannot be delivered by any amount
+> of client cleverness" framing below all predate that and **should be revisited by the owner**. The
+> original scope text is left in place pending a deliberate re-plan. (Partial/line-level refunds and
+> true client-side offline remain genuinely backend-gated.)
 
 **What v1 is.** A **controlled, attended, cash-only** till that runs the full shift loop end-to-end
 on **today's API** — login → resolve scope → pick/create till → open session → ring single- and
@@ -86,6 +106,14 @@ and glossary, then the parts relevant to your work.
 Three phases, each gated by the backend capability it requires. Phase 1 ships entirely on today's
 API; Phases 2 and 3 **must not start** until their named backend asks are delivered and verified.
 
+> **NOTE (2026-06-20):** the backend dependencies this phasing waits on — **BR-1** (idempotency),
+> **BR-2** (POS reversal/refund/void), **BR-3** (multi/split + non-cash tender) — are now **DELIVERED**
+> (GAP-1/2/3 CLOSED in `f08fb08`, ADR-0042). The Phase 2 and Phase 3 *gating* below is therefore largely
+> satisfied; in-till refund/void and multi-tender are no longer "must not start" items. This phase
+> sequencing/gating **should be revisited and re-sequenced by the owner** — it is left unchanged here as
+> a deliberate re-plan, not a mechanical edit. (Partial/line-level refunds and a hardened true-offline
+> queue remain genuinely backend-gated.)
+
 | Phase | Theme | Backend dependency |
 |-------|-------|--------------------|
 | **Phase 1 — MVP** | Attended, **cash-only**, online-first: full shift loop (open → ring cash sales → print → X-read → close → reconcile) with reconcile-before-resend retry-safety; refunds handled only via the cash-drawer `REFUND` payout + mandatory back-office correction. | **None** — runs on the current API. |
@@ -105,8 +133,15 @@ use-case catalogue one directory up at
 
 - **[API reference `../00`–`../12`](../README.md)** — the endpoint-by-endpoint contract every
   requirement traces to (`§nn`). The single most important grounding document is
-  **[`../12 — Known Limitations`](../12-known-limitations.md)**: no sale idempotency (#1), no POS
-  reversal/refund/void (#2), single exact-cash tender (#3), `unitPrice` required-but-ignored (#4).
+  **[`../12 — Known Limitations`](../12-known-limitations.md)**. As of commit `f08fb08` (ADR-0042) its
+  first three gaps are **CLOSED**:
+  [sale idempotency — CLOSED (`Idempotency-Key` header)](../12-known-limitations.md#1-sale-idempotency-on-sale-creation--closed-idempotency-key-header),
+  [whole-sale POS reversal/refund/void — CLOSED (`reverse` endpoint)](../12-known-limitations.md#2-whole-sale-pos-reversal--refund--void--closed-reverse-endpoint), and
+  [multi-tender / non-cash payments — CLOSED (`tenders[]` list)](../12-known-limitations.md#3-multi-tender--non-cash-payments--closed-tenders-list);
+  [server-authoritative pricing](../12-known-limitations.md#4-server-authoritative-pricing--by-design-not-a-limitation)
+  (`unitPrice`/`agentId` now optional/informational) is **by design, not a limitation**. Still open:
+  [partial / line-level POS refunds — DEFERRED](../12-known-limitations.md#5-partial--line-level-pos-refunds--deferred) and
+  [client-side offline ingest — OPEN](../12-known-limitations.md#6-client-side-offline-ingest--open).
 - **[Use-case catalogue `../use-cases/`](../use-cases/README.md)** — the `UC-xx` scenarios (and
   their actor/permission model) that the functional requirements are derived from and tested
   against.

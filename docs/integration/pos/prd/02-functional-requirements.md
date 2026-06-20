@@ -22,18 +22,32 @@ Each requirement is **atomic and testable** and carries:
 - **Traceability** — the use case(s) (`UC-xx`) and/or API section(s) (`§nn`, all under `../`) the
   requirement derives from. Backend-gap dependencies cite `§12 #n` (`../12-known-limitations.md`).
 
-### The four hard constraints that shape every area (read first)
+### The four constraints that shaped every area (read first)
 
-These are **current API gaps** (`../12-known-limitations.md`). Every requirement below that touches
-them either states a **v1 workaround** or is deferred with its backend dependency named. The POS
-client must never silently assume a capability the API lacks.
+> **STATUS UPDATE (2026-06-20, commit `f08fb08`, ADR-0042).** Three of the four original "hard
+> constraints" below — **sale idempotency (§12 #1)**, **whole-sale POS reversal/refund/void
+> (§12 #2)**, and **multi-tender / non-cash payments (§12 #3)** — are now **CLOSED** in the shipped
+> API. The fourth — **server-authoritative pricing (§12 #4)** — is now documented as **by design**,
+> not a gap (`unitPrice`/`agentId` are informational, no longer `@NotNull`). The table below is
+> retained for the historical record but now reflects the **shipped** behaviour. The only genuinely
+> open items are **partial / line-level refunds** (explicitly deferred by ADR-0042) and **client-side
+> offline ingest**. The POS client must still never silently assume a capability the API lacks.
 
-| Gap | Effect on the POS client | Where it bites |
+These were the **constraints** (`../12-known-limitations.md`) that originally shaped this section.
+Each requirement below that touches them now states the **shipped capability** (or, where still
+deferred, its backend dependency).
+
+| Constraint | Shipped status | Where it bites |
 |-----|--------------------------|----------------|
-| **§12 #1 — no sale idempotency / dedup** on `POST /pos/sales` | A retried sale after an ambiguous outcome can create a **second** finalised invoice (double stock/GL/AR), unrecoverable from the POS. | Cart submit, offline replay, token-expiry retry |
-| **§12 #2 — no POS refund / void / reversal** endpoint | A cashier cannot void, correct, or refund a POS sale at the till; the only POS lever is a cash-drawer `REFUND` payout (drawer bookkeeping only). | Returns, mistake correction |
-| **§12 #3 — single exact CASH tender only** | No card / mobile-money / cheque, no split tender, no over-tender/change at the ledger. | Payments, tender |
-| **§12 #4 — required-but-ignored fields (`unitPrice`, `agentId`)**; no manual price override | The server prices every line from its own price list (client's `unitPrice` is decorative; the only reduction lever is `lineDiscountAmount`) and attributes the sale to the logged-in user (`agentId` is decorative). | Pricing, line edits, agent attribution |
+| **§12 #1 — sale idempotency / dedup** on `POST /pos/sales` | **CLOSED** — optional `Idempotency-Key` header (reserve-before-process, `pos_sale_idempotency` V70); replay returns the original invoice; in-flight duplicate gets a retryable `409`. Omitting the header ⇒ legacy non-idempotent behaviour (reconcile-before-resend is the no-key fallback only). | Cart submit, offline replay, token-expiry retry |
+| **§12 #2 — POS refund / void / reversal** endpoint | **CLOSED for whole-sale** — `POST /pos/sales/uid/{uid}/reverse` (perm `POS.SALE.VOID`, OPEN session, FINALISED, POS-origin) reverses revenue + VAT + cash + stock + COGS and drops the sale out of the drawer. **Still deferred:** partial / line-level refunds; closed-session sales use the back-office void. | Returns, mistake correction |
+| **§12 #3 — multi-tender / non-cash payments** | **CLOSED** — optional `tenders[]` list (`CASH`/`CARD`/`MOBILE_MONEY`/`CHEQUE`, split, sum ≥ gross); each tender posts a real ledger payment. Omitting `tenders` ⇒ today's single exact-CASH behaviour. | Payments, tender |
+| **§12 #4 — server-authoritative pricing (`unitPrice`, `agentId` informational)**; no manual price override | **By design (not a gap).** The server re-derives price + VAT per line from its own price list (client's `unitPrice` is accepted but ignored; the only reduction lever is `lineDiscountAmount`) and attributes the sale to the logged-in user. `@NotNull` on `unitPrice`/`agentId` was relaxed (now optional). | Pricing, line edits, agent attribution |
+
+> **NOTE (2026-06-20): GAP-1/2/3 are now CLOSED (`f08fb08`) — the "cash-only pilot" framing below
+> should be revisited by the owner.** A multi-tender, safe-retry, at-till-whole-sale-refund POS is
+> now viable on the shipped API; the original cash-only-pilot recommendation predates ADR-0042. Left
+> in place for the owner to re-plan deliberately.
 
 A controlled, attended, **cash-only** pilot is fully viable on the API as it stands; these four gaps
 bound the v1 scope.
@@ -107,12 +121,13 @@ UC-C10, UC-E3.
 ### FR-AUTH-5 — Do not blindly retry a sale POST that returned 401
 
 - **Statement.** When a `POST /api/v1/pos/sales` fails with `401`, the client must refresh/re-login
-  and then **reconcile before resending** (per FR-OFF-3) rather than blindly retrying, because the
+  and then resend safely — by reusing the same `Idempotency-Key` (§12 #1, CLOSED) or, if no key was
+  sent, **reconcile before resending** (per FR-OFF-3) — rather than blindly retrying, because the
   sale may already have committed.
 - **Priority.** Must.
 - **Acceptance criteria.**
   - A 401 on the sale endpoint never triggers an automatic resend of the same basket; it triggers
-    the reconcile-before-resend flow.
+    a same-key resend (idempotency-protected) or, absent a key, the reconcile-before-resend flow.
 - **Traceability.** UC-C10 (notes), `§12 #1`, `§11 §4`.
 
 ### FR-AUTH-6 — Logout
@@ -238,7 +253,9 @@ OPEN session**. Source: `§07`, `§08`, UC-A3–A5, UC-B1–B6, UC-E5.
   - A `200` (empty `data`) is treated as success; the client records its own reference (no payout
     uid is returned) and reflects the reduced expected cash on the next X-read.
   - A `REFUND` payout is clearly labelled in the UI as **drawer bookkeeping only** — it posts no
-    stock/VAT/revenue/AR reversal (see FR-RET-1).
+    stock/VAT/revenue/AR reversal (see FR-RET-1). Note (2026-06-20): a true at-till **whole-sale
+    reversal** now exists (`/reverse`, §12 #2 CLOSED) and posts the full stock/VAT/revenue reversal;
+    the `REFUND` payout remains the cash-only drawer lever and is **not** the way to refund a sale.
   - The payout is **not** auto-retried on a timeout (it is not idempotent); the client confirms via
     X-read before any resend.
 - **Traceability.** `§08 §6`, UC-B3, UC-D1, `§12 #2`, `§12 #1`.
@@ -400,8 +417,9 @@ UC-C1, UC-C6.
 ## 5.4 Cart & Selling
 
 The basket lives **entirely in the client** until submit; `POST /api/v1/pos/sales` is a one-shot
-finalise (price + single CASH tender + commit) — there is no add-line / draft / hold endpoint.
-Source: `§09`, UC-C1–C5, UC-C9.
+finalise (price + tender + commit) — there is no add-line / draft / hold endpoint. Tender is a
+single exact CASH leg by default, or an optional `tenders[]` list (multi-tender now shipped, §12 #3
+CLOSED). Source: `§09`, UC-C1–C5, UC-C9.
 
 ### FR-SELL-1 — Build a multi-line cart (client-side)
 
@@ -433,8 +451,9 @@ Source: `§09`, UC-C1–C5, UC-C9.
   `201` `SalesInvoiceDto` as the authoritative result.
 - **Priority.** Must.
 - **Acceptance criteria.**
-  - Each line carries `productId`, `unitId`, `quantity`, a (decorative) `unitPrice` satisfying
-    `@NotNull @DecimalMin("0.00")`, and optional `lineDiscountAmount`.
+  - Each line carries `productId`, `unitId`, `quantity`, and optional `lineDiscountAmount`;
+    `unitPrice` and `agentId` are now **optional** (the `@NotNull` was relaxed, ADR-0042 §12 #4) and
+    informational — accepted but ignored, the server re-derives price + VAT.
   - `Content-Type: application/json` is always sent (else `415`).
   - On `201`, the client reads `invoiceNumber`, `grossTotalAmount`, `netTotalAmount`,
     `vatTotalAmount`, `taxSummary`, `finalisedAt`, and `uid`, and prints the receipt (FR-RCPT-1).
@@ -456,8 +475,9 @@ Source: `§09`, UC-C1–C5, UC-C9.
     the client warns on a 0-gross / free line before submit.
 - **Risk / open question (UNVERIFIED).** A **fully zero-gross sale** (every line netted to 0) is
   **unverified** against the server. `PosSaleServiceImpl` has **no explicit zero-gross guard**, and
-  the finalise step then adds a single CASH payment for the (zero) gross and asserts paid-in-full;
-  whether a zero-gross invoice finalises cleanly / is treated as paid-in-full is **not confirmed**.
+  the finalise step then adds a payment for the (zero) gross (a single CASH leg by default, or the
+  supplied `tenders[]`) and asserts paid-in-full; whether a zero-gross invoice finalises cleanly /
+  is treated as paid-in-full is **not confirmed**.
   Confirm this behaviour with the ERP team (or a controlled test) **before** relying on free / 100%-off
   sales — do **not** assume it simply works.
 - **Traceability.** `§09 §4`, `§09 §6`, UC-C4, `§12 #4`.
@@ -466,10 +486,13 @@ Source: `§09`, UC-C1–C5, UC-C9.
 
 - **Statement.** Override the server list price for a line at the till (the `unitPrice` field).
 - **Priority.** Won't-for-v1.
-- **Reason / dependency.** `unitPrice` is required but **ignored**; the server always prices from its
-  own price list, and there is no POS price-override permission/path. **Backend change required:**
-  honour `unitPrice` as a permission-gated override (`POS.SALE.PRICE_OVERRIDE`, audited) — or drop
-  the field. **v1 workaround:** express the reduction as `lineDiscountAmount` (FR-SELL-4).
+- **Reason / dependency.** `unitPrice` is now **optional** (the `@NotNull` was relaxed, §12 #4) but
+  is still **accepted-and-ignored** — the server always re-derives price from its own price list,
+  and there is no POS price-override permission/path. Server-authoritative pricing is **by design**
+  (§12 #4 is a deliberate price-integrity guarantee, not a gap); a manual price-override is still
+  **not a feature**. **Backend change required (if ever wanted):** honour `unitPrice` as a
+  permission-gated override (`POS.SALE.PRICE_OVERRIDE`, audited). **v1 workaround:** express the
+  reduction as `lineDiscountAmount` (FR-SELL-4).
 - **Acceptance criteria.** The client never presents `unitPrice` as an editable price that changes
   the charge; any reduction is modelled as a discount.
 - **Traceability.** `§12 #4`, UC-C4 (notes), UC-C-not-supported table.
@@ -489,19 +512,19 @@ Source: `§09`, UC-C1–C5, UC-C9.
 
 ### FR-SELL-7 — Attribute the sale to an agent (limited)
 
-- **Statement.** The client must send a valid `agentId` (required by validation), and must **not**
-  promise that an arbitrary agent is recorded on the invoice.
+- **Statement.** The client may send an `agentId` (now optional — `@NotNull` relaxed, §12 #4), and
+  must **not** promise that an arbitrary agent is recorded on the invoice.
 - **Priority.** Should.
 - **Acceptance criteria.**
-  - A non-null `agentId` is always sent (resolve via `GET /api/v1/agents` if a picker is offered;
-    needs `AGENT.VIEW`).
+  - An `agentId` may be sent (resolve via `GET /api/v1/agents` if a picker is offered; needs
+    `AGENT.VIEW`); it is **informational** and not forwarded.
   - The UI states that the invoice agent defaults to the **authenticated user** (the POS path
     forwards `agentUid = null`); the client treats the returned `agentId`/`agentName` as the source
     of truth and does not display the submitted `agentId` as "the recorded agent".
 - **Note (doc accuracy).** API ref `§09 §2.1` originally described `agentId` as "carried for
-  receipt/audit attribution"; that was **inaccurate** — the authoritative behaviour is "required but
-  **not forwarded**" (now corrected in `§09 §2.1` and catalogued in `§12 #4`). A v1 build must **not**
-  rely on per-sale agent attribution.
+  receipt/audit attribution"; that was **inaccurate** — the authoritative behaviour is "informational
+  / **not forwarded**" (corrected in `§09 §2.1` and catalogued in `§12 #4`). `agentId` is now
+  optional, not required-but-ignored. A v1 build must **not** rely on per-sale agent attribution.
 - **Traceability.** UC-C5, `§09 §2.1`, `§12 #4`.
 
 ### FR-SELL-8 — Attribute the invoice to an arbitrary agent
@@ -524,7 +547,8 @@ Source: `§09`, UC-C1–C5, UC-C9.
     clears the active basket; "Recall" reloads it.
   - The UI states a parked basket lives only on this device and is lost if the app/device is lost
     (no server persistence).
-  - The client must **not** emulate hold by posting a sale and reversing it (no POS void exists).
+  - The client must **not** emulate hold by posting a sale and reversing it (even though a whole-sale
+    `/reverse` now exists, §12 #2 — posting-then-reversing a real invoice is not a park mechanism).
 - **Note.** This is **absent from the API** (no draft/park endpoint), not a §12 gap; a future
   server-side draft-sale endpoint would supersede the local-only approach.
 - **Traceability.** UC-C9.
@@ -592,7 +616,7 @@ The server prices and VATs every line and computes all totals; the client **prev
 ### FR-PRICE-4 — Single-currency document; no per-line FX
 
 - **Statement.** The client must treat the chosen `currency` as both the invoice header currency and
-  the single CASH-tender currency, with no per-line FX.
+  the tender currency (every tender is forced to the document currency, §12 #3), with no per-line FX.
 - **Priority.** Must.
 - **Acceptance criteria.** All line prices/VAT/totals display in the one document currency; the
   client offers no per-line currency control and no rate maintenance (back-office only).
@@ -664,13 +688,23 @@ cannot read credit status. Source: `§05`, UC-C3.
 
 ## 5.7 Payments & Tender
 
-v1 is **single exact CASH** only. The server adds one CASH tender for exactly the gross; tendered
-amount and change are client-side display only. Source: `§09 §6`, `§12 #3`, UC-E4.
+> **STATUS UPDATE (2026-06-20, §12 #3 CLOSED, `f08fb08`).** Multi-tender / non-cash payments now
+> **ship**: `POST /pos/sales` accepts an optional `tenders[]` list (`CASH`/`CARD`/`MOBILE_MONEY`/
+> `CHEQUE`, split, sum ≥ gross), each posting a real ledger payment. The single-exact-CASH path
+> below remains the **default** (omit `tenders`), so this area's framing is now a *default*, not the
+> only option. FR-PAY-2..5 below were authored as Won't-for-v1 against the old gap; their **factual
+> "Backend change required" basis is now CLOSED** — flagged inline for the owner to re-prioritise
+> (the MoSCoW/scope decision is left for the owner to re-make deliberately). PCI / card-data handling
+> (use an external certified terminal) remains a valid client-side concern.
 
-### FR-PAY-1 — Single exact CASH tender (v1)
+The default path is **single exact CASH**: the server adds one CASH tender for exactly the gross;
+tendered amount and change are client-side display only. Source: `§09 §6`, `§12 #3`, UC-E4.
 
-- **Statement.** The client must treat every POS sale as paid by a single CASH tender equal to the
-  gross, computing change locally.
+### FR-PAY-1 — Single exact CASH tender (default path)
+
+- **Statement.** When no `tenders[]` list is supplied, the client must treat the POS sale as paid by
+  a single CASH tender equal to the gross, computing change locally. (Multi-tender via `tenders[]` is
+  now also available — §12 #3 CLOSED, FR-PAY-2..4; this requirement is the default no-`tenders` path.)
 - **Priority.** Must.
 - **Acceptance criteria.**
   - The client sends an optional `tenderedAmount` (cash given) for **receipt printing only**; it
@@ -684,36 +718,52 @@ amount and change are client-side display only. Source: `§09 §6`, `§12 #3`, U
 
 - **Statement.** Accept card payment at the POS.
 - **Priority.** Won't-for-v1.
-- **Reason / dependency.** The POS orchestrator hard-codes `TenderType.CASH`. **Backend change
-  required:** let `PosSaleRequest` carry a tender list `[{ tenderType, amount, currency }]` and
-  persist it (`§12 #3` recommended fix). **v1 workaround:** none at the POS (back-office invoice
-  flow only).
+  > **NOTE (2026-06-20): §12 #3 is now CLOSED (`f08fb08`) — the backend change this row was gated on
+  > has shipped; this Won't-for-v1 priority should be revisited by the owner.** `PosSaleRequest` now
+  > carries an optional `tenders[]` list and posts a real `CARD` ledger payment. (PCI / card-data
+  > handling via an external certified terminal remains a client-side concern.)
+- **Reason / dependency (HISTORICAL — now resolved).** The POS orchestrator *formerly* hard-coded
+  `TenderType.CASH`. The backend change this required — `PosSaleRequest` carrying a tender list and
+  persisting it (`§12 #3` recommended fix) — has **shipped**.
 - **Traceability.** `§12 #3`, UC-B10, UC-C-not-supported table.
 
 ### FR-PAY-3 — Mobile-money / cheque tender
 
 - **Statement.** Accept mobile-money or cheque payment at the POS.
 - **Priority.** Won't-for-v1.
-- **Reason / dependency.** Same as FR-PAY-2 — `TenderType.{MOBILE_MONEY,CHEQUE}` exist in the
-  payment layer but the POS path never emits them. **Backend change required:** POS tender list.
+  > **NOTE (2026-06-20): §12 #3 is now CLOSED (`f08fb08`) — the POS tender list has shipped; this
+  > Won't-for-v1 priority should be revisited by the owner.** The POS path now emits
+  > `TenderType.{MOBILE_MONEY,CHEQUE}` from the `tenders[]` list.
+- **Reason / dependency (HISTORICAL — now resolved).** Same as FR-PAY-2 —
+  `TenderType.{MOBILE_MONEY,CHEQUE}` exist in the payment layer; the POS path *formerly* never
+  emitted them. The required POS tender list has **shipped**.
 - **Traceability.** `§12 #3`, UC-B10.
 
 ### FR-PAY-4 — Split tender (part cash + part card/other)
 
 - **Statement.** Accept more than one tender on a single POS sale.
 - **Priority.** Won't-for-v1.
-- **Reason / dependency.** The POS path adds exactly one CASH payment for the gross. **Backend change
-  required:** multi-tender list with sum-≥-gross validation and change on CASH (`BR-SALES-07`
-  already exists in the payment layer).
+  > **NOTE (2026-06-20): §12 #3 is now CLOSED (`f08fb08`) — split tender has shipped; this
+  > Won't-for-v1 priority should be revisited by the owner.** The `tenders[]` list accepts multiple
+  > tenders with sum-≥-gross validation.
+- **Reason / dependency (HISTORICAL — now resolved).** The POS path *formerly* added exactly one
+  CASH payment for the gross. The backend change required — a multi-tender list with sum-≥-gross
+  validation and change on CASH (`BR-SALES-07` already exists in the payment layer) — has **shipped**.
 - **Traceability.** `§12 #3`, UC-B10.
 
 ### FR-PAY-5 — Over-tender with change recorded at the ledger
 
 - **Statement.** Record over-tender and change on the invoice/ledger.
 - **Priority.** Won't-for-v1.
-- **Reason / dependency.** The POS payment equals gross exactly; no `changeAmount` is written.
-  **Backend change required:** persist tendered amount + change on the POS path. **v1 workaround:**
-  print change client-side only (FR-PAY-1).
+  > **NOTE (2026-06-20): §12 #3 is now CLOSED (`f08fb08`) — the `tenders[]` list now records real
+  > per-tender ledger payments (and validates tender sum ≥ gross), so this row's basis is largely
+  > superseded; the owner should revisit it.** A residual nuance remains: per `§12 #3`, change for a
+  > CASH over-tender is still computed on the **client** (`tenderedAmount` is a receipt hint, the
+  > ledger `changeAmount` is not persisted on the POS path), so the literal "change recorded at the
+  > ledger" ask may still be partly open. Left for the owner to confirm/re-scope.
+- **Reason / dependency (HISTORICAL — superseded).** The POS payment *formerly* equalled gross
+  exactly with no `changeAmount` written. Multi-tender now persists real per-tender payments; the
+  client still prints CASH change locally (FR-PAY-1).
 - **Traceability.** `§09 §6`, `§12 #3`, UC-C-not-supported table.
 
 ---
@@ -775,15 +825,28 @@ POS invoices use the shared `INV-####` series. Source: `§09 §5`, `§09 §8–�
 
 ## 5.9 Returns / Refunds
 
-There is **no POS refund/void/reversal**. The only POS-side mechanism is a cash-drawer `REFUND`
-payout (drawer bookkeeping only) plus a mandatory back-office correction. Source: `§10`, `§12 #2`,
-UC-B9, UC-D1, UC-D2.
+> **STATUS UPDATE (2026-06-20, §12 #2 CLOSED, `f08fb08`).** A **whole-sale** POS reversal/refund/void
+> now **ships**: `POST /pos/sales/uid/{uid}/reverse` (perm `POS.SALE.VOID`, OPEN session, FINALISED,
+> POS-origin) atomically reverses revenue + VAT + cash + stock + COGS and drops the sale out of the
+> drawer. The "there is no POS reversal" framing below is now **wrong for open-session whole-sale
+> refunds**. **Still deferred:** partial / line-level refunds (ADR-0042), and closed-session sales
+> (use the back-office void). FR-RET-2/FR-RET-3 below were authored Won't-for-v1 against the old gap;
+> their factual basis is now CLOSED for whole-sale — flagged inline for the owner to re-prioritise.
+
+The legacy cash-drawer `REFUND` payout (drawer bookkeeping only) remains, but the first-class
+mechanism for an open-session whole-sale refund is now the `/reverse` endpoint; closed-session sales
+and partial returns still need a back-office correction. Source: `§10`, `§12 #2`, UC-B9, UC-D1, UC-D2.
 
 ### FR-RET-1 — Record a cash refund as a drawer payout (with explicit caveat)
 
 - **Statement.** When cash must be returned, the client must record it as a `REFUND` **payout** on
   an OPEN session (FR-SHIFT-6) and clearly state this is **drawer bookkeeping only**.
 - **Priority.** Must.
+  > **NOTE (2026-06-20): §12 #2 is now CLOSED (`f08fb08`) — for an open-session whole-sale refund the
+  > first-class lever is now `/reverse` (FR-RET-2), which posts the full stock/VAT/revenue reversal.
+  > The owner should revisit whether the `REFUND`-payout-only flow is still the primary refund path
+  > or a fallback (e.g. closed-session or partial refunds).** The drawer-bookkeeping facts below
+  > remain accurate for the payout itself.
 - **Acceptance criteria.**
   - The refund flow records `{ payoutType: "REFUND", amount, reason }` (the client puts the original
     `INV-####` and SKU/qty in `reason` for later back-office matching).
@@ -796,11 +859,18 @@ UC-B9, UC-D1, UC-D2.
 - **Statement.** Reverse a POS sale (stock back in + VAT/revenue reversal + customer credit) from
   the till.
 - **Priority.** Won't-for-v1.
-- **Reason / dependency.** There is no POS reverse endpoint, and the general returns path requires a
-  `deliveryUid`+`deliveryLineUid` that a DIRECT-origin POS invoice never has. **Backend change
-  required:** a first-class `POST /pos/sales/uid/{uid}/reverse` (or a credit-note path accepting a
-  POS invoice as origin), gated by `POS.SALE.REFUND` / `POS.SALE.VOID`, atomically reversing
-  stock + GL + AR. **v1 workaround:** FR-RET-1 (drawer payout) + back-office correction.
+  > **NOTE (2026-06-20): §12 #2 is now CLOSED (`f08fb08`) — the exact backend change this row called
+  > for has shipped; this Won't-for-v1 priority should be revisited by the owner.** The first-class
+  > `POST /pos/sales/uid/{uid}/reverse` endpoint now exists (perm `POS.SALE.VOID`; requires an OPEN
+  > session, a FINALISED POS-origin invoice), atomically reversing revenue + VAT + cash + stock +
+  > COGS and dropping the sale out of the drawer — i.e. a whole-sale at-till refund is now buildable.
+  > (**Partial / line-level** refunds remain deferred — see FR-RET-3 / §12 #5; closed-session sales
+  > still use the back-office void.)
+- **Reason / dependency (HISTORICAL — now resolved for whole-sale).** There was *formerly* no POS
+  reverse endpoint, and the general returns path requires a `deliveryUid`+`deliveryLineUid` that a
+  DIRECT-origin POS invoice never has. The backend change required — a first-class
+  `POST /pos/sales/uid/{uid}/reverse` gated by `POS.SALE.VOID`, atomically reversing stock + GL — has
+  **shipped**. **Legacy v1 workaround:** FR-RET-1 (drawer payout) + back-office correction.
 - **Acceptance criteria.** The client offers no void/refund/reverse control on a POS invoice; it
   routes the merchandise/accounting side to the back office.
 - **Traceability.** UC-B9, UC-D1, `§12 #2`, `§10 §2/§5`.
@@ -809,8 +879,15 @@ UC-B9, UC-D1, UC-D2.
 
 - **Statement.** Cancel/edit a finalised mis-rung POS invoice from the till.
 - **Priority.** Won't-for-v1.
-- **Reason / dependency.** No POS undo (`§12 #2`), compounded by no idempotency (`§12 #1`). **Backend
-  change required:** the same reverse/void endpoint as FR-RET-2. **v1 workaround:** record any cash
+  > **NOTE (2026-06-20): §12 #2 AND §12 #1 are now CLOSED (`f08fb08`) — both factors this row was
+  > gated on have shipped; this Won't-for-v1 priority should be revisited by the owner.** A
+  > whole-sale `/reverse` now lets the till void a mis-rung **open-session** invoice (then re-ring
+  > corrected), and `Idempotency-Key` makes the re-ring safe to retry. (Editing a finalised invoice
+  > in place is still not a feature; **partial** line corrections remain deferred, §12 #5; and a
+  > closed-session sale still needs the back-office void.)
+- **Reason / dependency (HISTORICAL — now resolved for whole-sale void).** There was *formerly* no
+  POS undo (`§12 #2`), compounded by no idempotency (`§12 #1`). The backend change required — the
+  same reverse/void endpoint as FR-RET-2 — has **shipped**. **Legacy v1 workaround:** record any cash
   returned as a `REFUND` payout, re-ring the corrected basket as a **new** sale, and have finance
   post a correcting entry against the wrong invoice (both invoices then exist).
 - **Acceptance criteria.**
@@ -910,18 +987,36 @@ sales-report endpoint; the shared sales-invoice list is used for reconciliation/
 
 ## 5.12 Offline Mode & Sync
 
-The API is a stateless JWT server with **no offline/batch ingest** and **no sale idempotency** — the
-client owns all retry safety. Source: `§11 §4`, `§12 #1`, UC-E2.
+> **STATUS UPDATE (2026-06-20, §12 #1 CLOSED, `f08fb08`).** **Sale idempotency now ships** (optional
+> `Idempotency-Key` header). With a key, a client can **safely replay** queued sales on reconnect —
+> the server returns the original invoice on replay, so retry safety no longer rests entirely on the
+> client's reconcile-before-resend discipline (which is now the **no-key fallback**). The
+> requirements below were authored against the old no-idempotency gap; the reconcile-before-resend
+> machinery (FR-OFF-1..5) remains a valid belt-and-braces / no-key path, but **same-key resend is now
+> the primary safe-retry mechanism** — the owner may wish to re-weight these. **Still open:**
+> client-side **offline / batch ingest** (§12 #6) — there is no server batch endpoint, so the
+> queue-and-replay logic still lives on the client.
+
+The API is a stateless JWT server with **no offline/batch ingest** (§12 #6, still open); **sale
+idempotency** is now available via the `Idempotency-Key` header (§12 #1, CLOSED). Source: `§11 §4`,
+`§12 #1`, `§12 #6`, UC-E2.
 
 ### FR-OFF-1 — Per-basket durable transaction id
 
 - **Statement.** The client must generate and persist a durable local transaction id per basket
-  **before** the first `POST /pos/sales`, send it as `X-Request-Id` on every attempt of that same
-  sale, and use a fresh id only for a genuinely new sale.
+  **before** the first `POST /pos/sales`, send it as the `Idempotency-Key` header (§12 #1, CLOSED) on
+  every attempt of that same sale, and use a fresh id only for a genuinely new sale.
 - **Priority.** Must.
+  > **NOTE (2026-06-20): §12 #1 is now CLOSED (`f08fb08`).** Sending the durable id as
+  > `Idempotency-Key` now gives **server-side** dedupe (replay returns the original invoice), not
+  > just client-side. `X-Request-Id` remains **log-correlation only** and does **not** dedupe — the
+  > id that earns the guarantee is `Idempotency-Key`. The owner may re-weight FR-OFF-1..5 now that
+  > safe-retry is primarily server-enforced.
 - **Acceptance criteria.**
-  - The transaction id survives app restart and is reused for all retries of the same logical sale.
-  - A UI double-tap or in-flight resend never fires two `POST`s for one basket (client-side dedupe).
+  - The transaction id survives app restart and is reused (as `Idempotency-Key`) for all retries of
+    the same logical sale.
+  - A UI double-tap or in-flight resend never fires two committing `POST`s for one basket
+    (client-side dedupe **plus** server-side idempotency).
 - **Traceability.** `§11 §4.2` (#3), `§12 #1`, UC-E2.
 
 ### FR-OFF-2 — Never auto-retry a sale on an ambiguous outcome
@@ -940,6 +1035,11 @@ client owns all retry safety. Source: `§11 §4`, `§12 #1`, UC-E2.
   OPEN (`GET /pos/sessions/uid/{uid}`) and search `GET /api/v1/sales-invoices?companyId=…` (newest
   first) for a matching finalised invoice — before deciding to resend.
 - **Priority.** Must.
+  > **NOTE (2026-06-20): §12 #1 is now CLOSED (`f08fb08`).** Reconcile-before-resend is now the
+  > **no-key fallback**: a client that sends an `Idempotency-Key` (FR-OFF-1) can simply resend with
+  > the **same key** on an ambiguous outcome (the server returns the original invoice, or a retryable
+  > `409` if still in flight) instead of doing out-of-band reconciliation. The owner may re-weight
+  > this requirement accordingly; the reconcile path remains valid for the no-key case.
 - **Acceptance criteria.**
   - If a matching invoice is found, the client treats the original as **succeeded**, reprints from
     it, and does **not** resend.
@@ -989,11 +1089,17 @@ client owns all retry safety. Source: `§11 §4`, `§12 #1`, UC-E2.
 
 - **Statement.** Guarantee exactly-once sale posting via a server idempotency key.
 - **Priority.** Won't-for-v1.
-- **Reason / dependency.** No `Idempotency-Key` header or `clientSaleRef` exists on the sale path;
-  `X-Request-Id` is correlation-only. **Backend change required:** accept and persist an idempotency
-  key (or `clientSaleRef`) unique per company and return the original `201` on replay. **v1
-  workaround:** the reconcile-before-resend discipline (FR-OFF-1..5), which narrows but cannot fully
-  close the commit/learn window.
+  > **NOTE (2026-06-20): §12 #1 is now CLOSED (`f08fb08`) — the exact backend change this row called
+  > for has shipped; this Won't-for-v1 priority should be revisited by the owner (this is arguably now
+  > a "Must" delivered by the backend).** An optional `Idempotency-Key` header is accepted and
+  > persisted unique per company (`pos_sale_idempotency`, V70, reserve-before-process); replay returns
+  > the **original** invoice (still HTTP `201` — match on the returned `uid`), and an in-flight
+  > duplicate gets a retryable `409`.
+- **Reason / dependency (HISTORICAL — now resolved).** There was *formerly* no `Idempotency-Key`
+  header or `clientSaleRef` on the sale path; `X-Request-Id` is correlation-only. The backend change
+  required — accept and persist an idempotency key unique per company and return the original invoice
+  on replay — has **shipped**. **Legacy v1 workaround:** the reconcile-before-resend discipline
+  (FR-OFF-1..5), now the no-key fallback.
 - **Traceability.** `§12 #1`, `§11 §4.4`.
 
 ---
@@ -1043,6 +1149,16 @@ back-office endpoints. Source: `§01 §10`, UC-A1, UC-A5 (not-supported table).
 
 ## 5.14 Requirements traceability summary
 
+> **STATUS NOTE (2026-06-20, `f08fb08`/ADR-0042).** Several "Won't-for-v1 (backend dependency)"
+> entries below were gated on gaps that are now **CLOSED**: **§12 #1** (idempotency → FR-OFF-7),
+> **§12 #2** (POS reverse/void → FR-RET-2, FR-RET-3 for whole-sale), and **§12 #3** (tender list →
+> FR-PAY-2..5). **§12 #4** (server-authoritative pricing → FR-SELL-5) is now **by design**, not a
+> gap (so FR-SELL-5's *manual override* is a deliberate non-feature, not a blocked-by-gap deferral).
+> The MoSCoW columns and the rollup below are **left as authored** — the owner should re-prioritise
+> the now-unblocked rows deliberately. Items genuinely still deferred: **partial / line-level
+> refunds** (§12 #5), **offline / batch ingest** (§12 #6), and the non-§12 deferrals (FR-SELL-6/8,
+> FR-CUST-5, FR-SHIFT-7/12, FR-STK-3).
+
 | Area | Must | Should | Could | Won't-for-v1 (backend dependency) |
 |------|------|--------|-------|-----------------------------------|
 | Auth & Session | FR-AUTH-1..6 | FR-AUTH-7, FR-AUTH-8 | — | — |
@@ -1061,11 +1177,19 @@ back-office endpoints. Source: `§01 §10`, UC-A1, UC-A5 (not-supported table).
 
 **Backend-gap rollup (the Won't-for-v1 set, with the single change that unblocks each):**
 
-- `§12 #1` (sale idempotency) → unblocks **FR-OFF-7** (exactly-once posting).
+- `§12 #1` (sale idempotency) → unblocks **FR-OFF-7** (exactly-once posting). **— CLOSED `f08fb08`
+  (Idempotency-Key header); FR-OFF-7's backend dependency is delivered.**
 - `§12 #2` (POS reverse/void) → unblocks **FR-RET-2**, **FR-RET-3** (refund/void/correct at the
-  till).
-- `§12 #3` (tender list) → unblocks **FR-PAY-2..5** (card/mobile/cheque/split/over-tender).
-- `§12 #4` (`unitPrice` override) → unblocks **FR-SELL-5** (manual price override).
+  till). **— CLOSED `f08fb08` for whole-sale (`/reverse`, perm `POS.SALE.VOID`, open session);
+  FR-RET-2/3 whole-sale dependency is delivered. Partial / line-level refunds (§12 #5) still
+  deferred.**
+- `§12 #3` (tender list) → unblocks **FR-PAY-2..5** (card/mobile/cheque/split/over-tender). **—
+  CLOSED `f08fb08` (`tenders[]` list); FR-PAY-2..4 delivered; FR-PAY-5's ledger-change nuance may
+  remain (client computes CASH change).**
+- `§12 #4` (`unitPrice` override) → unblocks **FR-SELL-5** (manual price override). **— RESOLVED BY
+  DESIGN: server-authoritative pricing is a deliberate guarantee, `unitPrice`/`agentId` are now
+  optional/informational. FR-SELL-5 (manual override) remains a non-feature by choice, not a
+  gap-blocked deferral.**
 - Other deferrals not catalogued in §12 but absent from the API: **FR-SELL-8** (forward `agentId`),
   **FR-SELL-6** (rule application on the POS path), **FR-CUST-5** (on-account POS), **FR-SHIFT-7**
   (CASH_IN payout), **FR-SHIFT-12** (session re-open), **FR-STK-3** (lot/serial selection).
