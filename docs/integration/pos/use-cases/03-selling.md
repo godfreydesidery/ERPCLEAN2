@@ -12,10 +12,20 @@ End-to-end scenarios for ringing sales at the till on top of the single sale end
 >
 > **Three facts that shape every selling scenario (don't fight them):**
 > 1. **The server is authoritative on price, VAT and totals.** The `unitPrice` you send on a
->    line is **ignored** ([§12 #4](../12-known-limitations.md#4-unitprice-is-required-but-ignored-no-manual-price-override)); the only discount field honoured is `lineDiscountAmount`.
-> 2. **Tender is a single exact-gross CASH payment.** No card/mobile/cheque, no split, no
->    over-tender/change at the ledger ([§12 #3](../12-known-limitations.md#3-single-exact-cash-tender-only)). Change is a client-side computation from `tenderedAmount`.
-> 3. **There is no idempotency** ([§12 #1](../12-known-limitations.md#1-no-idempotency-on-sale-creation--duplicate-posting-risk)) and **no POS refund/void** ([§12 #2](../12-known-limitations.md#2-no-pos-reversal--refund--void-endpoint)). Treat a timed-out POST as *unknown* and reconcile before retrying.
+>    line is **dropped before pricing** — the server re-derives the unit price from the product's
+>    company-scoped price list and VAT from `tax_rates`, so a buggy/malicious client cannot set
+>    price=0 ([§12 #4](../12-known-limitations.md#4-server-authoritative-pricing--by-design-not-a-limitation)). The only discount field honoured is `lineDiscountAmount`. (Closed in
+>    commit `f08fb08` / ADR-0042; `unitPrice` is now optional and informational.)
+> 2. **Tender defaults to a single exact-gross CASH payment, but you can now split or pay non-cash.**
+>    Send the optional `tenders` list to do card/mobile-money/cheque and/or split tender; omit it for
+>    the legacy single exact-CASH behaviour ([§12 #3](../12-known-limitations.md#3-multi-tender--non-cash-payments--closed-tenders-list)). Change is still a client-side computation from
+>    `tenderedAmount`. (Multi-tender added in commit `f08fb08` / ADR-0042.)
+> 3. **Sales can now be made idempotent, and a whole-sale POS refund/void exists.** Send an
+>    `Idempotency-Key` header on every sale attempt for safe retries ([§12 #1](../12-known-limitations.md#1-sale-idempotency-on-sale-creation--closed-idempotency-key-header)); reverse a whole
+>    POS sale via `POST /pos/sales/uid/{uid}/reverse` while its session is still OPEN
+>    ([§12 #2](../12-known-limitations.md#2-whole-sale-pos-reversal--refund--void--closed-reverse-endpoint)). Both shipped in commit `f08fb08` / ADR-0042. If you omit the `Idempotency-Key`
+>    header you get legacy non-idempotent behaviour, so still reconcile a header-less timed-out POST
+>    before retrying. Partial/line-level refunds remain deferred.
 
 **Permission cheat-sheet for a selling cashier** (check effective codes via
 `GET /api/v1/auth/me`):
@@ -47,7 +57,13 @@ End-to-end scenarios for ringing sales at the till on top of the single sale end
 
 - **Main flow:**
   1. (Optional, advisory) Confirm stock — see UC-C6.
-  2. Ring the sale: `POST /api/v1/pos/sales` ([§09](../09-sales-payments-receipts.md)). Minimal body:
+  2. Ring the sale: `POST /api/v1/pos/sales` ([§09](../09-sales-payments-receipts.md)), sending an `Idempotency-Key` header for
+     safe retries (see below). Minimal body:
+     ```http
+     POST /api/v1/pos/sales
+     Idempotency-Key: a7f3c1e9-2b8d-4f10-9a6c-basket-0042
+     Content-Type: application/json
+     ```
      ```json
      {
        "sessionUid": "pos_sess_7c1e9a2b",
@@ -56,17 +72,25 @@ End-to-end scenarios for ringing sales at the till on top of the single sale end
        "currency": "TZS",
        "lines": [
          { "productId": 1201, "unitId": 9, "quantity": 1,
-           "unitPrice": 0, "lineDiscountAmount": 0 }
+           "lineDiscountAmount": 0 }
        ],
        "tenderedAmount": 5000.00
      }
      ```
      - `currency` must be enabled for the scope (default it to `resolvedDefault` from
        `GET /api/v1/fx/currencies/enabled` — [§04 §5.1](../04-pricing-tax-currency.md)).
-     - `unitPrice` is required by validation (`@NotNull @DecimalMin("0.00")`) but **ignored** —
-       send `0` or the displayed list price; it changes nothing ([§12 #4](../12-known-limitations.md#4-unitprice-is-required-but-ignored-no-manual-price-override)).
+     - **`Idempotency-Key` (HTTP header, optional, ≤80 chars).** Send one opaque value per basket /
+       sale attempt to make the POST safely retryable. A replay with the same key returns the
+       **original** finalised `SalesInvoiceDto` — no duplicate invoice, stock issue, GL/AR posting,
+       payment or outbox event. The key is scoped per company. **Always send it** to get the
+       guarantee; omitting it = legacy non-idempotent behaviour (a blind retry duplicates the sale).
+       See the retry semantics under *Alternate / exception flows* and UC-C8 ([§12 #1](../12-known-limitations.md#1-sale-idempotency-on-sale-creation--closed-idempotency-key-header)).
+     - `unitPrice` is now **optional and informational** — it is dropped before any pricing code, so
+       the server always re-derives the unit price from the product's price list ([§12 #4](../12-known-limitations.md#4-server-authoritative-pricing--by-design-not-a-limitation)). Send it
+       only if you want it for your own receipt display; treat the returned totals as authoritative.
      - `tenderedAmount` is a **receipt-printing aid only**; it is not stored and does not set
-       the payment amount ([§09 §6](../09-sales-payments-receipts.md)).
+       the payment amount ([§09 §6](../09-sales-payments-receipts.md)). For split / non-cash payment, send the optional
+       `tenders` list instead (UC-C4a; [§12 #3](../12-known-limitations.md#3-multi-tender--non-cash-payments--closed-tenders-list)).
   3. On **201** read the finalised `SalesInvoiceDto` from `data`: `invoiceNumber` (`INV-####`),
      `grossTotalAmount` (the amount charged), `netTotalAmount`, `vatTotalAmount`, `taxSummary`,
      `finalisedAt`, `uid`. Print the receipt (UC-C7).
@@ -76,16 +100,28 @@ End-to-end scenarios for ringing sales at the till on top of the single sale end
   - Unknown `sessionUid` / `customerId` / line `productId` / `unitId` → **404**.
   - Product has no price on any price list → **400** `Product has no price on any price list (BR-SALES-03)`.
   - `currency` not enabled for the scope → **422** (`CurrencyNotEnabledException`).
-  - Missing/blank required field, `quantity < 0.0001`, `unitPrice < 0`, empty `lines` → **400**.
+  - Missing/blank required field, `quantity < 0.0001`, empty `lines` → **400**.
+  - **Idempotency replay** (same `Idempotency-Key`, original already committed) → **201** with the
+    **original** `SalesInvoiceDto` (note: the controller hardcodes 201, so identify a replay by
+    matching the returned `uid` to one you already hold — not by a 200-vs-201 distinction).
+  - **Idempotency in-flight** (same key, the winning request hasn't stamped its invoice yet) → **409**
+    `A POS sale with this Idempotency-Key is still in progress; retry shortly.` This 409 is
+    **retryable** — resend the **same** key after a short delay. (A failed/rolled-back sale frees the
+    key, so the next send with that key creates the sale normally.)
   - Lacks `POS.SALE.CREATE`, or cannot act in the session's company → **403**.
   - Wrong `Content-Type` (must be `application/json`) → **415**.
 
-- **Outcome:** a **FINALISED**, fully-paid (single CASH tender = gross) invoice with
-  `origin = POS` and `posSessionId` set, and an allocated `INV-####` number — **synchronously**
-  committed. **Eventually** (outbox poller, ~1s): stock is decremented, and the sales GL + AR
-  journals post. Do **not** assume the ledger is posted at 201 time ([§09 §7](../09-sales-payments-receipts.md)).
+- **Outcome:** a **FINALISED**, fully-paid (single CASH tender = gross, unless you sent `tenders`)
+  invoice with `origin = POS` and `posSessionId` set, and an allocated `INV-####` number —
+  **synchronously** committed. **Eventually** (outbox poller, ~1s): stock is decremented, and the
+  sales GL + AR journals post. Do **not** assume the ledger is posted at 201 time ([§09 §7](../09-sales-payments-receipts.md)).
 
-- **Notes & limitations:** cash-only, exact-gross tender ([§12 #3](../12-known-limitations.md#3-single-exact-cash-tender-only)); no idempotency ([§12 #1](../12-known-limitations.md#1-no-idempotency-on-sale-creation--duplicate-posting-risk)) — on a timeout, reconcile (UC-C8 / [§11](../11-errors-offline-idempotency.md)) before resending; no void/refund ([§12 #2](../12-known-limitations.md#2-no-pos-reversal--refund--void-endpoint)). Tip: keep a client-side dedupe key per basket so a double-tap doesn't fire two POSTs.
+- **Notes & limitations:** defaults to single exact-gross CASH tender, with optional split/non-cash
+  via `tenders` ([§12 #3](../12-known-limitations.md#3-multi-tender--non-cash-payments--closed-tenders-list)); idempotency is available via the `Idempotency-Key` header ([§12 #1](../12-known-limitations.md#1-sale-idempotency-on-sale-creation--closed-idempotency-key-header)) — send
+  it on every attempt, but if you ever omit it, reconcile (UC-C8 / [§11](../11-errors-offline-idempotency.md)) before resending; a
+  whole-sale void/refund exists while the session is OPEN ([§12 #2](../12-known-limitations.md#2-whole-sale-pos-reversal--refund--void--closed-reverse-endpoint)). Tip: derive the
+  `Idempotency-Key` deterministically from the basket so a double-tap reuses the same key and the
+  second POST replays rather than duplicates.
 
 ---
 
@@ -101,9 +137,9 @@ End-to-end scenarios for ringing sales at the till on top of the single sale end
   2. `POST /api/v1/pos/sales` ([§09](../09-sales-payments-receipts.md)) with `lines` ≥ 1:
      ```json
      "lines": [
-       { "productId": 1201, "unitId": 9,  "quantity": 3, "unitPrice": 0, "lineDiscountAmount": 0 },
-       { "productId": 1330, "unitId": 9,  "quantity": 2, "unitPrice": 0, "lineDiscountAmount": 0 },
-       { "productId": 1408, "unitId": 14, "quantity": 1, "unitPrice": 0, "lineDiscountAmount": 0 }
+       { "productId": 1201, "unitId": 9,  "quantity": 3, "lineDiscountAmount": 0 },
+       { "productId": 1330, "unitId": 9,  "quantity": 2, "lineDiscountAmount": 0 },
+       { "productId": 1408, "unitId": 14, "quantity": 1, "lineDiscountAmount": 0 }
      ]
      ```
      - The server prices and VATs **each** line from the price list / `tax_rates`, recomputes
@@ -111,8 +147,9 @@ End-to-end scenarios for ringing sales at the till on top of the single sale end
        `taxSummary` ([§04 §6](../04-pricing-tax-currency.md), [§09 §4](../09-sales-payments-receipts.md)).
      - For carton/case selling, set `unitId` to a **bulk-pack** unit id
        (`GET /api/v1/products/uid/{uid}/bulk-packs` — [§03 §3](../03-catalog-products-units.md)); the server converts to base via `factorToBase`.
-  3. On **201**, the single CASH payment equals the **summed** `grossTotalAmount`. Print the
-     receipt; for the priced per-line block use `GET /api/v1/sales-invoices/uid/{uid}/lines` (UC-C7).
+  3. On **201**, the tender(s) cover the **summed** `grossTotalAmount` — a single CASH payment by
+     default, or your `tenders` list. Print the receipt; for the priced per-line block use
+     `GET /api/v1/sales-invoices/uid/{uid}/lines` (UC-C7).
 
 - **Alternate / exception flows:**
   - The call is **all-or-nothing** (one `@Transactional`): if **any** line fails (unknown
@@ -120,11 +157,13 @@ End-to-end scenarios for ringing sales at the till on top of the single sale end
     rejected and nothing is committed. Re-send the corrected basket.
   - Empty `lines` → **400** (`@NotEmpty`). Otherwise as UC-C1.
 
-- **Outcome:** one finalised multi-line invoice, one CASH tender for the total; async stock
-  issue per line (BOM/composed products explode to stockable components — [§09 §7](../09-sales-payments-receipts.md)) + GL/AR.
+- **Outcome:** one finalised multi-line invoice, the tender(s) covering the total (a single CASH
+  tender by default); async stock issue per line (BOM/composed products explode to stockable
+  components — [§09 §7](../09-sales-payments-receipts.md)) + GL/AR.
 
 - **Notes & limitations:** there is no "add line to an existing POS sale" call — the basket is
-  submitted whole. No partial commit. Same cash-only / no-idempotency / no-void caveats as UC-C1.
+  submitted whole. No partial commit. Same tender (default-CASH, optional split/non-cash) /
+  idempotency-via-header / whole-sale-void capabilities as UC-C1.
 
 ---
 
@@ -187,7 +226,7 @@ End-to-end scenarios for ringing sales at the till on top of the single sale end
   1. Compute the discount as an **absolute money amount** in the document currency.
   2. Put it on the line as `lineDiscountAmount`:
      ```json
-     { "productId": 1201, "unitId": 9, "quantity": 3, "unitPrice": 0, "lineDiscountAmount": 500 }
+     { "productId": 1201, "unitId": 9, "quantity": 3, "lineDiscountAmount": 500 }
      ```
   3. `POST /api/v1/pos/sales` ([§09](../09-sales-payments-receipts.md)). The server applies the discount **before VAT**:
      `rawNet = round(listPrice × qty) − lineDiscountAmount` (floored at 0), then
@@ -202,10 +241,11 @@ End-to-end scenarios for ringing sales at the till on top of the single sale end
   `lineDiscountAmount`, `netAmount`, `vatAmount`, `grossAmount` ([§09 §8](../09-sales-payments-receipts.md)).
 
 - **Notes & limitations:**
-  - **`unitPrice` is ignored — you cannot override the price** ([§12 #4](../12-known-limitations.md#4-unitprice-is-required-but-ignored-no-manual-price-override)). `lineDiscountAmount` is the
-    **only** way to reduce a line at the POS. Express any negotiated/tier/customer/promotion price
-    as a discount, because the POS path does **not** auto-apply tiers/customer-prices/promotions —
-    those endpoints are *advisory display data* ([§04 §3](../04-pricing-tax-currency.md)).
+  - **`unitPrice` is dropped before pricing — you cannot override the price** ([§12 #4](../12-known-limitations.md#4-server-authoritative-pricing--by-design-not-a-limitation)). The server
+    always re-derives the unit price from the price list, so `lineDiscountAmount` is the **only** way
+    to reduce a line at the POS. Express any negotiated/tier/customer/promotion price as a discount,
+    because the POS path does **not** auto-apply tiers/customer-prices/promotions — those endpoints
+    are *advisory display data* ([§04 §3](../04-pricing-tax-currency.md)).
   - **`lineDiscountPercent` is not reachable** from the POS path (the orchestrator forwards only
     `lineDiscountAmount` and passes percent as `null`). Convert a percentage to an absolute amount
     client-side before sending ([§09 §2.2](../09-sales-payments-receipts.md)).
@@ -217,6 +257,84 @@ End-to-end scenarios for ringing sales at the till on top of the single sale end
     0**. `PosSaleServiceImpl` has **no explicit zero-gross guard**, so if you rely on free /
     100%-off sales, confirm the finalise behaviour (and the resulting 0-value invoice/tender) in
     your own environment before shipping.
+
+---
+
+## UC-C4a: Take a split or non-cash payment (multi-tender)
+
+- **Actor:** cashier.
+- **Goal:** settle a sale with more than one payment method, or a single non-cash method
+  (card / mobile money / cheque), instead of the default single exact-CASH tender.
+- **Preconditions:** as UC-C1. (Shipped in commit `f08fb08` / ADR-0042; instrument refs per
+  ADR-0041.)
+
+- **Main flow:**
+  1. Build the basket exactly as UC-C1/UC-C2.
+  2. Add the optional **`tenders`** array (`List<PosTender>`). Each tender carries `tenderType`,
+     `amount`, an optional `reference`, plus the relevant instrument ref: `cashBankAccountId`,
+     `chequeId`, `mobileMoneyRef`, `cardRef`. Example — split cash + card:
+     ```json
+     {
+       "sessionUid": "pos_sess_7c1e9a2b",
+       "customerId": 55,
+       "agentId": 7,
+       "currency": "TZS",
+       "lines": [ { "productId": 1201, "unitId": 9, "quantity": 1, "lineDiscountAmount": 0 } ],
+       "tenders": [
+         { "tenderType": "CASH", "amount": 2000.00, "cashBankAccountId": 31 },
+         { "tenderType": "CARD", "amount": 3000.00, "cardRef": "auth-7741" }
+       ]
+     }
+     ```
+  3. `POST /api/v1/pos/sales` ([§09](../09-sales-payments-receipts.md)) (send an `Idempotency-Key` as in UC-C1). The service loops
+     every tender into a payment, forcing each to the request `currency`. The **sum of tenders must
+     be ≥ the gross total** (validated). On **201** the invoice is finalised and fully paid.
+
+- **Alternate / exception flows:**
+  - Tender sum **< gross total** → **400** (validation).
+  - **Omitting `tenders`** keeps the legacy behaviour: one exact-gross **CASH** payment (UC-C1).
+  - Otherwise as UC-C1 (unknown ids → 404; unpriced product → 400; idempotency 201/409 cases; etc.).
+
+- **Outcome:** a finalised invoice settled by the supplied tenders; `GET /sales-invoices/uid/{uid}/payments`
+  returns one row per tender.
+
+- **Notes & limitations:** all tenders are forced to the document `currency`. Over-tender (sum >
+  gross) is accepted; compute and print change client-side as usual — the POS path does not write a
+  ledger `changeAmount`.
+
+---
+
+## UC-C4b: Reverse / refund a whole POS sale
+
+- **Actor:** cashier / shift supervisor (needs `POS.SALE.VOID`, auto-granted to `ORG_ADMIN`).
+- **Goal:** fully reverse (refund) a POS sale rung in error or returned in full, while its till is
+  still open. (Shipped in commit `f08fb08` / ADR-0042.)
+- **Preconditions:**
+  - Caller holds **`POS.SALE.VOID`** (scoped on the invoice `uid`).
+  - The invoice is **POS-origin** (has a `posSessionId`) and **FINALISED**.
+  - Its originating **session is still OPEN** (not CLOSED/RECONCILED).
+
+- **Main flow:**
+  1. `POST /api/v1/pos/sales/uid/{uid}/reverse` with body `{ "reason": "<text>" }` (`reason`
+     is `@NotBlank`) → **204 No Content**.
+  2. The reversal acts as a **full refund**: it reverses revenue + VAT + cash (POS cash sale, no AR
+     leg), reverses the stock issue + restores inventory valuation, and posts DR Inventory / CR COGS.
+  3. The reversed sale **automatically drops out of the session's expected cash (drawer)** at the
+     X/Z-read — no separate payout entry is needed.
+
+- **Alternate / exception flows:**
+  - Not POS-origin, not FINALISED, or the session is already CLOSED/RECONCILED → **409**. A sale on a
+    closed/reconciled session must be handled via the **back-office invoice void** on `/sales-invoices`,
+    where the cash difference is a reconciled-variance matter, not a till refund.
+  - Lacks `POS.SALE.VOID` (on this invoice's scope) → **403**.
+  - Unknown `uid` → **404**; blank `reason` → **400**.
+
+- **Outcome:** the sale is fully reversed; stock and the ledger are restored and the till no longer
+  expects that cash.
+
+- **Notes & limitations:** **whole-sale only** — **partial / line-level refunds are NOT supported**
+  (explicitly deferred by ADR-0042; they need a credit-note-by-line path). For a partial return,
+  use the back-office returns/credit-note flow ([§10](../10-returns-refunds.md)).
 
 ---
 
@@ -324,7 +442,7 @@ End-to-end scenarios for ringing sales at the till on top of the single sale end
 
 - **Outcome:** a complete receipt. To avoid two extra round-trips, you may build the line block
   from your submitted basket — but the **lines** endpoint is the authoritative source for the
-  server-snapshotted price/VAT (which may differ from your `unitPrice`, per [§12 #4](../12-known-limitations.md#4-unitprice-is-required-but-ignored-no-manual-price-override)).
+  server-snapshotted price/VAT (which may differ from your `unitPrice`, per [§12 #4](../12-known-limitations.md#4-server-authoritative-pricing--by-design-not-a-limitation)).
 
 - **Notes & limitations:**
   - The POS **invoice number is `INV-####`** (the shared sales sequence) — there is **no separate
@@ -336,9 +454,11 @@ End-to-end scenarios for ringing sales at the till on top of the single sale end
     the lines endpoint) always carries the prices/VAT/totals; to print a gift receipt simply **omit
     the price columns** (and totals) when you render — there is no separate "gift receipt" mode on
     the API.
-  - **A POS receipt is never "refunded" server-side**, because the POS has no refund/void
-    ([§12 #2](../12-known-limitations.md#2-no-pos-reversal--refund--void-endpoint)). A reprint
-    therefore always reflects the **original** sale — there is no reversed/refunded state to render.
+  - **A whole-sale POS refund/void now exists** (`POST /pos/sales/uid/{uid}/reverse` while the
+    session is OPEN — [§12 #2](../12-known-limitations.md#2-whole-sale-pos-reversal--refund--void--closed-reverse-endpoint)). The reversal returns 204 and reverses revenue/VAT/cash + restores
+    stock; it does not stamp the original invoice with a refunded flag the receipt can render, so a
+    reprint still shows the original sale. If you reverse a sale, render the refund from your own
+    record of the `/reverse` call rather than expecting a reversed state on the invoice DTO.
 
 ---
 
@@ -361,10 +481,13 @@ End-to-end scenarios for ringing sales at the till on top of the single sale end
      row's `uid`, then continue as above.
 
 - **Reconciliation use (after a timed-out sale):**
-  1. List the recent invoices for the company/time-window with the search above and check whether a
-     **FINALISED** invoice already matches the basket **before** retrying the POST
-     ([§09 §10](../09-sales-payments-receipts.md), [§11](../11-errors-offline-idempotency.md)). This is the prescribed mitigation for the missing
-     idempotency ([§12 #1](../12-known-limitations.md#1-no-idempotency-on-sale-creation--duplicate-posting-risk)).
+  1. **Preferred:** simply re-send the original POST with the **same `Idempotency-Key`** — a replay
+     returns the original invoice and creates nothing new ([§12 #1](../12-known-limitations.md#1-sale-idempotency-on-sale-creation--closed-idempotency-key-header), UC-C1). If you get the
+     retryable **409** "still in progress", wait briefly and resend the same key.
+  2. **Fallback (only if you omitted the header):** list the recent invoices for the
+     company/time-window with the search above and check whether a **FINALISED** invoice already
+     matches the basket **before** retrying the POST ([§09 §10](../09-sales-payments-receipts.md), [§11](../11-errors-offline-idempotency.md)) — the legacy
+     non-idempotent path duplicates a blind retry.
 
 - **Alternate / exception flows:** **403** without `SALES.INVOICE.VIEW` or for an invoice outside
   your scope; **404** for an unknown uid; **400** if `companyId` is missing on the list call.
@@ -375,8 +498,9 @@ End-to-end scenarios for ringing sales at the till on top of the single sale end
 - **Notes & limitations:** there is **no POS-specific** "list my session's sales" endpoint — use
   the shared `/api/v1/sales-invoices` list (filter client-side; POS sales carry `origin=POS` but
   the list does not expose an `origin` query filter). The list does not return lines/payments —
-  fetch those per uid. Reprinting does **not** reverse or modify anything; there is **no
-  void/refund** at the POS ([§12 #2](../12-known-limitations.md#2-no-pos-reversal--refund--void-endpoint)).
+  fetch those per uid. Reprinting itself does **not** reverse or modify anything; to actually reverse
+  a POS sale use the whole-sale `POST /pos/sales/uid/{uid}/reverse` while its session is OPEN
+  ([§12 #2](../12-known-limitations.md#2-whole-sale-pos-reversal--refund--void--closed-reverse-endpoint)).
 
 ---
 
@@ -402,14 +526,14 @@ End-to-end scenarios for ringing sales at the till on top of the single sale end
   on the server, a lost/closed client app loses the parked sale.)
 
 - **Notes & limitations:**
-  - This is **absent from the API**, not a [§12](../12-known-limitations.md) limitation — there is
-    simply no park/draft endpoint to call (cf. void/refund in
-    [§12 #2](../12-known-limitations.md#2-no-pos-reversal--refund--void-endpoint), which *is* a
-    catalogued gap). Treat it like the other "not supported at POS today" rows.
+  - This is **absent from the API** — there is simply no park/draft endpoint to call. Treat it like
+    the other "not supported at POS today" rows. (Unlike park/draft, whole-sale void/refund is now
+    shipped — [§12 #2](../12-known-limitations.md#2-whole-sale-pos-reversal--refund--void--closed-reverse-endpoint).)
   - The recommended **server fix** would be a draft-sale / hold endpoint (persist an un-finalised
     basket and recall it by uid), distinct from the one-shot `POST /pos/sales` finalise.
-  - Do **not** try to emulate "hold" by posting a sale and reversing it — there is no POS
-    void/refund ([§12 #2](../12-known-limitations.md#2-no-pos-reversal--refund--void-endpoint)).
+  - Do **not** try to emulate "hold" by posting a sale and reversing it — even though a whole-sale
+    `POST /pos/sales/uid/{uid}/reverse` now exists ([§12 #2](../12-known-limitations.md#2-whole-sale-pos-reversal--refund--void--closed-reverse-endpoint)), it is a refund, not a
+    park mechanism, and it perturbs stock/cash/GL; hold the basket in client state instead.
 
 ---
 
@@ -440,10 +564,11 @@ End-to-end scenarios for ringing sales at the till on top of the single sale end
     this **is** a re-login: send the cashier back through `POST /api/v1/auth/login`
     ([§01](../01-authentication-and-permissions.md)); the held basket survives if you kept it in
     local state.
-  - Beware retrying a **`POST /pos/sales`** that 401'd: the sale may already have committed before
-    the token check elsewhere — there is **no idempotency**
-    ([§12 #1](../12-known-limitations.md#1-no-idempotency-on-sale-creation--duplicate-posting-risk)),
-    so reconcile via the invoice list (UC-C8) before resending, exactly as for a network drop.
+  - Retrying a **`POST /pos/sales`** that 401'd is safe **if you sent an `Idempotency-Key`**: resend
+    with the new access token **and the same key** — a replay returns the original invoice and creates
+    nothing new ([§12 #1](../12-known-limitations.md#1-sale-idempotency-on-sale-creation--closed-idempotency-key-header)). If you omitted the header, the sale may already have committed before the
+    token check, so reconcile via the invoice list (UC-C8) before resending, exactly as for a network
+    drop.
 
 - **Outcome:** the cashier rings continuously across token expiry; the only user-visible effect of a
   well-built client is a momentary pause while the token refreshes.
@@ -456,19 +581,28 @@ End-to-end scenarios for ringing sales at the till on top of the single sale end
 
 ---
 
+## Recently shipped (commit `f08fb08` / ADR-0042)
+
+Four previously-catalogued gaps are now **closed** on the POS endpoint. They are no longer in the
+"Not supported" table below; the use cases above show how to use them:
+
+| Capability | How | Use case / reference |
+|---|---|---|
+| **Idempotent / safe-retry sale** | Send the optional `Idempotency-Key` HTTP header (≤80 chars) per sale attempt; a replay returns the original invoice (201) and creates nothing new; in-flight duplicate gets a retryable 409. | UC-C1, UC-C8 ([§12 #1](../12-known-limitations.md#1-sale-idempotency-on-sale-creation--closed-idempotency-key-header)) |
+| **Whole-sale void / refund** | `POST /pos/sales/uid/{uid}/reverse` (`POS.SALE.VOID`) while the session is still OPEN. | UC-C4b ([§12 #2](../12-known-limitations.md#2-whole-sale-pos-reversal--refund--void--closed-reverse-endpoint)) |
+| **Split / non-cash tender (card, mobile money, cheque)** | Send the optional `tenders` list; sum must be ≥ gross. | UC-C4a ([§12 #3](../12-known-limitations.md#3-multi-tender--non-cash-payments--closed-tenders-list)) |
+| **Server-authoritative pricing** | `unitPrice` is now optional and dropped before pricing; the server re-derives price + VAT, so a client cannot set price=0. | UC-C1, UC-C4 ([§12 #4](../12-known-limitations.md#4-server-authoritative-pricing--by-design-not-a-limitation)) |
+
 ## Not supported today (selling scenarios you will be asked for)
 
-These are real retail needs that the **POS endpoint does not provide**. They are listed so you can
-plan around them; each cites the [§12](../12-known-limitations.md) gap and the closest workaround.
+These are real retail needs that the **POS endpoint still does not provide**. They are listed so you
+can plan around them; each cites the reference and the closest workaround.
 
 | Scenario | Status | Why / reference | Closest workaround today |
 |---|---|---|---|
-| **Void / refund / reverse a POS sale** | **Not supported** | No POS reverse endpoint; the general returns path needs a `deliveryUid`+`deliveryLineUid`, but a POS sale is a DIRECT-origin invoice with **no delivery**, so it can't be returned there ([§12 #2](../12-known-limitations.md#2-no-pos-reversal--refund--void-endpoint), [§10](../10-returns-refunds.md)). | Back-office correcting journal; a session **payout** records cash leaving the till but posts **no** stock/VAT/revenue/AR reversal — the ledger stays overstated. |
-| **Card / mobile-money / cheque tender** | **Not supported** | POS hard-codes a single `TenderType.CASH` payment for the exact gross ([§12 #3](../12-known-limitations.md#3-single-exact-cash-tender-only)). | None at the POS. Multi/alt-tender exists only on the `/api/v1/sales-invoices` draft flow (different integration). |
-| **Split tender (part cash + part card)** | **Not supported** | Single exact-gross CASH payment only ([§12 #3](../12-known-limitations.md#3-single-exact-cash-tender-only)). | As above. |
-| **Over-tender with change recorded at the ledger** | **Not supported** | Payment equals gross exactly; no `changeAmount` is written on the POS path ([§09 §6](../09-sales-payments-receipts.md), [§12 #3](../12-known-limitations.md#3-single-exact-cash-tender-only)). | Compute and print change client-side: `tenderedAmount − grossTotalAmount`. |
-| **Manual price override at the till** | **Not supported** | `unitPrice` is required but ignored; no POS price-override permission/path ([§12 #4](../12-known-limitations.md#4-unitprice-is-required-but-ignored-no-manual-price-override)). | Express the reduction as `lineDiscountAmount` (UC-C4). |
+| **Partial / line-level refund** | **Not supported** | Reversal is **whole-sale only**; per-line refunds are explicitly **deferred** by ADR-0042 (they need a credit-note-by-line path) ([§12 #2](../12-known-limitations.md#2-whole-sale-pos-reversal--refund--void--closed-reverse-endpoint), [§10](../10-returns-refunds.md)). | Reverse the whole sale (UC-C4b) and re-ring the kept lines; or use the back-office returns/credit-note flow. |
+| **Over-tender with change recorded at the ledger** | **Not supported** | No `changeAmount` is written on the POS path even with multi-tender ([§09 §6](../09-sales-payments-receipts.md), [§12 #3](../12-known-limitations.md#3-multi-tender--non-cash-payments--closed-tenders-list)). | Compute and print change client-side: `tenderedAmount − grossTotalAmount`. |
+| **Manual price override at the till** | **Not supported** | `unitPrice` is dropped before pricing (server is authoritative); no POS price-override permission/path ([§12 #4](../12-known-limitations.md#4-server-authoritative-pricing--by-design-not-a-limitation)). | Express the reduction as `lineDiscountAmount` (UC-C4). |
 | **Auto-applied tiers / customer prices / promotions on the sale** | **Not supported** | The POS path prices from the product's price-list row only; pricing rules are advisory display data ([§04 §3](../04-pricing-tax-currency.md)). | Read the rule, then reflect the negotiated price as `lineDiscountAmount`. |
-| **Sell "on account" to a credit customer** | **Not supported** | POS always rings a fully-paid CASH sale regardless of `customerKind` ([§05](../05-customers.md#how-customer-credit-interacts-with-pos)). | Use the back-office `/api/v1/sales-invoices` credit flow. |
+| **Sell "on account" to a credit customer** | **Not supported** | POS always rings a fully-paid sale regardless of `customerKind` ([§05](../05-customers.md#how-customer-credit-interacts-with-pos)). | Use the back-office `/api/v1/sales-invoices` credit flow. |
 | **Attribute the invoice to an arbitrary agent** | **Not supported** | POS forwards `agentUid=null`; the invoice agent defaults to the logged-in user (UC-C5). | Have the target agent be the authenticated user; or use the back-office draft flow (`CreateSalesInvoiceRequest.agentUid`). |
-| **Idempotent / safe-retry sale** | **Not supported** | No `Idempotency-Key`/client ref on `POST /pos/sales`; `X-Request-Id` is log-correlation only ([§12 #1](../12-known-limitations.md#1-no-idempotency-on-sale-creation--duplicate-posting-risk)). | Treat timeouts as *unknown*; reconcile via the invoice list (UC-C8) before resending; keep a per-basket client dedupe key. |

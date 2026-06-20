@@ -17,7 +17,7 @@ Everything below is grounded in the actual backend:
 | Session path | `com.erp.api.PosSessionController` |
 | Till path | `com.erp.api.PosTillController` |
 | Sale DTO | `com.erp.modules.sales.domain.dto.PosSaleRequest` |
-| Idempotency | *None — verified absent across the whole sale path (see [§4](#4-idempotency-the-honest-truth)).* |
+| Idempotency | **`Idempotency-Key` header** → table `pos_sale_idempotency` (Flyway `V70`), `com.erp.modules.sales.repository.PosSaleIdempotencyRepository` (see [§4](#4-idempotency-provided)). Shipped in commit `f08fb08` / ADR-0042. |
 
 All endpoints are versioned under the fixed prefix `/api/v1` (path-based versioning only — no header
 or media-type negotiation). The POS base paths are `/api/v1/pos/sales`, `/api/v1/pos/sessions`,
@@ -87,7 +87,7 @@ These are the statuses an external POS client can actually receive, mapped from
 | `409 Conflict` | A business-state or concurrency conflict. **Sub-cases differ — see [§2.1](#21-the-409-family-the-one-that-matters-for-pos).** | `ConflictException`, `IllegalStateException`, optimistic-lock failures, and DB unique/FK violations (`23505`/`23503`). |
 | `415 Unsupported Media Type` | Wrong `Content-Type`. | `HttpMediaTypeNotSupportedException` → `"Content-Type not supported. Use application/json."` **POS clients MUST send `Content-Type: application/json`.** |
 | `422 Unprocessable Entity` | Currency not enabled for the company/branch scope. | `CurrencyNotEnabledException` (ADR-0039). Relevant if a POS sale's `currency` is not enabled for the session's company. |
-| `500 Internal Server Error` | Unexpected server fault — **safe to retry once**, but treat as ambiguous (see [§4](#4-idempotency-the-honest-truth)). | Uncaught `NullPointerException` or any other `Exception` → generic `"An unexpected error occurred."` The exception text is never echoed; the full stack is logged server-side with MDC (`requestId`, user, company, branch). |
+| `500 Internal Server Error` | Unexpected server fault — **safe to retry with the SAME `Idempotency-Key`** (see [§4](#4-idempotency-provided)). | Uncaught `NullPointerException` or any other `Exception` → generic `"An unexpected error occurred."` The exception text is never echoed; the full stack is logged server-side with MDC (`requestId`, user, company, branch). |
 
 ### 2.1 The 409 family (the one that matters for POS)
 
@@ -99,6 +99,7 @@ sub-cases, because one is **terminal** and the other is **retryable**:
 | **Domain-rule violation** (`ConflictException`) | `"POS session <uid> is not OPEN."` | **No** | The session must be re-opened (or a new one opened). Do not auto-retry the sale; surface to the cashier. |
 | **Business-state conflict** (`IllegalStateException`) | `"Cannot finalise an invoice with no lines."`, `"Tenders under-cover the gross total..."`, `"Credit limit exceeded for customer <uid>. ... Requires SALES.CREDIT.OVERRIDE permission."` | **No** | The request itself is wrong (empty cart, under-tender, over-limit). Fix the request / obtain override; do not blind-retry. |
 | **Optimistic-lock conflict** (`OptimisticLockingFailureException` / `StaleObjectStateException` / jakarta `OptimisticLockException`) | `"This record was modified by another transaction. Please reload and try again."` | **Yes (transient)** | Reload the affected resource and retry. Expected under contention (e.g. concurrent stock-on-hand). |
+| **Idempotency-key in progress** (sale path only) | `"A POS sale with this Idempotency-Key is still in progress; retry shortly."` | **Yes (transient)** | A concurrent in-flight duplicate caught the original sale after it reserved the key but before it stamped the invoice uid. Resend the **same** `Idempotency-Key` after a short delay; you will receive the winner's original invoice. See [§4](#4-idempotency-provided). |
 | **DB unique violation** (`23505`) | `"A record with the same unique identifier already exists."` | No | Conflicting state already exists. |
 | **DB FK violation** (`23503`) | `"The referenced record does not exist or has been removed."` | No | A referenced row is missing/removed. |
 
@@ -106,7 +107,8 @@ sub-cases, because one is **terminal** and the other is **retryable**:
 > `IllegalStateException`, which `GlobalExceptionHandler.handleIllegalState` maps to **409**, not
 > 400. So a POS client that treats *all* 409s as "transient, retry" will hammer the server on a
 > genuinely rejected sale. **Match on the message family above, or simpler: only auto-retry a 409
-> whose message is exactly the optimistic-lock string.**
+> whose message is exactly the optimistic-lock string or the idempotency-key "still in progress"
+> string** — and, for the latter, only ever resend the *same* `Idempotency-Key`.
 
 ---
 
@@ -121,22 +123,38 @@ example in the envelope, and the notable errors for that endpoint. Send
 * **Permission:** `POS.SALE.CREATE` (`@PreAuthorize("@perm.has('POS.SALE.CREATE')")`).
 * **Success status:** `201 Created`. Body is a `SalesInvoiceDto` (finalised invoice, for receipt
   printing).
+* **Request header (optional but strongly recommended):** `Idempotency-Key` — an opaque string,
+  `<=80` chars, **per company**. Sending it makes a retry of the *same* logical sale return the
+  **original** invoice instead of double-posting (ADR-0042 / commit `f08fb08`). Omitting it falls
+  back to the legacy non-idempotent behaviour where a blind retry creates a duplicate sale. See
+  [§4](#4-idempotency-provided) for the full contract.
 * **Request body** (`PosSaleRequest`):
 
 | Field | Type | Constraint |
 | --- | --- | --- |
 | `sessionUid` | `String` | `@NotBlank` |
 | `customerId` | `Long` | `@NotNull` |
-| `agentId` | `Long` | `@NotNull` |
+| `agentId` | `Long` | optional (`@NotNull` relaxed, ADR-0042 D-4) — informational; the sale is recorded against the logged-in cashier |
 | `currency` | `String` | `@NotBlank` |
 | `lines` | `List<LineItem>` | `@NotEmpty @Valid` |
+| `tenders` | `List<PosTender>` | optional `@Valid` — split / non-cash tenders (ADR-0042 D-3); omit for single exact-CASH. See the [sales & payments page](09-sales-payments-receipts.md). |
 | `tenderedAmount` | `BigDecimal` | optional — receipt-only, **not stored** on the invoice |
 | `notes` | `String` | `@Size(max = 500)` |
 
 `LineItem`: `productId` (`Long`, `@NotNull`), `unitId` (`Long`, `@NotNull`),
 `quantity` (`BigDecimal`, `@NotNull @DecimalMin("0.0001")`),
-`unitPrice` (`BigDecimal`, `@NotNull @DecimalMin("0.00")` — client-submitted; validated against list
-price by the service), `lineDiscountAmount` (`BigDecimal`, optional).
+`unitPrice` (`BigDecimal`, **optional and IGNORED** — `@NotNull` was relaxed (ADR-0042 D-4); pricing
+is **server-authoritative**, re-derived from the product's company-scoped price list (`ProductPrice`)
+and VAT from the company's `tax_rates`. The submitted value has **no effect** — a client cannot set
+price `0`. You may still send it for your own receipt display, but treat the **server** totals in the
+returned `SalesInvoiceDto` as authoritative), `lineDiscountAmount` (`BigDecimal`, optional — the
+supported way to express a negotiated reduction).
+
+`PosTender` (each entry, when `tenders` is supplied): `tenderType` (`TenderType` —
+`CASH`/`CARD`/`MOBILE_MONEY`/`CHEQUE`, `@NotNull`), `amount` (`BigDecimal`,
+`@NotNull @DecimalMin("0.0001")`), `reference` (`String`, optional), plus the instrument refs
+`cashBankAccountId`, `chequeId`, `mobileMoneyRef`, `cardRef` (ADR-0041). The tender sum must
+`>=` the gross total (validated).
 
 > **No branch in the body.** Scope comes from the JWT (or `X-Branch-Uid`) and the resolved session's
 > company; `ScopeGuard.assertCanActIn(RequestContext.get(), session.getCompanyId())` enforces it.
@@ -147,6 +165,7 @@ price by the service), `lineDiscountAmount` (`BigDecimal`, optional).
 curl -i -X POST https://erp.example.com/api/v1/pos/sales \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
+  -H "Idempotency-Key: $LOCAL_SALE_ID" \
   -H "X-Request-Id: $(uuidgen)" \
   -d '{
         "sessionUid": "9f3c1d2e-1111-2222-3333-444455556666",
@@ -197,11 +216,12 @@ curl -i -X POST https://erp.example.com/api/v1/pos/sales \
 | `401` | Missing/expired token, or user no longer active. |
 | `403` | Caller lacks `POS.SALE.CREATE`, or cannot act in the session's company. |
 | `404` | Unknown `sessionUid`, `customerId`, `productId`, or `unitId`. |
-| `409` | `"POS session <uid> is not OPEN."`; `"Credit limit exceeded ... Requires SALES.CREDIT.OVERRIDE permission."`; tender under-cover; optimistic-lock (retryable). |
+| `409` | `"POS session <uid> is not OPEN."`; `"Credit limit exceeded ... Requires SALES.CREDIT.OVERRIDE permission."`; tender under-cover; optimistic-lock (retryable); `"A POS sale with this Idempotency-Key is still in progress; retry shortly."` (retryable — resend the SAME key after a short delay). |
 | `415` | Body sent without `application/json`. |
 | `422` | `currency` not enabled for the session's company. |
 
-> **Read [§4](#4-idempotency-the-honest-truth) before you implement retry on this endpoint.**
+> **Read [§4](#4-idempotency-provided) before you implement retry on this endpoint** — sending the
+> same `Idempotency-Key` is now the primary safe-retry mechanism.
 
 ### 3.2 `POST /api/v1/pos/sessions` — open a session
 
@@ -280,50 +300,57 @@ curl -i -X POST https://erp.example.com/api/v1/pos/sessions \
 
 ---
 
-## 4. Idempotency: the honest truth
+## 4. Idempotency: provided
 
-**The server provides NO idempotency or de-duplication for sale creation.** This was verified across
-the entire path, not assumed:
+**The server provides idempotent sale creation** via an optional `Idempotency-Key` request header
+(ADR-0042 / commit `f08fb08`). When you send it and reuse the *same* value on a retry of the *same*
+logical sale, the server returns the **original** invoice — no duplicate invoice, stock issue, GL/AR
+posting, payment, or `SALE_FINALISED` event. This is grounded in the actual backend, not assumed:
 
-* `PosSaleController.processSale` is a plain `@PostMapping` taking `@Valid @RequestBody
-  PosSaleRequest` — there is **no `Idempotency-Key` (or any) header parameter**.
-* `PosSaleRequest` has **no** client-reference, idempotency-key, or dedup field. Its fields are
-  exactly `sessionUid`, `customerId`, `agentId`, `currency`, `lines`, `tenderedAmount`, `notes`
-  (and `LineItem` = `productId`, `unitId`, `quantity`, `unitPrice`, `lineDiscountAmount`).
-* `PosSaleServiceImpl.processSale` performs **no lookup against any prior request key**. Every call
-  mints a brand-new DRAFT invoice via `invoiceService.create(...)` (fresh number allocation) and
-  finalises it.
+* `PosSaleController.processSale` declares
+  `@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey` and passes it
+  to `PosSaleService.processSale(idempotencyKey, request)`.
+* Table `pos_sale_idempotency(company_id, idem_key, invoice_uid)` with `UNIQUE(company_id, idem_key)`
+  (Flyway `V70`), accessed via `PosSaleIdempotencyRepository`.
+* **Reserve-before-process:** a native `INSERT ... ON CONFLICT (company_id, idem_key) DO NOTHING`
+  runs **inside the sale's single transaction BEFORE the invoice is created**. The winner stamps
+  `invoice_uid`; a later send with the same key short-circuits to the stored invoice.
 
-### 4.1 What this means for retries — the duplicate-posting hazard
+> **Verified by `PosSaleIdempotencyRepositoryIT`.**
+
+### 4.1 The header contract — exactly how it behaves
+
+| Aspect | Behaviour |
+| --- | --- |
+| **Header** | `Idempotency-Key` — opaque string, **`<=80` chars**, optional. |
+| **Scope** | **Per company** (namespaced by the authenticated session's company). The key need only be unique within a company; the same value in another company is independent. |
+| **Replay** (same key, original already committed) | Returns the **original finalised `SalesInvoiceDto`** — no second invoice / stock issue / GL/AR / payment / `SALE_FINALISED` event. **A replay still returns HTTP `201`** (the controller hardcodes `CREATED`), so identify a replay by **matching the returned invoice `uid`** to one you already hold — *not* by a 200-vs-201 distinction. |
+| **Concurrent in-flight duplicate** | The duplicate `INSERT` **blocks until the winner commits**, then returns the winner's original invoice. In the narrow window where the marker row exists but `invoice_uid` is not yet stamped, the duplicate gets **`409 "A POS sale with this Idempotency-Key is still in progress; retry shortly."`** — this specific `409` is **retryable**: resend the *same* key after a short delay. |
+| **Omitting the header** | Legacy **non-idempotent** behaviour — a blind retry creates a **duplicate** sale. The client **MUST** send the header to get the guarantee. |
+| **Failed / rolled-back sale** | **Frees the key** — the next send with the same key creates the sale normally. |
+
+> **The body is unchanged.** Idempotency is carried entirely by the header; `PosSaleRequest` itself
+> gained no key field.
+
+### 4.2 What this means for retries — the new primary mechanism
 
 `POST /api/v1/pos/sales` is **partially asynchronous**. The transaction synchronously produces a
-**FINALISED, fully-paid (CASH) invoice** tagged to the session, plus a queued `SALE_FINALISED`
+**FINALISED, fully-paid invoice** tagged to the session, plus a queued `SALE_FINALISED`
 transactional-outbox row. The **stock issue, GL journal, and AR posting are applied asynchronously**
-by the outbox poller (within ~1s, retried on failure). Consequences:
+by the outbox poller (within ~1s, retried on failure). Retry safety:
 
 1. **The ledger is NOT posted when the 201 returns.** Do not assume stock has decremented or GL/AR
-   are posted at response time. They follow eventually.
-2. **A blind retry creates a SECOND invoice.** If your first POST actually committed on the server
-   but the response was lost (network timeout, app crash, radio drop), resending the same body
-   creates a **second finalised invoice** and a **second `SALE_FINALISED` event** → duplicate stock
-   issue + duplicate GL/AR posting. There is no server guard against this.
-3. **The outbox idempotency does NOT save you.** The at-least-once outbox is idempotent on the
-   *consumer* side (handlers dedupe per ADR-0009 D-5/D-6) — that only protects against re-delivery
-   of the **same** event, **not** against two distinct sales rows created by two HTTP POSTs.
-4. **`X-Request-Id` does NOT deduplicate.** `JwtRequestContextFilter` reads `X-Request-Id` (or
-   generates one), puts it in the SLF4J MDC, and echoes it back in the response header. It is a
-   **logging/correlation id only** — it is never consulted for request de-duplication. Sending the
-   same `X-Request-Id` twice still creates two sales.
-
-### 4.2 Client-side rules for safe retries
-
-Because the server will not protect you, the **POS client must own retry safety**:
-
-1. **Never auto-retry `POST /pos/sales` on an ambiguous outcome** (timeout, dropped connection,
-   `500`, or any case where you did not receive a clean `201` *or* a clean terminal 4xx). An
-   ambiguous outcome means "unknown" — the sale may or may not have committed.
-2. **On ambiguity, reconcile before resending.** Before re-sending, query for the sale you may have
-   already created and only resend if it is absent:
+   are posted at response time. They follow eventually. (Idempotency covers the *sale row* and its
+   downstream postings — a replay never re-queues them.)
+2. **Sending the same `Idempotency-Key` on retry is the PRIMARY safe-retry mechanism.** On *any*
+   ambiguous outcome of the *same* logical sale — timeout, dropped connection, `500`, or a `409
+   "...still in progress..."` — **resend the SAME `Idempotency-Key`**. If the original committed you
+   get its invoice back (match on `uid`); if it had not, the sale is created normally. This closes
+   the "server committed but client never learned" window that previously could not be closed.
+3. **Reconcile-before-resend is now the FALLBACK** — only needed when the header was *omitted* (so
+   the guarantee does not apply) and you must establish whether a duplicate already exists. Before
+   re-sending a *keyless* sale, query for the one you may have already created and only resend if it
+   is absent:
    * Confirm the session is still OPEN: `GET /api/v1/pos/sessions/uid/{uid}` (perm
      `POS.SESSION.VIEW`).
    * List the invoices for the company and look for the one you may have just created: `GET
@@ -333,21 +360,25 @@ Because the server will not protect you, the **POS client must own retry safety*
      *which* invoice; use the sales-invoices list to identify the specific one.) If a matching
      finalised invoice already exists, **treat the original as succeeded** — do not resend; reprint
      the receipt from the existing invoice.
-3. **Generate and persist a local client transaction id before the first POST**, and keep it across
-   app restarts. Send it as `X-Request-Id` on **every** attempt of the *same* logical sale (it will
-   not dedupe server-side, but it makes the duplicate findable in the ERP server logs, which helps
-   support reconcile a double-post). Use a fresh id for genuinely new sales.
-4. **Branch retries on HTTP status, not message text** (see [§2.1](#21-the-409-family-the-one-that-matters-for-pos)):
+4. **Generate and persist a durable local sale id before the first POST**, and keep it across app
+   restarts. Use it as the `Idempotency-Key` on **every** attempt of the *same* logical sale, and
+   (optionally) also send it as `X-Request-Id` for log correlation. Use a fresh id for genuinely new
+   sales. Note `X-Request-Id` itself does **not** deduplicate — `JwtRequestContextFilter` only puts
+   it in the SLF4J MDC and echoes it back; only `Idempotency-Key` dedupes.
+5. **Branch retries on HTTP status, not message text** (see [§2.1](#21-the-409-family-the-one-that-matters-for-pos)):
    * `400` / `403` / `404` / `415` / `422` — **terminal**: fix the request, do not retry the same
      bytes.
    * `409` — **retry only** if `errors[0]` is exactly
-     `"This record was modified by another transaction. Please reload and try again."`; otherwise
-     terminal.
-   * `401` — refresh the token (`POST /api/v1/auth/refresh`) or re-login, then retry once.
-   * `500` / network failure — **ambiguous**: go to rule 2 (reconcile) before any resend.
-5. **Make the receipt print idempotent on your side.** The 201 body is the authoritative
-   `SalesInvoiceDto` (`uid`, `invoiceNumber`, totals). Persist it locally keyed by your client
-   transaction id so a reprint never triggers a second POST.
+     `"This record was modified by another transaction. Please reload and try again."` **or**
+     `"A POS sale with this Idempotency-Key is still in progress; retry shortly."` (the latter only
+     by resending the *same* key); otherwise terminal.
+   * `401` — refresh the token (`POST /api/v1/auth/refresh`) or re-login, then retry once **with the
+     same `Idempotency-Key`**.
+   * `500` / network failure — **ambiguous**: resend the **same `Idempotency-Key`** (rule 2). Only if
+     the key was omitted, fall back to reconcile (rule 3).
+6. **Make the receipt print idempotent on your side.** The 201 body is the authoritative
+   `SalesInvoiceDto` (`uid`, `invoiceNumber`, totals). Persist it locally keyed by your sale id so a
+   reprint never triggers a second POST.
 
 ### 4.3 Offline operation
 
@@ -363,45 +394,49 @@ later". Offline POS therefore has hard constraints:
   `dev-in-memory` signing mode the server's key rotates on restart, invalidating all tokens — assume
   reconnection may require a fresh login.
 * **Recommended offline pattern:** queue sales **locally** while offline, each stamped with a
-  durable local client transaction id (rule 3 above). On reconnect, **replay them one at a time**,
-  applying the reconcile-before-resend rule (4.2 #2) to each, so a sale that actually reached the
-  server during a flaky earlier attempt is not posted twice. Do not fire the whole queue in
-  parallel — serialize, and stop on the first terminal error for cashier review.
+  durable local sale id (rule 4 above). On reconnect, **replay them one at a time**, sending that id
+  as the `Idempotency-Key` on **every** attempt — so a sale that actually reached the server during a
+  flaky earlier attempt returns its original invoice instead of double-posting (match on `uid`). Do
+  not fire the whole queue in parallel — serialize, and stop on the first terminal error for cashier
+  review.
 * **Keep your own session clock.** Because the session must be OPEN server-side, a long offline
   period may outlast the cashier's session (it could be closed/reconciled by then). On reconnect,
   re-check `GET /pos/sessions/uid/{uid}` before replaying; if it is no longer OPEN, the queued sales
   cannot be posted to it and must be handled as an exception (open a new session / escalate).
 
-### 4.4 Limitations summary (be honest with your stakeholders)
+### 4.4 Capabilities summary
 
 | Capability | Status today |
 | --- | --- |
-| Server idempotency key for sale create | **Not provided** |
-| Dedup field on `PosSaleRequest` | **None** |
-| `X-Request-Id` used for dedup | **No** (correlation/logging only) |
-| Outbox dedup protects against double-POST | **No** (protects same-event re-delivery only) |
+| Server idempotency key for sale create | **Provided** — `Idempotency-Key` header + `pos_sale_idempotency` (Flyway `V70`), ADR-0042 / `f08fb08` |
+| Idempotency scope | **Per company** (namespaced by the session's company) |
+| Replay returns the original invoice | **Yes** (still HTTP `201` — match by invoice `uid`, not status) |
+| Omitting the header | **Legacy non-idempotent** — a blind retry duplicates the sale |
+| `X-Request-Id` used for dedup | **No** (correlation/logging only — use `Idempotency-Key`) |
+| Outbox dedup protects against double-POST | n/a for HTTP retries — covered by `Idempotency-Key`; the outbox still dedupes same-event re-delivery |
 | Ledger posted synchronously with the 201 | **No** (stock/GL/AR are eventual, ~1s poll) |
 | Offline sale ingest endpoint | **None** |
-| Safe-retry responsibility | **Entirely on the client** |
+| Safe-retry responsibility | **Client sends the key**; the server then guarantees exactly-once |
 
-If your deployment needs guaranteed exactly-once sale posting, that is a **server-side change**
-(adding an idempotency key + dedup store to the sale path) — it does not exist in the current API,
-and no amount of client cleverness fully closes the window between "server committed" and "client
-learned about it". Mitigate with the reconcile-before-resend discipline above.
+With the `Idempotency-Key` header, a deployment **can** get exactly-once sale posting, provided the
+client always sends a durable key per logical sale and resends the *same* key on retry. The only
+residual responsibility on the client is to **generate and persist that key** before the first POST
+and reuse it; if you omit the header you are back to the keyless reconcile-before-resend discipline.
 
 ---
 
 ## 5. Quick reference: status → client action
 
-| Status | Auto-retry same bytes? | Action |
+| Status | Auto-retry? | Action |
 | --- | --- | --- |
-| `201` / `200` | n/a | Persist result locally; reprint from it. |
+| `201` / `200` | n/a | Persist result locally; reprint from it. On a sale, match the returned `uid` to detect an idempotent replay. |
 | `400` | No | Fix the field(s) in `errors[]`; resend corrected. |
-| `401` | After refresh/login | `POST /auth/refresh` then retry once. |
+| `401` | After refresh/login | `POST /auth/refresh` then retry once (reuse the same `Idempotency-Key`). |
 | `403` | No | Cashier lacks permission / wrong scope — escalate. |
 | `404` | No | Bad id/uid — fix and resend. |
 | `409` optimistic-lock | Yes | Reload affected resource, retry. |
+| `409` idempotency "still in progress" | Yes | Resend the **same** `Idempotency-Key` after a short delay. |
 | `409` other | No | Terminal business conflict — surface to cashier. |
 | `415` | No | Set `Content-Type: application/json`. |
 | `422` | No | Use a currency enabled for the company. |
-| `500` / network | **No (ambiguous)** | Reconcile (query for the maybe-created sale) **before** any resend. |
+| `500` / network | **Yes — resend the SAME `Idempotency-Key`** | The key makes it safe (returns the original invoice if it had committed). If the key was omitted, reconcile before any resend. |

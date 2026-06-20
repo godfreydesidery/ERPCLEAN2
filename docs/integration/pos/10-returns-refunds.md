@@ -1,47 +1,143 @@
 # Returns & Refunds
 
 This section explains how an external POS client handles **returns** (giving stock back and crediting the
-customer) and **refunds** (paying cash back out of the till), and — importantly — what the ERP does **not**
-offer at the POS surface.
+customer) and **refunds** (paying cash back out of the till) at the POS surface, and where the back-office
+return path still applies.
 
 Read the shared contract first (envelope, auth, error table, pagination, idempotency). This page only adds
 the returns/refunds specifics and references the shared contract instead of repeating it.
 
 > **TL;DR**
-> There is **no POS return/refund endpoint that reverses a POS sale**. `POST /api/v1/pos/sales` is one-way:
-> it creates and finalises a paid DIRECT invoice. To get the full accounting reversal (stock back in,
-> COGS reversal, customer credit note) you must use the **office-side** `POST /api/v1/sales-returns`, and
-> that endpoint requires a **delivery** — which a pure POS cash sale never has. The only thing the POS
-> session API records is a cash-drawer **payout** of type `REFUND` (`POST /api/v1/pos/sessions/uid/{uid}/payouts`),
-> which adjusts the till's expected cash for reconciliation **but does not touch stock, GL revenue, or AR**.
-> See "What this means for a POS client" below.
+> A POS sale **can** be reversed at the till: `POST /api/v1/pos/sales/uid/{uid}/reverse` (body `{ "reason": "…" }`,
+> permission `POS.SALE.VOID`, **204 No Content**) performs a **whole-invoice reversal** — it reverses
+> revenue/VAT/cash, reverses the stock issue and inventory valuation (DR Inventory / CR COGS), and the
+> reversed sale automatically drops out of the session's expected cash at X/Z-read. Shipped in
+> **commit `f08fb08` (ADR-0042 D-2)**. Preconditions: the invoice must be **POS-origin** and its
+> originating **session still OPEN** (and the invoice FINALISED), else **409** — a sale whose session has
+> already been closed/reconciled is handled by the back-office invoice void on `/sales-invoices`.
+> **Partial / line-level refunds are deferred** (ADR-0042) — only whole-sale reversal exists today.
+> The order-to-cash `POST /api/v1/sales-returns` (stock-in + COGS reversal + AR credit note) still exists
+> for **delivery-backed** invoices, but a pure POS cash sale has no delivery, so use the POS `/reverse`
+> endpoint for those. A cash-drawer **payout** of type `REFUND`
+> (`POST /api/v1/pos/sessions/uid/{uid}/payouts`) remains available for ad-hoc till cash-outs that are
+> *not* tied to a specific sale (it adjusts expected cash for reconciliation but does **not** touch stock,
+> GL revenue, or AR). See "What this means for a POS client" below.
 
 ---
 
-## 1. The three things that are easy to confuse
+## 1. The four things that are easy to confuse
 
-The backend has three distinct, non-overlapping concepts. A POS client developer must keep them apart:
+The backend has four distinct, non-overlapping concepts. A POS client developer must keep them apart:
 
 | Concept | Endpoint | What it actually does |
 |---|---|---|
-| **POS sale** | `POST /api/v1/pos/sales` | Creates + finalises a fully-paid CASH **DIRECT** invoice tagged to the session. One-way; cannot be reversed at this endpoint. |
-| **Sales return / RMA** | `POST /api/v1/sales-returns` | Office-side. Returns stock, reverses COGS, raises an AR **credit note**. Requires a **delivery** + delivery lines. |
-| **POS cash payout (`REFUND`)** | `POST /api/v1/pos/sessions/uid/{uid}/payouts` | A cash-drawer ledger line only. Adjusts the session's expected cash for X/Z reconciliation. **No stock, no GL revenue reversal, no AR, no link to any invoice or product.** |
+| **POS sale** | `POST /api/v1/pos/sales` | Creates + finalises a fully-paid **DIRECT** invoice tagged to the session (single CASH payment, or split/non-cash tenders — see the sale page). Server-authoritative pricing. |
+| **POS sale reversal** | `POST /api/v1/pos/sales/uid/{uid}/reverse` | **The POS refund/void.** Whole-invoice reversal of a POS sale: reverses revenue/VAT/cash, reverses the stock issue + valuation (DR Inventory / CR COGS), and drops the sale out of the till's expected cash. Requires the originating session to still be OPEN. Perm `POS.SALE.VOID`. **204**. (ADR-0042 D-2, commit `f08fb08`.) |
+| **Sales return / RMA** | `POST /api/v1/sales-returns` | Office-side. Returns stock, reverses COGS, raises an AR **credit note**. Requires a **delivery** + delivery lines — so it serves the order-to-cash flow, not pure POS cash sales. |
+| **POS cash payout (`REFUND`)** | `POST /api/v1/pos/sessions/uid/{uid}/payouts` | A cash-drawer ledger line only, **not** tied to any sale. Adjusts the session's expected cash for X/Z reconciliation. **No stock, no GL revenue reversal, no AR, no link to any invoice or product.** Use it for ad-hoc till cash-outs, not for reversing a recorded POS receipt. |
 
-There is **no** code path that:
+So the POS surface **does** now have a first-class reversal: a POS `SalesInvoiceDto` (by its uid) can be
+reversed via `POST /api/v1/pos/sales/uid/{uid}/reverse` (Section 1a). What is **still** missing:
 
-- takes a POS `SalesInvoiceDto` (or its uid) and reverses it;
-- creates a "negative" POS sale;
-- accepts an `Idempotency-Key` to safely retry (see the shared contract — idempotency is **NONE**).
+- a **partial / line-level** POS refund — explicitly **deferred** by ADR-0042 (it needs a
+  credit-note-by-line path); only whole-sale reversal exists today;
+- a reversal of a POS sale whose **session has already closed/reconciled** — that is a back-office invoice
+  void on `/sales-invoices`, where the cash difference is a reconciled-variance matter (see Section 1a
+  preconditions).
 
-`PosSaleController` (`com.erp.api.PosSaleController`) exposes exactly one mapping: `POST /api/v1/pos/sales`
-(`processSale`). `PosSessionController` (`com.erp.api.PosSessionController`) exposes open / get / list /
-**payouts** / close / x-read / reconcile — and nothing else. Neither controller has a `return`, `refund`,
-`reverse`, `void`, or `credit` mapping.
+`PosSaleController` (`com.erp.api.PosSaleController`) now exposes **two** mappings: `POST /api/v1/pos/sales`
+(`processSale`) and `POST /api/v1/pos/sales/uid/{uid}/reverse` (`reverseSale`). `PosSessionController`
+(`com.erp.api.PosSessionController`) exposes open / get / list / **payouts** / close / x-read / reconcile.
+`POST /api/v1/pos/sales` also accepts an optional `Idempotency-Key` header to safely retry (see the shared
+contract — idempotency is now **provided** for the sale endpoint, ADR-0042 D-1).
+
+---
+
+## 1a. Reversing a POS sale at the till (the POS refund/void)
+
+This is the POS-native way to refund or void a mis-rung sale. It is a **whole-invoice reversal** that acts
+as a full refund.
+
+### Endpoint
+
+`POST /api/v1/pos/sales/uid/{uid}/reverse`
+
+- **Controller:** `PosSaleController.reverseSale` → `PosSaleServiceImpl.reverseSale`.
+- **Required permission:** `POS.SALE.VOID`
+  (`@PreAuthorize("@perm.scoped(#uid,'invoice','POS.SALE.VOID')")` — scoped to the **invoice** uid). Seeded
+  by `R__seed_permissions.sql` as *"Reverse / void a POS sale at the till (refund)"* and, like every
+  permission, auto-granted to `ORG_ADMIN`.
+- **Path param:** `uid` — the **POS sale invoice** uid (the `uid` of the `SalesInvoiceDto` returned by the
+  sale endpoint), e.g. `INV-2026-000042`.
+- **Return type:** the controller returns `void` with `@ResponseStatus(NO_CONTENT)` → **HTTP 204**, empty body.
+
+### Request JSON (`com.erp.modules.sales.domain.dto.VoidInvoiceRequest`)
+
+```java
+public record VoidInvoiceRequest(
+        @NotBlank String reason
+) {}
+```
+
+```json
+{ "reason": "Customer changed mind — full refund, receipt INV-2026-000042" }
+```
+
+### What it does (synchronous, single TX)
+
+`PosSaleServiceImpl.reverseSale` re-checks scope and the POS/session preconditions, then delegates to the
+invoice void (`SalesInvoiceServiceImpl.voidInvoice`). The reversal:
+
+- reverses **revenue + VAT + cash** — because a POS sale is a cash sale (no AR leg), the cash leg is
+  credited back out, so there is **no separate payout** to record;
+- reverses the **stock issue** and restores inventory valuation, posting **DR Inventory / CR COGS**;
+- causes the reversed sale to **automatically drop out of the session's expected cash** at X-read / Z-read
+  — no `REFUND` payout entry is needed for a reversal done this way.
+
+### Preconditions (else 409)
+
+1. The invoice must be **POS-origin** — `origin = POS` **and** it carries a `posSessionId`. A non-POS
+   invoice gets `409` ("… is not a POS sale; use the standard invoice void.").
+2. The **originating session must still be OPEN** so the till absorbs the cash refund. If that session is
+   already `CLOSED` / `RECONCILED`, you get `409` — reverse such a sale via the **back-office invoice void**
+   on `/sales-invoices`, where the cash difference is a reconciled-variance matter, not a till refund.
+3. The invoice must be **FINALISED** (a POS sale always finalises, so this normally holds).
+
+### Partial / line-level refunds — DEFERRED
+
+ADR-0042 explicitly **defers** partial and line-level POS refunds (they require a credit-note-by-line
+path). Today only **whole-sale** reversal exists. To refund part of a basket, reverse the whole sale and
+ring a fresh sale for the kept items, per your business policy.
+
+### curl
+
+```bash
+curl -i -X POST \
+  "$BASE/api/v1/pos/sales/uid/INV-2026-000042/reverse" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "reason": "Customer changed mind — full refund" }'
+# → HTTP/1.1 204 No Content
+```
+
+### Notable errors
+
+| Status | When |
+|---|---|
+| **400** | `reason` missing/blank (`@NotBlank`); malformed JSON. |
+| **401** | Missing/invalid/expired bearer token, or user no longer ACTIVE. |
+| **403** | Caller lacks `POS.SALE.VOID`, or is out of scope for the invoice's company. |
+| **404** | `uid` does not resolve to a `SalesInvoice` — `NotFoundException.of("SalesInvoice", uid)`. |
+| **409** | Invoice is not POS-origin; or its originating session is not `OPEN`; or the invoice is not `FINALISED`. |
+| **415** | Wrong `Content-Type`. Always send `application/json`. |
 
 ---
 
 ## 2. Why you cannot run a POS sale through `/api/v1/sales-returns`
+
+> The POS-native reversal in Section 1a is what you use for POS receipts. This section explains why the
+> **office-side** `/api/v1/sales-returns` path is *not* an alternative for a pure POS cash sale — it is
+> only for delivery-backed order-to-cash invoices.
 
 `POST /api/v1/sales-returns` is the real document-level return. Its request DTO
 (`com.erp.modules.sales.domain.dto.CreateSalesReturnRequest`) is:
@@ -71,18 +167,23 @@ no `Delivery`, and no `DeliveryLine`. So there is no `deliveryUid`/`deliveryLine
 plain POS cash sale **cannot** be returned via `/api/v1/sales-returns` at all.
 
 > **Practical consequence:** A back-office return through `/api/v1/sales-returns` is only possible for the
-> standard order-to-cash flow (Sales Order → Delivery → Invoice), **not** for POS-originated invoices.
-> If your deployment needs returns of POS merchandise, that is an operational/back-office decision (e.g.
-> exchange handled as a fresh sale, or a manual credit note / GL adjustment by finance) — there is no
-> first-class API for "return this POS receipt".
+> standard order-to-cash flow (Sales Order → Delivery → Invoice), **not** for POS-originated invoices. But
+> that no longer leaves POS receipts without a reversal: for a POS sale whose session is still OPEN, use the
+> first-class **POS reversal** `POST /api/v1/pos/sales/uid/{uid}/reverse` (Section 1a). For a POS sale whose
+> session has already closed/reconciled, fall back to the **back-office invoice void** on `/sales-invoices`
+> (a reconciled-variance matter). A partial/line-level refund is deferred (ADR-0042), so model that as a
+> reversal-plus-fresh-sale per your business policy.
 
 ---
 
-## 3. The only POS-side mechanism: a cash-drawer payout of type `REFUND`
+## 3. The other POS-side mechanism: a cash-drawer payout of type `REFUND`
 
-When a cashier gives money back to a customer at the till, the **only** thing the POS API records is a
-**payout** on the open session. This is a till-cash ledger entry for reconciliation — it is deliberately
-**not** an accounting reversal.
+The first-class way to refund a recorded POS sale is the reversal in Section 1a (it both pays the cash back
+*and* reverses stock/GL). Separately, the POS session API can record a bare **payout** on the open session
+— a till-cash ledger entry for reconciliation that is deliberately **not** an accounting reversal and is
+**not** tied to any invoice. Use a `REFUND` payout for ad-hoc cash-outs that do **not** correspond to a
+reversible POS sale (e.g. an over-the-counter goodwill cash-back, or a refund of a sale already settled in a
+prior, now-closed session). Prefer the Section 1a reversal whenever the sale and its open session exist.
 
 ### Endpoint
 
@@ -188,16 +289,20 @@ Payouts only matter at session settlement. From `PosSessionServiceImpl`:
   revenue/COGS/AR reversal — it just reduces the cash the till is expected to hold.
 
 So a `REFUND` payout keeps the cash drawer honest at Z-read, but the *merchandise/accounting* side of the
-refund (stock back in, revenue/VAT reversal, customer credit) is **not** handled by it. If your operation
-needs those effects, that is the back-office return path (Section 5), which is unavailable for pure POS
-invoices (Section 2).
+refund (stock back in, revenue/VAT reversal) is **not** handled by it. If you need those effects for a POS
+receipt, use the **POS reversal** (Section 1a) — it handles cash *and* stock/GL, and the reversed sale drops
+out of expected cash on its own (so you do **not** also record a `REFUND` payout for it). The back-office
+return path (Section 5) remains for order-to-cash deliveries only, and is unavailable for pure POS invoices
+(Section 2).
 
 ---
 
-## 5. For reference: the office-side return that POS sales cannot use
+## 5. For reference: the office-side return for order-to-cash deliveries
 
-This is the *real* return mechanism in the ERP. It is documented here so you know what exists and why a POS
-client cannot drive it for POS-originated invoices. Use it only for order-to-cash deliveries.
+This is the document-level return for the **order-to-cash** flow (Sales Order → Delivery → Invoice). It is
+documented here so you know what exists and why a POS client cannot drive it for POS-originated invoices
+(which have no delivery — see Section 2). For POS receipts, use the POS reversal in Section 1a instead. Use
+this endpoint only for order-to-cash deliveries.
 
 ### Endpoint
 
@@ -331,16 +436,25 @@ curl -i -X POST \
 
 ## 6. What this means for a POS client (decision guide)
 
-- **Customer wants cash back at the till, same session:** record a `POST .../payouts` with
-  `payoutType: "REFUND"` so the drawer reconciles. Understand this is **cash-only bookkeeping** — it does
-  *not* put stock back, reverse VAT/revenue, or credit the customer's AR ledger.
-- **You need the full accounting reversal of a POS receipt (stock + GL + credit note):** there is **no API
-  for this against a POS invoice.** A POS invoice has no delivery, so `/api/v1/sales-returns` rejects it.
-  Treat this as an operational/back-office task (finance raises a manual credit note / adjustment), or model
-  a return as a brand-new offsetting sale per your business policy. **Do not** invent or assume a refund
-  endpoint — none exists.
+- **Refund / void a recorded POS sale, session still open:** call
+  `POST /api/v1/pos/sales/uid/{uid}/reverse` with `{ "reason": "…" }` (perm `POS.SALE.VOID`, **204**). This
+  is the full reversal — cash back **and** stock back in **and** revenue/VAT/COGS reversal — and the
+  reversed sale drops out of the drawer's expected cash on its own. Do **not** also record a `REFUND`
+  payout for it (Section 1a).
+- **Customer wants ad-hoc cash back that is *not* a reversible sale** (goodwill cash-out, or a refund of a
+  sale settled in an already-closed session): record a `POST .../payouts` with `payoutType: "REFUND"` so the
+  drawer reconciles. Understand this is **cash-only bookkeeping** — it does *not* put stock back, reverse
+  VAT/revenue, or credit any AR ledger, and is not linked to any invoice.
+- **Refund only part of a POS basket:** there is **no partial / line-level POS refund** — ADR-0042 defers
+  it. Reverse the whole sale (above) and ring a fresh sale for the kept items.
+- **Reverse a POS sale whose session is already closed/reconciled:** the POS `/reverse` endpoint returns
+  `409` in that case. Use the **back-office invoice void** on `/sales-invoices` (a reconciled-variance
+  matter), not a till refund.
 - **You are doing standard order-to-cash (SO → delivery → invoice), not POS:** use `POST /api/v1/sales-returns`
-  with the delivery + delivery-line uids (Section 5). This is the only first-class return in the system.
-- **Retry safety:** there is no idempotency on either `POST /api/v1/pos/sales` or `POST .../payouts`. A
-  blind retry after a network timeout can create a duplicate payout (or a duplicate sale). Implement
-  client-side dedupe; `X-Request-Id` is correlation/logging only and is **not** used for deduplication.
+  with the delivery + delivery-line uids (Section 5). This is the document-level return for delivery-backed
+  invoices; it cannot be used for POS invoices (no delivery).
+- **Retry safety:** `POST /api/v1/pos/sales` now accepts an optional `Idempotency-Key` header — **always
+  send it** and reuse the SAME value on a retry, and the original sale is returned instead of double-posting
+  (ADR-0042 D-1; see the sale page / shared contract). A blind retry **without** the header still creates a
+  duplicate sale. `POST .../payouts` has **no** idempotency, so a blind payout retry can still duplicate —
+  dedupe those client-side. `X-Request-Id` is correlation/logging only and is **not** used for deduplication.

@@ -16,13 +16,23 @@
 > dependency** — never as a silent assumption. The four backend gaps that constrain this
 > part are, in shorthand:
 >
-> - **GAP-1 — no sale idempotency** on `POST /pos/sales` (no `Idempotency-Key`, no dedup
->   field; `X-Request-Id` is logging-only). See §12 #1.
-> - **GAP-2 — no POS reversal / refund / void** endpoint. See §12 #2.
-> - **GAP-3 — single exact CASH tender only** (no card / mobile money / split / change at
->   the ledger). See §12 #3.
-> - **GAP-4 — `unitPrice` ignored; no manual price override** (server-authoritative
->   pricing; reductions only via `lineDiscountAmount`). See §12 #4.
+> - **GAP-1 — sale idempotency: CLOSED (f08fb08, 2026-06-20).** `POST /pos/sales` now accepts
+>   an optional `Idempotency-Key` header (reserve-before-process; replay returns the original
+>   invoice; an in-flight duplicate returns a retryable `409`). Omitting the key is the legacy
+>   path (no dedup), so the reconcile-before-resend flow below is now only the **no-key
+>   fallback**, not the sole option. See §12 #1.
+> - **GAP-2 — whole-sale POS reversal / refund / void: CLOSED (f08fb08, 2026-06-20).**
+>   `POST /pos/sales/uid/{uid}/reverse` (perm `POS.SALE.VOID`, OPEN session) reverses
+>   revenue + VAT + cash + stock + COGS and drops the sale out of the drawer. **Still
+>   deferred:** partial / line-level refunds (closed-session sales use the back-office void).
+>   See §12 #2.
+> - **GAP-3 — multi-tender: CLOSED (f08fb08, 2026-06-20).** `POST /pos/sales` accepts an
+>   optional `tenders[]` list (CASH / CARD / MOBILE_MONEY / CHEQUE, split, sum ≥ gross); a
+>   card / mobile-money / split sale posts real ledger payments. See §12 #3.
+> - **GAP-4 — `unitPrice` resolved by design.** `unitPrice` / `agentId` `@NotNull` is relaxed
+>   (both now optional); `unitPrice` is accepted but ignored — the server re-derives price + VAT.
+>   A manual price override is still not a feature; express reductions via `lineDiscountAmount`.
+>   See §12 #4.
 > - Plus two non-§12 realities used below: **`agentId` is accepted but not forwarded** (the
 >   invoice's agent defaults to the logged-in user — UC-C5), and **no draft / hold / park**
 >   endpoint exists (UC-C9).
@@ -30,6 +40,10 @@
 > **MoSCoW.** Each requirement is tagged **MUST**, **SHOULD**, **COULD**, or
 > **WON'T (v1)**. "MUST" = required for the controlled, attended, cash-only v1 pilot that
 > the current API supports. "WON'T (v1)" items name the backend change they wait on.
+>
+> > **NOTE (2026-06-20):** GAP-1/GAP-2/GAP-3 are now CLOSED (f08fb08). The "cash-only v1
+> > pilot" framing was gated on those gaps — multi-tender, whole-sale reversal, and sale
+> > idempotency now ship. This pilot scope/sequencing should be revisited by the owner.
 >
 > **Acceptance criteria** are written to be atomic and testable. Cross-references use
 > `UC-xx` for use cases and `§NN` for API reference sections.
@@ -61,14 +75,23 @@ latency** around calls whose round-trip it cannot control.
 
 ### 6.2 Reliability & Resilience
 
-This is the most safety-critical group because of **GAP-1 (no server idempotency)**: a lost
-response on a sale that actually committed cannot be safely retried by replaying the bytes.
-The client must own retry safety end to end (§11 §4.2).
+This group is safety-critical for retry handling. **GAP-1 is now CLOSED (f08fb08): the sale
+path accepts an optional `Idempotency-Key` header that makes a replay safe server-side.** When
+the key is **omitted** (legacy path), a lost response on a sale that actually committed still
+cannot be safely retried by replaying the bytes, so the client must own retry safety end to end
+(§11 §4.2) for that fallback. With the key sent, a replay returns the original invoice and an
+in-flight duplicate returns a retryable `409`.
+
+> **NOTE (2026-06-20):** GAP-1 is now CLOSED (f08fb08). The NFR-8/9/10/11 client-owned
+> reconcile-before-resend design below was shaped to *compensate* for the absent server
+> idempotency; with `Idempotency-Key` available it is now the **no-key fallback** rather than
+> the only safe path. The owner should revisit whether the POS adopts the key as the primary
+> retry-safety mechanism.
 
 | ID | MoSCoW | Requirement | Acceptance criteria |
 |----|--------|-------------|---------------------|
 | **NFR-7** | MUST | **Basket persistence across restart, crash, and token refresh.** An uncommitted cart must survive app restart, OS/app crash, and a mid-sale token refresh without data loss. | The current cart (lines, quantities, discounts, customer/agent selection, chosen currency, and the local client-transaction-id from NFR-8) is durably persisted to local storage on every mutation. After a force-kill or device reboot mid-sale, relaunching restores the exact cart. A 401 → refresh (UC-C10, NFR-13) never clears the cart. |
-| **NFR-8** | MUST | **Durable local client-transaction-id per logical sale.** Before the first `POST /pos/sales` attempt, the client generates and persists a local id that is reused as `X-Request-Id` on every retry of the *same* logical sale and survives restarts. | A logical sale has exactly one persisted client-transaction-id; it is sent as `X-Request-Id` on attempt 1 and every subsequent attempt of that same cart; a genuinely new sale uses a fresh id (§11 §4.2 rule 3). Acknowledged: this does **not** dedupe server-side (GAP-1) — it only makes a double-post findable in the ERP logs. |
+| **NFR-8** | MUST | **Durable local client-transaction-id per logical sale.** Before the first `POST /pos/sales` attempt, the client generates and persists a local id that is reused as `X-Request-Id` on every retry of the *same* logical sale and survives restarts. | A logical sale has exactly one persisted client-transaction-id; it is sent as `X-Request-Id` on attempt 1 and every subsequent attempt of that same cart; a genuinely new sale uses a fresh id (§11 §4.2 rule 3). Note (updated 2026-06-20): on the **legacy (no-key) path**, `X-Request-Id` is logging-only and does **not** dedupe server-side — it only makes a double-post findable in the ERP logs. To get true server-side dedup, the client sends the same value as the optional `Idempotency-Key` header (GAP-1 CLOSED, f08fb08), which reserves-before-process and replays the original invoice. |
 | **NFR-9** | MUST | **No blind auto-retry on an ambiguous sale outcome.** On timeout, dropped connection, `500`, or any non-clean outcome, the client must NOT resend the same sale bytes automatically. | Given an ambiguous outcome on `POST /pos/sales`, the client performs **zero** automatic resends. It transitions the sale to a "needs reconcile" state and invokes the reconcile-before-resend flow (NFR-10). A 409 is auto-retried **only** when `errors[0]` is exactly the optimistic-lock string `"This record was modified by another transaction. Please reload and try again."` (§11 §2.1); all other 409/4xx are treated as terminal and surfaced to the cashier. |
 | **NFR-10** | MUST | **Reconcile-before-resend.** Before re-sending a possibly-committed sale, the client must check whether the sale already exists and only resend if it is absent. | On ambiguity, the client (a) confirms the session is still OPEN via `GET /pos/sessions/uid/{uid}` (§08), and (b) queries `GET /sales-invoices?companyId={id}` newest-first and matches on amount + line snapshot + the client-transaction-id / timestamp window (§11 §4.2 rule 2). If a matching finalised invoice exists, the client treats the original as **succeeded**, reprints from that invoice, and does **not** resend. Only when no match is found may the cashier choose to resend. |
 | **NFR-11** | MUST | **Crash recovery to a known state.** After any crash, on relaunch the client must reconcile its persisted state with the server before allowing new sales. | On relaunch with a persisted "in-flight" or "needs reconcile" sale, the client runs NFR-10 before enabling a new sale, and re-checks the active session status; if the session is no longer OPEN it blocks ringing and surfaces an "open a session" path (UC-B1). No new sale can be rung while a prior in-flight sale is unresolved. |
@@ -76,11 +99,14 @@ The client must own retry safety end to end (§11 §4.2).
 | **NFR-13** | MUST | **Transparent token refresh during a shift.** Access-token expiry mid-shift must not interrupt a sale or force a re-login while a valid refresh token exists. | When a protected call returns `401` (or pre-emptively before the 15-min access-token TTL, §01), the client refreshes via `POST /auth/refresh`, **replaces the stored refresh token with the rotated one** (single-use rotation, §01 §4), and retries the original call once (UC-C10). The cart is preserved throughout (NFR-7). If refresh fails (expired/reused token), the client routes to re-login without losing the persisted cart. |
 | **NFR-14** | SHOULD | **Session-clock awareness.** The client must not attempt to post sales to a session that is no longer OPEN. | Before posting (and before replaying a held cart), the client treats a `409 "POS session <uid> is not OPEN."` as terminal for that session, surfaces it, and offers opening a new session (UC-B1, UC-E2); it never loops resends against a non-OPEN session. |
 
-> **Honesty note (Reliability).** No amount of client logic fully closes the
-> "server-committed but client-didn't-learn" window under GAP-1; NFR-8/9/10 mitigate it but
-> guaranteed exactly-once posting is a **backend change** (idempotency key + dedup store on
-> the sale path — §12 #1, §11 §4.4). Likewise, true offline sale posting and at-till
-> refund/void recovery are out of v1 scope pending GAP-1/GAP-2.
+> **Honesty note (Reliability).** On the **legacy (no-key) path**, no amount of client logic
+> fully closes the "server-committed but client-didn't-learn" window; NFR-8/9/10 mitigate it.
+> That backend change has now **landed**: guaranteed exactly-once posting via the optional
+> `Idempotency-Key` header + dedup store on the sale path is **CLOSED (f08fb08, §12 #1)** — the
+> client closes the window by sending the key. Likewise, **at-till whole-sale reversal / refund /
+> void is now available** (`POST /pos/sales/uid/{uid}/reverse`, GAP-2 CLOSED, §12 #2) for
+> OPEN-session sales; **partial / line-level refunds** and **true offline / batch sale posting**
+> remain out of v1 scope (§12 #5, §12 #6, §11 §4.3).
 
 ### 6.3 Security
 
@@ -97,7 +123,7 @@ primary risks.
 | **NFR-19** | MUST | **No sensitive data in client logs.** Client logs/telemetry must not contain credentials, tokens, or full PII. | Passwords and tokens are never logged. Customer PII in logs is minimised/redacted. Log entries reference the correlation id (NFR-26), not raw secrets. |
 | **NFR-20** | MUST | **Immediate effect of account changes.** The client must handle the server disabling/locking an account at any time. | A `401 "User account is no longer active."` (re-checked every request, §01 §3) immediately locks the client out of transacting and routes to login; it is never auto-retried as the same user. |
 | **NFR-21** | SHOULD | **Certificate pinning & secure config.** For production deployments the client should pin the server certificate/CA and protect its configured base URL. | The deployment supports pinning the ERP's certificate/public-key and protects the configured base URL from casual tampering on the device. |
-| **NFR-22** | WON'T (v1) | **Card / PCI scope.** Capturing or transmitting payment-card data through the POS client. | Out of scope for v1. **Dependency:** GAP-3 (the sale path posts a single exact CASH tender only; no card/mobile-money tender reaches the ledger). When card tender is added server-side (a `tenders[]` list on `PosSaleRequest`, §12 #3), any card handling must be designed PCI-DSS-aware — ideally via an external, certified payment terminal so card data never enters the POS client's scope (see NFR-31). v1 records card/mobile-money sales, if any, only as out-of-band cash-drawer bookkeeping with a back-office correction (UC-B10), and the client must label them as such. |
+| **NFR-22** | WON'T (v1) | **Card / PCI scope.** Capturing or transmitting payment-card **data** through the POS client. | Out of scope for v1. **Correction (2026-06-20): GAP-3 is now CLOSED (f08fb08).** The sale path now accepts an optional `tenders[]` list (CASH / CARD / MOBILE_MONEY / CHEQUE, split, sum ≥ gross), so a card / mobile-money / split tender **does** post real ledger payments — the earlier claim that "the sale path posts a single exact CASH tender only; no card/mobile-money tender reaches the ledger" is no longer true. The WON'T-v1 boundary here is **PCI scope** (handling raw card data on the device), which stands independently of GAP-3: any card handling must be designed PCI-DSS-aware — ideally via an external, certified payment terminal so card data never enters the POS client's scope (see NFR-31). <br>> NOTE (2026-06-20): GAP-3 (multi-tender) is now CLOSED (f08fb08) — the dependency this WON'T-v1 was originally bound to has lifted. The PCI-scope WON'T-v1 decision is a deliberate scope boundary, not a gap; the owner should revisit whether/how a certified-terminal card flow enters scope now that `tenders[]` is live. |
 | **NFR-38** | MUST | **Data retention, purge & at-rest encryption of cached data.** The local store holds customer **PII** (names, phone, TIN), **finalised receipts** (`SalesInvoiceDto`), and a **pending-sale queue**, on a **shared, physically exposed** device — so cached business data, not just tokens, must be protected and bounded. | The client (a) defines and enforces a **retention/purge policy** for cached reference data, finalised receipts, and the outbound sale journal (e.g. purge receipts and resolved queue entries after a bounded audit window; never retain indefinitely on the device); (b) **encrypts at rest** the cached PII and reference data, not only the tokens (NFR-15) — using the platform's encrypted store or an app-managed encryption key in the OS keystore; (c) wipes cached PII / queued sales on logout or device de-provisioning, preserving only what an unresolved in-flight sale needs for reconcile (NFR-10). PII in any export honours NFR-19 (redaction). |
 
 ### 6.4 Usability & Accessibility
@@ -130,7 +156,7 @@ incident triage, and must propagate the correlation id the server expects.
 
 | ID | MoSCoW | Requirement | Acceptance criteria |
 |----|--------|-------------|---------------------|
-| **NFR-30** | MUST | **`X-Request-Id` correlation on every call.** Every API request carries a correlation id; for sales it is the durable client-transaction-id. | The client sends `X-Request-Id` on every request and records the value the server echoes back (§01 §0, §11 §4.1). For `POST /pos/sales`, the id is the persisted per-logical-sale id from NFR-8 (so a double-post is traceable across the ERP server logs, even though it is **not** used for dedup — GAP-1). |
+| **NFR-30** | MUST | **`X-Request-Id` correlation on every call.** Every API request carries a correlation id; for sales it is the durable client-transaction-id. | The client sends `X-Request-Id` on every request and records the value the server echoes back (§01 §0, §11 §4.1). For `POST /pos/sales`, the id is the persisted per-logical-sale id from NFR-8 (so a double-post is traceable across the ERP server logs). On the legacy (no-key) path `X-Request-Id` is **not** used for dedup; for true server-side dedup the client also sends it as the optional `Idempotency-Key` header (GAP-1 CLOSED, f08fb08, §12 #1). |
 | **NFR-31** | MUST | **Structured client event/error log.** The client maintains a local, structured log of API outcomes sufficient to reconcile a disputed sale. | Each sale attempt logs: timestamp, session uid, client-transaction-id, HTTP status, and (on success) the returned `invoiceNumber`/invoice `uid`; ambiguous outcomes (NFR-9) are flagged. Logs are PII/secret-safe (NFR-19) and exportable for support. |
 | **NFR-32** | SHOULD | **Health/connectivity indicator.** The cashier can see whether the till is online and authenticated. | A visible indicator reflects connectivity to the ERP and token validity; loss of connectivity is shown promptly and drives the offline-capture behaviour (NFR-12). `GET /health` (public, §01 §1) may back the connectivity probe. |
 
@@ -142,10 +168,10 @@ integration is **client-side**; only the sale data flows to the API.
 | ID | MoSCoW | Requirement | Acceptance criteria |
 |----|--------|-------------|---------------------|
 | **NFR-33** | MUST | **Barcode scanner.** The client must accept input from a barcode scanner (typically HID keyboard-wedge) and resolve scans against the catalog. | A scan populates the scan field and is resolved either from the local catalog cache (NFR-4) or via `GET /products/barcode-lookup?companyId=…&barcode=…` (§03 §4), using the returned `productId` (and `uomId` when present) to add the line; an unknown barcode (404) routes to manual search (NFR-24). |
-| **NFR-34** | MUST | **Receipt printer.** The client must print a sale receipt from the finalised invoice. | After a 201, the client renders and prints a receipt from the `SalesInvoiceDto` (number, lines, server-computed net/VAT/gross, currency, timestamp; change is computed client-side from the optional `tenderedAmount` — *not* stored on the invoice, GAP-3/§12 #3). Receipt rendering is idempotent and reprintable from the locally persisted invoice (UC-C7/UC-C8) without re-POSTing (NFR-7/NFR-8). The client functions if no printer is attached (on-screen / e-receipt fallback). |
+| **NFR-34** | MUST | **Receipt printer.** The client must print a sale receipt from the finalised invoice. | After a 201, the client renders and prints a receipt from the `SalesInvoiceDto` (number, lines, server-computed net/VAT/gross, currency, timestamp; for a cash tender, change is computed client-side from the optional `tenderedAmount` — *not* stored on the invoice, §12 #3). Multi-tender now ships (GAP-3 CLOSED, f08fb08): when a `tenders[]` mix is submitted, the receipt reflects the tender breakdown the client sent. Receipt rendering is idempotent and reprintable from the locally persisted invoice (UC-C7/UC-C8) without re-POSTing (NFR-7/NFR-8). The client functions if no printer is attached (on-screen / e-receipt fallback). |
 | **NFR-35** | SHOULD | **Cash drawer.** The client should trigger the cash drawer on a cash sale and on authorised no-sale opens. | On a completed cash sale (and on a supervisor-authorised drawer open), the client sends the kick signal to a connected drawer; drawer presence is optional and its absence does not block ringing. Drawer activity is the client's responsibility — the API has no drawer endpoint; cash movements that must hit the ledger use session payouts (§08). |
 | **NFR-36** | COULD | **Customer-facing display / scale.** The client may drive a secondary customer display and/or integrate a weighing scale for weight-priced items. | If present, the customer display mirrors the running total/line; a scale supplies quantity for `fractional` units (§03 §5). Both are optional and degrade gracefully when absent. |
-| **NFR-37** | WON'T (v1) | **Integrated card / payment terminal.** Driving an EMV/card terminal and recording its tender on the sale. | Out of scope for v1. **Dependency:** GAP-3 — the sale path records a single exact CASH tender; there is no API field for a card/mobile-money/split tender. When the backend adds a `tenders[]` list to `PosSaleRequest` (§12 #3 recommended fix), the client can integrate an external certified terminal (keeping card data out of POS scope, NFR-22) and submit the tender mix. |
+| **NFR-37** | WON'T (v1) | **Integrated card / payment terminal.** Driving an EMV/card terminal and recording its tender on the sale. | Out of scope for v1. **Correction (2026-06-20): GAP-3 is now CLOSED (f08fb08).** The API field exists — `PosSaleRequest` now accepts a `tenders[]` list (CASH / CARD / MOBILE_MONEY / CHEQUE, split), so the sale path **does** record a card / mobile-money / split tender; the earlier "single exact CASH tender; there is no API field" statement is no longer true. With `tenders[]` live, the client can integrate an external certified terminal (keeping card data out of POS scope, NFR-22) and submit the tender mix. <br>> NOTE (2026-06-20): GAP-3 is now CLOSED (f08fb08) — the dependency this WON'T-v1 was bound to has lifted. The remaining out-of-scope element is the physical EMV-terminal *device integration*, not the ledger field; the owner should revisit whether terminal integration enters scope now. |
 
 ### 6.8 Platform & Build
 
@@ -164,16 +190,23 @@ dictated by a current API gap, with the named backend dependency.
 
 | NFR | Gap | What v1 does instead | Backend change that lifts the constraint |
 |-----|-----|----------------------|------------------------------------------|
-| NFR-8, NFR-9, NFR-10, NFR-11 | **GAP-1** no sale idempotency (§12 #1) | Durable client-tx-id + reconcile-before-resend; no blind retry | Idempotency-Key / `clientSaleRef` + dedup store on `POST /pos/sales` |
-| NFR-12 | No offline ingest (§11 §4.3) | Capture carts offline, replay serially online; never claim final until 201 | A batch/offline sale-ingest endpoint |
-| NFR-22, NFR-37 | **GAP-3** single CASH tender (§12 #3) | Cash-only; card/mobile recorded out-of-band + back-office correction | `tenders[]` on `PosSaleRequest` (card/mobile/split + change) |
-| NFR-6, NFR-27 | **GAP-4** server-authoritative pricing (§12 #4) | Show prices as preview; receipt from server DTO; reductions via `lineDiscountAmount` | Permission-gated `unitPrice` override (`POS.SALE.PRICE_OVERRIDE`) |
+| NFR-8, NFR-9, NFR-10, NFR-11 | **GAP-1 — CLOSED (f08fb08, §12 #1)** | Reconcile-before-resend is now the **no-key fallback**; send the optional `Idempotency-Key` header for server-side dedup (replay returns the original invoice) | **Delivered:** `Idempotency-Key` header + dedup store on `POST /pos/sales` |
+| NFR-12 | No offline ingest (§12 #6, §11 §4.3) | Capture carts offline, replay serially online; never claim final until 201 | A batch/offline sale-ingest endpoint (**still open**, §12 #6) |
+| NFR-22, NFR-37 | **GAP-3 — CLOSED (f08fb08, §12 #3)** | Multi-tender ships; card / mobile-money / split posts real ledger payments. (PCI scope — raw card data on device — remains a deliberate WON'T-v1 boundary, NFR-22.) | **Delivered:** `tenders[]` on `PosSaleRequest` (CASH / CARD / MOBILE_MONEY / CHEQUE, split) |
+| NFR-6, NFR-27 | **GAP-4** server-authoritative pricing — by design (§12 #4) | Show prices as preview; receipt from server DTO; reductions via `lineDiscountAmount` | None planned; `unitPrice` accepted-but-ignored is the intended design (manual override not a feature) |
 
-> Refund/void NFRs are intentionally absent from v1: at-till correction depends on
-> **GAP-2** (no POS reversal/refund/void endpoint, §12 #2). v1 handles a mistaken/returned
-> sale only as a cash-drawer `REFUND` payout (drawer accuracy only) plus a mandatory
-> back-office correcting entry (UC-B9, UC-D1, UC-D2) — see part 2 for the functional
-> treatment.
+> **Correction (2026-06-20): GAP-2 is now CLOSED (f08fb08).** Whole-sale at-till correction is
+> **available** — `POST /pos/sales/uid/{uid}/reverse` (perm `POS.SALE.VOID`, OPEN session)
+> reverses revenue + VAT + cash + stock + COGS and drops the sale out of the drawer (§12 #2).
+> The earlier statement that "at-till correction depends on GAP-2 (no POS reversal/refund/void
+> endpoint)" is no longer true for OPEN-session sales. **Still deferred:** partial / line-level
+> refunds (§12 #5); closed-session sales still use the back-office void path. The cash-drawer
+> `REFUND` payout + back-office correcting entry (UC-B9, UC-D1, UC-D2) remains the treatment for
+> those deferred cases — see part 2 for the functional treatment.
+>
+> > NOTE (2026-06-20): GAP-2 (whole-sale reversal) is now CLOSED (f08fb08). The decision to
+> > keep refund/void NFRs absent from v1 was gated on that gap; the owner should revisit
+> > whether at-till reversal NFRs now belong in v1.
 
 ---
 
@@ -191,7 +224,7 @@ them. Visual design is deliberately out of scope.
 | S1 | **Login** | Authenticate the operator; discover scope & permissions. | `POST /auth/login`, `GET /auth/me`, `GET /auth/my-branches` (§01) | NFR-13, NFR-18, NFR-26 |
 | S2 | **Shift Open** | Pick a till, declare opening float, open the session. | `GET /pos/tills` (§07), `POST /pos/sessions` (§08), `GET /fx/currencies/enabled` (§04) | UC-A4, UC-B1, NFR-4 (catalog pre-load), NFR-26 |
 | S3 | **Sell / Cart** | The main ringing screen: scan/search, build the cart, manage lines. | `GET /products`, `/products/barcode-lookup`, `/units`, `/products/uid/{uid}/bulk-packs` (§03); optional `GET /stock/...` (§06), price previews (§04) | UC-C1–C6, NFR-1, NFR-23, NFR-24, NFR-33 |
-| S4 | **Payment** | Take payment (cash only in v1), compute change locally, confirm. | (none until confirm) | UC-C1, GAP-3 (cash-only), NFR-2 |
+| S4 | **Payment** | Take payment (cash, or a `tenders[]` mix — GAP-3 CLOSED, f08fb08), compute change locally for cash, confirm. | (none until confirm) | UC-C1, §12 #3 (multi-tender), NFR-2 |
 | S5 | **Submit / Receipt** | Finalise the sale, handle the outcome, print the receipt. | `POST /pos/sales` (§09); on ambiguity `GET /pos/sessions/uid/{uid}` + `GET /sales-invoices` (§11) | UC-C7, UC-E2, NFR-7–NFR-11, NFR-34 |
 | S6 | **Lookup / Reprint** | Find and reprint a past sale; check stock; look up/create a customer. | `GET /sales-invoices` (§09), `GET /stock/...` (§06), `GET/POST /customers` (§05) | UC-C8, UC-C3, UC-C6 |
 | S7 | **Session Close & Reconcile** | Mid-shift X-read, close with counted cash, (supervisor) Z-read reconcile. | `GET .../x-read`, `POST .../close`, `POST .../reconcile`, `POST .../payouts` (§08) | UC-B4, UC-B5, UC-B6, UC-B3, NFR-18 |
@@ -228,8 +261,8 @@ them. Visual design is deliberately out of scope.
                    │  cart not empty → "Pay"
                    ▼
             ┌────────────┐
-            │ S4 Payment │  v1: CASH only (GAP-3). Enter tendered → change computed
-            │            │  LOCALLY (tenderedAmount is receipt-only, not stored).
+            │ S4 Payment │  CASH or tenders[] mix (GAP-3 CLOSED, f08fb08). For cash,
+            │            │  change computed LOCALLY (tenderedAmount is receipt-only).
             └─────┬──────┘
                   │  confirm  (control disabled until terminal outcome — NFR-2)
                   ▼
@@ -285,10 +318,14 @@ them. Visual design is deliberately out of scope.
   `GET/POST /customers`, §05, UC-C3). Currency picker is constrained to the enabled list
   (NFR-26). Cart state is durably persisted on every change (NFR-7).
 
-- **S4 Payment.** v1 is **cash only** (GAP-3): the cashier enters the tendered amount and
-  the client computes change **locally** — `tenderedAmount` is receipt-only and is **not**
-  stored on the invoice (§12 #3, §04 §6). The screen must make clear that card/mobile-money
-  are not v1 tenders (any such sale is out-of-band + back-office, UC-B10). The confirm
+- **S4 Payment.** **Multi-tender now ships (GAP-3 CLOSED, f08fb08):** the sale accepts an
+  optional `tenders[]` list (CASH / CARD / MOBILE_MONEY / CHEQUE, split, sum ≥ gross), so
+  card / mobile-money / split tenders post real ledger payments (§12 #3). For a cash tender
+  the cashier enters the tendered amount and the client computes change **locally** —
+  `tenderedAmount` is receipt-only and is **not** stored on the invoice (§04 §6). The earlier
+  "cash only / card-mobile are not v1 tenders / out-of-band + back-office" framing no longer
+  applies to the ledger. **PCI note:** handling raw card *data* on the device remains a
+  deliberate WON'T-v1 boundary (NFR-22) — prefer an external certified terminal. The confirm
   control is disabled the moment it is pressed until a terminal outcome (NFR-2) to prevent
   double submission.
 
@@ -311,7 +348,10 @@ them. Visual design is deliberately out of scope.
   UC-B5); and a **supervisor-only Z-read reconcile** (`POST .../reconcile`, posts variance
   to GL, requires `POS.SESSION.RECONCILE`, UC-B6) — segregated from the cashier per NFR-18.
   Cash drops/refunds during the shift are `POST .../payouts` (UC-B3); note a `REFUND` payout
-  is drawer bookkeeping only and does **not** reverse stock/GL/AR (GAP-2, §12 #2).
+  is drawer bookkeeping only and does **not** reverse stock/GL/AR. For an actual whole-sale
+  reversal (revenue + VAT + cash + stock + COGS, dropped out of the drawer) the client now
+  calls `POST /pos/sales/uid/{uid}/reverse` (perm `POS.SALE.VOID`, OPEN session — GAP-2 CLOSED,
+  f08fb08, §12 #2); partial / line-level refunds remain deferred (§12 #5).
 
 - **S8 Lock.** Reachable from idle timeout (NFR-17) or manual lock. Preserves the cart
   (NFR-7) and the open session; unlock via quick-auth or `POST /auth/refresh`/re-login. A
