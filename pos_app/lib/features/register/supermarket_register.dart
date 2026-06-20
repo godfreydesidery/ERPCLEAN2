@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme.dart';
@@ -29,8 +30,10 @@ class SupermarketRegister extends ConsumerStatefulWidget {
 
 class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
   final _search = TextEditingController();
-  final _searchFocus = FocusNode();
+  late final FocusNode _searchFocus = FocusNode(onKeyEvent: _onSearchKey);
+  final _resultsScroll = ScrollController();
   List<Product> _results = const [];
+  int _resultIndex = -1; // highlighted row in the results dropdown (-1 = none)
   bool _loadingCatalogue = true;
   bool _busyScan = false;
   Timer? _debounce;
@@ -61,6 +64,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
     _debounce?.cancel();
     _search.dispose();
     _searchFocus.dispose();
+    _resultsScroll.dispose();
     super.dispose();
   }
 
@@ -142,7 +146,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
       } else if (hits.isEmpty) {
         showToast(context, 'No match for "$value".');
       } else {
-        setState(() => _results = hits);
+        _setResults(hits);
       }
     } on ApiException catch (e) {
       if (mounted) showToast(context, e.message);
@@ -155,12 +159,12 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
     _debounce?.cancel();
     final q = v.trim();
     if (q.isEmpty) {
-      setState(() => _results = const []);
+      _setResults(const []);
       return;
     }
     // Show instant local matches if the cache is warm, then refine from the
     // server (so search works even before the full catalogue finishes loading).
-    setState(() => _results = _cache.search(q));
+    _setResults(_cache.search(q));
     _debounce = Timer(const Duration(milliseconds: 250), () => _serverSearch(q));
   }
 
@@ -168,16 +172,70 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
     try {
       final hits = await ref
           .read(catalogServiceProvider)
-          .searchProducts(_companyId, q: q, size: 40);
-      if (mounted) setState(() => _results = hits);
+          .searchProducts(_companyId, q: q, size: 60);
+      if (mounted) _setResults(hits);
     } catch (_) {
-      if (mounted) setState(() => _results = _cache.search(q));
+      if (mounted) _setResults(_cache.search(q));
+    }
+  }
+
+  /// Replace the results dropdown and highlight the first row.
+  void _setResults(List<Product> r) {
+    setState(() {
+      _results = r;
+      _resultIndex = r.isEmpty ? -1 : 0;
+    });
+  }
+
+  /// Up/Down arrows move the highlight through the results (Enter adds it,
+  /// handled in the field's onSubmitted). Returns handled so the arrows don't
+  /// move the text cursor instead.
+  KeyEventResult _onSearchKey(FocusNode node, KeyEvent event) {
+    if (_results.isEmpty) return KeyEventResult.ignored;
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final k = event.logicalKey;
+    if (k == LogicalKeyboardKey.arrowDown) {
+      setState(() =>
+          _resultIndex = (_resultIndex + 1).clamp(0, _results.length - 1));
+      _scrollToHighlighted();
+      return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.arrowUp) {
+      setState(() => _resultIndex = _resultIndex <= 0 ? 0 : _resultIndex - 1);
+      _scrollToHighlighted();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  /// Keep the highlighted row visible as the user arrows past the fold.
+  void _scrollToHighlighted() {
+    if (!_resultsScroll.hasClients || _resultIndex < 0) return;
+    const rowH = 40.0;
+    final target = _resultIndex * rowH;
+    final offset = _resultsScroll.offset;
+    final viewport = _resultsScroll.position.viewportDimension;
+    final max = _resultsScroll.position.maxScrollExtent;
+    if (target < offset) {
+      _resultsScroll.jumpTo(target.clamp(0.0, max));
+    } else if (target + rowH > offset + viewport) {
+      _resultsScroll.jumpTo((target + rowH - viewport).clamp(0.0, max));
+    }
+  }
+
+  /// Add the currently-highlighted result (Enter on the search field).
+  void _addHighlighted() {
+    if (_resultIndex >= 0 && _resultIndex < _results.length) {
+      _addProduct(_results[_resultIndex]);
+      _resetSearch();
     }
   }
 
   void _resetSearch() {
     _search.clear();
-    setState(() => _results = const []);
+    _setResults(const []);
     _searchFocus.requestFocus();
   }
 
@@ -297,7 +355,13 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
                     contentPadding: EdgeInsets.symmetric(vertical: 14),
                   ),
                   onChanged: _onChanged,
-                  onSubmitted: _onSubmit,
+                  onSubmitted: (v) {
+                    if (_results.isNotEmpty && _resultIndex >= 0) {
+                      _addHighlighted();
+                    } else {
+                      _onSubmit(v);
+                    }
+                  },
                 ),
               ),
               Padding(
@@ -326,13 +390,17 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
       elevation: 8,
       borderRadius: AppRadii.brSm,
         child: Container(
-          constraints: const BoxConstraints(maxHeight: 320),
+          constraints: const BoxConstraints(maxHeight: 420),
           decoration: BoxDecoration(
             color: AppColors.panel,
             borderRadius: AppRadii.brSm,
             border: Border.all(color: AppColors.xlLineHard),
           ),
-          child: ListView.separated(
+          child: Scrollbar(
+            controller: _resultsScroll,
+            thumbVisibility: true,
+            child: ListView.separated(
+            controller: _resultsScroll,
             shrinkWrap: true,
             padding: EdgeInsets.zero,
             itemCount: _results.length,
@@ -345,7 +413,8 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
                   _addProduct(p);
                   _resetSearch();
                 },
-                child: Padding(
+                child: Container(
+                  color: i == _resultIndex ? AppColors.brandSoft : null,
                   padding: const EdgeInsets.symmetric(
                       horizontal: 12, vertical: 9),
                   child: Row(
@@ -370,6 +439,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
                 ),
               );
             },
+          ),
           ),
         ),
       );
