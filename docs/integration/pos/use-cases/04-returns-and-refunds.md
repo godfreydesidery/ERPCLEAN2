@@ -1,8 +1,8 @@
 # POS Use Cases — Returns & Refunds
 
-End-to-end scenarios for handling returns, refunds, and mis-rung sales at the POS — and an honest account of what the API supports today versus what must be done in the back office.
+End-to-end scenarios for handling returns, refunds, and mis-rung sales at the POS — using the shipped whole-sale reversal endpoint, with the cash-drawer payout and back-office paths as fall-backs.
 
-> **Read this first.** The POS surface has **no reversal, refund, or void endpoint**. `POST /api/v1/pos/sales` is one-way; the office-side `POST /api/v1/sales-returns` needs a `deliveryUid` that a DIRECT POS invoice never produces; and the only POS-side "refund" mechanism is a cash-drawer **payout** that adjusts till reconciliation but touches **no stock, GL revenue/VAT, or AR**. Both use cases below are therefore documented as **Not supported at POS today**, with the operational workaround and the recommended server-side fix. Grounding: [§10 Returns & Refunds](../10-returns-refunds.md) and [§12 Known Limitations](../12-known-limitations.md).
+> **Read this first.** A first-class **whole-sale void/refund** now ships (commit `f08fb08`, ADR-0042): `POST /api/v1/pos/sales/uid/{uid}/reverse` atomically reverses revenue + VAT + cash, reverses the stock issue + restores inventory valuation, and posts DR Inventory / CR COGS — gated by **`POS.SALE.VOID`** and requiring the originating session to still be **OPEN**. The reversed sale automatically drops out of the session's expected cash at X/Z-read; no separate payout is needed. **Partial / line-level refunds are still NOT supported** (explicitly deferred by ADR-0042 — they need a credit-note-by-line path). For a sale whose session is already **CLOSED/RECONCILED**, the till cannot reverse it — that is a back-office invoice-void / reconciled-variance matter. Grounding: [§10 Returns & Refunds](../10-returns-refunds.md) and [§12 Known Limitations](../12-known-limitations.md).
 
 Section links used below: [§08 Sessions](../08-sessions.md) · [§09 Sales, Payments & Receipts](../09-sales-payments-receipts.md) · [§10 Returns & Refunds](../10-returns-refunds.md) · [§11 Errors, Offline & Idempotency](../11-errors-offline-idempotency.md) · [§12 Known Limitations](../12-known-limitations.md).
 
@@ -10,87 +10,83 @@ Section links used below: [§08 Sessions](../08-sessions.md) · [§09 Sales, Pay
 
 ### UC-D1: Customer wants to return goods / get a refund
 
-> ⚠️ **Not supported at POS today.** There is no POS endpoint that reverses a POS sale (stock back in + VAT/revenue reversal + customer credit). The closest the POS offers is a cash-drawer **payout** (`payoutType: "REFUND"`) — drawer bookkeeping only — plus a back-office correcting entry. See **Notes & limitations** and [§12 #2](../12-known-limitations.md).
+> ✅ **Supported at POS for a whole sale** (commit `f08fb08`, ADR-0042). `POST /api/v1/pos/sales/uid/{uid}/reverse` reverses the entire POS sale — stock back in + valuation restored + revenue/VAT/cash reversed (DR Inventory / CR COGS) — provided the originating session is still **OPEN** and you hold **`POS.SALE.VOID`**. The cash drops out of the drawer automatically at X/Z-read, so **no payout is needed**. **Partial (line-level) refunds are NOT supported** — deferred by ADR-0042. If the session is already CLOSED/RECONCILED, fall back to the back-office paths in **Notes & limitations**. See [§12 #2](../12-known-limitations.md).
 
-- **Actor:** cashier (records the cash payout); store manager / finance (raises the back-office correction).
+- **Actor:** cashier or supervisor with `POS.SALE.VOID` (whole-sale reverse); store manager / finance (back-office path when the session is no longer open).
 - **Goal:** give a customer their money back for returned merchandise and keep both the cash drawer and the ledger correct.
 - **Preconditions:**
   - Authenticated cashier with a valid bearer token (see [§09](../09-sales-payments-receipts.md), [§11](../11-errors-offline-idempotency.md)).
-  - Permission **`POS.SESSION.OPEN`** — the payout endpoint is gated by `@perm.scoped(#uid,'possession','POS.SESSION.OPEN')`; there is **no** dedicated refund permission ([§10 §3](../10-returns-refunds.md)).
-  - An **OPEN** POS session on the till (the same session, or any open session — the payout carries no link to the original invoice). A `CLOSED`/`RECONCILED` session → **409**.
-  - You know the cash amount to return. (The original receipt number is useful only as a free-text `reason`; the API does not validate it.)
+  - Permission **`POS.SALE.VOID`** — the reverse endpoint is gated by `@perm.scoped(#uid,'salesinvoice','POS.SALE.VOID')` (seeded, auto-granted to `ORG_ADMIN`).
+  - The invoice is **FINALISED**, is **POS-origin** (has a `posSessionId`), and its **originating session is still OPEN** — otherwise **409** (see exception flows).
+  - You know the invoice `uid` (kept from the original 201, or looked up via `GET /api/v1/sales-invoices?companyId={id}`).
 
-- **Main flow (the only thing the POS API can do — drawer bookkeeping):**
-  1. Cashier confirms the goods and the cash amount to refund out of the drawer (per store policy — the API enforces nothing here).
-  2. Record a cash payout of type `REFUND` against the open session:
-     `POST /api/v1/pos/sessions/uid/{uid}/payouts` ([§10 §3](../10-returns-refunds.md), [§08 §6](../08-sessions.md)).
-     Body (`PosPayoutRequest`): `{ "payoutType": "REFUND", "amount": 25000.00, "reason": "Returned 2x SKU-1180, cash refund (ref INV-0042)" }`.
-     - `payoutType` `@NotNull` (`REFUND` | `PAID_OUT`); `amount` `@NotNull @DecimalMin("0.01")`; `reason` `@Size(max=255)`, optional.
-     - **Response:** the controller method returns `void` → empty-data envelope `{ "data": null, "errors": [], "meta": null }` at **HTTP 200**. No payout uid is echoed — record the reference client-side.
-  3. Hand the cash back and print/annotate your own refund slip from the values you sent (nothing about the payout is returned to reprint).
-  4. **Out-of-band, mandatory:** raise a back-office correcting entry for the *merchandise/accounting* side — see **Notes & limitations**. The payout alone leaves stock, revenue, and VAT overstated.
+- **Main flow (whole-sale reverse — the first-class path):**
+  1. Cashier confirms the goods coming back and identifies the sale to reverse (its `uid`).
+  2. Reverse the whole sale:
+     `POST /api/v1/pos/sales/uid/{uid}/reverse` ([§10](../10-returns-refunds.md)).
+     Body: `{ "reason": "Returned 2x SKU-1180, customer refund (INV-0042)" }` — `reason` is `@NotBlank`.
+     - **Response:** **HTTP 204 No Content** (empty body). The reversal is atomic within one transaction.
+  3. Hand the cash back. The reversed sale automatically **drops out of the session's expected cash** at X/Z-read — there is no separate payout to record and nothing to re-key against the drawer.
+  4. Print/annotate a refund slip from your own records (the 204 returns no body to reprint). The ledger is already correct: revenue, VAT and cash reversed; stock back in with valuation restored; DR Inventory / CR COGS posted.
 
 - **Alternate / exception flows:**
-  - **No open session / session already closed:** payout → **409** `Session <number> is not OPEN.` Open a fresh session first (or do the whole thing as a back-office credit note). ([§10 §3 errors](../10-returns-refunds.md))
-  - **Bad amount or enum:** `amount` null or `< 0.01`, unknown `payoutType`, or `reason` > 255 chars → **400** (field errors as `"field: message"`).
-  - **Unknown session uid** → **404** `PosSession`.
-  - **Missing permission / wrong company scope / rejected `X-Branch-Uid`** → **403** (generic; the missing code is never named).
+  - **Session already CLOSED/RECONCILED, or invoice is not POS-origin (no `posSessionId`):** reverse → **409**. The till cannot refund it; handle it as a back-office invoice void on `/sales-invoices`, where the cash difference is a reconciled-variance matter (see **Notes & limitations**).
+  - **Invoice not FINALISED** → **409**.
+  - **Blank `reason`** → **400** (`reason: must not be blank`).
+  - **Unknown invoice uid** → **404** `SalesInvoice`.
+  - **Missing `POS.SALE.VOID` / wrong company scope / rejected `X-Branch-Uid`** → **403** (generic; the missing code is never named).
   - **Wrong `Content-Type`** → **415**.
-  - **You tried the "proper" return endpoint instead:** `POST /api/v1/sales-returns` requires a `deliveryUid` + `deliveryLineUid` (both `@NotNull` on `CreateSalesReturnRequest`). A POS sale is a DIRECT invoice with **no delivery**, so there is nothing to pass — you cannot drive that endpoint for a POS receipt at all (see UC-D1's limitations and [§10 §2](../10-returns-refunds.md)).
+  - **Customer wants only *part* of the sale back:** partial / line-level refunds are **not supported** (deferred by ADR-0042). Reverse the whole sale and re-ring the items the customer is keeping as a new `POST /api/v1/pos/sales`, or handle the partial credit in the back office (`POST /api/v1/sales-returns` for order-to-cash sales; a POS DIRECT invoice has no delivery to return — see [§10 §2](../10-returns-refunds.md)).
 
 - **Outcome:**
-  - A `PosSessionPayout` of type `REFUND` is recorded against the session (audit action `POS.SESSION.PAYOUT`). At X-read/close it is **subtracted** from expected cash: `expectedCash = openingFloat + cashSales − totalPayouts` ([§08 §7–§9](../08-sessions.md)), so the drawer reconciles to the lower cash.
-  - **Nothing else changes.** No stock-in, no COGS reversal, no GL revenue/VAT reversal, no AR credit note, and **no link to the original invoice or product** — the payout entity stores only `payoutType`, `amount`, `reason`, session/company/branch, and audit columns ([§10 §3](../10-returns-refunds.md)).
-  - Until the back-office correction is posted, the ledger overstates revenue/VAT and understates stock for the returned goods.
+  - The POS sale is **fully reversed**: stock is returned and inventory valuation restored, revenue + VAT + cash are reversed, and a DR Inventory / CR COGS entry is posted — all atomically.
+  - The reversed sale is **removed from the session's expected cash** at X-read/close ([§08 §7–§9](../08-sessions.md)); no `PosSessionPayout` is created for it, and the drawer reconciles to the lower cash automatically.
+  - The ledger is correct immediately — **no out-of-band back-office correction is required** for a whole-sale reverse on an open session.
 
 - **Notes & limitations:**
-  - **No POS reversal/refund/void** ([§12 #2](../12-known-limitations.md)): the only first-class return is `POST /api/v1/sales-returns` (perm `SALES.RETURN.CREATE`), which does stock-in + COGS reversal + an AR **credit note** — but it is keyed by `deliveryUid`/`deliveryLineUid` and is reachable **only** for order-to-cash sales (SO → Delivery → Invoice), **never** for a POS DIRECT invoice ([§10 §2, §5](../10-returns-refunds.md)).
-  - **Operational workaround for the accounting side** (pick per your finance policy):
-    1. **Back-office credit note / GL adjustment.** Finance manually raises a credit note or correcting journal against the original POS invoice (look it up via `GET /api/v1/sales-invoices?companyId={id}`), and adjusts stock via a stock adjustment, to reverse revenue, VAT, COGS and put the goods back. This is the recommended path for a true return.
+  - **Whole-sale only; partial refunds deferred** ([§12 #2](../12-known-limitations.md)): `/reverse` voids the entire invoice. ADR-0042 explicitly defers partial / line-level refunds (they need a credit-note-by-line path). For a partial outcome, reverse the whole sale and re-ring the kept items.
+  - **Session must be OPEN** ([§10](../10-returns-refunds.md)): a sale whose session is already CLOSED/RECONCILED can only be undone via the **back-office invoice void** on `/sales-invoices`, where the cash difference is a reconciled-variance matter, not a till refund.
+  - **Back-office path for non-open-session returns** (pick per your finance policy):
+    1. **Back-office credit note / GL adjustment.** Finance raises a credit note or correcting journal against the original POS invoice (look it up via `GET /api/v1/sales-invoices?companyId={id}`), and adjusts stock via a stock adjustment, to reverse revenue, VAT, COGS and put the goods back.
     2. **Model the return as a fresh offsetting transaction** if your policy allows (e.g. an exchange handled as a new sale). Note the POS sale path cannot post negative lines, so a literal "negative sale" is not possible at the POS.
-    3. In all cases, still record the `REFUND` payout (step 2 above) so the **cash drawer** reconciles — it is the only POS-visible trace of the cash leaving the till.
-  - **Cash-only** ([§12 #3](../12-known-limitations.md)): the payout records a cash outflow only; there is no card/mobile-money refund concept at the POS.
-  - **No idempotency** ([§12 #1](../12-known-limitations.md), [§11](../11-errors-offline-idempotency.md)): a blind retry of the payout after a timeout can record a **duplicate** payout (under-stating expected cash). `X-Request-Id` is correlation only — implement client-side dedupe and treat a timed-out payout as *unknown*, reconciling via X-read before resending.
-  - **Tip:** put the original receipt number and SKU/qty in `reason` so the back-office correction can be matched to the drawer payout later.
-  - **Recommended server-side fix** ([§12 #2](../12-known-limitations.md)): a first-class `POST /api/v1/pos/sales/uid/{uid}/reverse` (or a credit-note path that accepts a POS invoice as origin) that reverses stock + GL + AR atomically, gated by a `POS.SALE.REFUND` / `POS.SALE.VOID` permission and audited.
+  - **Refunds follow the original tenders.** The original sale may have used **split / non-cash tenders** ([§09 §2.2](../09-sales-payments-receipts.md), ADR-0041); the whole-sale reverse reverses the cash leg for a POS cash sale (no AR leg). Reconcile any card/mobile-money refund out-of-band with your acquirer as your finance policy requires.
+  - **Tip:** put the original receipt number and SKU/qty in `reason` so the reversal is easy to trace in the audit trail.
+  - **Idempotency on the sale itself** ([§12 #1](../12-known-limitations.md), [§11](../11-errors-offline-idempotency.md)): the *original sale* now supports an `Idempotency-Key` header to prevent duplicate finalised invoices on retry. The `/reverse` call carries no idempotency key — treat a timed-out reverse as *unknown* and re-check the invoice/session state before resending.
 
 ---
 
 ### UC-D2: Correcting a mis-rung sale (wrong item, wrong quantity, accidental sale)
 
-> ⚠️ **Not supported at POS today.** Same root constraint as UC-D1: `POST /api/v1/pos/sales` is one-way and there is no void/reverse. A finalised POS invoice cannot be cancelled or edited from the POS, and it has no delivery to return. See [§12 #1–#2](../12-known-limitations.md).
+> ✅ **Supported at POS while the session is open** (commit `f08fb08`, ADR-0042). A finalised POS invoice can be voided whole with `POST /api/v1/pos/sales/uid/{uid}/reverse` (perm `POS.SALE.VOID`), then re-rung correctly. There is no in-place edit and **no partial void** — you reverse the whole receipt and ring a fresh one. If the session is already closed, it falls back to a back-office correction. See [§12 #1–#2](../12-known-limitations.md).
 
-- **Actor:** cashier (notices the error, records any cash payout); shift supervisor / store manager (authorises); finance (back-office correction).
+- **Actor:** cashier or supervisor with `POS.SALE.VOID` (reverses the receipt, re-rings); finance (back-office correction when the session is no longer open).
 - **Goal:** undo or fix a sale that was rung incorrectly (wrong product, wrong quantity, duplicate/accidental sale) so stock, revenue, VAT, AR, and the drawer are all correct.
 - **Preconditions:**
   - Authenticated cashier; bearer token valid.
   - The mis-rung sale already returned **HTTP 201** from `POST /api/v1/pos/sales` ([§09](../09-sales-payments-receipts.md)) — i.e. it is **FINALISED**, fully-paid, `origin=POS`, with an `INV-####` number and (eventually) stock/GL/AR effects via the outbox poller.
-  - For any cash given back: an **OPEN** session and **`POS.SESSION.OPEN`** (the payout path, as in UC-D1).
-  - For the accounting correction: back-office access (e.g. `SALES.INVOICE.VIEW` to look the invoice up; finance permissions to post a credit note / adjustment).
+  - To reverse it at the POS: **`POS.SALE.VOID`** and the invoice's **originating session still OPEN**.
+  - For the back-office fall-back (session already closed): back-office access (e.g. `SALES.INVOICE.VIEW` to look the invoice up; finance permissions to post a credit note / adjustment).
 
-- **Main flow (what is actually possible):**
+- **Main flow (reverse-and-re-ring):**
   1. **Identify the bad invoice.** From the original 201 response keep its `uid`/`invoiceNumber`; or look it up via `GET /api/v1/sales-invoices?companyId={id}` (perm `SALES.INVOICE.VIEW`) filtered to your session/time window, then `GET /api/v1/sales-invoices/uid/{uid}` and `.../lines` for detail ([§09 §8](../09-sales-payments-receipts.md)).
-  2. **Recognise there is no POS undo.** `PosSaleController` exposes only `POST /api/v1/pos/sales` — no `void`/`reverse`/`refund` mapping ([§10 §1](../10-returns-refunds.md), [§12 #2](../12-known-limitations.md)). You cannot edit, cancel, or negate the invoice from the POS.
-  3. **If cash must be returned now**, record it as a drawer payout so the till reconciles:
-     `POST /api/v1/pos/sessions/uid/{uid}/payouts` with `{ "payoutType": "REFUND", "amount": <amount>, "reason": "Correction: mis-rung INV-####" }` ([§10 §3](../10-returns-refunds.md), [§08 §6](../08-sessions.md)) → **HTTP 200**, empty-data envelope. (Drawer-only; no ledger effect.)
-  4. **If the corrected basket should still be sold**, ring a **new, correct** `POST /api/v1/pos/sales` ([§09](../09-sales-payments-receipts.md)) → **HTTP 201**, a new finalised invoice. (This does not cancel the wrong one — both invoices exist.)
-  5. **Out-of-band, mandatory:** finance posts a back-office correcting entry against the wrong invoice (credit note / reversing journal + stock adjustment) — see **Notes & limitations**. Without it, the wrong sale stays on the ledger.
+  2. **Void the whole receipt:** `POST /api/v1/pos/sales/uid/{uid}/reverse` with `{ "reason": "Correction: mis-rung INV-####" }` (`reason` `@NotBlank`) → **HTTP 204 No Content**. This atomically reverses stock + valuation + revenue/VAT/cash (DR Inventory / CR COGS) and drops the sale out of the session's expected cash ([§10](../10-returns-refunds.md), [§12 #2](../12-known-limitations.md)). There is **no in-place edit** — you reverse, then re-ring.
+  3. **If the corrected basket should still be sold**, ring a **new, correct** `POST /api/v1/pos/sales` ([§09](../09-sales-payments-receipts.md)) → **HTTP 201**, a new finalised invoice. The wrong one is already reversed, so only the correct sale stands.
+  4. **No drawer payout is needed** for the cash: the reverse already removes the original sale from expected cash. (A `REFUND` payout is only for ad-hoc cash-out that isn't tied to reversing a sale.)
 
 - **Alternate / exception flows:**
   - **Error spotted before submitting:** simply do not POST — fix the basket client-side and ring the correct sale. (There is nothing to undo because no invoice exists yet.)
-  - **Ambiguous/timed-out original POST** (you are unsure the sale committed): do **not** blindly retry — that risks a duplicate finalised invoice (double stock/GL/AR), with no way to reverse it from the POS. Reconcile first via `GET /api/v1/sales-invoices?companyId={id}` before any resend ([§09 §10](../09-sales-payments-receipts.md), [§11](../11-errors-offline-idempotency.md), [§12 #1](../12-known-limitations.md)).
-  - **Payout against a non-open session** → **409** `Session <number> is not OPEN.`; **bad amount/enum** → **400**; **unknown session** → **404**; **missing perm/scope** → **403**; **wrong `Content-Type`** → **415** ([§10 §3 errors](../10-returns-refunds.md)).
-  - **Attempting `POST /api/v1/sales-returns` to "return" the mis-rung items:** rejected — no `deliveryUid` exists for a POS DIRECT invoice (`CreateSalesReturnRequest.deliveryUid` is `@NotNull`) ([§10 §2](../10-returns-refunds.md)).
+  - **Ambiguous/timed-out original POST** (you are unsure the sale committed): send the original sale with an **`Idempotency-Key`** header so a retry returns the original invoice rather than a duplicate ([§11](../11-errors-offline-idempotency.md), [§12 #1](../12-known-limitations.md)). If the original had no key, reconcile via `GET /api/v1/sales-invoices?companyId={id}` and, if a duplicate finalised invoice did land, `/reverse` it ([§09 §10](../09-sales-payments-receipts.md)).
+  - **Session already CLOSED/RECONCILED, or invoice not POS-origin/not FINALISED:** reverse → **409**; fall back to a back-office invoice void / correcting entry (see **Notes & limitations**).
+  - **Blank `reason`** → **400** (`reason: must not be blank`); **unknown invoice uid** → **404** `SalesInvoice`; **missing `POS.SALE.VOID`/scope** → **403**; **wrong `Content-Type`** → **415** ([§10](../10-returns-refunds.md)).
+  - **Only part of the basket is wrong:** no partial void exists (deferred by ADR-0042). Reverse the whole receipt and re-ring the correct basket. As a POS DIRECT invoice, it also has no `deliveryUid` for `POST /api/v1/sales-returns` (`CreateSalesReturnRequest.deliveryUid` is `@NotNull`) ([§10 §2](../10-returns-refunds.md)).
 
 - **Outcome:**
-  - The mis-rung invoice **remains FINALISED and unchanged** at the POS; its eventual stock/GL/AR effects stand until a back-office correction reverses them.
-  - Any `REFUND` payout reduces the session's expected cash at X-read/close ([§08 §7–§9](../08-sessions.md)) but produces no ledger reversal.
+  - On a whole-sale reverse, the mis-rung invoice is **fully reversed** (stock/valuation/revenue/VAT/cash + DR Inventory / CR COGS) and drops out of the session's expected cash at X-read/close ([§08 §7–§9](../08-sessions.md)) — **no back-office correction needed** while the session is open.
   - A correct re-rung sale (if used) is an independent finalised invoice with its own number and side effects.
-  - Books are correct only after the back-office correcting entry posts.
+  - If the session was already closed, the mis-rung invoice **remains FINALISED** until a back-office correcting entry reverses it.
 
 - **Notes & limitations:**
-  - **No void / mistake correction at the POS** ([§12 #2](../12-known-limitations.md)): "A cashier cannot correct a wrong sale, void a mis-rung receipt, or process a merchandise return at the till." This is the same gap as UC-D1.
-  - **Duplicate-posting risk** ([§12 #1](../12-known-limitations.md)): because there is no idempotency *and* no reversal, a duplicate sale created by a retry is unrecoverable from the POS — prevention (client-side dedupe + reconcile-before-resend) is the only defence.
-  - **`unitPrice` is ignored; only `lineDiscountAmount` is honoured** ([§12 #4](../12-known-limitations.md), [§09 §2.2](../09-sales-payments-receipts.md)): a "wrong price" cannot be fixed by re-sending a different `unitPrice` (the server prices from its own price list). The only price lever at the POS is `lineDiscountAmount`; genuine price corrections are a back-office task.
-  - **Operational workaround:** identify the invoice, record a `REFUND` payout for any cash returned, re-ring the correct sale if needed, and have finance post the correcting credit note / journal + stock adjustment against the wrong invoice. Use the `reason` field to cross-reference `INV-####`.
-  - **Recommended server-side fix** ([§12 #2](../12-known-limitations.md)): a permission-gated, audited `POST /api/v1/pos/sales/uid/{uid}/reverse` (or void) that atomically reverses stock + GL + AR for a POS invoice — closing the gap for both UC-D1 and UC-D2.
+  - **Whole-sale void at the POS; no in-place edit, no partial void** ([§12 #2](../12-known-limitations.md)): a cashier reverses the entire receipt and re-rings — line-level corrections are deferred by ADR-0042. Same `/reverse` mechanism as UC-D1.
+  - **Duplicate-posting risk is now mitigated** ([§12 #1](../12-known-limitations.md)): the original sale supports an `Idempotency-Key` header (per company) so a retry returns the *original* invoice instead of a duplicate. Should a duplicate still arise (e.g. no key sent), `/reverse` it while its session is open.
+  - **`unitPrice` is server-derived; only `lineDiscountAmount` is honoured** ([§12 #4](../12-known-limitations.md), [§09 §2.2](../09-sales-payments-receipts.md)): a "wrong price" cannot be fixed by re-sending a different `unitPrice` — the server re-derives the unit price from its own price list (the client `unitPrice` is dropped before pricing). The only price lever at the POS is `lineDiscountAmount`; genuine price-list corrections are a back-office task.
+  - **Back-office fall-back (closed session):** identify the invoice, have finance post a correcting credit note / reversing journal + stock adjustment against the wrong invoice, using the `reason`/notes to cross-reference `INV-####`.

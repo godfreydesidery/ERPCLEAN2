@@ -431,7 +431,7 @@ A POS line ultimately posts to `POST /api/v1/pos/sales` with `lines[].productId`
 
 - **Do not assume the ledger/stock reflects your sale immediately.** Re-query on-hand after a short delay (~1s+) if you display live counts.
 - **On-hand reads are point-in-time and not reserved.** Two terminals can both see the last unit. Overselling is a *flagged* state (`StockOnHandDto.negative=true`), not a hard block, unless the location's `allowNegative=false` policy applies upstream. Build your own client-side guard if you need hard stock reservation.
-- **Retrying a timed-out `POST /pos/sales` creates a SECOND sale** (no idempotency key) — never blindly retry; check for the resulting invoice first (shared **idempotency** contract).
+- **Retrying a timed-out `POST /pos/sales` is safe *only* if you resend the same `Idempotency-Key`.** With the same key the server replays the **original** invoice (HTTP 201, matched by uid — no duplicate, no double post); a concurrent in-flight retry returns **409** "still in progress; retry shortly" (resend the same key). It is only a **blind** retry *without* the `Idempotency-Key` header that creates a SECOND sale (legacy non-idempotent path). Always send (and reuse) an `Idempotency-Key` per sale attempt, or check for the resulting invoice before retrying (shared **idempotency** contract — `Idempotency-Key`, ADR-0042 / commit f08fb08).
 
 ---
 

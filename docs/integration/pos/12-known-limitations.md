@@ -6,130 +6,181 @@ the actual backend code (file references below). These are **API/behaviour gaps,
 gaps** — the rest of this guide describes the API as it really is; this page calls out where that
 reality falls short of what a full retail POS typically needs.
 
-> Scope note: nothing here is a blocker for a *controlled* cash-only pilot. Items 1 and 2 are the
-> ones to close before any unattended or high-volume production use.
+> Status update (commit `f08fb08`, **ADR-0042** — now *Implemented*): the three highest-impact gaps
+> on this page — **sale idempotency**, **whole-sale reversal/refund/void**, and **multi-tender /
+> non-cash payments** — are **CLOSED** and ship in the current API. They are documented below as the
+> shipped mechanism (kept on this page for the historical record and the integration notes that come
+> with them). The only items that remain genuinely open are **partial / line-level POS refunds**
+> (explicitly deferred by ADR-0042) and **client-side offline ingest**. Server-authoritative pricing
+> is **by design**, not a limitation.
 
-| # | Gap | Severity | Affects |
-|---|-----|----------|---------|
-| 1 | No idempotency / dedup on `POST /pos/sales` | **High** | data integrity (double-posting) |
-| 2 | No POS reversal / refund / void endpoint | **High** | returns, mistake correction |
-| 3 | Single exact **cash** tender only | **Medium–High** | payments (card, mobile money, split, change) |
-| 4 | Required-but-ignored fields (`unitPrice`, `agentId`); no manual price override | **Medium** | API clarity, price overrides, agent attribution |
+| # | Item | Status | Affects |
+|---|------|--------|---------|
+| 1 | Sale idempotency / dedup on `POST /pos/sales` | **CLOSED** (`Idempotency-Key` header, V70) | data integrity (double-posting) |
+| 2 | Whole-sale POS reversal / refund / void | **CLOSED** (`POST /pos/sales/uid/{uid}/reverse`) | returns, mistake correction |
+| 3 | Multi-tender / non-cash payments | **CLOSED** (optional `tenders[]` list) | payments (card, mobile money, split, change) |
+| 4 | Server-authoritative pricing; `unitPrice`/`agentId` informational | **By design** (not a gap) | price integrity, agent attribution |
+| 5 | Partial / line-level POS refunds | **Open** (deferred by ADR-0042) | per-line returns |
+| 6 | Client-side offline ingest | **Open** | disconnected operation |
 
 ---
 
-## 1. No idempotency on sale creation — duplicate-posting risk
+## 1. Sale idempotency on sale creation — CLOSED (`Idempotency-Key` header)
 
-**Current behaviour.** `POST /api/v1/pos/sales` accepts no idempotency key. `PosSaleRequest`
-(`com.erp.modules.sales.domain.dto.PosSaleRequest`) has fields `sessionUid`, `customerId`,
-`agentId`, `currency`, `lines[]`, `tenderedAmount`, `notes` — and **no `Idempotency-Key` header, no
-client reference / dedup field**. `X-Request-Id` is honoured for log correlation only (it does **not**
-dedupe). Each accepted call independently creates a new finalised invoice and enqueues its own stock
-issue + GL + AR postings.
+> **Status: CLOSED** in commit `f08fb08` (ADR-0042). The duplicate-posting risk described below is
+> resolved when the client sends the header.
 
-**Impact on a POS.** A network timeout or dropped connection after the server committed but before
-the client received the `201` is ambiguous. A blind retry creates a **second finalised invoice**,
-double-issuing stock and double-posting revenue/VAT/cash — and (see #2) there is no way to reverse
-it from the POS. This is the single most important gap for any client that can lose connectivity.
+**Shipped behaviour.** `POST /api/v1/pos/sales` accepts an **optional** HTTP header
+`Idempotency-Key` (opaque string, ≤ 80 chars). The `PosSaleRequest` body is **unchanged**
+(`com.erp.modules.sales.domain.dto.PosSaleRequest` still has `sessionUid`, `customerId`, `agentId`,
+`currency`, `lines[]`, `tenderedAmount`, `notes`). The key is backed by table
+`pos_sale_idempotency(company_id, idem_key, invoice_uid)` with `UNIQUE(company_id, idem_key)`
+(Flyway **V70**). It is **reserve-before-process**: a native `INSERT ... ON CONFLICT (company_id,
+idem_key) DO NOTHING` runs inside the sale's single transaction **before** the invoice is created.
+`X-Request-Id` remains log-correlation only (it does **not** dedupe). Verified by
+`PosSaleIdempotencyRepositoryIT`.
 
-**Client-side mitigation (today).** Never auto-retry on an ambiguous outcome; on ambiguity,
-reconcile via `GET /api/v1/sales-invoices?companyId={id}` before resending (see
+**Replay (same key, original already committed).** The API returns the **original** finalised
+`SalesInvoiceDto` — no duplicate invoice, stock issue, GL/AR posting, payment, or `SALE_FINALISED`
+outbox event. Note a replay **still returns HTTP `201`** (the controller hardcodes `CREATED`), so the
+client must recognise a replay by **matching the returned invoice `uid` to one it already holds** —
+not by a `200`-vs-`201` distinction.
+
+**Concurrent in-flight duplicate.** The duplicate `INSERT` blocks until the winner commits, then
+returns the winner's original invoice. In the narrow window where the marker row exists but
+`invoice_uid` is not yet stamped, the duplicate gets **HTTP `409`** — *"A POS sale with this
+Idempotency-Key is still in progress; retry shortly"*. This specific `409` is **retryable**: resend
+the **same** key after a short delay.
+
+**Scope & rules.**
+- **Per company** — namespaced by the authenticated session's company. The key need only be unique
+  within a company; the same value in another company is independent.
+- **Omitting the header** ⇒ legacy non-idempotent behaviour (a blind retry creates a duplicate
+  sale). The client **must always send the header** to get the guarantee.
+- A **failed / rolled-back** sale frees the key — the next send with the same key creates the sale
+  normally.
+
+**Client guidance.** Generate one key per logical sale attempt and reuse it across retries. On an
+ambiguous outcome, simply **resend with the same key** rather than reconciling out of band; if a
+replay returns an invoice `uid` you already have, treat it as the original (see
 [11 — Errors, Offline & Idempotency](./11-errors-offline-idempotency.md)).
 
-**Recommended server-side fix.** Accept an `Idempotency-Key` header (or a `clientSaleRef` on
-`PosSaleRequest`), persist it unique per company, and return the original `201` on replay.
+---
+
+## 2. Whole-sale POS reversal / refund / void — CLOSED (`/reverse` endpoint)
+
+> **Status: CLOSED** in commit `f08fb08` (ADR-0042) for **whole-sale** reversal. Partial / line-level
+> refunds remain deferred — see [§5](#5-partial--line-level-pos-refunds--deferred).
+
+**Shipped behaviour.** `PosSaleController` exposes
+`POST /api/v1/pos/sales/uid/{uid}/reverse` with body `{ "reason": "<text>" }` (`reason` is
+`@NotBlank`) returning **`204 No Content`**. It is gated by permission **`POS.SALE.VOID`** (scoped on
+the invoice `uid`; seeded, auto-granted to `ORG_ADMIN`). The whole-invoice reversal acts as a **full
+refund**: it reverses revenue + VAT + cash (a POS cash sale has no AR leg), reverses the stock issue
+and restores inventory valuation, and posts **DR Inventory / CR COGS**. The general returns path
+(`POST /api/v1/sales-returns`, which still requires a `deliveryUid` **and** `deliveryLineUid`) does
+**not** apply to POS sales — POS reversal is this dedicated endpoint instead.
+
+**Drawer effect.** The reversed sale automatically **drops out of the session's expected cash**
+(drawer) at X/Z-read — **no separate payout entry is needed**. (The POS session **payout**,
+`POST /pos/sessions/uid/{uid}/payouts`, remains cash-drawer bookkeeping only and is *not* the way to
+refund a sale.)
+
+**Preconditions (else `409`).**
+- The invoice must be **POS-origin** (has a `posSessionId`).
+- Its originating **session must still be OPEN**. A sale whose session is already CLOSED/RECONCILED
+  must be handled via the back-office invoice void on `/sales-invoices`, where the cash difference is
+  a reconciled-variance matter, not a till refund.
+- The invoice must be **FINALISED**.
+
+**Not supported.** **Partial / line-level** refunds are explicitly **deferred** by ADR-0042 (they
+need a credit-note-by-line path) — this endpoint reverses the **whole** sale only. See
+[§5](#5-partial--line-level-pos-refunds--deferred).
 
 ---
 
-## 2. No POS reversal / refund / void endpoint
+## 3. Multi-tender / non-cash payments — CLOSED (`tenders[]` list)
 
-**Current behaviour.** `PosSaleController` exposes only `POST /api/v1/pos/sales` — there is **no
-void, reverse, or refund** operation for a POS sale. The general returns path,
-`POST /api/v1/sales-returns`, requires a `deliveryUid` **and** a `deliveryLineUid`
-(`CreateSalesReturnRequest`: both `@NotNull`) — but a POS sale produces a **DIRECT-origin invoice
-with no delivery**, so it can never be returned through that endpoint. The POS session **payout**
-(`POST /pos/sessions/uid/{uid}/payouts`) is cash-drawer bookkeeping only: it records cash leaving the
-till and posts **no** stock-in, VAT reversal, revenue reversal, or AR credit.
+> **Status: CLOSED** in commit `f08fb08` (ADR-0042, building on ADR-0041 tender instruments).
 
-**Impact on a POS.** A cashier cannot correct a wrong sale, void a mis-rung receipt, or process a
-merchandise return at the till. Refunds can only be handled as out-of-band cash payouts that leave
-the ledger (stock/revenue/VAT) overstated, requiring a back-office correcting journal.
+**Shipped behaviour.** `PosSaleRequest` carries an **optional** `tenders` list
+(`List<PosTender>`). Each `PosTender` has `tenderType`, `amount`, `reference`, plus the instrument
+refs `cashBankAccountId`, `chequeId`, `mobileMoneyRef`, `cardRef` (ADR-0041). `PosSaleServiceImpl`
+loops **every** tender into `addPayment`, forcing each to the request's currency; the tender sum must
+be **≥ gross total** (validated). This supports **split tender** and **non-cash** methods (card,
+mobile money, cheque) — the payment layer's `TenderType` enum (`CASH, MOBILE_MONEY, CHEQUE, CARD`) is
+now driven by the request rather than hard-coded.
 
-**Recommended server-side fix.** A first-class `POST /pos/sales/uid/{uid}/reverse` (or a credit-note
-path that accepts a POS invoice as the origin) that reverses stock + GL + AR atomically, gated by a
-`POS.SALE.REFUND` / `POS.SALE.VOID` permission and audited.
+**Back-compat.** **Omitting `tenders`** ⇒ today's single exact-**CASH** behaviour: the service posts
+one `CASH` payment for the gross total (paid-in-full). `PosSaleRequest.tenderedAmount` remains a
+receipt-printing hint ("not stored on invoice"); change is still computed on the client for cash.
 
----
-
-## 3. Single exact cash tender only
-
-**Current behaviour.** `PosSaleServiceImpl` hard-codes the payment:
-`invoiceService.addPayment(invoiceUid, new AddPaymentRequest(TenderType.CASH, grossTotal, currency, null))`
-— always `TenderType.CASH`, always the **exact gross total** (paid-in-full). `PosSaleRequest.tenderedAmount`
-is, per its own Javadoc, "for receipt printing, **not stored on invoice**", so change is computed on
-the client and never reaches the ledger. The payment layer's `TenderType` enum supports
-`CASH, MOBILE_MONEY, CHEQUE, CARD`, but the POS orchestrator never uses anything but `CASH`, and
-sends no split/multi-tender list.
-
-**Impact on a POS.** No card, mobile money, or cheque tender; no split tender (e.g. part cash + part
-card); no over-tender / change recorded at the ledger; the tendered amount and tender mix are not
-auditable from the invoice. Most real retail needs at least card/mobile money.
-
-**Recommended server-side fix.** Let `PosSaleRequest` carry a list of tenders
-`[{ tenderType, amount, currency }]`, persist them, validate sum ≥ gross with change on `CASH`
-(the `BR-SALES-07` over-tender rule already exists in the payment layer), and surface the tender
-breakdown on the invoice/receipt DTO.
+**Client guidance.** Send a `tenders[]` entry per tender taken (e.g. part cash + part card), with the
+appropriate instrument ref per method. The invoice's recorded payments reflect the tender mix, so it
+is auditable from the returned `SalesInvoiceDto`.
 
 ---
 
-## 4. Required-but-ignored fields (`unitPrice`, `agentId`); no manual price override
+## 4. Server-authoritative pricing — BY DESIGN (not a limitation)
 
-**Both `unitPrice` and `agentId` are required-but-ignored fields on `PosSaleRequest`:** the validator
-forces the client to send them, but `PosSaleServiceImpl` forwards neither. Pricing is
-server-authoritative (`unitPrice` ignored — detailed below) and agent attribution always defaults to
-the logged-in user (`agentId` ignored — there is **no way to attribute a POS sale to a different
-agent today**).
+> **Status: By design**, clarified in commit `f08fb08` (ADR-0042 **D-4**). This is a deliberate
+> price-integrity guarantee, not a gap. `unitPrice` and `agentId` are now **informational** fields.
 
-**`agentId` (ignored).** `PosSaleRequest.agentId` is `@NotNull`, but `PosSaleServiceImpl.processSale`
-builds the create call as
-`new CreateSalesInvoiceRequest(company.getUid(), customer.getUid(), null, currency, notes, null)` —
-passing `null` for the agent slot (the "resolve agent" step is not implemented). The invoice service
-then defaults the agent to the **logged-in user**, so the submitted `agentId` has no effect; the
-recorded `agentId`/`agentName` on the returned `SalesInvoiceDto` is always the authenticated cashier.
+**Pricing is server-authoritative — the client `unitPrice` is not trusted.**
+`PosSaleRequest.LineItem.unitPrice` is still **accepted** by the API (back-compat) but is **dropped
+before any pricing code** runs: each line is built as `new AddInvoiceLineRequest(productUid, unitUid,
+quantity, lineDiscountAmount, null)` and **`AddInvoiceLineRequest` has no `unitPrice` field**. The
+server **re-derives** the unit price from the product's company-scoped price list (`ProductPrice`,
+via `resolveListPrice(product, companyId, currency)` in `SalesInvoiceServiceImpl`) and VAT from the
+company's `tax_rates`. A malicious or buggy client therefore **cannot set `price = 0`**. The
+`@NotNull` on `unitPrice` was **relaxed** (D-4), so the field is genuinely optional now. The client
+may still send `unitPrice` for its own receipt display, but must treat the **server totals** in the
+returned `SalesInvoiceDto` as authoritative. Sections [04](./04-pricing-tax-currency.md) and
+[09](./09-sales-payments-receipts.md) describe the real behaviour.
 
-**`unitPrice` (ignored).** `PosSaleRequest.LineItem.unitPrice` is `@NotNull @DecimalMin("0.00")` —
-the client **must** send it — but `PosSaleServiceImpl` **never passes it through**: each line is
-rebuilt as `new AddInvoiceLineRequest(productUid, unitUid, quantity, lineDiscountAmount, null)`
-(the trailing `null` is `lineDiscountPercent`; `AddInvoiceLineRequest` has **no price field**). The
-invoice service then resolves the price itself via `resolveListPrice(product, companyId, currency)`
-(`SalesInvoiceServiceImpl`), using the product's `ProductPrice` row. So pricing is
-**server-authoritative** — the client's `unitPrice` has no effect. (Note: the `LineItem.unitPrice`
-Javadoc claiming "validated against list price by service" is **inaccurate** — the value is *ignored*,
-not validated. Sections [04](./04-pricing-tax-currency.md) and
-[09](./09-sales-payments-receipts.md) describe the real behaviour.)
+**`agentId` is informational.** `agentId` is likewise not forwarded; agent attribution defaults to
+the logged-in cashier on the returned `SalesInvoiceDto`. (Attributing a POS sale to a *different*
+agent is not supported — a deliberate constraint, not a posting bug.)
 
-**Impact on a POS.** This is **good for price integrity** — a client cannot inject an arbitrary price.
-But: (a) the required `unitPrice` field is misleading (you must send a value satisfying the
-validators, yet it does nothing); (b) there is **no manual price-override at the POS** — the only way
-to reduce a line is `lineDiscountAmount`; the back-office invoice's permission-gated
-`overrideLinePrice` has no POS equivalent; (c) the line **fails** if the product has no price row for
-the company. Always treat fetched price-list/tier/customer prices as a *preview* and the returned
-`SalesInvoiceDto` as the source of truth for the receipt. The same misleading-required-field problem
-applies to `agentId`: you must send it, but the recorded agent is always the logged-in cashier, so a
-POS sale cannot be attributed to a different agent today.
+**Residual notes (not data-integrity gaps).**
+- There is **no manual price-override at the POS** — the only way to reduce a line is
+  `lineDiscountAmount`; the back-office invoice's permission-gated `overrideLinePrice` has no POS
+  equivalent. (Negotiated reductions must be expressed as `lineDiscountAmount`.)
+- A line **fails** if the product has no `ProductPrice` row for the company/currency. Always treat
+  fetched price-list/tier/customer prices as a *preview* and the returned `SalesInvoiceDto` as the
+  source of truth for the receipt.
 
-**Recommended server-side fix.** For `unitPrice`: either honour it as a permission-gated manual
-override (`POS.SALE.PRICE_OVERRIDE`, audited) **or** drop the field and correct the Javadoc — and
-document that negotiated reductions must be expressed as `lineDiscountAmount`. For `agentId`: forward
-the submitted value through to the invoice (the "resolve agent" step), or drop the field if POS sales
-are intentionally always attributed to the logged-in cashier.
+---
+
+## 5. Partial / line-level POS refunds — DEFERRED
+
+> **Status: Open** — explicitly **deferred** by ADR-0042.
+
+The `/reverse` endpoint ([§2](#2-whole-sale-pos-reversal--refund--void--closed-reverse-endpoint))
+reverses the **whole** sale only. **Partial** refunds (return some lines, or a partial quantity of a
+line) are **not supported**: they require a credit-note-by-line path that ADR-0042 deferred. Until
+that ships, a partial return must be handled in the back office (a per-line credit note against the
+originating invoice), not at the till.
+
+---
+
+## 6. Client-side offline ingest — OPEN
+
+The server has **no batch/offline-ingest endpoint** to drain a queue of sales captured while the
+client was disconnected; each sale is still posted by an individual online `POST /pos/sales` call.
+With sale idempotency now shipped ([§1](#1-sale-idempotency-on-sale-creation--closed-idempotency-key-header)),
+a client can **safely replay** its queued sales on reconnect (each with its own `Idempotency-Key`)
+without risk of duplicates — but the **queue-and-replay logic lives on the client**. See
+[11 — Errors, Offline & Idempotency](./11-errors-offline-idempotency.md) for the recommended pattern.
 
 ---
 
 ## Summary for planning
 
-A controlled, attended, **cash-only** POS pilot is viable on the API as it stands today. Before a
-production rollout, prioritise **#1 (idempotency)** and **#2 (reversal/refund)** — they are the two
-that cause unrecoverable data problems in normal retail operation — then **#3 (tenders)** for real
-payment coverage, and **#4** for API clarity. None of these are documentation problems; they are
-backend capabilities to add. See each section above for the recommended endpoint/field shape.
+The three highest-impact gaps that previously blocked production use — **idempotency (#1)**,
+**reversal/refund (#2)**, and **multi-tender (#3)** — are now **CLOSED** in commit `f08fb08`
+(ADR-0042), so an attended, multi-tender POS with safe retries and at-till whole-sale refunds is
+viable on the shipped API. **Server-authoritative pricing (#4)** is a deliberate by-design guarantee,
+not a gap. The only genuinely open items are **partial / line-level refunds (#5)**, deferred by
+ADR-0042 pending a credit-note-by-line path, and **client-side offline ingest (#6)**, where the
+queue-and-replay logic lives on the client (now safe to build on top of the shipped idempotency key).

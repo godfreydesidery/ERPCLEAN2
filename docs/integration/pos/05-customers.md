@@ -55,8 +55,8 @@ values:
 
 | `customerKind` | Meaning | At the POS till |
 |----------------|---------|-----------------|
-| `CASH_WALK_IN` | Cash / walk-in customer. `creditLimit` is null. | The normal POS path. The sale is paid in full in cash at ring-up. |
-| `CREDIT_ACCOUNT` | Account customer with a credit limit and payment terms. | POS still rings it as a **fully-paid cash** sale (see below) — POS is not an on-account/charge channel. |
+| `CASH_WALK_IN` | Cash / walk-in customer. `creditLimit` is null. | The normal POS path. The sale is paid in full at ring-up (CASH by default, or via a multi-tender split since ADR-0042). |
+| `CREDIT_ACCOUNT` | Account customer with a credit limit and payment terms. | POS still rings it as a **fully-paid** sale (see below) — POS is not an on-account/charge channel. |
 
 Two related enums you will see on the DTO:
 
@@ -372,11 +372,12 @@ curl -s -X POST 'https://erp.example.com/api/v1/customers' \
       }'
 ```
 
-> **No idempotency.** Like the POS sale endpoint, customer-create has no
-> `Idempotency-Key`. A retried `POST /customers` after a network timeout will create a
-> **second** customer record (there is no unique constraint on name/phone). De-dupe
-> client-side: on retry, first re-run the search (`q=<phone>`) and reuse any match before
-> re-posting.
+> **No idempotency.** Customer-create accepts **no** `Idempotency-Key` header. A retried
+> `POST /customers` after a network timeout will create a **second** customer record
+> (there is no unique constraint on name/phone). De-dupe client-side: on retry, first
+> re-run the search (`q=<phone>`) and reuse any match before re-posting. (Note: the POS
+> **sale** endpoint *does* now support an optional `Idempotency-Key` — see ADR-0042 /
+> commit `f08fb08` — but customer-create has not yet gained one.)
 
 ---
 
@@ -400,15 +401,20 @@ Archiving is a soft-delete; archived customers **still appear** in search result
 ## How customer credit interacts with POS
 
 This is the part that surprises integrators: **the POS sale endpoint always rings a
-fully-paid CASH sale, regardless of the customer's `customerKind`.**
+fully-paid sale, regardless of the customer's `customerKind`** — it is a paid-in-full
+channel, never an on-account / charge channel.
 
 Grounding (`PosSaleServiceImpl.processSale`,
 `src/main/java/com/erp/modules/sales/service/PosSaleServiceImpl.java`):
 
 1. POS resolves the customer by `customerId` (`customers.findById(...)` → `404 Customer`
    if unknown). It does **not** branch on `customerKind`.
-2. It builds the invoice and then adds a **single CASH payment for the full gross**
-   (`AddPaymentRequest(TenderType.CASH, grossTotal, currency, null)`).
+2. It builds the invoice and then adds payment covering the **full gross**. By default
+   (no `tenders` supplied) this is a single CASH payment for the gross
+   (`AddPaymentRequest(TenderType.CASH, grossTotal, currency, null)`); since ADR-0042 /
+   commit `f08fb08` the request may instead carry a `tenders` list (CASH / CARD /
+   MOBILE_MONEY / CHEQUE, split allowed) whose amounts must sum to **at least** the gross.
+   Either way the invoice is paid in full.
 3. It calls `finalise(...)`.
 
 What `finalise` does with the customer's kind
@@ -429,11 +435,12 @@ What `finalise` does with the customer's kind
 
 ### Practical guidance for a POS client
 
-- **Default to `CASH_WALK_IN`.** POS is a cash channel: paying in full at the till is the
-  model the endpoint assumes. New-at-the-till customers should be created as
-  `CASH_WALK_IN`.
+- **Default to `CASH_WALK_IN`.** POS is a paid-in-full channel: settling the whole invoice
+  at the till is the model the endpoint assumes. New-at-the-till customers should be
+  created as `CASH_WALK_IN`. (The till need not be paid in *cash* — see the multi-tender
+  note above — but it must be paid in full.)
 - **Selling to an existing `CREDIT_ACCOUNT` customer is allowed**, but it is still rung as
-  a paid-in-full cash sale — POS does **not** post the sale "on account". If the customer
+  a paid-in-full sale — POS does **not** post the sale "on account". If the customer
   is over limit you will get a `409` unless the cashier has `SALES.CREDIT.OVERRIDE`.
 - **You cannot read credit status from the API.** `creditStatus` / `manualHold` are not on
   `CustomerDto`. The only credit signal a POS client can pre-check is `creditLimit` (and
