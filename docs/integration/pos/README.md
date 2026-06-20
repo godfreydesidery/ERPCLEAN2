@@ -1,5 +1,7 @@
 # POS Integration API
 
+> **Looking for the cashier's user manual?** This guide is **developer-facing** (how to build a client against the API). The end-user manual for the **OrbixPOS** reference client (the Flutter till app in [`pos_app/`](../../../pos_app/)) is **[docs/POS-USER-MANUAL.md](../../POS-USER-MANUAL.md)** (also `.docx`), authored as chapters under [docs/pos-user-manual/](../../pos-user-manual/) and rebuilt with `bash docs/tools/build-pos-manual.sh`.
+
 This guide is the entry point for building an **external Point-of-Sale (POS) client** against the ERP over REST. The ERP exposes a stateless, JWT-secured JSON API: a POS application (a till app, a self-checkout kiosk, a mobile cashier, or a third-party register) authenticates a cashier, opens a cash session on a till, rings sales against that session, prints a receipt from the finalised invoice the API returns, and finally closes and reconciles the session at end-of-shift. Everything is plain `application/json` over HTTPS — there is no SDK, no SOAP, and no proprietary transport — so any HTTP-capable client can integrate. The financial back-office (stock issue, GL journal, AR posting) happens **eventually** behind each sale, so this guide is as much about *what the API guarantees synchronously* as it is about the call shapes.
 
 ---

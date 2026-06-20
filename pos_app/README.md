@@ -6,6 +6,9 @@ business logic; it runs a register entirely by calling the ERP REST API
 variance — everything the client shows in money is a *preview* until the ERP's
 finalised `SalesInvoice` comes back.
 
+- **User manual (cashiers):** `docs/POS-USER-MANUAL.md` (+ `.docx`), authored as
+  chapters under `docs/pos-user-manual/` and rebuilt with
+  `bash docs/tools/build-pos-manual.sh`.
 - **Spec:** `docs/integration/pos/prd/` (the PRD) + the API reference
   (`docs/integration/pos/00`–`12`).
 - **Visual design:** the `pos-ui-prototype/` OrbixPOS mock (indigo brand, green
