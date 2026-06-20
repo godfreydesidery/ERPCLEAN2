@@ -7,6 +7,8 @@ import '../../state/app_controller.dart';
 import '../../state/cart_controller.dart';
 import '../../widgets/ui.dart';
 import '../session/session_menu.dart';
+import 'pharmacy_register.dart';
+import 'restaurant_register.dart';
 import 'supermarket_register.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
@@ -42,9 +44,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             Expanded(
               child: switch (mode) {
                 BusinessMode.supermarket => const SupermarketRegister(),
-                BusinessMode.pharmacy => const _ComingSoon(BusinessMode.pharmacy),
-                BusinessMode.restaurant =>
-                  const _ComingSoon(BusinessMode.restaurant),
+                BusinessMode.pharmacy => const PharmacyRegister(),
+                BusinessMode.restaurant => const RestaurantRegister(),
               },
             ),
           ],
@@ -148,25 +149,3 @@ class _ModeSwitch extends ConsumerWidget {
   }
 }
 
-class _ComingSoon extends StatelessWidget {
-  const _ComingSoon(this.mode);
-  final BusinessMode mode;
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(mode.glyph, style: const TextStyle(fontSize: 48)),
-          const SizedBox(height: 12),
-          Text('${mode.label} register',
-              style:
-                  const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 6),
-          const Text('This register mode is coming next.',
-              style: TextStyle(color: AppColors.ink2)),
-        ],
-      ),
-    );
-  }
-}

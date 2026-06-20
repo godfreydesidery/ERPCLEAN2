@@ -54,6 +54,7 @@ class CartState {
     this.agent,
     this.currency = 'TZS',
     this.selectedId,
+    this.notes,
   });
 
   final List<CartLine> lines;
@@ -61,6 +62,9 @@ class CartState {
   final Agent? agent;
   final String currency;
   final String? selectedId;
+
+  /// Free-text carried onto the sale (e.g. pharmacy Rx / restaurant table).
+  final String? notes;
 
   List<CartLine> get activeLines => lines.where((l) => !l.voided).toList();
   bool get isEmpty => activeLines.isEmpty;
@@ -107,7 +111,7 @@ class CartState {
         'tenders': tenders.map((t) => t.toJson()).toList(),
       'tenderedAmount': ?tenderedAmount,
       'ageVerified': ageVerified,
-      'notes': ?notes,
+      'notes': ?(notes ?? this.notes),
     };
   }
 
@@ -118,6 +122,7 @@ class CartState {
     String? currency,
     String? selectedId,
     bool clearSelected = false,
+    String? notes,
   }) =>
       CartState(
         lines: lines ?? this.lines,
@@ -125,6 +130,7 @@ class CartState {
         agent: agent ?? this.agent,
         currency: currency ?? this.currency,
         selectedId: clearSelected ? null : (selectedId ?? this.selectedId),
+        notes: notes ?? this.notes,
       );
 }
 
@@ -212,9 +218,21 @@ class CartController extends Notifier<CartState> {
   void setCustomer(Customer c) => state = state.copyWith(customer: c);
   void setAgent(Agent a) => state = state.copyWith(agent: a);
   void setCurrency(String c) => state = state.copyWith(currency: c);
+  void setNotes(String? n) =>
+      state = CartState(
+        lines: state.lines,
+        customer: state.customer,
+        agent: state.agent,
+        currency: state.currency,
+        selectedId: state.selectedId,
+        notes: n,
+      );
 
-  void clearLines() =>
-      state = state.copyWith(lines: const [], clearSelected: true);
+  void clearLines() => state = CartState(
+        customer: state.customer,
+        agent: state.agent,
+        currency: state.currency,
+      );
 }
 
 final cartProvider =

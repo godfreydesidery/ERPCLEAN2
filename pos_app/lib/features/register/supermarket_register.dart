@@ -11,6 +11,7 @@ import '../../state/catalog_cache.dart';
 import '../../state/providers.dart';
 import '../../widgets/ui.dart';
 import '../payment/payment_sheet.dart';
+import 'pickers.dart';
 
 enum _NumTarget { qty, disc }
 
@@ -668,7 +669,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
   Widget _customerChip(CartState cart) {
     return InkWell(
       borderRadius: AppRadii.brSm,
-      onTap: () => showToast(context, 'Customer picker — coming soon'),
+      onTap: () => showCustomerPicker(context, ref),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
