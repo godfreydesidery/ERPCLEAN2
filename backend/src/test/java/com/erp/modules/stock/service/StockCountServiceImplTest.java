@@ -134,13 +134,14 @@ class StockCountServiceImplTest {
         //            brand, manufacturer, weight, volume, dimensions, hsCode,   // P2-M3
         //            version, createdAt, createdBy, updatedAt, updatedBy,
         //            reorderLevel, reorderQty, safetyStock, minStock, maxStock,
-        //            leadTimeDays, purchasable, preferredSupplierId)
+        //            leadTimeDays, purchasable, preferredSupplierId,
+        //            restrictedKind)                                             // ADR-0044 D-3a
         ProductDto productDto = new ProductDto(PRODUCT_ID, "PROD-UID-001", COMPANY_ID,
                 "P001", "Widget A", null, null,
                 true, true, false, false, false, null, null, null,
                 null, null, null,
                 null, null, null, null, null, null,   // P2-M3 brand/manufacturer/weight/volume/dimensions/hsCode
-                null, null, null, null, null, null, null, null, null, null, null, false, null);
+                null, null, null, null, null, null, null, null, null, null, null, false, null, null);
         when(productService.getById(PRODUCT_ID)).thenReturn(productDto);
 
         // Stub saves — return the passed object (simulate persist)

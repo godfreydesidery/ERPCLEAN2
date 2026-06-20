@@ -493,7 +493,7 @@ class DeliveryServiceIT extends PostgresIntegrationTest {
         setCtx();
         ProductDto p = productService.create(new CreateProductRequest(
                 company.getUid(), null, name, null,
-                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null));
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null, null));
         productService.setPrice(p.uid(),
                 new SetProductPriceRequest(priceListUid, new MoneyDto(price, "TZS")));
         return p;

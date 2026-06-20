@@ -108,7 +108,7 @@ class BomServiceIT extends PostgresIntegrationTest {
     private String createProduct(String name) {
         var dto = productService.create(new CreateProductRequest(
                 company.getUid(), null, name, null,
-                ProductType.GOODS, true, true, uomUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null));
+                ProductType.GOODS, true, true, uomUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null, null));
         return dto.uid();
     }
 

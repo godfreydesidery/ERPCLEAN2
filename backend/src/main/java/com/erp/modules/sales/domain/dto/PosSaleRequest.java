@@ -32,13 +32,27 @@ public record PosSaleRequest(
         @Valid List<PosTender> tenders,
         /** Total tendered (for receipt printing, not stored on invoice). */
         BigDecimal tenderedAmount,
-        @Size(max = 500) String notes
+        @Size(max = 500) String notes,
+        /**
+         * Age-verification acknowledgement (ADR-0044 D-3a, BR-11). Optional — existing clients
+         * that omit this field are treated as {@code false}. When any sale line contains a product
+         * with {@code restrictedKind != NONE}, either this must be {@code true} OR the cashier
+         * must hold {@code POS.SALE.AGE_OVERRIDE}; otherwise the sale is rejected with 409.
+         */
+        Boolean ageVerified
 ) {
 
-    /** Backward-compatible constructor (no tenders) — existing callers/clients are unaffected. */
+    /** Backward-compatible constructor (no tenders, no ageVerified) — existing callers unaffected. */
     public PosSaleRequest(String sessionUid, Long customerId, Long agentId, String currency,
                           List<LineItem> lines, BigDecimal tenderedAmount, String notes) {
-        this(sessionUid, customerId, agentId, currency, lines, null, tenderedAmount, notes);
+        this(sessionUid, customerId, agentId, currency, lines, null, tenderedAmount, notes, null);
+    }
+
+    /** Backward-compatible constructor (tenders, no ageVerified) — preserves ADR-0042 D-3 callers. */
+    public PosSaleRequest(String sessionUid, Long customerId, Long agentId, String currency,
+                          List<LineItem> lines, List<PosTender> tenders,
+                          BigDecimal tenderedAmount, String notes) {
+        this(sessionUid, customerId, agentId, currency, lines, tenders, tenderedAmount, notes, null);
     }
 
     public record LineItem(

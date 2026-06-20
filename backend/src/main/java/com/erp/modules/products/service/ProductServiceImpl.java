@@ -22,6 +22,7 @@ import com.erp.modules.products.domain.entity.ProductBulkPack;
 import com.erp.modules.products.domain.entity.ProductComponent;
 import com.erp.modules.products.domain.entity.ProductPrice;
 import com.erp.modules.products.domain.entity.UnitOfMeasure;
+import com.erp.modules.products.domain.enums.RestrictedKind;
 import com.erp.modules.products.domain.enums.VatStatus;
 import com.erp.modules.products.repository.PriceListRepository;
 import com.erp.modules.products.repository.ProductBarcodeRepository;
@@ -130,6 +131,7 @@ public class ProductServiceImpl implements ProductService {
         p.setDescription(req.description());
         p.setCost(MoneyDto.toMoney(req.cost()));
         p.setVatStatus(req.vatStatus() != null ? req.vatStatus() : VatStatus.STANDARD);
+        p.setRestrictedKind(req.restrictedKind() != null ? req.restrictedKind() : RestrictedKind.NONE);
         applyPlanningFields(p, companyId, req.reorderLevel(), req.reorderQty(), req.safetyStock(),
                 req.minStock(), req.maxStock(), req.leadTimeDays(), req.purchasable(),
                 req.preferredSupplierId());
@@ -188,6 +190,7 @@ public class ProductServiceImpl implements ProductService {
         p.setBaseUnit(baseUnit);
         p.setCost(MoneyDto.toMoney(req.cost()));
         p.setVatStatus(req.vatStatus() != null ? req.vatStatus() : VatStatus.STANDARD);
+        p.setRestrictedKind(req.restrictedKind() != null ? req.restrictedKind() : RestrictedKind.NONE);
         applyPlanningFields(p, p.getCompanyId(), req.reorderLevel(), req.reorderQty(),
                 req.safetyStock(), req.minStock(), req.maxStock(), req.leadTimeDays(),
                 req.purchasable(), req.preferredSupplierId());
