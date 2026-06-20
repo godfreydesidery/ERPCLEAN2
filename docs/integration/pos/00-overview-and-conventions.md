@@ -260,9 +260,10 @@ These conventions hold across all POS DTOs.
   full precision (e.g. `1500.00`, `2.5`). Send them as numbers (a numeric string also coerces).
 - Validation seen on POS request DTOs:
   - `PosSaleRequest.LineItem.quantity` — `@NotNull @DecimalMin("0.0001")`
-  - `PosSaleRequest.LineItem.unitPrice` — `@NotNull @DecimalMin("0.00")`
-    (required by the validator but **ignored by the sale path** — the server resolves the list price
-    itself; see [04](./04-pricing-tax-currency.md) and [12](./12-known-limitations.md))
+  - `PosSaleRequest.LineItem.unitPrice` — **optional** `@DecimalMin("0.00")` (the `@NotNull` was relaxed
+    in ADR-0042 D-4). Accepted but **ignored by the sale path** — the server re-derives the price from the
+    price list, so this field never reaches pricing; safe to omit or send for receipt display only. See
+    [04](./04-pricing-tax-currency.md) and [12](./12-known-limitations.md).
   - `PosSaleRequest.LineItem.lineDiscountAmount` — nullable `BigDecimal`
   - `OpenSessionRequest.openingFloatAmount` — `@NotNull @DecimalMin("0.00")`
   - `CloseSessionRequest.countedCashAmount` — `@NotNull`
@@ -300,6 +301,7 @@ Method security is enforced by `@PreAuthorize` on each controller method (in add
 | Permission | Gates |
 |---|---|
 | `POS.SALE.CREATE` | `POST /api/v1/pos/sales` (`@perm.has`) |
+| `POS.SALE.VOID` | `POST /pos/sales/uid/{uid}/reverse` — whole-invoice POS reversal (`@perm.scoped` on the invoice uid; seeded in `V70`, ADR-0042 D-2) |
 | `POS.SESSION.OPEN` | `POST /api/v1/pos/sessions` (open, `@perm.has`) **and** `POST /pos/sessions/uid/{uid}/payouts` (`@perm.scoped`) |
 | `POS.SESSION.CLOSE` | `POST /pos/sessions/uid/{uid}/close` (`@perm.scoped`) |
 | `POS.SESSION.VIEW` | `GET /pos/sessions/uid/{uid}`, `GET /pos/sessions` (list), `GET /pos/sessions/uid/{uid}/x-read` |
@@ -478,20 +480,29 @@ curl -sS -X POST "$BASE/api/v1/pos/sessions/uid/sess_4d2e/close" \
 ### 10.12 `POST /api/v1/pos/sales` — ring a sale
 
 - **Permission:** `POS.SALE.CREATE`
+- **Optional header:** `Idempotency-Key` (≤80 chars) — see the idempotency note below and
+  [11](./11-errors-offline-idempotency.md).
 - **Body:** `PosSaleRequest`
   - `sessionUid` (`@NotBlank` String) — must reference an **OPEN** session
   - `customerId` (`@NotNull` Long)
-  - `agentId` (`@NotNull` Long)
+  - `agentId` (optional Long — the `@NotNull` was relaxed in ADR-0042 D-4; informational only, the sale is
+    recorded against the logged-in cashier)
   - `currency` (`@NotBlank` String, 3-letter code)
   - `lines` (`@NotEmpty @Valid List<LineItem>`), each `LineItem`:
     - `productId` (`@NotNull` Long), `unitId` (`@NotNull` Long)
     - `quantity` (`@NotNull @DecimalMin("0.0001")` BigDecimal)
-    - `unitPrice` (`@NotNull @DecimalMin("0.00")` BigDecimal — required by the validator but
-      **ignored**; the server resolves the list price itself, see [12](./12-known-limitations.md))
+    - `unitPrice` (optional `@DecimalMin("0.00")` BigDecimal — `@NotNull` relaxed in ADR-0042 D-4; accepted
+      but **ignored**, the server re-derives the price from the price list, see
+      [12](./12-known-limitations.md))
     - `lineDiscountAmount` (nullable BigDecimal)
+  - `tenders` (nullable `@Valid List<PosTender>` — optional **split / non-cash** payment list, ADR-0042
+    D-3; each `PosTender` carries `tenderType` (`CASH` / `CARD` / `MOBILE_MONEY` / `CHEQUE`) + `amount` +
+    instrument refs, and their sum must cover the gross total. **Omit** ⇒ a single exact CASH payment
+    (legacy). See [09](./09-sales-payments-receipts.md).)
   - `tenderedAmount` (nullable BigDecimal — **receipt-only, not stored on the invoice**)
   - `notes` (`@Size(max=500)` String, nullable)
 - **Success:** **201**, `data` = `SalesInvoiceDto` (the finalised invoice, ready for receipt printing).
+  Replaying the same `Idempotency-Key` returns the **original** invoice (still **201**), no double post.
 
 > **No branch in the body.** Scope comes from the JWT (or `X-Branch-Uid`) and the resolved session's
 > company; `ScopeGuard.assertCanActIn(...)` enforces the caller can act in the session's company.
@@ -532,21 +543,45 @@ curl -sS -X POST "$BASE/api/v1/pos/sales" \
   - **404** — unknown `sessionUid` (`NotFoundException.of("PosSession", uid)`), `customerId`, `productId`,
     or `unitId`.
   - **409** — session **not OPEN** (`POS session <uid> is not OPEN.`); finalising with no lines;
-    cash invoice not paid-in-full; credit-limit exceeded without `SALES.CREDIT.OVERRIDE`; optimistic-lock
-    conflict (`This record was modified by another transaction. Please reload and try again.` —
-    retryable).
+    cash/tenders not covering the gross; credit-limit exceeded without `SALES.CREDIT.OVERRIDE`;
+    a concurrent request is still in flight under the **same `Idempotency-Key`** (`still in progress; retry
+    shortly` — **retryable**, resend the same key); optimistic-lock conflict (`This record was modified by
+    another transaction. Please reload and try again.` — retryable).
   - **415** — wrong content type.
   - **422** — `currency` not enabled for the session's company/branch scope.
 
 > **Two critical behaviours for sale create** (each detailed on its own page):
 >
-> 1. **No idempotency.** `POST /pos/sales` has **no** `Idempotency-Key` header and `PosSaleRequest` has
->    **no** client-reference/dedup field. A blind retry after a timeout that actually committed will
->    create a **second** finalised invoice (duplicate stock + GL/AR). `X-Request-Id` is correlation only.
->    Implement client-side dedupe or check for the existing invoice before re-sending.
+> 1. **Idempotency is opt-in (ADR-0042 D-1, commit `f08fb08`).** Send an optional **`Idempotency-Key`**
+>    request header (≤80 chars, per-company scope) and a blind retry after a timeout is safe: the key is
+>    reserved before processing, so replaying it returns the **original** invoice (still **201**, matched by
+>    uid) with no double post; a concurrent in-flight request under the same key gets a retryable **409**
+>    (`still in progress; retry shortly`). **Omitting** the header keeps the legacy non-idempotent path, so
+>    a blind retry there still duplicates the invoice (stock + GL/AR). `X-Request-Id` is correlation only and
+>    is **not** used for dedup. See [11](./11-errors-offline-idempotency.md).
 > 2. **Posting is only partially synchronous.** The 201 returns a **FINALISED, fully-paid** invoice, but
 >    the stock issue, GL journal, and AR posting are applied **asynchronously** by an outbox poller
 >    (~1s). Do **not** assume the ledger/stock is posted at response time.
+
+### 10.13 `POST /api/v1/pos/sales/uid/{uid}/reverse` — reverse (void/refund) a POS sale
+
+- **Permission:** `POS.SALE.VOID` (scoped to the **invoice** uid; ADR-0042 D-2, commit `f08fb08`)
+- **Body:** `{ "reason": "..." }`
+- **Success:** **204 No Content**. Performs a **whole-invoice reversal** — reverses revenue + VAT + cash,
+  reverses the stock issue and inventory valuation (DR Inventory / CR COGS), and the reversed sale drops out
+  of the session's expected cash at X/Z-read.
+- **Preconditions:** the invoice must be POS-origin, **FINALISED**, and its originating session still
+  **OPEN**; otherwise **409** (use the back-office invoice void instead).
+- **Notable errors:** 401; 403 (lacks `POS.SALE.VOID`); 404 (unknown invoice uid); 409 (precondition not met).
+- **Scope:** whole-invoice only — **partial / line-level POS refunds are deferred** (ADR-0042). See
+  [10](./10-returns-refunds.md).
+
+```bash
+curl -sS -X POST "$BASE/api/v1/pos/sales/uid/inv_8b1f/reverse" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"reason":"Customer changed mind"}'
+```
 
 ---
 
@@ -601,7 +636,9 @@ the source of truth for those two conventions.
 3. (Optional) set `X-Branch-Uid` to scope to a specific branch; set `X-Request-Id` for traceability.
 4. Confirm POS permissions via `GET /api/v1/auth/me`.
 5. Ensure a till exists (`/pos/tills`), open a session (`/pos/sessions`), then ring sales (`/pos/sales`).
-6. Read `data` for payloads; treat non-empty `errors[]` (with the HTTP status) as failure; retry only on
-   409 optimistic-lock.
-7. **Do not** blind-retry `POST /pos/sales`; **do not** assume GL/stock is posted when the 201 returns.
+6. Read `data` for payloads; treat non-empty `errors[]` (with the HTTP status) as failure; retry on
+   409 optimistic-lock or the `Idempotency-Key`-in-progress 409 (resend the same key).
+7. Send an **`Idempotency-Key`** header on `POST /pos/sales` so retries are safe (without it a blind retry
+   duplicates); **do not** assume GL/stock is posted when the 201 returns. To undo a sale on an open session,
+   `POST /pos/sales/uid/{uid}/reverse` (perm `POS.SALE.VOID`).
 8. X-read any time; close + reconcile at end of shift.

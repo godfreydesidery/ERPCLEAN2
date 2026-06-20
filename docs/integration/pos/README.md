@@ -17,7 +17,7 @@ These hold for every endpoint in this guide; see [00 — Overview & Conventions]
 | Scope | Company/branch scope is taken from the JWT (the cashier's default branch). Override per-request with the optional `X-Branch-Uid` header — no re-login. |
 | Correlation | Send `X-Request-Id` to correlate logs; it is echoed back on the response (logging only — **not** used for deduplication). |
 | Paging | Paged endpoints accept `page` (0-based), `size`, `sort`; `meta` carries `{page,size,totalElements,totalPages,hasNext}`. |
-| Idempotency | **None.** `POST /api/v1/pos/sales` has no idempotency key — a blind retry creates a *second* sale. See [11 — Errors, Offline & Idempotency](./11-errors-offline-idempotency.md). |
+| Idempotency | **Optional, recommended.** Send an `Idempotency-Key` header (≤80 chars) on `POST /api/v1/pos/sales` and reuse the **same** value on retries — a replay returns the *original* invoice, never a second sale (omit it → legacy non-idempotent behaviour). Shipped in `f08fb08` / ADR-0042; full contract in [11 — Errors, Offline & Idempotency](./11-errors-offline-idempotency.md). |
 | OpenAPI | Swagger UI at `/swagger-ui/index.html`, spec at `/v3/api-docs` (can be disabled in production via `ERP_SWAGGER_ENABLED=false`). |
 
 ---
@@ -98,35 +98,35 @@ GET /api/v1/units                                  # units of measure (need unit
 GET /api/v1/products/uid/{productUid}/prices       # price-list entries for a product
 GET /api/v1/products/barcode-lookup?companyId={companyId}&barcode={scanned}
 ```
-Build your cart from the numeric `productId` + `unitId` + a `unitPrice`. Optionally check sellable quantity via [06 — Stock Availability](./06-stock-availability.md) (`GET /api/v1/stock/on-hand`). Resolve the cash **customer** id and the **agent** id from [05 — Customers](./05-customers.md) (`GET /api/v1/customers`) and `GET /api/v1/agents`.
+Build your cart from the numeric `productId` + `unitId` + `quantity`. **Pricing is server-authoritative** — any `unitPrice` you send on a sale line is **ignored**; the server re-derives the price and VAT from its own price list (load prices only for your own display — see [04 — Pricing, Tax & Currency](./04-pricing-tax-currency.md) and [09](./09-sales-payments-receipts.md)). Optionally check sellable quantity via [06 — Stock Availability](./06-stock-availability.md) (`GET /api/v1/stock/on-hand`). Resolve the cash **customer** id from [05 — Customers](./05-customers.md) (`GET /api/v1/customers`).
 
 ### 6. Ring a sale
 Post the cart against the open session (requires `POS.SALE.CREATE`):
 ```http
 POST /api/v1/pos/sales
 Content-Type: application/json
+Idempotency-Key: pos-term-3-basket-8f2c1a
 
 {
   "sessionUid": "sess_...",
   "customerId": 501,
-  "agentId": 9,
   "currency": "TZS",
   "lines": [
-    { "productId": 1001, "unitId": 3, "quantity": 2, "unitPrice": 1500.00, "lineDiscountAmount": 0 },
-    { "productId": 1042, "unitId": 3, "quantity": 1, "unitPrice": 4000.00, "lineDiscountAmount": 200.00 }
+    { "productId": 1001, "unitId": 3, "quantity": 2, "lineDiscountAmount": 0 },
+    { "productId": 1042, "unitId": 3, "quantity": 1, "lineDiscountAmount": 200.00 }
   ],
   "tenderedAmount": 7000.00,
   "notes": "walk-in"
 }
 ```
-On success you get **HTTP 201** and `data` is the **finalised** `SalesInvoiceDto` (number allocated, VAT and totals frozen, tagged `origin=POS` and to your `posSessionId`). The sale is recorded as a fully-paid CASH **DIRECT** invoice.
+On success you get **HTTP 201** and `data` is the **finalised** `SalesInvoiceDto` (number allocated, VAT and totals frozen, tagged `origin=POS` and to your `posSessionId`). The sale is a fully-paid **DIRECT** invoice — settled by a single exact CASH tender by default, or by an optional `tenders` list (split / non-cash) if you send one (see [09](./09-sales-payments-receipts.md)). (`unitPrice` and `agentId` are optional and ignored — the server prices from its own list and attributes the sale to the logged-in cashier.)
 
 > **What is *not* done by the time 201 returns:** stock issue, the GL revenue/VAT/cash journal, and the AR posting run **asynchronously** (a ~1s outbox poller), each in its own transaction. Do not assume the ledger is posted at response time. See [09 — Sales, Payments & Receipts](./09-sales-payments-receipts.md).
 >
-> **No idempotency:** if the POST times out but actually committed, a blind retry creates a **second** invoice and a second stock/GL/AR effect. Implement client-side dedupe (e.g. re-query before resending). See [11](./11-errors-offline-idempotency.md).
+> **Idempotency (recommended):** send the `Idempotency-Key` header above and **reuse the same value** on any retry of that basket. If the POST times out but actually committed, resending with the same key returns the **original** invoice (no second sale). Omit the header and a blind retry creates a duplicate. See [11](./11-errors-offline-idempotency.md).
 
 ### 7. Print the receipt
-The 201 body is everything you need to print — invoice number, line snapshots, VAT, gross total, and the `tenderedAmount` you submitted (compute change locally). No extra call is required for a basic receipt; reprints/lookups are covered in [09](./09-sales-payments-receipts.md). Note: the POS API has **no sale-reversal/refund endpoint** — see [10 — Returns & Refunds](./10-returns-refunds.md) for what is (and isn't) possible.
+The 201 body is everything you need to print — invoice number, line snapshots, VAT, gross total, and the `tenderedAmount` you submitted (compute change locally). No extra call is required for a basic receipt; reprints/lookups are covered in [09](./09-sales-payments-receipts.md). Note: a mis-rung POS sale can be **reversed** (whole-sale void/refund) via `POST /api/v1/pos/sales/uid/{uid}/reverse` (perm `POS.SALE.VOID`) while the session is OPEN — see [10 — Returns & Refunds](./10-returns-refunds.md) (partial/line-level refunds are deferred).
 
 ### 8. (During the shift) X-read — non-resetting snapshot
 At any point you can pull a mid-shift totals snapshot without affecting the session (requires `POS.SESSION.VIEW`):
@@ -172,9 +172,9 @@ That is the full loop: **login → context → till → session → catalog → 
 | 07 | [Tills](./07-tills.md) | Till (register) CRUD, listing by branch, default cash/bank account, deactivation. |
 | 08 | [Sessions](./08-sessions.md) | Session lifecycle: open → payout → X-read → close → reconcile (Z-read); variance posting. |
 | 09 | [Sales, Payments & Receipts](./09-sales-payments-receipts.md) | `POST /pos/sales` in depth, the synchronous vs. eventual side effects, receipt data. |
-| 10 | [Returns & Refunds](./10-returns-refunds.md) | Why the POS API has no sale-reversal/refund endpoint, and the office-side return path. |
-| 11 | [Errors, Offline & Idempotency](./11-errors-offline-idempotency.md) | Full HTTP error table, the no-idempotency caveat, safe-retry and offline guidance. |
-| 12 | [Known Limitations & API Gaps](./12-known-limitations.md) | **Read before production:** no sale idempotency, no POS reversal/refund, cash-only single tender, `unitPrice` ignored — with recommended fixes. |
+| 10 | [Returns & Refunds](./10-returns-refunds.md) | The POS sale-reversal/void endpoint (whole-sale refund, OPEN session), the office-side return path, and the deferred partial-refund case. |
+| 11 | [Errors, Offline & Idempotency](./11-errors-offline-idempotency.md) | Full HTTP error table, the `Idempotency-Key` contract (replay/in-flight 409), safe-retry and offline guidance. |
+| 12 | [Known Limitations & API Gaps](./12-known-limitations.md) | **Read before production:** the four gaps now CLOSED (idempotency, POS reversal, multi-tender, server-authoritative pricing) and the genuine remaining limits (partial/line-level refunds deferred, no offline ingest). |
 
 ---
 

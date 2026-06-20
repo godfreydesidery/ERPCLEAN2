@@ -81,13 +81,13 @@ Two hard rules to design around (both from `PosSessionServiceImpl`):
 
 ### UC-B3: Record a cash payout / drawer drop mid-shift
 - **Actor:** cashier (or supervisor) holding `POS.SESSION.OPEN`.
-- **Goal:** record cash leaving the drawer during the shift (a drawer-to-safe drop, a petty payout, or cash handed back on a refund) so the expected-cash figure stays accurate.
+- **Goal:** record cash leaving the drawer during the shift (a drawer-to-safe drop, a petty payout, or ad-hoc cash handed back that is **not** tied to reversing a sale) so the expected-cash figure stays accurate. To actually refund a POS sale, use UC-B9 (`/reverse`), not a payout.
 - **Preconditions:**
   - Authenticated; holds `POS.SESSION.OPEN` (there is **no** separate payout permission — the same code that opens a session authorises payouts), scoped to the session.
   - The session is **`OPEN`** (payouts are illegal once `CLOSED`/`RECONCILED`).
 - **Main flow:**
   1. `POST /api/v1/pos/sessions/uid/{uid}/payouts` ([§08 §6](../08-sessions.md)) with body `{ "payoutType", "amount", "reason" }`.
-     - `payoutType` — `@NotNull`, one of `PAID_OUT` (drawer-to-safe / petty payout) or `REFUND` (cash returned to a customer).
+     - `payoutType` — `@NotNull`, one of `PAID_OUT` (drawer-to-safe / petty payout) or `REFUND` (ad-hoc cash returned to a customer — drawer bookkeeping only; this does **not** reverse a sale, see UC-B9).
      - `amount` — `@NotNull`, `@DecimalMin("0.01")` (strictly positive).
      - `reason` — optional, `@Size(max = 255)`.
   2. On **200 OK** the body is `{ "data": null, ... }` — the handler returns `void`. The amount is now subtracted from the session's expected cash.
@@ -99,7 +99,7 @@ Two hard rules to design around (both from `PosSessionServiceImpl`):
   - **415** — body not `application/json`.
 - **Outcome:** every payout **reduces** expected cash (`expectedCashAmount = openingFloat + cashSales − totalPayouts`). The reduction is visible immediately on the next X-read (UC-B4) and is baked into the close/reconcile math (UC-B5/B6).
 - **Notes & limitations:**
-  - **Payouts are cash-drawer bookkeeping only.** A `REFUND` payout records cash leaving the till but posts **no** stock-in, no VAT/revenue reversal, and no AR credit — see [§12 #2 (no POS reversal/refund)](../12-known-limitations.md). It does **not** undo a sale; the ledger stays overstated and needs a back-office correcting entry.
+  - **Payouts are cash-drawer bookkeeping only.** A `REFUND` payout records cash leaving the till but posts **no** stock-in, no VAT/revenue reversal, and no AR credit. It does **not** undo a sale. To actually reverse an OPEN-session POS sale (stock + VAT + revenue + cash), use the dedicated whole-sale void/refund `POST /api/v1/pos/sales/uid/{uid}/reverse` (`POS.SALE.VOID`) instead — see UC-B9 and [§12 #2 (whole-sale reversal — CLOSED)](../12-known-limitations.md#2-whole-sale-pos-reversal--refund--void--closed-reverse-endpoint) (commit `f08fb08`, ADR-0042). The `REFUND` payout is now for **ad-hoc cash-out not tied to a sale** (or a sale whose session has already closed); using it to refund an open-session sale leaves the ledger overstated and needs a back-office correcting entry.
   - Both enum values are **outflows**; there is no cash-in / float-top-up type. To add cash to a drawer you must open a new session with a larger float — there is no mid-shift increase.
   - This endpoint is **not idempotent** — a blind retry records a second payout. Confirm success before resending ([§11](../11-errors-offline-idempotency.md)).
 
@@ -177,13 +177,13 @@ Two hard rules to design around (both from `PosSessionServiceImpl`):
 - **Notes & limitations:**
   - **Terminal state.** There is no un-reconcile and no edit after reconcile — any correction is a manual back-office journal.
   - The variance posting is **fail-fast and synchronous**, unlike the sale's stock/GL/AR effects which are eventual ([§09](../09-sales-payments-receipts.md)). A 200 from reconcile means the variance journal is actually posted (or the variance was zero).
-  - Reconcile resolves only the **cash variance**. It does not reconcile or reverse any sale-level discrepancy — e.g. cash refunded via a `REFUND` payout (UC-B3) leaves stock/revenue/VAT overstated; that is a [§12 #2](../12-known-limitations.md) gap to handle in the back office, not something Z-read fixes.
+  - Reconcile resolves only the **cash variance**. It does not reconcile or reverse any sale-level discrepancy — e.g. cash refunded via an ad-hoc `REFUND` payout (UC-B3) leaves stock/revenue/VAT overstated; that is not something Z-read fixes. The proper way to reverse a sale is the whole-sale void/refund endpoint while its session is still OPEN (UC-B9); once the session has closed, a sale-level correction is a back-office void on `/sales-invoices`.
 
 ---
 
-## Use cases the shift loop does NOT support today
+## Edge cases beyond the core shift loop
 
-These are common cash-management needs that the current session API cannot satisfy. They are listed so a POS builder plans around them rather than discovering the gap at runtime.
+These are common cash-management needs that sit outside the core shift loop. Most are still **not supported** by the session API (UC-B7, UC-B8, UC-B10) and are listed so a POS builder plans around them rather than discovering the gap at runtime. One — **whole-sale void/refund at the till (UC-B9)** — is now **supported** (commit `f08fb08`, ADR-0042); only its partial / line-level variant remains deferred.
 
 ### UC-B7: Float top-up / cash-in mid-shift — **Not supported today**
 - **What you'd want:** add cash to the drawer (or correct the opening float) during an open shift.
@@ -195,10 +195,19 @@ These are common cash-management needs that the current session API cannot satis
 - **Why not:** the lifecycle is strictly one-way (`OPEN → CLOSED → RECONCILED`); every backward transition is rejected with **409**.
 - **Closest workaround:** record the correction as a back-office GL journal; do not attempt to mutate the session.
 
-### UC-B9: Refund / void a POS sale from the till — **Not supported today**
-- **What you'd want:** a cashier reverses a wrong or returned sale at the register.
-- **Why not:** there is **no POS reversal/refund/void endpoint** ([§12 #2](../12-known-limitations.md)); the general returns path needs a delivery uid that a DIRECT-origin POS invoice never has ([§10](../10-returns-refunds.md)). The session `REFUND` **payout** (UC-B3) only records cash leaving the drawer — it posts no stock/VAT/revenue/AR reversal.
-- **Closest workaround:** record a `REFUND` payout for the cash handed back (drawer accuracy only), then raise a back-office correcting journal/credit note. Expect the ledger to be overstated until that is done.
+### UC-B9: Void / refund a whole POS sale from the till — **Supported** (commit `f08fb08`, ADR-0042)
+- **Actor:** cashier (or supervisor) holding **`POS.SALE.VOID`** (scoped on the invoice `uid`; auto-granted to `ORG_ADMIN`).
+- **Goal:** a cashier reverses a wrong or returned sale at the register while the shift is still open.
+- **Preconditions (else **409** → back-office void):**
+  - The invoice is **POS-origin** (has a `posSessionId`).
+  - Its originating **session is still `OPEN`**.
+  - The invoice is **FINALISED**.
+- **Main flow:**
+  1. `POST /api/v1/pos/sales/uid/{uid}/reverse` with body `{ "reason": "<text>" }` (`reason` is `@NotBlank`) → **204 No Content**.
+  2. The whole-invoice reversal acts as a **full refund**: it reverses revenue + VAT + cash (a POS cash sale has no AR leg), reverses the stock issue (restoring inventory valuation), and posts **DR Inventory / CR COGS** — see [§12 #2](../12-known-limitations.md#2-whole-sale-pos-reversal--refund--void--closed-reverse-endpoint).
+  3. The reversed sale automatically **drops out of the session's expected cash** at X/Z-read — **no separate `REFUND` payout is needed** (and a payout would not reverse the sale anyway; see UC-B3).
+- **Limitation — partial / line-level refunds are deferred (ADR-0042):** this endpoint reverses the **whole** sale only. To return some lines, or a partial quantity, use a back-office per-line credit note against the originating invoice — there is no at-till partial refund yet ([§12 #5](../12-known-limitations.md#5-partial--line-level-pos-refunds--deferred)).
+- **Closest workaround for a closed session:** if the originating session has already CLOSED/RECONCILED, `/reverse` returns **409** — handle the reversal via the back-office invoice void on `/sales-invoices`, where the cash difference is a reconciled-variance matter rather than a till refund.
 
 ### UC-B10: Non-cash or split tender at the till — **Not supported today**
 - **What you'd want:** card, mobile-money, cheque, or split (part-cash/part-card) tender on a sale during the shift.
@@ -211,7 +220,8 @@ These are common cash-management needs that the current session API cannot satis
 
 1. **UC-B1** — `POST /api/v1/pos/sessions` `{tillUid, openingFloatAmount}` → 201, session `OPEN`, keep `uid`.
 2. (through the shift) ring sales — `POST /api/v1/pos/sales` `{sessionUid, ...}` (session must be `OPEN`; [§09](../09-sales-payments-receipts.md)).
-3. **UC-B3** (optional) — `POST .../uid/{uid}/payouts` for drawer drops / cash refunds.
-4. **UC-B4** (optional) — `GET .../uid/{uid}/x-read` for a mid-shift cash snapshot.
-5. **UC-B5** — `POST .../uid/{uid}/close` `{countedCashAmount, notes}` → 200, session `CLOSED`, variance computed.
-6. **UC-B6** — `POST .../uid/{uid}/reconcile` `{notes}` → 200, Z-read returned, variance journal posted (if non-zero), session `RECONCILED`.
+3. **UC-B3** (optional) — `POST .../uid/{uid}/payouts` for drawer drops / ad-hoc cash-out not tied to a sale.
+4. **UC-B9** (optional) — `POST /api/v1/pos/sales/uid/{uid}/reverse` `{reason}` → 204 to void/refund a whole sale while its session is OPEN (`POS.SALE.VOID`).
+5. **UC-B4** (optional) — `GET .../uid/{uid}/x-read` for a mid-shift cash snapshot.
+6. **UC-B5** — `POST .../uid/{uid}/close` `{countedCashAmount, notes}` → 200, session `CLOSED`, variance computed.
+7. **UC-B6** — `POST .../uid/{uid}/reconcile` `{notes}` → 200, Z-read returned, variance journal posted (if non-zero), session `RECONCILED`.
