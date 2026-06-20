@@ -240,33 +240,44 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
   Widget _left() {
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: Column(
+      child: Stack(
         children: [
-          _searchBar(),
-          if (_loadingCatalogue)
-            const Padding(
-              padding: EdgeInsets.only(top: 10),
-              child: LinearProgressIndicator(minHeight: 2),
+          Column(
+            children: [
+              _searchBar(),
+              if (_loadingCatalogue)
+                const Padding(
+                  padding: EdgeInsets.only(top: 10),
+                  child: LinearProgressIndicator(minHeight: 2),
+                ),
+              const SizedBox(height: 12),
+              Expanded(child: _grid()),
+            ],
+          ),
+          // The search-results dropdown must paint ON TOP of the grid, so it is
+          // the last child of the Stack (not nested inside the search bar, where
+          // the grid would occlude it).
+          if (_results.isNotEmpty)
+            Positioned(
+              top: 52,
+              left: 0,
+              right: 0,
+              child: _resultsOverlay(),
             ),
-          const SizedBox(height: 12),
-          Expanded(child: _grid()),
         ],
       ),
     );
   }
 
   Widget _searchBar() {
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Container(
-          decoration: BoxDecoration(
-            color: AppColors.panel,
-            borderRadius: AppRadii.brLg,
-            border: Border.all(color: AppColors.line2),
-          ),
-          padding: const EdgeInsets.only(left: 14, right: 4),
-          child: Row(
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.panel,
+        borderRadius: AppRadii.brLg,
+        border: Border.all(color: AppColors.line2),
+      ),
+      padding: const EdgeInsets.only(left: 14, right: 4),
+      child: Row(
             children: [
               Icon(_busyScan ? Icons.hourglass_top : Icons.qr_code_scanner,
                   color: AppColors.ink3, size: 20),
@@ -307,20 +318,13 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
               ),
             ],
           ),
-        ),
-        if (_results.isNotEmpty) _resultsOverlay(),
-      ],
-    );
+        );
   }
 
   Widget _resultsOverlay() {
-    return Positioned(
-      top: 54,
-      left: 0,
-      right: 0,
-      child: Material(
-        elevation: 8,
-        borderRadius: AppRadii.brSm,
+    return Material(
+      elevation: 8,
+      borderRadius: AppRadii.brSm,
         child: Container(
           constraints: const BoxConstraints(maxHeight: 320),
           decoration: BoxDecoration(
@@ -368,8 +372,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
             },
           ),
         ),
-      ),
-    );
+      );
   }
 
   Widget _grid() {
