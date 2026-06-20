@@ -1,17 +1,24 @@
 import 'dart:convert';
 
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/auth.dart';
 
-/// Persists the auth tokens + user thumbnail in the OS secure store (DPAPI on
-/// Windows, Keystore on Android). On web the implementation degrades to the
-/// browser's less-secure store — acceptable for the v1 "Should" web target.
+/// Persists the auth tokens + user thumbnail.
+///
+/// v1 stores them in the app's local preferences (an OS-user-protected file).
+/// This is deliberately toolchain-free so the till builds on every target
+/// (Windows desktop included) without extra native components. Refresh tokens
+/// are short-lived (7 days), rotated and revocable, which bounds the exposure.
+///
+/// HARDENING (production): swap this implementation for an OS keystore
+/// (DPAPI / Keychain / Android Keystore) behind the same interface once the
+/// platform's secure-storage toolchain is provisioned on the till image.
 class SecureStore {
-  SecureStore([FlutterSecureStorage? storage])
-      : _s = storage ?? const FlutterSecureStorage();
+  SharedPreferences? _prefs;
 
-  final FlutterSecureStorage _s;
+  Future<SharedPreferences> get _p async =>
+      _prefs ??= await SharedPreferences.getInstance();
 
   static const _kAccess = 'pos.access_token';
   static const _kExpires = 'pos.access_expires';
@@ -19,13 +26,13 @@ class SecureStore {
   static const _kUser = 'pos.auth_user';
 
   Future<void> saveSession(TokenBundle b) async {
-    await _s.write(key: _kAccess, value: b.accessToken);
-    await _s.write(
-        key: _kExpires, value: b.accessTokenExpiresAt.toIso8601String());
-    await _s.write(key: _kRefresh, value: b.refreshToken);
-    await _s.write(
-      key: _kUser,
-      value: jsonEncode({
+    final p = await _p;
+    await p.setString(_kAccess, b.accessToken);
+    await p.setString(_kExpires, b.accessTokenExpiresAt.toIso8601String());
+    await p.setString(_kRefresh, b.refreshToken);
+    await p.setString(
+      _kUser,
+      jsonEncode({
         'uid': b.user.uid,
         'username': b.user.username,
         'displayName': b.user.displayName,
@@ -38,26 +45,28 @@ class SecureStore {
   }
 
   Future<TokenBundle?> readSession() async {
-    final access = await _s.read(key: _kAccess);
-    final expires = await _s.read(key: _kExpires);
-    final refresh = await _s.read(key: _kRefresh);
-    final userStr = await _s.read(key: _kUser);
+    final p = await _p;
+    final access = p.getString(_kAccess);
+    final refresh = p.getString(_kRefresh);
+    final userStr = p.getString(_kUser);
     if (access == null || refresh == null || userStr == null) return null;
     final user = AuthUser.fromJson(
         (jsonDecode(userStr) as Map).cast<String, dynamic>());
     return TokenBundle(
       accessToken: access,
       accessTokenExpiresAt:
-          DateTime.tryParse(expires ?? '')?.toUtc() ?? DateTime.now().toUtc(),
+          DateTime.tryParse(p.getString(_kExpires) ?? '')?.toUtc() ??
+              DateTime.now().toUtc(),
       refreshToken: refresh,
       user: user,
     );
   }
 
   Future<void> clear() async {
-    await _s.delete(key: _kAccess);
-    await _s.delete(key: _kExpires);
-    await _s.delete(key: _kRefresh);
-    await _s.delete(key: _kUser);
+    final p = await _p;
+    await p.remove(_kAccess);
+    await p.remove(_kExpires);
+    await p.remove(_kRefresh);
+    await p.remove(_kUser);
   }
 }
