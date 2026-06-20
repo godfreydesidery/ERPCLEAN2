@@ -41,6 +41,7 @@ enum PosSessionStatus {
       .firstWhere((s) => s.wire == w, orElse: () => unknown);
 
   bool get isOpen => this == open;
+  bool get isClosed => this == closed;
 }
 
 /// `InvoiceStatus` — DRAFT -> FINALISED -> VOID.

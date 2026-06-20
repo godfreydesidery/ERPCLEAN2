@@ -99,10 +99,20 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
       try {
         final bc =
             await ref.read(catalogServiceProvider).lookupBarcode(_companyId, value);
+        if (!context.mounted) return;
         final product = _cache.byId(bc.productId);
         if (product != null) {
-          _addProduct(product,
-              fixedQuantity: bc.derivedQuantity, overridePrice: bc.derivedAmount);
+          // Embedded-PRICE labels carry an absolute amount the server cannot
+          // honour (POS pricing is server-authoritative; unitPrice is ignored),
+          // so adding the line would post at the catalogue price — a wrong
+          // charge. Refuse it instead. Embedded-WEIGHT is fine (qty is linear).
+          if (bc.valueKind == 'PRICE' || bc.derivedAmount != null) {
+            showToast(context,
+                "Price-embedded labels aren't supported yet — enter ${product.name} manually.");
+            _resetSearch();
+            return;
+          }
+          _addProduct(product, fixedQuantity: bc.derivedQuantity);
           _resetSearch();
           return;
         }

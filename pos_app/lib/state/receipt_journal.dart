@@ -28,6 +28,25 @@ class ReceiptJournal {
       return Receipt.fromJson((jsonDecode(s) as Map).cast<String, dynamic>());
     }).toList();
   }
+
+  /// Mark a journalled receipt as VOID after its sale is reversed, so an offline
+  /// reprint shows the reversed state (not a stale full-value "Sale complete").
+  Future<void> markReversed(String invoiceUid) async {
+    final p = await SharedPreferences.getInstance();
+    final list = p.getStringList(_key) ?? <String>[];
+    var changed = false;
+    for (var i = 0; i < list.length; i++) {
+      final m = (jsonDecode(list[i]) as Map).cast<String, dynamic>();
+      final inv = (m['invoice'] as Map?)?.cast<String, dynamic>();
+      if (inv != null && inv['uid'] == invoiceUid) {
+        inv['status'] = 'VOID';
+        m['invoice'] = inv;
+        list[i] = jsonEncode(m);
+        changed = true;
+      }
+    }
+    if (changed) await p.setStringList(_key, list);
+  }
 }
 
 final receiptJournalProvider = Provider<ReceiptJournal>((ref) => ReceiptJournal());

@@ -45,6 +45,12 @@ class ApiException implements Exception {
   /// must reconcile-before-resend rather than assume failure.
   bool get isAmbiguous => statusCode == null && (isTimeout || isNetwork);
 
+  /// Like [isAmbiguous] but also true for a 5xx: a server error AFTER a write
+  /// (e.g. a 502/504 once the sale row committed) is an unknown outcome too, so
+  /// the idempotent sale path must reconcile-by-resending the same key — never
+  /// retry with a fresh key.
+  bool get isAmbiguousWrite => isAmbiguous || isServer;
+
   bool get isUnauthorized => statusCode == 401;
   bool get isForbidden => statusCode == 403;
   bool get isNotFound => statusCode == 404;

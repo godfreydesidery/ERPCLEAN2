@@ -83,6 +83,12 @@ class CartState {
   bool get hasRestricted =>
       activeLines.any((l) => l.product.restrictedKind.isRestricted);
 
+  /// True when any active line has no preview price yet — so the on-screen total
+  /// is indeterminate (the server will price it). Payment must not gate tender
+  /// sufficiency on the preview when this holds.
+  bool get hasUnpricedLine =>
+      activeLines.any((l) => l.unitPricePreview == null);
+
   /// Build the `PosSaleRequest` body. [tenders] omitted => server settles a
   /// single exact CASH payment (the legacy path).
   Map<String, dynamic> buildRequest(
@@ -203,8 +209,15 @@ class CartController extends Notifier<CartState> {
   void setLinePrice(String localId, double? price) =>
       _mutate(localId, (l) => l.unitPricePreview = price);
 
-  void toggleVoid(String localId) =>
-      _mutate(localId, (l) => l.voided = !l.voided);
+  void toggleVoid(String localId) {
+    _mutate(localId, (l) => l.voided = !l.voided);
+    // If the selected line was just voided, drop the selection so the numpad
+    // cannot silently edit a struck-through line that is excluded from the sale.
+    final line = state.lines.where((l) => l.localId == localId).firstOrNull;
+    if (state.selectedId == localId && (line?.voided ?? false)) {
+      state = state.copyWith(clearSelected: true);
+    }
+  }
 
   void removeLine(String localId) {
     final lines = _copy..removeWhere((l) => l.localId == localId);

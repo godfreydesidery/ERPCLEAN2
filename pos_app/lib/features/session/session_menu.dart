@@ -102,7 +102,8 @@ class _SessionDrawer extends ConsumerWidget {
                         onTap: () => _payout(context, ref)),
                     _action(context, Icons.receipt_long_outlined,
                         "Today's sales", 'Look up & reprint a receipt',
-                        enabled: true, onTap: () => _todaysSales(context, ref)),
+                        enabled: app.can(Perms.salesInvoiceView),
+                        onTap: () => _todaysSales(context, ref)),
                     _action(context, Icons.history, 'Recent receipts',
                         'Reprint from this device (offline)',
                         enabled: true, onTap: () => _recent(context, ref)),
@@ -114,7 +115,9 @@ class _SessionDrawer extends ConsumerWidget {
                         onTap: () => _close(context, ref)),
                     _action(context, Icons.fact_check_outlined,
                         'Reconcile (Z-read)', 'Post variance — supervisor',
-                        enabled: app.can(Perms.sessionReconcile) && s != null,
+                        enabled: app.can(Perms.sessionReconcile) &&
+                            s != null &&
+                            s.status.isClosed,
                         locked: !app.can(Perms.sessionReconcile),
                         onTap: () => _reconcile(context, ref)),
                   ],
@@ -487,11 +490,24 @@ class _TodaysSalesDialogState extends ConsumerState<_TodaysSalesDialog> {
                         padding: EdgeInsets.all(40),
                         child: Center(child: CircularProgressIndicator()));
                   }
-                  final list = snap.data ?? const [];
+                  if (snap.hasError) {
+                    final e = snap.error;
+                    return Padding(
+                        padding: const EdgeInsets.all(40),
+                        child: Center(
+                            child: Text(e is ApiException
+                                ? e.message
+                                : 'Could not load sales.')));
+                  }
+                  // Only finalised sales — never reprint a void/draft as a clean
+                  // receipt from this list.
+                  final list = (snap.data ?? const <SalesInvoice>[])
+                      .where((i) => i.status.isFinalised)
+                      .toList();
                   if (list.isEmpty) {
                     return const Padding(
                         padding: EdgeInsets.all(40),
-                        child: Center(child: Text('No sales yet.')));
+                        child: Center(child: Text('No finalised sales yet.')));
                   }
                   return ListView.separated(
                     shrinkWrap: true,

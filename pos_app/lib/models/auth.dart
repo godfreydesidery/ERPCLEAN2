@@ -141,4 +141,5 @@ class Perms {
   static const customerView = 'CUSTOMER.VIEW';
   static const agentView = 'AGENT.VIEW';
   static const branchView = 'BRANCH.VIEW';
+  static const salesInvoiceView = 'SALES.INVOICE.VIEW';
 }

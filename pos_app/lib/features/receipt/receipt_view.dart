@@ -9,6 +9,7 @@ import '../../models/auth.dart';
 import '../../models/sale.dart';
 import '../../state/app_controller.dart';
 import '../../state/providers.dart';
+import '../../state/receipt_journal.dart';
 import '../../widgets/ui.dart';
 
 /// Shows a printed-style receipt built from the finalised invoice (the receipt
@@ -41,6 +42,7 @@ class _ReceiptDialogState extends ConsumerState<_ReceiptDialog> {
         (app.shift?.status.isOpen ?? false) &&
         !_reversed &&
         !r.invoice.status.isVoid;
+    final voided = _reversed || r.invoice.status.isVoid;
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: AppRadii.brLg),
       child: ConstrainedBox(
@@ -52,11 +54,12 @@ class _ReceiptDialogState extends ConsumerState<_ReceiptDialog> {
               padding: const EdgeInsets.fromLTRB(18, 16, 8, 16),
               child: Row(
                 children: [
-                  const Icon(Icons.check_circle, color: AppColors.pay),
+                  Icon(voided ? Icons.cancel : Icons.check_circle,
+                      color: voided ? AppColors.danger : AppColors.pay),
                   const SizedBox(width: 10),
-                  const Expanded(
-                    child: Text('Sale complete',
-                        style: TextStyle(
+                  Expanded(
+                    child: Text(voided ? 'Sale reversed' : 'Sale complete',
+                        style: const TextStyle(
                             fontSize: 18, fontWeight: FontWeight.w700)),
                   ),
                   IconButton(
@@ -195,7 +198,7 @@ class _ReceiptDialogState extends ConsumerState<_ReceiptDialog> {
                     style: mono.copyWith(color: const Color(0xFF64748B)))),
           const SizedBox(height: 10),
           Center(child: Text('Thank you!', style: mono)),
-          if (_reversed)
+          if (_reversed || r.invoice.status.isVoid)
             Center(
                 child: Text('\n*** REVERSED ***',
                     style: mono.copyWith(
@@ -265,6 +268,8 @@ class _ReceiptDialogState extends ConsumerState<_ReceiptDialog> {
         : reasonCtrl.text.trim();
     try {
       await ref.read(saleServiceProvider).reverse(r.invoice.uid, reason);
+      // Reconcile the local journal so an offline reprint reflects the reversal.
+      await ref.read(receiptJournalProvider).markReversed(r.invoice.uid);
       setState(() => _reversed = true);
       if (mounted) showToast(context, 'Sale reversed.', ok: true);
     } on ApiException catch (e) {

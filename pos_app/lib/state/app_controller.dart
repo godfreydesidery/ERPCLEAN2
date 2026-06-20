@@ -99,10 +99,14 @@ class AppController extends Notifier<AppData> {
     }
     try {
       await _afterAuth();
-    } catch (_) {
-      // stale/expired session — require a fresh login
-      await tokens.clear();
-      state = state.copyWith(phase: AppPhase.login);
+    } on ApiException catch (e) {
+      // Only a genuine auth failure should drop the session. A transient
+      // network / 5xx / permission hiccup at startup must NOT wipe a valid
+      // token — surface the error and let the cashier retry by signing in.
+      if (e.isUnauthorized) await tokens.clear();
+      state = state.copyWith(phase: AppPhase.login, error: e.message);
+    } catch (e) {
+      state = state.copyWith(phase: AppPhase.login, error: _friendly(e));
     }
   }
 
@@ -114,7 +118,7 @@ class AppController extends Notifier<AppData> {
     } on ApiException catch (e) {
       state = state.copyWith(busy: false, error: e.message);
     } catch (e) {
-      state = state.copyWith(busy: false, error: e.toString());
+      state = state.copyWith(busy: false, error: _friendly(e));
     }
   }
 
@@ -129,8 +133,11 @@ class AppController extends Notifier<AppData> {
     final me = await auth.me();
     final context = await ctxSvc.resolve(me);
 
-    // Scope every subsequent call to the chosen branch (§02).
-    ref.read(apiClientProvider).branchUidOverride = context.branchUid;
+    // Scope every subsequent call to the chosen branch (§02), and re-attach the
+    // auth-lost callback in case the API client was rebuilt (e.g. a host change).
+    final client = ref.read(apiClientProvider);
+    client.onAuthLost = onAuthLost;
+    client.branchUidOverride = context.branchUid;
 
     final units = await catalog.listUnits(context.companyId);
     final unitsByUid = {for (final u in units) u.uid: u};
@@ -215,6 +222,10 @@ class AppController extends Notifier<AppData> {
   }
 
   void clearError() => state = state.copyWith(clearError: true);
+
+  /// Strips the "Bad state:" prefix that StateError.toString() adds, so context
+  /// errors (e.g. "This user is not assigned to any company.") read cleanly.
+  String _friendly(Object e) => e is StateError ? e.message : e.toString();
 }
 
 final appControllerProvider =

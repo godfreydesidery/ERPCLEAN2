@@ -94,9 +94,18 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
     }
     try {
       final bc = await ref.read(catalogServiceProvider).lookupBarcode(_companyId, v);
+      if (!context.mounted) return;
       final p = _cache.byId(bc.productId);
       if (p != null) {
-        _add(p, fixedQty: bc.derivedQuantity, overridePrice: bc.derivedAmount);
+        // Embedded-PRICE labels carry an amount the server cannot honour — adding
+        // the line would charge the catalogue price. Refuse it (weight is fine).
+        if (bc.valueKind == 'PRICE' || bc.derivedAmount != null) {
+          showToast(context,
+              "Price-embedded labels aren't supported yet — enter ${p.name} manually.");
+          _reset();
+          return;
+        }
+        _add(p, fixedQty: bc.derivedQuantity);
         _reset();
         return;
       }

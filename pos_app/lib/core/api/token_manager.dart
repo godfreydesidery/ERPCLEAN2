@@ -73,8 +73,13 @@ class TokenManager {
       final data = unwrapData(res.data);
       await setSession(TokenBundle.fromJson(asMap(data)));
       return true;
-    } on DioException {
-      await clear();
+    } on DioException catch (e) {
+      // ONLY a genuine server rejection (401/403) invalidates the session. A
+      // transient transport failure (timeout / connection drop on flaky till
+      // Wi-Fi) must NOT wipe a still-valid refresh token — keep it so the next
+      // request simply retries, instead of forcing a spurious mid-shift logout.
+      final status = e.response?.statusCode;
+      if (status == 401 || status == 403) await clear();
       return false;
     }
   }

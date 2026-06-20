@@ -123,9 +123,20 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
     final session = app.shift;
     if (session == null) return;
 
-    if (_tenders.isNotEmpty && _paid + 0.0001 < _gross) {
+    final hasUnpriced = cart.hasUnpricedLine;
+    final knownGross = !hasUnpriced && _gross > 0;
+
+    // Tender-coverage guard — only when the total is KNOWN (a fully-priced
+    // basket). When a line has no preview price the total is indeterminate, so
+    // we let the server price it rather than gate on a 0/partial preview.
+    if (knownGross && _tenders.isNotEmpty && _paid + 0.0001 < _gross) {
       showToast(context, 'Tendered ${formatAmount(_paid)} is less than the '
           'total ${formatAmount(_gross)}.');
+      return;
+    }
+    if (knownGross && _tenders.isEmpty && _typed > 0 && _typed + 0.0001 < _gross) {
+      showToast(context, 'Tendered ${formatAmount(_typed)} is less than the '
+          'total ${formatAmount(_gross)}. Use Add tender to split, or key the full amount.');
       return;
     }
 
@@ -140,15 +151,31 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
       }
     }
 
-    // Pure-cash fast path: omit tenders, send tenderedAmount for change.
-    final cashOnly = _tenders.isEmpty;
-    final tendered = cashOnly
-        ? (_typed >= _gross ? _typed : _gross)
-        : _cashPortion();
+    // Resolve the tenders to post. The single-CASH fast path is used ONLY when
+    // no explicit tenders were added AND Cash is the selected type; a non-cash
+    // type chosen without "Add tender" is booked under THAT type, never silently
+    // recorded as cash.
+    List<PosTender>? tenders;
+    double? tendered;
+    if (_tenders.isNotEmpty) {
+      tenders = _tenders;
+      tendered = _cashPortion();
+    } else if (_type == TenderType.cash) {
+      tenders = null; // server settles one exact CASH payment (+ change)
+      tendered = _typed > 0 ? _typed : (knownGross ? _gross : null);
+    } else {
+      final amt = _typed > 0 ? _typed : (knownGross ? _gross : 0.0);
+      if (amt <= 0) {
+        showToast(context, 'Enter the ${_type.label} amount, then Complete sale.');
+        return;
+      }
+      tenders = [PosTender(tenderType: _type, amount: amt)];
+      tendered = null;
+    }
 
     final body = cart.buildRequest(
       session.uid,
-      tenders: cashOnly ? null : _tenders,
+      tenders: tenders,
       tenderedAmount: tendered,
       ageVerified: ageVerified,
     );
@@ -178,9 +205,9 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
     } on ApiException catch (e) {
       setState(() {
         _busy = false;
-        _ambiguous = e.isAmbiguous;
+        _ambiguous = e.isAmbiguousWrite;
       });
-      if (!e.isAmbiguous && mounted) showToast(context, e.message);
+      if (!e.isAmbiguousWrite && mounted) showToast(context, e.message);
     }
   }
 
@@ -220,6 +247,9 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
   }
 
   double _changePreview() {
+    // Total is indeterminate while a line has no preview price — don't show a
+    // change figure computed against a 0/partial total.
+    if (ref.read(cartProvider).hasUnpricedLine) return 0;
     if (_tenders.isEmpty) {
       return (_typed - _gross).clamp(0, double.infinity);
     }
