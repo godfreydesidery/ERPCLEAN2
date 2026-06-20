@@ -115,7 +115,16 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
       if (!e.isNotFound && mounted) showToast(context, e.message);
     }
     if (!mounted) return;
-    final hits = _cache.search(v);
+    // Server search so it works regardless of the local-cache load state.
+    List<Product> hits;
+    try {
+      hits = await ref
+          .read(catalogServiceProvider)
+          .searchProducts(_companyId, q: v, size: 10);
+    } catch (_) {
+      hits = _cache.search(v);
+    }
+    if (!context.mounted) return;
     if (hits.isNotEmpty) {
       _add(hits.first);
       _reset();

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,6 +9,7 @@ import '../../models/catalog.dart';
 import '../../state/app_controller.dart';
 import '../../state/cart_controller.dart';
 import '../../state/catalog_cache.dart';
+import '../../state/providers.dart';
 import '../../widgets/ui.dart';
 import '../payment/payment_sheet.dart';
 
@@ -25,6 +28,7 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
   bool _loading = true;
   int? _table;
   bool _sent = false;
+  Timer? _debounce;
 
   CatalogCache get _cache => ref.read(catalogCacheProvider);
   String get _companyId => ref.read(appControllerProvider).context!.companyId;
@@ -37,19 +41,27 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
   }
 
   Future<void> _load() async {
+    await _browse();
+    if (mounted) setState(() => _loading = false);
+    // Warm the cache in the background for barcode resolution.
+    unawaited(_cache.ensureLoaded(_companyId).catchError((_) {}));
+  }
+
+  /// Loads an initial menu page from the server (independent of the full cache).
+  Future<void> _browse() async {
     try {
-      await _cache.ensureLoaded(_companyId);
-    } catch (_) {}
-    if (mounted) {
-      setState(() {
-        _menu = _cache.search('', limit: 120);
-        _loading = false;
-      });
+      final hits = await ref
+          .read(catalogServiceProvider)
+          .searchProducts(_companyId, size: 120);
+      if (mounted) setState(() => _menu = hits);
+    } catch (_) {
+      if (mounted) setState(() => _menu = _cache.search('', limit: 120));
     }
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _q.dispose();
     super.dispose();
   }
@@ -74,8 +86,23 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
     setState(() => _sent = false);
   }
 
-  void _filter(String q) =>
-      setState(() => _menu = _cache.search(q, limit: 120));
+  void _filter(String q) {
+    _debounce?.cancel();
+    final s = q.trim();
+    if (s.isEmpty) {
+      _browse();
+      return;
+    }
+    setState(() => _menu = _cache.search(s, limit: 120)); // instant local
+    _debounce = Timer(const Duration(milliseconds: 250), () async {
+      try {
+        final hits = await ref
+            .read(catalogServiceProvider)
+            .searchProducts(_companyId, q: s, size: 120);
+        if (mounted) setState(() => _menu = hits);
+      } catch (_) {}
+    });
+  }
 
   Future<void> _pickTable() async {
     final picked = await showDialog<int>(

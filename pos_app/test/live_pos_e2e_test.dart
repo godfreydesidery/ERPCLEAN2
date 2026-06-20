@@ -174,6 +174,17 @@ void main() {
         reason: 'seed priced products first (full-coverage-drive.js)');
   });
 
+  test('server-side product search returns hits for a common term', () async {
+    // The register searches the server (not just the local cache), so results
+    // appear regardless of catalogue size / cache-load state.
+    final any = await catalog.searchProducts(companyId, size: 1);
+    expect(any, isNotEmpty, reason: 'company should have products to search');
+    final term = any.first.name.split(' ').first; // e.g. "Beverages"
+    final hits = await catalog.searchProducts(companyId, q: term, size: 20);
+    expect(hits, isNotEmpty,
+        reason: 'server search for "$term" should return at least one product');
+  });
+
   test('multi-line cash sale finalises with the right line count', () async {
     final till = await freshTill();
     final s = await sessions.open(till.uid, 50000);

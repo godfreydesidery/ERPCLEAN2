@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -31,6 +33,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
   List<Product> _results = const [];
   bool _loadingCatalogue = true;
   bool _busyScan = false;
+  Timer? _debounce;
 
   String _numpad = '';
   _NumTarget _target = _NumTarget.qty;
@@ -55,6 +58,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _search.dispose();
     _searchFocus.dispose();
     super.dispose();
@@ -122,8 +126,16 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
         if (!e.isNotFound) rethrow;
       }
       if (!context.mounted) return;
-      // 3) local text search → single hit auto-adds, else show the dropdown
-      final hits = _cache.search(value);
+      // 3) server search → single hit auto-adds, else show the dropdown
+      List<Product> hits;
+      try {
+        hits = await ref
+            .read(catalogServiceProvider)
+            .searchProducts(_companyId, q: value, size: 40);
+      } catch (_) {
+        hits = _cache.search(value);
+      }
+      if (!context.mounted) return;
       if (hits.length == 1) {
         _addProduct(hits.first);
         _resetSearch();
@@ -140,7 +152,27 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
   }
 
   void _onChanged(String v) {
-    setState(() => _results = v.trim().isEmpty ? const [] : _cache.search(v));
+    _debounce?.cancel();
+    final q = v.trim();
+    if (q.isEmpty) {
+      setState(() => _results = const []);
+      return;
+    }
+    // Show instant local matches if the cache is warm, then refine from the
+    // server (so search works even before the full catalogue finishes loading).
+    setState(() => _results = _cache.search(q));
+    _debounce = Timer(const Duration(milliseconds: 250), () => _serverSearch(q));
+  }
+
+  Future<void> _serverSearch(String q) async {
+    try {
+      final hits = await ref
+          .read(catalogServiceProvider)
+          .searchProducts(_companyId, q: q, size: 40);
+      if (mounted) setState(() => _results = hits);
+    } catch (_) {
+      if (mounted) setState(() => _results = _cache.search(q));
+    }
   }
 
   void _resetSearch() {
