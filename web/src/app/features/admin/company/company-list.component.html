@@ -84,13 +84,27 @@
                   <th scope="col">Name</th>
                   <th scope="col">Status</th>
                   <th scope="col">Branches</th>
+                  @if (canManage()) {
+                    <th scope="col"><span class="sr-only">Actions</span></th>
+                  }
                 </tr>
               </thead>
               <tbody>
                 @for (c of companies(); track c.uid) {
                   <tr>
                     <td class="mono">{{ c.code }}</td>
-                    <td>{{ c.name }}</td>
+                    <td>
+                      @if (editingUid() === c.uid) {
+                        <input type="text" class="form-control form-control-sm"
+                               [(ngModel)]="editName" [ngModelOptions]="{ standalone: true }"
+                               [disabled]="savingEdit()" aria-label="Company name" />
+                        @if (editError(); as msg) {
+                          <span class="text-danger small d-block mt-1" role="alert">{{ msg }}</span>
+                        }
+                      } @else {
+                        {{ c.name }}
+                      }
+                    </td>
                     <td>
                       <span class="status-tag"
                             [class.status-tag--ok]="c.status === 'ACTIVE'"
@@ -101,6 +115,26 @@
                     <td>
                       <a [routerLink]="['/admin/companies', c.uid, 'branches']">Manage branches</a>
                     </td>
+                    @if (canManage()) {
+                      <td>
+                        @if (editingUid() === c.uid) {
+                          <button type="button" class="btn btn-sm btn-primary me-1"
+                                  [disabled]="savingEdit()" (click)="saveEdit(c)">
+                            @if (savingEdit()) {
+                              <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                            }
+                            Save
+                          </button>
+                          <button type="button" class="btn btn-sm btn-outline-secondary"
+                                  [disabled]="savingEdit()" (click)="cancelEdit()">Cancel</button>
+                        } @else {
+                          <button type="button" class="btn btn-sm btn-outline-secondary"
+                                  [disabled]="editingUid() !== null"
+                                  (click)="startEdit(c)"
+                                  [attr.aria-label]="'Edit ' + c.name">Edit</button>
+                        }
+                      </td>
+                    }
                   </tr>
                 }
               </tbody>
