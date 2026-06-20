@@ -517,3 +517,308 @@ test.describe('UI/UX RBAC nav — permission-driven sidebar', () => {
   });
 
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Branch-only RBAC: a user with BRANCH.VIEW + BRANCH.MANAGE (no COMPANY.VIEW)
+// can reach /admin/branches and sees "Branches" in the sidebar but NOT "Companies".
+//
+// This is the regression guard for the feature that added the standalone
+// BranchAdminComponent so branch-only users are no longer stranded.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test.describe('UI/UX RBAC nav — BRANCH-only user reaches /admin/branches', () => {
+
+  /** Per-run tag — distinct from the outer TAG to avoid cross-suite state collisions. */
+  const BTAG = `bonly${Date.now().toString(36).slice(-6)}`;
+
+  /** Permissions granted: BRANCH.VIEW + BRANCH.MANAGE only. COMPANY.VIEW is intentionally absent. */
+  const BRANCH_PERMS = ['BRANCH.VIEW', 'BRANCH.MANAGE'];
+
+  /** Credentials for the branch-only test user. */
+  const BRANCH_USERNAME = `branch.${BTAG}`;
+  const BRANCH_PASS = 'BranchOnly12!';
+
+  let bSetupOk = false;
+  let bSetupFailReason = '';
+
+  // ── one-time seed ──────────────────────────────────────────────────────────
+  // Reuses the module-level apiReq / uidOf / listOf helpers (same file).
+  test.beforeAll(async () => {
+    const appBase = process.env['PW_BASE_URL'] ?? 'http://localhost:4200';
+    const ctx = await pwRequest.newContext({ baseURL: appBase });
+
+    try {
+      // 1. Obtain rootadmin token.
+      const loginRes = await apiReq(ctx, 'POST', '/auth/login', null, {
+        username: ROOT_USER,
+        password: ROOT_PASS,
+      });
+      const loginBody = loginRes.body as Record<string, unknown>;
+      const token = (
+        (loginBody?.['data'] as Record<string, unknown>)?.['accessToken'] as string | undefined
+      ) ?? '';
+      if (!token) {
+        bSetupFailReason = `rootadmin login failed (status ${loginRes.status}): ${JSON.stringify(loginRes.body).slice(0, 200)}`;
+        return;
+      }
+
+      // 2. Discover org → company → branch (same discovery pattern as the outer suite).
+      const orgsRes = await apiReq(ctx, 'GET', '/organisations?size=5', token);
+      const orgs = listOf(orgsRes) as Array<Record<string, unknown>>;
+      if (orgs.length === 0) {
+        bSetupFailReason = `No organisations found (status ${orgsRes.status}) — backend not bootstrapped?`;
+        return;
+      }
+      const orgUid = String(orgs[0]['uid']);
+
+      const companiesRes = await apiReq(ctx, 'GET', `/companies?organisationUid=${orgUid}&size=5`, token);
+      const companies = listOf(companiesRes) as Array<Record<string, unknown>>;
+      if (companies.length === 0) {
+        bSetupFailReason = `No companies found for org ${orgUid}`;
+        return;
+      }
+      const companyUid = String(companies[0]['uid']);
+
+      const branchesRes = await apiReq(ctx, 'GET', `/branches?companyUid=${companyUid}&size=5`, token);
+      const branches = listOf(branchesRes) as Array<Record<string, unknown>>;
+      if (branches.length === 0) {
+        bSetupFailReason = `No branches found for company ${companyUid}`;
+        return;
+      }
+      const branchUid = String(branches[0]['uid']);
+
+      // 3. Verify BRANCH.VIEW + BRANCH.MANAGE are in the catalogue. Warn if absent (non-fatal:
+      //    the test will still exercise the guard; it will just redirect instead of landing).
+      const permsRes = await apiReq(ctx, 'GET', '/roles/permissions', token);
+      const catalogue = listOf(permsRes) as Array<Record<string, unknown>>;
+      const available = new Set(catalogue.map((p) => String(p['code'])));
+      const resolved = BRANCH_PERMS.filter((c) => available.has(c));
+      if (resolved.length < BRANCH_PERMS.length) {
+        const missing = BRANCH_PERMS.filter((c) => !available.has(c));
+        console.warn(`[branch-only-setup] missing permission codes: ${missing.join(', ')} (${catalogue.length} in catalogue)`);
+      }
+
+      // 4. Create a branch-only role (BRANCH.VIEW + BRANCH.MANAGE; no COMPANY.VIEW).
+      const roleRes = await apiReq(ctx, 'POST', '/roles', token, {
+        code: `BRANCH_ONLY_${BTAG}`,
+        name: `Branch Only ${BTAG}`,
+        description: `e2e branch-only role — ${BTAG} — safe to delete`,
+      });
+      const roleUid = uidOf(roleRes);
+      if (!roleUid) {
+        bSetupFailReason = `Failed to create branch-only role: ${JSON.stringify(roleRes.body).slice(0, 200)}`;
+        return;
+      }
+
+      // 5. Assign BRANCH.VIEW + BRANCH.MANAGE (and ONLY those) to the role.
+      if (resolved.length > 0) {
+        const permRes = await apiReq(ctx, 'PUT', `/roles/uid/${roleUid}/permissions`, token, {
+          permissionCodes: resolved,
+        });
+        if (permRes.status >= 300) {
+          console.warn(`[branch-only-setup] permission assignment returned ${permRes.status}: ${JSON.stringify(permRes.body).slice(0, 200)}`);
+        }
+      }
+
+      // 6. Create the branch-only user.
+      const userRes = await apiReq(ctx, 'POST', '/users', token, {
+        username: BRANCH_USERNAME,
+        displayName: `Branch Only User ${BTAG}`,
+        password: BRANCH_PASS,
+        email: `${BRANCH_USERNAME}@erp-test.local`,
+        phone: `0700002${BTAG.slice(-4)}`,
+      });
+      const userUid = uidOf(userRes);
+      if (!userUid) {
+        bSetupFailReason = `Failed to create branch-only user: ${JSON.stringify(userRes.body).slice(0, 200)}`;
+        return;
+      }
+
+      // 7. Assign the branch (default).
+      await apiReq(ctx, 'POST', '/user-branches', token, {
+        userUid,
+        branchUid,
+        makeDefault: true,
+      });
+
+      // 8. Grant the branch-only role.
+      const grantRes = await apiReq(ctx, 'POST', '/user-roles', token, {
+        userUid,
+        roleUid,
+        companyUid,
+        branchUid,
+      });
+      if (grantRes.status >= 300) {
+        bSetupFailReason = `Failed to grant branch-only role to user: ${JSON.stringify(grantRes.body).slice(0, 200)}`;
+        return;
+      }
+
+      bSetupOk = true;
+    } catch (err) {
+      bSetupFailReason = `beforeAll threw: ${String(err)}`;
+    } finally {
+      await ctx.dispose();
+    }
+  });
+
+  function skipIfBSetupFailed(): void {
+    if (!bSetupOk) {
+      test.info().annotations.push({
+        type: 'skip-reason',
+        description: `Branch-only setup did not complete: ${bSetupFailReason}`,
+      });
+      test.skip();
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // B1: "Branches" nav item is visible in the sidebar; "Companies" is absent.
+  //
+  //     Regression: before the fix, there was no "Branches" nav item at all, so
+  //     a branch-only user would see an empty "Administration" group (or nothing)
+  //     and had no route to manage branches.
+  // ────────────────────────────────────────────────────────────────────────────
+  test('B1: branch-only user: sidebar shows "Branches" nav item and hides "Companies"', async ({ page }) => {
+    skipIfBSetupFailed();
+
+    await login(page, BRANCH_USERNAME, BRANCH_PASS);
+    // Wait for the sidebar nav — the shell renders it once permissions are loaded.
+    await page.waitForSelector('nav.sidebar-nav', { timeout: 15_000 });
+    await page.waitForTimeout(600);
+
+    // Scope all locators to the sidebar nav to avoid false matches in page content.
+    const sidebar = page.locator('nav.sidebar-nav');
+
+    // "Branches" nav item MUST be visible — BRANCH.VIEW satisfies its permission gate.
+    const branchesLink = sidebar.locator('a.nav-item', { hasText: /^Branches$/ });
+    await expect(
+      branchesLink,
+      '"Branches" nav item not found in sidebar for branch-only user — BRANCH.VIEW should make it visible',
+    ).toBeVisible();
+
+    // "Companies" nav item MUST be absent — the user has no COMPANY.VIEW.
+    // This is the regression we fixed: previously the Companies link was the only path to
+    // branch management, and branch-only users were stranded.
+    const companiesLink = sidebar.locator('a.nav-item', { hasText: /^Companies$/ });
+    const companiesCount = await companiesLink.count();
+    expect(
+      companiesCount,
+      '"Companies" nav item is visible for a branch-only user — COMPANY.VIEW was not granted, ' +
+        'so the shell must hide this link (permission regression)',
+    ).toBe(0);
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // B2: navigating directly to /admin/branches lands on the page (not /admin/home).
+  //
+  //     The route guard is requirePermission('BRANCH.VIEW'). A branch-only user
+  //     satisfies it, so the guard must NOT redirect to /admin/home. The heading
+  //     "Branches" (from <h1>) must be visible on screen.
+  //
+  //     This is the core regression check: before the fix the only way to reach
+  //     a branch list was via the COMPANY.VIEW-gated Companies screen. Now there
+  //     is a dedicated route and this test proves the guard allows it through.
+  // ────────────────────────────────────────────────────────────────────────────
+  test('B2: branch-only user: /admin/branches loads (heading visible, not redirected to /admin/home)', async ({ page }) => {
+    skipIfBSetupFailed();
+
+    await login(page, BRANCH_USERNAME, BRANCH_PASS);
+    await page.goto('/admin/branches', { waitUntil: 'networkidle', timeout: 30_000 });
+    await page.waitForTimeout(500);
+
+    // Must not be bounced back to /login (session still valid).
+    const url = page.url();
+    expect(url, 'Session must survive navigation to /admin/branches').not.toMatch(/\/login/);
+
+    // Must stay on /admin/branches — the requirePermission('BRANCH.VIEW') guard must not redirect.
+    expect(
+      url,
+      'Branch-only user was redirected away from /admin/branches — ' +
+        'the requirePermission("BRANCH.VIEW") guard should allow this user through. ' +
+        'If the URL is /admin/home the guard incorrectly rejected BRANCH.VIEW.',
+    ).toMatch(/\/admin\/branches/);
+
+    // The page heading "Branches" (<h1 class="h4 mb-1">Branches</h1>) must be visible.
+    const heading = page.locator('h1', { hasText: 'Branches' });
+    await expect(
+      heading,
+      'Heading "Branches" not visible on /admin/branches — page may not have loaded or the wrong component rendered',
+    ).toBeVisible({ timeout: 10_000 });
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // B3: the company picker (#branchCompany) or a branch list is visible after load.
+  //
+  //     The component resolves GET /organisations/current then GET /companies/accessible.
+  //     If the user is assigned to exactly one company it auto-selects and renders the
+  //     branch list (.erp-table or .erp-empty). If multiple companies are accessible
+  //     the company picker select (#branchCompany) must be visible. Either state is
+  //     valid — the test accepts both. What it must NOT see is an error alert or the
+  //     "not assigned to any company" empty-state (because the seeded user IS assigned
+  //     to a branch in a company).
+  // ────────────────────────────────────────────────────────────────────────────
+  test('B3: branch-only user: /admin/branches shows company picker or branch list — no error, not empty "no company" state', async ({ page }) => {
+    skipIfBSetupFailed();
+
+    await login(page, BRANCH_USERNAME, BRANCH_PASS);
+    await page.goto('/admin/branches', { waitUntil: 'networkidle', timeout: 30_000 });
+    // Allow time for the two sequential API calls (org + accessible companies) to resolve.
+    await page.waitForTimeout(1_500);
+
+    const url = page.url();
+    if (!url.includes('/admin/branches')) {
+      // Guard redirected — B2 will catch this more specifically; annotate here and bail.
+      test.info().annotations.push({
+        type: 'skip-reason',
+        description: `User was not on /admin/branches (landed: ${url}) — B2 covers the redirect assertion.`,
+      });
+      return;
+    }
+
+    // Error states: org load failure or company load failure.
+    const orgError = page.locator('[role="alert"]', { hasText: /Could not load the organisation/i });
+    const orgErrorVisible = await orgError.isVisible().catch(() => false);
+    expect(
+      orgErrorVisible,
+      '"Could not load the organisation" error is visible — GET /organisations/current failed for branch-only user. ' +
+        'The endpoint must be accessible to authenticated users regardless of COMPANY.VIEW.',
+    ).toBe(false);
+
+    const companyError = page.locator('[role="alert"]', { hasText: /Could not load companies/i });
+    const companyErrorVisible = await companyError.isVisible().catch(() => false);
+    expect(
+      companyErrorVisible,
+      '"Could not load companies" error is visible — GET /companies/accessible failed for branch-only user. ' +
+        'This endpoint is auth-only (no COMPANY.VIEW required) and must return the companies the user is assigned to.',
+    ).toBe(false);
+
+    // "Not assigned to any company" empty state: the component renders this when accessible
+    // companies come back as an empty list.  Our seeded user IS in a company, so this must
+    // not appear.
+    const noCompanyEmpty = page.locator('.erp-empty', {
+      hasText: /aren.t assigned to any company/i,
+    });
+    const noCompanyVisible = await noCompanyEmpty.isVisible().catch(() => false);
+    expect(
+      noCompanyVisible,
+      '"You aren\'t assigned to any company" empty state is visible — ' +
+        '/companies/accessible returned an empty list for the seeded user, ' +
+        'but the user has a branch assignment and should see at least one company.',
+    ).toBe(false);
+
+    // At least one of: company picker (#branchCompany) OR branch table (.erp-table) OR
+    // branch empty-state (.erp-empty with "No branches") must be present.
+    const pickerVisible   = await page.locator('#branchCompany').isVisible().catch(() => false);
+    const tableVisible    = await page.locator('table.erp-table').isVisible().catch(() => false);
+    const emptyBranchVisible = await page.locator('.erp-empty').isVisible().catch(() => false);
+
+    const pageIsUsable = pickerVisible || tableVisible || emptyBranchVisible;
+    expect(
+      pageIsUsable,
+      'Neither the company picker (#branchCompany), nor a branch table (.erp-table), ' +
+        'nor an empty-state (.erp-empty) is visible on /admin/branches. ' +
+        'The page appears non-functional for the branch-only user.',
+    ).toBe(true);
+  });
+
+});
