@@ -4,9 +4,12 @@
 **Status:** active
 **Related:** ADR-0038 (production-hardening), `scripts/check-migrations.sh`, `backend/src/main/resources/db/migration/`
 
-This runbook is the single source of truth for how the ERP database schema and seed data evolve —
-in development (where the DB is still **ephemeral**) and after the production cutover (where it is
-**durable** and every migration runs against real, multi-tenant data under load).
+This runbook is the single source of truth for how the ERP database schema and seed data evolve.
+
+> **Schema freeze — 2026-06-20.** The DB is now **durable in every environment** (local, QA, prod):
+> it is never wiped or recreated, and every migration runs against real, populated, multi-tenant
+> data. Migrations are **append-only and immutable** — see §2. CI rule 2 (immutability) is **ON**
+> (§4). The pre-cutover "edit-and-recreate / consolidate" workflow in §7 no longer applies.
 
 ---
 
@@ -91,8 +94,10 @@ Set explicitly in `application.yml` (applies to all profiles; safe because no co
   DB, Hibernate `ddl-auto: validate`, ArchUnit, and **`MigrationKeepDataIT`** (the keep-data
   forward-migration test that proves migrations apply onto a populated, pre-existing company).
 - **`migration-hygiene`** (REQUIRED) — `scripts/check-migrations.sh`:
-  - **Rule 1 (on now):** no duplicate Flyway versions.
-  - **Rule 2 (immutability):** OFF until cutover — see §6.
+  - **Rule 1 (ON):** no duplicate Flyway versions.
+  - **Rule 2 (immutability, ON since 2026-06-20):** an applied versioned migration must not be
+    edited, renamed, or deleted (diffed against the PR base branch). Repeatable `R__*` files are
+    exempt — they are designed to change and re-run.
 
 ---
 
@@ -110,12 +115,17 @@ A migration that fails midway (or a half-applied non-transactional statement) le
 
 ## 6. Production cutover checklist (flip these the day prod data goes durable)
 
+> **Status (2026-06-20):** the **schema-freeze** half is DONE — data is durable everywhere and
+> immutability (step 2) is enforced. The remaining **prod-deploy** gates (steps 1, 3, 4) are still
+> open and tracked for the prod rollout.
+
 1. **Backup-before-migrate gate** in the deploy path: take a `pg_dump` (see `infra/prod/backup.sh`)
    **before** the new container runs Flyway; abort the deploy if the backup fails. Add a pre-traffic
    `flyway validate` / `flyway info` step that fails fast before the container is marked healthy.
-2. **Enable immutability (Rule 2)** in `.github/workflows/backend-ci.yml` → job `migration-hygiene`:
-   swap the run line to `BASE=origin/${{ github.base_ref || 'main' }} bash ../scripts/check-migrations.sh`.
-   From this point migrations are append-only forever.
+   *(Open — prod deploy.)*
+2. ✅ **Immutability (Rule 2) ENABLED** in `.github/workflows/backend-ci.yml` → job
+   `migration-hygiene` runs `BASE=origin/${{ github.base_ref || 'main' }} bash ../scripts/check-migrations.sh`.
+   Migrations are append-only forever from here.
 3. **Reproducible artifact + rollback target** — build the image once in CI, tag with the git SHA,
    deploy that tag; rollback = redeploy previous tag + restore backup.
 4. **Forward-only undo** — Flyway Community has no `undo`; author a paired revert migration alongside
@@ -123,10 +133,16 @@ A migration that fails midway (or a half-applied non-transactional statement) le
 
 ---
 
-## 7. Consolidating migrations while the DB is still ephemeral
+## 7. Consolidating migrations (HISTORICAL — no longer permitted)
 
-Pre-cutover only. The faithfulness bar is: a fresh migrate after consolidation must produce a
-**byte-identical schema** and an explainable diff in seed data. Harness (used for the 2026-06 cleanup):
+> **Closed as of the 2026-06-20 schema freeze.** Consolidation/renumbering rewrites migration
+> history and requires wiping every DB — both are now disallowed (the DB is durable everywhere and
+> migrations are immutable, §2/§4). This section is retained only as the record of the pre-freeze
+> 2026-06 cleanup below. Do not run this workflow.
+
+Pre-cutover only (historical). The faithfulness bar was: a fresh migrate after consolidation must
+produce a **byte-identical schema** and an explainable diff in seed data. Harness (used for the
+2026-06 cleanup):
 
 1. Migrate the **original** tree (git HEAD) and the **working tree** into two scratch databases via
    the Flyway image (disk-based, so it reflects edits — *not* a prebuilt jar, which migrates from its

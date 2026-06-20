@@ -113,10 +113,12 @@ supervisord; it activates `SPRING_PROFILES_ACTIVE=qa` (`infra/qa/application-qa.
 Hikari pool of 10 and INFO logging). The container reads the JWT signing mode from
 `ERP_JWT_SIGNING_MODE` (defaults to `dev-in-memory`).
 
-- **Data-preserving deploy** is the default: the persistent volume survives a redeploy, so QA
-  data carries across releases.
-- **Recreate / wipe:** stop and remove the container **and** drop the `erpclean2-data` volume,
-  then redeploy — the next start re-bootstraps from `qa.env` on a fresh DB.
+- **Data-preserving deploy** is the default and the standard: the persistent volume survives a
+  redeploy, so QA data carries across releases. **QA data is permanent (since 2026-06-20)** — treat
+  it like prod.
+- **Recreate / wipe** (drop the `erpclean2-data` volume, then redeploy → re-bootstraps a fresh DB
+  from `qa.env`): **destructive and non-routine** — only on a deliberate decision to rebuild the
+  environment, never as part of a normal release.
 
 The non-secret target host/user/branch live in committed `infra/qa/deploy.env`; the SSH key
 path, the GitHub PAT, and the bootstrap secrets stay out of git (`deploy.env.local`,
