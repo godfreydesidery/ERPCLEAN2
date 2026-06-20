@@ -1,8 +1,9 @@
-import { Component, inject, input, signal } from '@angular/core';
+import { Component, computed, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Branch } from '../models/branch.model';
 import { BranchService } from './branch.service';
 import { AlertService } from '../../../core/feedback/alert.service';
+import { SessionStore } from '../../../core/auth/session.store';
 
 /**
  * Lists a company's branches and manages them — create, set-default, archive. The
@@ -18,6 +19,10 @@ import { AlertService } from '../../../core/feedback/alert.service';
 export class BranchListComponent {
   private readonly branchService = inject(BranchService);
   private readonly alerts = inject(AlertService);
+  private readonly session = inject(SessionStore);
+
+  /** Rename is gated on BRANCH.MANAGE (the page itself only needs BRANCH.VIEW). */
+  readonly canManage = computed(() => this.session.hasPermission('BRANCH.MANAGE'));
 
   /** Route input — Angular binds the `:companyUid` path param to this signal. */
   readonly companyUid = input.required<string>();
@@ -40,6 +45,50 @@ export class BranchListComponent {
 
   /** uid of the branch whose row action (set-default or archive) is in-flight. */
   readonly busyUid = signal<string | null>(null);
+
+  // Inline rename: at most one row is editable at a time (keyed by uid).
+  readonly editingUid = signal<string | null>(null);
+  readonly editName = signal('');
+  readonly savingEdit = signal(false);
+  readonly editError = signal<string | null>(null);
+
+  startEdit(branch: Branch): void {
+    this.editError.set(null);
+    this.editName.set(branch.name);
+    this.editingUid.set(branch.uid);
+  }
+
+  cancelEdit(): void {
+    this.editingUid.set(null);
+    this.editError.set(null);
+  }
+
+  saveEdit(branch: Branch): void {
+    const name = this.editName().trim();
+    if (!name) {
+      this.editError.set('Name is required.');
+      return;
+    }
+    if (name === branch.name) {
+      this.cancelEdit();
+      return;
+    }
+    this.savingEdit.set(true);
+    this.editError.set(null);
+    // Only the name changes; timeZone is preserved server-side when omitted/blank.
+    this.branchService.update(branch.uid, { name }).subscribe({
+      next: () => {
+        this.savingEdit.set(false);
+        this.editingUid.set(null);
+        this.alerts.success('Branch updated');
+        this.load();
+      },
+      error: (err) => {
+        this.editError.set(this.messageFrom(err));
+        this.savingEdit.set(false);
+      },
+    });
+  }
 
   constructor() {
     // input.required is set by the router before the constructor body runs in this config; load on init.

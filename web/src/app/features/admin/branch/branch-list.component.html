@@ -72,7 +72,18 @@
               @for (b of branches(); track b.uid) {
                 <tr>
                   <td class="mono">{{ b.code }}</td>
-                  <td>{{ b.name }}</td>
+                  <td>
+                    @if (editingUid() === b.uid) {
+                      <input type="text" class="form-control form-control-sm"
+                             [(ngModel)]="editName" [ngModelOptions]="{ standalone: true }"
+                             [disabled]="savingEdit()" aria-label="Branch name" />
+                      @if (editError(); as msg) {
+                        <span class="text-danger small d-block mt-1" role="alert">{{ msg }}</span>
+                      }
+                    } @else {
+                      {{ b.name }}
+                    }
+                  </td>
                   <td>
                     @if (b.isDefault) {
                       <span class="status-tag status-tag--ok">Default</span>
@@ -96,16 +107,34 @@
                     </span>
                   </td>
                   <td>
-                    @if (!b.isDefault) {
-                      <button type="button" class="btn btn-sm btn-outline-danger"
-                              [disabled]="busyUid() !== null"
-                              (click)="archive(b)"
-                              [attr.aria-label]="'Archive branch ' + b.name">
-                        @if (busyUid() === b.uid) {
+                    @if (editingUid() === b.uid) {
+                      <button type="button" class="btn btn-sm btn-primary me-1"
+                              [disabled]="savingEdit()" (click)="saveEdit(b)">
+                        @if (savingEdit()) {
                           <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
                         }
-                        Archive
+                        Save
                       </button>
+                      <button type="button" class="btn btn-sm btn-outline-secondary"
+                              [disabled]="savingEdit()" (click)="cancelEdit()">Cancel</button>
+                    } @else {
+                      @if (canManage()) {
+                        <button type="button" class="btn btn-sm btn-outline-secondary me-1"
+                                [disabled]="editingUid() !== null || busyUid() !== null"
+                                (click)="startEdit(b)"
+                                [attr.aria-label]="'Edit branch ' + b.name">Edit</button>
+                      }
+                      @if (!b.isDefault) {
+                        <button type="button" class="btn btn-sm btn-outline-danger"
+                                [disabled]="busyUid() !== null || editingUid() !== null"
+                                (click)="archive(b)"
+                                [attr.aria-label]="'Archive branch ' + b.name">
+                          @if (busyUid() === b.uid) {
+                            <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                          }
+                          Archive
+                        </button>
+                      }
                     }
                   </td>
                 </tr>
