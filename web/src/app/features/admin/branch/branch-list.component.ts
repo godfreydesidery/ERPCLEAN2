@@ -22,6 +22,13 @@ export class BranchListComponent {
   /** Route input — Angular binds the `:companyUid` path param to this signal. */
   readonly companyUid = input.required<string>();
 
+  /**
+   * When true the component is hosted inside another page (the standalone Branches admin screen),
+   * which already provides the `.admin-page` chrome and the "Branches" heading — so we drop both to
+   * avoid a duplicate `<h1>` and double page padding. Defaults false → unchanged standalone/route use.
+   */
+  readonly embedded = input(false);
+
   readonly branches = signal<Branch[]>([]);
   readonly state = signal<'loading' | 'idle' | 'error'>('loading');
   readonly formError = signal<string | null>(null);
