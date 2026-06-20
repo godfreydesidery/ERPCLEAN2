@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_app/core/api/api_client.dart';
 import 'package:pos_app/core/api/api_exception.dart';
 import 'package:pos_app/core/api/token_manager.dart';
+import 'package:pos_app/core/jwt.dart';
 import 'package:pos_app/core/storage/secure_store.dart';
 import 'package:pos_app/models/catalog.dart';
 import 'package:pos_app/models/enums.dart';
@@ -56,6 +57,8 @@ void main() {
   late Map<String, Unit> unitsByUid;
   late List<({Product product, Unit unit, double price})> priced;
   late String unpricedProductId;
+  late String accessToken;
+  late Map<String, double> vatRates;
 
   var tillSeq = 0;
   late String runTag; // unique per run so till names never collide on reruns
@@ -104,12 +107,14 @@ void main() {
     final me = await auth.me();
     final ctx = await ContextService(api).resolve(me);
     api.branchUidOverride = ctx.branchUid;
+    accessToken = tm.bundle!.accessToken;
     companyId = ctx.companyId;
     companyUid = ctx.companyUid;
     branchId = ctx.branchId;
     currency = ctx.company.baseCurrency ?? 'TZS';
 
     unitsByUid = {for (final u in await catalog.listUnits(companyId)) u.uid: u};
+    vatRates = await catalog.taxRatesByStatus(companyId);
     walkIn = (await party.findWalkIn(companyId))!;
     agent = (await party.listAgents(companyId)).first;
 
@@ -137,6 +142,22 @@ void main() {
       'vatStatus': 'STANDARD',
     });
     unpricedProductId = (created['id']).toString();
+  });
+
+  tearDownAll(() async {
+    // Close any sessions this run (or earlier ones) left OPEN for the cashier so
+    // the backend stays clean and session-resume has no stale orphans to grab.
+    try {
+      final sub = jwtSub(accessToken);
+      final list = await sessions.list(companyId, size: 200);
+      for (final s in list.where(
+          (x) => x.status == PosSessionStatus.open && x.cashierId == sub)) {
+        try {
+          final x = await sessions.xRead(s.uid);
+          await sessions.close(s.uid, x.expectedCashAmount);
+        } catch (_) {}
+      }
+    } catch (_) {}
   });
 
   test('context resolves to numeric company + branch ids', () {
@@ -347,5 +368,48 @@ void main() {
     // ignore: avoid_print
     print('PREVIEW=$preview  GROSS=${inv.grossTotalAmount}  '
         'ratio=${(inv.grossTotalAmount / (preview == 0 ? 1 : preview)).toStringAsFixed(3)}');
+  });
+
+  test('VAT-inclusive preview matches the server gross', () async {
+    final p = priced[0];
+    final rate = vatRates[p.product.vatStatus] ?? 0;
+    final till = await freshTill();
+    final s = await sessions.open(till.uid, 0);
+    final body = {
+      'sessionUid': s.uid,
+      'customerId': walkIn.id,
+      'agentId': agent.id,
+      'currency': currency,
+      'lines': [
+        {'productId': p.product.id, 'unitId': p.unit.id, 'quantity': 1}
+      ],
+      'tenderedAmount': p.price * 2,
+      'ageVerified': true,
+    };
+    final inv = await sales.ring(body, idempotencyKey: newKey(), xRequestId: newKey());
+    if (rate > 0) {
+      final computed = p.price * (1 + rate); // what the register now previews
+      expect((computed - inv.grossTotalAmount).abs(), lessThan(1.0),
+          reason: 'VAT-inclusive preview $computed should match server gross '
+              '${inv.grossTotalAmount} (rate $rate)');
+    } else {
+      expect(inv.grossTotalAmount, greaterThanOrEqualTo(p.price - 0.001));
+    }
+  });
+
+  test('an open session is discoverable for resume (jwt sub + list filter)',
+      () async {
+    final sub = jwtSub(accessToken);
+    expect(sub, isNotNull, reason: 'the access token must carry a sub claim');
+    final till = await freshTill();
+    final s = await sessions.open(till.uid, 0);
+    final list = await sessions.list(companyId, size: 100);
+    final mine = list
+        .where((x) => x.status == PosSessionStatus.open && x.cashierId == sub);
+    expect(mine.any((x) => x.uid == s.uid), isTrue,
+        reason: 'the just-opened session must be findable as my open session');
+    // tidy up so it does not linger as an orphan for the next run
+    final x = await sessions.xRead(s.uid);
+    await sessions.close(s.uid, x.expectedCashAmount);
   });
 }

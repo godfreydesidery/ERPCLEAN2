@@ -77,8 +77,10 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
     cart.addProduct(p, unit, fixedQuantity: fixedQty, overridePrice: overridePrice);
     final id = ref.read(cartProvider).selectedId;
     if (overridePrice == null && id != null) {
-      _cache.previewPrice(p.uid, _currency).then((pr) {
-        if (pr != null && mounted) cart.setLinePrice(id, pr);
+      _cache.previewPrice(p.uid, _currency).then((net) {
+        if (net != null && mounted) {
+          cart.setLinePrice(id, app.grossUnitPrice(net, p.vatStatus));
+        }
       });
     }
   }

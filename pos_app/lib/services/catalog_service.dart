@@ -45,4 +45,25 @@ class CatalogService {
   Future<List<ProductPrice>> listPrices(String productUid) async =>
       asList(await _api.get('/products/uid/$productUid/prices'),
           ProductPrice.fromJson);
+
+  /// VAT rates by `vatStatus`, as a fraction (e.g. 0.18). Lets the preview show
+  /// VAT-inclusive totals that match the server's gross. Needs `TAXRATE.VIEW`;
+  /// the caller treats an empty map (or a thrown 403) as "show net prices".
+  Future<Map<String, double>> taxRatesByStatus(String companyId) async {
+    final data = await _api.get('/tax-rates', query: {'companyId': companyId});
+    final out = <String, double>{};
+    if (data is List) {
+      for (final m in data) {
+        if (m is Map) {
+          final status = m['vatStatus']?.toString();
+          final raw = asNum(m['rate']);
+          if (status != null && raw != null) {
+            // Normalise both conventions: a percentage (18) or a fraction (0.18).
+            out[status] = raw > 1 ? raw / 100 : raw;
+          }
+        }
+      }
+    }
+    return out;
+  }
 }

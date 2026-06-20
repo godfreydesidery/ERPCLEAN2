@@ -77,8 +77,10 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
         overridePrice: overridePrice);
     final lineId = ref.read(cartProvider).selectedId;
     if (overridePrice == null && lineId != null) {
-      _cache.previewPrice(p.uid, _currency).then((price) {
-        if (price != null && mounted) cart.setLinePrice(lineId, price);
+      _cache.previewPrice(p.uid, _currency).then((net) {
+        if (net != null && mounted) {
+          cart.setLinePrice(lineId, app.grossUnitPrice(net, p.vatStatus));
+        }
       });
     }
   }

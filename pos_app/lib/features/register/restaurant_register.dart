@@ -65,8 +65,10 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
     cart.addProduct(p, unit);
     final id = ref.read(cartProvider).selectedId;
     if (id != null) {
-      _cache.previewPrice(p.uid, _currency).then((pr) {
-        if (pr != null && mounted) cart.setLinePrice(id, pr);
+      _cache.previewPrice(p.uid, _currency).then((net) {
+        if (net != null && mounted) {
+          cart.setLinePrice(id, app.grossUnitPrice(net, p.vatStatus));
+        }
       });
     }
     setState(() => _sent = false);

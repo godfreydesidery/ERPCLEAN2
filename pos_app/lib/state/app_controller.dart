@@ -1,7 +1,9 @@
+import 'package:collection/collection.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/api/api_exception.dart';
 import '../core/config/app_config.dart';
+import '../core/jwt.dart';
 import '../models/auth.dart';
 import '../models/catalog.dart';
 import '../models/context.dart';
@@ -30,6 +32,7 @@ class AppData {
     this.agents = const [],
     this.unitsByUid = const {},
     this.currency = 'TZS',
+    this.vatRates = const {},
   });
 
   final AppPhase phase;
@@ -46,7 +49,16 @@ class AppData {
   final Map<String, Unit> unitsByUid;
   final String currency;
 
+  /// VAT rates by `vatStatus` (fraction, e.g. 0.18) — empty when TAXRATE.VIEW is
+  /// not granted, in which case the preview shows net prices.
+  final Map<String, double> vatRates;
+
   bool can(String code) => me?.can(code) ?? false;
+
+  /// VAT-inclusive unit price for a product's vatStatus (preview aid). Falls back
+  /// to the net price when the rate is unknown.
+  double grossUnitPrice(double net, String vatStatus) =>
+      net * (1 + (vatRates[vatStatus] ?? 0));
 
   AppData copyWith({
     AppPhase? phase,
@@ -63,6 +75,7 @@ class AppData {
     List<Agent>? agents,
     Map<String, Unit>? unitsByUid,
     String? currency,
+    Map<String, double>? vatRates,
   }) {
     return AppData(
       phase: phase ?? this.phase,
@@ -77,6 +90,7 @@ class AppData {
       agents: agents ?? this.agents,
       unitsByUid: unitsByUid ?? this.unitsByUid,
       currency: currency ?? this.currency,
+      vatRates: vatRates ?? this.vatRates,
     );
   }
 }
@@ -157,10 +171,33 @@ class AppController extends Notifier<AppData> {
         walkIn?.defaultCurrency ??
         'TZS';
 
+    // Best-effort VAT rates so the preview total is VAT-inclusive and matches
+    // the server gross (needs TAXRATE.VIEW; absent -> preview shows net prices).
+    Map<String, double> vatRates = const {};
+    try {
+      vatRates = await catalog.taxRatesByStatus(context.companyId);
+    } catch (_) {/* no TAXRATE.VIEW — net preview */}
+
+    // Resume an existing OPEN session for this cashier (orphaned-shift recovery
+    // after a restart / re-login) instead of forcing a duplicate-open later.
+    PosSession? resumable;
+    try {
+      final sub = jwtSub(ref.read(tokenManagerProvider).bundle?.accessToken);
+      if (sub != null) {
+        final open = await ref
+            .read(sessionServiceProvider)
+            .list(context.companyId, size: 50);
+        resumable = open
+            .where((s) => s.status.isOpen && s.cashierId == sub)
+            .firstOrNull;
+      }
+    } catch (_) {/* best-effort */}
+
     state = state.copyWith(
-      phase: AppPhase.openShift,
+      phase: resumable != null ? AppPhase.register : AppPhase.openShift,
       me: me,
       context: context,
+      shift: resumable,
       busy: false,
       clearError: true,
       defaultCustomer: walkIn,
@@ -168,6 +205,7 @@ class AppController extends Notifier<AppData> {
       agents: agents,
       unitsByUid: unitsByUid,
       currency: currency,
+      vatRates: vatRates,
     );
   }
 
