@@ -46,8 +46,8 @@ OPEN  →  CLOSED  →  RECONCILED
    | Mode | Card label | Best for |
    |---|---|---|
    | 🛒 | **Supermarket** | Fast scanner-first grocery checkout |
-   | 💊 | **Pharmacy** | Dispensing with batch/expiry & Rx |
-   | 🍽 | **Restaurant** | Table service, courses, split bill |
+   | 💊 | **Pharmacy** | Dispensing with patient & Rx capture |
+   | 🍽 | **Restaurant** | Table service with order tickets |
 
    The selected card is highlighted. You can change mode later from the register's top bar, but only while no sale is in progress — so it is best to pick the right one now.
 3. Under **Choose a till**, tap the till you are working on. Only **active** tills for your branch are shown; each tile shows the till **name**, its short **code**, and a small green dot. The tile you pick is highlighted.

@@ -86,8 +86,8 @@ enum RestrictedKind {
 /// only the register changes (prototype README).
 enum BusinessMode {
   supermarket('Supermarket', '🛒', 'Fast scanner-first grocery checkout'),
-  pharmacy('Pharmacy', '💊', 'Dispensing with batch/expiry & Rx'),
-  restaurant('Restaurant', '🍽', 'Table service, courses, split bill');
+  pharmacy('Pharmacy', '💊', 'Dispensing with patient & Rx capture'),
+  restaurant('Restaurant', '🍽', 'Table service with order tickets');
 
   const BusinessMode(this.label, this.glyph, this.blurb);
   final String label;

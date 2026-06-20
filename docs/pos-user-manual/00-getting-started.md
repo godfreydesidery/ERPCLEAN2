@@ -121,7 +121,7 @@ From left to right, the top bar contains:
 
 **What they are.** OrbixPOS comes in three flavours of sell screen — called **business modes** — each tuned for a different kind of shop. The way you take payment, print receipts, and run your session is identical in all three; only the *register* (how you add items to the sale) changes.
 
-**Why they exist.** A grocery cashier wants to scan barcodes fast; a pharmacy needs patient and prescription details; a restaurant works in tables and courses. One till would feel wrong for all three, so OrbixPOS gives each its own purpose-built register while keeping everything else the same — so the skills you learn in one mode carry straight over.
+**Why they exist.** A grocery cashier wants to scan barcodes fast; a pharmacy needs patient and prescription details; a restaurant works in tables and order tickets. One till would feel wrong for all three, so OrbixPOS gives each its own purpose-built register while keeping everything else the same — so the skills you learn in one mode carry straight over.
 
 **When you choose a mode.** You pick a mode when you open your shift (covered in the next chapter), and you can switch between modes during your shift using the switcher in the top bar — as long as you are not in the middle of a sale.
 
