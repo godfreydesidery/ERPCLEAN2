@@ -75,9 +75,14 @@ The container bootstrap secrets are in `qa.env` (gitignored, lives on the box).
 
 ## Reset / wipe
 
+> ⚠️ **QA data is permanent (since 2026-06-20).** A normal deploy keeps the volume — this is the
+> default and what you want. The wipe below **drops all QA data** and re-bootstraps a fresh DB;
+> it is **not** routine and should only be run on an explicit, deliberate decision (e.g. rebuilding
+> the environment from scratch). Day-to-day releases must use the data-preserving `deploy.sh`.
+
 ```bash
 ssh -i orbix-qa.pem ubuntu@16.170.11.41
-# full reset (drops all QA data; next deploy re-bootstraps from qa.env):
+# full reset (drops all QA data; next deploy re-bootstraps from qa.env) — DELIBERATE USE ONLY:
 docker stop erpclean2 && docker rm erpclean2
 docker volume rm erpclean2-data
 # then run deploy.ps1 again

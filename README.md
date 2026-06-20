@@ -87,8 +87,10 @@ cd web && npm run build         # production bundle
 ```
 
 ## Conventions that bite if ignored
-- Schema is owned by **Flyway** (`ddl-auto=validate`). Pre-stable: **edit the baseline + recreate the
-  DB**, don't stack migrations (PROJECT-CONVENTIONS §3.6).
+- Schema is owned by **Flyway** (`ddl-auto=validate`) and is **frozen / additive-only** (since
+  2026-06-20): never edit an applied migration — add a new `V<n>`. The DB is **durable everywhere**
+  (local, QA, prod) — don't wipe/recreate it, including no `docker compose down -v` locally
+  (PROJECT-CONVENTIONS §3.6, [docs/ops/migrations-and-seeding.md](docs/ops/migrations-and-seeding.md)).
 - Every API response is wrapped in `ApiResponse<T>`; the web interceptor unwraps it — services see
   raw `T`.
 - Externally exposed entities carry `id` (numeric) + `uid` (ULID); URLs address by `uid`.

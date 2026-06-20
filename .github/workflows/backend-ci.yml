@@ -79,20 +79,19 @@ jobs:
   # ── Job 3: REQUIRED — Flyway migration hygiene ─────────────────────────────────────────
   # Guards a DURABLE database against failure modes the "build schema from V1 on an empty DB"
   # tests cannot see (see scripts/check-migrations.sh):
-  #   Rule 1 (ON NOW): no two migrations share a version. A duplicate version (e.g. two feature
-  #                    branches both adding V65__) makes Flyway fail at startup on every environment.
-  #   Rule 2 (immutability) is intentionally OFF until the PRODUCTION CUTOVER. While the DB is still
-  #                    ephemeral, migrations may legitimately be consolidated/renumbered. At cutover,
-  #                    switch the run line below to enforce that already-shipped migrations are never
-  #                    edited/renamed/deleted (checksum-drift => app refuses to boot on staging/prod).
+  #   Rule 1 (ON): no two migrations share a version. A duplicate version (e.g. two feature
+  #                branches both adding V65__) makes Flyway fail at startup on every environment.
+  #   Rule 2 (immutability, ON since the 2026-06-20 schema freeze): an applied migration must never
+  #                be edited/renamed/deleted — its checksum would drift and the app refuses to boot
+  #                (validate-on-migrate) on the durable QA/prod DB. Corrections are NEW Vn migrations
+  #                (or, for convergent reference data, an edit to the repeatable R__ file).
   migration-hygiene:
-    name: Migration hygiene (versions)
+    name: Migration hygiene (versions + immutability)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # full history so Rule 2 can diff against the base branch once enabled
+          fetch-depth: 0   # full history so Rule 2 can diff against the base branch
       - name: Check Flyway migration hygiene
-        run: bash ../scripts/check-migrations.sh
-        # PROD CUTOVER — replace the line above with the next one to also enforce immutability:
-        # run: BASE=origin/${{ github.base_ref || 'main' }} bash ../scripts/check-migrations.sh
+        # Rule 1 (always) + Rule 2 (immutability vs the PR base branch).
+        run: BASE=origin/${{ github.base_ref || 'main' }} bash ../scripts/check-migrations.sh
