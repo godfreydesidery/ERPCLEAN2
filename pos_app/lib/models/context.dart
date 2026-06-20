@@ -1,0 +1,89 @@
+import '../core/json.dart';
+
+/// `GET /organisations/current` — the deployment's single organisation.
+class Organisation {
+  Organisation({required this.uid, required this.name});
+  final String uid;
+  final String name;
+
+  factory Organisation.fromJson(Map<String, dynamic> j) => Organisation(
+        uid: asStrOr(j['uid']),
+        name: asStrOr(j['name']),
+      );
+}
+
+/// `GET /companies/accessible` — a company the caller may act in (id + uid).
+class Company {
+  Company({
+    required this.id,
+    required this.uid,
+    required this.name,
+    this.baseCurrency,
+  });
+  final String id;
+  final String uid;
+  final String name;
+  final String? baseCurrency;
+
+  factory Company.fromJson(Map<String, dynamic> j) => Company(
+        id: asStrOr(j['id']),
+        uid: asStrOr(j['uid']),
+        name: asStrOr(j['name']),
+        baseCurrency: asStr(j['baseCurrency']),
+      );
+}
+
+/// `GET /branches?companyUid` — carries the numeric `id` the POS queries need.
+class Branch {
+  Branch({
+    required this.id,
+    required this.uid,
+    required this.companyId,
+    required this.companyUid,
+    required this.code,
+    required this.name,
+    required this.isDefault,
+    required this.status,
+  });
+  final String id;
+  final String uid;
+  final String companyId;
+  final String companyUid;
+  final String code;
+  final String name;
+  final bool isDefault;
+  final String status;
+
+  bool get isActive => status == 'ACTIVE';
+
+  factory Branch.fromJson(Map<String, dynamic> j) => Branch(
+        id: asStrOr(j['id']),
+        uid: asStrOr(j['uid']),
+        companyId: asStrOr(j['companyId']),
+        companyUid: asStrOr(j['companyUid']),
+        code: asStrOr(j['code']),
+        name: asStrOr(j['name']),
+        isDefault: asBool(j['isDefault']),
+        status: asStrOr(j['status'], 'ACTIVE'),
+      );
+}
+
+/// The fully-resolved operating context for a POS shift: the org, the active
+/// company (numeric id), and the active branch (numeric id). Built once after
+/// login from `/organisations/current` + `/companies/accessible` + `/branches`.
+class PosContext {
+  PosContext({
+    required this.organisationUid,
+    required this.company,
+    required this.branch,
+  });
+
+  final String organisationUid;
+  final Company company;
+  final Branch branch;
+
+  String get companyId => company.id;
+  String get companyUid => company.uid;
+  String get branchId => branch.id;
+  String get branchUid => branch.uid;
+}
