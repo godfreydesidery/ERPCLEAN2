@@ -25,6 +25,13 @@ web/dist/
 web/.angular/
 npm-debug.log*
 
+# Playwright run artifacts — regenerated on every run, never commit.
+# (e2e SPECS live in web/e2e/ and ARE tracked; these are run OUTPUT only.)
+web/test-results/
+web/playwright-report/
+web/pw-*.json
+web/pw-*.txt
+
 # Local infra data
 infra/local-data/
 

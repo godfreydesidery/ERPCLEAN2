@@ -110,9 +110,15 @@ REST controllers live flat under `com.erp.api..`, one per resource.
    - Append-only posting tables (e.g. `stock_move`, `audit_log`) — corrections are new
      postings, never updates.
    - Soft-deletable masters use a `status` enum (`ACTIVE` / `INACTIVE` / `ARCHIVED`).
-   - **Pre-stable schema:** while the schema is unstable, EDIT existing migrations and recreate
-     the DB rather than stacking corrective migrations. Ask before adding a migration on top if
-     unsure whether the schema is stable.
+   - **Schema is FROZEN (since 2026-06-20) — additive-only.** The database is now durable in
+     **every** environment (local, QA, prod); it is never wiped or recreated. **Never edit, rename,
+     or delete an applied migration** — its checksum would drift and the app refuses to boot
+     (`validate-on-migrate`) on a populated DB. Any schema/seed change is a **new `V<n>` migration**
+     (the next free version), or — for convergent reference data (permissions/grants) — an edit to
+     the repeatable `R__seed_permissions.sql`. CI enforces this (`scripts/check-migrations.sh`, job
+     `migration-hygiene`, rules 1+2). Author changes against populated tables (expand→backfill→
+     constrain; `CREATE INDEX CONCURRENTLY` in its own migration). Full discipline:
+     [docs/ops/migrations-and-seeding.md](docs/ops/migrations-and-seeding.md).
 
 7. **Coding standards.** Java: Google Java Style, `final` where reasonable, records for DTOs.
    **Lombok** is used to remove getter/setter boilerplate on JPA entities and elsewhere: annotate

@@ -110,9 +110,11 @@ com.erp
   `roles`, `permissions` (read), `companies`, `branches` (CRUD, set-default).
 
 ## 8. Persistence & migrations
-- Flyway under `db/migration/`. `ddl-auto=validate`. Pre-stable schema → **edit the baseline and
-  recreate** the DB rather than stacking corrective migrations (conventions §3.6) until IAM
-  stabilises. Optimistic locking (`@Version`) on mutable aggregates. PostgreSQL-native where it pays
+- Flyway under `db/migration/`. `ddl-auto=validate`. Schema is **frozen (since 2026-06-20):
+  additive-only** — never edit an applied migration; add a new `V<n>`. The DB is durable in every
+  environment (never wiped); author changes against populated tables (conventions §3.6,
+  [docs/ops/migrations-and-seeding.md](docs/ops/migrations-and-seeding.md)). Optimistic locking
+  (`@Version`) on mutable aggregates. PostgreSQL-native where it pays
   (partial unique indexes for the default-branch invariants; `JSONB` for `audit_log.detail`).
 
 ## 9. Cross-module communication (forward-looking)
