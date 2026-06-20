@@ -444,4 +444,9 @@ public final class AuditActions {
     public static final String SUPPLIER_ADDRESS_ADD      = "SUPPLIER.ADDRESS.ADD";
     public static final String SUPPLIER_ADDRESS_UPDATE   = "SUPPLIER.ADDRESS.UPDATE";
     public static final String SUPPLIER_ADDRESS_DEACTIVATE = "SUPPLIER.ADDRESS.DEACTIVATE";
+
+    // ---- Barcode Symbology Rules (ADR-0044 D-1a / BR-9) ----
+    public static final String SYMBOLOGY_RULE_CREATE  = "SYMBOLOGY.RULE.CREATE";
+    public static final String SYMBOLOGY_RULE_UPDATE  = "SYMBOLOGY.RULE.UPDATE";
+    public static final String SYMBOLOGY_RULE_ARCHIVE = "SYMBOLOGY.RULE.ARCHIVE";
 }

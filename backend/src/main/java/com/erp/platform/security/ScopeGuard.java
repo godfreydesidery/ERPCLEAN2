@@ -58,6 +58,7 @@ import com.erp.modules.parties.repository.AgentRepository;
 import com.erp.modules.parties.repository.CustomerRepository;
 import com.erp.modules.parties.repository.OtherPartyRepository;
 import com.erp.modules.parties.repository.SupplierRepository;
+import com.erp.modules.products.repository.BarcodeSymbologyRuleRepository;
 import com.erp.modules.products.repository.BomRepository;
 import com.erp.modules.products.repository.PriceListRepository;
 import com.erp.modules.products.repository.ProductRepository;
@@ -192,6 +193,8 @@ public class ScopeGuard {
     private final DocumentBrandingRepository  documentBrandings;
     // products-bom (ADR-0026 D-11)
     private final BomRepository              bomsRepo;
+    // barcode symbology (ADR-0044 D-1a)
+    private final BarcodeSymbologyRuleRepository symbologyRules;
     // cost-centre (ADR-0025 D-5)
     private final DimensionRepository        dimensions;
     private final DimensionValueRepository   dimensionValues;
@@ -299,6 +302,8 @@ public class ScopeGuard {
                       DocumentTemplateRepository documentTemplates,
                       DocumentBrandingRepository documentBrandings,
                       BomRepository bomsRepo,
+                      // barcode symbology (ADR-0044 D-1a)
+                      BarcodeSymbologyRuleRepository symbologyRules,
                       // cost-centre (ADR-0025 D-5)
                       DimensionRepository dimensions,
                       DimensionValueRepository dimensionValues,
@@ -405,6 +410,8 @@ public class ScopeGuard {
         this.documentBrandings   = documentBrandings;
         // products-bom (ADR-0026 D-11)
         this.bomsRepo            = bomsRepo;
+        // barcode symbology (ADR-0044 D-1a)
+        this.symbologyRules      = symbologyRules;
         // cost-centre (ADR-0025 D-5)
         this.dimensions          = dimensions;
         this.dimensionValues     = dimensionValues;
@@ -534,6 +541,8 @@ public class ScopeGuard {
             case "documentbranding"    -> documentBrandings.findCompanyIdByUid(uid);
             // products-bom (ADR-0026 D-11)
             case "bom"                 -> bomsRepo.findCompanyIdByUid(uid);
+            // barcode symbology (ADR-0044 D-1a)
+            case "symbologyrule"       -> symbologyRules.findCompanyIdByUid(uid);
             // cost-centre target types (ADR-0025 D-5)
             case "dimension"           -> dimensions.findCompanyIdByUid(uid);
             case "dimensionvalue"      -> dimensionValues.findCompanyIdByUid(uid);
