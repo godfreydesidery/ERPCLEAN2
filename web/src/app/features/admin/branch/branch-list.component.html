@@ -1,7 +1,9 @@
-<section class="admin-page">
-  <header class="page-head">
-    <h1 class="h4 mb-1">Branches</h1>
-  </header>
+<section [class.admin-page]="!embedded()">
+  @if (!embedded()) {
+    <header class="page-head">
+      <h1 class="h4 mb-1">Branches</h1>
+    </header>
+  }
 
   <form class="card card-body mb-3" (ngSubmit)="create()" aria-label="Create branch">
     <div class="row g-2 align-items-end">

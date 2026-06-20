@@ -103,6 +103,13 @@ export class ShellComponent {
           available: true,
           permission: 'COMPANY.VIEW',
         },
+        {
+          label: 'Branches',
+          route: '/admin/branches',
+          icon: 'bi-diagram-2',
+          available: true,
+          permission: 'BRANCH.VIEW',
+        },
         { label: 'Users', route: '/admin/users', icon: 'bi-people', available: true, permission: 'USER.VIEW' },
         {
           label: 'Roles',

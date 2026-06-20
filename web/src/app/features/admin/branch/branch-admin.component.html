@@ -1,0 +1,54 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Branches</h1>
+    <p class="text-muted mb-0">Select a company to view and manage its branches.</p>
+  </header>
+
+  @switch (orgState()) {
+    @case ('loading') {
+      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+      </p>
+    }
+    @case ('error') {
+      <p class="state text-danger" role="alert">
+        Could not load the organisation. Please try again.
+      </p>
+    }
+    @default {
+      @switch (companiesState()) {
+        @case ('loading') {
+          <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+          </p>
+        }
+        @case ('error') {
+          <p class="state text-danger" role="alert">Could not load companies. Please try again.</p>
+        }
+        @default {
+          @if (companies().length === 0) {
+            <div class="erp-empty">
+              <i class="bi bi-diagram-2" aria-hidden="true"></i>
+              You aren't assigned to any company yet. Ask an administrator to assign you to a branch.
+            </div>
+          } @else {
+            <div class="card card-body mb-3">
+              <label class="form-label small text-muted mb-1" for="branchCompany">Company</label>
+              <select id="branchCompany" name="branchCompany" class="form-select"
+                      [(ngModel)]="selectedCompanyUid">
+                <option value="">Select a company…</option>
+                @for (c of companies(); track c.uid) {
+                  <option [value]="c.uid">{{ c.name }} ({{ c.code }})</option>
+                }
+              </select>
+            </div>
+
+            @for (uid of selectedKey(); track uid) {
+              <app-branch-list [companyUid]="uid" [embedded]="true" />
+            }
+          }
+        }
+      }
+    }
+  }
+</section>

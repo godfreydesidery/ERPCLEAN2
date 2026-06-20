@@ -22,6 +22,15 @@ export const ADMIN_ROUTES: Routes = [
       import('./company/company-list.component').then((m) => m.CompanyListComponent),
   },
   {
+    // Standalone branch management: pick a company you can act in (scoped picker), then manage its
+    // branches. Reachable with only BRANCH.VIEW — no COMPANY.VIEW needed (unlike the nested route
+    // below, whose only entry point is the COMPANY.VIEW-gated Companies screen).
+    path: 'branches',
+    canActivate: [requirePermission('BRANCH.VIEW')],
+    loadComponent: () =>
+      import('./branch/branch-admin.component').then((m) => m.BranchAdminComponent),
+  },
+  {
     path: 'companies/:companyUid/branches',
     canActivate: [requirePermission('BRANCH.VIEW')],
     loadComponent: () =>
