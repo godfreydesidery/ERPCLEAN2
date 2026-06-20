@@ -23,6 +23,11 @@ reality falls short of what a full retail POS typically needs.
 | 5 | Partial / line-level POS refunds | **Open** (deferred by ADR-0042) | per-line returns |
 | 6 | Client-side offline ingest | **Open** | disconnected operation |
 
+> **Beyond transaction integrity:** for **supermarket / grocery** readiness — embedded-weight
+> barcodes, fiscal/EFD receipts, age-restriction, promotions-on-POS, weighed goods, partial refunds,
+> loyalty, gift cards — see **[§7 Supermarket-readiness gaps](#7-supermarket-readiness-gaps-grocery)**
+> and **[ADR-0044](../../decisions/0044-pos-supermarket-readiness.md)**.
+
 ---
 
 ## 1. Sale idempotency on sale creation — CLOSED (`Idempotency-Key` header)
@@ -172,6 +177,41 @@ With sale idempotency now shipped ([§1](#1-sale-idempotency-on-sale-creation--c
 a client can **safely replay** its queued sales on reconnect (each with its own `Idempotency-Key`)
 without risk of duplicates — but the **queue-and-replay logic lives on the client**. See
 [11 — Errors, Offline & Idempotency](./11-errors-offline-idempotency.md) for the recommended pattern.
+
+---
+
+## 7. Supermarket-readiness gaps (grocery)
+
+The items above (#1–#6) are the POS **transaction-integrity** gaps — mostly now closed. A separate
+**supermarket / grocery design review** (2026-06-20) assessed the POS against a real grocery
+operation and found a distinct set of gaps. Full analysis, proposed data-model/API shapes, and a
+recommended phasing are in **[ADR-0044 — POS supermarket-readiness](../../decisions/0044-pos-supermarket-readiness.md)**;
+this is the client-facing summary.
+
+> **Scope note.** A POS sale is one `POST /pos/sales` over a **client-side basket**, so cashier
+> ergonomics — scan loop, void-a-line / edit-qty before submit, suspend-&-recall, price-check,
+> no-sale/open-drawer, peripheral & scale integration, e-receipt rendering — are the **client's**
+> job, not API gaps (ADR-0044 D-7). The table below lists genuine **backend/design** gaps only.
+
+| Gap | Status | Grocery criticality | Proposed (ADR-0044) |
+|---|---|---|---|
+| **Embedded weight/price barcodes** (EAN-13 type-2; deli/produce scale labels) | **Absent** — exact-match lookup 404s on every such scan | **Critical** | D-1a |
+| **Fiscal / EFD receipt** (TRA VFD signed device + verification code) | **Absent** — legal prerequisite for a TZ VAT retailer | **Critical** | D-3b |
+| **Age-restricted item gate** (alcohol / tobacco verification) | **Absent** | **Critical** | D-3a |
+| **POS-applied promotions** (multi-buy / 3-for-2 / BOGO / threshold) | **Absent** — a `Promotion` engine exists but is **not applied on the sale path** and can't express multi-buy | **Critical** | D-2 |
+| **First-class weighed goods** (sell-by-weight, tare, scale rounding) | **Partial** — math works via a WEIGHT unit; no weighed-product type | **Critical** | D-1b |
+| **Partial / line-level refund** | **Deferred** (= §5 above) | **High** | D-4 |
+| **PLU codes** (ring-by-number for loose produce) | **Absent** (workaround: type the SKU code) | **High** | D-1c |
+| **Manual price override** at the till (supervisor) | **Absent** on POS (exists in the back-office invoice flow) | **High** | (D-2 note) |
+| **Markdown / clearance** (reduced-to-clear) | **Absent** (only lever is a line discount) | **High** | D-2 |
+| **Loyalty / membership** (points accrual/redeem, member pricing) | **Absent** — no module | **High** | D-5 |
+| **Gift card / store credit** (issue + redeem) | **Absent** | **High** | D-6 |
+| Vouchers/EBT, FX tender, deposit items, exchange, no-receipt return, denomination count, gift/e-receipt | **Absent** | Medium–Low | D-4 / D-6 |
+
+**The four critical, must-fix-for-a-real-supermarket gaps** are: embedded-weight barcodes (D-1a),
+fiscal/EFD receipts (D-3b), age-restriction (D-3a), and weighed goods (D-1b) — the legal + core
+grocery basics — plus **promotions-on-POS (D-2)**, the highest-leverage single change for grocery
+economics. Prioritisation/phasing is the owner's call (ADR-0044, *Consequences*).
 
 ---
 

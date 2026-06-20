@@ -208,6 +208,31 @@ phase it unblocks**. These are asks **on the ERP team**, not client work.
 | **BR-7** | **P3 (Low)** | **Mid-shift float top-up / cash-in.** A cash-in counterpart to the payout endpoint (today only cash-**out** payouts exist). | Phase 3 (drawer top-up) | UC-B7 |
 | **BR-8** | **P3 (Low)** | **Re-open / amend a closed or reconciled session.** Currently terminal once CLOSED/RECONCILED. | Phase 3 (correct a mis-closed shift) | UC-B8 |
 
+### 9a. Supermarket-readiness backend asks (NEW — ADR-0044, 2026-06-20)
+
+A grocery-lens design review surfaced a distinct set of backend/design gaps beyond the
+transaction-integrity asks above. Full analysis + proposed data-model/API shapes are in
+**[ADR-0044 — POS supermarket-readiness](../../../decisions/0044-pos-supermarket-readiness.md)**;
+client-facing summary in **[§12 §7](../12-known-limitations.md#7-supermarket-readiness-gaps-grocery)**.
+The "supermarket phase" below is **proposed — prioritisation/sequencing is the owner's re-planning
+call**; these are not yet slotted into the client phases (§11), and per the dependency rule no v1
+requirement assumes them.
+
+| Ask | Supermarket phase (proposed) | Backend change | Refs |
+|-----|------------------------------|----------------|------|
+| **BR-9** | **P1 — critical (core grocery)** | **Embedded weight/price barcodes (EAN-13 type-2).** Per-company symbology config (prefix ranges, item-code/embedded-value offsets), new `BarcodeType` values, and a lookup that extracts the item code and injects the embedded weight/price. Today the exact-match lookup **404s on every scale label**. | ADR-0044 D-1a; §12 §7 |
+| **BR-10** | **P1 — critical (legal)** | **Fiscal / EFD receipt (TRA VFD).** Pluggable per-country fiscal adapter at finalise → signed fiscal payload + verification code stored on the invoice. Legal prerequisite for a TZ VAT retailer. Likely its own ADR. | ADR-0044 D-3b; §12 §7 |
+| **BR-11** | **P1 — critical (legal)** | **Age-restricted product gate.** A product restriction flag + a POS age-verification acknowledgement (flag/record, optionally block). | ADR-0044 D-3a; §12 §7 |
+| **BR-12** | **P2 — high (highest leverage)** | **POS-applied promotions engine.** Extend the existing (orphaned) `Promotion` model to express **multi-buy / mix-match / BOGO / threshold**, AND **evaluate + apply it server-side on the sale pricing path** (it is configurable today but never applied at sale time). | ADR-0044 D-2; §12 §7 |
+| **BR-13** | **P1 — critical (core grocery)** | **First-class weighed goods.** A weighed-product type (sell-by-weight), tare, scale-division rounding (the price math already works via a WEIGHT unit). | ADR-0044 D-1b; §12 §7 |
+| **BR-14** | **P3 — high (convenience)** | **PLU master / lookup** for ring-by-number of un-barcoded loose produce. | ADR-0044 D-1c; §12 §7 |
+| **BR-15** | **P3 — high (retention)** | **Loyalty subsystem** (member, points accrual/redemption, member pricing) and **gift card / store credit** (issue + redeem). Each likely its own ADR. | ADR-0044 D-5/D-6; §12 §7 |
+
+> Partial/line-level refunds (**BR-2a**) and a permission-gated manual price override (**BR-5**) above
+> already cover two supermarket gaps — ADR-0044 maps to them rather than duplicating. Cashier-ergonomics
+> items (scan loop, void-line/edit-qty pre-submit, suspend/recall via BR-6, price-check, peripherals/scale)
+> are **client-side** by design (ADR-0044 D-7), not backend asks.
+
 > **Dependency rule honoured.** No v1 requirement in this PRD assumes BR-1…BR-8. Each backend ask is
 > the named precondition for the later-phase requirement that needs it (see the per-phase entry/exit
 > criteria in §11). The client team MUST NOT begin a phase whose backend dependency is unmet — it would
