@@ -12,6 +12,7 @@ import '../../models/pos.dart';
 import '../../models/sale.dart';
 import '../../state/app_controller.dart';
 import '../../state/providers.dart';
+import '../../state/receipt_journal.dart';
 import '../../widgets/ui.dart';
 import '../receipt/receipt_view.dart';
 
@@ -102,6 +103,9 @@ class _SessionDrawer extends ConsumerWidget {
                     _action(context, Icons.receipt_long_outlined,
                         "Today's sales", 'Look up & reprint a receipt',
                         enabled: true, onTap: () => _todaysSales(context, ref)),
+                    _action(context, Icons.history, 'Recent receipts',
+                        'Reprint from this device (offline)',
+                        enabled: true, onTap: () => _recent(context, ref)),
                     const Divider(),
                     _action(context, Icons.lock_outline, 'Close session',
                         'Count the drawer → variance',
@@ -237,6 +241,15 @@ class _SessionDrawer extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (_) => _TodaysSalesDialog(companyId: companyId),
+    );
+  }
+
+  Future<void> _recent(BuildContext context, WidgetRef ref) async {
+    final receipts = await ref.read(receiptJournalProvider).recent();
+    if (!context.mounted) return;
+    showDialog(
+      context: context,
+      builder: (_) => _RecentReceiptsDialog(receipts: receipts),
     );
   }
 
@@ -501,6 +514,79 @@ class _TodaysSalesDialogState extends ConsumerState<_TodaysSalesDialog> {
                   );
                 },
               ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: OrbixButton(
+                    label: 'Close',
+                    kind: BtnKind.ghost,
+                    onPressed: () => Navigator.pop(context)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================ recent receipts
+
+class _RecentReceiptsDialog extends ConsumerWidget {
+  const _RecentReceiptsDialog({required this.receipts});
+  final List<Receipt> receipts;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final df = DateFormat('MMM d, HH:mm');
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: AppRadii.brLg),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480, maxHeight: 560),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 18, 20, 10),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Recent receipts (this device)',
+                    style:
+                        TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              ),
+            ),
+            const Divider(height: 1),
+            Flexible(
+              child: receipts.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.all(40),
+                      child: Center(child: Text('No receipts on this device yet.')))
+                  : ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: receipts.length,
+                      separatorBuilder: (_, _) => const Divider(height: 1),
+                      itemBuilder: (context, i) {
+                        final r = receipts[i];
+                        return ListTile(
+                          leading: const Icon(Icons.receipt_outlined,
+                              color: AppColors.brand),
+                          title: Text(r.invoice.invoiceNumber),
+                          subtitle: Text(r.invoice.finalisedAt == null
+                              ? (r.invoice.customerName ?? '')
+                              : df.format(r.invoice.finalisedAt!.toLocal())),
+                          trailing: Text(
+                              formatMoneyParts(r.invoice.grossTotalAmount,
+                                  r.invoice.currency),
+                              style: numStyle(weight: FontWeight.w700)),
+                          onTap: () {
+                            Navigator.pop(context);
+                            showReceiptSheet(context, ref, r);
+                          },
+                        );
+                      },
+                    ),
             ),
             Padding(
               padding: const EdgeInsets.all(12),

@@ -11,6 +11,7 @@ import '../../models/sale.dart';
 import '../../state/app_controller.dart';
 import '../../state/cart_controller.dart';
 import '../../state/providers.dart';
+import '../../state/receipt_journal.dart';
 import '../../widgets/ui.dart';
 import '../receipt/receipt_view.dart';
 
@@ -22,9 +23,11 @@ Future<void> openPaymentSheet(BuildContext context, WidgetRef ref) async {
     barrierDismissible: false,
     builder: (_) => const _PaymentSheet(),
   );
-  if (receipt != null && context.mounted) {
+  if (receipt != null) {
     ref.read(cartProvider.notifier).clearLines();
-    await showReceiptSheet(context, ref, receipt);
+    // Persist locally so it can be reprinted without re-posting (G-8), offline.
+    await ref.read(receiptJournalProvider).add(receipt);
+    if (context.mounted) await showReceiptSheet(context, ref, receipt);
   }
 }
 

@@ -84,6 +84,23 @@ class SalesInvoice {
         finalisedAt: asDate(j['finalisedAt']),
         notes: asStr(j['notes']),
       );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'uid': uid,
+        'invoiceNumber': invoiceNumber,
+        'status': status.wire,
+        'customerId': customerId,
+        'customerName': customerName,
+        'agentName': agentName,
+        'currency': currency,
+        'netTotalAmount': netTotalAmount,
+        'vatTotalAmount': vatTotalAmount,
+        'grossTotalAmount': grossTotalAmount,
+        'taxSummary': taxSummary,
+        'finalisedAt': finalisedAt?.toIso8601String(),
+        'notes': notes,
+      };
 }
 
 /// A finalised invoice line (`SalesInvoiceLineDto`) — for the printed receipt body.
@@ -127,6 +144,20 @@ class InvoiceLine {
         grossAmount: asNumOr(j['grossAmount']),
         vatRate: asNumOr(j['vatRate']),
       );
+
+  Map<String, dynamic> toJson() => {
+        'lineNo': lineNo,
+        'productCode': productCode,
+        'productName': productName,
+        'unitName': unitName,
+        'quantity': quantity,
+        'unitPriceAmount': unitPriceAmount,
+        'lineDiscountAmount': lineDiscountAmount,
+        'netAmount': netAmount,
+        'vatAmount': vatAmount,
+        'grossAmount': grossAmount,
+        'vatRate': vatRate,
+      };
 }
 
 /// A finalised invoice payment (`SalesInvoicePaymentDto`) — receipt tender lines.
@@ -149,6 +180,13 @@ class InvoicePayment {
         changeAmount: asNumOr(j['changeAmount']),
         reference: asStr(j['reference']),
       );
+
+  Map<String, dynamic> toJson() => {
+        'tenderType': tenderType.wire,
+        'amount': amount,
+        'changeAmount': changeAmount,
+        'reference': reference,
+      };
 }
 
 /// A fully-loaded receipt: header + lines + payments, persisted in the local
@@ -181,4 +219,20 @@ class Receipt {
     }
     return (paid - invoice.grossTotalAmount).clamp(0, double.infinity);
   }
+
+  Map<String, dynamic> toJson() => {
+        'invoice': invoice.toJson(),
+        'lines': lines.map((l) => l.toJson()).toList(),
+        'payments': payments.map((p) => p.toJson()).toList(),
+        'clientTxnId': clientTxnId,
+        'tenderedAmount': tenderedAmount,
+      };
+
+  factory Receipt.fromJson(Map<String, dynamic> j) => Receipt(
+        invoice: SalesInvoice.fromJson(asMap(j['invoice'])),
+        lines: asList(j['lines'], InvoiceLine.fromJson),
+        payments: asList(j['payments'], InvoicePayment.fromJson),
+        clientTxnId: asStrOr(j['clientTxnId']),
+        tenderedAmount: asNum(j['tenderedAmount']),
+      );
 }
