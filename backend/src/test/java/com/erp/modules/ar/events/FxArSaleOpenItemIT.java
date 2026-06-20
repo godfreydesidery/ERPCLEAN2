@@ -165,14 +165,14 @@ class FxArSaleOpenItemIT extends PostgresIntegrationTest {
         // USD product: 1 unit = USD 100 (no VAT for simplicity — use VatStatus.EXEMPT)
         productUsdUid = productService.create(new CreateProductRequest(
                 company.getUid(), null, "USD Widget", null,
-                ProductType.GOODS, true, true, pcsUid, null, VatStatus.EXEMPT, null, null, null, null, null, null, null, null)).uid();
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.EXEMPT, null, null, null, null, null, null, null, null, null)).uid();
         productService.setPrice(productUsdUid,
                 new SetProductPriceRequest(priceListUid, new MoneyDto("100", USD)));
 
         // TZS product: 1 unit = TZS 1000 (no-regression check)
         productTzsUid = productService.create(new CreateProductRequest(
                 company.getUid(), null, "TZS Widget", null,
-                ProductType.GOODS, true, true, pcsUid, null, VatStatus.EXEMPT, null, null, null, null, null, null, null, null)).uid();
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.EXEMPT, null, null, null, null, null, null, null, null, null)).uid();
         productService.setPrice(productTzsUid,
                 new SetProductPriceRequest(priceListUid, new MoneyDto("1000", TZS)));
 

@@ -512,7 +512,7 @@ class StockServiceImplIT extends PostgresIntegrationTest {
     private ProductDto stockableProduct(String name) {
         ProductDto p = productService.create(new CreateProductRequest(
                 companyA.getUid(), null, name, null,
-                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null));
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null, null));
         productService.setPrice(p.uid(),
                 new SetProductPriceRequest(priceListUid, new MoneyDto("500", "TZS")));
         return p;
@@ -521,7 +521,7 @@ class StockServiceImplIT extends PostgresIntegrationTest {
     private ProductDto nonStockableProduct(String name) {
         ProductDto p = productService.create(new CreateProductRequest(
                 companyA.getUid(), null, name, null,
-                ProductType.SERVICE, true, false, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null));
+                ProductType.SERVICE, true, false, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null, null));
         productService.setPrice(p.uid(),
                 new SetProductPriceRequest(priceListUid, new MoneyDto("100", "TZS")));
         return p;

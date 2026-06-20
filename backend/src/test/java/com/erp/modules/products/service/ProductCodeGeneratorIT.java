@@ -106,6 +106,6 @@ class ProductCodeGeneratorIT extends PostgresIntegrationTest {
 
     private static CreateProductRequest goods(String companyUid, String name, String baseUnitUid) {
         return new CreateProductRequest(
-                companyUid, null, name, null, ProductType.GOODS, true, true, baseUnitUid, null, null, null, null, null, null, null, null, null, null);
+                companyUid, null, name, null, ProductType.GOODS, true, true, baseUnitUid, null, null, null, null, null, null, null, null, null, null, null);
     }
 }
