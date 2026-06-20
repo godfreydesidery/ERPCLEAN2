@@ -145,7 +145,7 @@ class _Aside extends StatelessWidget {
     'Fast, scanner-first checkout',
     'Multi-tender: cash, card, mobile money, cheque & split',
     'Server-authoritative pricing, VAT & totals',
-    'Safe sales: idempotent posting, reconcile-before-resend',
+    'Reliable sales that ride out brief network blips',
     'Built-in X-read, close, and Z-read reconcile',
   ];
 
@@ -167,7 +167,7 @@ class _Aside extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'The till that never double-charges.',
+              'A fast, dependable till for every counter.',
               style: TextStyle(
                   color: Colors.white,
                   fontSize: 30,
