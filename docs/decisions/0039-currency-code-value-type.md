@@ -165,7 +165,12 @@ Separate **what currencies exist** (catalog) from **what a new company starts wi
 
 ### D-10 — Where the seed lives (dev-phase: edit existing migrations in place)
 
-Per [[dev-phase-migrations-editable]] (DB ephemeral, development): fold these into existing migrations rather than appending additive `Vnn`, and drop the ADD-nullable→backfill ceremony.
+> **Superseded by ADR-0043 (2026-06-20).** The "edit existing migrations in place" mechanism below
+> applied only while the DB was ephemeral. The schema is now frozen / additive-only and the DB is
+> durable in every environment — new seed/schema changes are a new `V<n>` (the currency rows below
+> are already shipped and stay as-is). The *currency model* decisions in this ADR are unaffected.
+
+Per the (now-retired) dev-phase stance (DB ephemeral, development): fold these into existing migrations rather than appending additive `Vnn`, and drop the ADD-nullable→backfill ceremony.
 - **Catalog rows** (`UGX`, `RWF`, `BIF`, `SSP`) → add to the existing V77 `currencies` seed (`TZS/KES/USD/EUR/GBP` already there).
 - **`company_currency` / `branch_currency` tables** → create in the FX migration set (or a clean migration); no back-fill ceremony.
 - **Bootstrap company's** base + default + enabled set → seeded by the **bootstrap service at startup from `BootstrapProperties`** (Java), not a migration — because the bootstrap company itself is created there.
