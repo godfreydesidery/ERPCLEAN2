@@ -1,0 +1,33 @@
+# Caddy — TLS reverse proxy in front of the ERPCLEAN2 API (which serves the Angular SPA too).
+#
+# CURRENT: self-signed HTTPS via Caddy's INTERNAL CA (no domain yet). Browsers will show a
+# "not secure / not trusted" warning — that is expected; the traffic is still encrypted.
+#
+# TO UPGRADE TO A REAL (trusted) CERT later: point a domain's A record at this box's public
+# (Elastic) IP, then replace the ":443" block below with your domain and drop `tls internal`:
+#
+#     erp.example.com {
+#         encode gzip
+#         reverse_proxy localhost:8081
+#     }
+#
+# Caddy then auto-issues + auto-renews a free Let's Encrypt cert. (Keep the :80 block or
+# delete it — with a domain, Caddy handles the HTTP->HTTPS redirect automatically.)
+
+{
+	# We manage HTTP->HTTPS ourselves (below), so disable Caddy's automatic redirect to
+	# avoid it also trying to bind :80.
+	auto_https disable_redirects
+}
+
+# Plain HTTP -> redirect everything to HTTPS.
+:80 {
+	redir https://{host}{uri} permanent
+}
+
+# HTTPS on 443 with a self-signed cert from Caddy's internal CA, proxying to the API.
+:443 {
+	tls internal
+	encode gzip
+	reverse_proxy localhost:8081
+}
