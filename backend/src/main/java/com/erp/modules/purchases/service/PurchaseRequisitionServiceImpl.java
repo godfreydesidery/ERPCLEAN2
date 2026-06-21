@@ -194,6 +194,13 @@ public class PurchaseRequisitionServiceImpl implements PurchaseRequisitionServic
             throw new IllegalStateException(
                     "Can only cancel DRAFT or SUBMITTED requisitions; current: " + r.getStatus());
         }
+
+        // PURCHASES-027: chk_purchase_requisition_number_when_submitted requires
+        // requisition_number IS NOT NULL for any status != DRAFT.  A DRAFT has no number yet, so
+        // assign one before changing the status to CANCELLED.
+        if (r.getStatus() == RequisitionStatus.DRAFT && r.getRequisitionNumber() == null) {
+            r.setRequisitionNumber(numberGen.nextRequisition(r.getCompanyId()));
+        }
         r.setStatus(RequisitionStatus.CANCELLED);
         r.setCancelledAt(Instant.now());
         r.setCancelReason(reason);

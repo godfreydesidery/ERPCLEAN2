@@ -271,12 +271,15 @@ public class CurrencyEnablementServiceImpl implements CurrencyEnablementService 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private void shiftCompanyDefault(Long companyId, CompanyCurrency newDefault, Long actorId) {
-        // Clear the existing default — use object identity to avoid NPE on transient entities
+        // Clear the old default and flush immediately so the UPDATE reaches Postgres before the
+        // UPDATE that sets the new default row — prevents a momentary two-row violation on the
+        // partial unique index (FX-CURRENCY-019, FLOW-TAX-FX-052).
         companyCurrencies.findByCompanyIdAndIsDefaultTrue(companyId).ifPresent(old -> {
-            if (old != newDefault) {
+            if (old != newDefault) { // reference identity: JPA returns the same instance for the same row, so this is null-safe for unsaved rows
                 old.setDefault(false);
                 old.setUpdatedAt(Instant.now());
                 old.setUpdatedBy(actorId);
+                companyCurrencies.saveAndFlush(old);
             }
         });
         newDefault.setDefault(true);
@@ -285,11 +288,15 @@ public class CurrencyEnablementServiceImpl implements CurrencyEnablementService 
     }
 
     private void shiftBranchDefault(Long branchId, BranchCurrency newDefault, Long actorId) {
+        // Clear the old default and flush immediately so the UPDATE reaches Postgres before the
+        // UPDATE that sets the new default row — prevents a momentary two-row violation on the
+        // partial unique index (FX-CURRENCY-033).
         branchCurrencies.findByBranchIdAndIsDefaultTrue(branchId).ifPresent(old -> {
-            if (old != newDefault) {
+            if (old != newDefault) { // reference identity: JPA returns the same instance for the same row, so this is null-safe for unsaved rows
                 old.setDefault(false);
                 old.setUpdatedAt(Instant.now());
                 old.setUpdatedBy(actorId);
+                branchCurrencies.saveAndFlush(old);
             }
         });
         newDefault.setDefault(true);

@@ -165,6 +165,11 @@ public class BudgetServiceImpl implements BudgetService {
                                        String costCentreValueUid, BudgetVersionStatus versionStatus,
                                        Pageable pageable) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        // Defect #4: versionStatus filter was accepted but silently ignored — wire it now.
+        if (versionStatus != null) {
+            return budgets.findByCompanyIdAndVersionStatus(companyId, versionStatus, pageable)
+                    .map(b -> toBudgetDto(b, List.of()));
+        }
         if (fiscalYearUid != null) {
             FiscalYear fy = fiscalYears.findByUid(fiscalYearUid)
                     .filter(y -> y.getCompanyId().equals(companyId))
@@ -426,8 +431,11 @@ public class BudgetServiceImpl implements BudgetService {
 
         Long actorId = principal != null ? principal.userId() : null;
 
-        // Supersede the prior approved version in the same TX (D-5, NFR-BUD-04)
-        // Use PESSIMISTIC_WRITE to serialise concurrent approves
+        // Supersede the prior approved version in the same TX (D-5, NFR-BUD-04).
+        // Use PESSIMISTIC_WRITE to serialise concurrent approves.
+        // Flush the SUPERSEDED update immediately so the status UPDATE reaches Postgres before
+        // the UPDATE that sets the new version APPROVED — prevents a momentary two-row violation
+        // on the partial unique index uq_budget_version_one_approved (BUDGETING-040).
         Optional<BudgetVersion> priorApproved = versions.findApprovedForUpdate(
                 ver.getCompanyId(), ver.getFiscalYearId(), ver.getCostCentreValueId(),
                 BudgetVersionStatus.APPROVED);
@@ -436,7 +444,7 @@ public class BudgetServiceImpl implements BudgetService {
             prior.setSupersededAt(Instant.now());
             prior.setUpdatedAt(Instant.now());
             prior.setUpdatedBy(actorId);
-            versions.save(prior);
+            versions.saveAndFlush(prior);
         });
 
         ver.setStatus(BudgetVersionStatus.APPROVED);
@@ -489,10 +497,31 @@ public class BudgetServiceImpl implements BudgetService {
     // -------------------------------------------------------------------------
 
     private BudgetDto toBudgetDto(Budget b, List<BudgetVersionDto> vDtos) {
+        // Defect #5: resolve fiscalYearUid + fiscalYearCode
+        String fyUid  = null;
+        String fyCode = null;
+        if (b.getFiscalYearId() != null) {
+            var fy = fiscalYears.findById(b.getFiscalYearId()).orElse(null);
+            if (fy != null) {
+                fyUid  = fy.getUid();
+                fyCode = fy.getYearCode();
+            }
+        }
+        // Defect #5: resolve costCentreValueUid + costCentreValueName via resolveValueById
+        // (boundary-safe: DimensionService is the approved read contract for budgeting, D-8)
+        String ccValueUid  = null;
+        String ccValueName = null;
+        if (b.getCostCentreValueId() != null) {
+            var ccVal = dimensionService.resolveValueById(b.getCostCentreValueId()).orElse(null);
+            if (ccVal != null) {
+                ccValueUid  = ccVal.uid();
+                ccValueName = ccVal.name();
+            }
+        }
         return new BudgetDto(
                 b.getId(), b.getUid(), b.getCompanyId(), b.getBudgetNumber(), b.getName(),
-                b.getFiscalYearId(), null, null,
-                b.getCostCentreValueId(), null, null,
+                b.getFiscalYearId(), fyUid, fyCode,
+                b.getCostCentreValueId(), ccValueUid, ccValueName,
                 b.getBudgetType() != null ? b.getBudgetType().name() : null, b.getBranchId(),
                 b.getNotes(), b.getVersion(),
                 b.getCreatedAt(), b.getCreatedBy(), b.getUpdatedAt(), b.getUpdatedBy(),
@@ -500,11 +529,20 @@ public class BudgetServiceImpl implements BudgetService {
     }
 
     BudgetVersionDto toVersionDto(BudgetVersion v, List<BudgetLineDto> lineDtos) {
+        // Defect #5: resolve budgetUid and seededFromVersionUid
+        String budgetUid = budgets.findById(v.getBudgetId())
+                .map(com.erp.modules.budgeting.domain.entity.Budget::getUid)
+                .orElse(null);
+        String seededFromVersionUid = v.getSeededFromVersionId() != null
+                ? versions.findById(v.getSeededFromVersionId())
+                        .map(BudgetVersion::getUid)
+                        .orElse(null)
+                : null;
         return new BudgetVersionDto(
-                v.getId(), v.getUid(), v.getBudgetId(), null,
+                v.getId(), v.getUid(), v.getBudgetId(), budgetUid,
                 v.getCompanyId(), v.getFiscalYearId(), v.getCostCentreValueId(),
                 v.getVersionNo(), v.getStatus(), v.getLabel(),
-                v.getSeededFromVersionId(), null,
+                v.getSeededFromVersionId(), seededFromVersionUid,
                 v.getSubmittedAt(), v.getSubmittedBy(),
                 v.getApprovedAt(), v.getApprovedBy(),
                 v.getRejectedAt(), v.getRejectedBy(),
@@ -514,10 +552,31 @@ public class BudgetServiceImpl implements BudgetService {
     }
 
     BudgetLineDto toLineDto(BudgetLine l) {
+        // Defect #5: resolve accountUid/accountCode/accountName and fiscalPeriodUid/periodNo
+        String accountUid  = null;
+        String accountCode = null;
+        String accountName = null;
+        if (l.getAccountId() != null) {
+            var acct = accounts.findById(l.getAccountId()).orElse(null);
+            if (acct != null) {
+                accountUid  = acct.getUid();
+                accountCode = acct.getAccountCode();
+                accountName = acct.getName();
+            }
+        }
+        String fiscalPeriodUid = null;
+        int    periodNo        = 0;
+        if (l.getFiscalPeriodId() != null) {
+            var period = fiscalPeriods.findById(l.getFiscalPeriodId()).orElse(null);
+            if (period != null) {
+                fiscalPeriodUid = period.getUid();
+                periodNo        = period.getPeriodNo();
+            }
+        }
         return new BudgetLineDto(
                 l.getId(), l.getUid(), l.getBudgetVersionId(),
-                l.getAccountId(), null, null, null,
-                l.getFiscalPeriodId(), null, 0,
+                l.getAccountId(), accountUid, accountCode, accountName,
+                l.getFiscalPeriodId(), fiscalPeriodUid, periodNo,
                 l.getAmount(), l.getQuantity(), l.getCurrency().value(), l.getLineMemo(), l.getCreatedAt());
     }
 }

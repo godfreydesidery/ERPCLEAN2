@@ -6,6 +6,7 @@ import com.erp.modules.purchases.service.RfqService;
 import com.erp.platform.common.api.ApiResponse;
 import com.erp.platform.common.api.PageMeta;
 import java.util.List;
+import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -35,7 +36,7 @@ public class RfqController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("@perm.scoped(#req.companyUid(), 'company', 'PURCHASE.RFQ.CREATE')")
-    public ApiResponse<RfqDto> create(@RequestBody CreateRfqRequest req) {
+    public ApiResponse<RfqDto> create(@Valid @RequestBody CreateRfqRequest req) {
         return ApiResponse.ok(service.create(req));
     }
 

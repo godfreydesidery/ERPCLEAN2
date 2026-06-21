@@ -213,13 +213,15 @@ class BomScopeGuardTest {
 
         @Test
         void rollUp_crossTenantBranch_throws403() {
-            // Branch belongs to COMPANY_A; caller is in COMPANY_B
+            // Branch belongs to COMPANY_A; caller is in COMPANY_B.
+            // Uses findWithCompanyByUid (EntityGraph) — avoids LazyInitializationException
+            // when getCompany().getId() is called (MANUFACTURING-022 fix).
             Company companyA = mock(Company.class);
             when(companyA.getId()).thenReturn(COMPANY_A);
             Branch branchA = mock(Branch.class);
             when(branchA.getCompany()).thenReturn(companyA);
             when(branchA.getId()).thenReturn(BRANCH_ID);
-            when(branchesRepo.findByUid("branch-a-uid")).thenReturn(Optional.of(branchA));
+            when(branchesRepo.findWithCompanyByUid("branch-a-uid")).thenReturn(Optional.of(branchA));
 
             doThrow(ForbiddenException.notPermitted())
                     .when(scopeGuard).assertCanActIn(any(), anyLong());
@@ -233,13 +235,14 @@ class BomScopeGuardTest {
 
         @Test
         void rollUp_crossTenantBranch_noExplosionDataLeaks() {
-            // Prove the guard fires BEFORE the explosion is called
+            // Prove the guard fires BEFORE the explosion is called.
+            // Uses findWithCompanyByUid (EntityGraph) — MANUFACTURING-022 fix.
             Company companyA = mock(Company.class);
             when(companyA.getId()).thenReturn(COMPANY_A);
             Branch branchA = mock(Branch.class);
             when(branchA.getCompany()).thenReturn(companyA);
             when(branchA.getId()).thenReturn(BRANCH_ID);
-            when(branchesRepo.findByUid("branch-a-uid")).thenReturn(Optional.of(branchA));
+            when(branchesRepo.findWithCompanyByUid("branch-a-uid")).thenReturn(Optional.of(branchA));
 
             doThrow(ForbiddenException.notPermitted())
                     .when(scopeGuard).assertCanActIn(any(), anyLong());
@@ -262,7 +265,8 @@ class BomScopeGuardTest {
             Branch branchA = mock(Branch.class);
             when(branchA.getCompany()).thenReturn(companyA);
             when(branchA.getId()).thenReturn(BRANCH_ID);
-            when(branchesRepo.findByUid("branch-a-uid")).thenReturn(Optional.of(branchA));
+            // Uses findWithCompanyByUid — MANUFACTURING-022 fix
+            when(branchesRepo.findWithCompanyByUid("branch-a-uid")).thenReturn(Optional.of(branchA));
 
             doNothing().when(scopeGuard).assertCanActIn(any(), anyLong());
 
@@ -284,7 +288,8 @@ class BomScopeGuardTest {
 
         @Test
         void rollUp_byBomUid_crossTenantBranch_throws403() {
-            // When only bomUid is supplied (parentProductUid null), branch guard still fires
+            // When only bomUid is supplied (parentProductUid null), branch guard still fires.
+            // Uses findWithCompanyByUid — MANUFACTURING-022 fix.
             Bom bom = bomInCompanyA();
             when(bomsRepo.findByUid(BOM_UID)).thenReturn(Optional.of(bom));
             com.erp.modules.products.domain.entity.Product product =
@@ -297,7 +302,7 @@ class BomScopeGuardTest {
             Branch branchA = mock(Branch.class);
             when(branchA.getCompany()).thenReturn(companyA);
             when(branchA.getId()).thenReturn(BRANCH_ID);
-            when(branchesRepo.findByUid("branch-a-uid")).thenReturn(Optional.of(branchA));
+            when(branchesRepo.findWithCompanyByUid("branch-a-uid")).thenReturn(Optional.of(branchA));
 
             doThrow(ForbiddenException.notPermitted())
                     .when(scopeGuard).assertCanActIn(any(), anyLong());

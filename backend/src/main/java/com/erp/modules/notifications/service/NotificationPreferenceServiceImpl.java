@@ -4,6 +4,8 @@ import com.erp.modules.notifications.domain.dto.NotificationPreferenceDto;
 import com.erp.modules.notifications.domain.dto.SetPreferenceRequest;
 import com.erp.modules.notifications.domain.entity.NotificationPreference;
 import com.erp.modules.notifications.repository.NotificationPreferenceRepository;
+import com.erp.modules.notifications.repository.NotificationTypeRepository;
+import com.erp.platform.common.api.NotFoundException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -19,9 +21,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class NotificationPreferenceServiceImpl implements NotificationPreferenceService {
 
     private final NotificationPreferenceRepository preferences;
+    private final NotificationTypeRepository       types;
 
-    public NotificationPreferenceServiceImpl(NotificationPreferenceRepository preferences) {
+    public NotificationPreferenceServiceImpl(NotificationPreferenceRepository preferences,
+                                              NotificationTypeRepository types) {
         this.preferences = preferences;
+        this.types       = types;
     }
 
     @Override
@@ -34,6 +39,18 @@ public class NotificationPreferenceServiceImpl implements NotificationPreference
     @Override
     public NotificationPreferenceDto setPreference(Long userId, Long companyId,
                                                     String typeKey, SetPreferenceRequest req) {
+        // Defect 1: guard against unknown typeKey — reject before creating an orphan row.
+        if (types.findByCompanyIdAndTypeKey(companyId, typeKey).isEmpty()) {
+            throw new NotFoundException(
+                    "NotificationType not found: company=" + companyId + " typeKey=" + typeKey);
+        }
+        // Defect 2: both fields are boolean primitives; an empty body {} deserialises to
+        // muted=false/channelsEnabled=null — treat a null channelsEnabled as an ambiguous body.
+        if (!req.muted() && req.channelsEnabled() == null) {
+            throw new IllegalArgumentException(
+                    "Request body must supply at least one of 'muted' or 'channelsEnabled' "
+                    + "with an explicit value (empty body is not accepted).");
+        }
         Optional<NotificationPreference> existing =
                 preferences.findByCompanyIdAndUserIdAndTypeKey(companyId, userId, typeKey);
         NotificationPreference pref;

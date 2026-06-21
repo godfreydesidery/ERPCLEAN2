@@ -112,7 +112,7 @@ public class OpportunityController {
 
     @PostMapping("/uid/{uid}/win")
     @PreAuthorize("@perm.scoped(#uid,'opportunity','CRM.OPPORTUNITY.MANAGE')")
-    public OpportunityDto win(@PathVariable String uid, @RequestBody WinOpportunityRequest request) {
+    public OpportunityDto win(@PathVariable String uid, @Valid @RequestBody WinOpportunityRequest request) {
         return opportunityService.win(uid, request);
     }
 

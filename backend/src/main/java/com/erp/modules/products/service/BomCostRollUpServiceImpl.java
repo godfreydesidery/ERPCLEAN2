@@ -71,8 +71,10 @@ public class BomCostRollUpServiceImpl implements BomCostRollUpService {
             resolvedBomUid = bom.getUid();
         }
 
-        // 2. Resolve branch to companyId + branchId
-        var branch = branches.findByUid(branchUid)
+        // 2. Resolve branch to companyId + branchId.
+        // Use findWithCompanyByUid (EntityGraph) so branch.company is eagerly loaded — avoids
+        // LazyInitializationException when getCompany().getId() is called (MANUFACTURING-022).
+        var branch = branches.findWithCompanyByUid(branchUid)
                 .orElseThrow(() -> new NotFoundException("Branch not found: " + branchUid));
         Long companyId = branch.getCompany().getId();
         Long branchId = branch.getId();

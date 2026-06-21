@@ -11,6 +11,8 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.erp.modules.budgeting.domain.dto.BudgetLineDto;
+import com.erp.modules.budgeting.domain.dto.BudgetVersionDto;
 import com.erp.modules.budgeting.domain.dto.UpsertBudgetLineRequest;
 import com.erp.modules.budgeting.domain.dto.UpsertBudgetLineRequest.EntryMode;
 import com.erp.modules.budgeting.domain.entity.BudgetLine;
@@ -38,6 +40,9 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 
 /**
  * Unit tests for BudgetServiceImpl — focused on the upsert-line persistence fixes
@@ -286,8 +291,140 @@ class BudgetServiceImplTest {
     }
 
     // -------------------------------------------------------------------------
+    // Defect #4: versionStatus filter must not be silently ignored
+    // -------------------------------------------------------------------------
+
+    /**
+     * When listBudgets is called with a non-null versionStatus, the service must delegate
+     * to findByCompanyIdAndVersionStatus — not the unfiltered findByCompanyId.
+     */
+    @Test
+    void listBudgets_withVersionStatus_delegatesToFilteredQuery() {
+        com.erp.modules.budgeting.domain.entity.Budget b = mockBudget(10L, 5L);
+        when(budgets.findByCompanyIdAndVersionStatus(
+                eq(10L), eq(BudgetVersionStatus.APPROVED), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(b)));
+        when(fiscalYears.findById(5L)).thenReturn(Optional.empty()); // toBudgetDto fallback
+
+        Page<com.erp.modules.budgeting.domain.dto.BudgetDto> result =
+                service.listBudgets(10L, null, null, BudgetVersionStatus.APPROVED, Pageable.unpaged());
+
+        assertThat(result.getContent()).hasSize(1);
+        verify(budgets).findByCompanyIdAndVersionStatus(10L, BudgetVersionStatus.APPROVED, Pageable.unpaged());
+        verify(budgets, never()).findByCompanyId(any(), any());
+    }
+
+    /**
+     * When listBudgets is called without a versionStatus, the unfiltered findByCompanyId is used —
+     * no regression on the default path.
+     */
+    @Test
+    void listBudgets_withoutVersionStatus_usesUnfilteredQuery() {
+        com.erp.modules.budgeting.domain.entity.Budget b = mockBudget(10L, 5L);
+        when(budgets.findByCompanyId(eq(10L), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(b)));
+        when(fiscalYears.findById(5L)).thenReturn(Optional.empty());
+
+        Page<com.erp.modules.budgeting.domain.dto.BudgetDto> result =
+                service.listBudgets(10L, null, null, null, Pageable.unpaged());
+
+        assertThat(result.getContent()).hasSize(1);
+        verify(budgets).findByCompanyId(10L, Pageable.unpaged());
+        verify(budgets, never()).findByCompanyIdAndVersionStatus(any(), any(), any());
+    }
+
+    // -------------------------------------------------------------------------
+    // Defect #5: toVersionDto must populate budgetUid; toLineDto must populate
+    //            accountUid/accountCode/accountName and fiscalPeriodUid/periodNo
+    // -------------------------------------------------------------------------
+
+    /**
+     * getVersionByUid must return a BudgetVersionDto with budgetUid populated
+     * (was always null before the fix).
+     */
+    @Test
+    void getVersionByUid_populatesBudgetUid() {
+        BudgetVersion ver = draftVersion(10L, 1L, 5L);
+        when(versions.findByUid("VER-UID")).thenReturn(Optional.of(ver));
+
+        com.erp.modules.budgeting.domain.entity.Budget b = mockBudget(10L, 5L);
+        when(b.getUid()).thenReturn("BUDGET-UID");
+        when(budgets.findById(42L)).thenReturn(Optional.of(b));
+        when(versions.findById(any())).thenReturn(Optional.empty()); // no seededFrom
+        when(lines.findByBudgetVersionIdOrderByFiscalPeriodId(1L)).thenReturn(List.of());
+
+        BudgetVersionDto dto = service.getVersionByUid("VER-UID");
+
+        assertThat(dto.budgetUid()).isEqualTo("BUDGET-UID");
+    }
+
+    /**
+     * toLineDto must populate accountUid, accountCode, accountName, fiscalPeriodUid,
+     * and periodNo from the account and period repos.
+     */
+    @Test
+    void getVersionByUid_lineDtoPopulatesAccountAndPeriodFields() {
+        BudgetVersion ver = draftVersion(10L, 1L, 5L);
+        when(versions.findByUid("VER-UID")).thenReturn(Optional.of(ver));
+        when(budgets.findById(42L)).thenReturn(Optional.empty());
+        when(versions.findById(any())).thenReturn(Optional.empty());
+
+        // One budget line returned
+        BudgetLine line = mock(BudgetLine.class);
+        when(line.getId()).thenReturn(99L);
+        when(line.getUid()).thenReturn("LINE-UID");
+        when(line.getBudgetVersionId()).thenReturn(1L);
+        when(line.getAccountId()).thenReturn(20L);
+        when(line.getFiscalPeriodId()).thenReturn(30L);
+        when(line.getAmount()).thenReturn(new BigDecimal("1000.0000"));
+        when(line.getCurrency()).thenReturn(com.erp.platform.common.money.CurrencyCode.of("TZS"));
+        when(lines.findByBudgetVersionIdOrderByFiscalPeriodId(1L)).thenReturn(List.of(line));
+
+        // Mock account lookup
+        ChartOfAccount acct = mockAccount(20L, "5300", "Salaries", AccountType.EXPENSE, NormalBalance.DEBIT);
+        when(acct.getUid()).thenReturn("ACCT-UID");
+        when(accounts.findById(20L)).thenReturn(Optional.of(acct));
+
+        // Mock period lookup
+        FiscalPeriod period = mockPeriod(30L, 5L, 3);
+        when(period.getUid()).thenReturn("PER-UID");
+        when(fiscalPeriods.findById(30L)).thenReturn(Optional.of(period));
+
+        BudgetVersionDto dto = service.getVersionByUid("VER-UID");
+
+        assertThat(dto.lines()).hasSize(1);
+        BudgetLineDto lineDto = dto.lines().get(0);
+        assertThat(lineDto.accountUid()).isEqualTo("ACCT-UID");
+        assertThat(lineDto.accountCode()).isEqualTo("5300");
+        assertThat(lineDto.accountName()).isEqualTo("Salaries");
+        assertThat(lineDto.fiscalPeriodUid()).isEqualTo("PER-UID");
+        assertThat(lineDto.periodNo()).isEqualTo(3);
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
+
+    private static com.erp.modules.budgeting.domain.entity.Budget mockBudget(Long companyId, Long fiscalYearId) {
+        com.erp.modules.budgeting.domain.entity.Budget b =
+                mock(com.erp.modules.budgeting.domain.entity.Budget.class);
+        when(b.getId()).thenReturn(42L);
+        when(b.getUid()).thenReturn("BUDGET-UID");
+        when(b.getCompanyId()).thenReturn(companyId);
+        when(b.getFiscalYearId()).thenReturn(fiscalYearId);
+        when(b.getCostCentreValueId()).thenReturn(null);
+        when(b.getBudgetNumber()).thenReturn("BUDGET-0001");
+        when(b.getName()).thenReturn("Test Budget");
+        when(b.getBudgetType()).thenReturn(null);
+        when(b.getBranchId()).thenReturn(null);
+        when(b.getNotes()).thenReturn(null);
+        when(b.getVersion()).thenReturn(0L);
+        when(b.getCreatedAt()).thenReturn(null);
+        when(b.getCreatedBy()).thenReturn(null);
+        when(b.getUpdatedAt()).thenReturn(null);
+        when(b.getUpdatedBy()).thenReturn(null);
+        return b;
+    }
 
     /** Build a BudgetVersion in DRAFT status using its public constructor. */
     private static BudgetVersion draftVersion(Long companyId, Long versionDbId, Long fiscalYearId) {

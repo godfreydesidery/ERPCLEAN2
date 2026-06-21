@@ -14,6 +14,13 @@ spring:
         jdbc:
           time_zone: UTC
     open-in-view: false
+  mvc:
+    # Raise NoHandlerFoundException instead of silently forwarding to the Whitelabel /error path
+    # when no controller matches. Required so GlobalExceptionHandler can intercept unmatched
+    # /api/** requests and return the standard ApiResponse 404 envelope (security defects
+    # RBAC-SECURITY-NEGATIVE-017/-046). The ApiNotFoundController catch-all in com.erp.api
+    # provides a second line of defence for paths consumed by the SPA resource handler.
+    throw-exception-if-no-handler-found: true
   flyway:
     enabled: true
     locations: classpath:db/migration
@@ -38,6 +45,16 @@ spring:
 server:
   # 8081 by default (8080 is often taken by another local app); override with ERP_API_PORT.
   port: ${ERP_API_PORT:8081}
+  error:
+    # Never include the stack trace, exception class, or raw message in any error response
+    # body — only the ApiResponse envelope (via GlobalExceptionHandler / SecurityErrorResponder)
+    # is permitted to reach the caller (PROJECT-CONVENTIONS §3.1, security defects
+    # RBAC-SECURITY-NEGATIVE-017/-046, IAM-ORG-060). These govern the Whitelabel /error path;
+    # our handlers short-circuit before that path for /api/** requests.
+    include-stacktrace: never
+    include-exception: false
+    include-message: never
+    include-binding-errors: never
 
 management:
   # D-5: Separate management port — Prometheus never reachable from the public 8081 edge.

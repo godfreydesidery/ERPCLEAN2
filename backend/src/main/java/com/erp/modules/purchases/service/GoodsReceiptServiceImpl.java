@@ -207,6 +207,11 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
 
     @Override
     public GoodsReceiptDto voidReceipt(String uid, VoidGoodsReceiptRequest req) {
+        // PROCURE-RECEIVING: null/blank reason must be rejected before any Map.of call (NPE guard)
+        if (req.reason() == null || req.reason().isBlank()) {
+            throw new IllegalArgumentException("A void reason is required (FR-PURCH-09).");
+        }
+
         GoodsReceipt gr = requireReceipt(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), gr.getCompanyId());
         if (gr.getStatus() != GoodsReceiptStatus.RECEIVED) {

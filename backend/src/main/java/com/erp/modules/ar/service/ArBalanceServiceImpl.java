@@ -34,6 +34,13 @@ public class ArBalanceServiceImpl implements ArBalanceService {
     }
 
     @Override
+    public boolean hasAllocations(Long companyId, String sourceInvoiceUid) {
+        return invoices.findBySalesInvoiceUid(companyId, sourceInvoiceUid)
+                .map(inv -> inv.getOutstandingAmount().compareTo(inv.getOriginalAmount()) < 0)
+                .orElse(false);
+    }
+
+    @Override
     public ArBalanceDto currentBalance(Long companyId, Long customerId) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
 

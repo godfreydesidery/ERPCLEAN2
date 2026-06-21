@@ -42,6 +42,7 @@ public class Lead extends UidEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "lead_source", nullable = false, length = 30)
+    @Setter
     private LeadSource leadSource;
 
     @Column(name = "display_name", nullable = false, length = 200)

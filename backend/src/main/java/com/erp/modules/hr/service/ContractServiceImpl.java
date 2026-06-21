@@ -4,6 +4,7 @@ import com.erp.modules.hr.domain.dto.ContractDto;
 import com.erp.modules.hr.domain.dto.CreateContractRequest;
 import com.erp.modules.hr.domain.entity.Employee;
 import com.erp.modules.hr.domain.entity.EmploymentContract;
+import com.erp.modules.hr.domain.enums.EmploymentStatus;
 import com.erp.modules.hr.repository.EmployeeRepository;
 import com.erp.modules.hr.repository.EmploymentContractRepository;
 import com.erp.platform.audit.AuditActions;
@@ -100,9 +101,27 @@ public class ContractServiceImpl implements ContractService {
     public void terminate(String uid) {
         EmploymentContract c = requireByUid(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), c.getCompanyId());
+        // D4: reject re-termination of an already-inactive/terminated contract
+        if (!c.isActive()) {
+            throw new ConflictException("Contract is already terminated.");
+        }
         c.setActive(false);
         c.setUpdatedAt(Instant.now());
         c.setUpdatedBy(RequestContext.get().userId());
+
+        // HR-5: if the employee now has no remaining active contract, mark the employee
+        // as TERMINATED so the leave-submit guard (and any other status guards) will fire.
+        boolean hasOtherActiveContract = contracts
+                .findByCompanyIdAndEmployeeIdAndActiveTrue(c.getCompanyId(), c.getEmployeeId())
+                .isPresent();
+        if (!hasOtherActiveContract) {
+            employees.findById(c.getEmployeeId()).ifPresent(emp -> {
+                emp.setStatus(EmploymentStatus.TERMINATED);
+                emp.setUpdatedAt(Instant.now());
+                emp.setUpdatedBy(RequestContext.get().userId());
+            });
+        }
+
         audit.record(AuditEvent.of(AuditActions.HR_CONTRACT_TERMINATE, "employment_contracts", c.getId(), null));
     }
 

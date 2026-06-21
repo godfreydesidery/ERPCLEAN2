@@ -23,6 +23,7 @@ import com.erp.modules.products.domain.entity.ProductBulkPack;
 import com.erp.modules.products.domain.entity.ProductComponent;
 import com.erp.modules.products.domain.entity.ProductPrice;
 import com.erp.modules.products.domain.entity.UnitOfMeasure;
+import com.erp.modules.products.domain.enums.ProductType;
 import com.erp.modules.products.domain.enums.RestrictedKind;
 import com.erp.modules.products.domain.enums.VatStatus;
 import com.erp.modules.products.repository.PriceListRepository;
@@ -123,6 +124,9 @@ public class ProductServiceImpl implements ProductService {
         Long companyId = resolveCompanyId(req.companyUid());
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
 
+        // Defect 6b: SERVICE products cannot be stockable — clear message before DB CHECK fires.
+        assertServiceNotStockable(req.type(), req.stockable());
+
         // Resolve baseUnitUid scoped to this company (cross-tenant safe — brief §F15 pattern)
         UnitOfMeasure baseUnit = resolveUnit(companyId, req.baseUnitUid());
 
@@ -182,6 +186,9 @@ public class ProductServiceImpl implements ProductService {
     public ProductDto updateByUid(String uid, UpdateProductRequest req) {
         Product p = require(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), p.getCompanyId());
+
+        // Defect 6b: SERVICE products cannot be stockable — clear message before DB CHECK fires.
+        assertServiceNotStockable(req.type(), req.stockable());
 
         // Resolve baseUnitUid scoped to the product's company (cross-tenant safe)
         UnitOfMeasure baseUnit = resolveUnit(p.getCompanyId(), req.baseUnitUid());
@@ -590,6 +597,17 @@ public class ProductServiceImpl implements ProductService {
             });
         } else {
             p.setPreferredSupplierId(null);
+        }
+    }
+
+    /**
+     * Defect 6b: rejects a SERVICE product with stockable=true before the DB CHECK
+     * ({@code chk_product_service_stockable}) fires a generic constraint error (BR-PROD-01).
+     */
+    private static void assertServiceNotStockable(ProductType type, boolean stockable) {
+        if (ProductType.SERVICE.equals(type) && stockable) {
+            throw new IllegalArgumentException(
+                    "Service products cannot be stockable (BR-PROD-01).");
         }
     }
 

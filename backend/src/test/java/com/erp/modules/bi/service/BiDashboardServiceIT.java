@@ -57,6 +57,7 @@ import com.erp.modules.sales.domain.enums.TenderType;
 import com.erp.modules.sales.service.SalesInvoiceService;
 import com.erp.modules.sales.service.TaxRateSeeder;
 import com.erp.platform.common.api.ForbiddenException;
+import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.money.MoneyDto;
 import com.erp.platform.events.DomainEventDispatcher;
 import com.erp.platform.events.DomainEventRepository;
@@ -543,6 +544,60 @@ class BiDashboardServiceIT extends PostgresIntegrationTest {
         assertThatThrownBy(() -> dashboardService.revenueTrend(companyA.getId()))
                 .as("Non-root principal scoped to company B must be denied revenue trend for company A")
                 .isInstanceOf(ForbiddenException.class);
+    }
+
+    // =========================================================================
+    // REPORTING-BI-041 / 049 / 062: bogus companyId → 404, never 500
+    // =========================================================================
+
+    /**
+     * REPORTING-BI-041: dashboard() with a non-existent companyId must throw NotFoundException
+     * (→ HTTP 404) rather than NPE-ing inside a downstream query (→ HTTP 500).
+     */
+    @Test
+    void dashboard_nonExistentCompanyId_throwsNotFoundException() {
+        final long bogusId = Long.MAX_VALUE;
+        RequestContext.set(new RequestContext.Principal(
+                rootAId, "bi_root_a", true, companyA.getId(), branchA.getId(), null));
+
+        assertThatThrownBy(() -> dashboardService.dashboard(bogusId, null, null, null))
+                .as("dashboard() with non-existent companyId must throw NotFoundException (HTTP 404), not NPE")
+                .isInstanceOf(NotFoundException.class);
+    }
+
+    /**
+     * REPORTING-BI-049: inventorySummary() with a non-existent companyId must throw
+     * NotFoundException (→ HTTP 404) rather than NPE-ing in StockValuationQuery.
+     */
+    @Test
+    void inventorySummary_nonExistentCompanyId_throwsNotFoundException() {
+        final long bogusId = Long.MAX_VALUE;
+        RequestContext.set(new RequestContext.Principal(
+                rootAId, "bi_root_a", true, companyA.getId(), branchA.getId(), null));
+
+        assertThatThrownBy(() -> dashboardService.inventorySummary(bogusId))
+                .as("inventorySummary() with non-existent companyId must throw NotFoundException (HTTP 404), not NPE")
+                .isInstanceOf(NotFoundException.class);
+    }
+
+    /**
+     * REPORTING-BI-062: the export endpoint calls dashboard() internally; verify the same
+     * NotFoundException propagates so the export path also returns HTTP 404, not 500.
+     * financeSummary() exercises the same guard used by the export's dashboard() call.
+     */
+    @Test
+    void financeSummary_nonExistentCompanyId_throwsNotFoundException() {
+        final long bogusId = Long.MAX_VALUE;
+        RequestContext.set(new RequestContext.Principal(
+                rootAId, "bi_root_a", true, companyA.getId(), branchA.getId(), null));
+
+        LocalDate from = LocalDate.now().withDayOfMonth(1);
+        LocalDate to   = LocalDate.now();
+
+        assertThatThrownBy(() -> dashboardService.financeSummary(bogusId, from, to))
+                .as("financeSummary() (exercised by the BI export path) with non-existent companyId "
+                        + "must throw NotFoundException (HTTP 404), not NPE")
+                .isInstanceOf(NotFoundException.class);
     }
 
     // =========================================================================

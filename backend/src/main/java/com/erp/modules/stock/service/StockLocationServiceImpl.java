@@ -132,13 +132,15 @@ public class StockLocationServiceImpl implements StockLocationService {
         RequestContext.Principal principal = RequestContext.get();
         StockLocation loc = findAndAssertScope(locationUid, principal);
 
-        // Clear current default
+        // Clear the current default and flush immediately so the UPDATE reaches Postgres before
+        // the UPDATE that sets the new default row — prevents a momentary two-row violation on
+        // the partial unique index uq_stock_location_one_default (STOCK-011).
         locations.findByCompanyIdAndBranchIdAndIsDefaultTrue(
                         principal.companyId(), loc.getBranchId())
                 .ifPresent(existing -> {
                     if (!existing.getId().equals(loc.getId())) {
                         existing.clearDefault(principal.userId());
-                        locations.save(existing);
+                        locations.saveAndFlush(existing);
                     }
                 });
 

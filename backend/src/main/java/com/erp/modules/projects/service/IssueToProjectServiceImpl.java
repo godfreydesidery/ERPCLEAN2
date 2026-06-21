@@ -113,6 +113,11 @@ public class IssueToProjectServiceImpl implements IssueToProjectService {
             Product product = products.findByUid(line.productUid())
                     .orElseThrow(() -> new NotFoundException("Product not found: " + line.productUid()));
 
+            // PROJECTS-044 gap-2: qty must not be null here; @NotNull on the DTO catches it at
+            // the HTTP layer, but a programmatic/test call could still pass null → guard defensively.
+            if (line.qty() == null) {
+                throw new IllegalArgumentException("lines[].qty must not be null");
+            }
             BigDecimal qty = line.qty().abs(); // always positive magnitude
 
             // costIssue returns null when avg_cost is not established (ADR-0020 D-2 edge)

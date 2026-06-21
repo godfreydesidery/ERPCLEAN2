@@ -70,4 +70,12 @@ public interface PurchaseOrderService {
      * Copies lines at quoted prices; sets source_quote_uid.
      */
     PurchaseOrderDto createFromQuote(String quoteUid);
+
+    /**
+     * APPROVALS-047: Submit a DRAFT PO to the approval engine (ADR-0027 D-6).
+     * Calls {@code PoApprovalGate.submit()} in the same TX; sets approval_status = PENDING
+     * (or APPROVED when the engine auto-approves per policy).  The PO remains DRAFT — it is
+     * placed (DRAFT→ORDERED) only once approval_status = APPROVED via {@link #placeOrder}.
+     */
+    PurchaseOrderDto submitForApproval(String uid);
 }

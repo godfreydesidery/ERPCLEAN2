@@ -106,6 +106,7 @@ public class LeadServiceImpl implements LeadService {
         assertEditable(lead);
 
         lead.setDisplayName(req.displayName());
+        lead.setLeadSource(req.leadSource());
         lead.setCompanyName(req.companyName());
         lead.setContactPerson(req.contactPerson());
         lead.setPhone(req.phone());
@@ -140,6 +141,10 @@ public class LeadServiceImpl implements LeadService {
         Lead lead = require(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), lead.getCompanyId());
 
+        if (lead.getLeadStatus() == LeadStatus.QUALIFIED) {
+            throw new com.erp.platform.common.api.ConflictException(
+                    "Lead is already QUALIFIED; uid=" + uid);
+        }
         if (lead.getLeadStatus() == LeadStatus.CONVERTED || lead.getLeadStatus() == LeadStatus.DISQUALIFIED) {
             throw new IllegalStateException("Cannot qualify a terminal lead; current: " + lead.getLeadStatus());
         }
@@ -157,9 +162,12 @@ public class LeadServiceImpl implements LeadService {
         } else if (req.newCustomerDetails() != null) {
             // Promote lead to a new Parties customer via CustomerService (CRM does not write customers directly)
             var details = req.newCustomerDetails();
+            // crm-062: use caller-supplied partyType; default to INDIVIDUAL so walk-in/cash leads
+            // do not trigger BR-PARTY-04 ("business customer must have a TIN").
+            PartyType resolvedPartyType = details.partyType() != null ? details.partyType() : PartyType.INDIVIDUAL;
             CreateCustomerRequest createReq = new CreateCustomerRequest(
                     lead.getCompanyId(),
-                    PartyType.BUSINESS,   // default; override if details had individual flag (v1 uses BUSINESS)
+                    resolvedPartyType,
                     details.displayName(),
                     null, null, false, null, null, null,
                     details.phone(), details.email(),

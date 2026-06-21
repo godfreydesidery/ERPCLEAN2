@@ -15,4 +15,14 @@ public interface ArBalanceService {
      * Company-scoped; never crosses tenant boundary.
      */
     ArBalanceDto currentBalance(Long companyId, Long customerId);
+
+    /**
+     * Returns true when an AR open item exists for the given sales invoice uid AND its
+     * outstanding_amount is strictly less than original_amount (i.e. at least one receipt or
+     * credit-note allocation has been posted against it).
+     *
+     * <p>Used by {@code SalesInvoiceServiceImpl.voidInvoice} to block voiding a settled or
+     * partially-settled FINALISED invoice (FLOW-ORDER-TO-CASH-027).
+     */
+    boolean hasAllocations(Long companyId, String sourceInvoiceUid);
 }

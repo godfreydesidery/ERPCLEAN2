@@ -202,7 +202,7 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
             note = notes.findById(note.getId()).orElseThrow();
         }
 
-        return toDto(note, savedAllocs);
+        return toDto(note, savedAllocs, bills);
     }
 
     // =========================================================================
@@ -235,7 +235,7 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
                         reloaded.getId(), reloaded.getUid())
                 .detail(Map.of("action", "apply", "debitNoteUid", req.debitNoteUid())));
 
-        return toDto(reloaded, saved);
+        return toDto(reloaded, saved, bills);
     }
 
     // =========================================================================
@@ -300,7 +300,7 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
                         reloaded.getId(), reloaded.getUid())
                 .detail(Map.of("action", "reapply", "debitNoteUid", req.debitNoteUid())));
 
-        return toDto(reloaded, saved);
+        return toDto(reloaded, saved, bills);
     }
 
     // =========================================================================
@@ -312,7 +312,7 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
     public ApDebitNoteDto getByUid(String uid) {
         ApDebitNote note = Lookups.orNotFound(notes.findByUid(uid), "ApDebitNote", uid);
         scopeGuard.assertCanActIn(RequestContext.get(), note.getCompanyId());
-        return toDto(note, dnAllocations.findByDebitNoteId(note.getId()));
+        return toDto(note, dnAllocations.findByDebitNoteId(note.getId()), bills);
     }
 
     @Override
@@ -320,7 +320,7 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
     public Page<ApDebitNoteDto> listByCompany(Long companyId, Pageable pageable) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
         return notes.findByCompanyId(companyId, pageable)
-                .map(n -> toDto(n, dnAllocations.findByDebitNoteId(n.getId())));
+                .map(n -> toDto(n, dnAllocations.findByDebitNoteId(n.getId()), bills));
     }
 
     @Override
@@ -328,7 +328,7 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
     public Page<ApDebitNoteDto> listBySupplier(Long companyId, Long supplierId, Pageable pageable) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
         return notes.findByCompanyIdAndSupplierId(companyId, supplierId, pageable)
-                .map(n -> toDto(n, dnAllocations.findByDebitNoteId(n.getId())));
+                .map(n -> toDto(n, dnAllocations.findByDebitNoteId(n.getId()), bills));
     }
 
     // =========================================================================
@@ -559,10 +559,15 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
         return p != null ? p.userId() : null;
     }
 
-    static ApDebitNoteDto toDto(ApDebitNote n, List<ApDebitNoteAllocation> allocs) {
+    static ApDebitNoteDto toDto(ApDebitNote n, List<ApDebitNoteAllocation> allocs,
+                                 SupplierBillRepository billRepo) {
         List<AllocationDto> allocDtos = allocs == null ? List.of() : allocs.stream()
-                .map(a -> new AllocationDto(a.getId(), a.getSupplierBillId(), null,
-                        a.getAllocatedAmount()))
+                .map(a -> {
+                    String billUid = billRepo.findById(a.getSupplierBillId())
+                            .map(b -> b.getUid()).orElse(null);
+                    return new AllocationDto(a.getId(), a.getSupplierBillId(), billUid,
+                            a.getAllocatedAmount());
+                })
                 .toList();
         return new ApDebitNoteDto(
                 n.getId(), n.getUid(), n.getCompanyId(), n.getBranchId(), n.getSupplierId(),

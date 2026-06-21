@@ -23,6 +23,14 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>Value-preserving: these movements are net-zero on account 1300 — no GL posted.
  * The in-transit balance clears to zero after the receive pair.
+ *
+ * <p><strong>Per-leg idempotency key (STOCK-039 fix):</strong> mirrors the logic in
+ * {@link TransferDispatchStockHandler} — the {@code source_event_uid} column is {@code VARCHAR(26)};
+ * appending a text suffix to the 26-char ULID event uid would overflow the column. The fix
+ * truncates to 24 chars and appends a 2-char leg code ({@code R1} / {@code R2}) to produce a
+ * 26-char deterministic key per leg, ensuring the (source_event_uid, product_id) backstop in
+ * {@link com.erp.modules.stock.service.StockPostingServiceImpl} correctly identifies each leg on
+ * redelivery without suppressing the destination TRANSFER_IN.
  */
 @Component
 public class TransferReceiveStockHandler implements DomainEventHandler {
@@ -62,28 +70,39 @@ public class TransferReceiveStockHandler implements DomainEventHandler {
 
         TransferReceivedPayload payload = deserialise(event.getPayload());
 
+        // Deterministic 26-char per-leg source_event_uid keys (STOCK-039 fix — see class javadoc).
+        // Leg codes "R1" / "R2" are distinct from the dispatch handler's "D1" / "D2" so a product
+        // can have both a dispatch and a receive event in the backstop without collision.
+        final String legOutKey = event.getUid().substring(0, 24) + "R1";
+        final String legInKey  = event.getUid().substring(0, 24) + "R2";
+
         RequestContext.Principal previous = RequestContext.get();
         RequestContext.set(new RequestContext.Principal(
                 null, "SYSTEM", false, event.getCompanyId(), event.getBranchId(), null));
         try {
             for (TransferDispatchedPayload.LineItem line : payload.lines()) {
 
-                // (1) TRANSFER_OUT at in-transit pseudo-location (quantity decreases in transit)
+                // (1) TRANSFER_OUT at in-transit pseudo-location (quantity decreases in transit).
+                // Uses leg key "R1" — distinct from the destination IN leg so the
+                // (source_event_uid, product_id) idempotency backstop in StockPostingServiceImpl
+                // does not suppress the destination TRANSFER_IN (STOCK-039).
                 posting.post(
                         payload.companyId(), payload.destBranchId(), payload.inTransitLocationId(),
                         line.productId(), line.qtyInBase().negate(),
                         MovementType.TRANSFER_OUT,
-                        event.getUid(), "STOCK_TRANSFER", payload.transferUid(),
+                        legOutKey, "STOCK_TRANSFER", payload.transferUid(),
                         null, null, payload.receivedAt(),
                         null,
                         line.unitCostAmount(), line.valueAmount() != null ? line.valueAmount().negate() : null);
 
-                // (2) TRANSFER_IN at destination location (quantity increases at dest)
+                // (2) TRANSFER_IN at destination location (quantity increases at dest).
+                // Uses leg key "R2" — distinct from the transit OUT leg above so both movements
+                // are written and the destination on-hand is correctly credited.
                 posting.post(
                         payload.companyId(), payload.destBranchId(), payload.destLocationId(),
                         line.productId(), line.qtyInBase(),
                         MovementType.TRANSFER_IN,
-                        event.getUid(), "STOCK_TRANSFER", payload.transferUid(),
+                        legInKey, "STOCK_TRANSFER", payload.transferUid(),
                         null, null, payload.receivedAt(),
                         null,
                         line.unitCostAmount(), line.valueAmount());

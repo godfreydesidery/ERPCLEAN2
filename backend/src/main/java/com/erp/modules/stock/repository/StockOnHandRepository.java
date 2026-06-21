@@ -20,10 +20,21 @@ public interface StockOnHandRepository extends JpaRepository<StockOnHand, Long> 
     /**
      * The upsert-probe for the posting primitive (D-4): returns the existing on-hand row for
      * the (company, branch, product) triple, or empty if first-touch.
-     * @deprecated Use the location-aware overload (ADR-0028 D-3).
+     * @deprecated Use the location-aware overload (ADR-0028 D-3). This method throws
+     *             IncorrectResultSizeDataAccessException when the product is stocked at more than
+     *             one location in the branch; use {@link #findAllByCompanyIdAndBranchIdAndProductId}
+     *             for read-only aggregation.
      */
     @Deprecated
     Optional<StockOnHand> findByCompanyIdAndBranchIdAndProductId(
+            Long companyId, Long branchId, Long productId);
+
+    /**
+     * All on-hand rows for a (company, branch, product) triple across every location.
+     * Use this — not the deprecated single-row finder — when aggregating quantity or weighted-average
+     * cost across all locations in a branch (e.g. BOM cost roll-up, MANUFACTURING-024).
+     */
+    List<StockOnHand> findAllByCompanyIdAndBranchIdAndProductId(
             Long companyId, Long branchId, Long productId);
 
     /**

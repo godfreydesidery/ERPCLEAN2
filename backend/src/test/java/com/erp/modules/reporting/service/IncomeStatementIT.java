@@ -1,6 +1,7 @@
 package com.erp.modules.reporting.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.erp.modules.gl.service.ChartOfAccountService;
 import com.erp.modules.gl.service.FiscalCalendarService;
@@ -31,6 +32,7 @@ import com.erp.modules.products.service.ProductService;
 import com.erp.modules.products.service.UnitOfMeasureService;
 import com.erp.modules.reporting.domain.dto.IncomeStatementDto;
 import com.erp.modules.reporting.domain.enums.StatementSection;
+import com.erp.platform.common.api.NotFoundException;
 import com.erp.modules.sales.domain.dto.AddInvoiceLineRequest;
 import com.erp.modules.sales.domain.dto.AddPaymentRequest;
 import com.erp.modules.sales.domain.dto.CreateSalesInvoiceRequest;
@@ -218,6 +220,52 @@ class IncomeStatementIT extends PostgresIntegrationTest {
         assertThat(pl.netProfit()).isNotNull();
         // Self-check still ties
         assertThat(pl.reconciliation().ties()).isTrue();
+    }
+
+    // =========================================================================
+    // reporting-bi (Medium): non-existent companyId → 404, not phantom 200
+    // =========================================================================
+
+    /**
+     * A companyId that does not exist must throw NotFoundException (→ HTTP 404) rather than
+     * returning a fabricated IncomeStatementDto with header.companyName="Company 9999" and
+     * computed-but-meaningless totals (reporting-bi phantom-data defect).
+     */
+    @Test
+    void incomeStatement_nonExistentCompanyId_throwsNotFoundException() {
+        final long bogusId = Long.MAX_VALUE;
+        RequestContext.set(new RequestContext.Principal(
+                rootId, "rpl_root", true, company.getId(), branch.getId(), null));
+
+        LocalDate from = LocalDate.now().withDayOfMonth(1);
+        LocalDate to   = LocalDate.now();
+
+        assertThatThrownBy(() -> reportingService.incomeStatement(bogusId, from, to, null, null))
+                .as("incomeStatement() with non-existent companyId must throw NotFoundException (HTTP 404), "
+                        + "not return phantom data with companyName='Company <id>'")
+                .isInstanceOf(NotFoundException.class);
+    }
+
+    // =========================================================================
+    // reporting-bi (Low): reversed date range → 400, not silent 200
+    // =========================================================================
+
+    /**
+     * fromDate after toDate must be rejected with IllegalArgumentException (→ HTTP 400) rather
+     * than silently returning a zero-data statement (reporting-bi date-range defect).
+     */
+    @Test
+    void incomeStatement_reversedDateRange_throwsIllegalArgumentException() {
+        RequestContext.set(new RequestContext.Principal(
+                rootId, "rpl_root", true, company.getId(), branch.getId(), null));
+
+        LocalDate from = LocalDate.now();
+        LocalDate to   = from.minusDays(1); // reversed
+
+        assertThatThrownBy(() -> reportingService.incomeStatement(company.getId(), from, to, null, null))
+                .as("fromDate after toDate must throw IllegalArgumentException (HTTP 400)")
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("fromDate");
     }
 
     // -------------------------------------------------------------------------

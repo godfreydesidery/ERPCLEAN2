@@ -8,23 +8,31 @@ import org.springframework.stereotype.Component;
 /**
  * Enforces BR-PROD-05 and BR-PROD-06 for composition:
  * <ul>
+ *   <li>BR-PROD-05 (self-ref): a product cannot be a component of itself.</li>
+ *   <li>BR-PROD-05 (archived): a component may not be ARCHIVED when added.</li>
  *   <li>BR-PROD-06: a component must belong to the same company as the composed product.</li>
- *   <li>BR-PROD-05 (non-self part): a component may not be ARCHIVED when added.</li>
  * </ul>
- * Self-composition (BR-PROD-05 self-ref) is a DB CHECK ({@code chk_product_component_not_self}).
+ * The self-ref guard here produces a clear domain message BEFORE the DB CHECK
+ * ({@code chk_product_component_not_self}) fires a generic constraint error (defect 6).
  */
 @Component
 public class ProductCompositionGuard {
 
     /**
-     * Asserts the component is from the same company as the composed product, and is not ARCHIVED.
+     * Asserts composition rules before persisting a component link.
      *
      * @param composed  the product that will contain the component
      * @param component the product being added as a component
+     * @throws IllegalArgumentException if composed == component (BR-PROD-05 self-ref)
      * @throws ForbiddenException       if different companies (BR-PROD-06)
      * @throws IllegalArgumentException if the component is ARCHIVED (BR-PROD-05)
      */
     public void assertCanAddComponent(Product composed, Product component) {
+        // Defect 6a: self-reference — clear message before the DB CHECK fires.
+        if (composed.getId() != null && composed.getId().equals(component.getId())) {
+            throw new IllegalArgumentException(
+                    "A product cannot be a component of itself (BR-PROD-05).");
+        }
         if (!component.getCompanyId().equals(composed.getCompanyId())) {
             throw new ForbiddenException(
                     "Component must belong to the same company as the composed product (BR-PROD-06).");

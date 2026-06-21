@@ -1,6 +1,7 @@
 package com.erp.modules.projects.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -157,6 +158,71 @@ class IssueToProjectServiceImplTest {
         // No GL posting when costIssue returns null
         assertThat(result.cogsGlEntryUid()).isNull();
         // TotalValue should be zero (null treated as zero)
+        assertThat(result.totalValue()).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    /**
+     * PROJECTS-044 gap-1 (service-layer mirror): qty = null must throw IllegalArgumentException
+     * with a clear message — never NPE inside line.qty().abs().
+     * (The HTTP layer catches this via @NotNull on IssueLine; this test guards programmatic callers.)
+     */
+    @Test
+    void issue_nullQty_throwsIllegalArgumentException() {
+        Company company = mockCompany(10L, "COMP-1", "USD");
+        Branch branch   = mockBranch(20L, "BR-1");
+        Product product = mockProduct(1L, "PROD-1", "WGT");
+
+        when(companies.findByUid("COMP-1")).thenReturn(Optional.of(company));
+        when(branches.findByUid("BR-1")).thenReturn(Optional.of(branch));
+        when(products.findByUid("PROD-1")).thenReturn(Optional.of(product));
+        when(tagResolver.resolve(10L, "PROJ-1", null)).thenReturn(new ProjectTag(100L, null));
+        when(numberGen.next(10L)).thenReturn("PJI-0003");
+
+        var request = new IssueToProjectRequest(
+                "COMP-1", "BR-1", "PROJ-1", null,
+                List.of(new IssueToProjectRequest.IssueLine("PROD-1", null)),
+                LocalDate.now(), "null qty test");
+        var p = principal(1L, 10L);
+
+        assertThatThrownBy(() -> service.issue(request, p))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("qty must not be null");
+    }
+
+    /**
+     * PROJECTS-044 gap-2: qty = 0 would pass @NotNull but violate @DecimalMin("0.0001").
+     * At the service layer the null-guard fires before abs(); a zero qty that somehow bypasses
+     * DTO validation still gets rejected by costIssue (or stock check) — but this test confirms
+     * the service does NOT NPE when qty is non-null but zero (it proceeds to the stock layer).
+     * The real gate for qty=0 is Bean Validation on IssueLine (tested separately via the DTO).
+     */
+    @Test
+    void issue_zeroQty_doesNotNpe_reachesStockLayer() {
+        Company company = mockCompany(10L, "COMP-1", "USD");
+        Branch branch   = mockBranch(20L, "BR-1");
+        Product product = mockProduct(1L, "PROD-1", "WGT");
+
+        when(companies.findByUid("COMP-1")).thenReturn(Optional.of(company));
+        when(branches.findByUid("BR-1")).thenReturn(Optional.of(branch));
+        when(products.findByUid("PROD-1")).thenReturn(Optional.of(product));
+        when(tagResolver.resolve(10L, "PROJ-1", null)).thenReturn(new ProjectTag(100L, null));
+        when(numberGen.next(10L)).thenReturn("PJI-0004");
+        // costIssue with qty=0 returns null (no cost established for zero quantity)
+        when(valuation.costIssue(anyLong(), anyLong(), anyLong(), eq(BigDecimal.ZERO)))
+                .thenReturn(null);
+        when(stockPosting.post(anyLong(), anyLong(), any(), anyLong(),
+                any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), anyLong(), any(), anyLong(), any()))
+                .thenReturn("movement-uid-zero");
+
+        var request = new IssueToProjectRequest(
+                "COMP-1", "BR-1", "PROJ-1", null,
+                List.of(new IssueToProjectRequest.IssueLine("PROD-1", BigDecimal.ZERO)),
+                LocalDate.now(), "zero qty test");
+
+        // Must not throw NPE — the null-guard is on qty==null only; zero is valid Java but invalid
+        // domain (caught at HTTP layer by @DecimalMin). Service completes with zero totalValue.
+        IssueToProjectResultDto result = service.issue(request, principal(1L, 10L));
         assertThat(result.totalValue()).isEqualByComparingTo(BigDecimal.ZERO);
     }
 
