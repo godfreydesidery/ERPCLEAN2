@@ -1,5 +1,6 @@
 package com.erp.modules.projects.domain.dto;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -17,7 +18,7 @@ public record IssueToProjectRequest(
         @NotBlank String branchUid,
         @NotBlank String projectUid,
         String projectTaskUid,
-        @NotEmpty List<IssueLine> lines,
+        @NotEmpty @Valid List<IssueLine> lines,
         LocalDate issueDate,
         String reason
 ) {

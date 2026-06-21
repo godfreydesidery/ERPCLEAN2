@@ -384,14 +384,29 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
             throw new IllegalStateException(
                     "Only FINALISED invoices can be voided; current status: " + inv.getStatus());
         }
-        // FLOW-ORDER-TO-CASH-027: block void when AR receipts/allocations have been posted
-        // against this invoice (settled or partially settled). A void on a settled invoice
+        // FLOW-ORDER-TO-CASH-027 (AR path): block void when AR receipts/allocations have been
+        // posted against this invoice (settled or partially settled). A void on a settled invoice
         // would leave orphaned AR allocations and an unbalanced sub-ledger.
         if (arBalanceService.hasAllocations(inv.getCompanyId(), inv.getUid())) {
             throw new com.erp.platform.common.api.ConflictException(
                     "Invoice " + uid + " cannot be voided because it has AR receipt allocations "
                             + "(settled or partially settled). Raise a credit note to reverse it "
                             + "(FLOW-ORDER-TO-CASH-027).");
+        }
+        // FLOW-ORDER-TO-CASH-027 (direct-payment path): block void when any direct tender has
+        // been applied via sales_invoice_payments. Effective amount = amount − change_amount;
+        // a non-zero settled total means cash has changed hands and the invoice must be reversed
+        // via a credit note, not silently voided.
+        BigDecimal settled = payments.findByInvoiceId(inv.getId()).stream()
+                .map(p -> p.getChangeAmount() != null
+                        ? p.getAmount().subtract(p.getChangeAmount())
+                        : p.getAmount())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (settled.compareTo(BigDecimal.ZERO) > 0) {
+            throw new com.erp.platform.common.api.ConflictException(
+                    "Invoice " + uid + " cannot be voided because direct payments totalling "
+                            + settled.toPlainString() + " have been applied. "
+                            + "Raise a credit note to reverse it (FLOW-ORDER-TO-CASH-027).");
         }
         inv.setStatus(InvoiceStatus.VOID);
         inv.setVoidedAt(Instant.now());

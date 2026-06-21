@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -30,8 +29,12 @@ import org.mockito.ArgumentCaptor;
  * Unit tests for {@link TransferDispatchStockHandler} — regression for STOCK-039.
  *
  * <p>Proves that TRANSFER_OUT at source and TRANSFER_IN at in-transit use distinct
- * sourceEventUid values ({@code eventUid + ":OUT"} / {@code ":IN"}), so the
- * idempotency backstop in StockPostingServiceImpl does not swallow the second leg.
+ * {@code source_event_uid} values that are exactly 26 chars (matching the
+ * {@code VARCHAR(26)} column in {@code stock_movements}). The earlier fix appended
+ * {@code ":OUT"} / {@code ":IN"} to the 26-char event ULID, producing 30-char strings that
+ * overflowed the column — PostgreSQL raised {@code 22001 value too long}, rolling back the
+ * transaction and leaving the destination un-credited. The correct fix truncates the event uid
+ * to 24 chars and appends a 2-char leg code ({@code D1} / {@code D2}).
  */
 class TransferDispatchStockHandlerTest {
 
@@ -47,7 +50,11 @@ class TransferDispatchStockHandlerTest {
     private static final Long   SRC_LOCATION_ID  = 10L;
     private static final Long   TRANSIT_LOC_ID   = 99L;
     private static final Long   PRODUCT_ID       = 100L;
-    private static final String EVENT_UID        = "EVT-DISPATCH-001";
+    /**
+     * Production ULID — exactly 26 chars like a real domain_events.uid.
+     * Using a realistic value ensures the per-leg key computation is tested against a real-width input.
+     */
+    private static final String EVENT_UID        = "01KVJT7VQ0XWKE53X4MGM87BYN";
 
     @BeforeEach
     void setUp() {
@@ -66,7 +73,7 @@ class TransferDispatchStockHandlerTest {
                 any(), any())).thenReturn("MVT-UID");
     }
 
-    // ── STOCK-039 regression: two distinct sourceEventUid suffixes ─────────────
+    // ── STOCK-039 regression: two distinct sourceEventUid values, each exactly 26 chars ───────
 
     @Test
     void handle_postsTransferOutAndTransferInWithDistinctSourceEventUids() throws Exception {
@@ -75,7 +82,6 @@ class TransferDispatchStockHandlerTest {
 
         handler.handle(event);
 
-        // Capture all post() calls
         ArgumentCaptor<String> sourceEventUidCaptor = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<MovementType> movementTypeCaptor = ArgumentCaptor.forClass(MovementType.class);
 
@@ -88,13 +94,39 @@ class TransferDispatchStockHandlerTest {
         List<String> eventUids = sourceEventUidCaptor.getAllValues();
         List<MovementType> types = movementTypeCaptor.getAllValues();
 
-        // First post: TRANSFER_OUT with ":OUT" suffix
+        // First post: TRANSFER_OUT with D1 leg code
         assertThat(types.get(0)).isEqualTo(MovementType.TRANSFER_OUT);
-        assertThat(eventUids.get(0)).isEqualTo(EVENT_UID + ":OUT");
+        assertThat(eventUids.get(0)).isEqualTo(EVENT_UID.substring(0, 24) + "D1");
 
-        // Second post: TRANSFER_IN with ":IN" suffix
+        // Second post: TRANSFER_IN with D2 leg code
         assertThat(types.get(1)).isEqualTo(MovementType.TRANSFER_IN);
-        assertThat(eventUids.get(1)).isEqualTo(EVENT_UID + ":IN");
+        assertThat(eventUids.get(1)).isEqualTo(EVENT_UID.substring(0, 24) + "D2");
+    }
+
+    /**
+     * STOCK-039 root-cause regression: the per-leg source_event_uid must be exactly 26 chars.
+     * The broken approach appended ":OUT" / ":IN" producing 30-char strings that exceeded the
+     * VARCHAR(26) column and caused a PostgreSQL 22001 error, rolling back the entire handler TX.
+     */
+    @Test
+    void handle_sourceEventUidKeysAreExactly26Chars() throws Exception {
+        TransferDispatchedPayload payload = buildPayload();
+        DomainEvent event = buildEvent(EVENT_UID, payload);
+
+        handler.handle(event);
+
+        ArgumentCaptor<String> uidCaptor = ArgumentCaptor.forClass(String.class);
+        verify(posting, times(2)).post(
+                anyLong(), anyLong(), anyLong(), anyLong(), any(BigDecimal.class),
+                any(MovementType.class),
+                uidCaptor.capture(), anyString(), anyString(),
+                any(), any(), any(Instant.class), any(), any(), any());
+
+        for (String legKey : uidCaptor.getAllValues()) {
+            assertThat(legKey)
+                    .as("source_event_uid leg key must be exactly 26 chars to fit VARCHAR(26)")
+                    .hasSize(26);
+        }
     }
 
     @Test
@@ -155,6 +187,20 @@ class TransferDispatchStockHandlerTest {
         BigDecimal inQty  = qtyCaptor.getAllValues().get(1);
         assertThat(outQty).isEqualByComparingTo(new BigDecimal("-5")); // negate of 5
         assertThat(inQty).isEqualByComparingTo(new BigDecimal("5"));
+    }
+
+    @Test
+    void handle_valuationTransferCostCalledForTransitCredit() throws Exception {
+        TransferDispatchedPayload payload = buildPayload();
+        DomainEvent event = buildEvent(EVENT_UID, payload);
+
+        handler.handle(event);
+
+        verify(valuation).transferCost(
+                COMPANY_ID,
+                BRANCH_ID, SRC_LOCATION_ID,
+                BRANCH_ID, TRANSIT_LOC_ID,
+                PRODUCT_ID, new BigDecimal("5"));
     }
 
     @Test

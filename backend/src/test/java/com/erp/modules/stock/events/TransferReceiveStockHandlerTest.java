@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -33,10 +32,17 @@ import org.mockito.ArgumentCaptor;
  * <p>The critical defect: both the TRANSFER_OUT (clear transit) and TRANSFER_IN (credit dest)
  * previously passed the same {@code sourceEventUid}. The idempotency backstop in
  * {@code StockPostingServiceImpl} deduplicates on {@code (sourceEventUid, productId)}, so the
- * second leg was silently skipped — the destination was never credited and the transit was left
- * negative/uncleared.
+ * second leg was silently skipped — the destination was never credited.
  *
- * <p>Fix: append {@code ":OUT"} / {@code ":IN"} suffix so the two legs have distinct keys.
+ * <p>The first attempted fix appended {@code ":OUT"} / {@code ":IN"} to the 26-char ULID event uid,
+ * producing 30-char strings that overflowed the {@code VARCHAR(26) source_event_uid} column.
+ * PostgreSQL raised {@code 22001 value too long}, rolling back the entire handler transaction and
+ * leaving the PENDING event unprocessed (attempt_count never incremented to FAILED — it was
+ * retried until reaching max-attempts with the same outcome).
+ *
+ * <p>The correct fix (STOCK-039 root-cause resolution) computes a 26-char deterministic per-leg
+ * key by truncating the event uid to 24 chars and appending a 2-char leg code:
+ * {@code R1} for the TRANSFER_OUT (transit clear) and {@code R2} for the TRANSFER_IN (dest credit).
  */
 class TransferReceiveStockHandlerTest {
 
@@ -52,7 +58,12 @@ class TransferReceiveStockHandlerTest {
     private static final Long   DST_LOCATION_ID = 20L;
     private static final Long   TRANSIT_LOC_ID  = 99L;
     private static final Long   PRODUCT_ID      = 100L;
-    private static final String EVENT_UID       = "EVT-RECEIVE-001";
+    /**
+     * Production-width ULID — exactly 26 chars like a real domain_events.uid.
+     * Using a realistic value ensures the per-leg key computation is tested against a real-width
+     * input; the old ":OUT"/":IN" fix only worked in tests because they used short fake UIDs.
+     */
+    private static final String EVENT_UID       = "01KVJT7VQE37PWZ9RY687BZ84Z";
 
     @BeforeEach
     void setUp() {
@@ -71,12 +82,38 @@ class TransferReceiveStockHandlerTest {
                 any(), any())).thenReturn("MVT-UID");
     }
 
+    // ── STOCK-039 root-cause regression: keys must be exactly 26 chars ─────────────────────────
+
+    /**
+     * Core invariant: the per-leg source_event_uid must be exactly 26 chars to fit the
+     * VARCHAR(26) stock_movements.source_event_uid column. The broken ":OUT"/":IN" approach
+     * produced 30-char strings → PostgreSQL 22001 → TX rollback → destination never credited.
+     */
+    @Test
+    void handle_sourceEventUidKeysAreExactly26Chars() throws Exception {
+        DomainEvent event = buildEvent(EVENT_UID, buildPayload());
+
+        handler.handle(event);
+
+        ArgumentCaptor<String> uidCaptor = ArgumentCaptor.forClass(String.class);
+        verify(posting, times(2)).post(
+                anyLong(), anyLong(), anyLong(), anyLong(), any(BigDecimal.class),
+                any(MovementType.class),
+                uidCaptor.capture(), anyString(), anyString(),
+                any(), any(), any(Instant.class), any(), any(), any());
+
+        for (String legKey : uidCaptor.getAllValues()) {
+            assertThat(legKey)
+                    .as("source_event_uid must be exactly 26 chars to fit VARCHAR(26)")
+                    .hasSize(26);
+        }
+    }
+
     // ── STOCK-039 regression: destination must be credited ──────────────────
 
     @Test
     void handle_postsTransferOutAtTransitAndTransferInAtDest() throws Exception {
-        TransferReceivedPayload payload = buildPayload();
-        DomainEvent event = buildEvent(EVENT_UID, payload);
+        DomainEvent event = buildEvent(EVENT_UID, buildPayload());
 
         handler.handle(event);
 
@@ -100,10 +137,7 @@ class TransferReceiveStockHandlerTest {
 
     @Test
     void handle_outAndInSourceEventUidsAreDifferent() throws Exception {
-        // Core invariant: the two legs must have distinct sourceEventUid values so the
-        // idempotency backstop does NOT suppress the destination TRANSFER_IN.
-        TransferReceivedPayload payload = buildPayload();
-        DomainEvent event = buildEvent(EVENT_UID, payload);
+        DomainEvent event = buildEvent(EVENT_UID, buildPayload());
 
         handler.handle(event);
 
@@ -120,9 +154,8 @@ class TransferReceiveStockHandlerTest {
     }
 
     @Test
-    void handle_sourceEventUidSuffixesAreOutAndIn() throws Exception {
-        TransferReceivedPayload payload = buildPayload();
-        DomainEvent event = buildEvent(EVENT_UID, payload);
+    void handle_sourceEventUidLegCodesAreR1AndR2() throws Exception {
+        DomainEvent event = buildEvent(EVENT_UID, buildPayload());
 
         handler.handle(event);
 
@@ -133,14 +166,13 @@ class TransferReceiveStockHandlerTest {
                 uidCaptor.capture(), anyString(), anyString(),
                 any(), any(), any(Instant.class), any(), any(), any());
 
-        assertThat(uidCaptor.getAllValues().get(0)).isEqualTo(EVENT_UID + ":OUT");
-        assertThat(uidCaptor.getAllValues().get(1)).isEqualTo(EVENT_UID + ":IN");
+        assertThat(uidCaptor.getAllValues().get(0)).isEqualTo(EVENT_UID.substring(0, 24) + "R1");
+        assertThat(uidCaptor.getAllValues().get(1)).isEqualTo(EVENT_UID.substring(0, 24) + "R2");
     }
 
     @Test
     void handle_outQtyIsNegatedInAtDestIsPositive() throws Exception {
-        TransferReceivedPayload payload = buildPayload();
-        DomainEvent event = buildEvent(EVENT_UID, payload);
+        DomainEvent event = buildEvent(EVENT_UID, buildPayload());
 
         handler.handle(event);
 
@@ -159,17 +191,15 @@ class TransferReceiveStockHandlerTest {
 
     @Test
     void handle_valuationTransferCostCalledForDestinationCredit() throws Exception {
-        // valuation.transferCost must move cost from transit → dest (issue #12)
-        TransferReceivedPayload payload = buildPayload();
-        DomainEvent event = buildEvent(EVENT_UID, payload);
+        DomainEvent event = buildEvent(EVENT_UID, buildPayload());
 
         handler.handle(event);
 
         verify(valuation).transferCost(
-                eq(COMPANY_ID),
-                eq(BRANCH_ID), eq(TRANSIT_LOC_ID),
-                eq(BRANCH_ID), eq(DST_LOCATION_ID),
-                eq(PRODUCT_ID), eq(new BigDecimal("3")));
+                COMPANY_ID,
+                BRANCH_ID, TRANSIT_LOC_ID,
+                BRANCH_ID, DST_LOCATION_ID,
+                PRODUCT_ID, new BigDecimal("3"));
     }
 
     @Test
@@ -182,7 +212,8 @@ class TransferReceiveStockHandlerTest {
 
         verify(posting, never()).post(anyLong(), anyLong(), anyLong(), anyLong(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
-        verify(valuation, never()).transferCost(anyLong(), anyLong(), anyLong(), anyLong(), anyLong(), anyLong(), any());
+        verify(valuation, never()).transferCost(anyLong(), anyLong(), anyLong(), anyLong(),
+                anyLong(), anyLong(), any());
     }
 
     // ── helpers ────────────────────────────────────────────────────────────────

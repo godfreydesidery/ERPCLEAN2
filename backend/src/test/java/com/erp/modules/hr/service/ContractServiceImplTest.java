@@ -1,11 +1,14 @@
 package com.erp.modules.hr.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.erp.modules.hr.domain.entity.Employee;
 import com.erp.modules.hr.domain.entity.EmploymentContract;
 import com.erp.modules.hr.domain.enums.ContractType;
+import com.erp.modules.hr.domain.enums.EmploymentStatus;
 import com.erp.modules.hr.repository.EmployeeRepository;
 import com.erp.modules.hr.repository.EmploymentContractRepository;
 import com.erp.platform.audit.AuditService;
@@ -73,12 +76,78 @@ class ContractServiceImplTest {
 
         service.terminate(CONTRACT_UID); // must not throw
 
-        org.assertj.core.api.Assertions.assertThat(c.isActive()).isFalse();
+        assertThat(c.isActive()).isFalse();
+    }
+
+    // -----------------------------------------------------------------------
+    // HR-5 — terminating the last active contract sets employee status=TERMINATED
+    // -----------------------------------------------------------------------
+
+    @Test
+    void terminate_lastActiveContract_setsEmployeeStatusTerminated() {
+        EmploymentContract c = makeContract(true);
+        when(contracts.findByUid(CONTRACT_UID)).thenReturn(Optional.of(c));
+
+        // After this contract is deactivated, no other active contract exists for this employee
+        when(contracts.findByCompanyIdAndEmployeeIdAndActiveTrue(COMPANY_ID, 1L))
+                .thenReturn(Optional.empty());
+
+        Employee emp = makeEmployee(EmploymentStatus.ACTIVE);
+        when(employees.findById(1L)).thenReturn(Optional.of(emp));
+
+        service.terminate(CONTRACT_UID);
+
+        assertThat(emp.getStatus()).isEqualTo(EmploymentStatus.TERMINATED);
+    }
+
+    @Test
+    void terminate_whenOtherActiveContractExists_doesNotTerminateEmployee() {
+        EmploymentContract c = makeContract(true);
+        when(contracts.findByUid(CONTRACT_UID)).thenReturn(Optional.of(c));
+
+        // Another active contract still exists — employee stays ACTIVE
+        EmploymentContract other = makeContract(true);
+        when(contracts.findByCompanyIdAndEmployeeIdAndActiveTrue(COMPANY_ID, 1L))
+                .thenReturn(Optional.of(other));
+
+        Employee emp = makeEmployee(EmploymentStatus.ACTIVE);
+        when(employees.findById(1L)).thenReturn(Optional.of(emp));
+
+        service.terminate(CONTRACT_UID);
+
+        assertThat(emp.getStatus()).isEqualTo(EmploymentStatus.ACTIVE);
+    }
+
+    @Test
+    void terminate_lastActiveContract_contractFlagSetBeforeEmployeeStatusCheck() {
+        // Verifies that c.active is false at the point the employee-status guard runs.
+        // The mock returns empty (simulating: after deactivation, no active contract found),
+        // so employee must be set to TERMINATED — not left ACTIVE.
+        EmploymentContract c = makeContract(true);
+        when(contracts.findByUid(CONTRACT_UID)).thenReturn(Optional.of(c));
+        when(contracts.findByCompanyIdAndEmployeeIdAndActiveTrue(COMPANY_ID, 1L))
+                .thenReturn(Optional.empty());
+
+        Employee emp = makeEmployee(EmploymentStatus.ACTIVE);
+        when(employees.findById(1L)).thenReturn(Optional.of(emp));
+
+        service.terminate(CONTRACT_UID);
+
+        assertThat(c.isActive()).isFalse();
+        assertThat(emp.getStatus()).isEqualTo(EmploymentStatus.TERMINATED);
     }
 
     // -----------------------------------------------------------------------
     // helper
     // -----------------------------------------------------------------------
+
+    private Employee makeEmployee(EmploymentStatus status) {
+        Employee emp = new Employee(COMPANY_ID, 2L, "EMP-000001", "John", "Doe",
+                LocalDate.of(2020, 1, 1), 1L);
+        emp.setStatus(status);
+        setField(emp, "id", 1L);
+        return emp;
+    }
 
     private EmploymentContract makeContract(boolean active) {
         EmploymentContract c = new EmploymentContract(
