@@ -15,6 +15,8 @@ import com.erp.modules.purchases.repository.SupplierQuoteRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
+import com.erp.modules.purchases.domain.enums.RfqStatus;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.repository.Lookups;
@@ -65,6 +67,14 @@ public class SupplierQuoteServiceImpl implements SupplierQuoteService {
         Rfq rfq = Lookups.orNotFound(rfqs.findByUid(req.rfqUid()), "Rfq", req.rfqUid());
         RequestContext.Principal ctx = RequestContext.get();
         scopeGuard.assertCanActIn(ctx, rfq.getCompanyId());
+
+        // PURCHASES-058: only SENT or QUOTES_RECEIVED RFQs accept quote captures (FR-PROC-09)
+        if (rfq.getStatus() != RfqStatus.SENT
+                && rfq.getStatus() != RfqStatus.QUOTES_RECEIVED) {
+            throw new ConflictException(
+                    "Cannot capture a quote against an RFQ in status " + rfq.getStatus()
+                            + "; RFQ must be SENT or QUOTES_RECEIVED (PURCHASES-058, FR-PROC-09).");
+        }
 
         var supplier = suppliers.findByCompanyIdAndUid(rfq.getCompanyId(), req.supplierUid())
                 .orElseThrow(() -> new NotFoundException("Supplier: " + req.supplierUid()));

@@ -384,6 +384,15 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
             throw new IllegalStateException(
                     "Only FINALISED invoices can be voided; current status: " + inv.getStatus());
         }
+        // FLOW-ORDER-TO-CASH-027: block void when AR receipts/allocations have been posted
+        // against this invoice (settled or partially settled). A void on a settled invoice
+        // would leave orphaned AR allocations and an unbalanced sub-ledger.
+        if (arBalanceService.hasAllocations(inv.getCompanyId(), inv.getUid())) {
+            throw new com.erp.platform.common.api.ConflictException(
+                    "Invoice " + uid + " cannot be voided because it has AR receipt allocations "
+                            + "(settled or partially settled). Raise a credit note to reverse it "
+                            + "(FLOW-ORDER-TO-CASH-027).");
+        }
         inv.setStatus(InvoiceStatus.VOID);
         inv.setVoidedAt(Instant.now());
         inv.setVoidedBy(actorId());

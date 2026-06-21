@@ -131,6 +131,17 @@ public class PurchaseOrderController {
         return ApiResponse.ok(service.voidOrder(uid, req));
     }
 
+    /**
+     * APPROVALS-047: Submit a DRAFT PO to the approval engine.
+     * Creates the approval_request row and transitions approval_status → PENDING (or APPROVED
+     * when the engine auto-approves per policy). The PO stays DRAFT until /place is called.
+     */
+    @PostMapping("/uid/{uid}/submit-for-approval")
+    @PreAuthorize("@perm.scoped(#uid, 'purchaseorder', 'PURCHASE.ORDER.CREATE')")
+    public ApiResponse<PurchaseOrderDto> submitForApproval(@PathVariable String uid) {
+        return ApiResponse.ok(service.submitForApproval(uid));
+    }
+
     /** Approve a PO that is pending approval (ADR-0027 D-6). */
     @PostMapping("/uid/{uid}/approve")
     @PreAuthorize("@perm.scoped(#uid, 'purchaseorder', 'PURCHASE.ORDER.APPROVE')")

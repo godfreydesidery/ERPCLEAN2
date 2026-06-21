@@ -22,11 +22,25 @@ final class DiscountValidator {
     /**
      * Validates a line-level discount pair.
      *
+     * <p>Rules:
+     * <ul>
+     *   <li>Amount and percent are mutually exclusive — both non-zero is ambiguous (SALES-BILLING).</li>
+     *   <li>Amount must be >= 0 when provided.</li>
+     *   <li>Percent must be in [0, 100] when provided.</li>
+     * </ul>
+     *
      * @param amount  line discount amount (nullable)
      * @param percent line discount percent (nullable)
-     * @throws IllegalArgumentException if any value is out of range
+     * @throws IllegalArgumentException if any value is out of range or both are provided
      */
     static void validateLineDiscount(BigDecimal amount, BigDecimal percent) {
+        boolean hasAmount  = amount  != null && amount.compareTo(BigDecimal.ZERO) != 0;
+        boolean hasPercent = percent != null && percent.compareTo(BigDecimal.ZERO) != 0;
+        if (hasAmount && hasPercent) {
+            throw new IllegalArgumentException(
+                    "lineDiscountAmount and lineDiscountPercent are mutually exclusive — "
+                            + "supply one or the other, not both (SALES-BILLING).");
+        }
         if (amount != null && amount.compareTo(BigDecimal.ZERO) < 0) {
             throw new IllegalArgumentException(
                     "Line discount amount cannot be negative; got: " + amount.toPlainString());

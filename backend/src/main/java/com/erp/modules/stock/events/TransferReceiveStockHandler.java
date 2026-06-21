@@ -68,22 +68,26 @@ public class TransferReceiveStockHandler implements DomainEventHandler {
         try {
             for (TransferDispatchedPayload.LineItem line : payload.lines()) {
 
-                // (1) TRANSFER_OUT at in-transit pseudo-location (quantity decreases in transit)
+                // (1) TRANSFER_OUT at in-transit pseudo-location (quantity decreases in transit).
+                // Suffix ":OUT" distinguishes this leg from (2) for the (sourceEventUid, productId)
+                // idempotency backstop in StockPostingServiceImpl — both legs share the same event
+                // uid so without the suffix the second leg is skipped as a duplicate (STOCK-039).
                 posting.post(
                         payload.companyId(), payload.destBranchId(), payload.inTransitLocationId(),
                         line.productId(), line.qtyInBase().negate(),
                         MovementType.TRANSFER_OUT,
-                        event.getUid(), "STOCK_TRANSFER", payload.transferUid(),
+                        event.getUid() + ":OUT", "STOCK_TRANSFER", payload.transferUid(),
                         null, null, payload.receivedAt(),
                         null,
                         line.unitCostAmount(), line.valueAmount() != null ? line.valueAmount().negate() : null);
 
-                // (2) TRANSFER_IN at destination location (quantity increases at dest)
+                // (2) TRANSFER_IN at destination location (quantity increases at dest).
+                // Suffix ":IN" makes the idempotency key unique from the OUT leg above.
                 posting.post(
                         payload.companyId(), payload.destBranchId(), payload.destLocationId(),
                         line.productId(), line.qtyInBase(),
                         MovementType.TRANSFER_IN,
-                        event.getUid(), "STOCK_TRANSFER", payload.transferUid(),
+                        event.getUid() + ":IN", "STOCK_TRANSFER", payload.transferUid(),
                         null, null, payload.receivedAt(),
                         null,
                         line.unitCostAmount(), line.valueAmount());

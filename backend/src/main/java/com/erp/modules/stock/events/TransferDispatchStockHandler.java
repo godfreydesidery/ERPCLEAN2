@@ -66,22 +66,26 @@ public class TransferDispatchStockHandler implements DomainEventHandler {
         try {
             for (TransferDispatchedPayload.LineItem line : payload.lines()) {
 
-                // (1) TRANSFER_OUT at source location (quantity decreases)
+                // (1) TRANSFER_OUT at source location (quantity decreases).
+                // Suffix ":OUT" distinguishes this leg from (2) for the (sourceEventUid, productId)
+                // idempotency backstop in StockPostingServiceImpl — both legs share the same event
+                // uid so without the suffix the second leg is skipped as a duplicate (STOCK-039).
                 posting.post(
                         payload.companyId(), payload.sourceBranchId(), payload.sourceLocationId(),
                         line.productId(), line.qtyInBase().negate(),
                         MovementType.TRANSFER_OUT,
-                        event.getUid(), "STOCK_TRANSFER", payload.transferUid(),
+                        event.getUid() + ":OUT", "STOCK_TRANSFER", payload.transferUid(),
                         null, null, payload.dispatchedAt(),
                         null,
                         line.unitCostAmount(), line.valueAmount() != null ? line.valueAmount().negate() : null);
 
-                // (2) TRANSFER_IN at in-transit pseudo-location (quantity increases)
+                // (2) TRANSFER_IN at in-transit pseudo-location (quantity increases).
+                // Suffix ":IN" makes the idempotency key unique from the OUT leg above.
                 posting.post(
                         payload.companyId(), payload.sourceBranchId(), payload.inTransitLocationId(),
                         line.productId(), line.qtyInBase(),
                         MovementType.TRANSFER_IN,
-                        event.getUid(), "STOCK_TRANSFER", payload.transferUid(),
+                        event.getUid() + ":IN", "STOCK_TRANSFER", payload.transferUid(),
                         null, null, payload.dispatchedAt(),
                         null,
                         line.unitCostAmount(), line.valueAmount());
