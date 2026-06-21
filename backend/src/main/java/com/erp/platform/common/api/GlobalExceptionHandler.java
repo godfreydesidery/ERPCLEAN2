@@ -12,18 +12,27 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.NoHandlerFoundException;
 
 /**
  * Translates exceptions into the {@link ApiResponse} error envelope with user-safe messages only
  * (PROJECT-CONVENTIONS §3.1 — never leak internal exception text). The list grows as the domain
  * defines its own exceptions (e.g. a NotFoundException → 404) in later slices.
+ *
+ * <p>Scoped to the full {@code com.erp} base package (no {@code basePackages} restriction) so that
+ * exceptions raised by the DispatcherServlet dispatch path — notably
+ * {@link NoHandlerFoundException} and {@link HttpRequestMethodNotSupportedException} — are caught
+ * here rather than falling through to Spring's Whitelabel error path. The existing
+ * {@link com.erp.platform.common.api.ApiResponseAdvice} retains its {@code com.erp.api} scope for
+ * body-wrapping; this handler is a separate concern (exception → response, not body-wrapping).
  */
-@RestControllerAdvice(basePackages = "com.erp.api")
+@RestControllerAdvice
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
@@ -83,6 +92,38 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<ApiResponse<Void>> handleNotFound(NotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error(ex.getMessage()));
+    }
+
+    /**
+     * No controller or resource handler matched the request path → 404 in the standard envelope.
+     *
+     * <p>Without this handler the DispatcherServlet forwards to the Whitelabel {@code /error}
+     * path, which emits a raw Spring error body containing the stack trace (security defects
+     * RBAC-SECURITY-NEGATIVE-017 and -046). This handler intercepts the exception before it
+     * reaches that path and returns a clean, user-safe 404 response. Requires
+     * {@code spring.mvc.throw-exception-if-no-handler-found=true} in application.yml; the
+     * {@code ApiNotFoundController} catch-all ensures the exception is raised for
+     * {@code /api/**} paths even when the SPA resource handler consumes the dispatch first.
+     */
+    @ExceptionHandler(NoHandlerFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNoHandlerFound(NoHandlerFoundException ex) {
+        log.debug("No handler found: {} {}", ex.getHttpMethod(), ex.getRequestURL());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.error("The requested resource was not found."));
+    }
+
+    /**
+     * HTTP method not allowed on an existing endpoint → 405 in the standard envelope.
+     *
+     * <p>Without this handler Spring emits the Whitelabel error body with a stack trace (security
+     * defect IAM-ORG-060). Logged at DEBUG because 405 is a caller error, not a server fault.
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMethodNotSupported(
+            HttpRequestMethodNotSupportedException ex) {
+        log.debug("Method not allowed: {} — allowed: {}", ex.getMethod(), ex.getSupportedMethods());
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+                .body(ApiResponse.error("HTTP method not allowed for this endpoint."));
     }
 
     /** Domain rule violated (duplicate code, invalid default, etc.) → 409. */

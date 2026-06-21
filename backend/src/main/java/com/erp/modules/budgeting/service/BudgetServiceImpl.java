@@ -426,8 +426,11 @@ public class BudgetServiceImpl implements BudgetService {
 
         Long actorId = principal != null ? principal.userId() : null;
 
-        // Supersede the prior approved version in the same TX (D-5, NFR-BUD-04)
-        // Use PESSIMISTIC_WRITE to serialise concurrent approves
+        // Supersede the prior approved version in the same TX (D-5, NFR-BUD-04).
+        // Use PESSIMISTIC_WRITE to serialise concurrent approves.
+        // Flush the SUPERSEDED update immediately so the status UPDATE reaches Postgres before
+        // the UPDATE that sets the new version APPROVED — prevents a momentary two-row violation
+        // on the partial unique index uq_budget_version_one_approved (BUDGETING-040).
         Optional<BudgetVersion> priorApproved = versions.findApprovedForUpdate(
                 ver.getCompanyId(), ver.getFiscalYearId(), ver.getCostCentreValueId(),
                 BudgetVersionStatus.APPROVED);
@@ -436,7 +439,7 @@ public class BudgetServiceImpl implements BudgetService {
             prior.setSupersededAt(Instant.now());
             prior.setUpdatedAt(Instant.now());
             prior.setUpdatedBy(actorId);
-            versions.save(prior);
+            versions.saveAndFlush(prior);
         });
 
         ver.setStatus(BudgetVersionStatus.APPROVED);

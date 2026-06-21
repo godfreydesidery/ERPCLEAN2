@@ -345,9 +345,12 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                         l.getQtyInBase()))
                 .toList();
 
-        // ADR-0021 D-6: DIRECT invoices issue stock on finalise (issuesStock=true);
+        // ADR-0021 D-6: DIRECT and POS invoices issue stock on finalise (issuesStock=true).
+        // POS is a DIRECT-class invoice (ADR-0029 D-5, DocumentOrigin javadoc) — it has no
+        // delivery step, so stock must be issued at finalise just like a walk-in invoice.
         // SO-sourced invoices post revenue only — delivery already issued stock (issuesStock=false).
-        boolean issuesStock = (inv.getOrigin() == com.erp.modules.sales.domain.enums.DocumentOrigin.DIRECT);
+        boolean issuesStock = (inv.getOrigin() == com.erp.modules.sales.domain.enums.DocumentOrigin.DIRECT
+                || inv.getOrigin() == com.erp.modules.sales.domain.enums.DocumentOrigin.POS);
 
         outbox.publish(
                 DomainEventType.SALE_FINALISED,

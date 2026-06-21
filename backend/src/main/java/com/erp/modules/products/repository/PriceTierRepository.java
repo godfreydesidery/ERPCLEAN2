@@ -36,7 +36,9 @@ public interface PriceTierRepository extends JpaRepository<PriceTier, Long> {
             @Param("priceListId") Long priceListId,
             @Param("qty") BigDecimal qty);
 
-    @Query("SELECT COUNT(t) > 0 FROM PriceTier t WHERE t.productId = :productId AND t.priceListId = :priceListId AND t.minQty = :minQty AND t.id <> :excludeId")
+    // PRICING-053: only ACTIVE tiers constitute a duplicate — an INACTIVE row at the same
+    // minQty must not block re-creation of a new tier at that floor.
+    @Query("SELECT COUNT(t) > 0 FROM PriceTier t WHERE t.productId = :productId AND t.priceListId = :priceListId AND t.minQty = :minQty AND t.id <> :excludeId AND t.status = 'ACTIVE'")
     boolean existsDuplicateBreak(
             @Param("productId") Long productId,
             @Param("priceListId") Long priceListId,

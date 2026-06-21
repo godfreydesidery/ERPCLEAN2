@@ -28,7 +28,11 @@ class EndpointAuthorizationTest {
             "AuthController#login",
             "AuthController#refresh",
             "AuthController#logout",
-            "HealthController#health");
+            "HealthController#health",
+            // Catch-all that throws NoHandlerFoundException for unmatched /api/** paths so they return
+            // the standard ApiResponse 404 (not Spring's whitelabel + stack trace). Returning 404 on a
+            // non-existent path is not a security-sensitive operation, so it is public by design.
+            "ApiNotFoundController#apiCatchAll");
 
     @Test
     void everyApiHandlerIsPermissionGatedOrExplicitlyPublic() {
