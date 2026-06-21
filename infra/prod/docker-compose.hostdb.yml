@@ -70,6 +70,9 @@ services:
     container_name: erp-prod-caddy
     restart: unless-stopped
     network_mode: host
+    # .env provides ERP_PUBLIC_HOST, which the Caddyfile binds its site to.
+    env_file:
+      - .env
     depends_on:
       - api
     volumes:

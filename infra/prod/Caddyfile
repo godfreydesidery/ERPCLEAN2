@@ -1,32 +1,29 @@
 # Caddy — TLS reverse proxy in front of the ERPCLEAN2 API (which serves the Angular SPA too).
 #
-# CURRENT: self-signed HTTPS via Caddy's INTERNAL CA (no domain yet). Browsers will show a
-# "not secure / not trusted" warning — that is expected; the traffic is still encrypted.
+# The site is bound to ${ERP_PUBLIC_HOST} (set in infra/prod/.env) — the hostname or IP this
+# box is reached at, e.g. the EC2 public DNS, an Elastic IP, or your domain. A host MUST be set
+# so Caddy can issue a certificate for it (a bare ":443" has no name to issue a cert for, which
+# causes ERR_SSL_PROTOCOL_ERROR).
 #
-# TO UPGRADE TO A REAL (trusted) CERT later: point a domain's A record at this box's public
-# (Elastic) IP, then replace the ":443" block below with your domain and drop `tls internal`:
+# CURRENT: self-signed via Caddy's INTERNAL CA (`tls internal`) — encrypted, but browsers show a
+# "not trusted" warning. That is expected without a real domain.
 #
-#     erp.example.com {
-#         encode gzip
-#         reverse_proxy localhost:8081
-#     }
-#
-# Caddy then auto-issues + auto-renews a free Let's Encrypt cert. (Keep the :80 block or
-# delete it — with a domain, Caddy handles the HTTP->HTTPS redirect automatically.)
+# TO GET A REAL (trusted) Let's Encrypt cert later: set ERP_PUBLIC_HOST to a domain whose A record
+# points at this box, then DELETE the `tls internal` line below and `up -d` again — Caddy then
+# auto-issues + renews a free public cert.
 
 {
-	# We manage HTTP->HTTPS ourselves (below), so disable Caddy's automatic redirect to
-	# avoid it also trying to bind :80.
+	# We manage HTTP->HTTPS ourselves (below), so disable Caddy's automatic redirect.
 	auto_https disable_redirects
 }
 
-# Plain HTTP -> redirect everything to HTTPS.
-:80 {
+# Plain HTTP -> redirect to HTTPS.
+{$ERP_PUBLIC_HOST}:80 {
 	redir https://{host}{uri} permanent
 }
 
-# HTTPS on 443 with a self-signed cert from Caddy's internal CA, proxying to the API.
-:443 {
+# HTTPS with a self-signed cert from Caddy's internal CA, proxying to the API.
+{$ERP_PUBLIC_HOST}:443 {
 	tls internal
 	encode gzip
 	reverse_proxy localhost:8081
