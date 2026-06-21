@@ -148,6 +148,39 @@ class ProjectCostingQueryImplTest {
     }
 
     // -------------------------------------------------------------------------
+    // PROJECTS-040: empty result for a company with no tagged GL activity
+    // (bogus companyId returns empty list, not 500 — ForbiddenException guards
+    //  cross-company access; root cross-company returns empty if no rows)
+    // -------------------------------------------------------------------------
+
+    @Test
+    void wipReport_noProjectsForCompany_returnsEmptyList() {
+        Long companyId = 99L;
+        RequestContext.Principal principal = principal(1L, companyId, null);
+
+        when(costRepo.wipReport(companyId, null)).thenReturn(List.of());
+
+        List<ProjectWipRowDto> result = service.wipReport(companyId, principal);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void wipReport_nullBranchPrincipal_passesNullBranchToRepository() {
+        // Root/admin cross-branch principal has null branchId — must pass null to repo
+        // so the SQL omits the branch filter and returns all branches.
+        Long companyId = 10L;
+        RequestContext.Principal rootPrincipal = principal(1L, companyId, null);
+
+        when(costRepo.wipReport(companyId, null)).thenReturn(List.of());
+
+        service.wipReport(companyId, rootPrincipal);
+
+        // Verify repo called with null branchId (not 0 or some default)
+        org.mockito.Mockito.verify(costRepo).wipReport(companyId, null);
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 

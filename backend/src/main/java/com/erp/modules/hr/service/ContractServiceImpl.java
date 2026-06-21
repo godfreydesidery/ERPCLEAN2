@@ -100,6 +100,10 @@ public class ContractServiceImpl implements ContractService {
     public void terminate(String uid) {
         EmploymentContract c = requireByUid(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), c.getCompanyId());
+        // D4: reject re-termination of an already-inactive/terminated contract
+        if (!c.isActive()) {
+            throw new ConflictException("Contract is already terminated.");
+        }
         c.setActive(false);
         c.setUpdatedAt(Instant.now());
         c.setUpdatedBy(RequestContext.get().userId());

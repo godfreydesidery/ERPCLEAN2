@@ -79,6 +79,12 @@ public class ArOpeningBalanceServiceImpl implements ArOpeningBalanceService {
                 : companies.findById(companyId).map(c -> c.getBaseCurrency())
                         .orElseThrow(() -> new NotFoundException("Company not found: " + companyId));
 
+        // Guard: amount must be a positive value (null/zero/negative produces a cryptic GL error)
+        if (req.amount() == null || req.amount().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException(
+                    "amount must be a positive value (got: " + req.amount() + ")");
+        }
+
         // Post DR AR control / CR Opening Balance Equity synchronously (D-4/D-6)
         ChartOfAccount arAcct     = glConfig.resolve(companyId, GlConfigKey.ACCOUNTS_RECEIVABLE);
         ChartOfAccount equityAcct = glConfig.resolve(companyId, GlConfigKey.OPENING_BALANCE_EQUITY);

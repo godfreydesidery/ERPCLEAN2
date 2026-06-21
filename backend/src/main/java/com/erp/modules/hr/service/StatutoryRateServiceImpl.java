@@ -49,6 +49,11 @@ public class StatutoryRateServiceImpl implements StatutoryRateService {
         Long companyId = p.companyId();
         scopeGuard.assertCanActIn(p, companyId);
 
+        // D5: reject an empty bands list (defence-in-depth alongside @NotEmpty on the DTO)
+        if (req.bands() == null || req.bands().isEmpty()) {
+            throw new IllegalArgumentException("A PAYE band set must contain at least one band.");
+        }
+
         // #27 — duplicate effectiveFrom returns 409 instead of leaking DB unique violation as 500
         if (payeBandSets.existsByCompanyIdAndEffectiveFrom(companyId, req.effectiveFrom())) {
             throw new ConflictException(

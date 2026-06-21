@@ -250,7 +250,7 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
             note = creditNotes.findById(note.getId()).orElseThrow();
         }
 
-        return toDto(note, savedAllocs);
+        return toDto(note, savedAllocs, invoices);
     }
 
     // =========================================================================
@@ -283,7 +283,7 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
                         reloaded.getId(), reloaded.getUid())
                 .detail(Map.of("action", "apply", "creditNoteUid", req.creditNoteUid())));
 
-        return toDto(reloaded, saved);
+        return toDto(reloaded, saved, invoices);
     }
 
     // =========================================================================
@@ -348,7 +348,7 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
                         reloaded.getId(), reloaded.getUid())
                 .detail(Map.of("action", "reapply", "creditNoteUid", req.creditNoteUid())));
 
-        return toDto(reloaded, saved);
+        return toDto(reloaded, saved, invoices);
     }
 
     // =========================================================================
@@ -361,7 +361,7 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
         ArCreditNote note = Lookups.orNotFound(creditNotes.findByUid(uid), "ArCreditNote", uid);
         scopeGuard.assertCanActIn(RequestContext.get(), note.getCompanyId());
         List<ArCreditNoteAllocation> allocs = cnAllocations.findByCreditNoteId(note.getId());
-        return toDto(note, allocs);
+        return toDto(note, allocs, invoices);
     }
 
     @Override
@@ -369,7 +369,7 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
     public Page<ArCreditNoteDto> listByCompany(Long companyId, Pageable pageable) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
         return creditNotes.findByCompanyId(companyId, pageable)
-                .map(n -> toDto(n, cnAllocations.findByCreditNoteId(n.getId())));
+                .map(n -> toDto(n, cnAllocations.findByCreditNoteId(n.getId()), invoices));
     }
 
     // =========================================================================
@@ -561,10 +561,15 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
         return p != null ? p.userId() : null;
     }
 
-    static ArCreditNoteDto toDto(ArCreditNote n, List<ArCreditNoteAllocation> allocs) {
+    static ArCreditNoteDto toDto(ArCreditNote n, List<ArCreditNoteAllocation> allocs,
+                                  ArInvoiceRepository invoiceRepo) {
         List<AllocationDto> allocDtos = allocs == null ? List.of() : allocs.stream()
-                .map(a -> new AllocationDto(a.getId(), a.getArInvoiceId(), null,
-                        a.getAllocatedAmount()))
+                .map(a -> {
+                    String invUid = invoiceRepo.findById(a.getArInvoiceId())
+                            .map(i -> i.getUid()).orElse(null);
+                    return new AllocationDto(a.getId(), a.getArInvoiceId(), invUid,
+                            a.getAllocatedAmount());
+                })
                 .toList();
         return new ArCreditNoteDto(
                 n.getId(), n.getUid(), n.getCompanyId(), n.getCustomerId(),

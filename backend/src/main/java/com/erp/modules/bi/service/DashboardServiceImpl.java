@@ -34,6 +34,7 @@ import com.erp.modules.reporting.service.AccountMovementQuery;
 import com.erp.modules.reporting.service.StatementClassifier;
 import com.erp.modules.stock.domain.dto.StockValuationReportDto;
 import com.erp.modules.stock.service.StockValuationQuery;
+import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.PermissionChecks;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
@@ -132,10 +133,13 @@ public class DashboardServiceImpl implements DashboardService {
         // D-5: assertCanActIn FIRST — before any panel call
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
 
-        // Header resolution is wrapped so a CompanyRepository hiccup never kills the whole
-        // dashboard (adversarial-review MEDIUM: header outside degrade).
-        String companyName = resolveCompanyNameSafe(companyId);
-        String currency    = resolveBaseCurrencySafe(companyId);
+        // REPORTING-BI-041/062: validate company existence before building any panel; a bogus
+        // companyId must 404 here rather than degrade silently or NPE inside a downstream query.
+        com.erp.modules.iam.domain.entity.Company company =
+                companyRepo.findById(companyId)
+                        .orElseThrow(() -> NotFoundException.of("Company", String.valueOf(companyId)));
+        String companyName = company.getName();
+        String currency    = company.getBaseCurrency() != null ? company.getBaseCurrency() : "TZS";
 
         LocalDate effectiveFrom = from != null ? from : LocalDate.now().withDayOfMonth(1);
         LocalDate effectiveTo   = to   != null ? to   : LocalDate.now();
@@ -173,6 +177,7 @@ public class DashboardServiceImpl implements DashboardService {
     @Override
     public FinanceSummaryDto financeSummary(Long companyId, LocalDate from, LocalDate to) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        requireCompanyExists(companyId);
         return buildFinance(companyId, from, to);
     }
 
@@ -251,6 +256,7 @@ public class DashboardServiceImpl implements DashboardService {
     @Override
     public WorkingCapitalDto workingCapital(Long companyId) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        requireCompanyExists(companyId);
         return buildWorkingCapital(companyId);
     }
 
@@ -275,6 +281,7 @@ public class DashboardServiceImpl implements DashboardService {
     @Override
     public InventorySummaryDto inventorySummary(Long companyId) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        requireCompanyExists(companyId);
         return buildInventory(companyId);
     }
 
@@ -292,6 +299,7 @@ public class DashboardServiceImpl implements DashboardService {
     @Override
     public CrmSnapshotDto crmSnapshot(Long companyId, Long branchId, LocalDate from, LocalDate to) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        requireCompanyExists(companyId);
         return buildCrm(companyId, branchId, from, to);
     }
 
@@ -313,13 +321,15 @@ public class DashboardServiceImpl implements DashboardService {
     @Override
     public TrendDto revenueTrend(Long companyId) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
-        return buildTrend(companyId, "Revenue", resolveBaseCurrencySafe(companyId), false);
+        String currency = requireCompanyExists(companyId).getBaseCurrency();
+        return buildTrend(companyId, "Revenue", currency != null ? currency : "TZS", false);
     }
 
     @Override
     public TrendDto netProfitTrend(Long companyId) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
-        return buildTrend(companyId, "Net Profit", resolveBaseCurrencySafe(companyId), true);
+        String currency = requireCompanyExists(companyId).getBaseCurrency();
+        return buildTrend(companyId, "Net Profit", currency != null ? currency : "TZS", true);
     }
 
     /**
@@ -433,32 +443,14 @@ public class DashboardServiceImpl implements DashboardService {
     // =========================================================================
 
     /**
-     * Safe company-name resolution: falls back to "Company &lt;id&gt;" on any exception so a
-     * CompanyRepository hiccup never kills the whole dashboard (adversarial-review MEDIUM fix).
+     * Resolves the Company entity, throwing {@link NotFoundException} (→ HTTP 404) when the
+     * companyId does not exist. Called at the top of every public method so a bogus companyId
+     * never reaches downstream queries and NPEs (REPORTING-BI-041 / REPORTING-BI-049 /
+     * REPORTING-BI-062 fix).
      */
-    private String resolveCompanyNameSafe(Long companyId) {
-        try {
-            return companyRepo.findById(companyId)
-                    .map(com.erp.modules.iam.domain.entity.Company::getName)
-                    .orElse("Company " + companyId);
-        } catch (Exception ex) {
-            log.warn("BI could not resolve company name for {}: {}", companyId, ex.getMessage());
-            return "Company " + companyId;
-        }
-    }
-
-    /**
-     * Safe base-currency resolution: falls back to "TZS" on any exception (same degrade contract).
-     */
-    private String resolveBaseCurrencySafe(Long companyId) {
-        try {
-            return companyRepo.findById(companyId)
-                    .map(com.erp.modules.iam.domain.entity.Company::getBaseCurrency)
-                    .orElse("TZS");
-        } catch (Exception ex) {
-            log.warn("BI could not resolve base currency for {}: {}", companyId, ex.getMessage());
-            return "TZS";
-        }
+    private com.erp.modules.iam.domain.entity.Company requireCompanyExists(Long companyId) {
+        return companyRepo.findById(companyId)
+                .orElseThrow(() -> NotFoundException.of("Company", String.valueOf(companyId)));
     }
 
     private static BigDecimal[] zero2() {

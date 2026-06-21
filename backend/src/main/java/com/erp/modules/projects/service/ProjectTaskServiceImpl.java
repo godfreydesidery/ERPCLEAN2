@@ -4,11 +4,13 @@ import com.erp.modules.projects.domain.dto.CreateProjectTaskRequest;
 import com.erp.modules.projects.domain.dto.ProjectTaskDto;
 import com.erp.modules.projects.domain.entity.Project;
 import com.erp.modules.projects.domain.entity.ProjectTask;
+import com.erp.modules.projects.domain.enums.ProjectStatus;
 import com.erp.modules.projects.repository.ProjectRepository;
 import com.erp.modules.projects.repository.ProjectTaskRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.security.RequestContext;
@@ -45,6 +47,14 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
                                  RequestContext.Principal principal) {
         Project project = findProject(projectUid);
         scopeGuard.assertCanActIn(principal, project.getCompanyId());
+
+        // Guard: tasks cannot be added to a CANCELLED or COMPLETED project.
+        if (project.getProjectStatus() == ProjectStatus.CANCELLED
+                || project.getProjectStatus() == ProjectStatus.COMPLETED) {
+            throw new ConflictException(
+                    "Tasks cannot be created on a " + project.getProjectStatus() + " project. "
+                    + "Project " + projectUid + " must be DRAFT, ACTIVE, or ON_HOLD.");
+        }
 
         var task = new ProjectTask(project.getId(), project.getCompanyId(), project.getBranchId(),
                 req.taskCode(), req.name(), principal.userId());

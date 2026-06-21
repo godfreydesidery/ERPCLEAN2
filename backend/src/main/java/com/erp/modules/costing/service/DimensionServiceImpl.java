@@ -97,6 +97,9 @@ public class DimensionServiceImpl implements DimensionService {
 
     @Override
     public DimensionValueDto createValue(CreateDimensionValueRequest request) {
+        if (request.dimensionUid() == null || request.dimensionUid().isBlank()) {
+            throw new IllegalArgumentException("dimensionUid is required (must not be null or blank)");
+        }
         Dimension dim = dimensions.findByUid(request.dimensionUid())
                 .orElseThrow(() -> NotFoundException.of("Dimension", request.dimensionUid()));
         scopeGuard.assertCanActIn(RequestContext.get(), dim.getCompanyId());
@@ -206,6 +209,9 @@ public class DimensionServiceImpl implements DimensionService {
     @Override
     @Transactional(readOnly = true)
     public Page<DimensionValueDto> listValues(String dimensionUid, Pageable pageable) {
+        if (dimensionUid == null || dimensionUid.isBlank()) {
+            throw new IllegalArgumentException("dimensionUid is required (must not be null or blank)");
+        }
         Dimension dim = dimensions.findByUid(dimensionUid)
                 .orElseThrow(() -> NotFoundException.of("Dimension", dimensionUid));
         scopeGuard.assertCanActIn(RequestContext.get(), dim.getCompanyId());
@@ -221,6 +227,17 @@ public class DimensionServiceImpl implements DimensionService {
     @Transactional(readOnly = true)
     public Optional<DimensionValueDto> resolveValue(String uid) {
         return values.findByUid(uid)
+                .map(v -> {
+                    Dimension dim = dimensions.findById(v.getDimensionId()).orElse(null);
+                    return toValueDto(v, dim);
+                });
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<DimensionValueDto> resolveValueById(Long id) {
+        if (id == null) return Optional.empty();
+        return values.findById(id)
                 .map(v -> {
                     Dimension dim = dimensions.findById(v.getDimensionId()).orElse(null);
                     return toValueDto(v, dim);

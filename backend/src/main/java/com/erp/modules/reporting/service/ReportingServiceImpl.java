@@ -5,6 +5,7 @@ import com.erp.modules.reporting.domain.dto.AccountLedgerDto;
 import com.erp.modules.reporting.domain.dto.BalanceSheetDto;
 import com.erp.modules.reporting.domain.dto.CashFlowStatementDto;
 import com.erp.modules.reporting.domain.dto.IncomeStatementDto;
+import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.time.LocalDate;
@@ -50,6 +51,9 @@ public class ReportingServiceImpl implements ReportingService {
                                                LocalDate fromDate, LocalDate toDate,
                                                LocalDate cmpFrom,  LocalDate cmpTo) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        if (fromDate.isAfter(toDate)) {
+            throw new IllegalArgumentException("fromDate must not be after toDate.");
+        }
         LocalDate effectiveCmpFrom = cmpFrom != null ? cmpFrom : comparativeResolver.comparativeFrom(fromDate, toDate);
         LocalDate effectiveCmpTo   = cmpTo   != null ? cmpTo   : comparativeResolver.comparativeTo(fromDate);
         String companyName = resolveCompanyName(companyId);
@@ -94,7 +98,7 @@ public class ReportingServiceImpl implements ReportingService {
 
     private String resolveCompanyName(Long companyId) {
         return companyRepo.findById(companyId)
-                .map(c -> c.getName())
-                .orElse("Company " + companyId);
+                .map(com.erp.modules.iam.domain.entity.Company::getName)
+                .orElseThrow(() -> NotFoundException.of("Company", String.valueOf(companyId)));
     }
 }

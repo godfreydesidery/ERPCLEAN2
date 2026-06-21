@@ -63,6 +63,9 @@ public interface DimensionService {
     /** Resolve a dimension value uid → DTO (id/company/slot) for Budgeting/Projects. */
     Optional<DimensionValueDto> resolveValue(String uid);
 
+    /** Resolve a dimension value id → DTO for callers that only hold the numeric FK (Defect #5). */
+    Optional<DimensionValueDto> resolveValueById(Long id);
+
     /** List active values of a slot for a company — the picker source (FR-CC-15). */
     List<DimensionValueDto> listActiveValues(Long companyId, DimensionSlot slot);
 }

@@ -259,10 +259,19 @@ public class AgentServiceImpl implements AgentService {
         a.setDistrict(district);
     }
 
-    /** Applies the optional P2 D5 performance targets + country (null = clear). */
+    /**
+     * Applies the optional P2 D5 performance targets + country (null = clear).
+     * country must be ISO 3166-1 alpha-2 (exactly 2 ASCII letters) when supplied;
+     * the DB column is VARCHAR(2) — reject before the constraint fires (defect 5).
+     */
     private static void applyDefaults(Agent a, String country, java.math.BigDecimal salesTarget,
                                       java.math.BigDecimal quota) {
-        a.setCountry(country);
+        if (country != null && !country.matches("[A-Za-z]{2}")) {
+            throw new IllegalArgumentException(
+                    "country must be an ISO 3166-1 alpha-2 code (exactly 2 letters), got: '"
+                    + country + "'.");
+        }
+        a.setCountry(country != null ? country.toUpperCase() : null);
         a.setSalesTarget(salesTarget);
         a.setQuota(quota);
     }

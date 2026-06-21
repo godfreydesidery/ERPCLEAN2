@@ -6,6 +6,7 @@ import com.erp.modules.hr.domain.dto.SubmitLeaveRequest;
 import com.erp.modules.hr.domain.entity.Employee;
 import com.erp.modules.hr.domain.entity.LeaveRequest;
 import com.erp.modules.hr.domain.entity.LeaveType;
+import com.erp.modules.hr.domain.enums.EmploymentStatus;
 import com.erp.modules.hr.domain.enums.LeaveRequestStatus;
 import com.erp.modules.hr.repository.EmployeeRepository;
 import com.erp.modules.hr.repository.LeaveRequestRepository;
@@ -13,6 +14,7 @@ import com.erp.modules.hr.repository.LeaveTypeRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
@@ -51,12 +53,22 @@ public class LeaveServiceImpl implements LeaveService {
                 .orElseThrow(() -> NotFoundException.of("Employee", employeeUid));
         scopeGuard.assertCanActIn(p, emp.getCompanyId());
 
+        // D1: reject leave for non-active (terminated) employees
+        if (emp.getStatus() != EmploymentStatus.ACTIVE) {
+            throw new ConflictException("Cannot submit a leave request for an employee whose status is " + emp.getStatus() + ".");
+        }
+
         if (req.toDate().isBefore(req.fromDate())) {
             throw new IllegalArgumentException("fromDate must not be after toDate");
         }
 
         LeaveType leaveType = leaveTypes.findById(req.leaveTypeId())
                 .orElseThrow(() -> NotFoundException.of("LeaveType", String.valueOf(req.leaveTypeId())));
+
+        // D2: leave type must be active
+        if (!leaveType.isActive()) {
+            throw new ConflictException("Leave type '" + leaveType.getName() + "' is not active.");
+        }
 
         LeaveRequest lr = new LeaveRequest(emp.getCompanyId(), emp.getId(),
                 req.leaveTypeId(), req.fromDate(), req.toDate(), req.days(), req.reason(), p.userId());
@@ -93,6 +105,11 @@ public class LeaveServiceImpl implements LeaveService {
         RequestContext.Principal p = RequestContext.get();
         LeaveRequest lr = requireByUid(uid);
         scopeGuard.assertCanActIn(p, lr.getCompanyId());
+
+        // D3: only PENDING requests can be decided
+        if (lr.getStatus() != LeaveRequestStatus.PENDING) {
+            throw new IllegalStateException("Leave request is already " + lr.getStatus() + " and cannot be decided again.");
+        }
 
         if (req.decision() != LeaveRequestStatus.APPROVED && req.decision() != LeaveRequestStatus.REJECTED) {
             throw new IllegalArgumentException("Decision must be APPROVED or REJECTED.");

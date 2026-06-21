@@ -4,12 +4,14 @@ import com.erp.modules.projects.domain.dto.CreateTimesheetRequest;
 import com.erp.modules.projects.domain.dto.ProjectTimesheetDto;
 import com.erp.modules.projects.domain.entity.Project;
 import com.erp.modules.projects.domain.entity.ProjectTimesheet;
+import com.erp.modules.projects.domain.enums.ProjectStatus;
 import com.erp.modules.projects.repository.ProjectRepository;
 import com.erp.modules.projects.repository.ProjectTaskRepository;
 import com.erp.modules.projects.repository.ProjectTimesheetRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
@@ -48,6 +50,14 @@ public class ProjectTimesheetServiceImpl implements ProjectTimesheetService {
                                       RequestContext.Principal principal) {
         Project project = findProject(projectUid);
         scopeGuard.assertCanActIn(principal, project.getCompanyId());
+
+        // BR-PROJ-04: timesheets are only accepted when the project is ACTIVE.
+        // DRAFT / ON_HOLD / COMPLETED / CANCELLED all reject (PROJECTS-037 / PROJECTS-038).
+        if (project.getProjectStatus() != ProjectStatus.ACTIVE) {
+            throw new ConflictException(
+                    "Timesheets can only be recorded on an ACTIVE project. "
+                    + "Project " + projectUid + " is currently " + project.getProjectStatus() + ".");
+        }
 
         var ts = new ProjectTimesheet(project.getId(), project.getCompanyId(), project.getBranchId(),
                 req.userId(), req.workDate(), req.hours(), principal.userId());
