@@ -190,15 +190,18 @@ public class PayrollRunServiceImpl implements PayrollRunService {
         LocalDate periodStart = ym.atDay(1);
         LocalDate periodEnd   = ym.atEndOfMonth();
 
-        // Delete any previously calculated lines (idempotent recalculate)
+        // Delete any previously calculated lines (idempotent recalculate).
+        // Use deleteAllInBatch so the SQL DELETEs are sent to Postgres immediately — without a
+        // flush the write-behind cache would batch the new INSERTs before the DELETEs, violating
+        // the unique constraint uq_payroll_line_run_employee (HR-PAY-033).
         List<PayrollLine> existing = lines.findByPayrollRunIdOrderByEmployeeIdAsc(run.getId());
         if (!existing.isEmpty()) {
-            lineItems.deleteAll(
+            lineItems.deleteAllInBatch(
                     existing.stream()
                             .flatMap(l -> lineItems.findByPayrollLineIdOrderByItemKindAscLabelAsc(l.getId()).stream())
                             .toList());
             existing.forEach(l -> snapshots.findByPayrollLineId(l.getId()).ifPresent(snapshots::delete));
-            lines.deleteAll(existing);
+            lines.deleteAllInBatch(existing);
         }
 
         // Collect active employees with active contracts

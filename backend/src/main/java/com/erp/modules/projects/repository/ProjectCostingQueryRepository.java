@@ -81,8 +81,10 @@ public class ProjectCostingQueryRepository {
      * Passing {@code null} returns all branches (root/admin cross-branch view).
      */
     public List<ProjectWipRowDto> wipReport(Long companyId, Long branchId) {
-        String branchFilter = branchId != null ? " AND p.branch_id = ?" : "";
-        String sql = """
+        // Build SQL with an optional branch filter — use a StringBuilder to avoid
+        // text-block concatenation that produced a missing whitespace before GROUP BY
+        // when branchFilter was empty (PROJECTS-040 SQL failure).
+        StringBuilder sql = new StringBuilder("""
                 SELECT
                     p.uid              AS project_uid,
                     p.project_number   AS project_number,
@@ -93,21 +95,29 @@ public class ProjectCostingQueryRepository {
                                      THEN jl.credit_amount - jl.debit_amount ELSE 0 END), 0) AS billed,
                     p.currency         AS currency
                 FROM projects p
-                JOIN journal_lines jl     ON jl.project_id = p.id
+                JOIN journal_lines jl      ON jl.project_id = p.id
                 JOIN chart_of_accounts coa ON coa.id = jl.account_id
                 WHERE p.company_id = ?
                   AND jl.company_id = ?
-                """ + branchFilter + """
+                """);
+        if (branchId != null) {
+            sql.append("  AND p.branch_id = ?\n");
+        }
+        sql.append("""
                 GROUP BY p.uid, p.project_number, p.name, p.currency
                 ORDER BY p.project_number
-                """;
+                """);
         Object[] params = branchId != null
                 ? new Object[]{companyId, companyId, branchId}
                 : new Object[]{companyId, companyId};
-        return jdbc.query(sql, (rs, n) -> {
+        return jdbc.query(sql.toString(), (rs, n) -> {
             BigDecimal cost   = rs.getBigDecimal("cost_incurred");
             BigDecimal billed = rs.getBigDecimal("billed");
-            BigDecimal wip    = cost.subtract(billed).max(BigDecimal.ZERO);
+            // Null-guard: COALESCE ensures non-null for aggregate groups, but
+            // guard defensively (PROJECTS-040).
+            if (cost == null)   cost   = BigDecimal.ZERO;
+            if (billed == null) billed = BigDecimal.ZERO;
+            BigDecimal wip = cost.subtract(billed).max(BigDecimal.ZERO);
             return new ProjectWipRowDto(
                     rs.getString("project_uid"),
                     rs.getString("project_number"),

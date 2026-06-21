@@ -82,6 +82,13 @@ public class PosSessionServiceImpl implements PosSessionService {
                 .orElseThrow(() -> NotFoundException.of("PosTill", req.tillUid()));
         scopeGuard.assertCanActIn(RequestContext.get(), till.getCompanyId());
 
+        // Guard: reject if till is not ACTIVE (INACTIVE/ARCHIVED tills cannot open sessions).
+        if (till.getStatus() != com.erp.platform.common.domain.MasterStatus.ACTIVE) {
+            throw new ConflictException(
+                    "Till " + req.tillUid() + " is " + till.getStatus()
+                            + " and cannot open a session. Activate the till first.");
+        }
+
         // Enforce at-most-one-open constraint (mirrors DB partial unique index)
         if (sessions.findByPosTillIdAndStatus(till.getId(), PosSessionStatus.OPEN).isPresent()) {
             throw new ConflictException("Till " + req.tillUid() + " already has an OPEN session.");

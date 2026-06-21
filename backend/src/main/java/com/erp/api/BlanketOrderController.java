@@ -58,6 +58,7 @@ public class BlanketOrderController {
     }
 
     @DeleteMapping("/uid/{uid}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("@perm.scoped(#uid,'blanketorder','SALES.BLANKET.MANAGE')")
     public void cancel(@PathVariable String uid) {
         blanketOrderService.cancelBlanket(uid);
@@ -67,6 +68,14 @@ public class BlanketOrderController {
     @PreAuthorize("@perm.scoped(#uid,'blanketorder','SALES.BLANKET.MANAGE')")
     public SalesOrderDto draw(@PathVariable String uid,
                                @Valid @RequestBody DrawBlanketRequest request) {
+        // Path uid is authoritative (SALES-ORDERS-035 control-gap). Reject when the body
+        // blanketUid disagrees with the URL so callers cannot silently draw against a
+        // different blanket than the one the path permission was evaluated for.
+        if (!uid.equals(request.blanketUid())) {
+            throw new IllegalArgumentException(
+                    "Path uid '" + uid + "' does not match body blanketUid '"
+                            + request.blanketUid() + "'. Use the path uid as the authoritative reference.");
+        }
         return blanketOrderService.drawAgainstBlanket(request);
     }
 }

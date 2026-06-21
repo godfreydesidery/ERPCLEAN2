@@ -202,9 +202,13 @@ public class SupplierServiceImpl implements SupplierService {
         validateBankAccountIdentifiers(req.accountNo(), req.iban());
 
         if (req.isDefault()) {
-            // clear existing default before setting the new one
+            // Clear the existing default and flush before inserting the new default row,
+            // to avoid a momentary two-row violation on the partial unique index (PARTIES-SUPPLIERS-054).
             bankAccounts.findBySupplierIdAndIsDefaultTrue(s.getId())
-                    .ifPresent(existing -> { existing.setDefault(false); bankAccounts.save(existing); });
+                    .ifPresent(existing -> {
+                        existing.setDefault(false);
+                        bankAccounts.saveAndFlush(existing);
+                    });
         }
 
         SupplierBankAccount sba = new SupplierBankAccount(
@@ -274,9 +278,16 @@ public class SupplierServiceImpl implements SupplierService {
         Supplier s = require(supplierUid);
         scopeGuard.assertCanActIn(RequestContext.get(), s.getCompanyId());
         SupplierBankAccount sba = requireBankAccount(bankAccountUid, s.getId());
-        // clear existing default
+        // Clear the existing default first and flush so the DB UPDATE reaches Postgres before
+        // the UPDATE that sets the new default — prevents a momentary two-row violation on the
+        // partial unique index uq_supplier_bank_account_default (PARTIES-SUPPLIERS-054).
         bankAccounts.findBySupplierIdAndIsDefaultTrue(s.getId())
-                .ifPresent(existing -> { existing.setDefault(false); bankAccounts.save(existing); });
+                .ifPresent(existing -> {
+                    if (existing != sba) { // reference identity: same row => same JPA instance; null-safe for unsaved rows
+                        existing.setDefault(false);
+                        bankAccounts.saveAndFlush(existing);
+                    }
+                });
         sba.setDefault(true);
         sba.setUpdatedAt(Instant.now());
         sba.setUpdatedBy(actorId());

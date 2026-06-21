@@ -146,13 +146,15 @@ public class GLPostingServiceImpl implements GLPostingService {
                 draft.companyId(), draft.branchId(), batchNumber,
                 draft.sourceType(), draft.description(), draft.postedBy(), draft.postedBy()));
 
-        // 7. Persist entry
+        // 7. Persist entry — stamp totalDebit/totalCredit from the already-validated sums (Defect #1)
         JournalEntry entry = new JournalEntry(
                 draft.companyId(), draft.branchId(), batch.getId(),
                 draft.postingDate(), draft.description(),
                 draft.sourceType(), draft.sourceRef(),
                 draft.postedBy(), draft.postedBy());
         entry.setFiscalPeriodId(period.getId());
+        entry.setTotalDebit(totalDebit);
+        entry.setTotalCredit(totalCredit);
         if (draft.reversalOfId() != null) {
             entry.setReversalOfId(draft.reversalOfId());
         }

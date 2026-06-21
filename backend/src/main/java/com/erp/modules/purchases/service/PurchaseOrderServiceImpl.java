@@ -1,5 +1,7 @@
 package com.erp.modules.purchases.service;
 
+import com.erp.modules.iam.domain.entity.Branch;
+import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.parties.domain.entity.Supplier;
 import com.erp.modules.parties.repository.PaymentTermsRepository;
@@ -78,6 +80,8 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     private final PoApprovalGate              approvalGate;
     private final SupplierQuoteRepository     quotes;
     private final SupplierQuoteLineRepository quoteLines;
+    // APPROVALS-047: branch uid resolution for approval engine submit
+    private final BranchRepository            branches;
 
     public PurchaseOrderServiceImpl(PurchaseOrderRepository orders,
                                     PurchaseOrderLineRepository lines,
@@ -94,7 +98,8 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                                     AuditService audit,
                                     PoApprovalGate approvalGate,
                                     SupplierQuoteRepository quotes,
-                                    SupplierQuoteLineRepository quoteLines) {
+                                    SupplierQuoteLineRepository quoteLines,
+                                    BranchRepository branches) {
         this.orders       = orders;
         this.lines        = lines;
         this.receipts     = receipts;
@@ -111,6 +116,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         this.approvalGate = approvalGate;
         this.quotes       = quotes;
         this.quoteLines   = quoteLines;
+        this.branches     = branches;
     }
 
     // -------------------------------------------------------------------------
@@ -377,6 +383,11 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         PurchaseOrder po = requireOrder(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), po.getCompanyId());
 
+        // FLOW-PROCURE-TO-PAY-035 (a): null/blank reason must be rejected before any Map.of call
+        if (req.reason() == null || req.reason().isBlank()) {
+            throw new IllegalArgumentException("A void reason is required (FR-PURCH-09).");
+        }
+
         if (po.getStatus() == PurchaseOrderStatus.RECEIVED
                 || po.getStatus() == PurchaseOrderStatus.CLOSED) {
             throw new IllegalStateException(
@@ -400,6 +411,13 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
             }
         }
 
+        // FLOW-PROCURE-TO-PAY-035 (b): chk_purchase_order_number_when_ordered requires
+        // order_number IS NOT NULL for any status != DRAFT.  A DRAFT has no number yet, so
+        // assign one before changing the status to VOID.
+        if (po.getStatus() == PurchaseOrderStatus.DRAFT && po.getOrderNumber() == null) {
+            po.setOrderNumber(numberGen.nextPurchaseOrder(po.getCompanyId()));
+        }
+
         po.setStatus(PurchaseOrderStatus.VOID);
         po.setVoidedAt(Instant.now());
         po.setVoidedBy(actorId());
@@ -407,7 +425,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         po.setUpdatedAt(Instant.now());
         po.setUpdatedBy(actorId());
 
-        String number = po.getOrderNumber() != null ? po.getOrderNumber() : "(DRAFT)";
+        String number = po.getOrderNumber();   // never null here — assigned above if was DRAFT
         audit.record(AuditEvent.of(AuditActions.PURCHASE_ORDER_VOID, "purchase_orders",
                         po.getId(), po.getUid())
                 .detail(Map.of("orderNumber", number, "voidReason", req.reason())));
@@ -635,6 +653,40 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         audit.record(AuditEvent.of(AuditActions.PO_REJECT, "purchase_orders",
                 po.getId(), po.getUid())
                 .detail(Map.of("reason", reason)));
+        return toDto(po);
+    }
+
+    // APPROVALS-047: submit DRAFT PO to the approval engine so approval_request rows are created
+    @Override
+    public PurchaseOrderDto submitForApproval(String uid) {
+        PurchaseOrder po = requireOrder(uid);
+        scopeGuard.assertCanActIn(RequestContext.get(), po.getCompanyId());
+        assertDraft(po, "submit for approval");
+
+        if (!approvalGate.requiresApproval(po, null)) {
+            throw new IllegalStateException(
+                    "PO does not require approval (below threshold or gate disabled, ADR-0027 D-6). "
+                            + "Place it directly via /place.");
+        }
+        if (po.getApprovalStatus() == PoApprovalStatus.PENDING) {
+            throw new IllegalStateException(
+                    "PO is already pending approval (approval_request_uid=" + po.getApprovalRequestUid() + ").");
+        }
+
+        // Resolve branch uid for the engine's policy lookup
+        String branchUid = branches.findById(po.getBranchId())
+                .map(Branch::getUid)
+                .orElseThrow(() -> new NotFoundException("Branch not found: " + po.getBranchId()));
+
+        approvalGate.submit(po, branchUid);   // sets approval_status + approval_request_uid on po
+        po.setUpdatedAt(Instant.now());
+        po.setUpdatedBy(actorId());
+
+        audit.record(AuditEvent.of(AuditActions.PO_APPROVE, "purchase_orders",
+                        po.getId(), po.getUid())
+                .detail(Map.of("action", "submitted_for_approval",
+                        "approvalRequestUid", po.getApprovalRequestUid() != null
+                                ? po.getApprovalRequestUid() : "")));
         return toDto(po);
     }
 

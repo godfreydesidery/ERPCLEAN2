@@ -3,7 +3,6 @@ package com.erp.api;
 import com.erp.modules.projects.domain.dto.ProjectPnlDto;
 import com.erp.modules.projects.domain.dto.ProjectWipRowDto;
 import com.erp.modules.projects.service.ProjectCostingQuery;
-import com.erp.platform.common.api.ApiResponse;
 import com.erp.platform.security.RequestContext;
 import java.util.List;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -35,7 +34,8 @@ public class ProjectCostingController {
 
     @GetMapping("/wip")
     @PreAuthorize("@perm.has('PROJECTS.COSTING.VIEW')")
-    public ApiResponse<List<ProjectWipRowDto>> wipReport(@RequestParam Long companyId) {
-        return ApiResponse.ok(costingQuery.wipReport(companyId, RequestContext.get()));
+    public List<ProjectWipRowDto> wipReport(@RequestParam Long companyId) {
+        // PROJECTS-040: return raw List — ApiResponseAdvice wraps it; never wrap manually.
+        return costingQuery.wipReport(companyId, RequestContext.get());
     }
 }

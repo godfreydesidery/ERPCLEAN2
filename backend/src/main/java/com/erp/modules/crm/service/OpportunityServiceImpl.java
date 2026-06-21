@@ -245,7 +245,7 @@ public class OpportunityServiceImpl implements OpportunityService {
             throw new IllegalStateException("Only OPEN opportunities can be won; current: " + opp.getOpportunityStatus());
         }
         opp.setOpportunityStatus(OpportunityStatus.WON);
-        opp.setWonAt(req.wonAt() != null ? req.wonAt() : Instant.now());
+        opp.setWonAt(req.wonAt());
         opp.setUpdatedAt(Instant.now());
         opp.setUpdatedBy(actorId());
 

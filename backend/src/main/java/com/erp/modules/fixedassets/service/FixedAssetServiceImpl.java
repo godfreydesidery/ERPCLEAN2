@@ -12,6 +12,7 @@ import com.erp.modules.fixedassets.domain.dto.TransferAssetRequest;
 import com.erp.modules.fixedassets.domain.dto.UpdateAssetRequest;
 import com.erp.modules.fixedassets.domain.entity.AssetCategory;
 import com.erp.modules.fixedassets.domain.entity.FixedAsset;
+import com.erp.modules.fixedassets.domain.enums.DepreciationMethod;
 import com.erp.modules.fixedassets.domain.enums.FixedAssetStatus;
 import com.erp.modules.fixedassets.repository.AssetCategoryRepository;
 import com.erp.modules.fixedassets.repository.FixedAssetRepository;
@@ -65,6 +66,19 @@ public class FixedAssetServiceImpl implements FixedAssetService {
     public FixedAssetDto register(RegisterAssetRequest req) {
         scopeGuard.assertCanActIn(RequestContext.get(), req.companyId());
         requireCategory(req.companyId(), req.categoryId());
+
+        // Defect 4: reject a negative acquisitionCost before the DB constraint fires.
+        if (req.acquisitionCost() != null && req.acquisitionCost().compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException(
+                    "acquisitionCost must be zero or positive (BR-FA-04).");
+        }
+        // Defect 3: REDUCING_BALANCE requires a positive reducingRate — catch before schedule
+        // generation causes an NPE on asset.getReducingRate().divide(...).
+        if (req.depreciationMethod() == DepreciationMethod.REDUCING_BALANCE
+                && (req.reducingRate() == null || req.reducingRate().compareTo(BigDecimal.ZERO) <= 0)) {
+            throw new IllegalArgumentException(
+                    "REDUCING_BALANCE depreciation requires a positive reducingRate (BR-FA-05).");
+        }
 
         String assetNumber = numberGenerator.nextAssetNumber(req.companyId());
         BigDecimal salvage = req.salvageValue() != null ? req.salvageValue() : BigDecimal.ZERO;

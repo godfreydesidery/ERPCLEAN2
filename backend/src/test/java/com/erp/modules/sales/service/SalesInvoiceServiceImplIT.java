@@ -47,6 +47,7 @@ import com.erp.modules.sales.service.TaxRateSeeder;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditLog;
 import com.erp.platform.audit.AuditRepository;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.ForbiddenException;
 import com.erp.platform.common.money.MoneyDto;
 import com.erp.platform.security.RequestContext;
@@ -102,6 +103,7 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
 
     // companyA seeded parties + product
     private String customerAUid;
+    private String creditCustomerUid;   // CREDIT_ACCOUNT — finalises without a payment
     private String agentAUid;
     private String pcsUid;
     private String priceListAUid;
@@ -153,12 +155,19 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
         productService.setPrice(productZeroUid,
                 new SetProductPriceRequest(priceListAUid, new MoneyDto("500", "TZS")));
 
-        // Seed customer for companyA
+        // Seed cash customer for companyA
         CustomerDto cust = customerService.create(new CreateCustomerRequest(
                 companyA.getId(), PartyType.INDIVIDUAL, "Test Customer A",
                 null, null, null, null, null, null, null, null, null, null, null, null,
                 CustomerKind.CASH_WALK_IN, null, null, null));
         customerAUid = cust.uid();
+
+        // Seed credit customer for companyA (no credit limit — finalises without a payment)
+        CustomerDto creditCust = customerService.create(new CreateCustomerRequest(
+                companyA.getId(), PartyType.INDIVIDUAL, "Credit Customer A",
+                null, null, null, null, null, null, null, null, null, null, null, null,
+                CustomerKind.CREDIT_ACCOUNT, null, null, null));
+        creditCustomerUid = creditCust.uid();
 
         // Seed external agent for companyA
         AgentDto ag = agentService.create(new CreateAgentRequest(
@@ -490,10 +499,12 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
     // -----------------------------------------------------------------------
 
     @Test
-    void void_finalised_setsStatusVoidAndRetainsNumber() {
-        SalesInvoiceDto draft = salesInvoiceService.create(invoiceRequest());
+    void void_finalised_creditCustomer_noPayments_setsStatusVoidAndRetainsNumber() {
+        // Use a CREDIT_ACCOUNT customer so the invoice finalises without requiring a payment.
+        // No direct tender is applied → the direct-payment void guard (FLOW-ORDER-TO-CASH-027)
+        // does not fire → void succeeds.
+        SalesInvoiceDto draft = salesInvoiceService.create(creditInvoiceRequest());
         addStandardLine(draft.uid(), "1");
-        addExactPayment(draft.uid(), "1180", TenderType.CASH);
         salesInvoiceService.finalise(draft.uid(), new FinaliseInvoiceRequest());
 
         salesInvoiceService.voidInvoice(draft.uid(), new VoidInvoiceRequest("Test void reason"));
@@ -503,6 +514,39 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
         assertThat(result.invoiceNumber()).isEqualTo("INV-0001");
         assertThat(result.voidReason()).isEqualTo("Test void reason");
         assertThat(result.voidedAt()).isNotNull();
+    }
+
+    @Test
+    void void_fullyPaidDirectInvoice_rejected_FLOW_ORDER_TO_CASH_027() {
+        // CASH_WALK_IN customer with a full cash payment: effective settled = 1180 > 0.
+        // voidInvoice must throw ConflictException (FLOW-ORDER-TO-CASH-027 direct-payment path).
+        SalesInvoiceDto draft = salesInvoiceService.create(invoiceRequest());
+        addStandardLine(draft.uid(), "1");
+        addExactPayment(draft.uid(), "1180", TenderType.CASH);
+        salesInvoiceService.finalise(draft.uid(), new FinaliseInvoiceRequest());
+
+        assertThatThrownBy(() -> salesInvoiceService.voidInvoice(draft.uid(),
+                new VoidInvoiceRequest("should be blocked")))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("direct payments")
+                .hasMessageContaining("FLOW-ORDER-TO-CASH-027");
+    }
+
+    @Test
+    void void_partiallyPaidDirectInvoice_rejected_FLOW_ORDER_TO_CASH_027() {
+        // CREDIT_ACCOUNT customer with a partial cash payment: settled > 0, even though
+        // the invoice is not fully paid. The guard blocks on ANY applied tender.
+        SalesInvoiceDto draft = salesInvoiceService.create(creditInvoiceRequest());
+        addStandardLine(draft.uid(), "1");
+        salesInvoiceService.addPayment(draft.uid(), new AddPaymentRequest(
+                TenderType.CASH, new BigDecimal("500"), "TZS", null));
+        salesInvoiceService.finalise(draft.uid(), new FinaliseInvoiceRequest());
+
+        assertThatThrownBy(() -> salesInvoiceService.voidInvoice(draft.uid(),
+                new VoidInvoiceRequest("should be blocked")))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("direct payments")
+                .hasMessageContaining("FLOW-ORDER-TO-CASH-027");
     }
 
     @Test
@@ -884,6 +928,12 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
     private CreateSalesInvoiceRequest invoiceRequest() {
         return new CreateSalesInvoiceRequest(
                 companyA.getUid(), customerAUid, agentAUid, "TZS", null, null);
+    }
+
+    /** Invoice request for a CREDIT_ACCOUNT customer — finalises without requiring a payment. */
+    private CreateSalesInvoiceRequest creditInvoiceRequest() {
+        return new CreateSalesInvoiceRequest(
+                companyA.getUid(), creditCustomerUid, agentAUid, "TZS", null, null);
     }
 
     /** Add a single unit of productAUid (STANDARD, price 1000 TZS). */

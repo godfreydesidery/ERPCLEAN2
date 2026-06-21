@@ -1,5 +1,7 @@
 package com.erp.modules.projects.domain.dto;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -16,13 +18,15 @@ public record IssueToProjectRequest(
         @NotBlank String branchUid,
         @NotBlank String projectUid,
         String projectTaskUid,
-        @NotEmpty List<IssueLine> lines,
+        @NotEmpty @Valid List<IssueLine> lines,
         LocalDate issueDate,
         String reason
 ) {
     /** One product line in an issue-to-project request. */
     public record IssueLine(
             @NotBlank String productUid,
-            @NotNull BigDecimal qty
+            // PROJECTS-044: qty = 0 passes @NotNull but fails chk_stock_movement_qty (quantity <> 0)
+            // at the DB level → DataIntegrityViolationException → 400. Catch it at validation layer.
+            @NotNull @DecimalMin(value = "0.0001", message = "qty must be greater than zero") BigDecimal qty
     ) {}
 }

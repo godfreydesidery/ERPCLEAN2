@@ -2,6 +2,7 @@ package com.erp.modules.hr.domain.dto;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import java.math.BigDecimal;
@@ -12,7 +13,7 @@ public record CreatePayeBandSetRequest(
         @NotNull LocalDate effectiveFrom,
         @NotNull @PositiveOrZero BigDecimal taxFreeThreshold,
         String description,
-        @NotNull @Valid List<BandRequest> bands
+        @NotNull @NotEmpty @Valid List<BandRequest> bands
 ) {
     public record BandRequest(
             short bandNo,

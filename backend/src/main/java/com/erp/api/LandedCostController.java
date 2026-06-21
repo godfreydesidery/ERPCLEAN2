@@ -8,6 +8,7 @@ import com.erp.platform.common.api.PageMeta;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -35,7 +36,7 @@ public class LandedCostController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("@perm.scoped(#req.companyUid(), 'company', 'PURCHASE.LANDED_COST.CREATE')")
-    public ApiResponse<LandedCostDto> create(@RequestBody CreateLandedCostRequest req) {
+    public ApiResponse<LandedCostDto> create(@Valid @RequestBody CreateLandedCostRequest req) {
         return ApiResponse.ok(service.create(req));
     }
 

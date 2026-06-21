@@ -35,6 +35,10 @@ web/pw-*.txt
 # Local infra data
 infra/local-data/
 
+# QA UAT run scratch (raw agent results, OpenAPI snapshot, helper scripts) — regenerated per run.
+# The curated UAT deliverables under docs/testing/ ARE tracked; this scratch is not.
+.qa-run/
+
 # IDE / OS
 .idea/
 *.iml

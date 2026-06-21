@@ -211,7 +211,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
                         "billUid", req.supplierBillUid())));
 
         List<ApPaymentAllocation> allocList = allocations.findByApPaymentId(payment.getId());
-        return toDto(payment, allocList);
+        return toDto(payment, allocList, bills);
     }
 
     // -------------------------------------------------------------------------
@@ -345,7 +345,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
                         "totalPaid", totalPaid.toPlainString(),
                         "billCount", String.valueOf(openBills.size()))));
 
-        return toDto(payment, allocList);
+        return toDto(payment, allocList, bills);
     }
 
     // -------------------------------------------------------------------------
@@ -358,7 +358,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         ApPayment payment = Lookups.orNotFound(payments.findByUid(uid), "ApPayment", uid);
         scopeGuard.assertCanActIn(RequestContext.get(), payment.getCompanyId());
         List<ApPaymentAllocation> allocList = allocations.findByApPaymentId(payment.getId());
-        return toDto(payment, allocList);
+        return toDto(payment, allocList, bills);
     }
 
     @Override
@@ -366,7 +366,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
     public Page<ApPaymentDto> listByCompany(Long companyId, Pageable pageable) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
         return payments.findByCompanyId(companyId, pageable)
-                .map(p -> toDto(p, allocations.findByApPaymentId(p.getId())));
+                .map(p -> toDto(p, allocations.findByApPaymentId(p.getId()), bills));
     }
 
     @Override
@@ -374,7 +374,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
     public Page<ApPaymentDto> listBySupplier(Long companyId, Long supplierId, Pageable pageable) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
         return payments.findByCompanyIdAndSupplierId(companyId, supplierId, pageable)
-                .map(p -> toDto(p, allocations.findByApPaymentId(p.getId())));
+                .map(p -> toDto(p, allocations.findByApPaymentId(p.getId()), bills));
     }
 
     // -------------------------------------------------------------------------
@@ -553,10 +553,15 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         return p != null ? p.userId() : null;
     }
 
-    static ApPaymentDto toDto(ApPayment p, List<ApPaymentAllocation> allocList) {
+    static ApPaymentDto toDto(ApPayment p, List<ApPaymentAllocation> allocList,
+                               SupplierBillRepository billRepo) {
         List<PaymentAllocationDto> dtoAllocs = allocList.stream()
-                .map(a -> new PaymentAllocationDto(
-                        a.getId(), a.getSupplierBillId(), null, a.getAllocatedAmount()))
+                .map(a -> {
+                    String billUid = billRepo.findById(a.getSupplierBillId())
+                            .map(b -> b.getUid()).orElse(null);
+                    return new PaymentAllocationDto(
+                            a.getId(), a.getSupplierBillId(), billUid, a.getAllocatedAmount());
+                })
                 .toList();
         return new ApPaymentDto(
                 p.getId(), p.getUid(), p.getCompanyId(), p.getBranchId(), p.getSupplierId(),

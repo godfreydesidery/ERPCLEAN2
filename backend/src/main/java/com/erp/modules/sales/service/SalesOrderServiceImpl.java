@@ -320,10 +320,32 @@ public class SalesOrderServiceImpl implements SalesOrderService {
     private void doCancel(String orderUid, CancelSalesOrderRequest req) {
         SalesOrder order = require(orderUid);
         scopeGuard.assertCanActIn(RequestContext.get(), order.getCompanyId());
-        if (order.getStatus() == SalesOrderStatus.CANCELLED
-                || order.getStatus() == SalesOrderStatus.CLOSED) {
-            throw new IllegalStateException(
-                    "Cannot cancel an order in status " + order.getStatus());
+        // FLOW-ORDER-TO-CASH-028: FULFILLED, PARTIALLY_INVOICED, INVOICED, and CLOSED orders
+        // have committed stock movements or posted invoices and must not be cancelled.
+        // CANCELLED is already terminal. Allow cancellation only from DRAFT or CONFIRMED
+        // (where reservations can still be safely released), or PARTIALLY_FULFILLED
+        // (open qty can be released; fulfilled lines already have delivery records).
+        switch (order.getStatus()) {
+            case CANCELLED ->
+                throw new IllegalStateException("Order " + orderUid + " is already CANCELLED.");
+            case FULFILLED ->
+                throw new com.erp.platform.common.api.ConflictException(
+                        "Cannot cancel order " + orderUid + ": it is FULFILLED. All stock has been "
+                                + "dispatched. Raise a sales return to reverse it "
+                                + "(FLOW-ORDER-TO-CASH-028).");
+            case PARTIALLY_INVOICED ->
+                throw new com.erp.platform.common.api.ConflictException(
+                        "Cannot cancel order " + orderUid + ": it is PARTIALLY_INVOICED. "
+                                + "One or more invoices have been raised (FLOW-ORDER-TO-CASH-028).");
+            case INVOICED ->
+                throw new com.erp.platform.common.api.ConflictException(
+                        "Cannot cancel order " + orderUid + ": it is INVOICED. "
+                                + "All lines have been invoiced (FLOW-ORDER-TO-CASH-028).");
+            case CLOSED ->
+                throw new com.erp.platform.common.api.ConflictException(
+                        "Cannot cancel order " + orderUid + ": it is CLOSED "
+                                + "(FLOW-ORDER-TO-CASH-028).");
+            default -> { /* DRAFT, CONFIRMED, PARTIALLY_FULFILLED — proceed */ }
         }
 
         // Release remaining reservation for each line (D-4/D-5)
