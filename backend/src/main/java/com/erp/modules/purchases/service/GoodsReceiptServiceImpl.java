@@ -34,6 +34,8 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -54,6 +56,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Transactional
 public class GoodsReceiptServiceImpl implements GoodsReceiptService {
+
+    private static final Logger log = LoggerFactory.getLogger(GoodsReceiptServiceImpl.class);
 
     private final GoodsReceiptRepository      receipts;
     private final GoodsReceiptLineRepository  grLines;
@@ -293,14 +297,18 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
         BigDecimal qtyInBase = lineReq.receivedQty().multiply(factor)
                 .setScale(6, java.math.RoundingMode.HALF_UP);
 
-        // Over-receipt check (BR-PURCH-10, ADR-0011 D-3): friendly 409 before the DB CHECK fires
+        // Over-receipt check (BR-PURCH-10, ADR-0011 D-3): friendly 409 before the DB CHECK fires.
+        // The user-facing message stays free of internal detail (ULID, base-unit values, rule/ADR
+        // codes) — those go to the log only, so the error shown to the user is safe and readable.
         BigDecimal outstanding = poLine.getOrderedQtyInBase().subtract(poLine.getReceivedQtyInBase());
         if (qtyInBase.compareTo(outstanding) > 0) {
+            log.warn("Over-receipt rejected (BR-PURCH-10, ADR-0011 D-3) on PO line id={} uid={}: "
+                            + "outstanding={}, requestedQtyInBase={}",
+                    poLine.getId(), poLine.getUid(), outstanding, qtyInBase);
             throw new IllegalStateException(
-                    "Over-receipt rejected on PO line " + poLine.getUid()
-                            + ": outstanding=" + outstanding
-                            + ", requested qtyInBase=" + qtyInBase
-                            + " (BR-PURCH-10, ADR-0011 D-3).");
+                    "Over-receipt rejected for " + poLine.getProductName()
+                            + ": the quantity received exceeds the outstanding amount on this line. "
+                            + "Reduce it and try again.");
         }
 
         short nextLineNo = (short) (grLines.findMaxLineNo(gr.getId()) + 1);
