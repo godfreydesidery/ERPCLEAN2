@@ -61,3 +61,10 @@ backend/src/main/resources/static/
 
 # Microsoft Office lock/temp files (e.g. ~$USER-MANUAL.docx — created while a doc is open)
 ~$*
+
+# User-manual screenshots are heavy — keep them, and the image-rich build, local-only.
+# The text-only docs/USER-MANUAL.md + .docx are committed; (re)create these with
+# web/e2e/capture-screenshots.mjs + docs/tools/build-manual.sh.
+docs/user-manual/images/
+docs/USER-MANUAL.with-images.md
+docs/USER-MANUAL.with-images.docx
