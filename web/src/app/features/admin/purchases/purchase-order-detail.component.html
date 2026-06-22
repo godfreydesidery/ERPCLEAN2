@@ -125,6 +125,23 @@
                 Void Order
               </button>
             }
+
+            <!-- Print PDF (any status except DRAFT + DOCUMENT.RENDER) -->
+            @if (!isDraft() && canPrint()) {
+              <button type="button" class="btn btn-outline-secondary"
+                      [disabled]="printing()"
+                      (click)="printPdf()">
+                @if (printing()) {
+                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                } @else {
+                  <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>
+                }
+                Print PDF
+              </button>
+              @if (printError(); as msg) {
+                <span class="text-danger small align-self-center" role="alert">{{ msg }}</span>
+              }
+            }
           </div>
 
           <!-- Void form -->
