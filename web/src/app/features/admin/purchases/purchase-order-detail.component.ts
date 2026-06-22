@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { DatePipe } from '@angular/common';
-import { Component, computed, inject, input, signal } from '@angular/core';
+import { Component, computed, DestroyRef, inject, input, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -15,6 +15,7 @@ import {
   VoidPurchaseOrderRequest,
 } from '../models/purchases.model';
 import { ProductService } from '../products/product.service';
+import { DocumentsService } from '../documents/documents.service';
 import { PurchasesService } from './purchases.service';
 
 type LoadState = 'loading' | 'idle' | 'error';
@@ -39,8 +40,10 @@ type LoadState = 'loading' | 'idle' | 'error';
 export class PurchaseOrderDetailComponent {
   private readonly purchasesService = inject(PurchasesService);
   private readonly productService = inject(ProductService);
+  private readonly documentsService = inject(DocumentsService);
   private readonly alerts = inject(AlertService);
   protected readonly session = inject(SessionStore);
+  private readonly destroyRef = inject(DestroyRef);
 
   /** Route input via withComponentInputBinding. */
   readonly uid = input.required<string>();
@@ -83,10 +86,15 @@ export class PurchaseOrderDetailComponent {
   readonly voiding = signal(false);
   readonly voidError = signal<string | null>(null);
 
+  // ── Print PDF ────────────────────────────────────────────────────────────
+  readonly printing = signal(false);
+  readonly printError = signal<string | null>(null);
+
   // ── Permissions ────────────────────────────────────────────────────────────
   readonly canCreate = computed(() => this.session.hasPermission('PURCHASE.ORDER.CREATE'));
   readonly canVoid = computed(() => this.session.hasPermission('PURCHASE.ORDER.VOID'));
   readonly canReceive = computed(() => this.session.hasPermission('PURCHASE.RECEIVE'));
+  readonly canPrint = computed(() => this.session.hasPermission('DOCUMENT.RENDER'));
 
   // ── Derived state ──────────────────────────────────────────────────────────
   readonly isDraft = computed(() => this.po()?.status === 'DRAFT');
@@ -335,6 +343,34 @@ export class PurchaseOrderDetailComponent {
     });
   }
 
+  // ── Print PDF ────────────────────────────────────────────────────────────
+
+  /**
+   * Render the purchase order as a PDF and trigger a browser download.
+   * Mirrors the documents-module pattern (DocumentsService.renderBlob →
+   * triggerBlobDownload). Hidden for DRAFT orders in the template so an
+   * unconfirmed order is never shared with a supplier.
+   */
+  printPdf(): void {
+    if (this.printing()) return;
+    this.printing.set(true);
+    this.printError.set(null);
+    this.documentsService
+      .renderBlob('PURCHASE_ORDER', this.uid())
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (blob) => {
+          this.printing.set(false);
+          const name = `purchase-order-${this.po()?.orderNumber ?? this.uid()}.pdf`;
+          triggerBlobDownload(blob, name);
+        },
+        error: (err) => {
+          this.printing.set(false);
+          this.printError.set(this.messageFrom(err, 'Could not generate the PDF.'));
+        },
+      });
+  }
+
   private messageFrom(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {
       const errors = (err.error as { errors?: string[] })?.errors;
@@ -342,4 +378,14 @@ export class PurchaseOrderDetailComponent {
     }
     return fallback;
   }
+}
+
+/** Create an object URL for a blob and click a synthetic anchor to download it. */
+function triggerBlobDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }

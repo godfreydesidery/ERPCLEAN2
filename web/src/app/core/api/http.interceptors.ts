@@ -91,7 +91,12 @@ export const authErrorInterceptor: HttpInterceptorFn = (req, next) => {
           session.clear();
           // Mid-redirect to /login — a lightweight toast, not a blocking modal.
           toasts.error('Your session has expired. Please sign in again.');
-          void router.navigateByUrl('/login');
+          // Preserve the page the user was on so login can send them back there, not to the
+          // dashboard. replaceUrl keeps the dead page out of history so Back doesn't loop.
+          void router.navigate(['/login'], {
+            queryParams: { returnUrl: router.url },
+            replaceUrl: true,
+          });
         }
         return throwError(() => err);
       }
