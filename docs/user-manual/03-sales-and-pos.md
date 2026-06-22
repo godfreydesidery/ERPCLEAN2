@@ -30,6 +30,7 @@ Walk-in cash sales skip the first three steps and begin directly with a Sales In
 | Pricing Rules | `SALES.PRICING.RULE.VIEW`, `SALES.PRICING.RULE.MANAGE` |
 | POS (tills) | `POS.TILL.VIEW`, `POS.TILL.MANAGE` |
 | POS (cashier) | `POS.SESSION.OPEN`, `POS.SALE.CREATE`, `POS.SESSION.VIEW` |
+| POS (reverse / age override) | `POS.SALE.VOID`, `POS.SALE.AGE_OVERRIDE` |
 | POS (close/reconcile) | `POS.SESSION.CLOSE`, `POS.SESSION.RECONCILE` |
 
 Contact your administrator if an expected menu item is missing.
@@ -41,6 +42,8 @@ Contact your administrator if an expected menu item is missing.
 ## 1. Quotations
 
 Navigate to **Sales › Quotations** (`/admin/quotations`).
+
+![Sales quotations](images/03-sales-and-pos/quotations.png)
 
 **What a quotation is.** A quotation (also called a quote or a sales proposal) is a formal written offer that the business sends to a customer. It states the products, quantities, unit prices, any discounts, and a validity period — that is, the date by which the customer must respond if the offered price is to be honoured.
 
@@ -121,6 +124,8 @@ Karibu calls back and accepts. Ali clicks **Accept & Convert to Order**. The sys
 
 Navigate to **Sales › Sales Orders** (`/admin/sales-orders`).
 
+![Sales orders](images/03-sales-and-pos/sales-orders.png)
+
 **What a Sales Order is.** A Sales Order (SO) is the internal document that records a customer's confirmed purchase intent. It lists the products, quantities, agreed prices, and any discounts. Unlike a quotation (which is an offer), a Sales Order is a commitment: the business has agreed to supply, and the customer has agreed to buy.
 
 **Why Sales Orders exist.** The Sales Order is the control centre of the fulfilment process. Two things happen that do not happen at the quotation stage: first, confirming the order **reserves stock** so those goods cannot be sold to someone else; second, the order creates the traceability link between the customer's request, the delivery that ships the goods, and the invoice that bills them. Without Sales Orders, a warehouse would not know what to pick, finance would have no basis for revenue recognition, and there would be no way to track partial deliveries or backorders systematically.
@@ -193,6 +198,8 @@ Cancellation is allowed from any status except **CANCELLED** and **CLOSED**.
 
 Navigate to **Sales › Deliveries** (`/admin/deliveries`).
 
+![Deliveries](images/03-sales-and-pos/deliveries.png)
+
 **What a Delivery is.** A Delivery is the document that records goods physically leaving the warehouse and being shipped or handed to the customer. It references the Sales Order it fulfils and specifies the exact quantities dispatched on that date. It is also sometimes called a "dispatch note" or "delivery note."
 
 **Why Deliveries exist.** Without a delivery document there is no system record of when goods actually left — only what was ordered. The Delivery is the trigger for two critical events: it reduces the physical stock balance (goods have left), and it becomes the source document for the customer's invoice (you invoice what you delivered, not what was ordered — because partial deliveries are common). The delivery is also the moment that the cost of those goods is posted to the Profit and Loss account as Cost of Goods Sold (COGS), matching the cost to the revenue period in which the goods are billed.
@@ -234,6 +241,8 @@ Proceed to section 4 to finalise the invoice.
 ## 4. Sales Invoices
 
 Navigate to **Sales › Invoices** (`/admin/sales-invoices`).
+
+![Sales invoices](images/03-sales-and-pos/sales-invoices.png)
 
 **What a Sales Invoice is.** A Sales Invoice is the formal billing document sent to the customer. It is the legal record of the sale: it states what was sold, at what price, the VAT due, and the amount the customer owes. Once finalised, a sales invoice is immutable — it cannot be edited, only voided (which raises a reversing credit note).
 
@@ -333,6 +342,8 @@ Cashier Fatuma opens **Sales › Invoices** (`/admin/sales-invoices`) and clicks
 
 Navigate to **Sales › Sales Returns** (`/admin/sales-returns`).
 
+![Sales returns](images/03-sales-and-pos/sales-returns.png)
+
 **What a Sales Return is.** A Sales Return (also called an RMA — Return Merchandise Authorisation) is the document that records goods coming back from the customer. It is always tied to a specific delivery so the system knows exactly which shipment is being reversed.
 
 **Why Sales Returns exist.** When a customer returns goods — because they are damaged, wrong, or surplus — several things need to happen simultaneously: the stock must come back into the warehouse, the customer's account must be credited (so they do not owe money for goods they no longer have), the revenue must be reversed, and the cost of those goods must be put back. Doing these four things as separate manual steps would be error-prone and would leave the accounts temporarily out of balance. A Sales Return handles all four atomically: on creation, stock is returned to the branch, a credit note is raised automatically, revenue and VAT are reversed, and (for a credit customer) the AR open item is reduced.
@@ -372,6 +383,8 @@ Two days after delivery, Karibu reports 5 cartons of Mafuta ya Kupikia arrived l
 ## 6. Blanket Orders
 
 Navigate to **Sales › Blanket Orders** (`/admin/blanket-orders`).
+
+![Blanket orders](images/03-sales-and-pos/blanket-orders.png)
 
 **What a Blanket Order is.** A Blanket Order is a framework supply agreement with a customer that fixes the unit price for a product and commits to a total quantity over a defined validity window. Instead of raising a new Sales Order with price negotiations each time the customer buys, both parties agree upfront: "you will buy up to 1,000 bags at TZS 6,500 each over the next six months." Each actual purchase draws down against this agreement — these draws are called **releases** or **call-offs**.
 
@@ -605,6 +618,10 @@ The till is created with status **ACTIVE**. To deactivate a till, click **Deacti
 
 **What opening a session means.** Opening a session declares the start of a cashier's working period on a specific till. The opening float is the starting cash in the drawer (coins and notes placed there before the first sale so the cashier can make change). The system records this amount and uses it as the baseline for the end-of-day cash reconciliation. Only one session can be open on a till at a time — you cannot accidentally open a second session on the same counter without closing the first.
 
+The **POS Sessions** list shows every session with its number, status (OPEN, CLOSED, RECONCILED), opening float, and expected cash; use the **Open Session** button to start a new one and the **View** action on a row to open a session's detail.
+
+![POS sessions / till control](images/03-sales-and-pos/pos-sessions.png)
+
 1. Navigate to **Point of Sale › POS Sessions** (`/admin/pos/sessions`).
 2. Click **Open Session**.
 3. Pick the **Till** by name (only ACTIVE tills are listed).
@@ -618,6 +635,8 @@ A new session is created with status **OPEN**. Only one session can be open on a
 **What "ringing a sale" means.** This is the cashier's checkout step: entering the products and quantities the customer is buying, taking the cash the customer hands over, and completing the transaction. The system calculates the total, computes the change due, and — on completion — records the cash payment, finalises the sales invoice, posts the revenue, and issues the receipt. (See the stock note above: a `POS`-origin invoice does not currently run the stock-issue step that a `DIRECT` walk-in invoice does.)
 
 **What the tendered amount is.** The tendered amount is the cash the customer physically hands to the cashier — often a round number larger than the total. If the total is TZS 13,000 and the customer hands over TZS 20,000, the tendered amount is TZS 20,000 and the change is TZS 7,000. The system calculates the change and the cashier returns it. A sale cannot be submitted if the tendered amount is less than the total.
+
+![POS — ringing up a sale](images/03-sales-and-pos/pos-sell.png)
 
 1. Navigate to **Point of Sale › Point of Sale** (`/admin/pos/sell`) — this is the checkout screen.
 2. If your organisation has more than one company, select the correct company.
@@ -633,9 +652,28 @@ A new session is created with status **OPEN**. Only one session can be open on a
 A success receipt is displayed showing the invoice number and total. Click **View Invoice** to open the full invoice, or **New Sale** to start the next transaction.
 
 **Notes:**
-- POS sales are always settled in cash. There is no tender-type selector; payment is recorded as Cash automatically.
+- On this checkout screen the sale is settled in cash — you enter a single **Tendered Amount** and the payment is recorded as Cash automatically. (The POS sale itself can also accept several tenders together; see *Splitting payment across tenders* below.)
 - The agent field is mandatory on the backend; leaving it blank will cause the sale to be rejected.
 - If the chosen session has been closed in the meantime, the sale is rejected with a message of the form *"POS session &lt;session-uid&gt; is not OPEN."* (the message quotes the session's internal UID, not its `POS-####` number) so you know to re-open or re-select an OPEN session.
+- If a **Complete Sale** click is interrupted (network drop, slow response) and the cashier retries, the system recognises the repeat and returns the original sale instead of ringing it twice — a sale is never double-posted, so it is safe to retry.
+
+#### Splitting payment across tenders
+
+A POS sale does not have to be settled with a single cash amount. It can be split across **several tenders** at once — for example part **cash** and part **card**, or cash plus **mobile money** — as long as the tenders together cover the sale total. Each tender is recorded as its own payment on the resulting invoice (cash, card, mobile money, or cheque), so the receipt and the books show exactly how the customer paid. The standard checkout screen above records a single cash tender; mixed-tender sales are taken on a connected POS terminal or device that offers the tender breakdown.
+
+#### Age-restricted items
+
+If any product on the sale is **age-restricted** (for example an 18+ or 21+ line — see *Products and Catalog* in chapter 02), the sale is **blocked** until age has been dealt with. The cashier must either confirm that the customer's age has been verified (the prompt to confirm appears when an age-restricted line is present) or hold the `POS.SALE.AGE_OVERRIDE` permission. Without one or the other, completing the sale is refused so restricted goods cannot be sold without an age check.
+
+#### Scale labels (embedded weight or price barcodes)
+
+Deli, butchery, and produce items are often weighed at a counter scale that prints a special **scale label** — a barcode that carries the item plus its weight or its price inside the code. When such a label is scanned at the till, the system recognises the format, identifies the product, and works out the **quantity** (or the line price) automatically from the embedded value, so the cashier does not type the weight by hand. Ordinary fixed-price barcodes are read as usual.
+
+#### Reversing (voiding) a POS sale
+
+A completed POS sale that was rung in error can be **reversed** at the till. Reversing a sale undoes everything the sale did: it reverses the revenue and VAT, refunds the cash out of the drawer, and returns the goods to stock — the opposite of the original transaction, recorded as evidence rather than deleted.
+
+A reversal is only allowed while the **till session is still OPEN**, so that the cash refund comes out of the same drawer that took the money. Once the session has been closed or reconciled, a mis-rung sale is corrected through a back-office invoice void (section 4.5) instead. Reversing a sale requires the `POS.SALE.VOID` permission; you enter a reason, which is recorded on the void and in the audit trail.
 
 ### 9.5 Record a payout
 

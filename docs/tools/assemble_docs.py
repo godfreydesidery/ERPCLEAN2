@@ -27,6 +27,11 @@ def main(chapters_dir, out_full, out_body, title):
     body = '\n\n---\n\n'.join(body_parts) + '\n'
 
     # full = title + metadata + contents + body
+    # Chapters reference screenshots relative to themselves (`images/...`, i.e. relative
+    # to docs/user-manual/). The monolith lives one level up in docs/, so rewrite those
+    # links to `user-manual/images/...` for the full .md to render correctly on GitHub.
+    # (The body-only file keeps `images/...`; md2docx resolves it via MD2DOCX_IMG_BASE.)
+    full_body = body.replace('](images/', '](user-manual/images/')
     contents = '\n'.join(f'{i+1}. {t}' for i, t in enumerate(titles))
     header = (
         f'# {title}\n\n'
@@ -35,7 +40,7 @@ def main(chapters_dir, out_full, out_body, title):
         f'## Contents\n\n{contents}\n\n---\n\n'
     )
     with open(out_full, 'w', encoding='utf-8') as fh:
-        fh.write(header + body)
+        fh.write(header + full_body)
     with open(out_body, 'w', encoding='utf-8') as fh:
         fh.write(body)
     print(f'{out_full}: {len(files)} chapters, {len(header)+len(body)} chars')

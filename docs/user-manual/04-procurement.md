@@ -40,6 +40,10 @@ Contact your administrator if an expected menu item is missing.
 
 Navigate to **Purchasing › Purchase Requisitions** (`/admin/purchase-requisitions`).
 
+![Purchase requisitions](images/04-procurement/purchase-requisitions.png)
+
+The list shows every requisition with its number, status, required-by date, cost centre, line count, and creation date. Use **+ New Requisition** to raise one, and the **Open** button on a row to view or act on it.
+
 **What a purchase requisition is.**
 A purchase requisition (also called a "purchase request" or PR) is a formal internal document raised by a member of staff to request that the business buys goods or services. It is not sent to a supplier — it is an internal request that must be reviewed and approved before any external commitment is made. Think of it as a "permission to buy" request.
 
@@ -122,6 +126,10 @@ Purchasing manager Neema opens the requisition and clicks **Approve** — status
 ## 2. RFQ (Request for Quotation)
 
 Navigate to **Purchasing › RFQs / Sourcing** (`/admin/rfqs`).
+
+![Requests for quotation](images/04-procurement/rfqs.png)
+
+The list shows each RFQ with its number, status, how many suppliers were invited, the response-due date, and the creation date. Use **+ New RFQ** to start one, and **Open** to send it, capture quotes, or award it.
 
 **What an RFQ is.**
 An RFQ (Request for Quotation) is a document sent to one or more suppliers asking them to submit their prices and delivery terms for a specified list of goods or services. It is not a commitment to buy — it is a competitive enquiry. The business collects the responses (supplier quotes), compares them, and chooses the best offer.
@@ -208,6 +216,10 @@ After review, Zawadi awards the RFQ to **Simba Cement Ltd** (cheaper price, acce
 ## 3. Purchase Orders
 
 Navigate to **Purchasing › Purchase Orders** (`/admin/purchase-orders`).
+
+![Purchase orders](images/04-procurement/purchase-orders.png)
+
+The list shows each PO with its order number, supplier, status, currency, total, and creation date. A search box and status filter narrow the list. Use **+ New Order** for a direct PO, and **Open** to add lines, place, close, or void one.
 
 **What a Purchase Order is.**
 A Purchase Order (PO) is the formal, legally binding document that a business sends to a supplier to commit to buying specific goods or services at agreed prices and quantities. It defines what is being ordered, how many units, at what price, and by when. Once placed, it is the reference document for everything that follows — the goods receipt checks deliveries against it, the supplier invoice is matched against it, and the payment settles it.
@@ -297,6 +309,10 @@ Zawadi opens **Purchasing › Purchase Orders** (`/admin/purchase-orders`), find
 
 Navigate to **Purchasing › Goods Receipts** (`/admin/goods-receipts`).
 
+![Goods receipts](images/04-procurement/goods-receipts.png)
+
+The list shows each receipt with its GRN number, status, a **View PO** link to the originating Purchase Order, when it was received, and any notes. Use **+ New Receipt** to record an arrival, and **Open** to view a receipt.
+
 **What a Goods Receipt is.**
 A Goods Receipt (GR), sometimes called a Goods Received Note (GRN), is the document that records the physical arrival of goods from a supplier. It is raised by the storekeeper or receiving officer at the moment goods are checked in, linking the delivery to the Purchase Order that authorised it. The GR is the point at which inventory increases: the quantities received are added to stock on-hand at the branch.
 
@@ -347,6 +363,10 @@ Simba Cement delivers 500 bags on 2026-06-22. Storekeeper John opens **Purchasin
 ## 5. Landed Costs
 
 Navigate to **Purchasing › Landed Costs** (`/admin/landed-costs`).
+
+![Landed costs](images/04-procurement/landed-costs.png)
+
+The list shows each landed-cost document with its LC number, status, allocation basis (By Value or By Quantity), currency, total charge, and creation date. Use **+ New Landed Cost** to create one, and **Open** to review and confirm it.
 
 **What landed costs are.**
 Landed cost is the total cost of getting an imported or shipped product to your warehouse — not just the purchase price, but all the additional charges incurred along the way: freight, customs duty, port clearing fees, insurance, and other incidentals. The "landed cost" is what the goods actually cost you once they are physically in your possession.
@@ -516,6 +536,10 @@ A different shipment arrives and the supplier bills at TZS 14,900/bag (TZS 400 o
 ## 7. Purchase Returns
 
 Navigate to **Purchasing › Purchase Returns** (`/admin/purchase-returns`).
+
+![Purchase returns](images/04-procurement/purchase-returns.png)
+
+The list shows each return with its number, supplier, status, currency, gross value, and creation date. Use **+ New Return** to raise one against a goods receipt, and **Open** to review and confirm it.
 
 **What a purchase return is.**
 A purchase return is the formal process of sending goods back to the supplier — typically because the goods arrived damaged, were incorrect, failed quality inspection, or are surplus to requirements. It is the reverse of a goods receipt: where a GR increases stock, a confirmed purchase return decreases stock and triggers the AP module to raise a debit note against the supplier.

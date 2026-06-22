@@ -19,6 +19,8 @@ Welcome to the ERP system. This chapter explains how to sign in, find your way a
 3. Enter your **password** in the second field.
 4. Click **Sign in**.
 
+![The sign-in screen](images/00-getting-started/login.png)
+
 If your credentials are correct you are taken straight to the main dashboard. The system reads your assigned permissions and builds your personal menu — you will only see the sections you are allowed to use.
 
 ### Sign-in problems
@@ -65,6 +67,8 @@ The large area to the right of the sidebar is where each screen loads. The curre
 ### The home page
 
 When you sign in — or are redirected after trying to open a screen you cannot access — you land on the **home page** (`/admin/home`).
+
+![The home / system-setup landing page](images/00-getting-started/home.png)
 
 What you see depends on your account:
 
