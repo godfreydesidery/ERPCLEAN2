@@ -52,6 +52,9 @@ DRAFT
 
 Navigate to **Projects > Projects** (`/admin/projects`) and click **New Project**. An inline create form opens.
 
+![Projects](images/07-projects/projects.png)
+
+
 1. Enter the **Name** (required, up to 160 characters).
 2. Optionally enter a **Budget Amount**, a **Start Date** and **End Date**, and **Notes**.
 3. Click **Create Project**.
@@ -285,6 +288,9 @@ The reconciliation bar shows **Reconciliation OK** — the project ledger ties t
 The WIP (Work in Progress) report is a company-wide summary that shows, for every project, how much cost has been incurred versus how much has been billed. WIP represents costs that have been spent but not yet recovered from the customer — it is an asset (money owed back to the company through future billing) and it appears on the balance sheet. Finance managers and project directors use the WIP report at month-end to understand the total unbilled exposure across all jobs, to flag jobs that are heavily over-cost relative to billing, and to support the preparation of interim billing or progress claims. A project with high WIP and low revenue may indicate that billing is overdue.
 
 Navigate to **Projects > WIP Report** (`/admin/projects/wip-report`); the screen is titled **Cross-Project WIP Report**. Requires `PROJECTS.COSTING.VIEW`.
+
+![Project WIP report](images/07-projects/projects-wip-report.png)
+
 
 1. Select the **Company** (the selector is shown only when you belong to more than one company).
 2. Click **Run Report**.

@@ -33,9 +33,11 @@ The system is structured in three levels:
 
 Navigate to **Administration › Companies** (`/admin/companies`) in the sidebar.
 
+![Companies administration](images/01-administration/companies.png)
+
 The list shows each company's code, name, status (Active or Archived), and a **Manage branches** link in the last column. Above the list, the organisation name for this deployment is shown. Your view is limited to companies within your active organisation and, for non-admin users, to companies you are scoped to act in.
 
-> The Companies screen is intentionally lean: it lets you create a company (code and name) and open each company's branches. There is no company detail or edit screen — the company code can never be changed after creation.
+> The Companies screen is intentionally lean: it lets you create a company (code and name), rename it inline (see below), and open each company's branches. There is no separate company detail screen — the company code can never be changed after creation.
 
 ### Creating a company
 
@@ -56,9 +58,19 @@ The new company appears in the list with status **Active**. The organisation is 
 
 > A duplicate code is rejected with a conflict (409) error shown beneath the form.
 
-### Editing or archiving a company
+### Renaming a company
 
-There is no company detail or edit screen in the current interface. A company's code, name, and other attributes are fixed at creation, and there is no Archive control on the Companies list. (Editing and archiving exist in the underlying API but are not exposed in the admin UI.) The only action available on a company row is the **Manage branches** link.
+**When to rename.** The system ships with a seeded **Default Company**. When you go live you will usually want to give it your real trading name. Renaming lets you correct that — and any later name change — without touching the code (which stays fixed forever).
+
+**Required permission:** `COMPANY.MANAGE`
+
+Each company row carries an **Edit** button (it appears only if you hold `COMPANY.MANAGE` — a view-only user with only `COMPANY.VIEW` sees no Edit control). To rename a company:
+
+1. On the Companies list, click **Edit** on the company's row. The Name cell turns into an editable text box.
+2. Type the new name.
+3. Click **Save** to keep the change, or **Cancel** to discard it.
+
+Only the name changes — the code, status, and other attributes are untouched. There is no Archive control on the Companies list. (Archiving exists in the underlying API but is not exposed in the admin UI.)
 
 ---
 
@@ -66,7 +78,14 @@ There is no company detail or edit screen in the current interface. A company's 
 
 **Required permission:** `BRANCH.VIEW`
 
-Navigate to **Administration › Companies** (`/admin/companies`), then click the **Manage branches** link on the company's row to open its branch list at `/admin/companies/<companyUid>/branches`. The branch list shows each branch's code, name, default flag, and status.
+There are two ways to reach a company's branch list:
+
+- **From the sidebar.** Navigate to **Administration › Branches** (`/admin/branches`). This standalone page is reachable with `BRANCH.VIEW` alone — you do not need `COMPANY.VIEW`. It first shows a **Company** picker listing only the companies you can act in; choose one to load its branches. If you can act in exactly one company, the page selects it for you automatically and goes straight to that company's branch list.
+- **From the Companies screen.** Navigate to **Administration › Companies** (`/admin/companies`), then click the **Manage branches** link on the company's row to open its branch list at `/admin/companies/<companyUid>/branches`. (This path requires `COMPANY.VIEW` to reach the Companies screen.)
+
+![Branches administration](images/01-administration/branches.png)
+
+Either way, the branch list shows each branch's code, name, default flag, and status.
 
 ### Creating a branch
 
@@ -103,9 +122,21 @@ Only one branch per company can be the default. The default branch is the one us
 
 The current default branch shows a **Default** status tag instead of a button. The previously default branch is cleared automatically.
 
+### Renaming a branch
+
+**When to rename.** A new deployment seeds a **Head Office** branch. Rename it (and any other branch) to match how your locations are actually called — a store name, a depot, a regional office. As with companies, the code is fixed at creation; only the name can change.
+
+**Required permission:** `BRANCH.MANAGE`
+
+Each branch row carries an **Edit** button (it appears only if you hold `BRANCH.MANAGE` — a view-only user with only `BRANCH.VIEW` sees no Edit control). To rename a branch:
+
+1. On the branch list, click **Edit** on the branch's row. The Name cell turns into an editable text box.
+2. Type the new name.
+3. Click **Save** to keep the change, or **Cancel** to discard it.
+
 ### Archiving a branch
 
-There is no branch detail or edit screen, and the branch row is not clickable to edit — a branch's code and name are fixed at creation. The only per-row actions are **Make default** and **Archive**.
+A branch's code is fixed at creation; the per-row actions are **Edit** (rename), **Make default**, and **Archive**.
 
 To archive a branch, click **Archive** on its row. The branch status changes to **Archived** and it is removed from branch-selector lists. Any users whose default was this branch will lose their active branch on next login.
 
@@ -129,6 +160,8 @@ To archive a branch, click **Archive** on its row. The branch status changes to 
 Navigate to **Administration › Users** (`/admin/users`) in the sidebar.
 
 ### The users list
+
+![Users list](images/01-administration/users.png)
 
 The list shows columns for **Username**, **Display name**, **Status**, **Locked**, and **Root** (a marker on the `rootadmin` account), plus a per-row action area. The actions on each row are **Disable**/**Enable**, **Unlock** (only when the account is locked), **Password** (an inline set-password form), and **Branches** (a link that opens the user's detail page at `/admin/users/uid/<uid>`). Root accounts do not show a Disable action.
 
@@ -198,6 +231,8 @@ Roles are named bundles of permissions. A user can be granted one or more roles;
 
 ### The roles list
 
+![Roles list](images/01-administration/roles.png)
+
 The list shows each role's code, name, a permission count, and its status, plus a marker on **system** roles (pre-defined and cannot be archived). The code and name cells are plain text — they are not clickable. To open a role's edit page at `/admin/roles/uid/<uid>`, click the **Edit** button in the row's actions column.
 
 ### Creating a role
@@ -255,6 +290,8 @@ There is no Archive control in the current interface. The role edit page offers 
 **Required permission:** `ROLE.MANAGE`
 
 Navigate to **Administration › Role Grants** (`/admin/role-grants`) in the sidebar.
+
+![Granting roles to a user](images/01-administration/role-grants.png)
 
 This screen lets you grant a role to a user for a specific company, optionally restricted to a single branch.
 
@@ -375,6 +412,8 @@ This example walks through the complete new-staff onboarding flow for Amina Juma
 **Required permission:** `AUDIT.VIEW`
 
 Navigate to **Administration › Audit** (`/admin/audit`) in the sidebar.
+
+![The audit log](images/01-administration/audit.png)
 
 The audit trail is an append-only log of every significant action performed in the system — who did it, what they did, and when. It cannot be edited or deleted.
 

@@ -270,7 +270,7 @@ Navigate to **Administration › Companies** (`/admin/companies`) in the sidebar
 
 The list shows each company's code, name, status (Active or Archived), and a **Manage branches** link in the last column. Above the list, the organisation name for this deployment is shown. Your view is limited to companies within your active organisation and, for non-admin users, to companies you are scoped to act in.
 
-> The Companies screen is intentionally lean: it lets you create a company (code and name) and open each company's branches. There is no company detail or edit screen — the company code can never be changed after creation.
+> The Companies screen is intentionally lean: it lets you create a company (code and name), rename it inline (see below), and open each company's branches. There is no separate company detail screen — the company code can never be changed after creation.
 
 ### Creating a company
 
@@ -291,9 +291,19 @@ The new company appears in the list with status **Active**. The organisation is 
 
 > A duplicate code is rejected with a conflict (409) error shown beneath the form.
 
-### Editing or archiving a company
+### Renaming a company
 
-There is no company detail or edit screen in the current interface. A company's code, name, and other attributes are fixed at creation, and there is no Archive control on the Companies list. (Editing and archiving exist in the underlying API but are not exposed in the admin UI.) The only action available on a company row is the **Manage branches** link.
+**When to rename.** The system ships with a seeded **Default Company**. When you go live you will usually want to give it your real trading name. Renaming lets you correct that — and any later name change — without touching the code (which stays fixed forever).
+
+**Required permission:** `COMPANY.MANAGE`
+
+Each company row carries an **Edit** button (it appears only if you hold `COMPANY.MANAGE` — a view-only user with only `COMPANY.VIEW` sees no Edit control). To rename a company:
+
+1. On the Companies list, click **Edit** on the company's row. The Name cell turns into an editable text box.
+2. Type the new name.
+3. Click **Save** to keep the change, or **Cancel** to discard it.
+
+Only the name changes — the code, status, and other attributes are untouched. There is no Archive control on the Companies list. (Archiving exists in the underlying API but is not exposed in the admin UI.)
 
 ---
 
@@ -301,7 +311,12 @@ There is no company detail or edit screen in the current interface. A company's 
 
 **Required permission:** `BRANCH.VIEW`
 
-Navigate to **Administration › Companies** (`/admin/companies`), then click the **Manage branches** link on the company's row to open its branch list at `/admin/companies/<companyUid>/branches`. The branch list shows each branch's code, name, default flag, and status.
+There are two ways to reach a company's branch list:
+
+- **From the sidebar.** Navigate to **Administration › Branches** (`/admin/branches`). This standalone page is reachable with `BRANCH.VIEW` alone — you do not need `COMPANY.VIEW`. It first shows a **Company** picker listing only the companies you can act in; choose one to load its branches. If you can act in exactly one company, the page selects it for you automatically and goes straight to that company's branch list.
+- **From the Companies screen.** Navigate to **Administration › Companies** (`/admin/companies`), then click the **Manage branches** link on the company's row to open its branch list at `/admin/companies/<companyUid>/branches`. (This path requires `COMPANY.VIEW` to reach the Companies screen.)
+
+Either way, the branch list shows each branch's code, name, default flag, and status.
 
 ### Creating a branch
 
@@ -338,9 +353,21 @@ Only one branch per company can be the default. The default branch is the one us
 
 The current default branch shows a **Default** status tag instead of a button. The previously default branch is cleared automatically.
 
+### Renaming a branch
+
+**When to rename.** A new deployment seeds a **Head Office** branch. Rename it (and any other branch) to match how your locations are actually called — a store name, a depot, a regional office. As with companies, the code is fixed at creation; only the name can change.
+
+**Required permission:** `BRANCH.MANAGE`
+
+Each branch row carries an **Edit** button (it appears only if you hold `BRANCH.MANAGE` — a view-only user with only `BRANCH.VIEW` sees no Edit control). To rename a branch:
+
+1. On the branch list, click **Edit** on the branch's row. The Name cell turns into an editable text box.
+2. Type the new name.
+3. Click **Save** to keep the change, or **Cancel** to discard it.
+
 ### Archiving a branch
 
-There is no branch detail or edit screen, and the branch row is not clickable to edit — a branch's code and name are fixed at creation. The only per-row actions are **Make default** and **Archive**.
+A branch's code is fixed at creation; the per-row actions are **Edit** (rename), **Make default**, and **Archive**.
 
 To archive a branch, click **Archive** on its row. The branch status changes to **Archived** and it is removed from branch-selector lists. Any users whose default was this branch will lose their active branch on next login.
 
@@ -930,6 +957,12 @@ Products are the items you sell, buy, or manufacture. Each product belongs to on
 
 **VAT Status** determines how value-added tax is calculated on sales lines for this product. **Standard** applies the current standard VAT rate (18%). **Zero-rated** applies 0% — the line is technically within the VAT system but taxed at nil (common for basic food items in some jurisdictions). **Exempt** items are outside the VAT system entirely and produce no VAT entry. These statuses drive the tax lines on invoices and the VAT return.
 
+### Age restriction
+
+A product can carry an **age-restriction classification** that marks it as something which may only be sold to buyers above a certain age — for example, alcohol or tobacco. There are three settings: **None**, **18+**, and **21+**. Every product is **None** by default, so existing products are unaffected and nothing changes until you deliberately mark an item as restricted.
+
+The classification is purely a label on the product record; on its own it does not block anything. Its effect is felt at the point of sale: when a cashier rings up a product marked **18+** or **21+**, the till prompts the cashier to confirm the buyer's age before the sale can complete (see **Point of Sale** for how this works at the till). Setting a product back to **None** removes the prompt for that item.
+
 ### How to create a product
 
 1. Navigate to **Products › Products** (`/admin/products`).
@@ -984,6 +1017,12 @@ In the **Barcodes** panel on the product detail page:
 4. To remove a barcode, click **Remove** on the relevant row.
 
 Each barcode row shows a **Primary** or **Secondary** tag.
+
+#### Scale labels (weight and price barcodes)
+
+Supermarket scales print their own labels for loose goods sold by weight — for example, a label on a tray of meat that carries the item plus the weighed amount or the calculated price inside the barcode itself. The system can read these labels: when such a label is scanned in the product barcode lookup or at the till, it identifies the product and reads the embedded weight or price out of the barcode automatically, so the cashier does not have to key in the amount.
+
+How a particular store's labels are laid out is set up once by an administrator as a set of **barcode symbology rules** for the company (this requires the `PRODUCT.SYMBOLOGY.MANAGE` permission). These rules are configured in the back office rather than on a screen in the main application; once they are in place, the product **Barcode** lookup and the till accept scale labels with no further setup. If your business does not sell weighed goods, you can ignore this — ordinary EAN-13 and UPC barcodes work without any rules.
 
 ### Bulk packs
 
@@ -1093,6 +1132,50 @@ Price lists group selling prices. You might have a Retail list (`RETAIL`), a Who
 ### Edit, archive, restore
 
 Click **Edit** on a row to change the name (code is read-only after creation). Archive and restore work as on all master records.
+
+---
+
+## Pricing Rules
+
+**Navigation:** **Sales › Pricing Rules** (`/admin/pricing-rules`) | **Permission to view:** `SALES.PRICING.RULE.VIEW` | **Permission to create / deactivate:** `SALES.PRICING.RULE.MANAGE`
+
+The standard price list gives every buyer one price per product. **Pricing Rules** lets you go further in two common situations: rewarding bigger orders with a lower unit price, and giving a particular customer their own negotiated price. Both live on a single screen with two tabs — **Price Tiers** and **Customer Prices** — and both feed the price the system proposes when a sales document is raised.
+
+**Why it exists.** Wholesale and distribution businesses rarely charge one flat price. A buyer who takes ten cartons expects a better rate than one who buys a single unit, and a key account may have a contract price agreed for the year. Capturing these rules as data — rather than relying on staff to remember and key them in by hand — keeps pricing consistent and auditable.
+
+**How it works.** You first pick the **Company** at the top of the screen (the picker only appears when you have more than one). Each rule is then created against a product (and, for tiers, a price list) or a customer. Rules are never deleted: instead you **deactivate** a rule you no longer want, which preserves the history while removing it from future pricing.
+
+### Price tiers (quantity breaks)
+
+A **price tier** sets a special unit price that applies once the order quantity reaches a minimum. For example, you might price a product at its normal rate for one to nine units, but drop the unit price for ten or more. Each tier is recorded against a specific product on a specific price list, so the same product can have different break points on your Retail and Wholesale lists.
+
+To view existing tiers, on the **Price Tiers** tab select a **Product** and a **Price List** from their pickers, then click **Load Tiers**. The table lists each tier's minimum quantity, unit price, currency, and status.
+
+To add a tier (you need the manage permission):
+
+1. Click **Add Price Tier**. A **New Price Tier** form appears.
+2. Choose the **Product** and **Price List** from their pickers.
+3. Enter the **Min Quantity** (the order size at which this price starts to apply) and the **Unit Price**.
+4. The **Currency** is chosen with the **Currency Picker** (the company's enabled currencies, defaulting to the company default).
+5. Click **Save Tier**.
+
+Each product/price-list combination can have only one **active** tier at a given minimum quantity. If you previously deactivated a tier at that quantity, you are free to create a fresh one at the same quantity — the limit applies only to tiers that are currently active. To retire a tier, click the deactivate (slash-circle) button on its row; its status changes and it no longer affects pricing.
+
+### Customer prices (contract prices)
+
+A **customer price** is a fixed unit price for one product agreed with one specific customer — a contract or negotiated rate that overrides the ordinary price list for that buyer. You can optionally bound it with an **Effective From** and **Effective To** date, so a seasonal or promotional rate switches itself on and off automatically.
+
+To view a customer's prices, switch to the **Customer Prices** tab, select the **Customer** from the picker, and click **Load Prices**. The table shows each product's agreed unit price, currency, the effective-date window (a dash means open-ended), and status.
+
+To add one (you need the manage permission):
+
+1. Click **Add Customer Price**. A **New Customer Price** form appears.
+2. Choose the **Customer** and the **Product** from their pickers.
+3. Enter the **Unit Price** and choose the **Currency** with the **Currency Picker**.
+4. Optionally set **Effective From** and **Effective To** dates (leave them blank for a price with no time limit).
+5. Click **Save Price**.
+
+As with tiers, a customer price is deactivated rather than deleted — click the deactivate button on its row to stop it applying.
 
 ---
 
@@ -1298,6 +1381,7 @@ Walk-in cash sales skip the first three steps and begin directly with a Sales In
 | Pricing Rules | `SALES.PRICING.RULE.VIEW`, `SALES.PRICING.RULE.MANAGE` |
 | POS (tills) | `POS.TILL.VIEW`, `POS.TILL.MANAGE` |
 | POS (cashier) | `POS.SESSION.OPEN`, `POS.SALE.CREATE`, `POS.SESSION.VIEW` |
+| POS (reverse / age override) | `POS.SALE.VOID`, `POS.SALE.AGE_OVERRIDE` |
 | POS (close/reconcile) | `POS.SESSION.CLOSE`, `POS.SESSION.RECONCILE` |
 
 Contact your administrator if an expected menu item is missing.
@@ -1873,6 +1957,8 @@ The till is created with status **ACTIVE**. To deactivate a till, click **Deacti
 
 **What opening a session means.** Opening a session declares the start of a cashier's working period on a specific till. The opening float is the starting cash in the drawer (coins and notes placed there before the first sale so the cashier can make change). The system records this amount and uses it as the baseline for the end-of-day cash reconciliation. Only one session can be open on a till at a time — you cannot accidentally open a second session on the same counter without closing the first.
 
+The **POS Sessions** list shows every session with its number, status (OPEN, CLOSED, RECONCILED), opening float, and expected cash; use the **Open Session** button to start a new one and the **View** action on a row to open a session's detail.
+
 1. Navigate to **Point of Sale › POS Sessions** (`/admin/pos/sessions`).
 2. Click **Open Session**.
 3. Pick the **Till** by name (only ACTIVE tills are listed).
@@ -1901,9 +1987,28 @@ A new session is created with status **OPEN**. Only one session can be open on a
 A success receipt is displayed showing the invoice number and total. Click **View Invoice** to open the full invoice, or **New Sale** to start the next transaction.
 
 **Notes:**
-- POS sales are always settled in cash. There is no tender-type selector; payment is recorded as Cash automatically.
+- On this checkout screen the sale is settled in cash — you enter a single **Tendered Amount** and the payment is recorded as Cash automatically. (The POS sale itself can also accept several tenders together; see *Splitting payment across tenders* below.)
 - The agent field is mandatory on the backend; leaving it blank will cause the sale to be rejected.
 - If the chosen session has been closed in the meantime, the sale is rejected with a message of the form *"POS session &lt;session-uid&gt; is not OPEN."* (the message quotes the session's internal UID, not its `POS-####` number) so you know to re-open or re-select an OPEN session.
+- If a **Complete Sale** click is interrupted (network drop, slow response) and the cashier retries, the system recognises the repeat and returns the original sale instead of ringing it twice — a sale is never double-posted, so it is safe to retry.
+
+#### Splitting payment across tenders
+
+A POS sale does not have to be settled with a single cash amount. It can be split across **several tenders** at once — for example part **cash** and part **card**, or cash plus **mobile money** — as long as the tenders together cover the sale total. Each tender is recorded as its own payment on the resulting invoice (cash, card, mobile money, or cheque), so the receipt and the books show exactly how the customer paid. The standard checkout screen above records a single cash tender; mixed-tender sales are taken on a connected POS terminal or device that offers the tender breakdown.
+
+#### Age-restricted items
+
+If any product on the sale is **age-restricted** (for example an 18+ or 21+ line — see *Products and Catalog* in chapter 02), the sale is **blocked** until age has been dealt with. The cashier must either confirm that the customer's age has been verified (the prompt to confirm appears when an age-restricted line is present) or hold the `POS.SALE.AGE_OVERRIDE` permission. Without one or the other, completing the sale is refused so restricted goods cannot be sold without an age check.
+
+#### Scale labels (embedded weight or price barcodes)
+
+Deli, butchery, and produce items are often weighed at a counter scale that prints a special **scale label** — a barcode that carries the item plus its weight or its price inside the code. When such a label is scanned at the till, the system recognises the format, identifies the product, and works out the **quantity** (or the line price) automatically from the embedded value, so the cashier does not type the weight by hand. Ordinary fixed-price barcodes are read as usual.
+
+#### Reversing (voiding) a POS sale
+
+A completed POS sale that was rung in error can be **reversed** at the till. Reversing a sale undoes everything the sale did: it reverses the revenue and VAT, refunds the cash out of the drawer, and returns the goods to stock — the opposite of the original transaction, recorded as evidence rather than deleted.
+
+A reversal is only allowed while the **till session is still OPEN**, so that the cash refund comes out of the same drawer that took the money. Once the session has been closed or reconciled, a mis-rung sale is corrected through a back-office invoice void (section 4.5) instead. Reversing a sale requires the `POS.SALE.VOID` permission; you enter a reason, which is recorded on the void and in the audit trail.
 
 ### 9.5 Record a payout
 
@@ -2080,6 +2185,8 @@ Contact your administrator if an expected menu item is missing.
 
 Navigate to **Purchasing › Purchase Requisitions** (`/admin/purchase-requisitions`).
 
+The list shows every requisition with its number, status, required-by date, cost centre, line count, and creation date. Use **+ New Requisition** to raise one, and the **Open** button on a row to view or act on it.
+
 **What a purchase requisition is.**
 A purchase requisition (also called a "purchase request" or PR) is a formal internal document raised by a member of staff to request that the business buys goods or services. It is not sent to a supplier — it is an internal request that must be reviewed and approved before any external commitment is made. Think of it as a "permission to buy" request.
 
@@ -2162,6 +2269,8 @@ Purchasing manager Neema opens the requisition and clicks **Approve** — status
 ## 2. RFQ (Request for Quotation)
 
 Navigate to **Purchasing › RFQs / Sourcing** (`/admin/rfqs`).
+
+The list shows each RFQ with its number, status, how many suppliers were invited, the response-due date, and the creation date. Use **+ New RFQ** to start one, and **Open** to send it, capture quotes, or award it.
 
 **What an RFQ is.**
 An RFQ (Request for Quotation) is a document sent to one or more suppliers asking them to submit their prices and delivery terms for a specified list of goods or services. It is not a commitment to buy — it is a competitive enquiry. The business collects the responses (supplier quotes), compares them, and chooses the best offer.
@@ -2248,6 +2357,8 @@ After review, Zawadi awards the RFQ to **Simba Cement Ltd** (cheaper price, acce
 ## 3. Purchase Orders
 
 Navigate to **Purchasing › Purchase Orders** (`/admin/purchase-orders`).
+
+The list shows each PO with its order number, supplier, status, currency, total, and creation date. A search box and status filter narrow the list. Use **+ New Order** for a direct PO, and **Open** to add lines, place, close, or void one.
 
 **What a Purchase Order is.**
 A Purchase Order (PO) is the formal, legally binding document that a business sends to a supplier to commit to buying specific goods or services at agreed prices and quantities. It defines what is being ordered, how many units, at what price, and by when. Once placed, it is the reference document for everything that follows — the goods receipt checks deliveries against it, the supplier invoice is matched against it, and the payment settles it.
@@ -2337,6 +2448,8 @@ Zawadi opens **Purchasing › Purchase Orders** (`/admin/purchase-orders`), find
 
 Navigate to **Purchasing › Goods Receipts** (`/admin/goods-receipts`).
 
+The list shows each receipt with its GRN number, status, a **View PO** link to the originating Purchase Order, when it was received, and any notes. Use **+ New Receipt** to record an arrival, and **Open** to view a receipt.
+
 **What a Goods Receipt is.**
 A Goods Receipt (GR), sometimes called a Goods Received Note (GRN), is the document that records the physical arrival of goods from a supplier. It is raised by the storekeeper or receiving officer at the moment goods are checked in, linking the delivery to the Purchase Order that authorised it. The GR is the point at which inventory increases: the quantities received are added to stock on-hand at the branch.
 
@@ -2387,6 +2500,8 @@ Simba Cement delivers 500 bags on 2026-06-22. Storekeeper John opens **Purchasin
 ## 5. Landed Costs
 
 Navigate to **Purchasing › Landed Costs** (`/admin/landed-costs`).
+
+The list shows each landed-cost document with its LC number, status, allocation basis (By Value or By Quantity), currency, total charge, and creation date. Use **+ New Landed Cost** to create one, and **Open** to review and confirm it.
 
 **What landed costs are.**
 Landed cost is the total cost of getting an imported or shipped product to your warehouse — not just the purchase price, but all the additional charges incurred along the way: freight, customs duty, port clearing fees, insurance, and other incidentals. The "landed cost" is what the goods actually cost you once they are physically in your possession.
@@ -2556,6 +2671,8 @@ A different shipment arrives and the supplier bills at TZS 14,900/bag (TZS 400 o
 ## 7. Purchase Returns
 
 Navigate to **Purchasing › Purchase Returns** (`/admin/purchase-returns`).
+
+The list shows each return with its number, supplier, status, currency, gross value, and creation date. Use **+ New Return** to raise one against a goods receipt, and **Open** to review and confirm it.
 
 **What a purchase return is.**
 A purchase return is the formal process of sending goods back to the supplier — typically because the goods arrived damaged, were incorrect, failed quality inspection, or are surplus to requirements. It is the reverse of a goods receipt: where a GR increases stock, a confirmed purchase return decreases stock and triggers the AP module to raise a debit note against the supplier.
@@ -3488,6 +3605,8 @@ An asset category is a classification template that groups assets of the same ty
 
 An asset category defines the depreciation method, useful life, and GL accounts used for assets of a particular type (e.g. Machinery, Vehicles, Furniture). Categories must be set up before any asset can be registered.
 
+The list shows each category's code, name, depreciation method, life (in periods), and status. Use **+ New Category** (top right) to add one, or **Open** on a row to view and edit it.
+
 ### 2.1 Creating a category
 
 1. Click **New Category**.
@@ -3524,6 +3643,8 @@ Navigate to **Finance / Fixed Assets > Fixed Assets** (`/admin/fixed-assets`).
 The asset register is the master list of every fixed asset the company owns. It is the single source of truth for capital investment: it records the original cost of each asset, the depreciation accumulated against it so far, and the resulting **net book value (NBV)** — the carrying value shown on the balance sheet. Every purchase of a capital item must be entered here (not coded to expense) so that the balance sheet correctly shows the asset, the profit and loss account receives only the proportionate depreciation charge each period, and the year-end accounts accurately reflect the company's capital base. The register is used by the finance team and reviewed by auditors to verify that assets exist, are in service, and are depreciated appropriately. The system keeps the register in step with the GL: every capitalisation, depreciation run, revaluation, and disposal posts a matching GL entry, and the FA-to-GL reconciliation screen (section 9) confirms the two agree.
 
 The register lists all fixed assets for the selected company. Use the status filter to show assets by state: Draft, In Service, Disposed, or Written Off. The list is paginated; use the pager controls (first / previous / page numbers / next / last) beneath the table to move through large registers.
+
+Each row shows the asset number, name, status, depreciation method, acquisition cost, current NBV, and acquisition date. Use **+ Register Asset** (top right) to add an asset, or **Open** on a row to view its detail.
 
 ### Asset status lifecycle
 
@@ -3659,7 +3780,7 @@ The system creates a depreciation run with status **Posted** and a run number (e
 
 ### 6.4 Viewing depreciation runs
 
-Navigate to **Finance / Fixed Assets > Depreciation Runs** (`/admin/depreciation-runs`). The list shows all posted runs in reverse date order. Click a run to see the detail, which includes per-asset lines showing the charge amount, accumulated depreciation after the run, and NBV after the run.
+Navigate to **Finance / Fixed Assets > Depreciation Runs** (`/admin/depreciation-runs`). The list shows all posted runs in reverse date order. Each row shows the run number, fiscal period, posting date, status, total charge, the number of assets covered, and when the run was executed. Click **Open** on a run to see the detail, which includes per-asset lines showing the charge amount, accumulated depreciation after the run, and NBV after the run. Use **Run Depreciation** (top right) to preview and post a new run (section 6.2–6.3).
 
 ---
 
@@ -4195,6 +4316,8 @@ Whatever you do here is always recorded with source type **MANUAL**. This endpoi
 
 Navigate to **Accounting > Journals** (`/admin/gl/journals`) and click **Post journal** (`/admin/gl/journals/post`).
 
+The Journal Entries list shows every posted batch — its batch number, posting date, description, source (MANUAL or a system source such as STOCK_RECEIPT or SALES), reference, and total debits — with a **View** action on each row and a **Post Manual Journal** button at the top right. SALES and other system entries are auto-posted and read-only; only MANUAL entries you compose here can later be reversed.
+
 **Requirements before posting (requires permission `GL.POST`):**
 
 - At least two active accounts must exist.
@@ -4433,7 +4556,7 @@ AR tracks amounts owed to your company by customers. Open items (invoices) are c
 
 Navigate to **Accounting > Receivables** (`/admin/ar/invoices`).
 
-The list shows all AR open items for the company: document number, customer name, original amount, outstanding amount, currency, invoice date, due date, and status.
+The list shows all AR open items for the company: document number, customer name, original amount, outstanding amount, currency, invoice date, due date, and status. Each OPEN or PARTIAL row carries a **Write off** and a **Credit** action (visible to users who hold the relevant permission).
 
 **Invoice statuses:**
 
@@ -4621,7 +4744,7 @@ On a HELD bill, each variance line shows the variance amount and percentage. Cli
 
 ### Viewing and Navigating Bills
 
-Navigate to **Accounting > Payables** (`/admin/ap/supplier-bills`). The list shows all bills with status, outstanding amount, and source. Click a bill number to open its detail screen, which shows the header, lines, and match result.
+Navigate to **Accounting > Payables** (`/admin/ap/supplier-bills`). The list shows all bills with status, outstanding amount, and source. Click a bill number to open its detail screen, which shows the header, lines, and match result. The header carries **Enter Bill** and **Record Payment** buttons, and a HELD or DRAFT row shows a **Match** action.
 
 **Bill statuses:**
 
@@ -4908,7 +5031,7 @@ Select an account by name to view:
 
 Navigate to **Accounting > Tax > VAT Returns** (`/admin/tax/vat-returns`). Permission required: `VAT.VIEW`.
 
-The list shows all VAT returns for the company with their period, status, and key amounts.
+The list shows all VAT returns for the company with their return number, period, due date, status, output VAT, input VAT, net VAT, and a result flag (Payable, Credit c/f, or Nil), plus a **New VAT Return** button.
 
 **VAT return statuses:**
 
@@ -5990,7 +6113,7 @@ An employee record is the master data entry for a person employed by the company
 
 Navigate to **HR & Payroll > Employees** (`/admin/hr/employees`).
 
-The list shows employee number, name, department name, and employment status. Use the paginator to navigate through large lists.
+The list shows employee number, name, job title, department name, and employment status. Use the paginator to navigate through large lists.
 
 **Creating an employee (minimum required fields):**
 
@@ -6071,7 +6194,7 @@ A leave request is the formal record of an employee's application for time off �
 
 Navigate to **HR & Payroll > Leave Requests** (`/admin/hr/leave-requests`).
 
-The list shows employee name, leave type, dates, number of days, and status. Use the paginator for large lists.
+The list shows employee name, leave type, from and to dates, number of days, and status. Use the paginator for large lists.
 
 **Submitting a leave request (requires `HR.LEAVE.MANAGE`):**
 
@@ -6178,7 +6301,7 @@ A payroll run is the process of computing every employee's pay for a given month
 
 Navigate to **HR & Payroll > Payroll Runs** (`/admin/hr/payroll-runs`).
 
-A payroll run computes gross pay, statutory deductions, voluntary deductions, and loan repayments for all employees with an active contract in a given period.
+A payroll run computes gross pay, statutory deductions, voluntary deductions, and loan repayments for all employees with an active contract in a given period. The list shows each run's number, period, pay date, status, and gross and net totals.
 
 **Payroll run lifecycle:**
 
@@ -6491,7 +6614,7 @@ The Document Generation module renders formally formatted, branded PDF documents
 
 Navigate to **Documents > Generated Documents** (`/admin/documents`). Requires `DOCUMENT.VIEW`.
 
-The log lists every document that has been rendered for the active company, with document number, type badge, source, and generated-at timestamp. Use the **Type** filter dropdown to narrow results by document type (Invoice, AR Statement, Purchase Order, Goods Receipt, Delivery Note, Credit Note).
+The log lists every document that has been rendered for the active company, with document number, type badge, source, and generated-at timestamp. Use the **Type** filter dropdown to narrow results by document type (Invoice, AR Statement, Purchase Order, Goods Receipt, Delivery Note, Credit Note). The **Render Document** button opens the render form, and each row carries **View** and **Download** actions.
 
 #### Rendering a Document
 
@@ -6634,7 +6757,7 @@ The inbox shows every approval request that is currently waiting for your decisi
 
 Navigate to **Approvals > My Inbox** (`/admin/approvals/inbox`). Requires `APPROVALS.DECIDE`.
 
-The inbox shows PENDING requests whose current open step is routed to one of your roles. These are the requests waiting for your decision.
+The inbox shows PENDING requests whose current open step is routed to one of your roles. These are the requests waiting for your decision. When nothing is awaiting you, the screen shows an "Your inbox is empty" message.
 
 1. Click a request to open its detail.
 2. Review the request: document type, amount, submitter, submission date, and step chain.

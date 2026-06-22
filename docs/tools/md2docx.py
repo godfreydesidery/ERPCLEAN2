@@ -11,6 +11,7 @@ Usage:
 
 Requires: python-docx (pip install python-docx).
 """
+import os
 import sys
 import re
 from docx import Document
@@ -25,6 +26,10 @@ TABLE_SEP_RE = re.compile(r'^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$')
 BULLET_RE = re.compile(r'^(\s*)[-*]\s+(.*)$')
 NUM_RE = re.compile(r'^(\s*)\d+\.\s+(.*)$')
 INLINE_RE = re.compile(r'(\*\*.+?\*\*|`[^`]+`)')
+# A block-level Markdown image on its own line: ![alt text](relative/path.png)
+IMAGE_RE = re.compile(r'^\s*!\[(.*?)\]\(([^)]+)\)\s*$')
+# Page text width on Letter with default 1-inch margins ≈ 6.5"; cap a touch under that.
+IMAGE_MAX_WIDTH_IN = 6.2
 
 
 def add_toc(doc):
@@ -54,6 +59,33 @@ def add_runs(paragraph, text):
             paragraph.add_run(part)
 
 
+def add_image(doc, alt, src, base):
+    """Embed a block-level Markdown image, centered, with the alt text as a caption.
+
+    Paths are resolved relative to `base` (the image base dir — set by the build to
+    docs/user-manual so chapter-relative `images/...` links resolve). A missing or
+    unreadable file degrades to an italic placeholder rather than aborting the build.
+    """
+    path = src if os.path.isabs(src) else os.path.normpath(os.path.join(base, src))
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    if os.path.exists(path):
+        try:
+            p.add_run().add_picture(path, width=Inches(IMAGE_MAX_WIDTH_IN))
+        except Exception as exc:  # corrupt/unsupported image — don't fail the whole doc
+            r = p.add_run(f'[image unavailable: {alt or src} — {exc}]'); r.italic = True
+    else:
+        r = p.add_run(f'[missing image: {src}]'); r.italic = True
+        sys.stderr.write(f'WARN md2docx: missing image {path}\n')
+    if alt:
+        cap = doc.add_paragraph()
+        cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        cr = cap.add_run(alt)
+        cr.italic = True
+        cr.font.size = Pt(9)
+        cr.font.color.rgb = RGBColor(0x55, 0x55, 0x55)
+
+
 def flush_table(doc, rows):
     if not rows:
         return
@@ -74,6 +106,10 @@ def flush_table(doc, rows):
 
 
 def convert(md_path, docx_path, title=None, subtitle=None):
+    # Image base: where chapter-relative `images/...` links are anchored. The build sets
+    # MD2DOCX_IMG_BASE=docs/user-manual; fall back to the input file's own directory.
+    img_base = os.environ.get('MD2DOCX_IMG_BASE') or os.path.dirname(os.path.abspath(md_path))
+
     with open(md_path, encoding='utf-8') as f:
         lines = f.read().split('\n')
 
@@ -135,6 +171,11 @@ def convert(md_path, docx_path, title=None, subtitle=None):
         if m:
             level = len(m.group(1))
             doc.add_heading(m.group(2).strip(), level=min(level, 4))
+            i += 1; continue
+
+        im = IMAGE_RE.match(line)
+        if im:
+            add_image(doc, im.group(1).strip(), im.group(2).strip(), img_base)
             i += 1; continue
 
         if line.strip() in ('---', '***', '___'):

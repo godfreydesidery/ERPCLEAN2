@@ -2,7 +2,7 @@ import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable, map } from 'rxjs';
 import { ApiResponse, PageMeta } from '../../../core/api/api-response.model';
-import { SKIP_UNWRAP } from '../../../core/api/http-context.tokens';
+import { SILENT_ERROR, SKIP_UNWRAP } from '../../../core/api/http-context.tokens';
 import { environment } from '../../../../environments/environment';
 import {
   AddPurchaseOrderLineRequest,
@@ -142,7 +142,11 @@ export class PurchasesService {
   // ── Goods Receipts — mutations ───────────────────────────────────────────────
 
   createReceipt(request: CreateGoodsReceiptRequest): Observable<GoodsReceiptDto> {
-    return this.http.post<GoodsReceiptDto>(this.grBase, request);
+    // The create screen renders its own inline over-receipt (409) banner, so silence the global
+    // error notification for this call — the user sees one calm message, not a duplicate toast.
+    return this.http.post<GoodsReceiptDto>(this.grBase, request, {
+      context: new HttpContext().set(SILENT_ERROR, true),
+    });
   }
 
   voidReceipt(uid: string, request: VoidGoodsReceiptRequest): Observable<void> {

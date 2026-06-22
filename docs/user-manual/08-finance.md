@@ -40,6 +40,8 @@ A "normal balance" tells you which side — debit or credit — makes the accoun
 
 Navigate to **Accounting > Chart of Accounts** (`/admin/gl/accounts`).
 
+![Chart of accounts](images/08-finance/gl-accounts.png)
+
 The table shows:
 
 | Column | Meaning |
@@ -96,6 +98,10 @@ Whatever you do here is always recorded with source type **MANUAL**. This endpoi
 - **Required-dimension guard.** If a target account is flagged to require a cost-centre, department, or project dimension, a manual line missing that dimension is rejected, naming the account and the missing slot.
 
 Navigate to **Accounting > Journals** (`/admin/gl/journals`) and click **Post journal** (`/admin/gl/journals/post`).
+
+![GL journals](images/08-finance/gl-journals.png)
+
+The Journal Entries list shows every posted batch — its batch number, posting date, description, source (MANUAL or a system source such as STOCK_RECEIPT or SALES), reference, and total debits — with a **View** action on each row and a **Post Manual Journal** button at the top right. SALES and other system entries are auto-posted and read-only; only MANUAL entries you compose here can later be reversed.
 
 **Requirements before posting (requires permission `GL.POST`):**
 
@@ -203,6 +209,8 @@ The screen shows two panels:
 **How it works.** The system aggregates all journal line amounts by account, grouping them by the account type in canonical order (ASSET, LIABILITY, EQUITY, INCOME, EXPENSE). A balanced set of books shows total debits = total credits in the footer. A non-zero difference is a finance-grade defect requiring investigation.
 
 Navigate to **Accounting > Trial Balance** (`/admin/gl/trial-balance`).
+
+![Trial balance](images/08-finance/gl-trial-balance.png)
 
 - Select your company (if multi-company).
 - Optionally select a specific **fiscal period** to view only that period's movements.
@@ -335,7 +343,9 @@ AR tracks amounts owed to your company by customers. Open items (invoices) are c
 
 Navigate to **Accounting > Receivables** (`/admin/ar/invoices`).
 
-The list shows all AR open items for the company: document number, customer name, original amount, outstanding amount, currency, invoice date, due date, and status.
+![AR invoices](images/08-finance/ar-invoices.png)
+
+The list shows all AR open items for the company: document number, customer name, original amount, outstanding amount, currency, invoice date, due date, and status. Each OPEN or PARTIAL row carries a **Write off** and a **Credit** action (visible to users who hold the relevant permission).
 
 **Invoice statuses:**
 
@@ -463,6 +473,8 @@ To load balances brought forward from a prior system, navigate to **Accounting >
 
 **Customer statement:** Navigate to **Accounting > Customer Statement** (`/admin/ar/statement`). Permission required: `AR.STATEMENT.VIEW`. Pick a customer by name to view total outstanding, ageing breakdown, open items, and recent receipts.
 
+![Customer statement](images/08-finance/ar-statement.png)
+
 **Ageing buckets:**
 
 | Bucket | Days Overdue |
@@ -523,7 +535,9 @@ On a HELD bill, each variance line shows the variance amount and percentage. Cli
 
 ### Viewing and Navigating Bills
 
-Navigate to **Accounting > Payables** (`/admin/ap/supplier-bills`). The list shows all bills with status, outstanding amount, and source. Click a bill number to open its detail screen, which shows the header, lines, and match result.
+Navigate to **Accounting > Payables** (`/admin/ap/supplier-bills`). The list shows all bills with status, outstanding amount, and source. Click a bill number to open its detail screen, which shows the header, lines, and match result. The header carries **Enter Bill** and **Record Payment** buttons, and a HELD or DRAFT row shows a **Match** action.
+
+![Supplier bills](images/08-finance/ap-supplier-bills.png)
 
 **Bill statuses:**
 
@@ -648,6 +662,8 @@ Pick a supplier by name to view:
 
 Navigate to **Accounting > Cash & Bank Accounts** (`/admin/cash/accounts`). Permission required: `CASH.VIEW` to view; `CASH.ACCOUNT.MANAGE` to create or set the default.
 
+![Cash & bank accounts](images/08-finance/cash-accounts.png)
+
 The list shows all cash and bank accounts for the company: code, name, type (CASH or BANK), linked GL account, currency, default flag, and active status.
 
 **To create an account (requires `CASH.ACCOUNT.MANAGE`):**
@@ -719,6 +735,8 @@ The entry's currency is the company base currency — there is no currency field
 **How it works.** The reconciliation opens with the account's uncleared book transactions. You mark each transaction as cleared when it appears on the bank statement. The system tracks the cleared book balance and computes the difference against the statement closing balance. When all matched transactions are ticked and the difference reaches zero, the reconciliation can be completed. A completed reconciliation is locked and cannot be modified.
 
 Bank reconciliation matches your book records against your bank statement. Navigate to **Accounting > Bank Reconciliation** (`/admin/cash/reconciliations`). Permission required: `CASH.RECONCILE`.
+
+![Bank reconciliation](images/08-finance/cash-reconciliations.png)
 
 **Opening a reconciliation:**
 
@@ -810,7 +828,9 @@ Select an account by name to view:
 
 Navigate to **Accounting > Tax > VAT Returns** (`/admin/tax/vat-returns`). Permission required: `VAT.VIEW`.
 
-The list shows all VAT returns for the company with their period, status, and key amounts.
+![VAT returns](images/08-finance/tax-vat-returns.png)
+
+The list shows all VAT returns for the company with their return number, period, due date, status, output VAT, input VAT, net VAT, and a result flag (Payable, Credit c/f, or Nil), plus a **New VAT Return** button.
 
 **VAT return statuses:**
 
@@ -965,6 +985,8 @@ Select the period by choosing **Month** mode (year + month) or **Range** mode (s
 **When it is used.** By a user with `CURRENCY.MANAGE` permission whenever an exchange rate needs to be entered or updated — typically daily or at the start of each period.
 
 Navigate to **Accounting > FX > Exchange Rates** (`/admin/fx/rates`). Permission required: `CURRENCY.VIEW` to view; `CURRENCY.MANAGE` to add rates.
+
+![FX rates](images/08-finance/fx-rates.png)
 
 A set of currencies (TZS, USD, EUR, KES, GBP) is seeded at system setup. Which of these a company may actually use on *documents* is governed by its admin-configured **enabled-currency allow-list** (with a default document currency); the Currency Picker on every document offers only the enabled currencies (see Chapter 0, *Common UI Patterns*). The **From / To** selects on this rate-entry form are an exception: they list the full seeded currency set, not the enabled-only allow-list. The rate list shows all effective-dated exchange rates for the company, newest first.
 

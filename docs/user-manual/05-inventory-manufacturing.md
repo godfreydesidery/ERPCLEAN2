@@ -50,6 +50,8 @@ The system stores both a maintained on-hand balance and an append-only movement 
 
 Navigate to **Inventory > Stock On-Hand** (`/admin/stock`).
 
+![Stock on hand](images/05-inventory-manufacturing/stock.png)
+
 The table shows every stockable product that has had at least one movement at the active branch. The columns are **Product** (code and name shown together), **Quantity** (on-hand, to three decimal places), **Reorder Level**, **Flags**, and an actions column. There is no separate unit-of-measure column. Two derived flags can appear in the **Flags** column:
 
 - **Negative** — the quantity has gone below zero (an overselling indicator; the system does not hard-block it).
@@ -144,6 +146,8 @@ The drawer has its own paginator. Movements are append-only records; there is no
 
 Navigate to **Inventory > Stock Locations** (`/admin/stock/locations`).
 
+![Stock locations](images/05-inventory-manufacturing/stock-locations.png)
+
 **What a stock location is.**
 A stock location is a named physical area within a branch where stock is stored and counted. Locations let a business track stock at a finer level than the branch — for example, distinguishing between the main warehouse, the shop floor, a quarantine area for goods awaiting inspection, and a van for a mobile sales team. Every stock movement and stock count is associated with a specific location, so the system can answer not just "how many bags of cement does the Dar es Salaam branch have?" but "how many are in the Warehouse versus the Store?"
 
@@ -190,6 +194,8 @@ Locations are never hard-deleted. The list always shows every location, both Act
 ## 4. Stock transfers
 
 Navigate to **Inventory > Stock Transfers** (`/admin/stock-transfers`).
+
+![Stock transfers](images/05-inventory-manufacturing/stock-transfers.png)
 
 **What a stock transfer is.**
 A stock transfer is a document that moves stock from one physical location to another — either between two locations within the same branch (for example, from the Warehouse to the Store) or between two different branches (for example, from the Arusha branch to the Dar es Salaam branch). A transfer records a physical movement of goods without buying or selling them; it re-attributes stock from one place to another.
@@ -281,6 +287,8 @@ Storekeeper Grace Mwenda at Arusha branch needs to send 200 bags of Pembe Flour 
 ## 5. Stock counts
 
 Navigate to **Inventory > Stock Counts** (`/admin/stock-counts`).
+
+![Stock counts](images/05-inventory-manufacturing/stock-counts.png)
 
 **What a stock count is.**
 A stock count (also called a physical inventory or stocktake) is a scheduled exercise where a team physically counts the items held at a location and compares the counted quantities to the quantities the system believes are there. Any discrepancy (a "variance") is recorded and — after review — posted as an adjustment to bring the system records into alignment with physical reality.
@@ -451,6 +459,8 @@ When a goods receipt is posted, the system computes the new average as: `(existi
 
 Navigate to **Inventory > Stock Valuation** (`/admin/stock/valuation`). Requires the `INVENTORY.VALUATION.VIEW` permission.
 
+![Inventory valuation](images/05-inventory-manufacturing/stock-valuation.png)
+
 The report is not loaded automatically — the initial screen shows an empty state ("Click Refresh to load the current valuation"). Click **Refresh** to build the report. It then shows every stockable product with its average cost, quantity, and calculated inventory value. A reconciliation bar at the top compares the sum of on-hand values (the stock ledger) against the GL inventory account balance:
 
 - **Reconciled to GL** (green) — the stock ledger and GL agree.
@@ -476,6 +486,8 @@ The system posts a GL entry (DR Inventory / CR Opening Balance Equity) and the p
 ## 9. Bills of Materials
 
 Navigate to **Manufacturing > Bills of Materials** (`/admin/boms`).
+
+![Bills of materials](images/05-inventory-manufacturing/boms.png)
 
 **What a Bill of Materials is.**
 A Bill of Materials (BOM) is the formal recipe or formula that defines exactly what components — and in what quantities — are needed to produce one run of a finished product. For example, a BOM for "Ugali Pack 1kg" might specify 1.05 kg of maize flour (the extra 5% is scrap allowance), or a BOM for a piece of furniture might specify 2 pieces of timber, 4 bolts, 1 m² of fabric, and 200 g of adhesive. The BOM is the production blueprint; without it, a work order cannot know what to consume.
@@ -556,6 +568,8 @@ On an Active BOM, click **Archive**. The **Archive** button is shown only while 
 ## 10. Work Orders
 
 Navigate to **Manufacturing > Work Orders** (`/admin/work-orders`).
+
+![Manufacturing work orders](images/05-inventory-manufacturing/work-orders.png)
 
 **What a Work Order is.**
 A Work Order (WO) is the production document that authorises the manufacture of a specified quantity of a finished product. It is to manufacturing what a Purchase Order is to procurement: a formal instruction to produce. The work order drives the full production accounting cycle — it specifies what to make, what materials to consume, and how much labour and overhead to apply, and it records the cost of everything consumed in producing the finished goods.
