@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A clean-build **ERP** — a modular monolith: **Spring Boot 3.3 / Java 21 / PostgreSQL 15** backend
 (`backend/`) + **Angular 21** standalone-components web client (`web/`). It started as IAM only;
-it now spans ~25 business modules (sales, purchases, stock, GL, AR, AP, cash/bank, tax, fixed
-assets, HR/payroll, manufacturing, projects, CRM, budgeting, FX, costing, POS, …) and 70+ Flyway
-migrations.
+it now spans 25 business modules (sales, purchases, stock, GL, AR, AP, cash/bank, tax, fixed
+assets, HR/payroll, manufacturing, projects, CRM, budgeting, FX, costing, BI, approvals, parties,
+products, reporting, routes, notifications, documents) and 75 Flyway migrations (latest V74).
 
 Authoritative design docs (read the relevant one before non-trivial work — they go deeper than this file):
 - [PROJECT-CONVENTIONS.md](PROJECT-CONVENTIONS.md) — fixed stack + the engineering invariants below.
@@ -51,8 +51,8 @@ BASE=origin/develop bash scripts/check-migrations.sh      # + rule 2: applied mi
 ### Integration tests on Windows
 Testcontainers ITs fail with "connection refused" unless **Ryuk is disabled** and a **singleton
 container** is reused (`TESTCONTAINERS_RYUK_DISABLED=true`; see `PostgresIntegrationTest` /
-`testcontainers.properties`). CI sets this env var; set it locally too. There are ~100 `*IT` files
-(failsafe, `verify`) vs ~54 `*Test` files (surefire, `test`).
+`testcontainers.properties`). CI sets this env var; set it locally too. There are ~109 `*IT` files
+(failsafe, `verify`) vs ~77 `*Test` files (surefire, `test`).
 
 ### Backend hot reload
 Spring Boot **DevTools** restarts the app context when `target/classes` changes. New endpoints
@@ -77,7 +77,7 @@ These are enforced by code/tests and cut across every module. Violating one is a
    importing another module's entity or service.** `ModuleBoundaryTest` (and
    `EndpointAuthorizationTest`) fail the build on violation. If a needed dependency breaks the rule,
    the design is wrong — fix it or write an ADR; don't relax the rule.
-   - Controllers: flat under `com.erp.api.<module>` (e.g. `api/SalesInvoiceController.java`), one per resource.
+   - Controllers: flat under `com.erp.api` — no per-module subpackage (e.g. `api/SalesInvoiceController.java`), one per resource.
    - Each module: `com.erp.modules.<name>/{domain/{entity,dto,enums,event},service,repository}`.
    - Services are `interface Xxx` + `class XxxImpl`, `@Transactional` at public methods.
    - Cross-cutting infra lives under `com.erp.platform/{common,security,audit,events,bootstrap}`.
@@ -167,6 +167,18 @@ persist across restarts like QA.
 `develop` is the integration branch; `main` is release. **Never commit to or push `main`.** Branch
 off `develop` (or `feat/**`), commit, and open a PR — the owner merges to `main`. CI (backend +
 web) runs on `main`, `develop`, and `feat/**`.
+
+## Deployment
+
+Deployment lives under `infra/`, not in the app modules:
+- `infra/prod/` — production stack: `docker-compose.yml` (+ `docker-compose.hostdb.yml` for a
+  host/native Postgres), a `Caddyfile` (self-signed TLS reverse proxy — bind it to
+  `ERP_PUBLIC_HOST`), `generate-jwt-keys.sh` (stable RS256 keypair for `ERP_JWT_SIGNING_MODE=file`),
+  and `backup.sh`/`restore.sh`.
+- `infra/qa/` — QA stack: `deploy.sh`/`deploy.ps1`, `entrypoint.sh`, `supervisord.conf`,
+  `application-qa.yml`, and `qa.env.example` (copy to `qa.env`; `*.local.*` files stay out of git).
+
+Prod/QA never wipe the DB (see the migration rules). `backend/Dockerfile` builds the API image.
 
 ## Config quick reference
 
