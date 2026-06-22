@@ -15,6 +15,9 @@ BODY="$(mktemp)"
 trap 'rm -f "$BODY"' EXIT
 
 python docs/tools/assemble_docs.py docs/user-manual docs/USER-MANUAL.md "$BODY" "$TITLE"
-python docs/tools/md2docx.py "$BODY" docs/USER-MANUAL.docx "$TITLE" "$SUBTITLE"
+# Anchor chapter-relative `images/...` screenshot links at docs/user-manual so md2docx
+# can embed them into the .docx regardless of the (temp) body file's location.
+MD2DOCX_IMG_BASE="$(pwd)/docs/user-manual" \
+  python docs/tools/md2docx.py "$BODY" docs/USER-MANUAL.docx "$TITLE" "$SUBTITLE"
 
 echo "Rebuilt docs/USER-MANUAL.md and docs/USER-MANUAL.docx from the 12 chapters."

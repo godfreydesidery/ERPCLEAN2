@@ -57,7 +57,9 @@ An employee record is the master data entry for a person employed by the company
 
 Navigate to **HR & Payroll > Employees** (`/admin/hr/employees`).
 
-The list shows employee number, name, department name, and employment status. Use the paginator to navigate through large lists.
+The list shows employee number, name, job title, department name, and employment status. Use the paginator to navigate through large lists.
+
+![Employees](images/11-hr-budgeting-platform/hr-employees.png)
 
 **Creating an employee (minimum required fields):**
 
@@ -138,7 +140,9 @@ A leave request is the formal record of an employee's application for time off â
 
 Navigate to **HR & Payroll > Leave Requests** (`/admin/hr/leave-requests`).
 
-The list shows employee name, leave type, dates, number of days, and status. Use the paginator for large lists.
+The list shows employee name, leave type, from and to dates, number of days, and status. Use the paginator for large lists.
+
+![Leave requests](images/11-hr-budgeting-platform/hr-leave-requests.png)
 
 **Submitting a leave request (requires `HR.LEAVE.MANAGE`):**
 
@@ -245,7 +249,9 @@ A payroll run is the process of computing every employee's pay for a given month
 
 Navigate to **HR & Payroll > Payroll Runs** (`/admin/hr/payroll-runs`).
 
-A payroll run computes gross pay, statutory deductions, voluntary deductions, and loan repayments for all employees with an active contract in a given period.
+A payroll run computes gross pay, statutory deductions, voluntary deductions, and loan repayments for all employees with an active contract in a given period. The list shows each run's number, period, pay date, status, and gross and net totals.
+
+![Payroll runs](images/11-hr-budgeting-platform/hr-payroll-runs.png)
 
 **Payroll run lifecycle:**
 
@@ -395,6 +401,8 @@ The system creates the budget and automatically creates **Version 1** in DRAFT s
 **Cost-centre scope.** The Create Budget screen creates company-wide budgets only â€” it does not expose a cost-centre field. A cost-centre-scoped budget cannot be created from this screen in this version; if you need one, contact your system administrator.
 
 The budget list shows each budget's number, name, fiscal year, cost centre, latest version status, and the number of versions. A **Status filter** at the top narrows the list, and a pager appears at the bottom for long lists.
+
+![Budgets](images/11-hr-budgeting-platform/budgets.png)
 
 ---
 
@@ -558,7 +566,9 @@ The Document Generation module renders formally formatted, branded PDF documents
 
 Navigate to **Documents > Generated Documents** (`/admin/documents`). Requires `DOCUMENT.VIEW`.
 
-The log lists every document that has been rendered for the active company, with document number, type badge, source, and generated-at timestamp. Use the **Type** filter dropdown to narrow results by document type (Invoice, AR Statement, Purchase Order, Goods Receipt, Delivery Note, Credit Note).
+The log lists every document that has been rendered for the active company, with document number, type badge, source, and generated-at timestamp. Use the **Type** filter dropdown to narrow results by document type (Invoice, AR Statement, Purchase Order, Goods Receipt, Delivery Note, Credit Note). The **Render Document** button opens the render form, and each row carries **View** and **Download** actions.
+
+![Documents](images/11-hr-budgeting-platform/documents.png)
 
 #### Rendering a Document
 
@@ -621,6 +631,8 @@ The Notifications module is the system's alerting spine. It listens for events t
 Navigate to **Notifications > Inbox** (`/admin/notifications`). Requires `NOTIFICATION.VIEW`.
 
 The inbox shows notifications sent to you within the active company, with title, message body, severity badge (INFO / WARNING / CRITICAL), and created-at timestamp.
+
+![Notifications](images/11-hr-budgeting-platform/notifications.png)
 
 - Toggle **Unread only** to filter to unread items only.
 - Click **Mark read** on an individual row to mark it as read.
@@ -701,7 +713,9 @@ The inbox shows every approval request that is currently waiting for your decisi
 
 Navigate to **Approvals > My Inbox** (`/admin/approvals/inbox`). Requires `APPROVALS.DECIDE`.
 
-The inbox shows PENDING requests whose current open step is routed to one of your roles. These are the requests waiting for your decision.
+The inbox shows PENDING requests whose current open step is routed to one of your roles. These are the requests waiting for your decision. When nothing is awaiting you, the screen shows an "Your inbox is empty" message.
+
+![Approvals inbox](images/11-hr-budgeting-platform/approvals-inbox.png)
 
 1. Click a request to open its detail.
 2. Review the request: document type, amount, submitter, submission date, and step chain.

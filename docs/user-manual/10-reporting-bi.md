@@ -32,6 +32,8 @@ The Profit and Loss statement (also called the Income Statement) shows how much 
 
 Navigate to **Accounting › Income Statement** (`/admin/reporting/income-statement`). Permission required: `REPORT.PL.VIEW`.
 
+![Income statement](images/10-reporting-bi/income-statement.png)
+
 1. Select the company by name.
 2. Set **Period from** and **Period to** (date inputs).
 3. Optionally set a **Comparative from** and **Comparative to** to add a prior-period column.
@@ -84,6 +86,8 @@ The Balance Sheet (also called the Statement of Financial Position) shows what t
 
 Navigate to **Accounting › Balance Sheet** (`/admin/reporting/balance-sheet`). Permission required: `REPORT.BS.VIEW`.
 
+![Balance sheet](images/10-reporting-bi/balance-sheet.png)
+
 1. Select the company by name.
 2. Set the **As-at date**.
 3. Optionally set a **Compare as-at** date to add a prior-date column.
@@ -115,6 +119,8 @@ The green **Balanced** bar appears, with the helper text *Assets = Liabilities +
 The Cash-Flow Statement shows how cash moved into and out of the business over a period, organised into three categories. **Operating activities** are cash flows from the company's main trading activities — collecting from customers, paying suppliers, paying wages. **Investing activities** are cash flows from buying or selling long-term assets — purchasing a vehicle or machinery, receiving proceeds from selling an asset. **Financing activities** are cash flows from raising or repaying capital — new loans drawn, loan repayments, equity injections. The statement reconciles the opening and closing cash balance, confirming that the movement in the company's bank accounts is fully explained. The Cash-Flow Statement answers the question: "Where did the cash come from, and where did it go?" It is particularly important for businesses that are profitable on paper but cash-constrained in practice — a common situation when customers pay late or large capital purchases are made. The system uses the **indirect method** (starting from net profit and adjusting for non-cash items), which is the most common format for external reporting.
 
 Navigate to **Accounting › Cash-Flow Statement** (`/admin/reporting/cash-flow`). Permission required: `REPORT.CASHFLOW.VIEW`.
+
+![Cash-flow statement](images/10-reporting-bi/cash-flow.png)
 
 1. Select the company by name.
 2. Set **Period from** and **Period to**.
@@ -149,6 +155,8 @@ Results show Opening Cash: TZS 6,800,000; Operating inflow: TZS 11,250,000; Inve
 The Account Ledger shows every individual journal line posted to a single GL account within a date range, with a running balance. It is the most granular view available in the system: while the financial statements show totals and subtotals, the ledger shows the individual transactions behind each total. It is the primary tool for investigating a balance — for example, if Trade Receivables on the balance sheet is higher than expected, you open the ledger for that account to see every invoice and receipt that has been posted. The ledger is also the standard tool for preparing a bank reconciliation (compare the bank account ledger to the bank statement) and for answering auditor queries about specific transactions. The opening balance is the account's position before the chosen date range, so every line in the report can be traced back to a source document.
 
 Navigate to **Accounting › Account Ledger** (`/admin/reporting/account-ledger`). Permission required: `REPORT.LEDGER.VIEW`.
+
+![Account ledger](images/10-reporting-bi/account-ledger.png)
 
 The account ledger shows every posted journal line for a single GL account within a date range, with a running balance.
 
@@ -193,6 +201,8 @@ The Trial Balance is covered fully in the Finance chapter (Accounting › Trial 
 The Business Intelligence Dashboard is a single-screen summary that composes key performance indicators (KPIs) from Finance, Operations, and CRM into one view. Rather than opening the income statement, then the AR list, then the stock valuation report separately, a finance director or general manager can open the dashboard and see the essential health indicators at a glance: is the trial balance balanced? Are the AR and AP sub-ledgers in agreement with the GL? How much cash is in the accounts? What is the current pipeline forecast? Each panel has a health badge (green `[OK]` / red `[!]`) that instantly signals whether the underlying sub-ledger ties to the GL control account — a critical integrity check the finance team would otherwise have to perform manually. Drill-through links let the reader navigate directly to the relevant detail screen with a single click. The dashboard is permission-gated at the panel level: a user with only operations permissions sees the stock panel but not the finance panel, and gets a calm "no permission" message for the panels they cannot access (ADR-0037).
 
 Navigate to **Analytics › Dashboard** (`/admin/dashboard`). Permission required: `BI.VIEW`.
+
+![BI dashboard](images/10-reporting-bi/dashboard.png)
 
 The dashboard is a composite view of key performance indicators drawn from Finance, Operations, and CRM data. Each panel loads independently and has its own permission. If you hold `BI.VIEW` but lack a panel-specific permission, that panel shows a calm "no permission" message rather than blocking the whole page.
 
