@@ -19,16 +19,20 @@ describe('http interceptors', () => {
   let httpMock: HttpTestingController;
   let session: SessionStore;
   const navigateByUrl = vi.fn();
+  const navigate = vi.fn();
+  /** The page the user is on when a 401 fires — captured into returnUrl by the interceptor. */
+  const currentUrl = '/admin/widgets';
 
   beforeEach(() => {
     navigateByUrl.mockReset();
+    navigate.mockReset();
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(
           withInterceptors([authErrorInterceptor, authHeaderInterceptor, apiResponseInterceptor]),
         ),
         provideHttpClientTesting(),
-        { provide: Router, useValue: { navigateByUrl } },
+        { provide: Router, useValue: { navigateByUrl, navigate, url: currentUrl } },
       ],
     });
     http = TestBed.inject(HttpClient);
@@ -85,7 +89,7 @@ describe('http interceptors', () => {
     req.flush({ data: {}, errors: [] });
   });
 
-  it('on 401 from an authenticated call, clears the session and redirects to login', () => {
+  it('on 401 from an authenticated call, clears the session and redirects to login with returnUrl', () => {
     session.setAccessToken('expired-token');
     http.get(`${environment.apiBaseUrl}/companies`).subscribe({ error: () => undefined });
 
@@ -93,7 +97,10 @@ describe('http interceptors', () => {
     req.flush({ data: null, errors: ['Unauthorized'] }, { status: 401, statusText: 'Unauthorized' });
 
     expect(session.isAuthenticated()).toBe(false);
-    expect(navigateByUrl).toHaveBeenCalledWith('/login');
+    expect(navigate).toHaveBeenCalledWith(['/login'], {
+      queryParams: { returnUrl: currentUrl },
+      replaceUrl: true,
+    });
   });
 
   it('does NOT redirect on a 401 from the login endpoint (bad credentials is the caller\'s concern)', () => {
@@ -104,6 +111,6 @@ describe('http interceptors', () => {
     const req = httpMock.expectOne(`${environment.apiBaseUrl}/auth/login`);
     req.flush({ data: null, errors: ['Invalid username or password.'] }, { status: 401, statusText: 'Unauthorized' });
 
-    expect(navigateByUrl).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
   });
 });
