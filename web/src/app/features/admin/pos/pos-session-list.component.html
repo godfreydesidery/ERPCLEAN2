@@ -39,6 +39,25 @@
   }
 
   @if (selectedCompanyId()) {
+    <!-- Branch selector — which branch's tills a session is opened against -->
+    @if (branches().length > 0) {
+      <div class="mb-3" style="max-width:320px">
+        <label class="form-label small text-muted mb-1" for="branchPicker">Branch</label>
+        <select id="branchPicker" name="branchPicker" class="form-select"
+                [ngModel]="selectedBranchId()"
+                (ngModelChange)="onBranchChange($event)">
+          @for (b of branches(); track b.uid) {
+            <option [value]="b.id">{{ b.name }}</option>
+          }
+        </select>
+      </div>
+    } @else if (branchesError()) {
+      <p class="text-muted small mb-3">
+        <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
+        Branches couldn't be loaded, so tills may be unavailable — you may not have permission to view branches.
+      </p>
+    }
+
     <!-- Toolbar -->
     <div class="erp-toolbar">
       @if (canOpen()) {
@@ -72,6 +91,12 @@
                                 placeholder="Select till"
                                 [required]="true"
                                 name="newTillUid" />
+                @if (tillOptions().length === 0) {
+                  <small class="d-block text-muted mt-1">
+                    <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
+                    No active tills in this branch. Create a till before opening a session.
+                  </small>
+                }
               </div>
               <div class="erp-field">
                 <label class="form-label" for="newOpeningFloat">

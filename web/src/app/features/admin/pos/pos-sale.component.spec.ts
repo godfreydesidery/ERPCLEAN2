@@ -26,6 +26,7 @@ import { OrganisationService } from '../organisation/organisation.service';
 import { CustomerService } from '../parties/customer.service';
 import { AgentService } from '../parties/agent.service';
 import { ProductService } from '../products/product.service';
+import { SalesService } from '../sales/sales.service';
 import { PosService } from './pos.service';
 import { PosSaleComponent } from './pos-sale.component';
 
@@ -110,6 +111,13 @@ function makeBed(opts: { canSell?: boolean; processSaleImpl?: () => any } = {}) 
         useValue: {
           list: vi.fn(() => of({ rows: [], meta: {} })),
           listUnits: vi.fn(() => of({ rows: [], meta: {} })),
+          listPrices: vi.fn(() => of([])),
+        },
+      },
+      {
+        provide: SalesService,
+        useValue: {
+          listTaxRates: vi.fn(() => of([])),
         },
       },
       {
@@ -264,6 +272,92 @@ describe('PosSaleComponent — lineSubtotal', () => {
     await vi.runAllTimersAsync();
     const line = { id: 'l1', productUid: '', productId: '', productName: '', unitUid: '', unitId: '', unitName: '', quantity: '3', unitPrice: '200.00', lineDiscountAmount: '50.00' };
     expect(comp.lineSubtotal(line)).toBe(550);
+  });
+});
+
+// ── price auto-fetch & VAT preview ───────────────────────────────────────────────
+
+describe('PosSaleComponent — price auto-fetch & VAT preview', () => {
+  const stubProduct = {
+    id: '10', uid: 'P1', companyId: '10', code: 'PRD1', name: 'Widget', description: null,
+    type: 'GOODS', sellable: true, stockable: true, baseUnitUid: 'U1', baseUnitCode: 'PCS',
+    baseUnitName: 'Pieces', cost: null, vatStatus: 'STANDARD', status: 'ACTIVE',
+    version: null, createdAt: null, createdBy: null, updatedAt: null, updatedBy: null,
+  } as any;
+  const stubUnit = {
+    id: '1', uid: 'U1', companyId: '10', code: 'PCS', name: 'Pieces', status: 'ACTIVE' as const,
+    version: null, createdAt: null, createdBy: null, updatedAt: null, updatedBy: null,
+  };
+  const stdRate = {
+    id: '1', uid: 'TR1', companyId: '10', vatStatus: 'STANDARD', rate: '18',
+    version: null, createdAt: null, createdBy: null, updatedAt: null, updatedBy: null,
+  } as any;
+
+  beforeEach(() => { vi.useFakeTimers(); makeBed(); });
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('auto-fetches the list price (and normalises the VAT rate) on product select', async () => {
+    const comp = TestBed.createComponent(PosSaleComponent).componentInstance;
+    const prodSvc = TestBed.inject(ProductService) as any;
+    prodSvc.listPrices.mockReturnValue(of([
+      { id: '1', productId: '10', priceListId: '1', priceListUid: 'PL1', priceListCode: 'RETAIL',
+        priceListName: 'Retail', companyId: '10', price: { amount: '2500.00', currency: 'TZS' } },
+    ]));
+    await vi.runAllTimersAsync();
+
+    comp.products.set([stubProduct]);
+    comp.units.set([stubUnit]);
+    comp.taxRates.set([stdRate]); // percentage form (18) must normalise to 0.18
+    comp.addLine();
+    const lineId = comp.lines()[0].id;
+    comp.onLineProductChange(lineId, 'P1');
+    await vi.runAllTimersAsync();
+
+    expect(comp.lines()[0].unitPrice).toBe('2500.00');
+    expect(comp.lines()[0].priceState).toBe('ok');
+    expect(comp.lines()[0].vatRate).toBe('0.18');
+  });
+
+  it('previews VAT-inclusive gross / VAT / change from the resolved price', async () => {
+    const comp = TestBed.createComponent(PosSaleComponent).componentInstance;
+    await vi.runAllTimersAsync();
+    comp.lines.set([{
+      id: 'l1', productUid: 'P1', productId: '10', productName: 'Widget', unitUid: 'U1', unitId: '1',
+      unitName: 'pcs', quantity: '1', unitPrice: '1000.00', lineDiscountAmount: '0.00', vatRate: '0.18', priceState: 'ok',
+    }]);
+    comp.tenderedAmount.set('1200');
+
+    expect(comp.subtotal()).toBe(1000);
+    expect(comp.grossTotal()).toBeCloseTo(1180);
+    expect(comp.vatTotal()).toBeCloseTo(180);
+    expect(comp.change()).toBeCloseTo(20); // 1200 tendered − 1180 gross
+  });
+
+  it('flags a product with no price and blocks the sale', async () => {
+    const comp = TestBed.createComponent(PosSaleComponent).componentInstance;
+    const prodSvc = TestBed.inject(ProductService) as any;
+    prodSvc.listPrices.mockReturnValue(of([])); // no price configured
+    const svc = TestBed.inject(PosService) as any;
+    await vi.runAllTimersAsync();
+
+    comp.products.set([stubProduct]);
+    comp.units.set([stubUnit]);
+    comp.customers.set([stubCustomer]);
+    comp.agents.set([stubAgent]);
+    comp.selectedSessionUid.set('SESS1');
+    comp.selectedCustomerUid.set('CUST1');
+    comp.selectedAgentUid.set('AGENT1');
+    comp.currency.set('TZS');
+    comp.addLine();
+    const lineId = comp.lines()[0].id;
+    comp.onLineProductChange(lineId, 'P1');
+    await vi.runAllTimersAsync();
+    comp.tenderedAmount.set('1000');
+    comp.submit();
+
+    expect(comp.lines()[0].priceState).toBe('missing');
+    expect(comp.formError()).toMatch(/no price/i);
+    expect(svc.processSale).not.toHaveBeenCalled();
   });
 });
 

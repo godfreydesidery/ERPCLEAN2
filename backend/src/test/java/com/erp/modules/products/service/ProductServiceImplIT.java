@@ -475,6 +475,31 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
                 .isEmpty();
     }
 
+    @Test
+    void search_byPartialCode_matchesContains_caseInsensitive() {
+        productService.create(new CreateProductRequest(
+                companyA.getUid(), "ZEB-777", "Striped Thing", null,
+                ProductType.GOODS, true, true, pcsUid,
+                null, null, null, null, null, null, null, null, null, null, null));
+        productService.create(goodsRequest(companyA.getUid(), "Plain Thing"));
+
+        // A lower-case fragment of the code must match (contains, case-insensitive) — the old
+        // query only matched the code exactly, so partial-code lookups returned nothing.
+        assertThat(productService.list(companyA.getId(), "zeb-7", Pageable.unpaged()).getContent())
+                .extracting(ProductDto::name).containsExactly("Striped Thing");
+    }
+
+    @Test
+    void search_byExactBarcode_matchesProduct() {
+        ProductDto scanned = productService.create(goodsRequest(companyA.getUid(), "Scannable Item"));
+        productService.addBarcode(scanned.uid(), new AddBarcodeRequest("6901234567890", false));
+        productService.create(goodsRequest(companyA.getUid(), "No Barcode Item"));
+
+        // Scanning the full barcode resolves the product — barcode was previously not searched at all.
+        assertThat(productService.list(companyA.getId(), "6901234567890", Pageable.unpaged()).getContent())
+                .extracting(ProductDto::uid).containsExactly(scanned.uid());
+    }
+
     // -----------------------------------------------------------------------
     // Security regression — F15: price list must be same-company as the product
     // -----------------------------------------------------------------------

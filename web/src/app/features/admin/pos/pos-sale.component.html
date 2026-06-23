@@ -94,6 +94,12 @@
                                     [required]="true"
                                     name="saleSession"
                                     [disabled]="submitting()" />
+                    @if (noOpenSession()) {
+                      <small class="d-block text-muted mt-1">
+                        <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
+                        No open session yet — <a [routerLink]="['/admin/pos/sessions']">open a till session</a> first.
+                      </small>
+                    }
                   </div>
                   <div class="erp-field">
                     <label class="form-label" for="saleCustomer">
@@ -130,6 +136,13 @@
                                     [required]="true"
                                     name="saleAgent"
                                     [disabled]="submitting()" />
+                    @if (noAgentAvailable()) {
+                      <small class="d-block text-muted mt-1">
+                        <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
+                        No sales agent is available for you yet. Ask an administrator to link your
+                        user to a sales agent before selling.
+                      </small>
+                    }
                   </div>
                   <div class="erp-field">
                     <label class="form-label" for="saleCurrency">
@@ -165,12 +178,16 @@
                 @if (lines().length > 0) {
                   <!-- Shared product search filter -->
                   <div class="mb-2" style="max-width:340px">
-                    <label class="visually-hidden" for="productSearch">Search products</label>
+                    <label class="visually-hidden" for="productSearch">Search products by name, code or barcode</label>
                     <input id="productSearch" type="search" class="form-control form-control-sm"
-                           placeholder="Search products to populate pickers…"
-                           aria-label="Search products"
+                           placeholder="Search by name, code or barcode…"
+                           aria-label="Search products by name, code or barcode"
                            [disabled]="submitting()"
                            (input)="onProductSearch($any($event.target).value)" />
+                    <small class="d-block text-muted mt-1">
+                      <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
+                      Prices are set automatically from the price list.
+                    </small>
                   </div>
 
                   <div class="erp-table-wrap">
@@ -215,22 +232,29 @@
                                      min="0.001" step="0.001"
                                      [ngModel]="l.quantity"
                                      (ngModelChange)="onLineFieldChange(l.id, 'quantity', $event)"
+                                     [name]="'qty-' + l.id"
                                      [disabled]="submitting()"
                                      [attr.aria-label]="'Quantity for line ' + l.id" />
                             </td>
                             <td class="num">
-                              <input type="number" class="form-control form-control-sm"
-                                     min="0" step="0.01"
-                                     [ngModel]="l.unitPrice"
-                                     (ngModelChange)="onLineFieldChange(l.id, 'unitPrice', $event)"
-                                     [disabled]="submitting()"
-                                     [attr.aria-label]="'Unit price for line ' + l.id" />
+                              @switch (l.priceState) {
+                                @case ('loading') {
+                                  <span class="spinner-border spinner-border-sm text-muted" aria-label="Loading price"></span>
+                                }
+                                @case ('missing') {
+                                  <span class="text-muted small" [attr.aria-label]="'No price set for line ' + l.id">No price</span>
+                                }
+                                @default {
+                                  <span [attr.aria-label]="'Unit price for line ' + l.id">{{ +l.unitPrice | number:'1.2-2' }}</span>
+                                }
+                              }
                             </td>
                             <td class="num">
                               <input type="number" class="form-control form-control-sm"
                                      min="0" step="0.01"
                                      [ngModel]="l.lineDiscountAmount"
                                      (ngModelChange)="onLineFieldChange(l.id, 'lineDiscountAmount', $event)"
+                                     [name]="'disc-' + l.id"
                                      [disabled]="submitting()"
                                      [attr.aria-label]="'Line discount for line ' + l.id" />
                             </td>
@@ -250,10 +274,20 @@
                       </tbody>
                       <tfoot class="erp-tfoot">
                         <tr>
-                          <td colspan="5" class="text-end fw-semibold">Total</td>
-                          <td class="num fw-bold">
-                            {{ currency() }} {{ subtotal() | number:'1.2-2' }}
-                          </td>
+                          <td colspan="5" class="text-end">Subtotal (net)</td>
+                          <td class="num">{{ currency() }} {{ subtotal() | number:'1.2-2' }}</td>
+                          <td></td>
+                        </tr>
+                        @if (vatKnown()) {
+                          <tr>
+                            <td colspan="5" class="text-end">VAT</td>
+                            <td class="num">{{ currency() }} {{ vatTotal() | number:'1.2-2' }}</td>
+                            <td></td>
+                          </tr>
+                        }
+                        <tr>
+                          <td colspan="5" class="text-end fw-semibold">Total{{ vatKnown() ? ' (incl. VAT)' : '' }}</td>
+                          <td class="num fw-bold">{{ currency() }} {{ grossTotal() | number:'1.2-2' }}</td>
                           <td></td>
                         </tr>
                       </tfoot>
@@ -283,7 +317,15 @@
                            [ngModel]="tenderedAmount()" (ngModelChange)="tenderedAmount.set($event)"
                            [disabled]="submitting()" />
                   </div>
-                  @if (tenderedAmount() && subtotal() > 0) {
+                  @if (grossTotal() > 0) {
+                    <div class="erp-field">
+                      <span class="form-label">Amount Due{{ vatKnown() ? ' (incl. VAT)' : '' }}</span>
+                      <p class="mb-0 fw-semibold font-monospace">
+                        {{ currency() }} {{ grossTotal() | number:'1.2-2' }}
+                      </p>
+                    </div>
+                  }
+                  @if (tenderedAmount() && grossTotal() > 0) {
                     <div class="erp-field">
                       <span class="form-label">Change</span>
                       <p class="mb-0 fw-semibold font-monospace"
