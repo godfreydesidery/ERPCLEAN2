@@ -51,6 +51,10 @@ export class PosSessionListComponent {
   // ── Branch context (needed for listTills which requires branchId) ──────────
   readonly branches = signal<Branch[]>([]);
   readonly activeBranchId = signal<string | undefined>(undefined);
+  /** Branch chosen on-screen — drives which branch's tills are offered when opening a session. */
+  readonly selectedBranchId = signal<string>('');
+  /** True when branches could not be loaded (e.g. missing BRANCH.VIEW) — shown as a calm note. */
+  readonly branchesError = signal(false);
 
   // ── List state ─────────────────────────────────────────────────────────────
   readonly rows = signal<PosSessionDto[]>([]);
@@ -139,23 +143,39 @@ export class PosSessionListComponent {
    * then load tills for that branch. listTills requires branchId (backend @RequestParam).
    */
   private loadBranchesAndTills(companyUid: string, companyId: string): void {
+    this.branchesError.set(false);
     this.branchService.list(companyUid).subscribe({
       next: (branchList) => {
-        this.branches.set(branchList);
+        this.branches.set(branchList.filter((b) => b.status === 'ACTIVE'));
         // Use the session's active branch if it belongs to this company, else fall back to the first.
         const activeBranchUid = this.session.activeBranchUid();
-        const active = branchList.find((b) => b.uid === activeBranchUid) ?? branchList[0];
+        const active = this.branches().find((b) => b.uid === activeBranchUid) ?? this.branches()[0];
         const branchId = active?.id;
         this.activeBranchId.set(branchId);
+        this.selectedBranchId.set(branchId ?? '');
         if (branchId) {
           this.loadTills(companyId, branchId);
         }
       },
       error: () => {
         // Non-fatal: till picker will be empty but sessions list can still load.
+        this.branches.set([]);
         this.tills.set([]);
+        this.branchesError.set(true);
       },
     });
+  }
+
+  /** Switch the branch whose tills are offered for opening a session. */
+  onBranchChange(branchId: string): void {
+    this.selectedBranchId.set(branchId);
+    this.newTillUid.set('');
+    const companyId = this.selectedCompanyId();
+    if (companyId && branchId) {
+      this.loadTills(companyId, branchId);
+    } else {
+      this.tills.set([]);
+    }
   }
 
   private loadTills(companyId: string, branchId: string): void {

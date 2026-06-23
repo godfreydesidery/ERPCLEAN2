@@ -10,12 +10,14 @@ import { SessionStore } from '../../../core/auth/session.store';
 import { Company } from '../models/company.model';
 import { CustomerModel } from '../models/party.model';
 import { AgentModel } from '../models/party.model';
-import { ProductModel, UnitOfMeasureDto } from '../models/product.model';
+import { ProductModel, UnitOfMeasureDto, VatStatus } from '../models/product.model';
+import { TaxRateDto } from '../models/sales.model';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { CustomerService } from '../parties/customer.service';
 import { AgentService } from '../parties/agent.service';
 import { ProductService } from '../products/product.service';
+import { SalesService } from '../sales/sales.service';
 import { UidPickerComponent, UidOption } from '../../../shared/uid-picker/uid-picker.component';
 import { SalesInvoiceDto } from '../models/sales.model';
 import { PosSessionDto, PosSaleLineRequest, PosSaleRequest } from './models/pos.model';
@@ -32,8 +34,13 @@ interface SaleLine {
   unitId: string;
   unitName: string;
   quantity: string;
+  /** System-resolved net unit price from the product's price list (server-authoritative). */
   unitPrice: string;
   lineDiscountAmount: string;
+  /** VAT fraction (e.g. 0.18) resolved from the company tax rate for the product's VAT status. */
+  vatRate?: string;
+  /** Price-resolution state for the picked product. */
+  priceState?: 'ok' | 'loading' | 'missing';
 }
 
 let _lineCounter = 0;
@@ -43,6 +50,12 @@ function nextLineId(): string { return `line-${++_lineCounter}`; }
  * POS Checkout (Sell) screen.
  * Pick open session + customer + agent + currency; add line items; record tender; submit.
  * The server returns a SalesInvoiceDto on success.
+ *
+ * Pricing is SERVER-AUTHORITATIVE (the backend resolves each line price from the product's price
+ * list and ignores any submitted unitPrice). To keep the on-screen total/change honest, this screen
+ * fetches the same list price on product select and previews the VAT-inclusive gross — it never asks
+ * the cashier to type a price.
+ *
  * Route: /admin/pos/sell
  * Gated: POS.SALE.CREATE.
  */
@@ -59,6 +72,7 @@ export class PosSaleComponent {
   private readonly customerService = inject(CustomerService);
   private readonly agentService = inject(AgentService);
   private readonly productService = inject(ProductService);
+  private readonly salesService = inject(SalesService);
   private readonly alerts = inject(AlertService);
   protected readonly session = inject(SessionStore);
 
@@ -70,9 +84,12 @@ export class PosSaleComponent {
 
   // ── Open sessions (for picker) ─────────────────────────────────────────────
   readonly openSessions = signal<PosSessionDto[]>([]);
+  readonly sessionsLoaded = signal(false);
   readonly sessionOptions = computed<UidOption[]>(() =>
     this.openSessions().map((s) => ({ uid: s.uid, label: `Session ${s.uid.slice(-8)} (Till ${s.posTillId})` })),
   );
+  /** Proactive blocker hint: options have loaded but there is no open session to sell against. */
+  readonly noOpenSession = computed(() => this.sessionsLoaded() && this.sessionOptions().length === 0);
 
   // ── Customers (for picker) ─────────────────────────────────────────────────
   readonly customers = signal<CustomerModel[]>([]);
@@ -82,9 +99,12 @@ export class PosSaleComponent {
 
   // ── Agents (for picker) ────────────────────────────────────────────────────
   readonly agents = signal<AgentModel[]>([]);
+  readonly agentsLoaded = signal(false);
   readonly agentOptions = computed<UidOption[]>(() =>
     this.agents().filter((a) => a.status === 'ACTIVE').map((a) => ({ uid: a.uid, label: a.displayName, hint: a.code })),
   );
+  /** Proactive blocker hint: agents have loaded but none can be selected (common POS sale blocker). */
+  readonly noAgentAvailable = computed(() => this.agentsLoaded() && this.agentOptions().length === 0);
 
   // ── Products (for picker) ──────────────────────────────────────────────────
   readonly products = signal<ProductModel[]>([]);
@@ -98,6 +118,9 @@ export class PosSaleComponent {
     this.units().filter((u) => u.status === 'ACTIVE').map((u) => ({ uid: u.uid, label: u.name, hint: u.code })),
   );
 
+  // ── Tax rates (for the VAT-inclusive preview; best-effort, needs TAXRATE.VIEW) ──────────────
+  readonly taxRates = signal<TaxRateDto[]>([]);
+
   // ── Form fields ────────────────────────────────────────────────────────────
   readonly selectedSessionUid = signal('');
   readonly selectedCustomerUid = signal('');
@@ -110,19 +133,25 @@ export class PosSaleComponent {
   readonly lines = signal<SaleLine[]>([]);
 
   // ── Derived totals ─────────────────────────────────────────────────────────
+  /** Net subtotal (pre-VAT), kept for the line/subtotal display. */
   readonly subtotal = computed<number>(() =>
-    this.lines().reduce((sum, l) => {
-      const qty = +l.quantity || 0;
-      const price = +l.unitPrice || 0;
-      const disc = +l.lineDiscountAmount || 0;
-      return sum + (qty * price - disc);
-    }, 0),
+    this.lines().reduce((sum, l) => sum + this.lineNet(l), 0),
   );
+
+  /** VAT-inclusive total — what the customer actually pays (matches the server gross). */
+  readonly grossTotal = computed<number>(() =>
+    this.lines().reduce((sum, l) => sum + this.lineGross(l), 0),
+  );
+
+  readonly vatTotal = computed<number>(() => this.grossTotal() - this.subtotal());
 
   readonly change = computed<number>(() => {
     const tendered = +this.tenderedAmount() || 0;
-    return tendered - this.subtotal();
+    return tendered - this.grossTotal();
   });
+
+  /** True once a tax rate is known, so the preview can be labelled "incl. VAT" honestly. */
+  readonly vatKnown = computed(() => this.taxRates().length > 0);
 
   // ── Submit state ───────────────────────────────────────────────────────────
   readonly submitting = signal(false);
@@ -162,7 +191,7 @@ export class PosSaleComponent {
         }),
         takeUntilDestroyed(),
       )
-      .subscribe({ next: ({ rows }) => this.agents.set(rows), error: () => {} });
+      .subscribe({ next: ({ rows }) => { this.agents.set(rows); this.agentsLoaded.set(true); }, error: () => this.agentsLoaded.set(true) });
 
     this.productSearch$
       .pipe(
@@ -202,11 +231,13 @@ export class PosSaleComponent {
 
   private loadOptions(companyId: string): void {
     // Load open sessions
+    this.sessionsLoaded.set(false);
     this.posService.listSessions(companyId, 0, 50).subscribe({
-      next: ({ rows }) => this.openSessions.set(rows.filter((s) => s.status === 'OPEN')),
-      error: () => {},
+      next: ({ rows }) => { this.openSessions.set(rows.filter((s) => s.status === 'OPEN')); this.sessionsLoaded.set(true); },
+      error: () => this.sessionsLoaded.set(true),
     });
     // Seed customer/agent/product options with empty query
+    this.agentsLoaded.set(false);
     this.customerSearch$.next('');
     this.agentSearch$.next('');
     this.productSearch$.next('');
@@ -214,6 +245,11 @@ export class PosSaleComponent {
     this.productService.listUnits(companyId, undefined, 0, 200).subscribe({
       next: ({ rows }) => this.units.set(rows),
       error: () => {},
+    });
+    // Load tax rates for the VAT-inclusive preview (best-effort — needs TAXRATE.VIEW).
+    this.salesService.listTaxRates(companyId).subscribe({
+      next: (rows) => this.taxRates.set(rows),
+      error: () => this.taxRates.set([]),
     });
   }
 
@@ -235,7 +271,8 @@ export class PosSaleComponent {
   addLine(): void {
     this.lines.update((ls) => [
       ...ls,
-      { id: nextLineId(), productUid: '', productId: '', productName: '', unitUid: '', unitId: '', unitName: '', quantity: '1', unitPrice: '0.00', lineDiscountAmount: '0.00' },
+      { id: nextLineId(), productUid: '', productId: '', productName: '', unitUid: '', unitId: '', unitName: '',
+        quantity: '1', unitPrice: '0.00', lineDiscountAmount: '0.00', vatRate: '0', priceState: 'ok' },
     ]);
   }
 
@@ -245,11 +282,13 @@ export class PosSaleComponent {
 
   onLineProductChange(lineId: string, productUid: string): void {
     const product = this.products().find((p) => p.uid === productUid);
+    const vatRate = product ? this.vatRateFor(product.vatStatus) : 0;
     this.lines.update((ls) =>
       ls.map((l) =>
         l.id === lineId
           ? { ...l, productUid, productId: product?.id ?? '', productName: product?.name ?? '',
-              unitUid: product?.baseUnitUid ?? '', unitId: '', unitName: product?.baseUnitName ?? '' }
+              unitUid: product?.baseUnitUid ?? '', unitId: '', unitName: product?.baseUnitName ?? '',
+              vatRate: String(vatRate), unitPrice: '0.00', priceState: product ? 'loading' : 'ok' }
           : l,
       ),
     );
@@ -262,6 +301,29 @@ export class PosSaleComponent {
         );
       }
     }
+    // Auto-fetch the server-authoritative list price (mirrors the backend's first-price-for-company rule).
+    if (product) this.fetchLinePrice(lineId, product.uid);
+  }
+
+  /** Pulls the product's price-list price and populates the (read-only) line price. */
+  private fetchLinePrice(lineId: string, productUid: string): void {
+    const companyId = this.selectedCompanyId();
+    this.productService.listPrices(productUid).subscribe({
+      next: (priceRows) => {
+        const row = priceRows.find((p) => p.companyId === companyId) ?? priceRows[0];
+        const amount = row?.price?.amount;
+        this.lines.update((ls) =>
+          ls.map((l) => l.id === lineId
+            ? { ...l, unitPrice: amount ?? '0.00', priceState: amount != null ? 'ok' : 'missing' }
+            : l),
+        );
+      },
+      error: () => {
+        this.lines.update((ls) =>
+          ls.map((l) => l.id === lineId ? { ...l, priceState: 'missing' } : l),
+        );
+      },
+    });
   }
 
   onLineUnitChange(lineId: string, unitUid: string): void {
@@ -273,10 +335,31 @@ export class PosSaleComponent {
     );
   }
 
-  onLineFieldChange(lineId: string, field: 'quantity' | 'unitPrice' | 'lineDiscountAmount', value: string): void {
+  onLineFieldChange(lineId: string, field: 'quantity' | 'lineDiscountAmount', value: string): void {
     this.lines.update((ls) =>
       ls.map((l) => l.id === lineId ? { ...l, [field]: value } : l),
     );
+  }
+
+  /**
+   * Resolve the VAT fraction for a product's VAT status from the company tax rates.
+   * Rates may be stored as a percentage (18) or a fraction (0.18) — both normalise to a fraction.
+   */
+  private vatRateFor(vatStatus: VatStatus): number {
+    const tr = this.taxRates().find((t) => t.vatStatus === vatStatus);
+    if (!tr) return 0;
+    const raw = +tr.rate || 0;
+    return raw > 1 ? raw / 100 : raw;
+  }
+
+  /** Net amount for a line: qty × unit price − discount. */
+  private lineNet(l: SaleLine): number {
+    return (+l.quantity || 0) * (+l.unitPrice || 0) - (+l.lineDiscountAmount || 0);
+  }
+
+  /** Gross (VAT-inclusive) amount for a line. */
+  lineGross(l: SaleLine): number {
+    return this.lineNet(l) * (1 + (+(l.vatRate ?? '0') || 0));
   }
 
   // ── Submit ─────────────────────────────────────────────────────────────────
@@ -285,16 +368,16 @@ export class PosSaleComponent {
   private validateSaleLine(l: SaleLine): string | null {
     if (!l.productId) return 'Select a product for every line.';
     if (!l.unitId) return 'Select a unit for every line.';
+    if (l.priceState === 'missing') return `"${l.productName}" has no price set. Set a price for it before selling.`;
     if (!l.quantity || +l.quantity <= 0) return 'Quantity must be positive for every line.';
-    if (!l.unitPrice || +l.unitPrice < 0) return 'Unit price must be non-negative for every line.';
     return null;
   }
 
   /** Returns a validation error message, or null if the form is valid. */
   private validateSaleForm(sessionUid: string, customerUid: string, agentUid: string, curr: string, tendered: string): string | null {
-    if (!sessionUid) return 'Session is required.';
-    if (!customerUid) return 'Customer is required.';
-    if (!agentUid) return 'Agent is required.';
+    if (!sessionUid) return 'Select an open session before completing the sale.';
+    if (!customerUid) return 'Select a customer before completing the sale.';
+    if (!agentUid) return 'Select a sales agent before completing the sale.';
     if (!curr) return 'Currency is required.';
     if (this.lines().length === 0) return 'Add at least one line item.';
     for (const l of this.lines()) {
@@ -302,7 +385,7 @@ export class PosSaleComponent {
       if (lineErr) return lineErr;
     }
     if (!tendered || Number.isNaN(+tendered) || +tendered < 0) return 'Tendered amount must be a valid non-negative number.';
-    if (+tendered < this.subtotal()) return 'Tendered amount is less than the total.';
+    if (+tendered < this.grossTotal()) return 'Tendered amount is less than the total.';
     return null;
   }
 
@@ -370,15 +453,16 @@ export class PosSaleComponent {
     // Refresh open sessions
     const cId = this.selectedCompanyId();
     if (cId) {
+      this.sessionsLoaded.set(false);
       this.posService.listSessions(cId, 0, 50).subscribe({
-        next: ({ rows }) => this.openSessions.set(rows.filter((s) => s.status === 'OPEN')),
-        error: () => {},
+        next: ({ rows }) => { this.openSessions.set(rows.filter((s) => s.status === 'OPEN')); this.sessionsLoaded.set(true); },
+        error: () => this.sessionsLoaded.set(true),
       });
     }
   }
 
   lineSubtotal(l: SaleLine): number {
-    return (+l.quantity || 0) * (+l.unitPrice || 0) - (+l.lineDiscountAmount || 0);
+    return this.lineNet(l);
   }
 
   private messageFrom(err: unknown, fallback: string): string {

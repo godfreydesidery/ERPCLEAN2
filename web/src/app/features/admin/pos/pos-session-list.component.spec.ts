@@ -176,6 +176,36 @@ describe('PosSessionListComponent — 403 forbidden', () => {
   });
 });
 
+// ── branch selector ─────────────────────────────────────────────────────────────
+
+describe('PosSessionListComponent — branch selector', () => {
+  beforeEach(() => { vi.useFakeTimers(); makeBed({ canOpen: true }); });
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('defaults to the active/first branch and loads its tills', async () => {
+    const comp = TestBed.createComponent(PosSessionListComponent).componentInstance;
+    const svc = TestBed.inject(PosService) as any;
+    await vi.runAllTimersAsync();
+
+    expect(comp.selectedBranchId()).toBe('2');
+    expect(svc.listTills).toHaveBeenCalledWith('10', '2');
+  });
+
+  it('onBranchChange reloads tills for the chosen branch and clears the till selection', async () => {
+    const comp = TestBed.createComponent(PosSessionListComponent).componentInstance;
+    const svc = TestBed.inject(PosService) as any;
+    await vi.runAllTimersAsync();
+    svc.listTills.mockClear();
+
+    comp.newTillUid.set('TILL1');
+    comp.onBranchChange('7');
+
+    expect(comp.selectedBranchId()).toBe('7');
+    expect(comp.newTillUid()).toBe('');
+    expect(svc.listTills).toHaveBeenCalledWith('10', '7');
+  });
+});
+
 // ── status pill rendering ──────────────────────────────────────────────────────
 // The legacy statusBadgeClass() helper was removed in the UI revamp; status colour
 // now lives in the template as inline status-tag bindings. Assert the rendered DOM.
