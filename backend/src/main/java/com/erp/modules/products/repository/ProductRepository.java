@@ -21,15 +21,20 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     Page<Product> findByCompanyId(Long companyId, Pageable pageable);
 
     /**
-     * Search by name (case-insensitive contains), code, or any barcode within a company.
-     * Contains (not prefix) per the brief — matches mid-name words.
+     * Search within a company by name (case-insensitive contains), code (case-insensitive
+     * contains), or an exact barcode match. Contains (not prefix) on name/code per the brief —
+     * matches mid-name words and partial codes; barcode is matched exactly because scans deliver
+     * the full symbol. The barcode predicate is an {@code EXISTS} subquery (not a join) so a
+     * product with several barcodes is never duplicated in the page and pagination stays correct.
      */
     @Query("""
             SELECT p FROM Product p
             WHERE p.companyId = :companyId
               AND (:q IS NULL OR
                    LOWER(p.name) LIKE LOWER(CONCAT('%', :q, '%'))
-                   OR p.code = :q)
+                   OR LOWER(p.code) LIKE LOWER(CONCAT('%', :q, '%'))
+                   OR EXISTS (SELECT 1 FROM ProductBarcode b
+                              WHERE b.product = p AND b.barcode = :q))
             """)
     Page<Product> search(@Param("companyId") Long companyId,
                          @Param("q") String q,
