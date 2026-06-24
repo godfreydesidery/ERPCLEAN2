@@ -1,0 +1,163 @@
+<div class="admin-page" aria-label="Currency Enablement">
+
+  <!-- Page header -->
+  <div class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>Currencies</h1>
+      <p class="subtitle">Enable or disable currencies and set the default document currency for each company</p>
+    </div>
+    <div class="erp-page-head__actions">
+      @if (companyState() === 'loading') {
+        <span class="spinner-border spinner-border-sm text-secondary" aria-label="Loading companies"></span>
+      }
+      @if (companies().length > 1) {
+        <label class="visually-hidden" for="currencyEnablementCompany">Company</label>
+        <select id="currencyEnablementCompany"
+                class="form-select form-select-sm w-auto"
+                [ngModel]="selectedCompany()?.uid ?? ''"
+                (ngModelChange)="onCompanyChange($event)">
+          @for (c of companies(); track c.uid) {
+            <option [value]="c.uid">{{ c.name }}</option>
+          }
+        </select>
+      }
+      @if (state() === 'idle' || state() === 'error') {
+        <button type="button" class="btn btn-outline-secondary btn-sm" (click)="loadAll()">
+          <i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Refresh
+        </button>
+      }
+    </div>
+  </div>
+
+  <!-- Permission notice (read-only mode) -->
+  @if (state() === 'idle' && !canManage()) {
+    <div class="alert alert-info py-2 mb-3" role="note">
+      <i class="bi bi-info-circle" aria-hidden="true"></i>
+      You can view currency settings but do not have permission to change them (CURRENCY.MANAGE required).
+    </div>
+  }
+
+  <!-- Action error -->
+  @if (actionError()) {
+    <div class="alert alert-danger py-2 d-flex align-items-center gap-2 mb-3" role="alert">
+      <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+      {{ actionError() }}
+      <button type="button" class="btn-close ms-auto" aria-label="Dismiss error"
+              (click)="actionError.set(null)"></button>
+    </div>
+  }
+
+  <!-- Four-state switch -->
+  @switch (state()) {
+    @case ('loading') {
+      <div class="text-center py-5" aria-busy="true" aria-live="polite" aria-label="Loading currencies">
+        <span class="spinner-border text-primary" aria-label="Loading"></span>
+      </div>
+    }
+    @case ('forbidden') {
+      <div class="alert alert-warning" role="alert">
+        <i class="bi bi-lock" aria-hidden="true"></i>
+        You do not have permission to view currency settings.
+      </div>
+    }
+    @case ('error') {
+      <div class="alert alert-danger d-flex align-items-center gap-2" role="alert">
+        <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+        Failed to load currencies.
+        <button type="button" class="btn btn-sm btn-outline-danger ms-auto" (click)="loadAll()">
+          Retry
+        </button>
+      </div>
+    }
+    @default {
+      @if (isEmpty()) {
+        <div class="erp-empty" aria-live="polite">
+          <i class="bi bi-coin"></i>
+          No currencies found in the global catalogue.
+        </div>
+      } @else {
+        <div class="erp-table-wrap">
+          <table class="erp-table">
+            <caption class="visually-hidden">Global currencies — enabled status and default for this company</caption>
+            <thead>
+              <tr>
+                <th scope="col">Code</th>
+                <th scope="col">Name</th>
+                <th scope="col">Symbol</th>
+                <th scope="col">Status</th>
+                <th scope="col">Default</th>
+                @if (canManage()) {
+                  <th scope="col"><span class="visually-hidden">Actions</span></th>
+                }
+              </tr>
+            </thead>
+            <tbody>
+              @for (currency of allCurrencies(); track currency.uid) {
+                <tr [class.table-success]="isDefault(currency.code)"
+                    [attr.aria-label]="currency.code + ' ' + currency.name + (isDefault(currency.code) ? ' (default)' : '')">
+                  <td class="mono fw-semibold">{{ currency.code }}</td>
+                  <td>{{ currency.name }}</td>
+                  <td class="mono">{{ currency.symbol }}</td>
+                  <td>
+                    @if (isEnabled(currency.code)) {
+                      <span class="status-tag status-tag--ok">
+                        <span class="status-tag__dot" aria-hidden="true"></span>Enabled
+                      </span>
+                    } @else {
+                      <span class="status-tag status-tag--neutral">
+                        <span class="status-tag__dot" aria-hidden="true"></span>Disabled
+                      </span>
+                    }
+                  </td>
+                  <td>
+                    @if (isDefault(currency.code)) {
+                      <span class="status-tag status-tag--info">
+                        <span class="status-tag__dot" aria-hidden="true"></span>Default
+                      </span>
+                    } @else {
+                      <span class="text-muted" aria-hidden="true">—</span>
+                    }
+                  </td>
+                  @if (canManage()) {
+                    <td class="text-end text-nowrap">
+                      @if (isActing(currency.code)) {
+                        <span class="spinner-border spinner-border-sm text-secondary"
+                              [attr.aria-label]="'Updating ' + currency.code"></span>
+                      } @else {
+                        @if (!isEnabled(currency.code)) {
+                          <button type="button"
+                                  class="btn btn-outline-success btn-sm me-1"
+                                  [attr.aria-label]="'Enable ' + currency.code"
+                                  (click)="enable(currency.code)">
+                            Enable
+                          </button>
+                        } @else {
+                          @if (!isDefault(currency.code)) {
+                            <button type="button"
+                                    class="btn btn-outline-primary btn-sm me-1"
+                                    [attr.aria-label]="'Set ' + currency.code + ' as default'"
+                                    (click)="setDefault(currency.code)">
+                              Make Default
+                            </button>
+                          }
+                          <button type="button"
+                                  class="btn btn-outline-danger btn-sm"
+                                  [attr.aria-label]="'Disable ' + currency.code"
+                                  [disabled]="isDefault(currency.code)"
+                                  [title]="isDefault(currency.code) ? 'Cannot disable the default currency' : ''"
+                                  (click)="disable(currency.code)">
+                            Disable
+                          </button>
+                        }
+                      }
+                    </td>
+                  }
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    }
+  }
+</div>

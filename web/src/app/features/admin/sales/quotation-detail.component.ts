@@ -57,6 +57,9 @@ export class QuotationDetailComponent {
   readonly newLineQty = signal('');
   readonly newLineUnitPrice = signal('');
   readonly newLineDiscountPct = signal('');
+  /** The product's price-list (Co.) price, fetched on product select; override is optional. */
+  readonly resolvedPrice = signal<string | null>(null);
+  readonly priceState = signal<'idle' | 'loading' | 'ok' | 'missing'>('idle');
   readonly addingLine = signal(false);
   readonly lineFormError = signal<string | null>(null);
 
@@ -158,6 +161,8 @@ export class QuotationDetailComponent {
     this.productSearchQ.set(q);
     this.selectedProduct.set(null);
     this.newLineUnitUid.set('');
+    this.resolvedPrice.set(null);
+    this.priceState.set('idle');
     this.productSearch$.next(q);
   }
 
@@ -165,6 +170,23 @@ export class QuotationDetailComponent {
     this.selectedProduct.set({ uid: product.uid, label: `${product.code} — ${product.name}` });
     this.productResults.set([]);
     this.productSearchQ.set(`${product.code} — ${product.name}`);
+    this.fetchLinePrice(product.uid);
+  }
+
+  /** Fetch the product's price-list price for this company so the Co. price is visible before submit. */
+  private fetchLinePrice(productUid: string): void {
+    const companyId = this.quote()?.companyId;
+    this.priceState.set('loading');
+    this.resolvedPrice.set(null);
+    this.productService.listPrices(productUid).subscribe({
+      next: (rows) => {
+        const row = rows.find((p) => p.companyId === companyId) ?? rows[0];
+        const amount = row?.price?.amount ?? null;
+        this.resolvedPrice.set(amount);
+        this.priceState.set(amount != null ? 'ok' : 'missing');
+      },
+      error: () => { this.resolvedPrice.set(null); this.priceState.set('missing'); },
+    });
   }
 
   private asStr(v: unknown): string {
@@ -206,6 +228,8 @@ export class QuotationDetailComponent {
         this.newLineQty.set('');
         this.newLineUnitPrice.set('');
         this.newLineDiscountPct.set('');
+        this.resolvedPrice.set(null);
+        this.priceState.set('idle');
         this.addingLine.set(false);
         this.alerts.success('Line added');
         this.loadLines();

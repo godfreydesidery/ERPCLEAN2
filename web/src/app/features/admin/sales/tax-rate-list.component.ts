@@ -1,4 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
+import { DecimalPipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AlertService } from '../../../core/feedback/alert.service';
@@ -17,7 +18,7 @@ import { SalesService } from './sales.service';
  */
 @Component({
   selector: 'app-tax-rate-list',
-  imports: [FormsModule],
+  imports: [FormsModule, DecimalPipe],
   templateUrl: './tax-rate-list.component.html',
   styleUrl: './tax-rate-list.component.scss',
 })
@@ -91,9 +92,15 @@ export class TaxRateListComponent {
 
   // ── Inline edit ────────────────────────────────────────────────────────────
 
+  /** Convert the stored fraction (e.g. "0.1800") to a display percentage number (18). */
+  ratePercent(fraction: string): number {
+    return (+fraction || 0) * 100;
+  }
+
   startEdit(tr: TaxRateDto): void {
     this.editingUid.set(tr.uid);
-    this.editRate.set(tr.rate);
+    // The field is a percentage; prefill from the stored fraction (0.18 → "18").
+    this.editRate.set(String(Number(this.ratePercent(tr.rate).toFixed(4))));
     this.editError.set(null);
   }
 
@@ -103,14 +110,20 @@ export class TaxRateListComponent {
   }
 
   saveEdit(tr: TaxRateDto): void {
-    const rate = this.editRate().trim();
-    if (!rate || isNaN(Number(rate))) {
-      this.editError.set('A valid numeric rate is required.');
+    const entered = this.editRate().trim();
+    const pct = Number(entered);
+    if (!entered || Number.isNaN(pct)) {
+      this.editError.set('Enter the rate as a percentage (e.g. 18).');
+      return;
+    }
+    // Backend stores a fraction in [0, 0.9999]; a percentage maps to [0, 99.99].
+    if (pct < 0 || pct > 99.99) {
+      this.editError.set('Rate must be between 0 and 99.99%.');
       return;
     }
     this.editSaving.set(true);
     this.editError.set(null);
-    const request: UpdateTaxRateRequest = { rate };
+    const request: UpdateTaxRateRequest = { rate: (pct / 100).toFixed(4) };
     this.salesService.updateTaxRate(tr.uid, request).subscribe({
       next: (updated) => {
         this.editSaving.set(false);

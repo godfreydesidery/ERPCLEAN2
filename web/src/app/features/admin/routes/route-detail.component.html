@@ -345,8 +345,8 @@
       </div>
       <div class="erp-card__body">
 
-        <!-- Add-branch form -->
-        @if (canAssign()) {
+        <!-- Add-branch form (branch ops require ROUTE.MANAGE, matching the backend endpoint) -->
+        @if (canManage()) {
           <fieldset class="mb-3">
             <legend class="form-label form-label-sm">Assign Branch</legend>
             @if (branchAssignError()) {
@@ -419,7 +419,7 @@
                 <tr>
                   <th scope="col">Code</th>
                   <th scope="col">Name</th>
-                  @if (canAssign()) {
+                  @if (canManage()) {
                     <th scope="col"><span class="visually-hidden">Actions</span></th>
                   }
                 </tr>
@@ -429,7 +429,7 @@
                   <tr>
                     <td class="mono">{{ rb.branchCode }}</td>
                     <td>{{ rb.branchName }}</td>
-                    @if (canAssign()) {
+                    @if (canManage()) {
                       <td>
                         <button class="btn btn-outline-danger btn-sm"
                                 type="button"

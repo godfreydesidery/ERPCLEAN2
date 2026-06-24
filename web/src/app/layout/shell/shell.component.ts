@@ -337,6 +337,7 @@ export class ShellComponent {
     {
       label: 'FX / Currency',
       items: [
+        { label: 'Currencies', route: '/admin/fx/currencies', icon: 'bi-coin', available: true, permission: 'CURRENCY.MANAGE' },
         { label: 'Exchange Rates', route: '/admin/fx/rates', icon: 'bi-currency-exchange', available: true, permission: 'CURRENCY.VIEW' },
         { label: 'Revaluation Runs', route: '/admin/fx/revaluation-runs', icon: 'bi-arrow-repeat', available: true, permission: 'FX.EXPOSURE.VIEW' },
       ],

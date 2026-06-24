@@ -5,9 +5,12 @@ import { ApiResponse, PageMeta } from '../../../core/api/api-response.model';
 import { SKIP_UNWRAP } from '../../../core/api/http-context.tokens';
 import { environment } from '../../../../environments/environment';
 import {
+  CompanyCurrencyDto,
   CurrencyDto,
   CurrencyRatePage,
   CurrencyRateDto,
+  EnableCurrencyRequest,
+  EnabledCurrenciesDto,
   FxRevaluationPreviewDto,
   FxRevaluationRunDto,
   FxRevaluationRunPage,
@@ -39,6 +42,63 @@ export class FxService {
   /** Get a single currency by uid. CURRENCY.VIEW. */
   getCurrency(uid: string): Observable<CurrencyDto> {
     return this.http.get<CurrencyDto>(`${this.base}/currencies/uid/${uid}`);
+  }
+
+  // ── Currency enablement (ADR-0039 D-7/D-8) ──────────────────────────────────
+
+  /**
+   * Effective enabled list + resolved default for a company scope.
+   * Any authenticated user (no CURRENCY.VIEW required — the controller uses isAuthenticated()).
+   * GET /fx/currencies/enabled?companyUid=...
+   */
+  getEnabledCurrencies(companyUid: string): Observable<EnabledCurrenciesDto> {
+    const params = new HttpParams().set('companyUid', companyUid);
+    return this.http.get<EnabledCurrenciesDto>(`${this.base}/currencies/enabled`, { params });
+  }
+
+  /**
+   * List active company_currency rows for a company.
+   * CURRENCY.VIEW.
+   * GET /fx/companies/{companyUid}/currencies
+   */
+  listEnabledForCompany(companyUid: string): Observable<CompanyCurrencyDto[]> {
+    return this.http.get<CompanyCurrencyDto[]>(`${this.base}/companies/${companyUid}/currencies`);
+  }
+
+  /**
+   * Enable (or re-enable) a currency for a company.
+   * CURRENCY.MANAGE.
+   * POST /fx/companies/{companyUid}/currencies/enable
+   */
+  enableForCompany(companyUid: string, req: EnableCurrencyRequest): Observable<CompanyCurrencyDto> {
+    return this.http.post<CompanyCurrencyDto>(
+      `${this.base}/companies/${companyUid}/currencies/enable`,
+      req,
+    );
+  }
+
+  /**
+   * Deactivate a currency for a company.
+   * CURRENCY.MANAGE.
+   * POST /fx/companies/{companyUid}/currencies/{currencyCode}/deactivate
+   */
+  deactivateForCompany(companyUid: string, currencyCode: string): Observable<CompanyCurrencyDto> {
+    return this.http.post<CompanyCurrencyDto>(
+      `${this.base}/companies/${companyUid}/currencies/${currencyCode}/deactivate`,
+      {},
+    );
+  }
+
+  /**
+   * Set the default document currency for a company.
+   * CURRENCY.MANAGE.
+   * POST /fx/companies/{companyUid}/currencies/{currencyCode}/set-default
+   */
+  setDefaultForCompany(companyUid: string, currencyCode: string): Observable<CompanyCurrencyDto> {
+    return this.http.post<CompanyCurrencyDto>(
+      `${this.base}/companies/${companyUid}/currencies/${currencyCode}/set-default`,
+      {},
+    );
   }
 
   // ── Currency rates ─────────────────────────────────────────────────────────

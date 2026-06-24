@@ -16,10 +16,11 @@ export type FxRevaluationRunStatus = 'PREVIEWED' | 'POSTED' | 'REVERSED';
 export interface CurrencyDto {
   id: string;
   uid: string;
-  code: string;       // ISO 4217 3-letter code (e.g. "USD")
+  code: string;           // ISO 4217 3-letter code (e.g. "USD")
   name: string;
   symbol: string;
-  minorUnits: number; // short — not a monetary amount, safe as number
+  minorUnits: number;     // short — not a monetary amount, safe as number
+  numericCode: string | null; // ISO 4217 numeric code (P2-M1); null if not seeded
   active: boolean;
   status: string;
 }
@@ -152,4 +153,35 @@ export interface CurrencyRatePage {
 export interface FxRevaluationRunPage {
   rows: FxRevaluationRunDto[];
   meta: import('../../../../core/api/api-response.model').PageMeta;
+}
+
+// ── Currency enablement (ADR-0039 D-7/D-8) ───────────────────────────────────
+
+/**
+ * Mirrors CompanyCurrencyDto.
+ * Long fields (id, companyId) arrive as strings (global Jackson config).
+ */
+export interface CompanyCurrencyDto {
+  id: string;
+  uid: string;
+  companyId: string;
+  currencyCode: string;
+  isDefault: boolean;
+  active: boolean;
+}
+
+/**
+ * Mirrors EnableCurrencyRequest.
+ */
+export interface EnableCurrencyRequest {
+  currencyCode: string;   // ISO 4217, exactly 3 chars
+  setAsDefault: boolean;
+}
+
+/**
+ * Mirrors EnabledCurrenciesDto — GET /fx/currencies/enabled.
+ */
+export interface EnabledCurrenciesDto {
+  resolvedDefault: string;
+  enabled: string[];
 }
