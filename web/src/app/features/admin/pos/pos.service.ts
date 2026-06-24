@@ -12,6 +12,7 @@ import {
   PosPayoutRequest,
   PosSaleRequest,
   PosSessionDto,
+  PosSessionStatus,
   PosTillDto,
   ReconcileSessionRequest,
   XReadDto,
@@ -59,11 +60,12 @@ export class PosService {
 
   // ── Sessions ──────────────────────────────────────────────────────────────
 
-  listSessions(companyId: string, page = 0, size = 20): Observable<PosSessionPage> {
-    const params = new HttpParams()
+  listSessions(companyId: string, page = 0, size = 20, status?: PosSessionStatus): Observable<PosSessionPage> {
+    let params = new HttpParams()
       .set('companyId', companyId)
       .set('page', String(page))
       .set('size', String(size));
+    if (status) params = params.set('status', status);
     const context = new HttpContext().set(SKIP_UNWRAP, true);
     return this.http
       .get<ApiResponse<PosSessionDto[]>>(this.sessionBase, { params, context })

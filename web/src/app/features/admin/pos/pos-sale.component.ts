@@ -247,7 +247,9 @@ export class PosSaleComponent {
   private loadOptions(companyId: string): void {
     // Load open sessions
     this.sessionsLoaded.set(false);
-    this.posService.listSessions(companyId, 0, 50).subscribe({
+    // Only OPEN sessions matter for checkout — filter server-side so a fresh session isn't
+    // buried beyond page 0 when a company has many historical (closed/reconciled) sessions.
+    this.posService.listSessions(companyId, 0, 50, 'OPEN').subscribe({
       next: ({ rows }) => { this.openSessions.set(rows.filter((s) => s.status === 'OPEN')); this.sessionsLoaded.set(true); },
       error: () => this.sessionsLoaded.set(true),
     });
@@ -501,7 +503,7 @@ export class PosSaleComponent {
     const cId = this.selectedCompanyId();
     if (cId) {
       this.sessionsLoaded.set(false);
-      this.posService.listSessions(cId, 0, 50).subscribe({
+      this.posService.listSessions(cId, 0, 50, 'OPEN').subscribe({
         next: ({ rows }) => { this.openSessions.set(rows.filter((s) => s.status === 'OPEN')); this.sessionsLoaded.set(true); },
         error: () => this.sessionsLoaded.set(true),
       });

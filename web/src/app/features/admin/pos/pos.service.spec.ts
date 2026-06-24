@@ -96,6 +96,19 @@ describe('PosService — listSessions', () => {
 
     expect(result.meta.totalPages).toBe(1);
   });
+
+  it('appends status=OPEN when a status filter is given (POS checkout)', () => {
+    const svc = TestBed.inject(PosService);
+    const http = TestBed.inject(HttpTestingController);
+
+    svc.listSessions('10', 0, 50, 'OPEN').subscribe();
+
+    const req = http.expectOne(
+      (r) => r.url === `${API}/pos/sessions` && r.params.get('status') === 'OPEN',
+    );
+    expect(req.request.params.get('companyId')).toBe('10');
+    req.flush({ data: [stubSession], meta: { page: 0, size: 50, totalElements: 1, totalPages: 1, hasNext: false } });
+  });
 });
 
 // ── openSession ───────────────────────────────────────────────────────────────
