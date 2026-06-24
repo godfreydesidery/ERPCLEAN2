@@ -185,6 +185,9 @@ body {
   box-shadow: var(--erp-shadow);
   overflow: clip;
 }
+/* Opt-out for cards hosting an absolutely-positioned autocomplete dropdown (e.g. add-line
+   product search): the default `overflow: clip` slices the results that spill past the card. */
+.erp-card--overflow-visible { overflow: visible; }
 .erp-card + .erp-card { margin-top: 1rem; }
 .erp-card__head {
   display: flex;
