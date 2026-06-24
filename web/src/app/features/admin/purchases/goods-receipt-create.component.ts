@@ -23,6 +23,16 @@ interface ReceiveLineEntry {
   receivedQty: string;
   /** Whether to include this line in the GR. */
   include: boolean;
+  /** Whether the batch/serial details section is expanded for this line. */
+  batchExpanded: boolean;
+  /** Batch / lot number. */
+  lotNumber: string;
+  /** Manufacture date (YYYY-MM-DD). */
+  manufactureDate: string;
+  /** Expiry date (YYYY-MM-DD). */
+  expiryDate: string;
+  /** Raw textarea content — one serial/IMEI per line. */
+  serialNumbersRaw: string;
 }
 
 /**
@@ -167,6 +177,11 @@ export class GoodsReceiptCreateComponent {
             line: l,
             receivedQty: l.outstandingQtyInBase,
             include: true,
+            batchExpanded: false,
+            lotNumber: '',
+            manufactureDate: '',
+            expiryDate: '',
+            serialNumbersRaw: '',
           }));
         this.receiveLines.set(entries);
         this.linesState.set('idle');
@@ -209,6 +224,22 @@ export class GoodsReceiptCreateComponent {
     );
   }
 
+  toggleBatchExpanded(index: number): void {
+    this.receiveLines.update((entries) =>
+      entries.map((e, i) => (i === index ? { ...e, batchExpanded: !e.batchExpanded } : e)),
+    );
+  }
+
+  updateLineBatchField(
+    index: number,
+    field: 'lotNumber' | 'manufactureDate' | 'expiryDate' | 'serialNumbersRaw',
+    value: string,
+  ): void {
+    this.receiveLines.update((entries) =>
+      entries.map((e, i) => (i === index ? { ...e, [field]: value } : e)),
+    );
+  }
+
   // ── Submit ─────────────────────────────────────────────────────────────────
 
   submit(): void {
@@ -237,10 +268,21 @@ export class GoodsReceiptCreateComponent {
     this.submitting.set(true);
     this.formError.set(null);
 
-    const lines: GoodsReceiptLineRequest[] = includedLines.map((e) => ({
-      purchaseOrderLineUid: e.line.uid,
-      receivedQty: e.receivedQty.trim(),
-    }));
+    const lines: GoodsReceiptLineRequest[] = includedLines.map((e) => {
+      const req: GoodsReceiptLineRequest = {
+        purchaseOrderLineUid: e.line.uid,
+        receivedQty: e.receivedQty.trim(),
+      };
+      if (e.lotNumber.trim()) req.lotNumber = e.lotNumber.trim();
+      if (e.manufactureDate.trim()) req.manufactureDate = e.manufactureDate.trim();
+      if (e.expiryDate.trim()) req.expiryDate = e.expiryDate.trim();
+      const serials = e.serialNumbersRaw
+        .split('\n')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+      if (serials.length > 0) req.serialNumbers = serials;
+      return req;
+    });
 
     const request: CreateGoodsReceiptRequest = {
       purchaseOrderUid: p.uid,

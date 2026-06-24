@@ -48,8 +48,14 @@ export class DocumentBrandingComponent {
   readonly fContactEmail = signal('');
   readonly fWebsite = signal('');
   readonly fLogoRef = signal('');
+  /** Inline logo as a base64 data URI ('' = none). Set from an upload, downscaled to ≤256 px. */
+  readonly fLogoDataUri = signal('');
+  readonly logoError = signal<string | null>(null);
   readonly fFooterTerms = signal('');
   readonly fBankDetails = signal('');
+
+  /** Max stored logo data-URI length — mirrors the V75 DB CHECK / request @Size (~70 KB). */
+  private static readonly LOGO_MAX_CHARS = 72000;
 
   readonly canManage = computed(() => this.session.hasPermission('DOCUMENT.BRANDING.MANAGE'));
 
@@ -86,8 +92,62 @@ export class DocumentBrandingComponent {
     this.fContactEmail.set(b.contactEmail ?? '');
     this.fWebsite.set(b.website ?? '');
     this.fLogoRef.set(b.logoRef ?? '');
+    this.fLogoDataUri.set(b.logoDataUri ?? '');
     this.fFooterTerms.set(b.footerTerms ?? '');
     this.fBankDetails.set(b.bankDetails ?? '');
+  }
+
+  /**
+   * Handle a logo file pick: validate PNG/JPEG, downscale to ≤256 px on a canvas, and store the
+   * result as a base64 data URI (kept under the ~70 KB cap, re-encoding as JPEG if needed).
+   */
+  onLogoSelected(event: Event): void {
+    this.logoError.set(null);
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = ''; // allow re-selecting the same file later
+    if (!file) return;
+    if (!/^image\/(png|jpeg)$/.test(file.type)) {
+      this.logoError.set('Use a PNG or JPEG image.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => this.logoError.set('Could not read the file.');
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => this.logoError.set('Could not read the image.');
+      img.onload = () => this.storeDownscaledLogo(img, file.type);
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  private storeDownscaledLogo(img: HTMLImageElement, sourceType: string): void {
+    const max = 256;
+    const scale = Math.min(1, max / Math.max(img.width, img.height));
+    const w = Math.max(1, Math.round(img.width * scale));
+    const h = Math.max(1, Math.round(img.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) { this.logoError.set('Could not process the image.'); return; }
+    ctx.drawImage(img, 0, 0, w, h);
+    // Prefer the source format; fall back to (lower-quality) JPEG if the PNG is over the cap.
+    let dataUri = canvas.toDataURL(sourceType === 'image/png' ? 'image/png' : 'image/jpeg', 0.85);
+    if (dataUri.length > DocumentBrandingComponent.LOGO_MAX_CHARS) {
+      dataUri = canvas.toDataURL('image/jpeg', 0.7);
+    }
+    if (dataUri.length > DocumentBrandingComponent.LOGO_MAX_CHARS) {
+      this.logoError.set('Logo is too detailed to store — try a simpler image.');
+      return;
+    }
+    this.fLogoDataUri.set(dataUri);
+  }
+
+  clearLogo(): void {
+    this.fLogoDataUri.set('');
+    this.logoError.set(null);
   }
 
   save(): void {
@@ -120,6 +180,7 @@ export class DocumentBrandingComponent {
       contactEmail: this.fContactEmail().trim(),
       website: this.fWebsite().trim(),
       logoRef: this.fLogoRef().trim(),
+      logoDataUri: this.fLogoDataUri(),
       footerTerms: this.fFooterTerms().trim(),
       bankDetails: this.fBankDetails().trim(),
       version: current.version,

@@ -2,6 +2,7 @@ package com.erp.modules.purchases.domain.dto;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -14,13 +15,16 @@ import java.util.List;
  * so the two records produce the same wire shape and Stock's handler deserialises either.
  * This avoids a cross-module compile dependency from Purchases → Stock (ADR-0011 D-1 boundary).
  *
- * <p>Shape (fixed by ADR-0010 D-5 / ADR-0011 D-8 / ADR-0020 D-3):
+ * <p>Shape (fixed by ADR-0010 D-5 / ADR-0011 D-8 / ADR-0020 D-3 / V76):
  * {@code { receiptUid, companyId, branchId, receivedAt, lines:[{ productId, productUid, unitId,
- * qtyInBase, unitCostAmount }] }}
+ * qtyInBase, unitCostAmount, lotNumber, manufactureDate, expiryDate, serialNumbers }] }}
  *
  * <p>ADR-0020 D-3: {@code unitCostAmount} added — populated from
  * {@code goods_receipt_lines.unit_cost_amount} so the stock handler can recompute the moving average
  * and post the GRNI GL leg without a cross-module read.
+ *
+ * <p>V76: lot/serial fields added to LineItem — all nullable/empty; stock handler uses them
+ * to call StockBatchService.receiveQty / StockSerialService.record.
  */
 public record StockReceivedPayload(
         String  receiptUid,
@@ -36,11 +40,24 @@ public record StockReceivedPayload(
                                 Instant receivedAt, List<LineItem> lines) {
         this(receiptUid, companyId, branchId, receivedAt, lines, null);
     }
+
     public record LineItem(
             Long       productId,
             String     productUid,
             Long       unitId,
             BigDecimal qtyInBase,
-            BigDecimal unitCostAmount   // NEW (ADR-0020 D-3) — goods_receipt_lines.unit_cost_amount
-    ) {}
+            BigDecimal unitCostAmount,   // ADR-0020 D-3 — goods_receipt_lines.unit_cost_amount
+            // V76 — lot/batch + serial tracking (all nullable/empty; soft)
+            String       lotNumber,
+            LocalDate    manufactureDate,
+            LocalDate    expiryDate,
+            List<String> serialNumbers
+    ) {
+        /** Back-compat: callers that supply only cost (no lot/serial). */
+        public LineItem(Long productId, String productUid, Long unitId,
+                        BigDecimal qtyInBase, BigDecimal unitCostAmount) {
+            this(productId, productUid, unitId, qtyInBase, unitCostAmount,
+                    null, null, null, List.of());
+        }
+    }
 }

@@ -8,11 +8,13 @@ import { debounceTime, distinctUntilChanged, Subject, switchMap } from 'rxjs';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import { Company } from '../models/company.model';
+import { Branch } from '../models/branch.model';
 import { CustomerModel } from '../models/party.model';
 import { AgentModel } from '../models/party.model';
 import { ProductModel, UnitOfMeasureDto, VatStatus } from '../models/product.model';
 import { TaxRateDto } from '../models/sales.model';
 import { CompanyService } from '../company/company.service';
+import { BranchService } from '../branch/branch.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { CustomerService } from '../parties/customer.service';
 import { AgentService } from '../parties/agent.service';
@@ -68,6 +70,7 @@ function nextLineId(): string { return `line-${++_lineCounter}`; }
 export class PosSaleComponent {
   private readonly posService = inject(PosService);
   private readonly companyService = inject(CompanyService);
+  private readonly branchService = inject(BranchService);
   private readonly organisationService = inject(OrganisationService);
   private readonly customerService = inject(CustomerService);
   private readonly agentService = inject(AgentService);
@@ -82,11 +85,22 @@ export class PosSaleComponent {
   readonly selectedCompanyUid = computed(() => this.companies().find((c) => c.id === this.selectedCompanyId())?.uid ?? '');
   readonly companyState = signal<'loading' | 'idle' | 'error'>('loading');
 
+  // ── Branch context (filters the session list to one branch) ─────────────────
+  readonly branches = signal<Branch[]>([]);
+  readonly selectedBranchId = signal('');
+  readonly branchesError = signal(false);
+
   // ── Open sessions (for picker) ─────────────────────────────────────────────
   readonly openSessions = signal<PosSessionDto[]>([]);
   readonly sessionsLoaded = signal(false);
+  /** Sessions narrowed to the selected branch (a session's branch is its till's branch). */
+  readonly branchSessions = computed<PosSessionDto[]>(() => {
+    const branchId = this.selectedBranchId();
+    const all = this.openSessions();
+    return branchId ? all.filter((s) => s.branchId === branchId) : all;
+  });
   readonly sessionOptions = computed<UidOption[]>(() =>
-    this.openSessions().map((s) => ({ uid: s.uid, label: `Session ${s.uid.slice(-8)} (Till ${s.posTillId})` })),
+    this.branchSessions().map((s) => ({ uid: s.uid, label: `Session ${s.uid.slice(-8)} (Till ${s.posTillId})` })),
   );
   /** Proactive blocker hint: options have loaded but there is no open session to sell against. */
   readonly noOpenSession = computed(() => this.sessionsLoaded() && this.sessionOptions().length === 0);
@@ -219,6 +233,7 @@ export class PosSaleComponent {
             this.companyState.set('idle');
             if (list.length > 0) {
               this.selectedCompanyId.set(list[0].id);
+              this.loadBranches(list[0].uid);
               this.loadOptions(list[0].id);
             }
           },
@@ -232,7 +247,9 @@ export class PosSaleComponent {
   private loadOptions(companyId: string): void {
     // Load open sessions
     this.sessionsLoaded.set(false);
-    this.posService.listSessions(companyId, 0, 50).subscribe({
+    // Only OPEN sessions matter for checkout — filter server-side so a fresh session isn't
+    // buried beyond page 0 when a company has many historical (closed/reconciled) sessions.
+    this.posService.listSessions(companyId, 0, 50, 'OPEN').subscribe({
       next: ({ rows }) => { this.openSessions.set(rows.filter((s) => s.status === 'OPEN')); this.sessionsLoaded.set(true); },
       error: () => this.sessionsLoaded.set(true),
     });
@@ -259,7 +276,37 @@ export class PosSaleComponent {
     this.selectedCustomerUid.set('');
     this.selectedAgentUid.set('');
     this.lines.set([]);
-    if (id) this.loadOptions(id);
+    if (id) {
+      const uid = this.companies().find((c) => c.id === id)?.uid;
+      if (uid) this.loadBranches(uid);
+      this.loadOptions(id);
+    }
+  }
+
+  /** Load this company's active branches and default the filter to the active/first branch. */
+  private loadBranches(companyUid: string): void {
+    this.branchesError.set(false);
+    this.branchService.list(companyUid).subscribe({
+      next: (list) => {
+        const active = list.filter((b) => b.status === 'ACTIVE');
+        this.branches.set(active);
+        const activeBranchUid = this.session.activeBranchUid();
+        const chosen = active.find((b) => b.uid === activeBranchUid) ?? active[0];
+        this.selectedBranchId.set(chosen?.id ?? '');
+      },
+      error: () => {
+        // Non-fatal: without BRANCH.VIEW the picker is hidden and every open session is shown.
+        this.branches.set([]);
+        this.selectedBranchId.set('');
+        this.branchesError.set(true);
+      },
+    });
+  }
+
+  /** Switch the branch whose open sessions are offered; clear a now out-of-branch session. */
+  onBranchChange(branchId: string): void {
+    this.selectedBranchId.set(branchId);
+    this.selectedSessionUid.set('');
   }
 
   onProductSearch(q: string): void { this.productSearch$.next(q); }
@@ -394,7 +441,9 @@ export class PosSaleComponent {
     const customerUid = this.selectedCustomerUid().trim();
     const agentUid = this.selectedAgentUid().trim();
     const curr = this.currency().trim();
-    const tendered = this.tenderedAmount().trim();
+    // A `type="number"` input stores a number (or null) in the signal via NumberValueAccessor,
+    // so coerce to string before trimming — `.trim()` on a number throws (DEFECT-POS-TENDER).
+    const tendered = String(this.tenderedAmount() ?? '').trim();
 
     const validationError = this.validateSaleForm(sessionUid, customerUid, agentUid, curr, tendered);
     if (validationError) { this.formError.set(validationError); return; }
@@ -454,7 +503,7 @@ export class PosSaleComponent {
     const cId = this.selectedCompanyId();
     if (cId) {
       this.sessionsLoaded.set(false);
-      this.posService.listSessions(cId, 0, 50).subscribe({
+      this.posService.listSessions(cId, 0, 50, 'OPEN').subscribe({
         next: ({ rows }) => { this.openSessions.set(rows.filter((s) => s.status === 'OPEN')); this.sessionsLoaded.set(true); },
         error: () => this.sessionsLoaded.set(true),
       });

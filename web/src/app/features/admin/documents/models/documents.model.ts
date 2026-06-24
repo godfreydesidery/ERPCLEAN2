@@ -98,6 +98,8 @@ export interface DocumentBrandingDto {
   contactEmail: string;
   website: string;
   logoRef: string;
+  /** Inline company logo as a base64 data URI (data:image/png;base64,…) or null. */
+  logoDataUri: string | null;
   footerTerms: string;
   bankDetails: string;
   updatedAt: string; // Instant — ISO-8601
@@ -119,6 +121,8 @@ export interface UpdateDocumentBrandingRequest {
   contactEmail: string;
   website: string;
   logoRef: string;
+  /** Inline company logo as a base64 data URI, or '' to clear it. Capped ~70 KB; PNG/JPEG only. */
+  logoDataUri?: string;
   footerTerms: string;
   bankDetails: string;
   /** Optimistic-lock version — must be round-tripped from the loaded entity */

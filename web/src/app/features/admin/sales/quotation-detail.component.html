@@ -178,7 +178,7 @@
       @default {
         <!-- Add-line form (DRAFT only) -->
         @if (isEditable() && canCreate()) {
-          <div class="erp-card mb-3">
+          <div class="erp-card erp-card--overflow-visible mb-3">
             <div class="erp-card__head"><h3>Add Line</h3></div>
             <div class="erp-card__body">
               <form (ngSubmit)="addLine()" aria-label="Add line to quotation">
@@ -247,14 +247,25 @@
                            [disabled]="addingLine()" />
                   </div>
 
-                  <!-- Unit price override -->
+                  <!-- Unit price (auto-resolved from the price list; override optional) -->
                   <div class="col-sm-2">
                     <label class="form-label small text-muted mb-1" for="lineUnitPrice">Price Override</label>
                     <input id="lineUnitPrice" name="lineUnitPrice" type="number" min="0" step="any"
                            class="form-control form-control-sm"
-                           placeholder="(list price)"
+                           [placeholder]="priceState() === 'ok' && resolvedPrice() ? (resolvedPrice() | number:'1.2-2') : '(list price)'"
                            [ngModel]="newLineUnitPrice()" (ngModelChange)="newLineUnitPrice.set($event)"
                            [disabled]="addingLine()" />
+                    @switch (priceState()) {
+                      @case ('loading') {
+                        <small class="d-block text-muted mt-1">Fetching price…</small>
+                      }
+                      @case ('ok') {
+                        <small class="d-block text-muted mt-1">List price {{ resolvedPrice() | number:'1.2-2' }} — leave blank to use it.</small>
+                      }
+                      @case ('missing') {
+                        <small class="d-block text-muted mt-1">No price set for this product yet.</small>
+                      }
+                    }
                   </div>
 
                   <!-- Discount % -->

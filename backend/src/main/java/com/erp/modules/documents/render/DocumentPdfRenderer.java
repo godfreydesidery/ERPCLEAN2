@@ -4,6 +4,7 @@ import com.lowagie.text.Document;
 import com.lowagie.text.Element;
 import com.lowagie.text.Font;
 import com.lowagie.text.FontFactory;
+import com.lowagie.text.Image;
 import com.lowagie.text.PageSize;
 import com.lowagie.text.Paragraph;
 import com.lowagie.text.Phrase;
@@ -17,6 +18,7 @@ import com.erp.modules.documents.render.DocumentRenderModel.TotalRow;
 import java.awt.Color;
 import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
+import java.util.Base64;
 import java.util.List;
 import org.springframework.stereotype.Component;
 
@@ -98,6 +100,7 @@ public class DocumentPdfRenderer {
     // -------------------------------------------------------------------------
 
     private void renderBranding(Document doc, BrandingBlock b) {
+        embedLogo(doc, b.logoDataUri());
         doc.add(new Paragraph(b.displayName() != null ? b.displayName() : "", FONT_COMPANY));
         if (b.legalName() != null) {
             doc.add(new Paragraph(b.legalName(), FONT_NORMAL));
@@ -114,6 +117,28 @@ public class DocumentPdfRenderer {
             doc.add(new Paragraph(b.contactLine(), FONT_NORMAL));
         }
         doc.add(new Paragraph(" ", FONT_NORMAL));
+    }
+
+    /**
+     * Embed the company logo (a base64 PNG/JPEG data URI) into the header, scaled to ~2x2 cm.
+     * Best-effort: any decode/format problem leaves a text-only header rather than failing the render.
+     */
+    private void embedLogo(Document doc, String dataUri) {
+        if (dataUri == null || dataUri.isBlank()) {
+            return;
+        }
+        int comma = dataUri.indexOf(',');
+        if (comma < 0) {
+            return;
+        }
+        try {
+            byte[] bytes = Base64.getDecoder().decode(dataUri.substring(comma + 1).trim());
+            Image logo = Image.getInstance(bytes);
+            logo.scaleToFit(57f, 57f); // ~2 cm at 72 dpi
+            doc.add(logo);
+        } catch (Exception ignored) {
+            // Unsupported / corrupt logo bytes — fall back to the text-only header.
+        }
     }
 
     private void renderMetaAndParty(Document doc, DocumentRenderModel model) {

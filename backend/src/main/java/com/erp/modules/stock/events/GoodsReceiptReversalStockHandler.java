@@ -26,6 +26,14 @@ import org.springframework.transaction.annotation.Transactional;
  * Consumes {@code STOCK.RECEIPT.VOIDED} — reverses GOODS_RECEIPT movements from the ledger
  * (ADR-0010 D-5, the buying-side mirror of {@link SaleReversalStockHandler}).
  *
+ * <p>V76 — batch/serial reversal: TODO. Neither {@code StockBatchService} nor
+ * {@code StockSerialService} currently exposes a purpose-built "receipt-reversal" API:
+ * batch reversal needs a {@code reverseReceiptQty(companyId, branchId, locationId, productId,
+ * lotNumber, qty)} method, and serial reversal needs a {@code removeReceived(companyId, productId,
+ * serialNumber)} method that finds the row by natural key and deletes / marks it RETURNED.
+ * Adding those without a dedicated ADR is out of scope here. The existing qty/GL reversal is
+ * unaffected; batch/serial rows will retain their original receipt values until this is addressed.
+ *
  * <p>ADR-0020: for each original GOODS_RECEIPT movement, reads the stored {@code value_amount}
  * (cost at time of receipt) and calls {@link InventoryValuationService#reverseReceipt} to back
  * out the moving-average. Posts DR GRNI (2150) / CR INVENTORY (1300) via

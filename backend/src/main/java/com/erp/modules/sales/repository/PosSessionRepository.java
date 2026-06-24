@@ -21,6 +21,9 @@ public interface PosSessionRepository extends JpaRepository<PosSession, Long> {
 
     Page<PosSession> findByCompanyId(Long companyId, Pageable pageable);
 
+    /** Paged sessions filtered by status — used by the POS checkout to load only OPEN sessions. */
+    Page<PosSession> findByCompanyIdAndStatus(Long companyId, PosSessionStatus status, Pageable pageable);
+
     /** All invoices for reconciliation total computation. */
     @Query("""
             SELECT s FROM PosSession s

@@ -62,6 +62,14 @@ public class DocumentBranding extends UidEntity {
     @Column(name = "logo_ref", length = 500)
     private String logoRef;
 
+    /**
+     * Inline company logo as a base64 data URI (e.g. {@code data:image/png;base64,...}), capped at
+     * ~70 KB by ck_document_branding_logo_size (V75). NULL = no embedded logo; the renderer then
+     * falls back to a text-only header. Preferred over {@link #logoRef} when present.
+     */
+    @Column(name = "logo_data_uri", columnDefinition = "text")
+    private String logoDataUri;
+
     @Column(name = "footer_terms", length = 1000)
     private String footerTerms;
 

@@ -121,6 +121,7 @@
             <p class="small text-muted mb-2">
               Quantities default to the outstanding amount. Adjust as needed.
               Uncheck lines you are not receiving in this delivery.
+              Use the <strong>Batch</strong> toggle to capture lot, expiry, or serial numbers per line.
             </p>
 
             <div class="erp-table-wrap mb-3">
@@ -137,10 +138,14 @@
                     <th scope="col" class="num">Previously Received</th>
                     <th scope="col" class="num">Outstanding</th>
                     <th scope="col" style="width:140px">Receive Qty</th>
+                    <th scope="col" style="width:80px">
+                      <span class="visually-hidden">Batch / Serial details</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   @for (entry of receiveLines(); track entry.line.uid; let i = $index) {
+                    <!-- Main line row -->
                     <tr [class.table-secondary]="!entry.include">
                       <td class="text-center">
                         <div class="form-check mb-0">
@@ -181,7 +186,98 @@
                           }
                         </div>
                       </td>
+                      <td class="text-center">
+                        <button type="button"
+                                class="btn btn-link btn-sm p-0 text-muted small text-nowrap"
+                                [attr.aria-expanded]="entry.batchExpanded"
+                                [attr.aria-controls]="'batch-' + entry.line.uid"
+                                (click)="toggleBatchExpanded(i)">
+                          <i class="bi bi-tag me-1" aria-hidden="true"></i>
+                          {{ entry.batchExpanded ? 'Hide' : 'Batch' }}
+                        </button>
+                      </td>
                     </tr>
+
+                    <!-- Collapsible batch / serial details row -->
+                    @if (entry.batchExpanded) {
+                      <tr [id]="'batch-' + entry.line.uid"
+                          [class.table-secondary]="!entry.include">
+                        <td></td>
+                        <td colspan="7">
+                          <fieldset class="border-0 p-0 m-0">
+                            <legend class="visually-hidden">
+                              Batch and serial details for {{ entry.line.productName }}
+                            </legend>
+                            <div class="d-flex flex-wrap gap-3 py-2">
+
+                              <!-- Lot / Batch number -->
+                              <div style="min-width:160px;max-width:220px">
+                                <label class="form-label small text-muted mb-1"
+                                       [for]="'lot-' + entry.line.uid">
+                                  Lot / Batch number
+                                </label>
+                                <input [id]="'lot-' + entry.line.uid"
+                                       [name]="'lot-' + entry.line.uid"
+                                       type="text"
+                                       class="form-control form-control-sm"
+                                       placeholder="e.g. LOT-2024-001"
+                                       [ngModel]="entry.lotNumber"
+                                       (ngModelChange)="updateLineBatchField(i, 'lotNumber', $event)"
+                                       [disabled]="submitting()"
+                                       autocomplete="off" />
+                              </div>
+
+                              <!-- Manufacture date -->
+                              <div style="min-width:160px;max-width:200px">
+                                <label class="form-label small text-muted mb-1"
+                                       [for]="'mfg-' + entry.line.uid">
+                                  Manufacture date
+                                </label>
+                                <input [id]="'mfg-' + entry.line.uid"
+                                       [name]="'mfg-' + entry.line.uid"
+                                       type="date"
+                                       class="form-control form-control-sm"
+                                       [ngModel]="entry.manufactureDate"
+                                       (ngModelChange)="updateLineBatchField(i, 'manufactureDate', $event)"
+                                       [disabled]="submitting()" />
+                              </div>
+
+                              <!-- Expiry date -->
+                              <div style="min-width:160px;max-width:200px">
+                                <label class="form-label small text-muted mb-1"
+                                       [for]="'exp-' + entry.line.uid">
+                                  Expiry date
+                                </label>
+                                <input [id]="'exp-' + entry.line.uid"
+                                       [name]="'exp-' + entry.line.uid"
+                                       type="date"
+                                       class="form-control form-control-sm"
+                                       [ngModel]="entry.expiryDate"
+                                       (ngModelChange)="updateLineBatchField(i, 'expiryDate', $event)"
+                                       [disabled]="submitting()" />
+                              </div>
+
+                              <!-- Serial / IMEI numbers -->
+                              <div style="min-width:200px;max-width:320px;flex:1">
+                                <label class="form-label small text-muted mb-1"
+                                       [for]="'ser-' + entry.line.uid">
+                                  Serial / IMEI numbers
+                                  <span class="fw-normal">(one per line)</span>
+                                </label>
+                                <textarea [id]="'ser-' + entry.line.uid"
+                                          [name]="'ser-' + entry.line.uid"
+                                          class="form-control form-control-sm"
+                                          rows="3"
+                                          placeholder="SN-00001&#10;SN-00002"
+                                          [ngModel]="entry.serialNumbersRaw"
+                                          (ngModelChange)="updateLineBatchField(i, 'serialNumbersRaw', $event)"
+                                          [disabled]="submitting()"></textarea>
+                              </div>
+                            </div>
+                          </fieldset>
+                        </td>
+                      </tr>
+                    }
                   }
                 </tbody>
               </table>

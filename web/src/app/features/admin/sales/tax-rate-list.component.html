@@ -116,7 +116,7 @@
                           <p class="text-danger small mt-1 mb-0 text-end" role="alert">{{ msg }}</p>
                         }
                       } @else {
-                        <span class="mono">{{ tr.rate }}</span>
+                        <span class="mono">{{ ratePercent(tr.rate) | number:'1.0-4' }}%</span>
                       }
                     </td>
                     @if (canManage()) {

@@ -43,6 +43,21 @@
           </div>
         }
 
+        <!-- Branch filter — narrows the open-session list to one branch -->
+        @if (branches().length > 0) {
+          <div class="mb-3" style="max-width:320px">
+            <label class="form-label small text-muted mb-1" for="saleBranch">Branch</label>
+            <select id="saleBranch" name="saleBranch" class="form-select"
+                    [ngModel]="selectedBranchId()"
+                    (ngModelChange)="onBranchChange($event)"
+                    [disabled]="submitting()">
+              @for (b of branches(); track b.uid) {
+                <option [value]="b.id">{{ b.name }}</option>
+              }
+            </select>
+          </div>
+        }
+
         <!-- Success receipt -->
         @if (savedInvoice(); as inv) {
           <div class="erp-card mb-3">

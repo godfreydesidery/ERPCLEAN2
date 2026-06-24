@@ -32,7 +32,7 @@ function makeTaxRate(overrides: Partial<TaxRateDto> = {}): TaxRateDto {
     uid: 'TR1',
     companyId: '10',
     vatStatus: 'STANDARD',
-    rate: '18.00',
+    rate: '0.1800', // backend stores a fraction; 0.18 = 18%
     version: null,
     createdAt: null,
     createdBy: null,
@@ -66,7 +66,7 @@ function makeBed(opts: { canManage?: boolean; listImpl?: () => any } = {}) {
         provide: SalesService,
         useValue: {
           listTaxRates: vi.fn(listImpl),
-          updateTaxRate: vi.fn(() => of(makeTaxRate({ rate: '20.00' }))),
+          updateTaxRate: vi.fn(() => of(makeTaxRate({ rate: '0.2000' }))),
         },
       },
       {
@@ -155,7 +155,8 @@ describe('TaxRateListComponent — inline edit', () => {
     comp.startEdit(tr);
 
     expect(comp.editingUid()).toBe(tr.uid);
-    expect(comp.editRate()).toBe(tr.rate);
+    // The edit field is a percentage prefilled from the stored fraction (0.18 → "18").
+    expect(comp.editRate()).toBe('18');
   });
 
   it('cancelEdit clears editingUid', async () => {
@@ -203,12 +204,27 @@ describe('TaxRateListComponent — inline edit', () => {
 
     const tr = comp.rows()[0];
     comp.startEdit(tr);
-    comp.editRate.set('20.00');
+    comp.editRate.set('20'); // user types a percentage
     comp.saveEdit(tr);
 
     expect(svc.updateTaxRate).toHaveBeenCalledOnce();
     expect(svc.updateTaxRate.mock.calls[0][0]).toBe(tr.uid);
-    expect(svc.updateTaxRate.mock.calls[0][1]).toEqual({ rate: '20.00' });
+    // …converted to the backend's fraction contract.
+    expect(svc.updateTaxRate.mock.calls[0][1]).toEqual({ rate: '0.2000' });
+  });
+
+  it('saveEdit() rejects a percentage out of range (>= 100%)', async () => {
+    const comp = TestBed.createComponent(TaxRateListComponent).componentInstance;
+    const svc = TestBed.inject(SalesService) as any;
+    await vi.runAllTimersAsync();
+
+    const tr = comp.rows()[0];
+    comp.startEdit(tr);
+    comp.editRate.set('150');
+    comp.saveEdit(tr);
+
+    expect(comp.editError()).toBeTruthy();
+    expect(svc.updateTaxRate).not.toHaveBeenCalled();
   });
 
   it('saveEdit() clears editingUid on success', async () => {
@@ -229,10 +245,10 @@ describe('TaxRateListComponent — inline edit', () => {
 
     const tr = comp.rows()[0];
     comp.startEdit(tr);
-    comp.editRate.set('20.00');
+    comp.editRate.set('20');
     comp.saveEdit(tr);
 
-    expect(comp.rows()[0].rate).toBe('20.00');
+    expect(comp.rows()[0].rate).toBe('0.2000');
   });
 });
 

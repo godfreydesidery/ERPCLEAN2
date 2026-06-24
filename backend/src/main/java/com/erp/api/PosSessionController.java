@@ -7,6 +7,7 @@ import com.erp.modules.sales.domain.dto.PosSessionDto;
 import com.erp.modules.sales.domain.dto.ReconcileSessionRequest;
 import com.erp.modules.sales.domain.dto.XReadDto;
 import com.erp.modules.sales.domain.dto.ZReadDto;
+import com.erp.modules.sales.domain.enums.PosSessionStatus;
 import com.erp.modules.sales.service.PosSessionService;
 import com.erp.platform.common.api.ApiResponse;
 import com.erp.platform.common.api.PageMeta;
@@ -54,8 +55,10 @@ public class PosSessionController {
 
     @GetMapping
     @PreAuthorize("@perm.has('POS.SESSION.VIEW')")
-    public ApiResponse<List<PosSessionDto>> list(@RequestParam Long companyId, Pageable pageable) {
-        Page<PosSessionDto> page = sessionService.listSessions(companyId, pageable);
+    public ApiResponse<List<PosSessionDto>> list(@RequestParam Long companyId,
+                                                 @RequestParam(required = false) PosSessionStatus status,
+                                                 Pageable pageable) {
+        Page<PosSessionDto> page = sessionService.listSessions(companyId, status, pageable);
         return ApiResponse.ok(page.getContent(), PageMeta.from(page));
     }
 
