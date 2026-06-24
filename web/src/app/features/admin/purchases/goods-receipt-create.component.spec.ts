@@ -7,6 +7,9 @@
  *  3. Submit builds correct CreateGoodsReceiptRequest (included lines only).
  *  4. 409 over-receipt error surfaced in formError.
  *  5. Zero qty → per-line validation error, createReceipt NOT called.
+ *  6. Excluding all lines → formError.
+ *  7. Batch/serial fields included in payload when provided.
+ *  8. Empty batch/serial fields are omitted from the payload.
  */
 import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -223,5 +226,51 @@ describe('GoodsReceiptCreateComponent', () => {
 
     expect(comp.formError()).toContain('at least one line');
     expect(createReceiptSpy).not.toHaveBeenCalled();
+  });
+
+  // ── 7. Batch/serial fields included in payload when provided ──────────────
+
+  it('includes lotNumber, dates and serialNumbers in the line payload when provided', async () => {
+    const { createReceiptSpy } = makeBed();
+    const fixture = TestBed.createComponent(GoodsReceiptCreateComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    // Simulate user entering batch detail for line 0
+    comp.updateLineBatchField(0, 'lotNumber', 'LOT-2024-001');
+    comp.updateLineBatchField(0, 'expiryDate', '2025-12-31');
+    comp.updateLineBatchField(0, 'manufactureDate', '2024-01-15');
+    comp.updateLineBatchField(0, 'serialNumbersRaw', 'SN-001\nSN-002\n  \nSN-003');
+
+    comp.submit();
+    await vi.runAllTimersAsync();
+
+    expect(createReceiptSpy).toHaveBeenCalledOnce();
+    const line = createReceiptSpy.mock.calls[0][0].lines[0];
+    expect(line.lotNumber).toBe('LOT-2024-001');
+    expect(line.expiryDate).toBe('2025-12-31');
+    expect(line.manufactureDate).toBe('2024-01-15');
+    // Blank line should be dropped; trimmed serials preserved
+    expect(line.serialNumbers).toEqual(['SN-001', 'SN-002', 'SN-003']);
+  });
+
+  // ── 8. Empty batch/serial fields are omitted from the payload ─────────────
+
+  it('omits lotNumber, dates and serialNumbers when left blank', async () => {
+    const { createReceiptSpy } = makeBed();
+    const fixture = TestBed.createComponent(GoodsReceiptCreateComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    // Leave all batch fields at their default empty values
+    comp.submit();
+    await vi.runAllTimersAsync();
+
+    expect(createReceiptSpy).toHaveBeenCalledOnce();
+    const line = createReceiptSpy.mock.calls[0][0].lines[0];
+    expect(line.lotNumber).toBeUndefined();
+    expect(line.expiryDate).toBeUndefined();
+    expect(line.manufactureDate).toBeUndefined();
+    expect(line.serialNumbers).toBeUndefined();
   });
 });

@@ -146,6 +146,7 @@
                 <th scope="col" class="num">Unit Cost</th>
                 <th scope="col" class="num">Line Cost</th>
                 <th scope="col">Currency</th>
+                <th scope="col">Batch / Tracking</th>
               </tr>
             </thead>
             <tbody>
@@ -161,6 +162,38 @@
                   <td class="num">{{ line.unitCostAmount }}</td>
                   <td class="num fw-semibold">{{ line.lineCostAmount }}</td>
                   <td class="small">{{ line.currency }}</td>
+                  <td class="small">
+                    @if (line.lotNumber || line.expiryDate || line.manufactureDate || line.serialNumbers.length) {
+                      <dl class="mb-0" style="font-size:0.8rem;line-height:1.5">
+                        @if (line.lotNumber) {
+                          <dt class="text-muted fw-normal d-inline">Lot:</dt>
+                          <dd class="d-inline ms-1 mono me-2">{{ line.lotNumber }}</dd>
+                        }
+                        @if (line.expiryDate) {
+                          <dt class="text-muted fw-normal d-inline">Exp:</dt>
+                          <dd class="d-inline ms-1 me-2">{{ line.expiryDate }}</dd>
+                        }
+                        @if (line.manufactureDate) {
+                          <dt class="text-muted fw-normal d-inline">Mfg:</dt>
+                          <dd class="d-inline ms-1 me-2">{{ line.manufactureDate }}</dd>
+                        }
+                        @if (line.serialNumbers.length) {
+                          <dt class="text-muted fw-normal mt-1">
+                            Serials ({{ line.serialNumbers.length }}):
+                          </dt>
+                          <dd class="mb-0">
+                            <ul class="list-unstyled mb-0 mono" style="font-size:0.8rem">
+                              @for (sn of line.serialNumbers; track sn) {
+                                <li>{{ sn }}</li>
+                              }
+                            </ul>
+                          </dd>
+                        }
+                      </dl>
+                    } @else {
+                      <span class="text-muted">—</span>
+                    }
+                  </td>
                 </tr>
               }
             </tbody>
