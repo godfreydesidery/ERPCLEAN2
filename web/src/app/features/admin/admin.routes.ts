@@ -848,6 +848,12 @@ export const ADMIN_ROUTES: Routes = [
   },
   // ── FX / Multi-currency ───────────────────────────────────────────────────
   {
+    path: 'fx/currencies',
+    canActivate: [requirePermission('CURRENCY.MANAGE')],
+    loadComponent: () =>
+      import('./fx/currency-enablement-list.component').then((m) => m.CurrencyEnablementListComponent),
+  },
+  {
     path: 'fx/rates',
     canActivate: [requirePermission('CURRENCY.VIEW')],
     loadComponent: () =>
