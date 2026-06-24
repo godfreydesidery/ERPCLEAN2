@@ -270,7 +270,7 @@ public class DocumentModelBuilder {
 
     private BrandingBlock toBrandingBlock(DocumentBranding b) {
         if (b == null) {
-            return new BrandingBlock("", null, null, List.of(), null, null, null, null);
+            return new BrandingBlock("", null, null, List.of(), null, null, null, null, null);
         }
         List<String> addr = new ArrayList<>();
         if (b.getAddressLine1() != null) addr.add(b.getAddressLine1());
@@ -291,7 +291,8 @@ public class DocumentModelBuilder {
 
         return new BrandingBlock(
                 b.getDisplayName(), b.getLegalName(), b.getTaxId(),
-                addr, contactLine, b.getLogoRef(), b.getFooterTerms(), b.getBankDetails());
+                addr, contactLine, b.getLogoRef(), b.getLogoDataUri(),
+                b.getFooterTerms(), b.getBankDetails());
     }
 
     private String nonNull(String s) { return s != null ? s : ""; }

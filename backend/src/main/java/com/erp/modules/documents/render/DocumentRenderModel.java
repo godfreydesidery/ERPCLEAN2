@@ -31,6 +31,7 @@ public record DocumentRenderModel(
             List<String>   addressLines,
             String         contactLine,
             String         logoRef,
+            String         logoDataUri,
             String         footerTerms,
             String         bankDetails
     ) {}

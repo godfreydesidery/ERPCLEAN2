@@ -21,6 +21,7 @@ public record DocumentBrandingDto(
         String  contactEmail,
         String  website,
         String  logoRef,
+        String  logoDataUri,
         String  footerTerms,
         String  bankDetails,
         Instant updatedAt
@@ -32,7 +33,7 @@ public record DocumentBrandingDto(
                 b.getAddressLine1(), b.getAddressLine2(),
                 b.getCity(), b.getRegion(), b.getCountry(), b.getPostalCode(),
                 b.getContactPhone(), b.getContactEmail(), b.getWebsite(),
-                b.getLogoRef(), b.getFooterTerms(), b.getBankDetails(),
+                b.getLogoRef(), b.getLogoDataUri(), b.getFooterTerms(), b.getBankDetails(),
                 b.getUpdatedAt());
     }
 }
