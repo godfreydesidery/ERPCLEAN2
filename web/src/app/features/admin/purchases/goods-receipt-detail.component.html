@@ -62,14 +62,31 @@
           </div>
 
           <!-- Actions -->
-          @if (!isVoid() && canVoid()) {
-            <div class="mt-3">
-              <button type="button" class="btn btn-outline-danger"
-                      (click)="toggleVoidForm()"
-                      [attr.aria-expanded]="showVoidForm()">
-                <i class="bi bi-x-circle me-1" aria-hidden="true"></i>
-                Void Receipt
-              </button>
+          @if ((!isVoid() && canVoid()) || ((isReceived() || isVoid()) && canPrint())) {
+            <div class="mt-3 d-flex flex-wrap gap-2 align-items-center">
+              @if (!isVoid() && canVoid()) {
+                <button type="button" class="btn btn-outline-danger"
+                        (click)="toggleVoidForm()"
+                        [attr.aria-expanded]="showVoidForm()">
+                  <i class="bi bi-x-circle me-1" aria-hidden="true"></i>
+                  Void Receipt
+                </button>
+              }
+              @if ((isReceived() || isVoid()) && canPrint()) {
+                <button type="button" class="btn btn-outline-secondary"
+                        [disabled]="printing()"
+                        (click)="printPdf()">
+                  @if (printing()) {
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  } @else {
+                    <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>
+                  }
+                  Print PDF
+                </button>
+                @if (printError(); as msg) {
+                  <span class="text-danger small align-self-center" role="alert">{{ msg }}</span>
+                }
+              }
             </div>
           }
 

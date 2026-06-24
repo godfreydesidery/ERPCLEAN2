@@ -22,6 +22,7 @@ import { of } from 'rxjs';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import { CompanyService } from '../company/company.service';
+import { BranchService } from '../branch/branch.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { CustomerService } from '../parties/customer.service';
 import { AgentService } from '../parties/agent.service';
@@ -97,6 +98,10 @@ function makeBed(opts: { canSell?: boolean; processSaleImpl?: () => any } = {}) 
       {
         provide: CompanyService,
         useValue: { list: vi.fn(() => of([{ uid: 'CO1', id: '10', name: 'Main Co' }])) },
+      },
+      {
+        provide: BranchService,
+        useValue: { list: vi.fn(() => of([])) },
       },
       {
         provide: CustomerService,
@@ -272,6 +277,68 @@ describe('PosSaleComponent — lineSubtotal', () => {
     await vi.runAllTimersAsync();
     const line = { id: 'l1', productUid: '', productId: '', productName: '', unitUid: '', unitId: '', unitName: '', quantity: '3', unitPrice: '200.00', lineDiscountAmount: '50.00' };
     expect(comp.lineSubtotal(line)).toBe(550);
+  });
+});
+
+// ── numeric tendered amount (regression: Complete Sale crash) ────────────────────
+
+describe('PosSaleComponent — numeric tendered amount', () => {
+  beforeEach(() => { vi.useFakeTimers(); makeBed(); });
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('submits without throwing when tendered is a number (type="number" emits a number)', async () => {
+    const comp = TestBed.createComponent(PosSaleComponent).componentInstance;
+    const svc = TestBed.inject(PosService) as any;
+    await vi.runAllTimersAsync();
+
+    comp.customers.set([stubCustomer]);
+    comp.agents.set([stubAgent]);
+    comp.selectedSessionUid.set('SESS1');
+    comp.selectedCustomerUid.set('CUST1');
+    comp.selectedAgentUid.set('AGENT1');
+    comp.currency.set('TZS');
+    comp.lines.set([{
+      id: 'line-1', productUid: 'P1', productId: '10', productName: 'Widget',
+      unitUid: 'U1', unitId: '1', unitName: 'pcs', quantity: '2', unitPrice: '500.00',
+      lineDiscountAmount: '0.00', vatRate: '0', priceState: 'ok',
+    }]);
+    // NumberValueAccessor stores a NUMBER — this used to throw `.trim is not a function`.
+    comp.tenderedAmount.set(1000 as unknown as string);
+
+    expect(() => comp.submit()).not.toThrow();
+    expect(svc.processSale).toHaveBeenCalledOnce();
+    expect(svc.processSale.mock.calls[0][0].tenderedAmount).toBe('1000');
+  });
+});
+
+// ── branch filter ────────────────────────────────────────────────────────────────
+
+describe('PosSaleComponent — branch filter', () => {
+  beforeEach(() => { vi.useFakeTimers(); makeBed(); });
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('narrows the session list to the selected branch', async () => {
+    const comp = TestBed.createComponent(PosSaleComponent).componentInstance;
+    await vi.runAllTimersAsync();
+    comp.openSessions.set([
+      { uid: 'S-AAA1', branchId: '2', posTillId: '1', status: 'OPEN' } as any,
+      { uid: 'S-BBB2', branchId: '9', posTillId: '2', status: 'OPEN' } as any,
+    ]);
+
+    comp.selectedBranchId.set('2');
+    expect(comp.sessionOptions().map((o: any) => o.uid)).toEqual(['S-AAA1']);
+
+    comp.selectedBranchId.set(''); // no branch → all sessions
+    expect(comp.sessionOptions().length).toBe(2);
+  });
+
+  it('onBranchChange switches branch and clears the chosen session', async () => {
+    const comp = TestBed.createComponent(PosSaleComponent).componentInstance;
+    await vi.runAllTimersAsync();
+    comp.selectedSessionUid.set('S-AAA1');
+    comp.onBranchChange('9');
+    expect(comp.selectedBranchId()).toBe('9');
+    expect(comp.selectedSessionUid()).toBe('');
   });
 });
 

@@ -197,7 +197,7 @@
       @default {
         <!-- Add-line form (DRAFT only + PURCHASE.ORDER.CREATE) -->
         @if (isDraft() && canCreate()) {
-          <form class="erp-card mb-3" (ngSubmit)="addLine()" aria-label="Add line to order">
+          <form class="erp-card erp-card--overflow-visible mb-3" (ngSubmit)="addLine()" aria-label="Add line to order">
             <div class="erp-card__head"><h3>Add Line</h3></div>
             <div class="erp-card__body">
               <div class="row g-2 align-items-start">

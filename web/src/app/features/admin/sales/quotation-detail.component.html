@@ -178,7 +178,7 @@
       @default {
         <!-- Add-line form (DRAFT only) -->
         @if (isEditable() && canCreate()) {
-          <div class="erp-card mb-3">
+          <div class="erp-card erp-card--overflow-visible mb-3">
             <div class="erp-card__head"><h3>Add Line</h3></div>
             <div class="erp-card__body">
               <form (ngSubmit)="addLine()" aria-label="Add line to quotation">

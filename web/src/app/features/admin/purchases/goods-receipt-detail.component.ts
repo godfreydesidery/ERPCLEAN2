@@ -1,6 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { DatePipe } from '@angular/common';
-import { Component, computed, inject, input, signal } from '@angular/core';
+import { Component, computed, DestroyRef, inject, input, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { AlertService } from '../../../core/feedback/alert.service';
@@ -10,6 +11,7 @@ import {
   GoodsReceiptLineDto,
   VoidGoodsReceiptRequest,
 } from '../models/purchases.model';
+import { DocumentsService } from '../documents/documents.service';
 import { PurchasesService } from './purchases.service';
 
 type LoadState = 'loading' | 'idle' | 'error';
@@ -27,7 +29,9 @@ type LoadState = 'loading' | 'idle' | 'error';
 })
 export class GoodsReceiptDetailComponent {
   private readonly purchasesService = inject(PurchasesService);
+  private readonly documentsService = inject(DocumentsService);
   private readonly alerts = inject(AlertService);
+  private readonly destroyRef = inject(DestroyRef);
   protected readonly session = inject(SessionStore);
 
   readonly uid = input.required<string>();
@@ -41,7 +45,12 @@ export class GoodsReceiptDetailComponent {
   readonly voiding = signal(false);
   readonly voidError = signal<string | null>(null);
 
+  // ── Print ───────────────────────────────────────────────────────────────
+  readonly printing = signal(false);
+  readonly printError = signal<string | null>(null);
+
   readonly canVoid = computed(() => this.session.hasPermission('PURCHASE.VOID'));
+  readonly canPrint = computed(() => this.session.hasPermission('DOCUMENT.RENDER'));
 
   readonly isReceived = computed(() => this.gr()?.status === 'RECEIVED');
   readonly isVoid = computed(() => this.gr()?.status === 'VOID');
@@ -89,6 +98,31 @@ export class GoodsReceiptDetailComponent {
     return gr.lines ?? [];
   }
 
+  /**
+   * Render the goods receipt as a PDF and trigger a browser download.
+   * The backend already supports GOODS_RECEIPT end to end (template + render dispatch);
+   * DRAFT receipts are blocked server-side and hidden in the template.
+   */
+  printPdf(): void {
+    if (this.printing()) return;
+    this.printing.set(true);
+    this.printError.set(null);
+    this.documentsService
+      .renderBlob('GOODS_RECEIPT', this.uid())
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (blob) => {
+          this.printing.set(false);
+          const name = `goods-receipt-${this.gr()?.receiptNumber ?? this.uid()}.pdf`;
+          triggerBlobDownload(blob, name);
+        },
+        error: (err) => {
+          this.printing.set(false);
+          this.printError.set(this.messageFrom(err, 'Could not generate the PDF.'));
+        },
+      });
+  }
+
   private messageFrom(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {
       const errors = (err.error as { errors?: string[] })?.errors;
@@ -96,4 +130,14 @@ export class GoodsReceiptDetailComponent {
     }
     return fallback;
   }
+}
+
+/** Create an object URL for a blob and click a synthetic anchor to download it. */
+function triggerBlobDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
