@@ -115,9 +115,12 @@ public class PosSessionServiceImpl implements PosSessionService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<PosSessionDto> listSessions(Long companyId, Pageable pageable) {
+    public Page<PosSessionDto> listSessions(Long companyId, PosSessionStatus status, Pageable pageable) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
-        return sessions.findByCompanyId(companyId, pageable).map(this::toDto);
+        var page = (status != null)
+                ? sessions.findByCompanyIdAndStatus(companyId, status, pageable)
+                : sessions.findByCompanyId(companyId, pageable);
+        return page.map(this::toDto);
     }
 
     @Override
