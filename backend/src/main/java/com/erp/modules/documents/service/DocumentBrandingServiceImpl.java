@@ -61,6 +61,7 @@ public class DocumentBrandingServiceImpl implements DocumentBrandingService {
         if (req.contactEmail() != null) branding.setContactEmail(req.contactEmail());
         if (req.website() != null)      branding.setWebsite(req.website());
         if (req.logoRef() != null)      branding.setLogoRef(req.logoRef());
+        if (req.logoDataUri() != null)  branding.setLogoDataUri(normaliseLogo(req.logoDataUri()));
         if (req.footerTerms() != null)  branding.setFooterTerms(req.footerTerms());
         if (req.bankDetails() != null)  branding.setBankDetails(req.bankDetails());
 
@@ -86,6 +87,24 @@ public class DocumentBrandingServiceImpl implements DocumentBrandingService {
                 null, null, companyId,
                 company.getName(), company.getLegalName(), company.getTaxId(),
                 null, null, null, null, null, null,
-                null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null);
+    }
+
+    /**
+     * Validates and normalises an inline logo data URI. Blank clears the logo (returns null);
+     * otherwise it must be a PNG or JPEG base64 data URI (the only formats the PDF renderer embeds).
+     * Throws a friendly 400 on anything else. The ~70 KB size cap is enforced by the request
+     * {@code @Size} and the DB CHECK constraint (V75).
+     */
+    private static String normaliseLogo(String dataUri) {
+        String v = dataUri.trim();
+        if (v.isEmpty()) {
+            return null;
+        }
+        String lower = v.toLowerCase();
+        if (!lower.startsWith("data:image/png;base64,") && !lower.startsWith("data:image/jpeg;base64,")) {
+            throw new IllegalArgumentException("Logo must be a PNG or JPEG image.");
+        }
+        return v;
     }
 }

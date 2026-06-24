@@ -15,6 +15,7 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import lombok.Getter;
 
 /**
@@ -113,6 +114,21 @@ public class GoodsReceiptLine {
     @Column(name = "returned_qty_in_base", precision = 19, scale = 6)
     @Setter
     private BigDecimal returnedQtyInBase = BigDecimal.ZERO;
+
+    /** Lot/batch number captured at receipt (V76, optional — soft validation). */
+    @Column(name = "lot_number", length = 60)
+    @Setter
+    private String lotNumber;
+
+    /** Manufacture date captured at receipt (V76, optional). */
+    @Column(name = "manufacture_date")
+    @Setter
+    private LocalDate manufactureDate;
+
+    /** Expiry date captured at receipt (V76, optional). */
+    @Column(name = "expiry_date")
+    @Setter
+    private LocalDate expiryDate;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();

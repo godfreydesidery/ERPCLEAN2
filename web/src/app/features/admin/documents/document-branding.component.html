@@ -138,13 +138,37 @@
                            autocomplete="url" />
                   </div>
 
-                  <!-- Logo Reference -->
-                  <div class="erp-field">
-                    <label for="fLogoRef">Logo Reference</label>
-                    <input id="fLogoRef" name="fLogoRef" type="text" class="form-control"
-                           placeholder="Storage key or URL for the company logo"
-                           [ngModel]="fLogoRef()" (ngModelChange)="fLogoRef.set($event)"
-                           autocomplete="off" />
+                  <!-- Company Logo (printed on document headers, ~2×2 cm) -->
+                  <div class="erp-field full">
+                    <label for="fLogoFile">Company Logo</label>
+                    <div class="d-flex align-items-center gap-3 flex-wrap">
+                      @if (fLogoDataUri()) {
+                        <img [src]="fLogoDataUri()" alt="Company logo preview"
+                             style="height:64px;width:auto;max-width:160px;border:1px solid var(--erp-border);border-radius:6px;padding:4px;background:#fff" />
+                      } @else {
+                        <span class="text-muted small">
+                          <i class="bi bi-image me-1" aria-hidden="true"></i>No logo — header is text-only.
+                        </span>
+                      }
+                      <div class="d-flex flex-column gap-1">
+                        <input id="fLogoFile" name="fLogoFile" type="file"
+                               class="form-control form-control-sm" style="max-width:280px"
+                               accept="image/png,image/jpeg"
+                               (change)="onLogoSelected($event)" />
+                        @if (fLogoDataUri()) {
+                          <button type="button" class="btn btn-sm btn-outline-secondary align-self-start"
+                                  (click)="clearLogo()">
+                            <i class="bi bi-x-lg me-1" aria-hidden="true"></i>Remove logo
+                          </button>
+                        }
+                      </div>
+                    </div>
+                    <small class="d-block text-muted mt-1">
+                      PNG or JPEG; automatically shrunk to ~2×2 cm for the document header.
+                    </small>
+                    @if (logoError(); as msg) {
+                      <small class="d-block text-danger mt-1" role="alert">{{ msg }}</small>
+                    }
                   </div>
 
                   <!-- Footer Terms -->

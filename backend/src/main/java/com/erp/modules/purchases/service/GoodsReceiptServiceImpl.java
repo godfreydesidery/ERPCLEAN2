@@ -11,11 +11,13 @@ import com.erp.modules.purchases.domain.dto.StockReceiptVoidedPayload;
 import com.erp.modules.purchases.domain.dto.VoidGoodsReceiptRequest;
 import com.erp.modules.purchases.domain.entity.GoodsReceipt;
 import com.erp.modules.purchases.domain.entity.GoodsReceiptLine;
+import com.erp.modules.purchases.domain.entity.GoodsReceiptLineSerial;
 import com.erp.modules.purchases.domain.entity.PurchaseOrder;
 import com.erp.modules.purchases.domain.entity.PurchaseOrderLine;
 import com.erp.modules.purchases.domain.enums.GoodsReceiptStatus;
 import com.erp.modules.purchases.domain.enums.PurchaseOrderStatus;
 import com.erp.modules.purchases.repository.GoodsReceiptLineRepository;
+import com.erp.modules.purchases.repository.GoodsReceiptLineSerialRepository;
 import com.erp.modules.purchases.repository.GoodsReceiptRepository;
 import com.erp.modules.purchases.repository.PurchaseOrderLineRepository;
 import com.erp.modules.purchases.repository.PurchaseOrderRepository;
@@ -32,8 +34,10 @@ import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -59,20 +63,22 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
 
     private static final Logger log = LoggerFactory.getLogger(GoodsReceiptServiceImpl.class);
 
-    private final GoodsReceiptRepository      receipts;
-    private final GoodsReceiptLineRepository  grLines;
-    private final PurchaseOrderRepository     orders;
-    private final PurchaseOrderLineRepository poLines;
-    private final ProductRepository           products;
-    private final PurchaseNumberGenerator     numberGen;
-    private final OutstandingTracker          tracker;
-    private final PurchaseOrderServiceImpl    poService;  // for recomputePoStatus
-    private final ScopeGuard                 scopeGuard;
-    private final AuditService               audit;
-    private final OutboxPublisher            outbox;
+    private final GoodsReceiptRepository           receipts;
+    private final GoodsReceiptLineRepository       grLines;
+    private final GoodsReceiptLineSerialRepository grLineSerials;
+    private final PurchaseOrderRepository          orders;
+    private final PurchaseOrderLineRepository      poLines;
+    private final ProductRepository                products;
+    private final PurchaseNumberGenerator          numberGen;
+    private final OutstandingTracker               tracker;
+    private final PurchaseOrderServiceImpl         poService;  // for recomputePoStatus
+    private final ScopeGuard                       scopeGuard;
+    private final AuditService                     audit;
+    private final OutboxPublisher                  outbox;
 
     public GoodsReceiptServiceImpl(GoodsReceiptRepository receipts,
                                    GoodsReceiptLineRepository grLines,
+                                   GoodsReceiptLineSerialRepository grLineSerials,
                                    PurchaseOrderRepository orders,
                                    PurchaseOrderLineRepository poLines,
                                    ProductRepository products,
@@ -82,17 +88,18 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
                                    ScopeGuard scopeGuard,
                                    AuditService audit,
                                    OutboxPublisher outbox) {
-        this.receipts   = receipts;
-        this.grLines    = grLines;
-        this.orders     = orders;
-        this.poLines    = poLines;
-        this.products   = products;
-        this.numberGen  = numberGen;
-        this.tracker    = tracker;
-        this.poService  = poService;
-        this.scopeGuard = scopeGuard;
-        this.audit      = audit;
-        this.outbox     = outbox;
+        this.receipts      = receipts;
+        this.grLines       = grLines;
+        this.grLineSerials = grLineSerials;
+        this.orders        = orders;
+        this.poLines       = poLines;
+        this.products      = products;
+        this.numberGen     = numberGen;
+        this.tracker       = tracker;
+        this.poService     = poService;
+        this.scopeGuard    = scopeGuard;
+        this.audit         = audit;
+        this.outbox        = outbox;
     }
 
     // -------------------------------------------------------------------------
@@ -129,7 +136,9 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
         }
         for (GoodsReceiptLineRequest lineReq : req.lines()) {
             GoodsReceiptLine grLine = buildGrLine(saved, po, lineReq);
-            savedLines.add(grLines.save(grLine));
+            GoodsReceiptLine persisted = grLines.save(grLine);
+            persistSerials(persisted, lineReq);
+            savedLines.add(persisted);
         }
 
         // 5. Assign GRN number (inside this TX, ADR-0011 D-6)
@@ -313,22 +322,61 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
 
         short nextLineNo = (short) (grLines.findMaxLineNo(gr.getId()) + 1);
 
-        return new GoodsReceiptLine(
+        GoodsReceiptLine line = new GoodsReceiptLine(
                 gr, poLine.getId(), nextLineNo,
                 poLine.getProductId(), poLine.getProductCode(), poLine.getProductName(),
                 poLine.getUnitId(), poLine.getUnitName(),
                 lineReq.receivedQty(), qtyInBase,
                 poLine.getUnitCostAmount(), CurrencyCode.value(po.getCurrency()), actorId());
+
+        // V76: capture lot/expiry — all optional; soft validation
+        if (lineReq.lotNumber() != null && !lineReq.lotNumber().isBlank()) {
+            line.setLotNumber(lineReq.lotNumber().trim());
+        }
+        line.setManufactureDate(lineReq.manufactureDate());
+        line.setExpiryDate(lineReq.expiryDate());
+
+        return line;
     }
 
-    private List<StockReceivedPayload.LineItem> buildPayloadLines(List<GoodsReceiptLine> grLines) {
-        return grLines.stream()
-                .map(l -> new StockReceivedPayload.LineItem(
-                        l.getProductId(),
-                        resolveProductUid(l.getProductId()),
-                        l.getUnitId(),
-                        l.getQtyInBase(),
-                        l.getUnitCostAmount()))  // ADR-0020 D-3: carry cost into the stock event
+    /**
+     * Persist serial child rows for a saved GR line (V76).
+     * Trims, skips blanks, deduplicates while preserving insertion order.
+     * All soft — if serialNumbers is null/empty, this is a no-op.
+     */
+    private void persistSerials(GoodsReceiptLine line, GoodsReceiptLineRequest req) {
+        if (req.serialNumbers() == null || req.serialNumbers().isEmpty()) {
+            return;
+        }
+        Set<String> seen = new LinkedHashSet<>();
+        for (String raw : req.serialNumbers()) {
+            if (raw == null) continue;
+            String s = raw.trim();
+            if (s.isEmpty()) continue;
+            seen.add(s);
+        }
+        for (String serial : seen) {
+            grLineSerials.save(new GoodsReceiptLineSerial(
+                    line.getId(), line.getCompanyId(), serial, actorId()));
+        }
+    }
+
+    private List<StockReceivedPayload.LineItem> buildPayloadLines(List<GoodsReceiptLine> savedLines) {
+        return savedLines.stream()
+                .map(l -> {
+                    List<String> serials = grLineSerials.findByGoodsReceiptLineId(l.getId())
+                            .stream().map(s -> s.getSerialNumber()).toList();
+                    return new StockReceivedPayload.LineItem(
+                            l.getProductId(),
+                            resolveProductUid(l.getProductId()),
+                            l.getUnitId(),
+                            l.getQtyInBase(),
+                            l.getUnitCostAmount(),   // ADR-0020 D-3
+                            l.getLotNumber(),
+                            l.getManufactureDate(),
+                            l.getExpiryDate(),
+                            serials);
+                })
                 .toList();
     }
 
@@ -354,7 +402,12 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
 
     private GoodsReceiptDto toDto(GoodsReceipt gr, List<GoodsReceiptLine> lines) {
         List<GoodsReceiptLineDto> lineDtos = lines.stream()
-                .map(GoodsReceiptLineDto::from).toList();
+                .map(l -> {
+                    List<String> serials = grLineSerials.findByGoodsReceiptLineId(l.getId())
+                            .stream().map(s -> s.getSerialNumber()).toList();
+                    return GoodsReceiptLineDto.from(l, serials);
+                })
+                .toList();
         String poUid = orders.findById(gr.getPurchaseOrderId())
                 .map(PurchaseOrder::getUid)
                 .orElse(null);

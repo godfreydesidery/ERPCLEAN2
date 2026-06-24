@@ -84,6 +84,11 @@ export interface GoodsReceiptLineDto {
   unitCostAmount: string;
   lineCostAmount: string;
   currency: string;
+  /** Batch/lot tracking — null when not captured. */
+  lotNumber: string | null;
+  manufactureDate: string | null;   // 'YYYY-MM-DD'
+  expiryDate: string | null;        // 'YYYY-MM-DD'
+  serialNumbers: string[];          // [] when none
 }
 
 // ── GoodsReceiptDto ─────────────────────────────────────────────────────────────
@@ -137,6 +142,11 @@ export interface VoidPurchaseOrderRequest {
 export interface GoodsReceiptLineRequest {
   purchaseOrderLineUid: string;
   receivedQty: string;
+  /** Batch/lot tracking — omit when not provided. */
+  lotNumber?: string;
+  manufactureDate?: string;   // ISO date 'YYYY-MM-DD'
+  expiryDate?: string;        // ISO date 'YYYY-MM-DD'
+  serialNumbers?: string[];
 }
 
 export interface CreateGoodsReceiptRequest {

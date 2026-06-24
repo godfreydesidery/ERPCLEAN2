@@ -3,11 +3,15 @@ package com.erp.modules.stock.events;
 import com.erp.modules.products.domain.dto.ProductDto;
 import com.erp.modules.products.service.ProductService;
 import com.erp.modules.stock.domain.dto.StockReceivedPayload;
+import com.erp.modules.stock.domain.entity.StockLocation;
 import com.erp.modules.stock.domain.enums.MovementType;
+import com.erp.modules.stock.repository.StockLocationRepository;
 import com.erp.modules.stock.service.InventoryGlPoster;
 import com.erp.modules.stock.service.InventoryGlPoster.ReceiptLeg;
 import com.erp.modules.stock.service.InventoryValuationService;
+import com.erp.modules.stock.service.StockBatchService;
 import com.erp.modules.stock.service.StockPostingService;
+import com.erp.modules.stock.service.StockSerialService;
 import com.erp.platform.events.DomainEvent;
 import com.erp.platform.events.DomainEventHandler;
 import com.erp.platform.events.DomainEventType;
@@ -31,6 +35,11 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>ADR-0020: after the +quantity movement, recomputes the moving-average cost and posts
  * DR INVENTORY (1300) / CR GRNI (2150) via {@link InventoryGlPoster#postReceiptInNewTx}
  * (REQUIRES_NEW — a GL anomaly never poisons the dispatch TX).
+ *
+ * <p>V76: after the quantity movement, if the payload line carries lot/serial data, delegates to
+ * {@link StockBatchService#receiveQty} and/or {@link StockSerialService#record} using the branch
+ * default stock location. If no default location exists the batch/serial writes are skipped with a
+ * WARN — the receipt itself is never failed for missing tracking data (soft validation).
  */
 @Component
 public class GoodsReceiptStockHandler implements DomainEventHandler {
@@ -45,6 +54,9 @@ public class GoodsReceiptStockHandler implements DomainEventHandler {
     private final ProductService             productService;
     private final InventoryValuationService  valuation;
     private final InventoryGlPoster          glPoster;
+    private final StockBatchService          batchService;
+    private final StockSerialService         serialService;
+    private final StockLocationRepository    locationRepo;
     private final ObjectMapper               objectMapper;
 
     public GoodsReceiptStockHandler(IdempotencyGuard guard,
@@ -52,12 +64,18 @@ public class GoodsReceiptStockHandler implements DomainEventHandler {
                                      ProductService productService,
                                      InventoryValuationService valuation,
                                      InventoryGlPoster glPoster,
+                                     StockBatchService batchService,
+                                     StockSerialService serialService,
+                                     StockLocationRepository locationRepo,
                                      ObjectMapper objectMapper) {
         this.guard          = guard;
         this.posting        = posting;
         this.productService = productService;
         this.valuation      = valuation;
         this.glPoster       = glPoster;
+        this.batchService   = batchService;
+        this.serialService  = serialService;
+        this.locationRepo   = locationRepo;
         this.objectMapper   = objectMapper;
     }
 
@@ -80,6 +98,11 @@ public class GoodsReceiptStockHandler implements DomainEventHandler {
         RequestContext.set(new RequestContext.Principal(
                 null, "SYSTEM", false, event.getCompanyId(), event.getBranchId(), null));
         try {
+            // Resolve the branch default stock location once — used for batch/serial writes (V76).
+            // If none exists the tracking writes are skipped (soft), but qty/GL proceed normally.
+            Long defaultLocationId = resolveDefaultLocationId(
+                    event.getCompanyId(), event.getBranchId(), payload.receiptUid());
+
             List<ReceiptLeg> glLegs = new ArrayList<>();
 
             for (StockReceivedPayload.LineItem line : payload.lines()) {
@@ -123,9 +146,15 @@ public class GoodsReceiptStockHandler implements DomainEventHandler {
                             product.code() != null ? product.code() : product.name(),
                             receiptValue));
                 }
+
+                // (4) V76: batch/serial tracking — soft, never fails the dispatch.
+                if (defaultLocationId != null) {
+                    writeBatchTracking(event, line, product, defaultLocationId);
+                    writeSerialTracking(event, line, product, defaultLocationId, payload.receiptUid());
+                }
             }
 
-            // (4) Post one GL journal DR INVENTORY / CR GRNI for the whole receipt (D-4a).
+            // (5) Post one GL journal DR INVENTORY / CR GRNI for the whole receipt (D-4a).
             if (!glLegs.isEmpty()) {
                 LocalDate postingDate = payload.receivedAt() != null
                         ? payload.receivedAt().atZone(ZoneOffset.UTC).toLocalDate()
@@ -149,6 +178,86 @@ public class GoodsReceiptStockHandler implements DomainEventHandler {
         }
 
         guard.markProcessed(CONSUMER, event.getUid());
+    }
+
+    // -------------------------------------------------------------------------
+    // V76 helpers — batch and serial tracking (all soft: exceptions are caught + warned)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Writes a stock_batches row when the product is lot-tracked OR the payload carries a lotNumber
+     * or expiryDate. If lotNumber is null/blank, uses "UNTRACKED" as a sentinel so the batch row
+     * still captures the expiry date for FEFO — but only when expiryDate is also present; otherwise
+     * skips silently.
+     */
+    private void writeBatchTracking(DomainEvent event, StockReceivedPayload.LineItem line,
+                                     ProductDto product, Long locationId) {
+        boolean haslotData = (line.lotNumber() != null && !line.lotNumber().isBlank())
+                || line.expiryDate() != null;
+        boolean shouldWrite = product.lotTracked() || haslotData;
+        if (!shouldWrite) {
+            return;
+        }
+        String lotNumber = (line.lotNumber() != null && !line.lotNumber().isBlank())
+                ? line.lotNumber().trim()
+                : "UNTRACKED";
+        try {
+            batchService.receiveQty(
+                    event.getCompanyId(), event.getBranchId(), locationId, line.productId(),
+                    lotNumber, line.manufactureDate(), line.expiryDate(),
+                    line.qtyInBase(), null /* actorId — SYSTEM */);
+            log.debug("GoodsReceiptStockHandler: batch recorded lot='{}' product={} qty={} receipt={}",
+                    lotNumber, line.productId(), line.qtyInBase(), event.getUid());
+        } catch (Exception ex) {
+            log.warn("GoodsReceiptStockHandler: batch write failed for lot='{}' product={} receipt={} — " +
+                             "skipping (soft); cause: {}",
+                    lotNumber, line.productId(), event.getUid(), ex.getMessage());
+        }
+    }
+
+    /**
+     * Records stock_serials rows for each serial in the payload when the product is serial-tracked
+     * OR the payload carries serial numbers. Idempotent per (company, product, serial).
+     */
+    private void writeSerialTracking(DomainEvent event, StockReceivedPayload.LineItem line,
+                                      ProductDto product, Long locationId, String receiptUid) {
+        List<String> serials = line.serialNumbers();
+        boolean hasSerials = serials != null && !serials.isEmpty();
+        if (!product.serialTracked() && !hasSerials) {
+            return;
+        }
+        if (!hasSerials) {
+            return; // serial-tracked product but no serials provided — soft skip
+        }
+        for (String serial : serials) {
+            if (serial == null || serial.isBlank()) continue;
+            try {
+                serialService.record(
+                        event.getCompanyId(), event.getBranchId(), locationId, line.productId(),
+                        serial.trim(), receiptUid, null /* actorId — SYSTEM */);
+                log.debug("GoodsReceiptStockHandler: serial recorded serial='{}' product={} receipt={}",
+                        serial, line.productId(), event.getUid());
+            } catch (Exception ex) {
+                log.warn("GoodsReceiptStockHandler: serial write failed serial='{}' product={} receipt={} — " +
+                                 "skipping (soft); cause: {}",
+                        serial, line.productId(), event.getUid(), ex.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Resolve the branch default stock location id.
+     * Returns null (with a WARN) if none exists — callers treat null as "skip tracking writes".
+     */
+    private Long resolveDefaultLocationId(Long companyId, Long branchId, String receiptUid) {
+        return locationRepo.findByCompanyIdAndBranchIdAndIsDefaultTrue(companyId, branchId)
+                .map(StockLocation::getId)
+                .orElseGet(() -> {
+                    log.warn("GoodsReceiptStockHandler: no default stock location for company={} branch={} " +
+                                     "receipt={} — batch/serial tracking writes skipped (V76 soft)",
+                            companyId, branchId, receiptUid);
+                    return null;
+                });
     }
 
     private StockReceivedPayload deserialise(String json) {
