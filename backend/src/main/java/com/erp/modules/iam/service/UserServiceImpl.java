@@ -10,8 +10,10 @@ import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
+import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.repository.Lookups;
+import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.password.PasswordPolicy;
 import java.time.Instant;
 import java.util.List;
@@ -69,12 +71,39 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional(readOnly = true)
     public UserDto getByUid(String uid) {
-        return UserDto.from(requireByUid(uid));
+        AppUser user = requireByUid(uid);
+        RequestContext.Principal principal = RequestContext.get();
+        // Root always resolves; same-company callers resolve; out-of-company is a 404 (don't leak
+        // existence — tenant-isolation fix, security audit 2026-06-25).
+        if (principal != null && !principal.root()) {
+            Long companyId = principal.companyId();
+            if (companyId == null || !users.existsUserInCompany(user.getId(), companyId)) {
+                throw NotFoundException.of("User", uid);
+            }
+        }
+        return UserDto.from(user);
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<UserDto> list() {
+        // Tenant-isolation fix (security audit 2026-06-25): root sees org-wide; non-root is scoped
+        // to their active company; null company → fail-closed empty list (mirrors UserRoleServiceImpl
+        // and CompanyServiceImpl patterns).
+        RequestContext.Principal principal = RequestContext.get();
+        if (principal == null || principal.root()) {
+            return users.findAllByOrderByUsername().stream().map(UserDto::from).toList();
+        }
+        Long companyId = principal.companyId();
+        if (companyId == null) {
+            return List.of();
+        }
+        return users.findAllInCompanyOrderByUsername(companyId).stream().map(UserDto::from).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<UserDto> listOrgWide() {
         return users.findAllByOrderByUsername().stream().map(UserDto::from).toList();
     }
 

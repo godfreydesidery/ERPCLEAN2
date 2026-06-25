@@ -18,7 +18,19 @@ public interface UserService {
 
     UserDto getByUid(String uid);
 
+    /**
+     * Company-scoped list (tenant-isolation fix, security audit 2026-06-25). Root sees everyone;
+     * a non-root caller sees only users who share their active company; null company → empty list
+     * (fail-closed). The pick-target for the org-wide picker is {@link #listOrgWide()}.
+     */
     List<UserDto> list();
+
+    /**
+     * Org-wide list — bypasses the company scope so the assign-role picker can show users NOT yet
+     * in the caller's company. Gated by USER.MANAGE at the controller; never call from a low-trust
+     * path.
+     */
+    List<UserDto> listOrgWide();
 
     UserDto updateByUid(String uid, UpdateUserRequest request);
 

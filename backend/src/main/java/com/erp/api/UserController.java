@@ -40,6 +40,18 @@ public class UserController {
         return users.list();
     }
 
+    /**
+     * Org-wide user picker — returns ALL users in the organisation regardless of company membership.
+     * Intended for the assign-role flow where the caller legitimately needs to find a user not yet
+     * in their company. Gated on USER.MANAGE (a stronger gate than VIEW) so read-only auditors
+     * cannot enumerate the whole org.
+     */
+    @GetMapping("/org-wide")
+    @PreAuthorize("@perm.has('USER.MANAGE')")
+    public List<UserDto> listOrgWide() {
+        return users.listOrgWide();
+    }
+
     @GetMapping("/uid/{uid}")
     @PreAuthorize("@perm.has('USER.VIEW')")
     public UserDto get(@PathVariable String uid) {

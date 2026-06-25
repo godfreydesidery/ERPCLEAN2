@@ -44,7 +44,7 @@ export const ADMIN_ROUTES: Routes = [
   },
   {
     path: 'roles/uid/:uid',
-    canActivate: [requirePermission('ROLE.MANAGE')],
+    canActivate: [requirePermission('ROLE.ADMIN')],
     loadComponent: () =>
       import('./role/role-edit.component').then((m) => m.RoleEditComponent),
   },

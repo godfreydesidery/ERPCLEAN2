@@ -29,6 +29,13 @@ describe('UserService', () => {
     req.flush([]);
   });
 
+  it('lists org-wide users via GET /users/org-wide', () => {
+    service.listOrgWide().subscribe();
+    const req = httpMock.expectOne(`${base}/org-wide`);
+    expect(req.request.method).toBe('GET');
+    req.flush([]);
+  });
+
   it('gets a single user by uid', () => {
     service.get('U1').subscribe();
     const req = httpMock.expectOne(`${base}/uid/U1`);
