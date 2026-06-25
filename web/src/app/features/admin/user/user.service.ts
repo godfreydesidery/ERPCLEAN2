@@ -19,6 +19,15 @@ export class UserService {
     return this.http.get<User[]>(this.base);
   }
 
+  /**
+   * Returns all users across the entire organisation regardless of company.
+   * Requires USER.MANAGE. Use only for pickers that must cross company boundaries
+   * (e.g. role-grant assignment); leave normal admin lists on list().
+   */
+  listOrgWide(): Observable<User[]> {
+    return this.http.get<User[]>(`${this.base}/org-wide`);
+  }
+
   get(uid: string): Observable<User> {
     return this.http.get<User>(`${this.base}/uid/${uid}`);
   }

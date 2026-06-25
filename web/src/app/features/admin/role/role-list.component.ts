@@ -4,10 +4,12 @@ import { RouterLink } from '@angular/router';
 import { Role } from '../models/role.model';
 import { RoleService } from './role.service';
 import { AlertService } from '../../../core/feedback/alert.service';
+import { SessionStore } from '../../../core/auth/session.store';
 
 /**
- * Lists all roles and provides an inline create form (code + name + description). Each row links
- * to the role-edit screen. All four states (loading / empty / error / populated) are handled.
+ * Lists all roles. ROLE.VIEW is sufficient to reach this screen.
+ * The inline create form and per-row Edit link are shown only when the caller also holds
+ * ROLE.ADMIN (catalogue mutations). A view-only role auditor sees the read-only list.
  */
 @Component({
   selector: 'app-role-list',
@@ -18,6 +20,7 @@ import { AlertService } from '../../../core/feedback/alert.service';
 export class RoleListComponent {
   private readonly roleService = inject(RoleService);
   private readonly alerts = inject(AlertService);
+  protected readonly session = inject(SessionStore);
 
   readonly roles = signal<Role[]>([]);
   readonly state = signal<'loading' | 'idle' | 'error'>('loading');
@@ -30,6 +33,8 @@ export class RoleListComponent {
   readonly saving = signal(false);
 
   readonly hasRoles = computed(() => this.roles().length > 0);
+  /** True when the caller may create, edit, or archive roles (ROLE.ADMIN). */
+  readonly canAdmin = computed(() => this.session.hasPermission('ROLE.ADMIN'));
 
   constructor() {
     this.load();
