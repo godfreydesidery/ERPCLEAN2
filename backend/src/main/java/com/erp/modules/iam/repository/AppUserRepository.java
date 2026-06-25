@@ -19,12 +19,10 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
     List<AppUser> findAllByOrderByUsername();
 
     /**
-     * Company-scoped user list (tenant-isolation fix, security audit 2026-06-25). Returns every
-     * user who has membership in {@code companyId} via either an active role grant OR a branch
-     * assignment in a branch of that company, ordered alphabetically.
-     *
-     * <p>Mirrors the {@code UserBranchRepository.existsByUserIdAndBranchCompanyId} join and the
-     * {@code UserRole.companyId} convention already used by {@code UserRoleRepository}.
+     * Company-scoped user list (tenant-isolation fix, security audit 2026-06-25; extended V77).
+     * Returns every user who has membership in {@code companyId} via an active role grant OR a
+     * branch assignment in a branch of that company OR an explicit active user_company row (V77
+     * additive oracle). Ordered alphabetically.
      */
     @Query("""
             SELECT DISTINCT u FROM AppUser u
@@ -37,15 +35,19 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
                       SELECT 1 FROM UserBranch ub
                       WHERE ub.userId = u.id
                         AND ub.branch.company.id = :companyId)
+               OR EXISTS (
+                      SELECT 1 FROM UserCompany uc
+                      WHERE uc.userId = u.id
+                        AND uc.company.id = :companyId
+                        AND uc.revokedAt IS NULL)
             ORDER BY u.username
             """)
     List<AppUser> findAllInCompanyOrderByUsername(@Param("companyId") Long companyId);
 
     /**
      * Membership check for the {@code getByUid} tenant-isolation guard. Returns {@code true} iff
-     * {@code userId} belongs to {@code companyId} via an active role grant OR a branch assignment.
-     *
-     * <p>A single EXISTS over two sub-selects keeps this one round-trip.
+     * {@code userId} belongs to {@code companyId} via an active role grant OR a branch assignment
+     * OR an explicit active user_company row (V77 additive oracle).
      */
     @Query("""
             SELECT COUNT(u) > 0 FROM AppUser u
@@ -58,7 +60,12 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
                    OR EXISTS (
                       SELECT 1 FROM UserBranch ub
                       WHERE ub.userId = u.id
-                        AND ub.branch.company.id = :companyId))
+                        AND ub.branch.company.id = :companyId)
+                   OR EXISTS (
+                      SELECT 1 FROM UserCompany uc
+                      WHERE uc.userId = u.id
+                        AND uc.company.id = :companyId
+                        AND uc.revokedAt IS NULL))
             """)
     boolean existsUserInCompany(@Param("userId") Long userId, @Param("companyId") Long companyId);
 

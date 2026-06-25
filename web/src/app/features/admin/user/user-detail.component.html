@@ -370,4 +370,121 @@
       </form>
     </div>
   </div>
+
+  <!-- Company memberships panel -->
+  <div class="erp-card mb-3">
+    <div class="erp-card__head">
+      <h2>Companies</h2>
+    </div>
+    <div class="erp-card__body">
+
+      <!-- Memberships list -->
+      @switch (companyMembershipsState()) {
+        @case ('loading') {
+          <p class="text-muted small d-flex align-items-center gap-2" aria-live="polite">
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading company memberships…
+          </p>
+        }
+        @case ('error') {
+          <p class="text-danger small" role="alert">
+            <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+            Could not load company memberships. Please try again.
+          </p>
+        }
+        @default {
+          @if (!hasCompanyMemberships()) {
+            <div class="erp-empty">
+              <i class="bi bi-building" aria-hidden="true"></i>
+              No company memberships yet.
+            </div>
+          } @else {
+            <div class="erp-table-wrap mb-3">
+              <table class="erp-table">
+                <caption class="sr-only">Company memberships for this user</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Company</th>
+                    <th scope="col">Assigned at</th>
+                    @if (canManageCompanies()) {
+                      <th scope="col"><span class="sr-only">Actions</span></th>
+                    }
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (m of companyMemberships(); track m.uid) {
+                    <tr>
+                      <td>{{ m.companyName }}</td>
+                      <td class="small text-muted">{{ m.assignedAt }}</td>
+                      @if (canManageCompanies()) {
+                        <td>
+                          <button type="button" class="btn btn-sm btn-outline-danger"
+                                  [disabled]="companyRowBusyUid() !== null"
+                                  (click)="removeCompany(m)"
+                                  [attr.aria-label]="'Remove ' + m.companyName + ' membership'">
+                            @if (companyRowBusyUid() === m.uid) {
+                              <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                            }
+                            Remove
+                          </button>
+                        </td>
+                      }
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        }
+      }
+
+      <!-- Assign form — visible only to USER.COMPANY.MANAGE holders -->
+      @if (canManageCompanies()) {
+        <form class="border-top pt-3" (ngSubmit)="assignCompany()" aria-label="Assign a company to this user">
+          <h3 class="erp-section-title mt-0">Assign Company</h3>
+
+          @switch (companiesState()) {
+            @case ('loading') {
+              <p class="text-muted small d-flex align-items-center gap-2" aria-live="polite">
+                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+              </p>
+            }
+            @case ('error') {
+              <p class="text-danger small" role="alert">Could not load companies. Refresh to try again.</p>
+            }
+            @default {
+              <div class="row g-2 align-items-end">
+                <div class="col-sm-6">
+                  <label class="form-label small text-muted mb-1" for="assignCompanySelect">Company</label>
+                  <select id="assignCompanySelect" name="assignCompanySelect" class="form-select"
+                          [ngModel]="assignCompanyUid()"
+                          (ngModelChange)="assignCompanyUid.set($event)"
+                          [disabled]="assigningCompany()">
+                    <option value="">— select company —</option>
+                    @for (c of companies(); track c.uid) {
+                      <option [value]="c.uid">{{ c.name }}</option>
+                    }
+                  </select>
+                </div>
+                <div class="col-sm-3">
+                  <button type="submit" class="btn btn-primary w-100"
+                          [disabled]="assigningCompany() || !assignCompanyUid()">
+                    @if (assigningCompany()) {
+                      <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                      Assigning…
+                    } @else {
+                      Assign
+                    }
+                  </button>
+                </div>
+              </div>
+            }
+          }
+
+          @if (assignCompanyError(); as msg) {
+            <p class="text-warning small mt-2 mb-0">{{ msg }}</p>
+          }
+        </form>
+      }
+    </div>
+  </div>
 </section>
