@@ -226,6 +226,7 @@ INSERT INTO permissions (code, module, description) VALUES
     ('TAXRATE.VIEW', 'sales', 'View company VAT rates'),
     ('UOM.MANAGE', 'products', 'Create, update, archive and restore units of measure'),
     ('UOM.VIEW', 'products', 'View units of measure'),
+    ('USER.COMPANY.MANAGE', 'iam', 'Assign and remove a user''s company memberships'),
     ('USER.MANAGE', 'iam', 'Create, update, disable and unlock users; set passwords'),
     ('USER.VIEW', 'iam', 'View users'),
     ('VAT.ADJUST', 'tax', 'Add / remove adjustment lines on a DRAFT return'),

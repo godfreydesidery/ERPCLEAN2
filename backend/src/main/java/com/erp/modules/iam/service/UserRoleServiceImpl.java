@@ -39,6 +39,7 @@ public class UserRoleServiceImpl implements UserRoleService {
     private final ScopeGuard scopeGuard;
     private final PermissionResolver permissionResolver;
     private final AuditService audit;
+    private final UserCompanyService userCompanyService;
 
     public UserRoleServiceImpl(UserRoleRepository userRoles,
                                AppUserRepository users,
@@ -47,7 +48,8 @@ public class UserRoleServiceImpl implements UserRoleService {
                                BranchRepository branches,
                                ScopeGuard scopeGuard,
                                PermissionResolver permissionResolver,
-                               AuditService audit) {
+                               AuditService audit,
+                               UserCompanyService userCompanyService) {
         this.userRoles = userRoles;
         this.users = users;
         this.roles = roles;
@@ -56,6 +58,7 @@ public class UserRoleServiceImpl implements UserRoleService {
         this.scopeGuard = scopeGuard;
         this.permissionResolver = permissionResolver;
         this.audit = audit;
+        this.userCompanyService = userCompanyService;
     }
 
     @Override
@@ -86,6 +89,12 @@ public class UserRoleServiceImpl implements UserRoleService {
         Long grantedBy = RequestContext.get().userId();
         UserRole ur = new UserRole(user.getId(), role, company.getId(), branchId, grantedBy);
         userRoles.save(ur);
+
+        // Auto-create company membership (V77 additive oracle): ensure a user_company row exists
+        // for the company this role grant targets. Idempotent + exception-free — must not roll back
+        // the grant if the membership insert fails.
+        userCompanyService.ensureMembership(user.getId(), company.getId(), grantedBy);
+
         permissionResolver.invalidate();
 
         String branchUid = branch != null ? branch.getUid() : null;

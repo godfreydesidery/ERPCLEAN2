@@ -45,6 +45,18 @@ public interface UserBranchRepository extends JpaRepository<UserBranch, Long> {
     boolean existsByUserIdAndBranchCompanyId(Long userId, Long companyId);
 
     /**
+     * Distinct company ids reachable for {@code userId} through branch assignments. Used by
+     * {@link com.erp.modules.iam.service.CompanyServiceImpl#listAccessibleByOrganisationUid}
+     * to extend the additive oracle with the branch→company path.
+     */
+    @org.springframework.data.jpa.repository.Query("""
+            SELECT DISTINCT ub.branch.company.id FROM UserBranch ub
+            WHERE ub.userId = :userId
+            """)
+    java.util.Set<Long> findActiveCompanyIdsByUserId(
+            @org.springframework.data.repository.query.Param("userId") Long userId);
+
+    /**
      * Branch assignments for {@code userId} scoped to branches belonging to {@code companyId}.
      * Used by the tenant-isolation fix in {@link com.erp.modules.iam.service.UserBranchServiceImpl}
      * so a non-root caller only sees assignments within their active company

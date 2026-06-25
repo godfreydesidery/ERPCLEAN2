@@ -37,17 +37,20 @@ public class UserBranchServiceImpl implements UserBranchService {
     private final BranchRepository branches;
     private final ScopeGuard scopeGuard;
     private final AuditService audit;
+    private final UserCompanyService userCompanyService;
 
     public UserBranchServiceImpl(UserBranchRepository userBranches,
                                  AppUserRepository users,
                                  BranchRepository branches,
                                  ScopeGuard scopeGuard,
-                                 AuditService audit) {
+                                 AuditService audit,
+                                 UserCompanyService userCompanyService) {
         this.userBranches = userBranches;
         this.users = users;
         this.branches = branches;
         this.scopeGuard = scopeGuard;
         this.audit = audit;
+        this.userCompanyService = userCompanyService;
     }
 
     @Override
@@ -69,6 +72,12 @@ public class UserBranchServiceImpl implements UserBranchService {
             assignment.markDefault();
         }
         UserBranch saved = userBranches.save(assignment);
+
+        // Auto-create company membership (V77 additive oracle): the branch's company is the
+        // companyId implied by this branch assignment. Idempotent + exception-free — must not
+        // roll back the branch assignment if the membership insert fails.
+        userCompanyService.ensureMembership(user.getId(), branch.getCompany().getId(), actorId());
+
         audit.record(AuditEvent.of(AuditActions.BRANCH_ASSIGN, "user_branch", saved.getId(), saved.getUid())
                 .detail(Map.of("userUid", user.getUid(), "branchUid", branch.getUid(),
                         "madeDefault", request.makeDefault())));

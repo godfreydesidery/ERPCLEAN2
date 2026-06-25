@@ -64,7 +64,8 @@ class UserBranchServiceImplTest {
                 userRepo,
                 mock(BranchRepository.class),
                 mock(ScopeGuard.class),
-                mock(AuditService.class));
+                mock(AuditService.class),
+                mock(UserCompanyService.class));
 
         // Target user stub
         AppUser user = mock(AppUser.class);
