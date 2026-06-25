@@ -65,6 +65,11 @@ public class RoleServiceImpl implements RoleService {
     @Override
     public RoleDto updateByUid(String uid, UpdateRoleRequest request) {
         Role role = requireByUid(uid);
+        // BR-7: system roles are immutable — block name/description edits the same way setPermissions
+        // and archiveByUid already do (security audit 2026-06-25).
+        if (role.isSystem()) {
+            throw new ConflictException("System role cannot be modified: " + role.getCode());
+        }
         role.setName(request.name());
         role.setDescription(request.description());
         return RoleDto.from(role); // dirty-checked within the TX

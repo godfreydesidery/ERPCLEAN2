@@ -49,20 +49,20 @@ public class RoleController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("@perm.has('ROLE.MANAGE')")
+    @PreAuthorize("@perm.has('ROLE.ADMIN')")
     public RoleDto create(@Valid @RequestBody CreateRoleRequest request) {
         return roleService.create(request);
     }
 
     @PutMapping("/uid/{uid}")
-    @PreAuthorize("@perm.has('ROLE.MANAGE')")
+    @PreAuthorize("@perm.has('ROLE.ADMIN')")
     public RoleDto update(@PathVariable String uid,
                           @Valid @RequestBody UpdateRoleRequest request) {
         return roleService.updateByUid(uid, request);
     }
 
     @PutMapping("/uid/{uid}/permissions")
-    @PreAuthorize("@perm.has('ROLE.MANAGE')")
+    @PreAuthorize("@perm.has('ROLE.ADMIN')")
     public RoleDto setPermissions(@PathVariable String uid,
                                   @Valid @RequestBody SetRolePermissionsRequest request) {
         return roleService.setPermissions(uid, request);
@@ -70,7 +70,7 @@ public class RoleController {
 
     @DeleteMapping("/uid/{uid}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @PreAuthorize("@perm.has('ROLE.MANAGE')")
+    @PreAuthorize("@perm.has('ROLE.ADMIN')")
     public void archive(@PathVariable String uid) {
         roleService.archiveByUid(uid);
     }

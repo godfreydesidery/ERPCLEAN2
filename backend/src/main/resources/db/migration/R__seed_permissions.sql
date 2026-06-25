@@ -173,6 +173,7 @@ INSERT INTO permissions (code, module, description) VALUES
     ('REPORT.LEDGER.VIEW', 'reporting', 'Drill into the GL account-ledger from a statement line'),
     ('REPORT.PL.VIEW', 'reporting', 'View the Income Statement / Profit & Loss'),
     ('REPORT.VIEW', 'reporting', 'View all financial statements + the account-ledger drill-down (coarse)'),
+    ('ROLE.ADMIN', 'iam', 'Create, edit and archive the shared org-wide role catalogue'),
     ('ROLE.MANAGE', 'iam', 'Create and update roles; grant and revoke role assignments'),
     ('ROLE.VIEW', 'iam', 'View roles and their permissions'),
     ('ROUTE.ASSIGN', 'routes', 'Assign/unassign customers and external agents to/from a route; set primary agent'),

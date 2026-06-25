@@ -7,39 +7,41 @@
     </p>
   </header>
 
-  <!-- Create form -->
-  <form class="create-form card card-body mb-3" (ngSubmit)="create()" aria-label="Create role">
-    <div class="row g-2 align-items-end">
-      <div class="col-sm-2">
-        <label class="form-label small text-muted mb-1" for="roleCode">Code</label>
-        <input id="roleCode" name="roleCode" type="text" class="form-control"
-               [(ngModel)]="code" required [disabled]="saving()" />
+  <!-- Create form — shown only to ROLE.ADMIN holders -->
+  @if (canAdmin()) {
+    <form class="create-form card card-body mb-3" (ngSubmit)="create()" aria-label="Create role">
+      <div class="row g-2 align-items-end">
+        <div class="col-sm-2">
+          <label class="form-label small text-muted mb-1" for="roleCode">Code</label>
+          <input id="roleCode" name="roleCode" type="text" class="form-control"
+                 [(ngModel)]="code" required [disabled]="saving()" />
+        </div>
+        <div class="col-sm-4">
+          <label class="form-label small text-muted mb-1" for="roleName">Name</label>
+          <input id="roleName" name="roleName" type="text" class="form-control"
+                 [(ngModel)]="name" required [disabled]="saving()" />
+        </div>
+        <div class="col-sm-4">
+          <label class="form-label small text-muted mb-1" for="roleDesc">Description</label>
+          <input id="roleDesc" name="roleDesc" type="text" class="form-control"
+                 [(ngModel)]="description" [disabled]="saving()" />
+        </div>
+        <div class="col-sm-2">
+          <button type="submit" class="btn btn-primary w-100" [disabled]="saving()">
+            @if (saving()) {
+              <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+              Saving…
+            } @else {
+              Add role
+            }
+          </button>
+        </div>
       </div>
-      <div class="col-sm-4">
-        <label class="form-label small text-muted mb-1" for="roleName">Name</label>
-        <input id="roleName" name="roleName" type="text" class="form-control"
-               [(ngModel)]="name" required [disabled]="saving()" />
-      </div>
-      <div class="col-sm-4">
-        <label class="form-label small text-muted mb-1" for="roleDesc">Description</label>
-        <input id="roleDesc" name="roleDesc" type="text" class="form-control"
-               [(ngModel)]="description" [disabled]="saving()" />
-      </div>
-      <div class="col-sm-2">
-        <button type="submit" class="btn btn-primary w-100" [disabled]="saving()">
-          @if (saving()) {
-            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-            Saving…
-          } @else {
-            Add role
-          }
-        </button>
-      </div>
-    </div>
-    @if (formError(); as msg) {
-      <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
-    }
-  </form>
+      @if (formError(); as msg) {
+        <output class="form-error text-danger small mt-2 mb-0 d-block" aria-live="assertive">{{ msg }}</output>
+      }
+    </form>
+  }
 
   <!-- List states: loading / error / empty / populated -->
   @switch (state()) {
@@ -49,7 +51,7 @@
       </p>
     }
     @case ('error') {
-      <p class="state text-danger" role="alert">
+      <p class="state text-danger" aria-live="assertive">
         <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
         Could not load roles. Please try again.
       </p>
@@ -58,7 +60,7 @@
       @if (!hasRoles()) {
         <div class="erp-empty">
           <i class="bi bi-shield-lock" aria-hidden="true"></i>
-          No roles yet. Add one above.
+          @if (canAdmin()) { No roles yet. Add one above. } @else { No roles found. }
         </div>
       } @else {
         <div class="erp-table-wrap">
@@ -94,10 +96,12 @@
                     </span>
                   </td>
                   <td>
-                    <a class="btn btn-sm btn-outline-primary"
-                       [routerLink]="['/admin/roles/uid', r.uid]">
-                      Edit
-                    </a>
+                    @if (canAdmin()) {
+                      <a class="btn btn-sm btn-outline-primary"
+                         [routerLink]="['/admin/roles/uid', r.uid]">
+                        Edit
+                      </a>
+                    }
                   </td>
                 </tr>
               }
