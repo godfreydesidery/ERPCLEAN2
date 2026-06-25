@@ -431,6 +431,12 @@ public final class AuditActions {
      */
     public static final String COMPANY_BASE_CURRENCY_CHANGE = "COMPANY.BASE_CURRENCY.CHANGE";
 
+    /**
+     * Emitted when an admin re-provisions all company-scoped defaults for an existing company
+     * (idempotent heal). Scoped to {@code COMPANY.MANAGE} on the target company.
+     */
+    public static final String COMPANY_PROVISION_DEFAULTS = "COMPANY.PROVISION_DEFAULTS";
+
     // ---- Party contacts & addresses (ADR-0040 D-3) ----
     public static final String CUSTOMER_CONTACT_ADD      = "CUSTOMER.CONTACT.ADD";
     public static final String CUSTOMER_CONTACT_UPDATE   = "CUSTOMER.CONTACT.UPDATE";
