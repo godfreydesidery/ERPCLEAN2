@@ -96,7 +96,8 @@
       </span>
     }
 
-    <div class="topbar-spacer"></div>
+    <!-- Command palette / menu search — central topbar slot; hidden below md breakpoint. -->
+    <app-nav-search [destinations]="searchDestinations()" />
 
     <span class="api-status" [attr.data-state]="state()" aria-live="polite">
       <span class="api-dot" aria-hidden="true"></span>
