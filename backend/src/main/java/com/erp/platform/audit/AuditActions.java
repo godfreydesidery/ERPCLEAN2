@@ -30,6 +30,10 @@ public final class AuditActions {
     public static final String BRANCH_UNASSIGN    = "BRANCH.UNASSIGN";
     public static final String BRANCH_SET_DEFAULT = "BRANCH.SET_DEFAULT";
 
+    // -- Company membership (V77) ---------------------------------------------
+    public static final String USER_COMPANY_ASSIGN = "USER.COMPANY.ASSIGN";
+    public static final String USER_COMPANY_REMOVE = "USER.COMPANY.REMOVE";
+
     // -- Authentication / lockout ---------------------------------------------
     public static final String LOGIN_SUCCESS = "LOGIN.SUCCESS";
     public static final String LOGIN_FAIL    = "LOGIN.FAIL";

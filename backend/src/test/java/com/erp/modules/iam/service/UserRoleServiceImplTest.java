@@ -69,7 +69,8 @@ class UserRoleServiceImplTest {
                 branchRepo,
                 mock(ScopeGuard.class),
                 mock(PermissionResolver.class),
-                mock(AuditService.class));
+                mock(AuditService.class),
+                mock(UserCompanyService.class));
 
         // Target user stub
         AppUser user = mock(AppUser.class);

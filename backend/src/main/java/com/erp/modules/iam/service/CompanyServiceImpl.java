@@ -11,6 +11,8 @@ import com.erp.modules.iam.domain.entity.Organisation;
 import com.erp.modules.iam.domain.entity.UserRole;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.repository.OrganisationRepository;
+import com.erp.modules.iam.repository.UserBranchRepository;
+import com.erp.modules.iam.repository.UserCompanyRepository;
 import com.erp.modules.iam.repository.UserRoleRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
@@ -25,7 +27,6 @@ import com.erp.platform.security.RequestContext;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,6 +49,8 @@ public class CompanyServiceImpl implements CompanyService {
     private final CompanyCurrencyRepository  companyCurrencies;
     private final AuditService               audit;
     private final UserRoleRepository         userRoles;
+    private final UserBranchRepository       userBranches;
+    private final UserCompanyRepository      userCompanies;
     private final CompanyProvisioningService provisioner;
 
     public CompanyServiceImpl(CompanyRepository          companies,
@@ -57,6 +60,8 @@ public class CompanyServiceImpl implements CompanyService {
                                CompanyCurrencyRepository  companyCurrencies,
                                AuditService               audit,
                                UserRoleRepository         userRoles,
+                               UserBranchRepository       userBranches,
+                               UserCompanyRepository      userCompanies,
                                CompanyProvisioningService provisioner) {
         this.companies        = companies;
         this.organisations    = organisations;
@@ -65,6 +70,8 @@ public class CompanyServiceImpl implements CompanyService {
         this.companyCurrencies = companyCurrencies;
         this.audit            = audit;
         this.userRoles        = userRoles;
+        this.userBranches     = userBranches;
+        this.userCompanies    = userCompanies;
         this.provisioner      = provisioner;
     }
 
@@ -135,12 +142,22 @@ public class CompanyServiceImpl implements CompanyService {
             return all.stream().map(CompanyDto::from).toList();
         }
 
-        // Everyone else: only companies they hold an active role grant in.
-        Set<Long> assignedCompanyIds = (principal == null || principal.userId() == null)
-                ? Set.of()
-                : userRoles.findByUserIdAndRevokedAtIsNull(principal.userId()).stream()
-                        .map(UserRole::getCompanyId)
-                        .collect(Collectors.toSet());
+        // Everyone else: additive oracle — role grant OR branch assignment OR explicit
+        // user_company membership (V77). Any one path is sufficient to include a company.
+        if (principal == null || principal.userId() == null) {
+            return List.of();
+        }
+        Long userId = principal.userId();
+        Set<Long> assignedCompanyIds = new java.util.HashSet<>();
+        // 1) active role grants
+        userRoles.findByUserIdAndRevokedAtIsNull(userId).stream()
+                .map(UserRole::getCompanyId)
+                .forEach(assignedCompanyIds::add);
+        // 2) branch assignments → company (V77 additive)
+        assignedCompanyIds.addAll(userBranches.findActiveCompanyIdsByUserId(userId));
+        // 3) explicit user_company memberships (V77 additive)
+        assignedCompanyIds.addAll(userCompanies.findActiveCompanyIdsByUserId(userId));
+
         return all.stream()
                 .filter(c -> assignedCompanyIds.contains(c.getId()))
                 .map(CompanyDto::from)

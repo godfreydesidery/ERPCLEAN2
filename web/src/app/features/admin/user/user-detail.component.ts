@@ -4,17 +4,20 @@ import { RouterLink } from '@angular/router';
 import { User } from '../models/user.model';
 import { UserBranch } from '../models/user-branch.model';
 import { UserRole } from '../models/user-role.model';
+import { UserCompany } from '../models/user-company.model';
 import { Branch } from '../models/branch.model';
 import { Company } from '../models/company.model';
 import { Role } from '../models/role.model';
 import { UserService } from './user.service';
 import { UserBranchService } from './user-branch.service';
+import { UserCompanyService } from './user-company.service';
 import { UserRoleService } from '../user-role/user-role.service';
 import { BranchService } from '../branch/branch.service';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { RoleService } from '../role/role.service';
 import { AlertService } from '../../../core/feedback/alert.service';
+import { SessionStore } from '../../../core/auth/session.store';
 
 type LoadState = 'loading' | 'idle' | 'error';
 type IdleLoadState = 'idle' | 'loading' | 'error';
@@ -35,12 +38,17 @@ type IdleLoadState = 'idle' | 'loading' | 'error';
 export class UserDetailComponent {
   private readonly userService = inject(UserService);
   private readonly userBranchService = inject(UserBranchService);
+  private readonly userCompanyService = inject(UserCompanyService);
   private readonly userRoleService = inject(UserRoleService);
   private readonly branchService = inject(BranchService);
   private readonly companyService = inject(CompanyService);
   private readonly organisationService = inject(OrganisationService);
   private readonly roleService = inject(RoleService);
   private readonly alerts = inject(AlertService);
+  private readonly session = inject(SessionStore);
+
+  /** True when the session has USER.COMPANY.MANAGE — gates Assign/Remove controls in the Companies panel. */
+  readonly canManageCompanies = computed(() => this.session.hasPermission('USER.COMPANY.MANAGE'));
 
   /** Route input — Angular binds the `:uid` path param to this signal via withComponentInputBinding. */
   readonly uid = input.required<string>();
@@ -90,6 +98,21 @@ export class UserDetailComponent {
 
   readonly hasRoleGrants = computed(() => this.roleGrants().length > 0);
 
+  // ── Company memberships list ──────────────────────────────────────────────
+  readonly companyMemberships = signal<UserCompany[]>([]);
+  readonly companyMembershipsState = signal<LoadState>('loading');
+
+  /** uid of the company-membership row whose Remove is in-flight. */
+  readonly companyRowBusyUid = signal<string | null>(null);
+
+  // ── Company assign form ───────────────────────────────────────────────────
+  readonly assignCompanyUid = signal('');
+  readonly assigningCompany = signal(false);
+  /** null = no error; string = inline calm message (e.g. 409 duplicate). */
+  readonly assignCompanyError = signal<string | null>(null);
+
+  readonly hasCompanyMemberships = computed(() => this.companyMemberships().length > 0);
+
   /** All branches across all loaded companies — used for the branchName() resolver. */
   readonly allBranches = signal<Branch[]>([]);
 
@@ -115,6 +138,7 @@ export class UserDetailComponent {
     this.loadCompanies();
     this.loadRoleGrants();
     this.loadRoles();
+    this.loadCompanyMemberships();
   }
 
   private loadUser(): void {
@@ -320,6 +344,61 @@ export class UserDetailComponent {
         this.loadRoleGrants();
       },
       error: () => this.roleRowBusyUid.set(null),
+    });
+  }
+
+  // ── Company memberships ───────────────────────────────────────────────────
+
+  loadCompanyMemberships(): void {
+    this.companyMembershipsState.set('loading');
+    this.userCompanyService.listForUser(this.uid()).subscribe({
+      next: (rows) => {
+        this.companyMemberships.set(rows);
+        this.companyMembershipsState.set('idle');
+      },
+      error: () => this.companyMembershipsState.set('error'),
+    });
+  }
+
+  assignCompany(): void {
+    const companyUid = this.assignCompanyUid();
+    if (!companyUid) {
+      this.assignCompanyError.set('Select a company to assign.');
+      return;
+    }
+    this.assigningCompany.set(true);
+    this.assignCompanyError.set(null);
+    this.userCompanyService.assign({ userUid: this.uid(), companyUid }).subscribe({
+      next: () => {
+        this.assignCompanyUid.set('');
+        this.assigningCompany.set(false);
+        this.alerts.success('Company assigned');
+        this.loadCompanyMemberships();
+      },
+      error: (err) => {
+        const status = (err as { status?: number })?.status;
+        if (status === 409) {
+          this.assignCompanyError.set('Already a member of that company.');
+        } else {
+          this.assignCompanyError.set(this.messageFrom(err, 'Could not assign company.'));
+        }
+        this.assigningCompany.set(false);
+      },
+    });
+  }
+
+  removeCompany(membership: UserCompany): void {
+    if (this.companyRowBusyUid() !== null) {
+      return;
+    }
+    this.companyRowBusyUid.set(membership.uid);
+    this.userCompanyService.remove(membership.uid).subscribe({
+      next: () => {
+        this.companyRowBusyUid.set(null);
+        this.alerts.success('Company membership removed', membership.companyName);
+        this.loadCompanyMemberships();
+      },
+      error: () => this.companyRowBusyUid.set(null),
     });
   }
 
