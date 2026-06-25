@@ -43,4 +43,21 @@ public interface UserBranchRepository extends JpaRepository<UserBranch, Long> {
               AND ub.branch.company.id = :companyId
             """)
     boolean existsByUserIdAndBranchCompanyId(Long userId, Long companyId);
+
+    /**
+     * Branch assignments for {@code userId} scoped to branches belonging to {@code companyId}.
+     * Used by the tenant-isolation fix in {@link com.erp.modules.iam.service.UserBranchServiceImpl}
+     * so a non-root caller only sees assignments within their active company
+     * (security audit 2026-06-25).
+     */
+    @org.springframework.data.jpa.repository.Query("""
+            SELECT ub
+            FROM UserBranch ub
+            WHERE ub.userId = :userId
+              AND ub.branch.company.id = :companyId
+            ORDER BY ub.assignedAt ASC, ub.id ASC
+            """)
+    List<UserBranch> findByUserIdAndBranchCompanyIdOrderByAssignedAtAscIdAsc(
+            @org.springframework.data.repository.query.Param("userId") Long userId,
+            @org.springframework.data.repository.query.Param("companyId") Long companyId);
 }

@@ -129,6 +129,20 @@ public class UserRoleServiceImpl implements UserRoleService {
     public List<UserRoleDto> listForUser(String userUid) {
         AppUser user = Lookups.orNotFound(users.findByUid(userUid), "AppUser", userUid);
         List<UserRole> assignments = userRoles.findByUserIdAndRevokedAtIsNull(user.getId());
+
+        // Tenant-isolation fix (security audit 2026-06-25): root sees all grants; non-root callers
+        // see only grants scoped to their active company. Fail-closed on a missing/null company.
+        RequestContext.Principal principal = RequestContext.get();
+        if (principal != null && !principal.root()) {
+            Long activeCompany = principal.companyId();
+            if (activeCompany == null) {
+                return List.of();
+            }
+            assignments = assignments.stream()
+                    .filter(ur -> activeCompany.equals(ur.getCompanyId()))
+                    .toList();
+        }
+
         return assignments.stream()
                 .map(ur -> buildDtoForAssignment(ur, user.getUid()))
                 .toList();
