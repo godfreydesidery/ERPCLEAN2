@@ -136,7 +136,24 @@ public class UserBranchServiceImpl implements UserBranchService {
     @Transactional(readOnly = true)
     public List<UserBranchDto> listForUser(String userUid) {
         AppUser user = Lookups.orNotFound(users.findByUid(userUid), "User", userUid);
-        return userBranches.findByUserIdOrderByAssignedAtAscIdAsc(user.getId()).stream()
+
+        // Tenant-isolation fix (security audit 2026-06-25): root sees all assignments; non-root
+        // callers see only assignments whose branch belongs to their active company. Fail-closed
+        // on a missing/null company — a non-root caller with no active company sees nothing.
+        RequestContext.Principal principal = RequestContext.get();
+        List<UserBranch> assignments;
+        if (principal != null && !principal.root()) {
+            Long activeCompany = principal.companyId();
+            if (activeCompany == null) {
+                return List.of();
+            }
+            assignments = userBranches.findByUserIdAndBranchCompanyIdOrderByAssignedAtAscIdAsc(
+                    user.getId(), activeCompany);
+        } else {
+            assignments = userBranches.findByUserIdOrderByAssignedAtAscIdAsc(user.getId());
+        }
+
+        return assignments.stream()
                 .map(ub -> UserBranchDto.from(ub, user.getUid()))
                 .toList();
     }
