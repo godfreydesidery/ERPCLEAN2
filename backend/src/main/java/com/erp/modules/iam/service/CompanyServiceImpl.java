@@ -21,7 +21,6 @@ import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.repository.Lookups;
-import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
 import java.util.List;
 import java.util.Map;
@@ -48,7 +47,6 @@ public class CompanyServiceImpl implements CompanyService {
     private final CurrencyRepository         currencies;
     private final CompanyCurrencyRepository  companyCurrencies;
     private final AuditService               audit;
-    private final PermissionResolver         permissions;
     private final UserRoleRepository         userRoles;
     private final CompanyProvisioningService provisioner;
 
@@ -58,7 +56,6 @@ public class CompanyServiceImpl implements CompanyService {
                                CurrencyRepository         currencies,
                                CompanyCurrencyRepository  companyCurrencies,
                                AuditService               audit,
-                               PermissionResolver         permissions,
                                UserRoleRepository         userRoles,
                                CompanyProvisioningService provisioner) {
         this.companies        = companies;
@@ -67,7 +64,6 @@ public class CompanyServiceImpl implements CompanyService {
         this.currencies       = currencies;
         this.companyCurrencies = companyCurrencies;
         this.audit            = audit;
-        this.permissions      = permissions;
         this.userRoles        = userRoles;
         this.provisioner      = provisioner;
     }
@@ -130,16 +126,16 @@ public class CompanyServiceImpl implements CompanyService {
                 organisations.findByUid(organisationUid), "Organisation", organisationUid);
         List<Company> all = companies.findByOrganisationIdOrderByName(org.getId());
 
-        // Admins (COMPANY.VIEW) and root see every company in the org — identical to the admin list.
-        // hasPermission short-circuits true for root.
-        if (permissions.hasPermission(RequestContext.get(), "COMPANY.VIEW", System.currentTimeMillis())) {
+        // Only ROOT sees every company in the org. A non-root user — even one holding COMPANY.VIEW
+        // via an all-permissions role scoped to a single company — must see ONLY companies they are
+        // assigned to; COMPANY.VIEW is granted per-company and must never leak the whole org's
+        // company list (tenant-isolation fix, security audit 2026-06-25).
+        RequestContext.Principal principal = RequestContext.get();
+        if (principal != null && principal.root()) {
             return all.stream().map(CompanyDto::from).toList();
         }
 
-        // Everyone else (the cross-cutting company picker) sees only the companies they are assigned
-        // to via an active role grant — so a non-admin gets their own company WITHOUT COMPANY.VIEW,
-        // and cannot enumerate companies they have no access to.
-        RequestContext.Principal principal = RequestContext.get();
+        // Everyone else: only companies they hold an active role grant in.
         Set<Long> assignedCompanyIds = (principal == null || principal.userId() == null)
                 ? Set.of()
                 : userRoles.findByUserIdAndRevokedAtIsNull(principal.userId()).stream()
