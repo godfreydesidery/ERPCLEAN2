@@ -15,12 +15,12 @@ import com.erp.modules.iam.repository.UserRoleRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.bootstrap.CompanyProvisioningService;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.repository.Lookups;
-import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
 import java.util.List;
 import java.util.Map;
@@ -33,31 +33,39 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class CompanyServiceImpl implements CompanyService {
 
-    private final CompanyRepository         companies;
-    private final OrganisationRepository    organisations;
-    private final JournalEntryRepository    journalEntries;
-    private final CurrencyRepository        currencies;
-    private final CompanyCurrencyRepository companyCurrencies;
-    private final AuditService              audit;
-    private final PermissionResolver        permissions;
-    private final UserRoleRepository        userRoles;
+    /**
+     * Enabled-currency allow-list for a freshly provisioned company: Classic EAC-6 + USD + EUR,
+     * matching the bootstrap default (ADR-0039 D-9). Shared by {@link #create} and
+     * {@link #reprovisionDefaults} so the two paths cannot drift.
+     */
+    private static final List<String> DEFAULT_ENABLED_CURRENCIES =
+            List.of("TZS", "KES", "UGX", "RWF", "BIF", "SSP", "USD", "EUR");
 
-    public CompanyServiceImpl(CompanyRepository         companies,
-                               OrganisationRepository    organisations,
-                               JournalEntryRepository    journalEntries,
-                               CurrencyRepository        currencies,
-                               CompanyCurrencyRepository companyCurrencies,
-                               AuditService              audit,
-                               PermissionResolver        permissions,
-                               UserRoleRepository        userRoles) {
-        this.companies         = companies;
-        this.organisations     = organisations;
-        this.journalEntries    = journalEntries;
-        this.currencies        = currencies;
+    private final CompanyRepository          companies;
+    private final OrganisationRepository     organisations;
+    private final JournalEntryRepository     journalEntries;
+    private final CurrencyRepository         currencies;
+    private final CompanyCurrencyRepository  companyCurrencies;
+    private final AuditService               audit;
+    private final UserRoleRepository         userRoles;
+    private final CompanyProvisioningService provisioner;
+
+    public CompanyServiceImpl(CompanyRepository          companies,
+                               OrganisationRepository     organisations,
+                               JournalEntryRepository     journalEntries,
+                               CurrencyRepository         currencies,
+                               CompanyCurrencyRepository  companyCurrencies,
+                               AuditService               audit,
+                               UserRoleRepository         userRoles,
+                               CompanyProvisioningService provisioner) {
+        this.companies        = companies;
+        this.organisations    = organisations;
+        this.journalEntries   = journalEntries;
+        this.currencies       = currencies;
         this.companyCurrencies = companyCurrencies;
-        this.audit             = audit;
-        this.permissions       = permissions;
-        this.userRoles         = userRoles;
+        this.audit            = audit;
+        this.userRoles        = userRoles;
+        this.provisioner      = provisioner;
     }
 
     @Override
@@ -78,7 +86,21 @@ public class CompanyServiceImpl implements CompanyService {
         } else {
             company.setTimeZone(org.getDefaultTimeZone());
         }
-        return CompanyDto.from(companies.save(company));
+        Company saved = companies.save(company);
+
+        // Provision all company-scoped defaults in the same TX so a UI-created company is
+        // immediately operational (mirrors BootstrapRunner; mirrors BranchServiceImpl for branch
+        // defaults). Base and default currency are both the company's baseCurrency (TZS by default
+        // since CreateCompanyRequest carries no currency field); enabled set is the Classic EAC-6 +
+        // USD + EUR, same as the bootstrap default (ADR-0039 D-9 / currencyOnCreateApproach).
+        String base = saved.getBaseCurrency(); // "TZS" from entity initializer
+        provisioner.provisionDefaults(
+                saved.getId(),
+                base,
+                base,   // defaultCurrency == base for a fresh company
+                DEFAULT_ENABLED_CURRENCIES);
+
+        return CompanyDto.from(saved);
     }
 
     @Override
@@ -104,16 +126,16 @@ public class CompanyServiceImpl implements CompanyService {
                 organisations.findByUid(organisationUid), "Organisation", organisationUid);
         List<Company> all = companies.findByOrganisationIdOrderByName(org.getId());
 
-        // Admins (COMPANY.VIEW) and root see every company in the org — identical to the admin list.
-        // hasPermission short-circuits true for root.
-        if (permissions.hasPermission(RequestContext.get(), "COMPANY.VIEW", System.currentTimeMillis())) {
+        // Only ROOT sees every company in the org. A non-root user — even one holding COMPANY.VIEW
+        // via an all-permissions role scoped to a single company — must see ONLY companies they are
+        // assigned to; COMPANY.VIEW is granted per-company and must never leak the whole org's
+        // company list (tenant-isolation fix, security audit 2026-06-25).
+        RequestContext.Principal principal = RequestContext.get();
+        if (principal != null && principal.root()) {
             return all.stream().map(CompanyDto::from).toList();
         }
 
-        // Everyone else (the cross-cutting company picker) sees only the companies they are assigned
-        // to via an active role grant — so a non-admin gets their own company WITHOUT COMPANY.VIEW,
-        // and cannot enumerate companies they have no access to.
-        RequestContext.Principal principal = RequestContext.get();
+        // Everyone else: only companies they hold an active role grant in.
         Set<Long> assignedCompanyIds = (principal == null || principal.userId() == null)
                 ? Set.of()
                 : userRoles.findByUserIdAndRevokedAtIsNull(principal.userId()).stream()
@@ -193,6 +215,33 @@ public class CompanyServiceImpl implements CompanyService {
         audit.record(AuditEvent.of(AuditActions.COMPANY_BASE_CURRENCY_CHANGE,
                 "companies", company.getId(), company.getUid())
                 .detail(Map.of("oldBase", oldBase, "newBase", newCode.value())));
+
+        return CompanyDto.from(company);
+    }
+
+    /**
+     * Re-provision all company-scoped defaults for an existing company (idempotent).
+     *
+     * <p>Intended to heal companies created before provisioning was wired into {@link #create}
+     * (e.g. the bootstrap company on a pre-fix deployment, or a company created via an earlier
+     * API version). Every seeder guards against duplicates, so re-running on an already-provisioned
+     * company is a safe no-op.
+     *
+     * @param uid company uid
+     * @return the company DTO (unchanged — this is a provisioning side-effect only)
+     */
+    @Override
+    public CompanyDto reprovisionDefaults(String uid) {
+        Company company = requireByUid(uid);
+        String base = company.getBaseCurrency();
+        provisioner.provisionDefaults(
+                company.getId(),
+                base,
+                base,
+                DEFAULT_ENABLED_CURRENCIES);
+
+        audit.record(AuditEvent.of(AuditActions.COMPANY_PROVISION_DEFAULTS,
+                "companies", company.getId(), company.getUid()));
 
         return CompanyDto.from(company);
     }

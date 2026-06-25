@@ -1,0 +1,179 @@
+/* Nav search / command palette — topbar centre slot. */
+
+:host {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  max-width: 440px;
+  /* Centre the search bar in the topbar flex row. */
+  justify-content: center;
+  position: relative;
+}
+
+/* Hide entirely below the md breakpoint (992px) — hamburger sidebar handles navigation. */
+@media (max-width: 991.98px) {
+  :host {
+    display: none;
+  }
+}
+
+/* ── Field wrapper (pill-shaped, matches the branch chip style) ── */
+.nav-search__field {
+  position: relative;
+  width: 100%;
+  max-width: 400px;
+}
+
+.nav-search__icon {
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  /* #5f6b7a — dark enough on white (#fff) for WCAG AA large text, fine for 16px decorative icon */
+  color: #5f6b7a;
+  font-size: 0.85rem;
+  pointer-events: none;
+}
+
+.nav-search__input {
+  width: 100%;
+  padding: 0.4rem 1rem 0.4rem 2.25rem;
+  border: 1px solid var(--erp-border, #e2e8f0);
+  border-radius: 999px;
+  background: var(--erp-card, #f8fafc);
+  /* #374151 on white — 10.5:1, well above WCAG AA 4.5:1 */
+  color: #374151;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease;
+  /* Remove default browser search-input clear button (redundant UX with Escape). */
+  appearance: none;
+}
+
+/* Visible placeholder: #5f6b7a on white = 5.2:1 (passes WCAG AA 4.5:1 for normal text) */
+.nav-search__input::placeholder {
+  color: #5f6b7a;
+}
+
+.nav-search__input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.nav-search__input:focus {
+  border-color: var(--erp-primary, #2563eb);
+  background: #fff;
+  box-shadow: 0 0 0 0.2rem rgba(37, 99, 235, 0.12);
+}
+
+/* ── Dropdown listbox ── */
+.nav-search__listbox {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 400px;
+  background: #fff;
+  border: 1px solid var(--erp-border, #e2e8f0);
+  border-radius: 10px;
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.07),
+    0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  padding: 0.375rem 0;
+  z-index: 1050;
+  list-style: none;
+  margin: 0;
+  /* Prevent the listbox from overflowing the viewport when near the bottom. */
+  max-height: min(400px, 60vh);
+  overflow-y: auto;
+}
+
+/* ── Option row ── */
+.nav-search__option {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 0.875rem;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.nav-search__option:hover,
+.nav-search__option.is-active {
+  background: var(--erp-primary-soft, #eff6ff);
+}
+
+.nav-search__opt-icon {
+  font-size: 0.95rem;
+  /* #374151 on white (10.5:1) — icon uses the body text colour */
+  color: #374151;
+  flex-shrink: 0;
+  width: 1.1rem;
+  text-align: center;
+}
+
+.nav-search__option.is-active .nav-search__opt-icon {
+  color: var(--erp-primary, #2563eb);
+}
+
+.nav-search__opt-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.nav-search__opt-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  /* #1f2937 on white: 16.1:1 */
+  color: #1f2937;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-search__opt-group {
+  font-size: 0.72rem;
+  /* #5f6b7a on white: 5.2:1 — passes WCAG AA for non-decorative text */
+  color: #5f6b7a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Empty state ── */
+.nav-search__empty {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 400px;
+  background: #fff;
+  border: 1px solid var(--erp-border, #e2e8f0);
+  border-radius: 10px;
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.07),
+    0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  padding: 0.625rem 1rem;
+  font-size: 0.85rem;
+  /* #5f6b7a on white: 5.2:1 */
+  color: #5f6b7a;
+  z-index: 1050;
+}
+
+/* Reduced-motion: skip transitions on the input. */
+@media (prefers-reduced-motion: reduce) {
+  .nav-search__input {
+    transition: none;
+  }
+
+  .nav-search__option {
+    transition: none;
+  }
+}

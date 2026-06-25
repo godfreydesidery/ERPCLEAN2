@@ -39,5 +39,19 @@ public interface CompanyService {
      */
     CompanyDto changeBaseCurrency(String uid, String newBase);
 
+    /**
+     * Idempotent re-provision of all company-scoped defaults (UoM, tax rates, GL, AR/AP, cash/bank,
+     * inventory, documents, fixed assets, costing dimensions, CRM stages, HR, notifications,
+     * manufacturing, currency enablement). Safe to call on an already-provisioned company — every
+     * seeder guards against duplicates.
+     *
+     * <p>Use this to heal companies that were created before provisioning was wired into
+     * {@link #create} (e.g. the bootstrap company on a pre-fix deployment).
+     *
+     * @param uid company uid
+     * @return the company DTO (data unchanged — provisioning is a side-effect)
+     */
+    CompanyDto reprovisionDefaults(String uid);
+
     void archiveByUid(String uid);
 }

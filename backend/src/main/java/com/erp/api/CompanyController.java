@@ -92,4 +92,17 @@ public class CompanyController {
                                           @RequestParam String newBase) {
         return companies.changeBaseCurrency(uid, newBase);
     }
+
+    /**
+     * Idempotent re-provision of all company-scoped defaults (UoM, tax rates, GL, AR/AP, cash/bank,
+     * inventory, documents, fixed assets, costing dimensions, CRM stages, HR, notifications,
+     * manufacturing, currency enablement). Safe on an already-provisioned company — every seeder
+     * guards against duplicates. Use to heal companies created before provisioning was wired into
+     * the create flow.
+     */
+    @PostMapping("/uid/{uid}/provision-defaults")
+    @PreAuthorize("@perm.scoped(#uid, 'company', 'COMPANY.MANAGE')")
+    public CompanyDto provisionDefaults(@PathVariable String uid) {
+        return companies.reprovisionDefaults(uid);
+    }
 }
