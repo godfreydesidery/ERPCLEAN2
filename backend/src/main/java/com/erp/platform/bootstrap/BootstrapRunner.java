@@ -10,25 +10,7 @@ import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.repository.OrganisationRepository;
 import com.erp.modules.iam.repository.UserBranchRepository;
-import com.erp.modules.ap.service.ApGlSeeder;
-import com.erp.modules.costing.service.DimensionSeeder;
-import com.erp.modules.crm.service.CrmStageSeeder;
-import com.erp.modules.documents.service.DocumentBrandingSeeder;
-import com.erp.modules.notifications.service.NotificationTypeSeeder;
-import com.erp.modules.ar.service.ArGlSeeder;
-import com.erp.modules.cashbank.service.CashBankSeeder;
-import com.erp.modules.stock.service.InventoryGlSeeder;
-import com.erp.modules.fixedassets.service.FixedAssetGlSeeder;
-import com.erp.modules.hr.service.HrGlSeeder;
-import com.erp.modules.hr.service.HrStatutorySeeder;
-import com.erp.modules.fx.service.CurrencyEnablementSeeder;
-import com.erp.modules.manufacturing.service.ManufacturingGlSeeder;
 import com.erp.modules.stock.service.StockLocationSeeder;
-import com.erp.modules.gl.service.ChartOfAccountService;
-import com.erp.modules.gl.service.FiscalCalendarService;
-import com.erp.modules.gl.service.GlConfigService;
-import com.erp.modules.products.service.UnitOfMeasureSeeder;
-import com.erp.modules.sales.service.TaxRateSeeder;
 import com.erp.platform.security.password.PasswordPolicy;
 import java.util.Set;
 import org.slf4j.Logger;
@@ -47,6 +29,10 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>Fail-closed on a weak/missing admin password: a bootstrap-enabled app with an invalid password
  * refuses to start, so we never create a root admin with a guessable password.
+ *
+ * <p>Per-company defaults (UoM, tax rates, GL, etc.) are delegated to
+ * {@link CompanyProvisioningService}. The branch-scoped stock-location seeder stays here
+ * because it also needs the branch id.
  */
 @Component
 @EnableConfigurationProperties(BootstrapProperties.class)
@@ -59,101 +45,39 @@ public class BootstrapRunner implements ApplicationRunner {
     private static final Set<String> PLACEHOLDERS =
             Set.of("changeme", "password", "admin", "rootadmin", "secret", "changeme123");
 
-    private final BootstrapProperties props;
-    private final OrganisationRepository organisations;
-    private final CompanyRepository companies;
-    private final BranchRepository branches;
-    private final AppUserRepository users;
-    private final UserBranchRepository userBranches;
-    private final PasswordEncoder passwordEncoder;
-    private final PasswordPolicy passwordPolicy;
-    private final UnitOfMeasureSeeder unitSeeder;
-    private final TaxRateSeeder taxRateSeeder;
-    // GL seeders (ADR-0013 D-15)
-    private final ChartOfAccountService chartOfAccountService;
-    private final FiscalCalendarService fiscalCalendarService;
-    private final GlConfigService glConfigService;
-    // AR/AP GL seeders (ADR-0014/0015)
-    private final ArGlSeeder arGlSeeder;
-    private final ApGlSeeder apGlSeeder;
-    // Cash & Bank seeder (ADR-0016 D-10)
-    private final CashBankSeeder cashBankSeeder;
-    // Inventory Valuation & COGS seeder (ADR-0020 D-8)
-    private final InventoryGlSeeder inventoryGlSeeder;
-    // Document branding + template registry seeder (ADR-0023 D-10)
-    private final DocumentBrandingSeeder documentBrandingSeeder;
-    // Fixed Assets GL seeder (ADR-0030 D-7)
-    private final FixedAssetGlSeeder fixedAssetGlSeeder;
-    // Costing built-in dimensions seeder (ADR-0025 D-9)
-    private final DimensionSeeder dimensionSeeder;
-    // CRM pipeline stage defaults seeder (ADR-0031 D-5)
-    private final CrmStageSeeder crmStageSeeder;
-    // HR & Payroll GL + statutory seeders (ADR-0032 D-8/D-9)
-    private final HrGlSeeder hrGlSeeder;
-    private final HrStatutorySeeder hrStatutorySeeder;
-    // Notifications type catalogue seeder (ADR-0024 D-9)
-    private final NotificationTypeSeeder notificationTypeSeeder;
-    // Manufacturing GL seeder (ADR-0035 D-7)
-    private final ManufacturingGlSeeder manufacturingGlSeeder;
-    // Stock location seeder — seeds WAREHOUSE + in-transit per branch (ADR-0028 D-4/D-5)
-    private final StockLocationSeeder stockLocationSeeder;
-    // Currency enablement seeder — seeds company_currency rows from BootstrapProperties (ADR-0039 D-9)
-    private final CurrencyEnablementSeeder currencyEnablementSeeder;
+    private final BootstrapProperties        props;
+    private final OrganisationRepository     organisations;
+    private final CompanyRepository          companies;
+    private final BranchRepository           branches;
+    private final AppUserRepository          users;
+    private final UserBranchRepository       userBranches;
+    private final PasswordEncoder            passwordEncoder;
+    private final PasswordPolicy             passwordPolicy;
+    // Stock location seeder — seeds WAREHOUSE + in-transit per branch (ADR-0028 D-4/D-5).
+    // Branch-scoped: stays here (needs branchId), not moved into CompanyProvisioningService.
+    private final StockLocationSeeder        stockLocationSeeder;
+    private final CompanyProvisioningService companyProvisioningService;
 
-    public BootstrapRunner(BootstrapProperties props,
-                           OrganisationRepository organisations,
-                           CompanyRepository companies,
-                           BranchRepository branches,
-                           AppUserRepository users,
-                           UserBranchRepository userBranches,
-                           PasswordEncoder passwordEncoder,
-                           PasswordPolicy passwordPolicy,
-                           UnitOfMeasureSeeder unitSeeder,
-                           TaxRateSeeder taxRateSeeder,
-                           ChartOfAccountService chartOfAccountService,
-                           FiscalCalendarService fiscalCalendarService,
-                           GlConfigService glConfigService,
-                           ArGlSeeder arGlSeeder,
-                           ApGlSeeder apGlSeeder,
-                           CashBankSeeder cashBankSeeder,
-                           InventoryGlSeeder inventoryGlSeeder,
-                           DocumentBrandingSeeder documentBrandingSeeder,
-                           FixedAssetGlSeeder fixedAssetGlSeeder,
-                           DimensionSeeder dimensionSeeder,
-                           CrmStageSeeder crmStageSeeder,
-                           HrGlSeeder hrGlSeeder,
-                           HrStatutorySeeder hrStatutorySeeder,
-                           NotificationTypeSeeder notificationTypeSeeder,
-                           ManufacturingGlSeeder manufacturingGlSeeder,
-                           StockLocationSeeder stockLocationSeeder,
-                           CurrencyEnablementSeeder currencyEnablementSeeder) {
-        this.props = props;
-        this.organisations = organisations;
-        this.companies = companies;
-        this.branches = branches;
-        this.users = users;
-        this.userBranches = userBranches;
-        this.passwordEncoder = passwordEncoder;
-        this.passwordPolicy = passwordPolicy;
-        this.unitSeeder = unitSeeder;
-        this.taxRateSeeder = taxRateSeeder;
-        this.chartOfAccountService = chartOfAccountService;
-        this.fiscalCalendarService = fiscalCalendarService;
-        this.glConfigService = glConfigService;
-        this.arGlSeeder             = arGlSeeder;
-        this.apGlSeeder             = apGlSeeder;
-        this.cashBankSeeder         = cashBankSeeder;
-        this.inventoryGlSeeder      = inventoryGlSeeder;
-        this.documentBrandingSeeder = documentBrandingSeeder;
-        this.fixedAssetGlSeeder     = fixedAssetGlSeeder;
-        this.dimensionSeeder        = dimensionSeeder;
-        this.crmStageSeeder         = crmStageSeeder;
-        this.hrGlSeeder             = hrGlSeeder;
-        this.hrStatutorySeeder      = hrStatutorySeeder;
-        this.notificationTypeSeeder = notificationTypeSeeder;
-        this.manufacturingGlSeeder       = manufacturingGlSeeder;
-        this.stockLocationSeeder         = stockLocationSeeder;
-        this.currencyEnablementSeeder    = currencyEnablementSeeder;
+    public BootstrapRunner(BootstrapProperties        props,
+                           OrganisationRepository     organisations,
+                           CompanyRepository          companies,
+                           BranchRepository           branches,
+                           AppUserRepository          users,
+                           UserBranchRepository       userBranches,
+                           PasswordEncoder            passwordEncoder,
+                           PasswordPolicy             passwordPolicy,
+                           StockLocationSeeder        stockLocationSeeder,
+                           CompanyProvisioningService companyProvisioningService) {
+        this.props                    = props;
+        this.organisations            = organisations;
+        this.companies                = companies;
+        this.branches                 = branches;
+        this.users                    = users;
+        this.userBranches             = userBranches;
+        this.passwordEncoder          = passwordEncoder;
+        this.passwordPolicy           = passwordPolicy;
+        this.stockLocationSeeder      = stockLocationSeeder;
+        this.companyProvisioningService = companyProvisioningService;
     }
 
     @Override
@@ -177,42 +101,11 @@ public class BootstrapRunner implements ApplicationRunner {
         company.setTimeZone(props.timeZone());
         companies.save(company);
 
-        // Seed default units of measure for the bootstrap company (brief §New company → seed defaults).
-        unitSeeder.seedDefaults(company.getId());
-
-        // Seed default VAT rates for the bootstrap company (ADR-0008 D-5b).
-        taxRateSeeder.seedDefaults(company.getId());
-
-        // Seed default Chart of Accounts, fiscal year + periods, GL config mappings (ADR-0013 D-15).
-        chartOfAccountService.seedDefaults(company.getId());
-        fiscalCalendarService.seedCurrentYear(company.getId());
-        glConfigService.seedDefaults(company.getId());
-        // Seed AR/AP GL accounts + gl_configs (ADR-0014/0015 D-13).
-        arGlSeeder.seedDefaults(company.getId());
-        apGlSeeder.seedDefaults(company.getId());
-        // Seed default Cash & Bank account (ADR-0016 D-10).
-        cashBankSeeder.seedDefaults(company.getId());
-        // Seed GRNI + Stock Adjustment GL accounts + gl_configs (ADR-0020 D-8).
-        inventoryGlSeeder.seedDefaults(company.getId());
-        // Seed document branding profile + template registry (ADR-0023 D-10).
-        documentBrandingSeeder.seedDefaults(company.getId());
-        // Seed Fixed Assets GL accounts + gl_configs (ADR-0030 D-7).
-        fixedAssetGlSeeder.seedDefaults(company.getId());
-        // Seed built-in costing dimensions COST_CENTRE + DEPARTMENT (ADR-0025 D-9).
-        dimensionSeeder.seedBuiltIns(company.getId());
-        // Seed default CRM pipeline stages (ADR-0031 D-5).
-        crmStageSeeder.seedDefaults(company.getId());
-        // Seed HR GL accounts + gl_configs + TZ statutory defaults (ADR-0032 D-8/D-9).
-        hrGlSeeder.seedDefaults(company.getId());
-        hrStatutorySeeder.seedDefaults(company.getId());
-        // Seed notification type catalogue (ADR-0024 D-9).
-        notificationTypeSeeder.seedDefaults(company.getId());
-        // Seed Manufacturing GL accounts + gl_configs (ADR-0035 D-7).
-        manufacturingGlSeeder.seedDefaults(company.getId());
-
-        // Seed company_currency allow-list from BootstrapProperties (ADR-0039 D-9).
+        // Provision all company-scoped defaults (UoM, tax rates, GL, AR/AP, cash/bank,
+        // inventory GL, documents, fixed assets, costing dimensions, CRM stages, HR GL +
+        // statutory, notifications, manufacturing GL, currency enablement — ADR-0013..0039).
         BootstrapProperties.CurrencyConfig ccy = props.effectiveCurrency();
-        currencyEnablementSeeder.seedDefaults(
+        companyProvisioningService.provisionDefaults(
                 company.getId(),
                 ccy.effectiveBase(),
                 ccy.effectiveDefault(),
