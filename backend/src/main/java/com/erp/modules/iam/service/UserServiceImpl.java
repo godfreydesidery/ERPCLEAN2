@@ -73,10 +73,14 @@ public class UserServiceImpl implements UserService {
     public UserDto getByUid(String uid) {
         AppUser user = requireByUid(uid);
         RequestContext.Principal principal = RequestContext.get();
-        // Root always resolves; same-company callers resolve; out-of-company is a 404 (don't leak
-        // existence — tenant-isolation fix, security audit 2026-06-25).
-        if (principal != null && !principal.root()) {
-            Long companyId = principal.companyId();
+        // Root always resolves; non-root callers are subject to two guards:
+        //   1. Root user → 404 (don't reveal existence — security hardening 2026-06-25).
+        //   2. Out-of-company → 404 (tenant-isolation fix, security audit 2026-06-25).
+        if (principal == null || !principal.root()) {
+            if (user.isRoot()) {
+                throw NotFoundException.of("User", uid);
+            }
+            Long companyId = (principal != null) ? principal.companyId() : null;
             if (companyId == null || !users.existsUserInCompany(user.getId(), companyId)) {
                 throw NotFoundException.of("User", uid);
             }
@@ -87,24 +91,30 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional(readOnly = true)
     public List<UserDto> list() {
-        // Tenant-isolation fix (security audit 2026-06-25): root sees org-wide; non-root is scoped
-        // to their active company; null company → fail-closed empty list (mirrors UserRoleServiceImpl
-        // and CompanyServiceImpl patterns).
+        // Root sees everyone org-wide (including other root users).
+        // Non-root (and null principal → no company context) sees only non-root users in their
+        // company; null company → fail-closed empty list.
         RequestContext.Principal principal = RequestContext.get();
-        if (principal == null || principal.root()) {
+        if (principal != null && principal.root()) {
             return users.findAllByOrderByUsername().stream().map(UserDto::from).toList();
         }
-        Long companyId = principal.companyId();
+        Long companyId = (principal != null) ? principal.companyId() : null;
         if (companyId == null) {
             return List.of();
         }
-        return users.findAllInCompanyOrderByUsername(companyId).stream().map(UserDto::from).toList();
+        return users.findNonRootInCompanyOrderByUsername(companyId).stream()
+                .map(UserDto::from).toList();
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<UserDto> listOrgWide() {
-        return users.findAllByOrderByUsername().stream().map(UserDto::from).toList();
+        // Root sees the full org list; non-root callers see org-wide but without root users.
+        RequestContext.Principal principal = RequestContext.get();
+        if (principal != null && principal.root()) {
+            return users.findAllByOrderByUsername().stream().map(UserDto::from).toList();
+        }
+        return users.findByRootFalseOrderByUsername().stream().map(UserDto::from).toList();
     }
 
     @Override
