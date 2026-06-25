@@ -19,10 +19,12 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
     List<AppUser> findAllByOrderByUsername();
 
     /**
-     * Company-scoped user list (tenant-isolation fix, security audit 2026-06-25; extended V77).
-     * Returns every user who has membership in {@code companyId} via an active role grant OR a
-     * branch assignment in a branch of that company OR an explicit active user_company row (V77
-     * additive oracle). Ordered alphabetically.
+     * Company-scoped user list for ROOT callers (tenant-isolation fix, security audit 2026-06-25;
+     * extended V77). Returns every user (including root) who has membership in {@code companyId}
+     * via an active role grant OR a branch assignment in a branch of that company OR an explicit
+     * active user_company row (V77 additive oracle). Ordered alphabetically.
+     *
+     * <p>Non-root callers must use {@link #findNonRootInCompanyOrderByUsername(Long)} instead.
      */
     @Query("""
             SELECT DISTINCT u FROM AppUser u
@@ -43,6 +45,39 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
             ORDER BY u.username
             """)
     List<AppUser> findAllInCompanyOrderByUsername(@Param("companyId") Long companyId);
+
+    /**
+     * Company-scoped user list for non-root callers. Identical membership predicate as
+     * {@link #findAllInCompanyOrderByUsername(Long)} but excludes root users ({@code is_root =
+     * false}) so the super-admin is never visible to ordinary principals. Ordered alphabetically.
+     */
+    @Query("""
+            SELECT DISTINCT u FROM AppUser u
+            WHERE u.root = false
+              AND (EXISTS (
+                      SELECT 1 FROM UserRole ur
+                      WHERE ur.userId = u.id
+                        AND ur.revokedAt IS NULL
+                        AND ur.companyId = :companyId)
+                   OR EXISTS (
+                      SELECT 1 FROM UserBranch ub
+                      WHERE ub.userId = u.id
+                        AND ub.branch.company.id = :companyId)
+                   OR EXISTS (
+                      SELECT 1 FROM UserCompany uc
+                      WHERE uc.userId = u.id
+                        AND uc.company.id = :companyId
+                        AND uc.revokedAt IS NULL))
+            ORDER BY u.username
+            """)
+    List<AppUser> findNonRootInCompanyOrderByUsername(@Param("companyId") Long companyId);
+
+    /**
+     * Org-wide list of non-root users for the assign-existing-user picker when the caller is
+     * non-root. Root users are intentionally excluded so they are never visible to ordinary
+     * principals. Ordered alphabetically.
+     */
+    List<AppUser> findByRootFalseOrderByUsername();
 
     /**
      * Membership check for the {@code getByUid} tenant-isolation guard. Returns {@code true} iff
