@@ -8,6 +8,7 @@ import { LoadingService } from '../../core/feedback/loading.service';
 import { ToastContainerComponent } from '../../core/feedback/toast-container.component';
 import { AlertHostComponent } from '../../core/feedback/alert-host.component';
 import { UserBranch } from '../../features/admin/models/user-branch.model';
+import { NavSearchComponent, NavDestination } from './nav-search.component';
 
 /**
  * A single sidebar navigation entry.
@@ -44,6 +45,7 @@ interface NavGroup {
     RouterOutlet,
     ToastContainerComponent,
     AlertHostComponent,
+    NavSearchComponent,
   ],
   templateUrl: './shell.component.html',
   styleUrl: './shell.component.scss',
@@ -374,6 +376,19 @@ export class ShellComponent {
         ),
       }))
       .filter((group) => group.items.length > 0),
+  );
+
+  /**
+   * Flattened, permission-filtered destinations for the command palette.
+   * Only includes available items (available === true) so "soon" badges don't appear
+   * as navigable targets.
+   */
+  readonly searchDestinations = computed<readonly NavDestination[]>(() =>
+    this.nav().flatMap((g) =>
+      g.items
+        .filter((i) => i.available)
+        .map((i) => ({ label: i.label, route: i.route, group: g.label, icon: i.icon })),
+    ),
   );
 
   constructor() {

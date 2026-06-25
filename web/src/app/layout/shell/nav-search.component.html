@@ -1,0 +1,59 @@
+<!-- Root: stop outside-click from self-closing when the user clicks inside the palette. -->
+<div class="nav-search" (click)="$event.stopPropagation()">
+  <div class="nav-search__field">
+    <i class="bi bi-search nav-search__icon" aria-hidden="true"></i>
+    <input
+      #searchInput
+      class="nav-search__input"
+      type="search"
+      role="combobox"
+      aria-label="Search menu"
+      aria-autocomplete="list"
+      autocomplete="off"
+      spellcheck="false"
+      placeholder="Search… (Ctrl K)"
+      [value]="query()"
+      [attr.aria-expanded]="dropdownOpen()"
+      [attr.aria-controls]="dropdownOpen() ? listboxId : null"
+      [attr.aria-activedescendant]="dropdownOpen() ? optionId(activeIndex()) : null"
+      (input)="onQueryInput($event)"
+      (keydown)="onInputKeydown($event)"
+      (focus)="open.set(true)"
+    />
+  </div>
+
+  <!-- Results listbox — only rendered when there are matches (axe aria-required-children). -->
+  @if (dropdownOpen()) {
+    <ul
+      class="nav-search__listbox"
+      role="listbox"
+      [id]="listboxId"
+      aria-label="Menu search results"
+    >
+      @for (dest of results(); track dest.route; let i = $index) {
+        <li
+          class="nav-search__option"
+          role="option"
+          [id]="optionId(i)"
+          [attr.aria-selected]="i === activeIndex()"
+          [class.is-active]="i === activeIndex()"
+          (click)="select(dest)"
+          (mouseenter)="activeIndex.set(i)"
+        >
+          <i class="bi {{ dest.icon }} nav-search__opt-icon" aria-hidden="true"></i>
+          <span class="nav-search__opt-body">
+            <span class="nav-search__opt-label">{{ dest.label }}</span>
+            <span class="nav-search__opt-group">{{ dest.group }}</span>
+          </span>
+        </li>
+      }
+    </ul>
+  }
+
+  <!-- No-match status — separate from the listbox (axe aria-required-children rule). -->
+  @if (open() && query().trim() && results().length === 0) {
+    <div class="nav-search__empty" role="status" aria-live="polite">
+      No matches for "{{ query().trim() }}"
+    </div>
+  }
+</div>
