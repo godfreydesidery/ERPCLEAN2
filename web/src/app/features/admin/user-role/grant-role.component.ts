@@ -94,7 +94,7 @@ export class GrantRoleComponent {
       },
       error: () => this.rolesState.set('error'),
     });
-    this.userService.list().subscribe({
+    this.userService.listOrgWide().subscribe({
       next: (rows) => this.users.set(rows),
       error: () => undefined,
     });
