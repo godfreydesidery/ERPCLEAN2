@@ -23,17 +23,17 @@ import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 /**
- * Unit tests for the tenant-isolation fixes in {@link UserServiceImpl}:
+ * Unit tests for the tenant-isolation and root-visibility fixes in {@link UserServiceImpl}:
  * <ul>
- *   <li>{@link UserServiceImpl#list()} — company-scoped for non-root; org-wide for root; fail-closed
- *       when companyId is null.
- *   <li>{@link UserServiceImpl#listOrgWide()} — always returns the full org list.
- *   <li>{@link UserServiceImpl#getByUid(String)} — 404 for out-of-company target (non-root); OK for
- *       same-company and root.
+ *   <li>{@link UserServiceImpl#list()} — root-excluding company-scoped for non-root; org-wide
+ *       (all users) for root; fail-closed when companyId is null or principal is null.
+ *   <li>{@link UserServiceImpl#listOrgWide()} — root-excluding org-wide for non-root; all for root.
+ *   <li>{@link UserServiceImpl#getByUid(String)} — 404 for out-of-company target (non-root); 404
+ *       when target is a root user and caller is non-root; OK for same-company and root callers.
  * </ul>
  *
  * <p>Style: mirrors {@link CompanyServiceImplTest} (mock repos + RequestContext.set/clear).
- * Security audit 2026-06-25.
+ * Security audit 2026-06-25; root-visibility hardening 2026-06-25.
  */
 class UserServiceImplTest {
 
@@ -88,10 +88,10 @@ class UserServiceImplTest {
 
     @Test
     void list_nonRoot_companyScoped_excludesOtherCompanyUser() {
-        AppUser inA  = stubUser(1L, "uid-a", "alice");
-        AppUser inB  = stubUser(2L, "uid-b", "bob");
+        AppUser inA = stubUser(1L, "uid-a", "alice");
 
-        when(userRepo.findAllInCompanyOrderByUsername(COMPANY_A)).thenReturn(List.of(inA));
+        // Non-root path uses the root-excluding company query.
+        when(userRepo.findNonRootInCompanyOrderByUsername(COMPANY_A)).thenReturn(List.of(inA));
         RequestContext.set(nonRoot(COMPANY_A));
 
         List<UserDto> result = service.list();
@@ -99,15 +99,33 @@ class UserServiceImplTest {
         assertThat(result).hasSize(1);
         assertThat(result.get(0).uid()).isEqualTo("uid-a");
         verify(userRepo, never()).findAllByOrderByUsername();
-        // confirm bob (company B) is absent
+        // bob (company B) absent — not returned by the scoped query
         assertThat(result).noneMatch(d -> d.uid().equals("uid-b"));
+    }
+
+    @Test
+    void list_nonRoot_excludesRootUser_evenIfInCompany() {
+        // The repository method bakes out root=false; mock returns only non-root users.
+        AppUser normalUser = stubUser(1L, "uid-a", "alice");
+
+        when(userRepo.findNonRootInCompanyOrderByUsername(COMPANY_A)).thenReturn(List.of(normalUser));
+        RequestContext.set(nonRoot(COMPANY_A));
+
+        List<UserDto> result = service.list();
+
+        // Root user is not in the result (the repo excludes it at the query level).
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).uid()).isEqualTo("uid-a");
+        // Root-excluding repo method was called, not the plain one.
+        verify(userRepo).findNonRootInCompanyOrderByUsername(COMPANY_A);
+        verify(userRepo, never()).findAllByOrderByUsername();
     }
 
     @Test
     void list_nonRoot_multiCompanyUser_includedViaCompanyAQuery() {
         AppUser multi = stubUser(3L, "uid-multi", "charlie");
 
-        when(userRepo.findAllInCompanyOrderByUsername(COMPANY_A)).thenReturn(List.of(multi));
+        when(userRepo.findNonRootInCompanyOrderByUsername(COMPANY_A)).thenReturn(List.of(multi));
         RequestContext.set(nonRoot(COMPANY_A));
 
         List<UserDto> result = service.list();
@@ -117,17 +135,18 @@ class UserServiceImplTest {
     }
 
     @Test
-    void list_root_seesAllOrgWide() {
-        AppUser u1 = stubUser(1L, "uid-a", "alice");
-        AppUser u2 = stubUser(2L, "uid-b", "bob");
+    void list_root_seesAllOrgWide_includingRootUsers() {
+        AppUser u1   = stubUser(1L, "uid-a", "alice");
+        AppUser root = stubUser(2L, "uid-root", "rootadmin");
+        when(root.isRoot()).thenReturn(true);
 
-        when(userRepo.findAllByOrderByUsername()).thenReturn(List.of(u1, u2));
+        when(userRepo.findAllByOrderByUsername()).thenReturn(List.of(u1, root));
         RequestContext.set(root());
 
         List<UserDto> result = service.list();
 
         assertThat(result).hasSize(2);
-        verify(userRepo, never()).findAllInCompanyOrderByUsername(COMPANY_A);
+        verify(userRepo, never()).findNonRootInCompanyOrderByUsername(COMPANY_A);
     }
 
     @Test
@@ -138,18 +157,19 @@ class UserServiceImplTest {
 
         assertThat(result).isEmpty();
         verify(userRepo, never()).findAllByOrderByUsername();
-        verify(userRepo, never()).findAllInCompanyOrderByUsername(null);
+        verify(userRepo, never()).findNonRootInCompanyOrderByUsername(null);
     }
 
     @Test
-    void list_nullPrincipal_treatedAsRoot_seesAll() {
-        AppUser u1 = stubUser(1L, "uid-a", "alice");
-        when(userRepo.findAllByOrderByUsername()).thenReturn(List.of(u1));
-        // No RequestContext set → principal is null
+    void list_nullPrincipal_failClosed_returnsEmpty() {
+        // Null principal has no company context → fail-closed empty list (same as non-root/null-company).
+        // No RequestContext set → principal is null.
 
         List<UserDto> result = service.list();
 
-        assertThat(result).hasSize(1);
+        assertThat(result).isEmpty();
+        verify(userRepo, never()).findAllByOrderByUsername();
+        verify(userRepo, never()).findNonRootInCompanyOrderByUsername(null);
     }
 
     // -----------------------------------------------------------------------
@@ -157,20 +177,37 @@ class UserServiceImplTest {
     // -----------------------------------------------------------------------
 
     @Test
-    void listOrgWide_alwaysReturnsFullOrgList() {
-        AppUser u1 = stubUser(1L, "uid-a", "alice");
-        AppUser u2 = stubUser(2L, "uid-b", "bob");
-        when(userRepo.findAllByOrderByUsername()).thenReturn(List.of(u1, u2));
-        // non-root principal — must still return all
+    void listOrgWide_nonRoot_excludesRootUser() {
+        AppUser normalUser = stubUser(1L, "uid-a", "alice");
+        // Root-excluding repo method returns only non-root users.
+        when(userRepo.findByRootFalseOrderByUsername()).thenReturn(List.of(normalUser));
         RequestContext.set(nonRoot(COMPANY_A));
 
         List<UserDto> result = service.listOrgWide();
 
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).uid()).isEqualTo("uid-a");
+        verify(userRepo).findByRootFalseOrderByUsername();
+        verify(userRepo, never()).findAllByOrderByUsername();
+    }
+
+    @Test
+    void listOrgWide_root_includesRootUsers() {
+        AppUser u1   = stubUser(1L, "uid-a", "alice");
+        AppUser root = stubUser(2L, "uid-root", "rootadmin");
+        when(root.isRoot()).thenReturn(true);
+        when(userRepo.findAllByOrderByUsername()).thenReturn(List.of(u1, root));
+        RequestContext.set(root());
+
+        List<UserDto> result = service.listOrgWide();
+
         assertThat(result).hasSize(2);
+        verify(userRepo).findAllByOrderByUsername();
+        verify(userRepo, never()).findByRootFalseOrderByUsername();
     }
 
     // -----------------------------------------------------------------------
-    // getByUid() — tenant-isolation guard
+    // getByUid() — tenant-isolation guard + root-visibility hardening
     // -----------------------------------------------------------------------
 
     @Test
@@ -182,8 +219,48 @@ class UserServiceImplTest {
         UserDto result = service.getByUid(USER_UID);
 
         assertThat(result.uid()).isEqualTo(USER_UID);
-        // existsUserInCompany must NOT be called for root
+        // existsUserInCompany must NOT be called for root callers
         verify(userRepo, never()).existsUserInCompany(USER_ID, COMPANY_A);
+    }
+
+    @Test
+    void getByUid_root_resolvesAnotherRootUser() {
+        // A root caller can look up a root target without restriction.
+        AppUser rootTarget = stubUser(99L, "uid-root", "rootadmin");
+        when(rootTarget.isRoot()).thenReturn(true);
+        when(userRepo.findByUid("uid-root")).thenReturn(Optional.of(rootTarget));
+        RequestContext.set(root());
+
+        UserDto result = service.getByUid("uid-root");
+
+        assertThat(result.uid()).isEqualTo("uid-root");
+        verify(userRepo, never()).existsUserInCompany(99L, COMPANY_A);
+    }
+
+    @Test
+    void getByUid_nonRoot_rootTarget_throws404() {
+        // A non-root caller resolving a root user must receive 404 — do not leak existence.
+        AppUser rootTarget = stubUser(99L, "uid-root", "rootadmin");
+        when(rootTarget.isRoot()).thenReturn(true);
+        when(userRepo.findByUid("uid-root")).thenReturn(Optional.of(rootTarget));
+        RequestContext.set(nonRoot(COMPANY_A));
+
+        assertThatThrownBy(() -> service.getByUid("uid-root"))
+                .isInstanceOf(NotFoundException.class);
+        // company check must NOT be reached — root guard fires first
+        verify(userRepo, never()).existsUserInCompany(99L, COMPANY_A);
+    }
+
+    @Test
+    void getByUid_nullPrincipal_rootTarget_throws404() {
+        // Null principal is also treated as non-root for the root-visibility guard.
+        AppUser rootTarget = stubUser(99L, "uid-root", "rootadmin");
+        when(rootTarget.isRoot()).thenReturn(true);
+        when(userRepo.findByUid("uid-root")).thenReturn(Optional.of(rootTarget));
+        // No RequestContext set → principal is null.
+
+        assertThatThrownBy(() -> service.getByUid("uid-root"))
+                .isInstanceOf(NotFoundException.class);
     }
 
     @Test
