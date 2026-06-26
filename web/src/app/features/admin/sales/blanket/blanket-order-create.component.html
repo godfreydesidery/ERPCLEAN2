@@ -226,15 +226,20 @@
                 }
               </div>
 
-              <!-- Unit -->
+              <!-- Unit (product-scoped: populated only after a product is selected) -->
               <div class="col-sm-2">
                 <label class="form-label small text-muted mb-1" for="lineUnit">Unit</label>
                 <select id="lineUnit" name="lineUnit" class="form-select form-select-sm"
                         [ngModel]="selectedUnitId()" (ngModelChange)="selectedUnitId.set($event)"
-                        [disabled]="saving() || units().length === 0">
-                  <option value="">— select —</option>
-                  @for (u of units(); track u.uid) {
-                    <option [value]="u.id">{{ u.name }}</option>
+                        [disabled]="saving() || !selectedProduct()">
+                  @if (!selectedProduct()) {
+                    <option value="">Select a product first</option>
+                  } @else if (units().length === 0) {
+                    <option value="">No units available</option>
+                  } @else {
+                    @for (u of units(); track u.uid) {
+                      <option [value]="u.id">{{ u.name }}</option>
+                    }
                   }
                 </select>
               </div>

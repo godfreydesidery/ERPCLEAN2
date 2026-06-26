@@ -66,10 +66,10 @@
       @if (pickerState() === 'loading') {
         <p class="text-muted small" aria-live="polite">
           <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
-          Loading products and units…
+          Loading products…
         </p>
       } @else if (pickerState() === 'error') {
-        <p class="text-danger small" role="alert">Could not load products/units.</p>
+        <p class="text-danger small" role="alert">Could not load products.</p>
       } @else {
         <div class="erp-table-wrap mb-2">
           <table class="erp-table" aria-label="Requisition line items">
@@ -96,7 +96,7 @@
                   <td>
                     <app-uid-picker
                       [ngModel]="line.productUid"
-                      (ngModelChange)="updateLine(i, { productUid: $event })"
+                      (ngModelChange)="onLineProductChange(i, $event)"
                       [options]="productOptions()"
                       placeholder="Select product"
                       [required]="true"
@@ -108,12 +108,12 @@
                     <app-uid-picker
                       [ngModel]="line.unitUid"
                       (ngModelChange)="updateLine(i, { unitUid: $event })"
-                      [options]="unitOptions()"
-                      placeholder="Select unit"
+                      [options]="line.lineUnitOptions"
+                      [placeholder]="line.lineUnitsLoading ? 'Loading…' : (line.productUid ? 'Select unit' : 'Pick product first')"
                       [required]="true"
                       [name]="'unit_' + i"
                       [ariaLabel]="'Unit for line ' + (i + 1)"
-                      [disabled]="saving()" />
+                      [disabled]="saving() || line.lineUnitsLoading || !line.productUid" />
                   </td>
                   <td>
                     <input type="number" class="form-control form-control-sm"

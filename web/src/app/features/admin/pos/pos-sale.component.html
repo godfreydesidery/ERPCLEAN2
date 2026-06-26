@@ -236,11 +236,11 @@
                               <app-uid-picker
                                 [ngModel]="l.unitUid"
                                 (ngModelChange)="onLineUnitChange(l.id, $event)"
-                                [options]="unitOptions()"
-                                placeholder="Unit"
+                                [options]="l.lineUnitOptions"
+                                [placeholder]="l.lineUnitsLoading ? 'Loading…' : (l.productUid ? 'Unit' : 'Pick product first')"
                                 [required]="true"
                                 [name]="'unit-' + l.id"
-                                [disabled]="submitting()" />
+                                [disabled]="submitting() || l.lineUnitsLoading || !l.productUid" />
                             </td>
                             <td class="num">
                               <input type="number" class="form-control form-control-sm"

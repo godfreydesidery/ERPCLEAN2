@@ -3,8 +3,8 @@ import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { forkJoin } from 'rxjs';
 import { AlertService } from '../../../../core/feedback/alert.service';
+
 import { SessionStore } from '../../../../core/auth/session.store';
 import { Company } from '../../models/company.model';
 import { ProductModel, UnitOfMeasureDto } from '../../models/product.model';
@@ -22,10 +22,13 @@ interface LineEntry {
   requestedQty: string;
   estimatedUnitCost: string;
   note: string;
+  /** Product-scoped unit options; empty until a product is selected for this line. */
+  lineUnitOptions: UidOption[];
+  lineUnitsLoading: boolean;
 }
 
 function blankLine(): LineEntry {
-  return { productUid: '', unitUid: '', requestedQty: '', estimatedUnitCost: '', note: '' };
+  return { productUid: '', unitUid: '', requestedQty: '', estimatedUnitCost: '', note: '', lineUnitOptions: [], lineUnitsLoading: false };
 }
 
 @Component({
@@ -52,15 +55,15 @@ export class RequisitionCreateComponent {
 
   // ── Product + unit pickers ─────────────────────────────────────────────────
   readonly products = signal<ProductModel[]>([]);
-  readonly units = signal<UnitOfMeasureDto[]>([]);
+  /**
+   * Accumulates all UoMs fetched via per-line listProductUnits calls so submit()
+   * can resolve uid → id without re-fetching.
+   */
+  private readonly loadedUnits = signal<UnitOfMeasureDto[]>([]);
   readonly pickerState = signal<'loading' | 'idle' | 'error'>('idle');
 
   readonly productOptions = computed<UidOption[]>(() =>
     this.products().map((p) => ({ uid: p.uid, label: p.name, hint: p.code })),
-  );
-
-  readonly unitOptions = computed<UidOption[]>(() =>
-    this.units().map((u) => ({ uid: u.uid, label: u.name, hint: u.code })),
   );
 
   // ── Form fields ────────────────────────────────────────────────────────────
@@ -101,15 +104,11 @@ export class RequisitionCreateComponent {
 
   private loadPickerData(companyId: string): void {
     this.pickerState.set('loading');
-    forkJoin({
-      products: this.productService.list(companyId, undefined, 0, 200),
-      units: this.productService.listUnits(companyId, undefined, 0, 200),
-    })
+    this.productService.list(companyId, undefined, 0, 200)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: ({ products, units }) => {
-          this.products.set(products.rows);
-          this.units.set(units.rows);
+        next: ({ rows }) => {
+          this.products.set(rows);
           this.pickerState.set('idle');
         },
         error: () => this.pickerState.set('error'),
@@ -140,6 +139,27 @@ export class RequisitionCreateComponent {
     );
   }
 
+  onLineProductChange(index: number, productUid: string): void {
+    // Clear unit selection for this line and start loading product-scoped units.
+    this.updateLine(index, { productUid, unitUid: '', lineUnitOptions: [], lineUnitsLoading: true });
+    if (!productUid) return;
+    this.productService.listProductUnits(productUid).subscribe({
+      next: (units) => {
+        // Accumulate into loadedUnits for uid→id resolution at submit time.
+        const existing = this.loadedUnits();
+        units.forEach((u) => {
+          if (!existing.some((e) => e.uid === u.uid)) {
+            this.loadedUnits.update((arr) => [...arr, u]);
+          }
+        });
+        const opts = units.map((u) => ({ uid: u.uid, label: u.name, hint: u.code }));
+        const defaultUid = units[0]?.uid ?? '';
+        this.updateLine(index, { lineUnitOptions: opts, lineUnitsLoading: false, unitUid: defaultUid });
+      },
+      error: () => this.updateLine(index, { lineUnitsLoading: false }),
+    });
+  }
+
   // ── Submit ─────────────────────────────────────────────────────────────────
 
   submit(): void {
@@ -166,7 +186,7 @@ export class RequisitionCreateComponent {
 
     // Resolve uid → id for products and units
     const productMap = new Map(this.products().map((p) => [p.uid, p.id]));
-    const unitMap = new Map(this.units().map((u) => [u.uid, u.id]));
+    const unitMap = new Map(this.loadedUnits().map((u) => [u.uid, u.id]));
 
     const resolvedLines: RequisitionLineRequest[] = [];
     for (let i = 0; i < lineEntries.length; i++) {

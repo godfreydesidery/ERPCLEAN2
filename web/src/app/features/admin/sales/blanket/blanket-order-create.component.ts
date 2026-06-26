@@ -161,12 +161,20 @@ export class BlanketOrderCreateComponent {
       },
       error: () => this.branches.set([]),
     });
-    this.loadUnits(c.id);
+    // Clear any previously loaded product-scoped units when company changes.
+    this.units.set([]);
+    this.selectedUnitId.set('');
   }
 
-  private loadUnits(companyId: string): void {
-    this.productService.listUnits(companyId).subscribe({
-      next: ({ rows }) => this.units.set(rows.filter((u) => u.status === 'ACTIVE')),
+  private loadUnitsForProduct(productUid: string): void {
+    this.units.set([]);
+    this.selectedUnitId.set('');
+    this.productService.listProductUnits(productUid).subscribe({
+      next: (rows) => {
+        this.units.set(rows);
+        // Default-select the first unit (base unit).
+        if (rows.length > 0) this.selectedUnitId.set(rows[0].id);
+      },
       error: () => this.units.set([]),
     });
   }
@@ -195,6 +203,8 @@ export class BlanketOrderCreateComponent {
   onProductSearchChange(q: string): void {
     this.productSearchQ.set(q);
     this.selectedProduct.set(null);
+    this.units.set([]);
+    this.selectedUnitId.set('');
     this.productSearch$.next(q);
   }
 
@@ -202,7 +212,7 @@ export class BlanketOrderCreateComponent {
     this.selectedProduct.set({ uid: p.uid, id: p.id, label: `${p.code} — ${p.name}` });
     this.productResults.set([]);
     this.productSearchQ.set(`${p.code} — ${p.name}`);
-    this.selectedUnitId.set('');
+    this.loadUnitsForProduct(p.uid);
   }
 
   // ── Lines ─────────────────────────────────────────────────────────────────
