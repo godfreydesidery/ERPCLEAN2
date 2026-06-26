@@ -90,7 +90,7 @@ public class DepreciationRunServiceImpl implements DepreciationRunService {
     @Transactional(readOnly = true)
     public DepreciationRunPreviewDto preview(Long companyId, String fiscalPeriodUid) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
-        FiscalPeriod period = requirePeriod(fiscalPeriodUid);
+        FiscalPeriod period = requirePeriod(companyId, fiscalPeriodUid);
 
         List<DepreciationScheduleLine> eligibleLines =
                 schedules.findEligibleForRun(companyId, period.getStartDate());
@@ -115,7 +115,7 @@ public class DepreciationRunServiceImpl implements DepreciationRunService {
     public DepreciationRunDto post(RunDepreciationRequest req) {
         scopeGuard.assertCanActIn(RequestContext.get(), req.companyId());
 
-        FiscalPeriod period = requirePeriod(req.fiscalPeriodUid());
+        FiscalPeriod period = requirePeriod(req.companyId(), req.fiscalPeriodUid());
 
         // Idempotency guard (D-4): depreciation run is once per (company, period) — reject repeats
         Optional<DepreciationRun> existing =
@@ -256,8 +256,13 @@ public class DepreciationRunServiceImpl implements DepreciationRunService {
 
     // -------------------------------------------------------------------------
 
-    private FiscalPeriod requirePeriod(String uid) {
-        return fiscalPeriods.findByUid(uid)
+    /**
+     * Company-scoped period lookup. Returns 404 when the period does not exist OR belongs to a
+     * different company, preventing a caller from referencing a foreign tenant's fiscal period
+     * (tenant-isolation site 4 — confused-deputy on preview/post).
+     */
+    private FiscalPeriod requirePeriod(Long companyId, String uid) {
+        return fiscalPeriods.findByCompanyIdAndUid(companyId, uid)
                 .orElseThrow(() -> NotFoundException.of("FiscalPeriod", uid));
     }
 

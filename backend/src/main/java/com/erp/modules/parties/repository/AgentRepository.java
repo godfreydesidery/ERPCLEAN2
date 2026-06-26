@@ -16,6 +16,9 @@ public interface AgentRepository extends JpaRepository<Agent, Long> {
 
     boolean existsByCompanyIdAndCode(Long companyId, String code);
 
+    /** Tenant-scoped existence check for the numeric default-agent FK on customer records. */
+    boolean existsByCompanyIdAndId(Long companyId, Long id);
+
     Page<Agent> findByCompanyId(Long companyId, Pageable pageable);
 
     @Query("""

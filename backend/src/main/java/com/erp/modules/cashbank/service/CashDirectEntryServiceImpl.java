@@ -171,6 +171,12 @@ public class CashDirectEntryServiceImpl implements CashDirectEntryService {
     @Transactional(readOnly = true)
     public List<CashTransactionDto> listByAccount(Long companyId, Long accountId) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        // Ownership check: verify the account belongs to companyId before returning its ledger.
+        // Without this, a caller may pass their own companyId (satisfying the scope guard above)
+        // but a foreign accountId and read another company's cash transactions (confused-deputy).
+        accounts.findById(accountId)
+                .filter(a -> a.getCompanyId().equals(companyId))
+                .orElseThrow(() -> new NotFoundException("Cash/bank account: " + accountId));
         return txns.findByCashBankAccountIdOrderByTxnDateAscIdAsc(accountId)
                 .stream().map(CashDirectEntryServiceImpl::toDto).toList();
     }

@@ -2,7 +2,9 @@ package com.erp.modules.documents.service;
 
 import com.erp.modules.documents.domain.dto.DocumentTemplateDto;
 import com.erp.modules.documents.domain.dto.UpdateDocumentTemplateRequest;
+import com.erp.modules.documents.domain.entity.DocumentBranding;
 import com.erp.modules.documents.domain.entity.DocumentTemplate;
+import com.erp.modules.documents.repository.DocumentBrandingRepository;
 import com.erp.modules.documents.repository.DocumentTemplateRepository;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -20,10 +22,14 @@ public class DocumentTemplateServiceImpl implements DocumentTemplateService {
     private static final String DOCUMENT_TEMPLATE_UPDATE = "DOCUMENT.TEMPLATE.UPDATE";
 
     private final DocumentTemplateRepository templates;
+    private final DocumentBrandingRepository brandings;
     private final AuditService               audit;
 
-    public DocumentTemplateServiceImpl(DocumentTemplateRepository templates, AuditService audit) {
+    public DocumentTemplateServiceImpl(DocumentTemplateRepository templates,
+                                       DocumentBrandingRepository brandings,
+                                       AuditService audit) {
         this.templates = templates;
+        this.brandings = brandings;
         this.audit     = audit;
     }
 
@@ -50,7 +56,15 @@ public class DocumentTemplateServiceImpl implements DocumentTemplateService {
             tmpl.setStatusChangedAt(Instant.now());
             tmpl.setStatusChangedBy(principal != null ? principal.userId() : null);
         }
-        if (req.brandingId() != null) tmpl.setBrandingId(req.brandingId());
+        if (req.brandingId() != null) {
+            // Ownership guard: the supplied branding must belong to the same company as the
+            // template being edited. A foreign brandingId is silently rejected as "not found"
+            // (404, no existence leak) per the error-hygiene rule (no raw ids in the message).
+            DocumentBranding br = brandings
+                    .findByIdAndCompanyId(req.brandingId(), tmpl.getCompanyId())
+                    .orElseThrow(() -> new NotFoundException("Branding not found"));
+            tmpl.setBrandingId(br.getId());
+        }
         tmpl.setUpdatedAt(Instant.now());
         tmpl.setUpdatedBy(principal != null ? principal.userId() : null);
 

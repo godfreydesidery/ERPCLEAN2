@@ -171,7 +171,10 @@ public class ApprovalPolicyServiceImpl implements ApprovalPolicyService {
             if (branchUid == null || branchUid.isBlank()) {
                 throw new ConflictException("branchUid is required when branchScope = BRANCH");
             }
-            return branchRepo.findByUid(branchUid)
+            // Use company-scoped finder: returns empty when the branch uid does not exist OR
+            // belongs to a different company. Throw 404 in both cases to avoid confirming
+            // cross-tenant existence (confused-deputy guard, SECURITY-FIX).
+            return branchRepo.findByUidAndCompanyId(branchUid, companyId)
                     .orElseThrow(() -> new NotFoundException("Branch not found: " + branchUid))
                     .getId();
         }

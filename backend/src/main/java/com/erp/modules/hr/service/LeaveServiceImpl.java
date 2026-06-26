@@ -62,7 +62,7 @@ public class LeaveServiceImpl implements LeaveService {
             throw new IllegalArgumentException("fromDate must not be after toDate");
         }
 
-        LeaveType leaveType = leaveTypes.findById(req.leaveTypeId())
+        LeaveType leaveType = leaveTypes.findByIdAndCompanyId(req.leaveTypeId(), emp.getCompanyId())
                 .orElseThrow(() -> NotFoundException.of("LeaveType", String.valueOf(req.leaveTypeId())));
 
         // D2: leave type must be active

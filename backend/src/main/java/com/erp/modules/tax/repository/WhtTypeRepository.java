@@ -23,4 +23,7 @@ public interface WhtTypeRepository extends JpaRepository<WhtType, Long> {
     List<WhtType> findByCompanyIdAndKindAndActiveTrue(Long companyId, WhtKind kind);
 
     boolean existsByCompanyIdAndCode(Long companyId, String code);
+
+    /** Tenant-scoped existence check for the numeric default-wht-type FK on supplier records. */
+    boolean existsByCompanyIdAndId(Long companyId, Long id);
 }

@@ -54,8 +54,8 @@ public class EmployeeLoanServiceImpl implements EmployeeLoanService {
                 .orElseThrow(() -> NotFoundException.of("Employee", employeeUid));
         scopeGuard.assertCanActIn(p, emp.getCompanyId());
 
-        // #23 — resolve GL account before persistence; unknown id returns 404 not 500
-        if (!glAccounts.existsById(req.glAccountId())) {
+        // #23 — resolve GL account before persistence; company-scoped to prevent cross-tenant binding
+        if (!glAccounts.existsByIdAndCompanyId(req.glAccountId(), emp.getCompanyId())) {
             throw NotFoundException.of("GlAccount", String.valueOf(req.glAccountId()));
         }
 

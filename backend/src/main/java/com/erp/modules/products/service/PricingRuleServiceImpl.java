@@ -196,7 +196,12 @@ public class PricingRuleServiceImpl implements PricingRuleService {
             if (req.targetProductUid() == null || req.targetProductUid().isBlank()) {
                 throw new IllegalArgumentException("targetProductUid required when target=PRODUCT");
             }
-            targetProductId = requireProductByUid(req.targetProductUid()).getId();
+            // Security: resolve via the promotion's own company so a caller cannot reference a
+            // foreign-company product (existence oracle + dangling cross-tenant FK).  404 mirrors
+            // how sibling createTier/createCustomerPrice guard their product lookups.
+            Product targetProduct = products.findByCompanyIdAndUid(company, req.targetProductUid())
+                    .orElseThrow(() -> NotFoundException.of("Product", req.targetProductUid()));
+            targetProductId = targetProduct.getId();
         }
 
         validatePromoEffect(req.effect(), req.effectValue());
@@ -210,7 +215,8 @@ public class PricingRuleServiceImpl implements PricingRuleService {
 
         // P2 D5 targeting + guardrails (all optional)
         if (req.targetCustomerUid() != null && !req.targetCustomerUid().isBlank()) {
-            var customer = customers.findByUid(req.targetCustomerUid())
+            // Security: customer must belong to the same company as the promotion.
+            var customer = customers.findByCompanyIdAndUid(company, req.targetCustomerUid())
                     .orElseThrow(() -> NotFoundException.of("Customer", req.targetCustomerUid()));
             promo.setTargetCustomerId(customer.getId());
         }

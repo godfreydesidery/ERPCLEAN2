@@ -18,4 +18,7 @@ public interface DepartmentRepository extends JpaRepository<Department, Long> {
     List<Department> findByCompanyId(Long companyId);
 
     boolean existsByCompanyIdAndCode(Long companyId, String code);
+
+    /** Company-scoped existence check — used by EmployeeServiceImpl to prevent cross-tenant FK binding. */
+    boolean existsByIdAndCompanyId(Long id, Long companyId);
 }
