@@ -23,11 +23,14 @@ type LoadState = 'loading' | 'idle' | 'error';
 type IdleLoadState = 'idle' | 'loading' | 'error';
 
 /**
- * Shows a user header and manages their branch assignments and role assignments.
+ * The user "Assignments" screen — a header plus three cards in order: Companies, Branches, Roles.
+ * Companies: assign/remove company memberships (gated by USER.COMPANY.MANAGE).
  * Branch picker: company select -> branch select -> make-default checkbox -> Assign.
  * Role picker: role select -> company select -> optional branch select -> Grant.
- * Per-row actions: Set default / Remove (branches), Revoke (roles), each with a busy spinner.
- * Route: /admin/users/:uid — `uid` is bound via withComponentInputBinding.
+ * Branch and role company pickers are scoped to {@link assignableCompanies} (the user's
+ * memberships) — assign a company first, then its branches/roles become available.
+ * Per-row actions: Set default / Remove (branches), Revoke (roles), Remove (companies).
+ * Route: /admin/users/uid/:uid — `uid` is bound via withComponentInputBinding.
  */
 @Component({
   selector: 'app-user-detail',
@@ -127,6 +130,17 @@ export class UserDetailComponent {
     const map = new Map(this.allBranches().map((b) => [b.uid, b.name]));
     return (uid: string) => map.get(uid) ?? uid;
   });
+
+  /**
+   * Companies the TARGET user is a member of, intersected with companies the current admin can
+   * access. Branches and roles may only be assigned within these — you assign a company first
+   * (the Companies card above), then its branches/roles become available here.
+   */
+  readonly assignableCompanies = computed(() => {
+    const memberUids = new Set(this.companyMemberships().map((m) => m.companyUid));
+    return this.companies().filter((c) => memberUids.has(c.uid));
+  });
+  readonly hasAssignableCompanies = computed(() => this.assignableCompanies().length > 0);
 
   constructor() {
     queueMicrotask(() => this.init());
