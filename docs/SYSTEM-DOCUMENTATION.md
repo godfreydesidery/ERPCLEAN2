@@ -215,6 +215,7 @@ The tenant tree is **Organisation → Company → Branch** (`DATA-MODEL.md`, ADR
 - Every transactional table carries `company_id`; tables that cross a branch boundary also carry `branch_id`.
 - `RequestContext` (request-scoped) holds the active company/branch. The branch-override header (`X-Branch-Uid`) switches branch within the caller's assignments without a re-login (ADR-0003).
 - Repository base interfaces inject the tenant predicate. A finder that bypasses the base interface is a tenant-isolation bug. IAM admin tables are exempt from the blanket predicate (administration is cross-branch); isolation there is by permission + explicit scope checks (ADR-0001 D-A).
+- The scope-company for any guarded operation is derived from the **loaded entity**, never from a caller-supplied parameter, and the same guard applies to reads and writes — this closes the confused-deputy and missing-write-scope leak classes found in the 2026-06-26 audit (see Security §3.4). An ArchUnit `FreezingArchRule` (`TenantScopingRulesTest`) bars new bare `findById`/`getReferenceById` calls from service classes.
 
 ## 5. The transactional outbox + domain-events pattern (ADR-0009)
 
@@ -348,18 +349,18 @@ The outbox has no controller, no REST surface, and no permission — it is inter
 ## IAM — Identity & Access (ADR-0001, ADR-0002, ADR-0003, ADR-0004)
 
 - **Purpose.** The security spine: authentication, the org/company/branch tenant tree, users, roles, permissions, branch assignment, and the audit trail. Built first; everything hangs off it.
-- **Key entities.** `organisation`, `company`, `branch`, `app_user`, `permission`, `role`, `role_permission`, `user_role`, `user_branch`, `refresh_token`, `audit_log`.
-- **Permission family.** `USER.*`, `ROLE.*`, `PERMISSION.*`, `COMPANY.*`, `BRANCH.*`, `AUDIT.*`.
+- **Key entities.** `organisation`, `company`, `branch`, `app_user`, `permission`, `role`, `role_permission`, `user_role`, `user_branch`, `user_company`, `refresh_token`, `audit_log`.
+- **Permission family.** `USER.*` (incl. `USER.COMPANY.MANAGE`), `ROLE.*`, `PERMISSION.*`, `COMPANY.*`, `BRANCH.*`, `AUDIT.*`.
 
 | Controller | Base path | Notes |
 |---|---|---|
 | `AuthController` | `/api/v1/auth` | login / refresh / logout (no permission — public/auth) |
 | `OrganisationController` | `/api/v1/organisations` | org tree root |
-| `CompanyController` | `/api/v1/companies` | legal entities; base currency |
+| `CompanyController` | `/api/v1/companies` | legal entities; base currency; list scoped to the caller's companies (root sees all), same as `/companies/accessible` |
 | `BranchController` | `/api/v1/branches` | locations; set-default |
-| `UserController` | `/api/v1/users` | user CRUD, set-password, unlock |
-| `UserBranchController` | `/api/v1/user-branches` | assign branches, set default |
-| `UserRoleController` | `/api/v1/user-roles` | grant/revoke roles, scoped to company/branch |
+| `UserController` | `/api/v1/users` | user CRUD, set-password, unlock; user ⇄ company membership assign/remove (`USER.COMPANY.MANAGE`); mutators scope-checked against the loaded user's company |
+| `UserBranchController` | `/api/v1/user-branches` | assign branches, set default; requires an active company membership for the branch's company (ADR-0046) |
+| `UserRoleController` | `/api/v1/user-roles` | grant/revoke roles, scoped to company/branch; grant requires an active company membership for that company (ADR-0046) |
 | `RoleController` | `/api/v1/roles` | role + permission-bundle management |
 | `AuditController` | `/api/v1/audit` | read-only audit trail |
 
@@ -764,8 +765,9 @@ The list below covers the main tables per domain. Owned child tables (lines, all
 | `permissions` | atomic access unit, dot-separated `code`; seeded; addressed by code |
 | `roles` | named permission bundle; `is_system` |
 | `role_permission` | junction role ⇄ permission |
-| `user_role` | role grant scoped to company, optionally one branch (NULL = all) |
-| `user_branch` | branch assignment; `uq_user_branch_default` (≤1 default/user) |
+| `user_role` | role grant scoped to company, optionally one branch (NULL = all); requires an active `user_company` membership for that company (ADR-0046) |
+| `user_branch` | branch assignment; `uq_user_branch_default` (≤1 default/user); requires an active `user_company` membership for the branch's company (ADR-0046) |
+| `user_company` | authoritative user ⇄ company membership; write-path prerequisite for any role grant or branch assignment in that company (ADR-0046); gated by `USER.COMPANY.MANAGE` |
 | `refresh_tokens` | hashed, single-use, rotated; reuse → revoke chain |
 | `audit_logs` | append-only action trail; `detail` JSONB; no UPDATE/DELETE |
 
@@ -967,8 +969,11 @@ handling actually work in the shipped system.
 The decisions behind this design are recorded in
 [ADR-0001](../decisions/0001-iam-architecture.md) (IAM architecture),
 [ADR-0002](../decisions/0002-rbac-enforcement.md) (permission AND scope enforcement),
-[ADR-0003](../decisions/0003-branch-switch-override.md) (runtime branch switch), and
-[ADR-0004](../decisions/0004-iam-audit-trail.md) (audit trail).
+[ADR-0003](../decisions/0003-branch-switch-override.md) (runtime branch switch),
+[ADR-0004](../decisions/0004-iam-audit-trail.md) (audit trail), and
+[ADR-0046](../decisions/0046-authoritative-user-company-membership.md) (authoritative
+user ⇄ company membership, superseding the non-authoritative phase of
+[ADR-0045](../decisions/0045-user-company-membership.md)).
 
 ## 1. Authentication
 
@@ -1122,6 +1127,32 @@ distinct `ROOT.BYPASS` row is written when root acts **out of** its active compa
 (ADR-0004 D-9). In the dev profile the backend bootstraps `rootadmin` / `RootPass12345`
 (dev only — never a prod credential).
 
+### 2.6 Company membership (authoritative — ADR-0046)
+
+A user's relationship to a company is an explicit, **authoritative** `user_company` row.
+This supersedes the non-authoritative phase of ADR-0045, where membership was a derived,
+auto-created convenience.
+
+- **Assign-company-first (write-path prerequisite).** `UserRoleService.grant` and
+  `UserBranchService.assign` now **require** an active `user_company` membership for the
+  target company; without one they reject with 409. The previous auto-create
+  (`ensureMembership` on grant/assign) is removed — membership is granted deliberately, not
+  as a side effect.
+- **No-cascade removal.** Removing a company membership is **blocked** while the user still
+  holds any role or branch assignment in that company (removal does not cascade; the caller
+  must clear roles/branches first).
+- **Read/isolation oracle stays additive.** "Belongs to company C" remains the defensive
+  superset `role-in-C OR branch-in-C OR user_company-in-C` — a read backstop, even though the
+  write path now guarantees the `user_company` row exists.
+- **Root** bypasses tenant scope but **not** the membership gate — root must still hold (or be
+  granted) a `user_company` membership to grant roles / assign branches in a company.
+- **BR-6 re-decided.** Branch assignment and role grant remain independent of each other, but
+  each now requires prior company membership.
+- **Coverage without a migration.** Explicit assign/remove are gated by `USER.COMPANY.MANAGE`.
+  Existing users are reconciled by an idempotent every-boot reconcile (`UserCompanyBackfill`),
+  not a Flyway data migration. Bootstrap and seeders write entities directly and are
+  unaffected by the gate.
+
 ## 3. Multi-tenant and branch isolation
 
 The tenancy tree is **organisation → company → branch** (PROJECT-CONVENTIONS §4). Every
@@ -1181,6 +1212,37 @@ Target-op scope checks live in the gate (`@perm.scoped`). The two **body-scoped*
 `UserRole.grant/revoke` and `Branch.create`, where the scoping company is in the request
 body, not a path uid — call `ScopeGuard.assertCanActIn` directly in the service. Both paths
 converge on `ScopeGuard`, so root-bypass and the same-company predicate exist exactly once.
+
+### 3.4 Isolation hardening — derive scope from the loaded entity (2026-06-26 audit)
+
+An empirical end-to-end probe found **28 confirmed cross-company leaks across 11 modules** —
+all fixed. They fell into two bug classes:
+
+- **Confused-deputy via a secondary identifier.** An endpoint scope-checked a
+  *caller-supplied* `companyId` (the attacker passes their **own** company, so the check
+  passes) and then loaded the actual data by a **separate, unverified** numeric id / uid
+  (`accountId`, `productId`, `glAccountId`, …) belonging to another tenant.
+- **Missing write-scope.** A uid-addressed **mutator** loaded its target by uid without
+  re-checking the loaded entity's company — so a caller could **write** a record they could
+  not **read**. Worst case: IAM user `update` / `disable` / `enable` / `unlock` /
+  `setPassword` permitted cross-tenant **account takeover** via a password reset.
+
+**Authoritative rule now:** derive the scope-company from the **loaded entity**, never from a
+caller-supplied parameter, and apply the **same guard to reads and writes**. The fixes are
+service-layer — company-scoped repository finders plus ownership re-checks on the loaded
+aggregate. The read oracle of §3.3 is unchanged and there is **no schema change**.
+
+**Regression guard.** An ArchUnit `FreezingArchRule` — `TenantScopingRulesTest` — fails the
+build if a `..service..` class makes a bare `findById` / `getReferenceById` on a Spring Data
+repository, forcing the use of company-scoped finders. The ~197 pre-existing, audited calls
+are frozen as a baseline (`allowStoreUpdate = false`), so no new bare lookup can slip in.
+
+### 3.5 Company list scoping
+
+`GET /api/v1/companies` (the company-admin list) previously returned **all** organisation
+companies to any `COMPANY.VIEW` holder. It now returns only the companies the caller belongs
+to — root sees all — applying the same assigned-or-root filter as `/companies/accessible`.
+Company master data is no longer enumerable across tenants.
 
 ## 4. Audit trail
 

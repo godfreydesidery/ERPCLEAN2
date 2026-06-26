@@ -40,6 +40,22 @@ The Sales-module review found **no Critical/High/Medium cross-tenant, IDOR, or a
 - `usernameAttempted` (unauthenticated `LOGIN.FAIL` path) is written to `audit_log.detail` without a length cap — cheap pre-auth storage amplification. Truncate at the auth boundary.
 - `ROOT.BYPASS` detail records raw numeric company ids, not uids (inconsistent with the uid wire convention). Cosmetic.
 
+### Tenant-isolation e2e audit (2026-06-26)
+
+An empirical end-to-end probe (two real tenants, every uid/id-addressed endpoint exercised cross-company) found **28 confirmed cross-company leaks across 11 modules** — all FIXED this pass. The leaks fell into two bug classes, both generalisations of F12–F16:
+
+- **(a) Confused-deputy via a secondary identifier.** An endpoint scope-checks a **caller-supplied `companyId`** (the attacker passes their *own* company, so the check passes) and then loads the actual data by a **separate, unverified numeric id/uid** (`accountId`, `productId`, `glAccountId`, …). The scoped parameter and the loaded entity are different objects, so the guard never constrains the data returned.
+- **(b) Missing write-scope.** uid-addressed **mutators** loaded the target by uid without re-checking the loaded entity's company — you could **write a record you could not read**. Worst case (IAM): user **update / disable / enable / unlock / setPassword** were exploitable cross-tenant → **account takeover via cross-tenant password reset**. Also fixed: cashbank confused-deputy reads, and `/companies` enumeration (see below).
+
+**Authoritative rule (now enforced):** derive the scope-company from the **LOADED entity**, never from a caller-supplied parameter; apply the same guard to **reads AND writes**. Fixes are service-layer only — company-scoped repository finders (`findByCompanyIdAndUid` / scoped `findById…`) plus ownership re-checks on the loaded entity. The isolation **read oracle is unchanged** and there is **no schema change**.
+
+| # | Module | Severity | Finding | Status | Resolution |
+|---|---|---|---|---|---|
+| F17 | IAM | BLOCKER | **Cross-tenant user mutation → account takeover.** `update`/`disable`/`enable`/`unlock`/`setPassword` loaded the target user by uid without re-checking the user's company (class (b)). A holder of the relevant `USER.*` permission in company A could reset another company's user's password and take over the account. | FIXED | Each mutator now re-checks the loaded user's company against the active company (root bypasses, audited); scoped finders replace the bare uid load. Regression covered by the 2026-06-26 audit IT suite. |
+| F18 | cashbank + 9 others | HIGH | **Confused-deputy reads/writes across 11 modules (28 endpoints).** Endpoints scope-checked a caller-supplied `companyId` then loaded data by an unverified `accountId`/`productId`/`glAccountId`/etc. (class (a)); several uid mutators also missed the write-side re-check (class (b)). cashbank account reads were the canonical confused-deputy case. | FIXED | All 28 endpoints reworked to derive scope from the loaded entity via company-scoped finders + ownership re-checks; guards applied symmetrically to reads and writes. |
+| F19 | IAM | HIGH | **`GET /api/v1/companies` enumerated all organisation companies** — any `COMPANY.VIEW` holder received every company's master data, regardless of membership. | FIXED | The list now applies the same **assigned-or-root** filter as `/companies/accessible` (root sees all; everyone else sees only companies they belong to). Company master data is no longer enumerable cross-tenant. |
+| F20 | (cross-cutting) | (regression guard) | No build-time fence prevented a future `..service..` class from re-introducing a bare, unscoped `findById`/`getReferenceById` (the root cause of classes (a)/(b)). | FIXED | Added ArchUnit `FreezingArchRule` **`TenantScopingRulesTest`**: a `..service..` class making a bare `findById`/`getReferenceById` on a Spring Data repository **fails the build**, forcing company-scoped finders. The **~197 pre-existing audited calls are frozen as a baseline** (`allowStoreUpdate=false`), so the baseline cannot grow. |
+
 ## Production-gating (carried, still OPEN)
 - **G1** (Slice 2): stable RS256 signing key from a secret store — dev key is in-memory (everyone logged out on restart; not prod-safe).
 - **G2** (Slice 2): access-token denylist on logout (access token currently valid until expiry after logout).

@@ -183,6 +183,37 @@ administering IAM is inherently cross-branch — an admin manages many branches'
 root must reach every company. IAM isolation is enforced by **permission + scope checks in
 the service layer**, not a blanket row predicate.
 
+The **company admin list** `GET /api/v1/companies` is scoped accordingly: it previously
+returned **all** organisation companies to any `COMPANY.VIEW` holder, and now returns only the
+companies the caller **belongs to** (root sees all) — the same assigned-or-root filter as
+`/companies/accessible`. Company master data is no longer enumerable cross-tenant.
+
+#### Scope-from-loaded-entity rule (2026-06-26 hardening)
+
+An empirical e2e probe (2026-06-26) found **28 confirmed cross-company leaks across 11
+modules** — all fixed. They fell into two bug classes, both at the service layer:
+
+- **Confused-deputy via a secondary identifier.** An endpoint scope-checked a
+  **caller-supplied `companyId`** (the attacker passes their *own* company, so the check
+  passes) and then loaded the real data by a *separate, unverified* numeric id/uid
+  (`accountId`, `productId`, `glAccountId`, …). The scope check guarded one identifier while
+  the load used another.
+- **Missing write-scope.** uid-addressed **mutators** loaded the target by uid without
+  re-checking the loaded entity's company — so a caller could **write** a record they could
+  not **read**. Worst case: IAM user `update` / `disable` / `enable` / `unlock` /
+  `setPassword` allowed **cross-tenant account takeover** (a password reset on another
+  tenant's user).
+
+**Authoritative rule now:** derive the scope-company from the **loaded entity**, never from a
+caller-supplied parameter, and apply the **same guard to reads and writes**. Fixes are
+service-layer — company-scoped repository finders plus ownership re-checks on the loaded
+entity. The isolation **read oracle is unchanged** and there is **no schema change**.
+
+**Regression guard.** An ArchUnit `FreezingArchRule` (`TenantScopingRulesTest`) fails the
+build if a `..service..` class makes a bare `findById` / `getReferenceById` on a Spring Data
+repository, forcing a company-scoped finder instead. The ~197 pre-existing audited calls are
+frozen as a baseline (`allowStoreUpdate = false`), so no new bare lookup can slip in.
+
 ### 3.2 Branch switch via `X-Branch-Uid`
 
 A user assigned to many branches can switch the **active branch per request** without
@@ -222,6 +253,31 @@ Target-op scope checks live in the gate (`@perm.scoped`). The two **body-scoped*
 `UserRole.grant/revoke` and `Branch.create`, where the scoping company is in the request
 body, not a path uid — call `ScopeGuard.assertCanActIn` directly in the service. Both paths
 converge on `ScopeGuard`, so root-bypass and the same-company predicate exist exactly once.
+
+### 3.4 Authoritative user–company membership (the membership gate)
+
+`user_company` records which companies a user belongs to. As of **ADR-0046** (superseding the
+non-authoritative phase of [ADR-0045](../decisions/0045-user-company-membership.md)) it is a
+**write-path prerequisite**, not just a defensive read input:
+
+- **Assign-company-first.** `UserRoleService.grant` and `UserBranchService.assign` now
+  **require an ACTIVE `user_company` membership** for the target company — without one they
+  fail with **409**. The previous auto-create (`ensureMembership` on grant/assign) is
+  **removed**.
+- **No silent cascade on removal.** Removing a company membership is **blocked** while the
+  user still holds any role or branch in that company.
+- **Read oracle stays additive.** The isolation oracle remains the **superset**
+  `role OR branch OR user_company` — a defensive belt-and-braces, not the authority. Only the
+  write path is gated.
+- **Root** bypasses tenant *scope* but **not** the membership gate — a user must be assigned
+  to a company before they can be granted roles or branches there.
+- **Bootstrap / seeders** write entities directly and are unaffected. Existing data coverage
+  is guaranteed by an **idempotent every-boot reconcile** (`UserCompanyBackfill`) — there is
+  **no Flyway migration**.
+- Permission **`USER.COMPANY.MANAGE`** gates the explicit assign / remove endpoints.
+
+**BR-6 re-decided.** Branch and role assignment remain **independent of each other**, but each
+now requires **prior company membership**.
 
 ## 4. Audit trail
 

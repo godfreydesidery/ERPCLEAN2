@@ -25,13 +25,14 @@ grows one module at a time; **IAM** is first.
 
 # Module: IAM
 
-Eleven tables. Hierarchy `organisation → company → branch`; identity `app_user`; access
-`role`/`permission`/`role_permission`/`user_role`; assignment `user_branch`; session
-`refresh_token`; trail `audit_log`. Diagram (FK direction → parent):
+Twelve tables. Hierarchy `organisation → company → branch`; identity `app_user`; access
+`role`/`permission`/`role_permission`/`user_role`; assignment `user_branch`; company membership
+`user_company`; session `refresh_token`; trail `audit_log`. Diagram (FK direction → parent):
 
 ```
 organisation ─< company ─< branch
 app_user ─< user_branch >─ branch
+app_user ─< user_company >─ company
 app_user ─< user_role >─ role ;  user_role >─ company ;  user_role >─ branch (nullable)
 role ─< role_permission >─ permission
 app_user ─< refresh_token
@@ -240,12 +241,61 @@ Append-only IAM (and later, global) action trail. Internal — no uid. (FR-IAM-2
   `ix_audit_log_action_at (action, at)`. **No UPDATE/DELETE** through the app (append-only, US-IAM-010
   AC2) — enforced by the audit aspect + a DB role without UPDATE/DELETE grant on this table at deploy.
 
+## 1.12 `user_company`
+Explicit user ⇄ company membership — the **authoritative write-path prerequisite** for tenancy
+(ADR-0046, supersedes the non-authoritative phase of ADR-0045). Added in V77; no schema change since.
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | BIGINT identity | NO | PK |
+| `uid` | VARCHAR(26) | NO | UNIQUE; assigned by `@PrePersist`, never seeded in SQL |
+| `user_id` | BIGINT | NO | FK → app_user.id |
+| `company_id` | BIGINT | NO | FK → company.id |
+| `assigned_at` | TIMESTAMPTZ | NO | DEFAULT now() |
+| `assigned_by` | BIGINT | YES | FK → app_user.id |
+| `revoked_at` | TIMESTAMPTZ | YES | NULL = active (mirrors `user_role`) |
+| `version` | BIGINT | NO | DEFAULT 0 — optimistic lock |
+
+- `uq_user_company_uid (uid)`; `uq_user_company_active` — `UNIQUE (user_id, company_id) WHERE
+  revoked_at IS NULL` → ≤1 active membership per (user, company);
+  `ix_user_company_company (company_id)`, `ix_user_company_user (user_id)`.
+- **Authoritative on the write path:** `UserRoleService.grant` and `UserBranchService.assign` require
+  an active membership for the target company (else **409**); the earlier auto-create on grant/assign
+  is removed. Membership is created only via the explicit `POST /api/v1/user-companies`
+  (`USER.COMPANY.MANAGE`).
+- **Removal is blocked (no cascade)** while the user still holds any active role grant or branch
+  assignment in that company — access must be cleared first.
+- **Read/isolation oracle stays additive** (defensive superset): a user is "in" company C if they
+  hold an active `user_role` **or** `user_branch` **or** `user_company` in C. After the write-path
+  gate, every active role/branch implies a membership row, so additive ≡ `user_company`-only — but
+  keeping it additive leaves the (separately hardened) isolation reads unchanged. **Root bypasses
+  tenant scope but NOT the membership gate.**
+- **BR-6 re-decided (ADR-0046):** branch and role assignment remain independent of each other, but
+  each now requires prior company membership.
+- Coverage is guaranteed by an idempotent every-boot reconcile (`UserCompanyBackfill`) — **no Flyway
+  data migration**; bootstrap/seeders persist `user_role`/`user_branch` directly and bypass the gate.
+
+---
+
+## Tenant-isolation discipline (write + read)
+Company isolation is enforced in the **service layer** (no schema change). The authoritative rule,
+reaffirmed by the 2026-06-26 security audit (28 cross-company leaks across 11 modules, all fixed):
+**derive the scope-company from the LOADED entity, never from a caller-supplied parameter, and apply
+the same guard to reads AND writes.** Two bug classes the audit closed: (a) *confused-deputy via a
+secondary identifier* — scope-checking a caller-supplied `companyId` while loading by a separate,
+unverified `id`/`uid`; (b) *missing write-scope* — uid-addressed mutators that load by uid without
+re-checking the loaded entity's company (writing a record you cannot read). Fixes use company-scoped
+repository finders + ownership re-checks. A regression guard (`TenantScopingRulesTest`, an ArchUnit
+`FreezingArchRule`) fails the build if a `..service..` class makes a bare `findById` /
+`getReferenceById` on a Spring Data repository, with ~197 pre-existing calls frozen as a baseline.
+
 ---
 
 ## Seed data (Flyway)
 - **Permissions** (org-wide catalogue, module `iam`): `USER.MANAGE`, `USER.VIEW`, `ROLE.MANAGE`,
   `ROLE.VIEW`, `PERMISSION.VIEW`, `BRANCH.MANAGE`, `BRANCH.ASSIGN`, `COMPANY.MANAGE`,
-  `COMPANY.VIEW`, `AUDIT.VIEW`. (Final list confirmed with backend-engineer per endpoint.)
+  `COMPANY.VIEW`, `USER.COMPANY.MANAGE` (explicit company-membership assign/remove), `AUDIT.VIEW`.
+  (Final list confirmed with backend-engineer per endpoint.)
 - **System roles** (`is_system = true`): `SUPER_ADMIN` is *not* a role — root is the `app_user.is_root`
   flag (ADR-0001). Seed `ORG_ADMIN` (all IAM permissions) and the obvious operational roles
   (`BRANCH_MANAGER`, etc.) as requirements for later modules firm up.
@@ -271,4 +321,5 @@ Append-only IAM (and later, global) action trail. Internal — no uid. (FR-IAM-2
 | BR-2 one default/company | `uq_branch_company_default` |
 | BR-3 default ∈ assignments | structural (flag on assignment row) |
 | BR-4 username org-unique | `uq_app_user_username` |
+| BR-6 company membership prerequisite for role/branch | §1.12 `user_company` + service gate (ADR-0046) |
 | BR-7 system roles/perms undeletable | `is_system` / seeded + service guard |

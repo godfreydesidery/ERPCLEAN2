@@ -35,7 +35,7 @@ Navigate to **Administration › Companies** (`/admin/companies`) in the sidebar
 
 ![Companies administration](images/01-administration/companies.png)
 
-The list shows each company's code, name, status (Active or Archived), and a **Manage branches** link in the last column. Above the list, the organisation name for this deployment is shown. Your view is limited to companies within your active organisation and, for non-admin users, to companies you are scoped to act in.
+The list shows each company's code, name, status (Active or Archived), and a **Manage branches** link in the last column. Above the list, the organisation name for this deployment is shown. The list is scoped to your access: a **root administrator** sees every company in the organisation, while everyone else (even holders of `COMPANY.VIEW`) sees only the companies they belong to — those they are assigned to via company membership, a branch, or a role. This keeps the company list from revealing companies you have no access to.
 
 > The Companies screen is intentionally lean: it lets you create a company (code and name), rename it inline (see below), and open each company's branches. There is no separate company detail screen — the company code can never be changed after creation.
 
@@ -150,7 +150,7 @@ To archive a branch, click **Archive** on its row. The branch status changes to 
 
 **Why user accounts exist.** Shared logins (for example, a single "accountant" password passed around the team) make audit trails meaningless — the log shows "accountant did X" and you cannot know who actually did it. Named individual accounts mean every action is attributable to a real person, accounts can be individually disabled without disrupting others, and each person can be given exactly the permissions their job requires.
 
-**When to create a user.** Create a user when a new employee joins, when a contractor needs access, or when a role needs an automated service account. After creating the account you must also assign the user to at least one branch and grant them at least one role; a user with no branches and no roles can log in but will see no menu and have no active branch.
+**When to create a user.** Create a user when a new employee joins, when a contractor needs access, or when a role needs an automated service account. After creating the account you must **assign the user to at least one company first**, then assign at least one branch and grant at least one role; a user with no branches and no roles can log in but will see no menu and have no active branch. Company membership is the prerequisite — branches and roles can only be assigned within a company the user already belongs to (see [Assigning Companies to Users](#assigning-companies-to-users)).
 
 **How the user lifecycle works.** A user starts `ACTIVE`. An administrator can `DISABLE` the account (status becomes `INACTIVE`) to prevent login while preserving the account and its history — for example, during a leave of absence or pending investigation. `ENABLE` restores it to `ACTIVE`. The `rootadmin` account cannot be disabled. If too many wrong-password attempts are made, the account is automatically locked for 15 minutes; an administrator can clear this with **Unlock**. User accounts are never hard-deleted.
 
@@ -163,7 +163,7 @@ Navigate to **Administration › Users** (`/admin/users`) in the sidebar.
 
 ![Users list](images/01-administration/users.png)
 
-The list shows columns for **Username**, **Display name**, **Status**, **Locked**, and **Root** (a marker on the `rootadmin` account), plus a per-row action area. The actions on each row are **Disable**/**Enable**, **Unlock** (only when the account is locked), **Password** (an inline set-password form), and **Branches** (a link that opens the user's detail page at `/admin/users/uid/<uid>`). Root accounts do not show a Disable action.
+The list shows columns for **Username**, **Display name**, **Status**, **Locked**, and **Root** (a marker on the `rootadmin` account), plus a per-row action area. The actions on each row are **Disable**/**Enable**, **Unlock** (only when the account is locked), **Password** (an inline set-password form), and **Assignments** (a link that opens the user's Assignments page at `/admin/users/uid/<uid>`, where you manage the user's companies, branches, and roles). Root accounts do not show a Disable action.
 
 ### Creating a user
 
@@ -204,9 +204,11 @@ If a user has been locked out after too many failed sign-in attempts, a locked i
 
 The user can sign in immediately with the new password. Passwords are never stored in plain text and are not shown in audit logs.
 
-### The user detail page
+### The user Assignments page
 
-Click **Branches** on a user's row to open their detail page (`/admin/users/uid/<uid>`). This page shows a **read-only header** (username, display name, and status, locked, and root tags) followed by two management panels: **Branch Assignments** and **Role Assignments** (see the sections below). It does not contain a form for editing display name, email, or phone — there is no contact-details edit screen in the current interface.
+Click **Assignments** on a user's row to open their Assignments page (`/admin/users/uid/<uid>`). This page shows a **read-only header** (username, display name, and status, locked, and root tags) followed by three management cards in order: **Companies**, **Branch Assignments**, and **Role Assignments** (see the sections below). It does not contain a form for editing display name, email, or phone — there is no contact-details edit screen in the current interface.
+
+> **Assign a company first.** Company membership is the prerequisite for the other two cards. Until the user belongs to at least one company, the Branch and Role cards show a hint to assign a company first, and their company pickers are empty. Once you assign a company, that company becomes selectable when assigning the user's branches and roles. (See [Assigning Companies to Users](#assigning-companies-to-users) below.)
 
 ---
 
@@ -277,6 +279,37 @@ There is no Archive control in the current interface. The role edit page offers 
 
 ---
 
+## Assigning Companies to Users
+
+**What company membership is.** Company membership is an explicit record that a user belongs to a specific company. It is the foundation of a user's access: before a user can be given any branch or role in a company, they must first be made a member of that company. A user can be a member of several companies.
+
+**Why membership is required first (assign-company-first).** Tying branch and role assignment to an explicit company membership makes "which companies is this person part of?" a single, deliberate decision rather than a side effect of the first role grant. It also keeps the company pickers on the Branches and Roles cards focused — they list only the companies the user actually belongs to, so you cannot accidentally grant access in the wrong company.
+
+**When to assign a company.** Immediately after creating a user, and whenever the user takes on responsibilities in an additional company.
+
+**How removal is protected.** You cannot remove a user's company membership while they still hold any branch assignment or role grant in that company — the system blocks it with a message asking you to remove those first. This prevents leaving a user with branches or roles in a company they are no longer a member of.
+
+**Required permission:** `USER.COMPANY.MANAGE`
+
+> The **Companies** card appears on every user's Assignments page, but the **Assign company** and **Remove** controls are shown only to administrators who hold `USER.COMPANY.MANAGE`. Other administrators can see which companies a user belongs to but cannot change them.
+
+### Assigning a user to a company
+
+1. Open the user's Assignments page (**Assignments** on the user's row in **Administration › Users**).
+2. In the **Companies** card, choose a company from the **Assign Company** picker. (Root and full administrators can choose any company in the organisation; other administrators choose from the companies they can act in.)
+3. Click **Assign**.
+
+The company appears in the user's Companies list. Its branches and roles can now be assigned in the cards below.
+
+### Removing a company membership
+
+In the **Companies** card, click **Remove** on the company's row.
+
+- If the user still has any branch assignment or role grant in that company, the removal is **rejected** — remove those branches and roles first (see the two sections below).
+- Otherwise the membership is removed. The user is no longer a member of that company and can be re-assigned later if needed.
+
+---
+
 ## Assigning Roles to Users
 
 **What a role grant is.** A role grant is a record that links a specific user to a specific role, scoped to a company and optionally to a single branch. It is not a permanent property of the user; it is an explicit, revocable assignment. A user can hold many grants, and each grant has its own scope.
@@ -295,7 +328,9 @@ Navigate to **Administration › Role Grants** (`/admin/role-grants`) in the sid
 
 This screen lets you grant a role to a user for a specific company, optionally restricted to a single branch.
 
-> You can also manage one user's role grants directly from their detail page. The **Role Assignments** panel on `/admin/users/uid/<uid>` (reached via **Branches** on the user's row) has the same **Grant Role** form (Role, Company, optional Branch) and a per-row **Revoke** action, scoped to that single user.
+> You can also manage one user's role grants directly from their Assignments page. The **Role Assignments** card on `/admin/users/uid/<uid>` (reached via **Assignments** on the user's row) has the same **Grant Role** form (Role, Company, optional Branch) and a per-row **Revoke** action, scoped to that single user. On this card the **Company** picker lists only the companies the user is a member of (see [Assigning Companies to Users](#assigning-companies-to-users)).
+
+> **Company membership is required.** A role can only be granted in a company the user already belongs to. If the user is not yet a member of the target company, assign the company first — otherwise the grant is rejected. (On the user's Assignments page the Role card simply will not offer a company the user does not belong to.)
 
 ### Granting a role
 
@@ -332,12 +367,12 @@ The grant is revoked immediately. The user loses those permissions on their next
 **Required permission to view branch assignments:** `USER.VIEW`
 **Required permission to assign / change default / remove:** `BRANCH.ASSIGN`
 
-Branch assignments control which branches a user can switch to and which data they can access. Open a user's detail page (`/admin/users/uid/<uid>`) by clicking **Branches** on the user's row in the **Administration › Users** (`/admin/users`) list.
+Branch assignments control which branches a user can switch to and which data they can access. Open a user's Assignments page (`/admin/users/uid/<uid>`) by clicking **Assignments** on the user's row in the **Administration › Users** (`/admin/users`) list. A branch can only be assigned within a company the user is already a member of (see [Assigning Companies to Users](#assigning-companies-to-users)).
 
 ### Assigning a user to a branch
 
-1. On the user detail page, find the **Branch Assignments** panel.
-2. Choose the **Company** by name (only companies you are active in are shown).
+1. On the user's Assignments page, find the **Branch Assignments** card.
+2. Choose the **Company** by name. The picker lists only the companies this user is a member of — if the company you want is not listed, assign it first in the **Companies** card above.
 3. Once a company is selected, the **Branch** picker loads that company's branches. Choose one by name.
 4. Check **Make default** if you want this branch to become the user's new default.
 5. Click **Assign**.
