@@ -1,5 +1,6 @@
 package com.erp.modules.costing.service;
 
+import com.erp.modules.costing.domain.dto.CreateDimensionRequest;
 import com.erp.modules.costing.domain.dto.CreateDimensionValueRequest;
 import com.erp.modules.costing.domain.dto.DimensionDto;
 import com.erp.modules.costing.domain.dto.DimensionValueDto;
@@ -54,6 +55,36 @@ public class DimensionServiceImpl implements DimensionService {
     // -------------------------------------------------------------------------
     // Dimension type operations
     // -------------------------------------------------------------------------
+
+    @Override
+    public DimensionDto createDimension(CreateDimensionRequest req) {
+        scopeGuard.assertCanActIn(RequestContext.get(), req.companyId());
+
+        // Find the first free custom slot (DIMENSION_3 then DIMENSION_4)
+        DimensionSlot freeSlot = null;
+        for (DimensionSlot candidate : List.of(DimensionSlot.DIMENSION_3, DimensionSlot.DIMENSION_4)) {
+            if (dimensions.findByCompanyIdAndSlot(req.companyId(), candidate).isEmpty()) {
+                freeSlot = candidate;
+                break;
+            }
+        }
+        if (freeSlot == null) {
+            throw new IllegalStateException(
+                    "All custom dimension slots are in use. A company can have at most two custom dimensions.");
+        }
+
+        Dimension d = new Dimension(req.companyId(), freeSlot, req.code(), req.name(), false, actorId());
+        if (req.description() != null) {
+            d.setDescription(req.description());
+        }
+        d = dimensions.save(d);
+
+        audit.record(AuditEvent.of(AuditActions.COSTING_DIMENSION_CREATE,
+                        "dimensions", d.getId(), d.getUid())
+                .detail(Map.of("slot", freeSlot.name(), "code", d.getCode())));
+
+        return toDto(d);
+    }
 
     @Override
     @Transactional(readOnly = true)

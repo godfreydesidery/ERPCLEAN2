@@ -40,4 +40,9 @@ export class CompanyService {
   archive(uid: string): Observable<void> {
     return this.http.delete<void>(`${this.base}/uid/${uid}`);
   }
+
+  /** Idempotently re-seeds all per-company defaults (tax rates, GL, units, etc.). */
+  provisionDefaults(uid: string): Observable<Company> {
+    return this.http.post<Company>(`${this.base}/uid/${uid}/provision-defaults`, {});
+  }
 }

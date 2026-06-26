@@ -116,9 +116,9 @@
                       <a [routerLink]="['/admin/companies', c.uid, 'branches']">Manage branches</a>
                     </td>
                     @if (canManage()) {
-                      <td>
+                      <td class="d-flex gap-1 align-items-center flex-wrap">
                         @if (editingUid() === c.uid) {
-                          <button type="button" class="btn btn-sm btn-primary me-1"
+                          <button type="button" class="btn btn-sm btn-primary"
                                   [disabled]="savingEdit()" (click)="saveEdit(c)">
                             @if (savingEdit()) {
                               <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
@@ -129,9 +129,20 @@
                                   [disabled]="savingEdit()" (click)="cancelEdit()">Cancel</button>
                         } @else {
                           <button type="button" class="btn btn-sm btn-outline-secondary"
-                                  [disabled]="editingUid() !== null"
+                                  [disabled]="editingUid() !== null || provisioningUid() !== null"
                                   (click)="startEdit(c)"
                                   [attr.aria-label]="'Edit ' + c.name">Edit</button>
+                          <button type="button" class="btn btn-sm btn-outline-secondary"
+                                  [disabled]="provisioningUid() !== null || editingUid() !== null"
+                                  (click)="provisionDefaults(c)"
+                                  [attr.aria-label]="'Provision defaults for ' + c.name">
+                            @if (provisioningUid() === c.uid) {
+                              <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                              Provisioning…
+                            } @else {
+                              Provision defaults
+                            }
+                          </button>
                         }
                       </td>
                     }

@@ -25,6 +25,14 @@ export interface SetDimensionMandatoryRequest {
   mandatory: boolean;
 }
 
+/** Request body for POST /api/v1/dimensions — backend assigns the next free custom slot. */
+export interface CreateDimensionRequest {
+  companyId: string;
+  code: string;
+  name: string;
+  description?: string;
+}
+
 // ── Dimension value (user-created, children of a dimension) ──────────────────
 
 export interface DimensionValueDto {

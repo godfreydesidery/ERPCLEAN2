@@ -44,6 +44,18 @@ export class DimensionListComponent {
 
   readonly canManage = computed(() => this.session.hasPermission('COSTING.MANAGE'));
 
+  // ── Add Dimension form ────────────────────────────────────────────────────
+  /** True when the company already has both custom slots (DIMENSION_3 + DIMENSION_4). */
+  readonly customSlotsFull = computed(
+    () => this.rows().filter((d) => !d.builtIn).length >= 2,
+  );
+
+  readonly newDimCode = signal('');
+  readonly newDimName = signal('');
+  readonly newDimDescription = signal('');
+  readonly addDimSaving = signal(false);
+  readonly addDimFormError = signal<string | null>(null);
+
   constructor() {
     this.loadCompanies();
   }
@@ -84,6 +96,40 @@ export class DimensionListComponent {
       },
       error: (err) =>
         this.state.set(err instanceof HttpErrorResponse && err.status === 403 ? 'forbidden' : 'error'),
+    });
+  }
+
+  addDimension(): void {
+    const code = this.newDimCode().trim();
+    const name = this.newDimName().trim();
+    if (!code || !name) {
+      this.addDimFormError.set('Code and name are required.');
+      return;
+    }
+    const companyId = this.selectedCompanyId();
+    if (!companyId) return;
+
+    this.addDimSaving.set(true);
+    this.addDimFormError.set(null);
+
+    const description = this.newDimDescription().trim() || undefined;
+    this.service.createDimension({ companyId, code, name, description }).subscribe({
+      next: (created) => {
+        this.rows.update((list) => [...list, created]);
+        this.newDimCode.set('');
+        this.newDimName.set('');
+        this.newDimDescription.set('');
+        this.addDimSaving.set(false);
+        this.alerts.success('Dimension added', created.name);
+      },
+      error: (err) => {
+        this.addDimSaving.set(false);
+        if (err instanceof HttpErrorResponse && err.status === 409) {
+          this.addDimFormError.set('You can have at most 2 custom dimensions.');
+        } else {
+          this.addDimFormError.set(this.messageFrom(err, 'Could not add dimension.'));
+        }
+      },
     });
   }
 
