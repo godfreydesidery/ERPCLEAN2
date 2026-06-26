@@ -624,6 +624,52 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
     }
 
     // -----------------------------------------------------------------------
+    // listProductUnits: base unit first, then bulk-pack units, de-duplicated
+    // -----------------------------------------------------------------------
+
+    @Test
+    void listProductUnits_noPacksConfigured_returnsBaseUnitOnly() {
+        ProductDto prod = productService.create(goodsRequest(companyA.getUid(), "Units-NoPack"));
+
+        List<UnitOfMeasureDto> units = productService.listProductUnits(prod.uid());
+
+        assertThat(units).hasSize(1);
+        assertThat(units.get(0).uid()).isEqualTo(pcsUid);
+    }
+
+    @Test
+    void listProductUnits_withOneBulkPack_returnsBaseUnitThenPackUnit() {
+        ProductDto prod = productService.create(goodsRequest(companyA.getUid(), "Units-OnePack"));
+
+        UnitOfMeasureDto carton = unitService.create(
+                new CreateUnitOfMeasureRequest(companyA.getUid(), "CTN", "Carton"));
+        productService.addBulkPack(prod.uid(),
+                new CreateBulkPackRequest(carton.uid(), new BigDecimal("12")));
+
+        List<UnitOfMeasureDto> units = productService.listProductUnits(prod.uid());
+
+        assertThat(units).hasSize(2);
+        // Base unit is first.
+        assertThat(units.get(0).uid()).isEqualTo(pcsUid);
+        // Pack unit is second.
+        assertThat(units.get(1).uid()).isEqualTo(carton.uid());
+    }
+
+    @Test
+    void listProductUnits_baseUnitAlsoAddedAsPack_isNotDuplicated() {
+        // Pathological case: someone adds the base unit as a bulk pack — must de-duplicate.
+        ProductDto prod = productService.create(goodsRequest(companyA.getUid(), "Units-DedupPack"));
+        productService.addBulkPack(prod.uid(),
+                new CreateBulkPackRequest(pcsUid, new BigDecimal("1")));
+
+        List<UnitOfMeasureDto> units = productService.listProductUnits(prod.uid());
+
+        // pcsUid appears only once.
+        assertThat(units).hasSize(1);
+        assertThat(units.get(0).uid()).isEqualTo(pcsUid);
+    }
+
+    // -----------------------------------------------------------------------
     // Private helpers
     // -----------------------------------------------------------------------
 

@@ -16,6 +16,7 @@ import com.erp.modules.parties.domain.dto.SupplierDto;
 import com.erp.modules.parties.domain.enums.PartyType;
 import com.erp.modules.parties.domain.enums.SupplierKind;
 import com.erp.modules.parties.service.SupplierService;
+import com.erp.modules.products.domain.dto.CreateBulkPackRequest;
 import com.erp.modules.products.domain.dto.CreateProductRequest;
 import com.erp.modules.products.domain.dto.CreateUnitOfMeasureRequest;
 import com.erp.modules.products.domain.dto.ProductDto;
@@ -673,6 +674,63 @@ class PurchasesServiceImplIT extends PostgresIntegrationTest {
                         .getContent().get(0).getUid(),
                 MovementType.GOODS_RECEIPT);
         assertThat(movements).hasSize(1);
+    }
+
+    // =========================================================================
+    // 11. computeQtyInBase guard: unconfigured unit → IllegalStateException
+    // =========================================================================
+
+    @Test
+    void addLine_withUnconfiguredUnit_throwsIllegalState() {
+        ProductDto product = stockableProduct("UnitGuard-Widget");
+
+        // Create a second unit that is NOT the product's base and NOT a bulk-pack.
+        UnitOfMeasureDto kgUnit = unitService.create(
+                new CreateUnitOfMeasureRequest(companyA.getUid(), "KG", "Kilograms"));
+
+        PurchaseOrderDto draft = poService.create(new CreatePurchaseOrderRequest(
+                companyA.getUid(), supplierUid, "TZS", null, null, null));
+
+        assertThatThrownBy(() -> poService.addLine(draft.uid(),
+                new AddPurchaseOrderLineRequest(
+                        product.uid(), kgUnit.uid(), new BigDecimal("5"), new BigDecimal("100"), null)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("is not a valid unit for");
+    }
+
+    @Test
+    void addLine_withBaseUnit_succeeds() {
+        ProductDto product = stockableProduct("BaseUnit-Widget");
+
+        // pcsUid is the product's base unit — must succeed.
+        PurchaseOrderDto draft = createDraftWithLine(product.uid(), new BigDecimal("3"),
+                new BigDecimal("200"));
+
+        assertThat(draft.lines()).hasSize(1);
+        assertThat(draft.lines().get(0).orderedQty()).isEqualByComparingTo(new BigDecimal("3"));
+        // qty_in_base == qty (factor 1) for the base unit.
+        assertThat(draft.lines().get(0).orderedQtyInBase()).isEqualByComparingTo(new BigDecimal("3"));
+    }
+
+    @Test
+    void addLine_withConfiguredBulkPackUnit_succeeds() {
+        ProductDto product = stockableProduct("PackUnit-Widget");
+
+        // Add a CARTON bulk pack (factor 12) to the product.
+        UnitOfMeasureDto cartonUnit = unitService.create(
+                new CreateUnitOfMeasureRequest(companyA.getUid(), "CTN", "Carton"));
+        productService.addBulkPack(product.uid(),
+                new CreateBulkPackRequest(cartonUnit.uid(), new BigDecimal("12")));
+
+        PurchaseOrderDto draft = poService.create(new CreatePurchaseOrderRequest(
+                companyA.getUid(), supplierUid, "TZS", null, null, null));
+        poService.addLine(draft.uid(), new AddPurchaseOrderLineRequest(
+                product.uid(), cartonUnit.uid(), new BigDecimal("2"), new BigDecimal("1200"), null));
+
+        PurchaseOrderDto updated = poService.getByUid(draft.uid());
+        assertThat(updated.lines()).hasSize(1);
+        // 2 cartons × 12 = 24 in base.
+        assertThat(updated.lines().get(0).orderedQtyInBase()).isEqualByComparingTo(new BigDecimal("24"));
     }
 
     // =========================================================================

@@ -28,7 +28,7 @@ export class LandedCostDetailComponent {
   readonly confirming = signal(false);
   readonly confirmError = signal<string | null>(null);
 
-  readonly canConfirm = computed(() => this.session.hasPermission('PURCHASE.LANDED_COST.CONFIRM'));
+  readonly canConfirm = computed(() => this.session.hasPermission('PURCHASE.LANDEDCOST.MANAGE'));
   readonly isDraft = computed(() => this.entity()?.status === 'DRAFT');
 
   constructor() {

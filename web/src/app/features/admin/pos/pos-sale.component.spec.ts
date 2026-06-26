@@ -115,7 +115,7 @@ function makeBed(opts: { canSell?: boolean; processSaleImpl?: () => any } = {}) 
         provide: ProductService,
         useValue: {
           list: vi.fn(() => of({ rows: [], meta: {} })),
-          listUnits: vi.fn(() => of({ rows: [], meta: {} })),
+          listProductUnits: vi.fn(() => of([])),
           listPrices: vi.fn(() => of([])),
         },
       },
@@ -222,7 +222,7 @@ describe('PosSaleComponent — submit validation', () => {
     comp.customers.set([stubCustomer]);
     comp.lines.set([{
       id: 'line-1', productUid: 'P1', productId: '10', productName: 'Widget',
-      unitUid: 'U1', unitId: '1', unitName: 'pcs', quantity: '2', unitPrice: '500.00', lineDiscountAmount: '0.00',
+      unitUid: 'U1', unitId: '1', unitName: 'pcs', quantity: '2', unitPrice: '500.00', lineDiscountAmount: '0.00', lineUnitOptions: [], lineUnitsLoading: false,
     }]);
     comp.tenderedAmount.set('500'); // subtotal=1000, tendered=500 → under
     comp.submit();
@@ -250,7 +250,7 @@ describe('PosSaleComponent — submit success', () => {
     comp.currency.set('TZS');
     comp.lines.set([{
       id: 'line-1', productUid: 'P1', productId: '10', productName: 'Widget',
-      unitUid: 'U1', unitId: '1', unitName: 'pcs', quantity: '2', unitPrice: '500.00', lineDiscountAmount: '0.00',
+      unitUid: 'U1', unitId: '1', unitName: 'pcs', quantity: '2', unitPrice: '500.00', lineDiscountAmount: '0.00', lineUnitOptions: [], lineUnitsLoading: false,
     }]);
     comp.tenderedAmount.set('1000');
     comp.submit();
@@ -275,7 +275,7 @@ describe('PosSaleComponent — lineSubtotal', () => {
   it('computes qty × price − discount', async () => {
     const comp = TestBed.createComponent(PosSaleComponent).componentInstance;
     await vi.runAllTimersAsync();
-    const line = { id: 'l1', productUid: '', productId: '', productName: '', unitUid: '', unitId: '', unitName: '', quantity: '3', unitPrice: '200.00', lineDiscountAmount: '50.00' };
+    const line = { id: 'l1', productUid: '', productId: '', productName: '', unitUid: '', unitId: '', unitName: '', quantity: '3', unitPrice: '200.00', lineDiscountAmount: '50.00', lineUnitOptions: [], lineUnitsLoading: false };
     expect(comp.lineSubtotal(line)).toBe(550);
   });
 });
@@ -300,7 +300,7 @@ describe('PosSaleComponent — numeric tendered amount', () => {
     comp.lines.set([{
       id: 'line-1', productUid: 'P1', productId: '10', productName: 'Widget',
       unitUid: 'U1', unitId: '1', unitName: 'pcs', quantity: '2', unitPrice: '500.00',
-      lineDiscountAmount: '0.00', vatRate: '0', priceState: 'ok',
+      lineDiscountAmount: '0.00', vatRate: '0', priceState: 'ok', lineUnitOptions: [], lineUnitsLoading: false,
     }]);
     // NumberValueAccessor stores a NUMBER — this used to throw `.trim is not a function`.
     comp.tenderedAmount.set(1000 as unknown as string);
@@ -366,6 +366,7 @@ describe('PosSaleComponent — price auto-fetch & VAT preview', () => {
   it('auto-fetches the list price (and normalises the VAT rate) on product select', async () => {
     const comp = TestBed.createComponent(PosSaleComponent).componentInstance;
     const prodSvc = TestBed.inject(ProductService) as any;
+    prodSvc.listProductUnits.mockReturnValue(of([stubUnit]));
     prodSvc.listPrices.mockReturnValue(of([
       { id: '1', productId: '10', priceListId: '1', priceListUid: 'PL1', priceListCode: 'RETAIL',
         priceListName: 'Retail', companyId: '10', price: { amount: '2500.00', currency: 'TZS' } },
@@ -373,13 +374,15 @@ describe('PosSaleComponent — price auto-fetch & VAT preview', () => {
     await vi.runAllTimersAsync();
 
     comp.products.set([stubProduct]);
-    comp.units.set([stubUnit]);
     comp.taxRates.set([stdRate]); // percentage form (18) must normalise to 0.18
     comp.addLine();
     const lineId = comp.lines()[0].id;
     comp.onLineProductChange(lineId, 'P1');
     await vi.runAllTimersAsync();
 
+    // Unit options populated from listProductUnits
+    expect(comp.lines()[0].lineUnitOptions).toHaveLength(1);
+    expect(comp.lines()[0].unitUid).toBe('U1');
     expect(comp.lines()[0].unitPrice).toBe('2500.00');
     expect(comp.lines()[0].priceState).toBe('ok');
     expect(comp.lines()[0].vatRate).toBe('0.18');
@@ -390,7 +393,7 @@ describe('PosSaleComponent — price auto-fetch & VAT preview', () => {
     await vi.runAllTimersAsync();
     comp.lines.set([{
       id: 'l1', productUid: 'P1', productId: '10', productName: 'Widget', unitUid: 'U1', unitId: '1',
-      unitName: 'pcs', quantity: '1', unitPrice: '1000.00', lineDiscountAmount: '0.00', vatRate: '0.18', priceState: 'ok',
+      unitName: 'pcs', quantity: '1', unitPrice: '1000.00', lineDiscountAmount: '0.00', vatRate: '0.18', priceState: 'ok', lineUnitOptions: [], lineUnitsLoading: false,
     }]);
     comp.tenderedAmount.set('1200');
 
@@ -403,12 +406,12 @@ describe('PosSaleComponent — price auto-fetch & VAT preview', () => {
   it('flags a product with no price and blocks the sale', async () => {
     const comp = TestBed.createComponent(PosSaleComponent).componentInstance;
     const prodSvc = TestBed.inject(ProductService) as any;
+    prodSvc.listProductUnits.mockReturnValue(of([stubUnit]));
     prodSvc.listPrices.mockReturnValue(of([])); // no price configured
     const svc = TestBed.inject(PosService) as any;
     await vi.runAllTimersAsync();
 
     comp.products.set([stubProduct]);
-    comp.units.set([stubUnit]);
     comp.customers.set([stubCustomer]);
     comp.agents.set([stubAgent]);
     comp.selectedSessionUid.set('SESS1');
@@ -440,7 +443,7 @@ describe('PosSaleComponent — resetSale', () => {
 
     comp.selectedSessionUid.set('SESS1');
     comp.selectedCustomerUid.set('CUST1');
-    comp.lines.set([{ id: 'l1', productUid: 'p', productId: '1', productName: 'P', unitUid: 'u', unitId: '1', unitName: 'pcs', quantity: '1', unitPrice: '100', lineDiscountAmount: '0' }]);
+    comp.lines.set([{ id: 'l1', productUid: 'p', productId: '1', productName: 'P', unitUid: 'u', unitId: '1', unitName: 'pcs', quantity: '1', unitPrice: '100', lineDiscountAmount: '0', lineUnitOptions: [], lineUnitsLoading: false }]);
     comp.resetSale();
 
     expect(comp.selectedSessionUid()).toBe('');
@@ -460,5 +463,74 @@ describe('PosSaleComponent — canSell gate', () => {
     const comp = TestBed.createComponent(PosSaleComponent).componentInstance;
     await vi.runAllTimersAsync();
     expect(comp.canSell()).toBe(false);
+  });
+});
+
+// ── product-scoped unit picker ────────────────────────────────────────────────
+// Proves: selecting a product calls listProductUnits (not listUnits) and the
+// resulting line unit options contain only that product's units.
+
+describe('PosSaleComponent — product-scoped unit picker', () => {
+  const stubProduct = {
+    id: '10', uid: 'P1', companyId: '10', code: 'PRD1', name: 'Widget', description: null,
+    type: 'GOODS', sellable: true, stockable: true, baseUnitUid: 'U1', baseUnitCode: 'PCS',
+    baseUnitName: 'Pieces', cost: null, vatStatus: 'STANDARD', status: 'ACTIVE',
+    version: null, createdAt: null, createdBy: null, updatedAt: null, updatedBy: null,
+  } as any;
+  const baseUnit = {
+    id: '1', uid: 'U1', companyId: '10', code: 'PCS', name: 'Pieces', status: 'ACTIVE' as const,
+    version: null, createdAt: null, createdBy: null, updatedAt: null, updatedBy: null,
+  };
+  const packUnit = {
+    id: '2', uid: 'U2', companyId: '10', code: 'CTN', name: 'Carton', status: 'ACTIVE' as const,
+    version: null, createdAt: null, createdBy: null, updatedAt: null, updatedBy: null,
+  };
+
+  beforeEach(() => { vi.useFakeTimers(); makeBed(); });
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('calls listProductUnits on product select and populates line unit options with only that product units', async () => {
+    const comp = TestBed.createComponent(PosSaleComponent).componentInstance;
+    const prodSvc = TestBed.inject(ProductService) as any;
+    // Return base unit + one pack unit for this product only.
+    prodSvc.listProductUnits.mockReturnValue(of([baseUnit, packUnit]));
+    prodSvc.listPrices.mockReturnValue(of([]));
+    await vi.runAllTimersAsync();
+
+    comp.products.set([stubProduct]);
+    comp.addLine();
+    const lineId = comp.lines()[0].id;
+
+    // Before product selection, unit options are empty.
+    expect(comp.lines()[0].lineUnitOptions).toHaveLength(0);
+
+    comp.onLineProductChange(lineId, 'P1');
+    await vi.runAllTimersAsync();
+
+    expect(prodSvc.listProductUnits).toHaveBeenCalledWith('P1');
+    const line = comp.lines()[0];
+    // Only this product's 2 units appear — not the company-wide list.
+    expect(line.lineUnitOptions).toHaveLength(2);
+    expect(line.lineUnitOptions.map((o: any) => o.uid)).toEqual(['U1', 'U2']);
+    // Base unit is auto-selected.
+    expect(line.unitUid).toBe('U1');
+    expect(line.unitId).toBe('1');
+    expect(line.lineUnitsLoading).toBe(false);
+  });
+
+  it('does not call listUnits on product select (company-wide load removed)', async () => {
+    const comp = TestBed.createComponent(PosSaleComponent).componentInstance;
+    const prodSvc = TestBed.inject(ProductService) as any;
+    prodSvc.listProductUnits.mockReturnValue(of([baseUnit]));
+    prodSvc.listPrices.mockReturnValue(of([]));
+    await vi.runAllTimersAsync();
+
+    comp.products.set([stubProduct]);
+    comp.addLine();
+    comp.onLineProductChange(comp.lines()[0].id, 'P1');
+    await vi.runAllTimersAsync();
+
+    // listUnits (company-wide) must never be called from POS line pickers.
+    expect(prodSvc.listUnits).toBeUndefined();
   });
 });

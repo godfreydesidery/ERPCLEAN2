@@ -299,22 +299,30 @@
                 }
               </div>
 
-              <!-- Unit select -->
+              <!-- Unit select (product-scoped: populated only after a product is selected) -->
               <div class="col-sm-2">
                 <label class="form-label small text-muted mb-1" for="lineUnit">
                   Unit <span class="text-danger" aria-hidden="true">*</span>
                 </label>
                 @if (lineUnitsState() === 'loading') {
-                  <div class="form-control form-control-sm d-flex align-items-center gap-1 text-muted small">
+                  <div class="d-flex align-items-center gap-1 mt-1" aria-live="polite">
                     <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                    <span class="small text-muted">Loading…</span>
                   </div>
+                } @else if (lineUnitsState() === 'error') {
+                  <p class="small text-danger mb-0" role="alert">Could not load units.</p>
                 } @else {
                   <select id="lineUnit" name="lineUnit" class="form-select form-select-sm"
                           [ngModel]="newLineUnitUid()" (ngModelChange)="newLineUnitUid.set($event)"
-                          [disabled]="addingLine()">
-                    <option value="">— unit —</option>
-                    @for (u of lineUnits(); track u.uid) {
-                      <option [value]="u.uid">{{ u.code }}</option>
+                          [disabled]="addingLine() || !selectedProduct()">
+                    @if (!selectedProduct()) {
+                      <option value="">Select a product first</option>
+                    } @else if (lineUnits().length === 0) {
+                      <option value="">No units available</option>
+                    } @else {
+                      @for (u of lineUnits(); track u.uid) {
+                        <option [value]="u.uid">{{ u.name }}</option>
+                      }
                     }
                   </select>
                 }

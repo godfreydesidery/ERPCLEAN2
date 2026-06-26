@@ -125,7 +125,6 @@ export class QuotationDetailComponent {
       next: (q) => {
         this.quote.set(q);
         this.quoteState.set('idle');
-        this.loadUnitsForCompany(q.companyId);
       },
       error: () => this.quoteState.set('error'),
     });
@@ -146,12 +145,16 @@ export class QuotationDetailComponent {
     });
   }
 
-  private loadUnitsForCompany(companyId: string): void {
+  private loadUnitsForProduct(productUid: string): void {
+    this.lineUnits.set([]);
+    this.newLineUnitUid.set('');
     this.lineUnitsState.set('loading');
-    this.productService.listUnits(companyId).subscribe({
-      next: ({ rows }) => {
-        this.lineUnits.set(rows.filter((u) => u.status === 'ACTIVE'));
+    this.productService.listProductUnits(productUid).subscribe({
+      next: (units) => {
+        this.lineUnits.set(units);
         this.lineUnitsState.set('idle');
+        // Default-select the first returned unit (the base unit).
+        if (units.length > 0) this.newLineUnitUid.set(units[0].uid);
       },
       error: () => this.lineUnitsState.set('error'),
     });
@@ -161,6 +164,7 @@ export class QuotationDetailComponent {
     this.productSearchQ.set(q);
     this.selectedProduct.set(null);
     this.newLineUnitUid.set('');
+    this.lineUnits.set([]);
     this.resolvedPrice.set(null);
     this.priceState.set('idle');
     this.productSearch$.next(q);
@@ -170,6 +174,7 @@ export class QuotationDetailComponent {
     this.selectedProduct.set({ uid: product.uid, label: `${product.code} — ${product.name}` });
     this.productResults.set([]);
     this.productSearchQ.set(`${product.code} — ${product.name}`);
+    this.loadUnitsForProduct(product.uid);
     this.fetchLinePrice(product.uid);
   }
 

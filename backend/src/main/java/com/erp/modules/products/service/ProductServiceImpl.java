@@ -13,6 +13,7 @@ import com.erp.modules.products.domain.dto.ProductBranchDto;
 import com.erp.modules.products.domain.dto.ProductBulkPackDto;
 import com.erp.modules.products.domain.dto.ProductComponentDto;
 import com.erp.modules.products.domain.dto.ProductDto;
+import com.erp.modules.products.domain.dto.UnitOfMeasureDto;
 import com.erp.modules.products.domain.dto.ProductPriceDto;
 import com.erp.modules.products.domain.dto.SetProductPriceRequest;
 import com.erp.modules.products.domain.dto.UpdateProductRequest;
@@ -315,6 +316,29 @@ public class ProductServiceImpl implements ProductService {
         return bulkPacks.findByProductId(p.getId()).stream()
                 .map(ProductBulkPackDto::from)
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<UnitOfMeasureDto> listProductUnits(String productUid) {
+        Product p = require(productUid);
+        scopeGuard.assertCanActIn(RequestContext.get(), p.getCompanyId());
+
+        // Base unit is always first and always valid.
+        java.util.LinkedHashMap<Long, UnitOfMeasureDto> result = new java.util.LinkedHashMap<>();
+        UnitOfMeasure base = p.getBaseUnit();
+        result.put(base.getId(), UnitOfMeasureDto.from(base));
+
+        // Each ACTIVE bulk-pack unit follows; skip inactive/archived units and any that
+        // duplicate the base unit.
+        for (ProductBulkPack bp : bulkPacks.findByProductId(p.getId())) {
+            UnitOfMeasure packUnit = bp.getUnit();
+            if (packUnit.getStatus() == MasterStatus.ACTIVE) {
+                result.putIfAbsent(packUnit.getId(), UnitOfMeasureDto.from(packUnit));
+            }
+        }
+
+        return List.copyOf(result.values());
     }
 
     // -------------------------------------------------------------------------

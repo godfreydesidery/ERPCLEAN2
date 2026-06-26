@@ -11,6 +11,7 @@ import com.erp.modules.products.domain.dto.ProductBranchDto;
 import com.erp.modules.products.domain.dto.ProductBulkPackDto;
 import com.erp.modules.products.domain.dto.ProductComponentDto;
 import com.erp.modules.products.domain.dto.ProductDto;
+import com.erp.modules.products.domain.dto.UnitOfMeasureDto;
 import com.erp.modules.products.domain.dto.ProductPriceDto;
 import com.erp.modules.products.domain.dto.SetProductPriceRequest;
 import com.erp.modules.products.domain.dto.UpdateProductRequest;
@@ -122,6 +123,16 @@ public class ProductController {
     @PreAuthorize("@perm.scoped(#uid,'product','PRODUCT.BRANCH.ASSIGN')")
     public void removeBranch(@PathVariable String uid, @PathVariable String branchUid) {
         productService.removeBranch(uid, branchUid);
+    }
+
+    // -------------------------------------------------------------------------
+    // Valid transaction units
+    // -------------------------------------------------------------------------
+
+    @GetMapping("/uid/{uid}/units")
+    @PreAuthorize("@perm.has('PRODUCT.VIEW')")
+    public List<UnitOfMeasureDto> listUnits(@PathVariable String uid) {
+        return productService.listProductUnits(uid);
     }
 
     // -------------------------------------------------------------------------

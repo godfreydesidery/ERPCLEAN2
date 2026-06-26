@@ -43,6 +43,9 @@ interface SaleLine {
   vatRate?: string;
   /** Price-resolution state for the picked product. */
   priceState?: 'ok' | 'loading' | 'missing';
+  /** Product-scoped unit options; empty until a product is selected for this line. */
+  lineUnitOptions: UidOption[];
+  lineUnitsLoading: boolean;
 }
 
 let _lineCounter = 0;
@@ -126,11 +129,8 @@ export class PosSaleComponent {
     this.products().filter((p) => p.status === 'ACTIVE' && p.sellable).map((p) => ({ uid: p.uid, label: p.name, hint: p.code })),
   );
 
-  // ── Units (for picker) ────────────────────────────────────────────────────
+  // ── Units accumulator (uid→id resolution for submit; populated per-line on product select) ───
   readonly units = signal<UnitOfMeasureDto[]>([]);
-  readonly unitOptions = computed<UidOption[]>(() =>
-    this.units().filter((u) => u.status === 'ACTIVE').map((u) => ({ uid: u.uid, label: u.name, hint: u.code })),
-  );
 
   // ── Tax rates (for the VAT-inclusive preview; best-effort, needs TAXRATE.VIEW) ──────────────
   readonly taxRates = signal<TaxRateDto[]>([]);
@@ -258,11 +258,7 @@ export class PosSaleComponent {
     this.customerSearch$.next('');
     this.agentSearch$.next('');
     this.productSearch$.next('');
-    // Load units
-    this.productService.listUnits(companyId, undefined, 0, 200).subscribe({
-      next: ({ rows }) => this.units.set(rows),
-      error: () => {},
-    });
+    // Units are loaded per-product when a product is selected on a line (listProductUnits).
     // Load tax rates for the VAT-inclusive preview (best-effort — needs TAXRATE.VIEW).
     this.salesService.listTaxRates(companyId).subscribe({
       next: (rows) => this.taxRates.set(rows),
@@ -319,7 +315,8 @@ export class PosSaleComponent {
     this.lines.update((ls) => [
       ...ls,
       { id: nextLineId(), productUid: '', productId: '', productName: '', unitUid: '', unitId: '', unitName: '',
-        quantity: '1', unitPrice: '0.00', lineDiscountAmount: '0.00', vatRate: '0', priceState: 'ok' },
+        quantity: '1', unitPrice: '0.00', lineDiscountAmount: '0.00', vatRate: '0', priceState: 'ok',
+        lineUnitOptions: [], lineUnitsLoading: false },
     ]);
   }
 
@@ -330,26 +327,49 @@ export class PosSaleComponent {
   onLineProductChange(lineId: string, productUid: string): void {
     const product = this.products().find((p) => p.uid === productUid);
     const vatRate = product ? this.vatRateFor(product.vatStatus) : 0;
+    // Reset line fields and start loading product-scoped units.
     this.lines.update((ls) =>
       ls.map((l) =>
         l.id === lineId
           ? { ...l, productUid, productId: product?.id ?? '', productName: product?.name ?? '',
-              unitUid: product?.baseUnitUid ?? '', unitId: '', unitName: product?.baseUnitName ?? '',
-              vatRate: String(vatRate), unitPrice: '0.00', priceState: product ? 'loading' : 'ok' }
+              unitUid: '', unitId: '', unitName: '',
+              vatRate: String(vatRate), unitPrice: '0.00', priceState: product ? 'loading' : 'ok',
+              lineUnitOptions: [], lineUnitsLoading: !!product }
           : l,
       ),
     );
-    // Resolve the base unit id
-    if (product?.baseUnitUid) {
-      const unit = this.units().find((u) => u.uid === product.baseUnitUid);
-      if (unit) {
-        this.lines.update((ls) =>
-          ls.map((l) => l.id === lineId ? { ...l, unitId: unit.id, unitName: unit.name } : l),
-        );
-      }
+    if (product) {
+      // Load product-scoped units (base unit first, then active pack units).
+      this.productService.listProductUnits(product.uid).subscribe({
+        next: (units) => {
+          // Accumulate into units signal so onLineUnitChange can resolve uid→id.
+          const existing = this.units();
+          units.forEach((u) => {
+            if (!existing.some((e) => e.uid === u.uid)) {
+              this.units.update((arr) => [...arr, u]);
+            }
+          });
+          const opts = units.map((u) => ({ uid: u.uid, label: u.name, hint: u.code }));
+          const baseUnit = units.find((u) => u.uid === product.baseUnitUid) ?? units[0];
+          this.lines.update((ls) =>
+            ls.map((l) =>
+              l.id === lineId
+                ? { ...l, lineUnitOptions: opts, lineUnitsLoading: false,
+                    unitUid: baseUnit?.uid ?? '', unitId: baseUnit?.id ?? '',
+                    unitName: baseUnit?.name ?? product.baseUnitName ?? '' }
+                : l,
+            ),
+          );
+        },
+        error: () => {
+          this.lines.update((ls) =>
+            ls.map((l) => l.id === lineId ? { ...l, lineUnitsLoading: false } : l),
+          );
+        },
+      });
+      // Auto-fetch the server-authoritative list price (mirrors the backend's first-price-for-company rule).
+      this.fetchLinePrice(lineId, product.uid);
     }
-    // Auto-fetch the server-authoritative list price (mirrors the backend's first-price-for-company rule).
-    if (product) this.fetchLinePrice(lineId, product.uid);
   }
 
   /** Pulls the product's price-list price and populates the (read-only) line price. */

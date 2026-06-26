@@ -28,6 +28,9 @@ interface LineEntry {
   qty: string;
   qtyBase: string;
   unitPriceAmount: string;
+  /** Product-scoped unit options; empty until a product is selected for this line. */
+  lineUnitOptions: UidOption[];
+  lineUnitsLoading: boolean;
 }
 
 /**
@@ -84,11 +87,6 @@ export class StandingOrderCreateComponent {
       .map((p) => ({ uid: p.uid, label: p.name, hint: p.code })),
   );
   readonly units = signal<UnitOfMeasureDto[]>([]);
-  readonly unitOptions = computed<UidOption[]>(() =>
-    this.units()
-      .filter((u) => u.status === 'ACTIVE')
-      .map((u) => ({ uid: u.uid, label: u.name, hint: u.code })),
-  );
 
   // ── Form fields ──────────────────────────────────────────────────────────────
   readonly fCurrency = signal('TZS');
@@ -98,7 +96,7 @@ export class StandingOrderCreateComponent {
   readonly fNotes = signal('');
 
   readonly lines = signal<LineEntry[]>([
-    { productUid: '', unitUid: '', qty: '', qtyBase: '', unitPriceAmount: '' },
+    { productUid: '', unitUid: '', qty: '', qtyBase: '', unitPriceAmount: '', lineUnitOptions: [], lineUnitsLoading: false },
   ]);
 
   readonly saving = signal(false);
@@ -151,10 +149,7 @@ export class StandingOrderCreateComponent {
       next: ({ rows }) => this.products.set(rows),
       error: () => undefined,
     });
-    this.productService.listUnits(companyId).subscribe({
-      next: ({ rows }) => this.units.set(rows),
-      error: () => undefined,
-    });
+    // units are now loaded per-product when a product is selected on a line.
   }
 
   onCompanyChange(uid: string): void {
@@ -168,6 +163,10 @@ export class StandingOrderCreateComponent {
     this.customers.set([]);
     this.products.set([]);
     this.units.set([]);
+    // Reset per-line unit options when company changes.
+    this.lines.update((ls) =>
+      ls.map((l) => ({ ...l, productUid: '', unitUid: '', lineUnitOptions: [], lineUnitsLoading: false })),
+    );
     this.loadDependencies(uid, company.id);
   }
 
@@ -176,7 +175,7 @@ export class StandingOrderCreateComponent {
   addLine(): void {
     this.lines.update((ls) => [
       ...ls,
-      { productUid: '', unitUid: '', qty: '', qtyBase: '', unitPriceAmount: '' },
+      { productUid: '', unitUid: '', qty: '', qtyBase: '', unitPriceAmount: '', lineUnitOptions: [], lineUnitsLoading: false },
     ]);
   }
 
@@ -188,6 +187,27 @@ export class StandingOrderCreateComponent {
     this.lines.update((ls) =>
       ls.map((l, i) => (i === idx ? { ...l, ...patch } : l)),
     );
+  }
+
+  onLineProductChange(idx: number, productUid: string): void {
+    // Clear the unit selection for this line and begin loading product-scoped units.
+    this.updateLine(idx, { productUid, unitUid: '', lineUnitOptions: [], lineUnitsLoading: true });
+    if (!productUid) return;
+    this.productService.listProductUnits(productUid).subscribe({
+      next: (units) => {
+        const opts = units.map((u) => ({ uid: u.uid, label: u.name, hint: u.code }));
+        // Also populate the global units signal so submit() can still resolve uid→id.
+        const existing = this.units();
+        units.forEach((u) => {
+          if (!existing.find((e) => e.uid === u.uid)) {
+            this.units.update((arr) => [...arr, u]);
+          }
+        });
+        const defaultUid = units[0]?.uid ?? '';
+        this.updateLine(idx, { lineUnitOptions: opts, lineUnitsLoading: false, unitUid: defaultUid });
+      },
+      error: () => this.updateLine(idx, { lineUnitsLoading: false }),
+    });
   }
 
   // ── Submit ───────────────────────────────────────────────────────────────────

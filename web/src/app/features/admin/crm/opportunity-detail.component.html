@@ -384,8 +384,12 @@
                   <label class="form-label small text-muted mb-1" for="newLineUnitUid">Unit</label>
                   <select id="newLineUnitUid" name="newLineUnitUid" class="form-select"
                           [ngModel]="newLineUnitUid()" (ngModelChange)="newLineUnitUid.set($event)"
-                          [disabled]="addingLine()">
-                    @if (lineUnits().length === 0) {
+                          [disabled]="addingLine() || lineUnitsState() === 'loading' || !selectedProduct()">
+                    @if (lineUnitsState() === 'loading') {
+                      <option value="">Loading…</option>
+                    } @else if (!selectedProduct()) {
+                      <option value="">Pick a product first</option>
+                    } @else if (lineUnits().length === 0) {
                       <option value="">— no units —</option>
                     }
                     @for (u of lineUnits(); track u.uid) {

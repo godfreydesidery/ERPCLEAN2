@@ -92,15 +92,22 @@
                     <label class="visually-hidden" [for]="'unit-' + i">
                       Unit for line {{ i + 1 }}
                     </label>
-                    <app-uid-picker
-                      [id]="'unit-' + i"
-                      [ngModel]="line.unitUid"
-                      [name]="'unitUid-' + i"
-                      [options]="unitOptions()"
-                      placeholder="Select unit"
-                      [required]="true"
-                      [disabled]="saving()"
-                      (ngModelChange)="onUnitPicked(i, $event)" />
+                    @if (line.lineUnitsLoading) {
+                      <div class="d-flex align-items-center gap-1" aria-live="polite">
+                        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                        <span class="small text-muted">Loading…</span>
+                      </div>
+                    } @else {
+                      <app-uid-picker
+                        [id]="'unit-' + i"
+                        [ngModel]="line.unitUid"
+                        [name]="'unitUid-' + i"
+                        [options]="line.lineUnitOptions"
+                        [placeholder]="line.productUid ? 'Select unit' : 'Select a product first'"
+                        [required]="true"
+                        [disabled]="saving() || !line.productUid || line.lineUnitOptions.length === 0"
+                        (ngModelChange)="onUnitPicked(i, $event)" />
+                    }
                   </td>
                   <td>
                     <label class="visually-hidden" [for]="'qty-' + i">

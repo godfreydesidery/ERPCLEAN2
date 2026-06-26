@@ -27,13 +27,13 @@ public class PurchaseSettingsController {
     }
 
     @GetMapping("/by-company/{companyUid}")
-    @PreAuthorize("@perm.scoped(#companyUid, 'company', 'PURCHASE.SETTINGS.VIEW')")
+    @PreAuthorize("@perm.scoped(#companyUid, 'company', 'PURCHASE.SETTINGS.MANAGE')")
     public ApiResponse<PurchaseSettingsDto> getByCompany(@PathVariable String companyUid) {
         return ApiResponse.ok(service.getByCompanyUid(companyUid));
     }
 
     @PutMapping
-    @PreAuthorize("@perm.scoped(#req.companyUid(), 'company', 'PURCHASE.SETTINGS.EDIT')")
+    @PreAuthorize("@perm.scoped(#req.companyUid(), 'company', 'PURCHASE.SETTINGS.MANAGE')")
     public ApiResponse<PurchaseSettingsDto> update(@Valid @RequestBody UpdatePurchaseSettingsRequest req) {
         return ApiResponse.ok(service.update(req));
     }

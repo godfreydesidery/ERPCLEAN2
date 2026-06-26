@@ -154,7 +154,6 @@ export class OpportunityDetailComponent {
         this.oppState.set('idle');
         this.patchForm(opp);
         this.loadStages(opp.companyId);
-        this.loadUnitsForCompany(opp.companyId);
       },
       error: () => this.oppState.set('error'),
     });
@@ -173,12 +172,15 @@ export class OpportunityDetailComponent {
     });
   }
 
-  private loadUnitsForCompany(companyId: string): void {
+  private loadUnitsForProduct(productUid: string): void {
+    this.lineUnits.set([]);
+    this.newLineUnitUid.set('');
     this.lineUnitsState.set('loading');
-    this.productService.listUnits(companyId).subscribe({
-      next: ({ rows }) => {
-        this.lineUnits.set(rows.filter((u) => u.status === 'ACTIVE'));
+    this.productService.listProductUnits(productUid).subscribe({
+      next: (units) => {
+        this.lineUnits.set(units);
         this.lineUnitsState.set('idle');
+        if (units.length > 0) this.newLineUnitUid.set(units[0].uid);
       },
       error: () => this.lineUnitsState.set('error'),
     });
@@ -231,6 +233,8 @@ export class OpportunityDetailComponent {
   onProductSearchChange(q: string): void {
     this.productSearchQ.set(q);
     this.selectedProduct.set(null);
+    this.lineUnits.set([]);
+    this.newLineUnitUid.set('');
     this.productSearch$.next(q);
   }
 
@@ -238,6 +242,7 @@ export class OpportunityDetailComponent {
     this.selectedProduct.set({ uid: p.uid, label: `${p.code} — ${p.name}` });
     this.productResults.set([]);
     this.productSearchQ.set(`${p.code} — ${p.name}`);
+    this.loadUnitsForProduct(p.uid);
   }
 
   addLine(): void {

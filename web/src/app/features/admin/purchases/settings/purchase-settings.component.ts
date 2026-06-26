@@ -43,8 +43,8 @@ export class PurchaseSettingsComponent {
   readonly saving = signal(false);
   readonly saveError = signal<string | null>(null);
 
-  readonly canEdit = computed(() => this.session.hasPermission('PURCHASE.SETTINGS.EDIT'));
-  readonly canView = computed(() => this.session.hasPermission('PURCHASE.SETTINGS.VIEW'));
+  readonly canEdit = computed(() => this.session.hasPermission('PURCHASE.SETTINGS.MANAGE'));
+  readonly canView = computed(() => this.session.hasPermission('PURCHASE.SETTINGS.MANAGE'));
 
   constructor() {
     this.loadCompanies();

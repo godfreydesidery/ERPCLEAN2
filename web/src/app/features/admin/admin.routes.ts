@@ -246,7 +246,7 @@ export const ADMIN_ROUTES: Routes = [
   },
   {
     path: 'stock/batches',
-    canActivate: [requirePermission('STOCK.BATCH.VIEW')],
+    canActivate: [requirePermission('STOCK.VIEW')],
     loadComponent: () =>
       import('./stock/batches/stock-batch-list.component').then(
         (m) => m.StockBatchListComponent,
@@ -254,7 +254,7 @@ export const ADMIN_ROUTES: Routes = [
   },
   {
     path: 'stock/serials',
-    canActivate: [requirePermission('STOCK.SERIAL.VIEW')],
+    canActivate: [requirePermission('STOCK.VIEW')],
     loadComponent: () =>
       import('./stock/serials/stock-serial-list.component').then(
         (m) => m.StockSerialListComponent,
@@ -975,7 +975,7 @@ export const ADMIN_ROUTES: Routes = [
   },
   {
     path: 'rfqs/create',
-    canActivate: [requirePermission('PURCHASE.RFQ.CREATE')],
+    canActivate: [requirePermission('PURCHASE.RFQ.MANAGE')],
     loadComponent: () =>
       import('./purchases/rfq/rfq-create.component').then((m) => m.RfqCreateComponent),
   },
@@ -1007,26 +1007,26 @@ export const ADMIN_ROUTES: Routes = [
   // ── Landed Costs ──────────────────────────────────────────────────────────
   {
     path: 'landed-costs',
-    canActivate: [requirePermission('PURCHASE.LANDED_COST.VIEW')],
+    canActivate: [requirePermission('PURCHASE.LANDEDCOST.VIEW')],
     loadComponent: () =>
       import('./purchases/landed-costs/landed-cost-list.component').then((m) => m.LandedCostListComponent),
   },
   {
     path: 'landed-costs/create',
-    canActivate: [requirePermission('PURCHASE.LANDED_COST.CREATE')],
+    canActivate: [requirePermission('PURCHASE.LANDEDCOST.MANAGE')],
     loadComponent: () =>
       import('./purchases/landed-costs/landed-cost-create.component').then((m) => m.LandedCostCreateComponent),
   },
   {
     path: 'landed-costs/uid/:uid',
-    canActivate: [requirePermission('PURCHASE.LANDED_COST.VIEW')],
+    canActivate: [requirePermission('PURCHASE.LANDEDCOST.VIEW')],
     loadComponent: () =>
       import('./purchases/landed-costs/landed-cost-detail.component').then((m) => m.LandedCostDetailComponent),
   },
   // ── Purchase Settings ─────────────────────────────────────────────────────
   {
     path: 'purchase-settings',
-    canActivate: [requirePermission('PURCHASE.SETTINGS.VIEW')],
+    canActivate: [requirePermission('PURCHASE.SETTINGS.MANAGE')],
     loadComponent: () =>
       import('./purchases/settings/purchase-settings.component').then((m) => m.PurchaseSettingsComponent),
   },

@@ -35,20 +35,20 @@ public class SupplierQuoteController {
     /** Capture a supplier's quote against an RFQ. */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("@perm.has('PURCHASE.QUOTE.CREATE')")
+    @PreAuthorize("@perm.has('PURCHASE.RFQ.MANAGE')")
     public ApiResponse<SupplierQuoteDto> capture(@RequestBody CaptureSupplierQuoteRequest req) {
         return ApiResponse.ok(service.capture(req));
     }
 
     @GetMapping("/uid/{uid}")
-    @PreAuthorize("@perm.scoped(#uid, 'supplierquote', 'PURCHASE.QUOTE.VIEW')")
+    @PreAuthorize("@perm.scoped(#uid, 'supplierquote', 'PURCHASE.RFQ.VIEW')")
     public ApiResponse<SupplierQuoteDto> getByUid(@PathVariable String uid) {
         return ApiResponse.ok(service.getByUid(uid));
     }
 
     /** List all quotes for a given RFQ. */
     @GetMapping("/by-rfq/{rfqUid}")
-    @PreAuthorize("@perm.has('PURCHASE.QUOTE.VIEW')")
+    @PreAuthorize("@perm.has('PURCHASE.RFQ.VIEW')")
     public ApiResponse<List<SupplierQuoteDto>> listByRfq(
             @PathVariable String rfqUid,
             Pageable pageable) {
@@ -58,7 +58,7 @@ public class SupplierQuoteController {
 
     /** Last quoted unit cost for a product/supplier pair (for price reference). */
     @GetMapping("/last-quoted-cost")
-    @PreAuthorize("@perm.has('PURCHASE.QUOTE.VIEW')")
+    @PreAuthorize("@perm.has('PURCHASE.RFQ.VIEW')")
     public ApiResponse<Object> lastQuotedCost(
             @RequestParam Long companyId,
             @RequestParam Long supplierId,

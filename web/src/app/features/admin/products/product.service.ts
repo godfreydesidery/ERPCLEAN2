@@ -158,6 +158,17 @@ export class ProductService {
     return this.http.delete<void>(`${this.base}/uid/${uid}/branches/${branchUid}`);
   }
 
+  // ── Product-scoped units ──────────────────────────────────────────────────
+
+  /**
+   * Returns the valid transaction units for a specific product:
+   * base unit first, then each active bulk-pack unit (de-duplicated).
+   * Calls GET /api/v1/products/uid/{uid}/units — gated by PRODUCT.VIEW.
+   */
+  listProductUnits(uid: string): Observable<UnitOfMeasureDto[]> {
+    return this.http.get<UnitOfMeasureDto[]>(`${this.base}/uid/${uid}/units`);
+  }
+
   // ── Units of Measure ─────────────────────────────────────────────────────
 
   private readonly unitBase = `${environment.apiBaseUrl}/units`;

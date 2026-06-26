@@ -552,10 +552,21 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     }
 
     private BigDecimal computeQtyInBase(Product product, UnitOfMeasure unit, BigDecimal qty) {
+        // Base unit: 1:1 conversion.
+        if (unit.getId().equals(product.getBaseUnit().getId())) {
+            return qty;
+        }
+        // Bulk-pack unit: find the configured factor.
         Optional<ProductBulkPack> pack = bulkPacks.findByProductId(product.getId()).stream()
                 .filter(bp -> bp.getUnit().getId().equals(unit.getId()))
                 .findFirst();
-        return pack.map(p -> qty.multiply(p.getFactorToBase())).orElse(qty);
+        if (pack.isPresent()) {
+            return qty.multiply(pack.get().getFactorToBase());
+        }
+        // Unit is neither the base nor a configured pack — reject it.
+        throw new IllegalStateException(
+                unit.getName() + " is not a valid unit for " + product.getName()
+                        + ". Use the product's base unit or a configured pack unit.");
     }
 
     private void assertDraft(PurchaseOrder po, String operation) {
