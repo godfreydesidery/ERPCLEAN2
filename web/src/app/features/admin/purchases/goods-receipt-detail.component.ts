@@ -6,6 +6,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
+import { blobErrorMessage } from '../../../core/api/blob-error';
 import {
   GoodsReceiptDto,
   GoodsReceiptLineDto,
@@ -118,7 +119,8 @@ export class GoodsReceiptDetailComponent {
         },
         error: (err) => {
           this.printing.set(false);
-          this.printError.set(this.messageFrom(err, 'Could not generate the PDF.'));
+          // Error body is a Blob (responseType: 'blob') — surface the friendly server message.
+          void blobErrorMessage(err, 'Could not generate the PDF.').then((m) => this.printError.set(m));
         },
       });
   }
