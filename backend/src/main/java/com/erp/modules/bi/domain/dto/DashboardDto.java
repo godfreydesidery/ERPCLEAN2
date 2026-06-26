@@ -20,5 +20,6 @@ public record DashboardDto(
         CrmSnapshotDto       crm,            // nullable — gated BI.CRM.VIEW
         TrendDto             revenueTrend,   // nullable — gated BI.FINANCE.VIEW
         TrendDto             netProfitTrend, // nullable — gated BI.FINANCE.VIEW
+        SalesByBranchDto     salesByBranch,  // nullable — gated BI.FINANCE.VIEW
         List<HealthIndicatorDto> health      // always present, may be empty
 ) {}

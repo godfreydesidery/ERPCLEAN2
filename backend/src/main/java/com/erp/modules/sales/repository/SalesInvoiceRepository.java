@@ -1,5 +1,6 @@
 package com.erp.modules.sales.repository;
 
+import com.erp.modules.sales.domain.dto.BranchSalesAggregateDto;
 import com.erp.modules.sales.domain.entity.SalesInvoice;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -76,4 +77,30 @@ public interface SalesInvoiceRepository extends JpaRepository<SalesInvoice, Long
     List<SalesInvoice> findFinalisedInPeriod(@Param("companyId") Long companyId,
                                              @Param("periodStart") Instant periodStart,
                                              @Param("periodEnd") Instant periodEnd);
+
+    /**
+     * Per-branch FINALISED invoice aggregate for a company within a finalisedAt window.
+     *
+     * <p>{@code branchId} is optional — pass {@code null} to aggregate across all branches.
+     * Grouped by branchId; result is a constructor-expression into {@link BranchSalesAggregateDto}.
+     * Used by {@code SalesByBranchQuery} (BI dashboard branch-sales panel, ADR-0037).
+     */
+    @Query("""
+            SELECT new com.erp.modules.sales.domain.dto.BranchSalesAggregateDto(
+                       i.branchId,
+                       COALESCE(SUM(i.grossTotalAmount), 0),
+                       COUNT(i))
+            FROM SalesInvoice i
+            WHERE i.companyId   = :companyId
+              AND i.status      = 'FINALISED'
+              AND i.finalisedAt >= :fromInstant
+              AND i.finalisedAt <  :toInstant
+              AND (:branchId IS NULL OR i.branchId = :branchId)
+            GROUP BY i.branchId
+            """)
+    List<BranchSalesAggregateDto> sumFinalisedByBranch(
+            @Param("companyId")   Long    companyId,
+            @Param("fromInstant") Instant fromInstant,
+            @Param("toInstant")   Instant toInstant,
+            @Param("branchId")    Long    branchId);
 }

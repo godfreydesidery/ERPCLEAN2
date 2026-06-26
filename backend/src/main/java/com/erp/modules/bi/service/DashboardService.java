@@ -4,6 +4,7 @@ import com.erp.modules.bi.domain.dto.CrmSnapshotDto;
 import com.erp.modules.bi.domain.dto.DashboardDto;
 import com.erp.modules.bi.domain.dto.FinanceSummaryDto;
 import com.erp.modules.bi.domain.dto.InventorySummaryDto;
+import com.erp.modules.bi.domain.dto.SalesByBranchDto;
 import com.erp.modules.bi.domain.dto.TrendDto;
 import com.erp.modules.bi.domain.dto.WorkingCapitalDto;
 import java.time.LocalDate;
@@ -34,4 +35,11 @@ public interface DashboardService {
 
     /** 12-period net-profit trend (iterates FiscalPeriodRepository x AccountMovementQuery). */
     TrendDto netProfitTrend(Long companyId);
+
+    /**
+     * Per-branch FINALISED invoice totals for the given window (branch-dimensional panel).
+     * {@code branchId} is optional — null returns all branches aggregated per branch.
+     * {@code from}/{@code to} default to current month when null.
+     */
+    SalesByBranchDto salesByBranch(Long companyId, Long branchId, LocalDate from, LocalDate to);
 }
