@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>Write-side operations (record/issue/return/restock/move) are called by internal services.
  * This controller exposes reads only: lookup by uid, by serial number, by location, by product.
  *
- * <p>Permission gate: {@code STOCK.SERIAL.VIEW}.
+ * <p>Permission gate: {@code STOCK.VIEW}.
  */
 @RestController
 @RequestMapping("/api/v1/stock-serials")
@@ -34,7 +34,7 @@ public class StockSerialController {
     }
 
     @GetMapping("/uid/{uid}")
-    @PreAuthorize("@perm.scoped(#uid, 'stockserial', 'STOCK.SERIAL.VIEW')")
+    @PreAuthorize("@perm.scoped(#uid, 'stockserial', 'STOCK.VIEW')")
     public StockSerialDto getByUid(@PathVariable String uid) {
         return serialService.getByUid(uid);
     }
@@ -44,7 +44,7 @@ public class StockSerialController {
      * Look up a specific serial by serial number within a company-product scope.
      */
     @GetMapping("/lookup")
-    @PreAuthorize("@perm.has('STOCK.SERIAL.VIEW')")
+    @PreAuthorize("@perm.has('STOCK.VIEW')")
     public StockSerialDto lookup(@RequestParam Long companyId,
                                   @RequestParam Long productId,
                                   @RequestParam String serialNumber) {
@@ -56,7 +56,7 @@ public class StockSerialController {
      * Paged list at a location for a product; status filter optional.
      */
     @GetMapping
-    @PreAuthorize("@perm.has('STOCK.SERIAL.VIEW')")
+    @PreAuthorize("@perm.has('STOCK.VIEW')")
     public ApiResponse<List<StockSerialDto>> listAtLocation(
             @RequestParam Long companyId,
             @RequestParam Long locationId,
@@ -73,7 +73,7 @@ public class StockSerialController {
      * Full history paged list by product uid (FR-INVD-27).
      */
     @GetMapping("/product/uid/{productUid}")
-    @PreAuthorize("@perm.has('STOCK.SERIAL.VIEW')")
+    @PreAuthorize("@perm.has('STOCK.VIEW')")
     public ApiResponse<List<StockSerialDto>> listByProduct(
             @PathVariable String productUid,
             @RequestParam Long companyId,
