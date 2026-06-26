@@ -5,12 +5,14 @@ import com.erp.modules.ar.service.ArReconciliationQuery;
 import com.erp.modules.ap.domain.dto.ApReconciliationDto;
 import com.erp.modules.ap.service.ApReconciliationQuery;
 import com.erp.modules.bi.domain.dto.BiHeaderDto;
+import com.erp.modules.bi.domain.dto.BranchSalesRowDto;
 import com.erp.modules.bi.domain.dto.CashPositionDto;
 import com.erp.modules.bi.domain.dto.CrmSnapshotDto;
 import com.erp.modules.bi.domain.dto.DashboardDto;
 import com.erp.modules.bi.domain.dto.FinanceSummaryDto;
 import com.erp.modules.bi.domain.dto.HealthIndicatorDto;
 import com.erp.modules.bi.domain.dto.InventorySummaryDto;
+import com.erp.modules.bi.domain.dto.SalesByBranchDto;
 import com.erp.modules.bi.domain.dto.TrendDto;
 import com.erp.modules.bi.domain.dto.TrendPointDto;
 import com.erp.modules.bi.domain.dto.WorkingCapitalDto;
@@ -28,10 +30,14 @@ import com.erp.modules.gl.domain.entity.FiscalPeriod;
 import com.erp.modules.gl.domain.enums.AccountType;
 import com.erp.modules.gl.repository.FiscalPeriodRepository;
 import com.erp.modules.gl.service.TrialBalanceQuery;
+import com.erp.modules.iam.domain.entity.Branch;
+import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.reporting.domain.enums.StatementSection;
 import com.erp.modules.reporting.service.AccountMovementQuery;
 import com.erp.modules.reporting.service.StatementClassifier;
+import com.erp.modules.sales.domain.dto.BranchSalesAggregateDto;
+import com.erp.modules.sales.service.SalesByBranchQuery;
 import com.erp.modules.stock.domain.dto.StockValuationReportDto;
 import com.erp.modules.stock.service.StockValuationQuery;
 import com.erp.platform.common.api.NotFoundException;
@@ -41,9 +47,14 @@ import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -95,6 +106,8 @@ public class DashboardServiceImpl implements DashboardService {
     private final StockValuationQuery      stockValuation;
     private final PipelineQuery            pipeline;
     private final FiscalPeriodRepository   fiscalPeriods;
+    private final SalesByBranchQuery       salesByBranchQuery;
+    private final BranchRepository         branchRepository;
 
     public DashboardServiceImpl(ScopeGuard scopeGuard,
                                  PermissionChecks permChecks,
@@ -108,20 +121,24 @@ public class DashboardServiceImpl implements DashboardService {
                                  CashGlReconciliationQuery cashGlRecon,
                                  StockValuationQuery stockValuation,
                                  PipelineQuery pipeline,
-                                 FiscalPeriodRepository fiscalPeriods) {
-        this.scopeGuard     = scopeGuard;
-        this.permChecks     = permChecks;
-        this.companyRepo    = companyRepo;
-        this.accountMovement = accountMovement;
-        this.classifier     = classifier;
-        this.trialBalance   = trialBalance;
-        this.arRecon        = arRecon;
-        this.apRecon        = apRecon;
-        this.cashStatement  = cashStatement;
-        this.cashGlRecon    = cashGlRecon;
-        this.stockValuation = stockValuation;
-        this.pipeline       = pipeline;
-        this.fiscalPeriods  = fiscalPeriods;
+                                 FiscalPeriodRepository fiscalPeriods,
+                                 SalesByBranchQuery salesByBranchQuery,
+                                 BranchRepository branchRepository) {
+        this.scopeGuard          = scopeGuard;
+        this.permChecks          = permChecks;
+        this.companyRepo         = companyRepo;
+        this.accountMovement     = accountMovement;
+        this.classifier          = classifier;
+        this.trialBalance        = trialBalance;
+        this.arRecon             = arRecon;
+        this.apRecon             = apRecon;
+        this.cashStatement       = cashStatement;
+        this.cashGlRecon         = cashGlRecon;
+        this.stockValuation      = stockValuation;
+        this.pipeline            = pipeline;
+        this.fiscalPeriods       = fiscalPeriods;
+        this.salesByBranchQuery  = salesByBranchQuery;
+        this.branchRepository    = branchRepository;
     }
 
     // =========================================================================
@@ -161,13 +178,14 @@ public class DashboardServiceImpl implements DashboardService {
         CrmSnapshotDto      crmPanel       = canCrm     ? safeCrm(companyId, branchId, effectiveFrom, effectiveTo) : null;
         TrendDto            revTrend       = canFinance ? safeRevenueTrend(companyId, currency) : null;
         TrendDto            netTrend       = canFinance ? safeNetProfitTrend(companyId, currency) : null;
+        SalesByBranchDto    salesPanel     = canFinance ? safeSalesByBranch(companyId, branchId, effectiveFrom, effectiveTo, currency) : null;
 
         BiHeaderDto header = new BiHeaderDto(
                 companyId, companyName, currency, periodLabel,
                 effectiveFrom, effectiveTo, LocalDate.now(), Instant.now());
 
         return new DashboardDto(header, financePanel, wcPanel, inventoryPanel, crmPanel,
-                revTrend, netTrend, health);
+                revTrend, netTrend, salesPanel, health);
     }
 
     // =========================================================================
@@ -370,6 +388,58 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     // =========================================================================
+    // Sales-by-Branch panel (ADR-0037, first genuinely branch-dimensional panel)
+    // =========================================================================
+
+    @Override
+    public SalesByBranchDto salesByBranch(Long companyId, Long branchId,
+                                          LocalDate from, LocalDate to) {
+        scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        com.erp.modules.iam.domain.entity.Company company = requireCompanyExists(companyId);
+        String currency = company.getBaseCurrency() != null ? company.getBaseCurrency() : "TZS";
+        LocalDate effectiveFrom = from != null ? from : LocalDate.now().withDayOfMonth(1);
+        LocalDate effectiveTo   = to   != null ? to   : LocalDate.now();
+        return buildSalesByBranch(companyId, branchId, effectiveFrom, effectiveTo, currency);
+    }
+
+    private SalesByBranchDto buildSalesByBranch(Long companyId, Long branchId,
+                                                LocalDate from, LocalDate to, String currency) {
+        Instant fromInstant = from.atStartOfDay(ZoneOffset.UTC).toInstant();
+        Instant toInstant   = to.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+
+        List<BranchSalesAggregateDto> aggregates =
+                salesByBranchQuery.sumByBranch(companyId, fromInstant, toInstant, branchId);
+
+        if (aggregates.isEmpty()) {
+            return new SalesByBranchDto(currency, BigDecimal.ZERO, 0L, List.of());
+        }
+
+        // Batch-resolve branch names — findAllById is NOT banned by TenantScopingRulesTest
+        Set<Long> branchIds = aggregates.stream()
+                .map(BranchSalesAggregateDto::branchId)
+                .collect(Collectors.toSet());
+        Map<Long, Branch> branchMap = branchRepository.findAllById(branchIds).stream()
+                .collect(Collectors.toMap(Branch::getId, Function.identity()));
+
+        List<BranchSalesRowDto> rows = aggregates.stream()
+                .map(agg -> {
+                    Branch b = branchMap.get(agg.branchId());
+                    String code = b != null ? b.getCode() : String.valueOf(agg.branchId());
+                    String name = b != null ? b.getName() : "Unknown";
+                    return new BranchSalesRowDto(agg.branchId(), code, name, agg.total(), agg.count());
+                })
+                .sorted(Comparator.comparing(BranchSalesRowDto::total).reversed())
+                .collect(Collectors.toList());
+
+        BigDecimal grandTotal   = rows.stream()
+                .map(BranchSalesRowDto::total)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        long invoiceCount = rows.stream().mapToLong(BranchSalesRowDto::count).sum();
+
+        return new SalesByBranchDto(currency, grandTotal, invoiceCount, rows);
+    }
+
+    // =========================================================================
     // Graceful-degrade wrappers for the composite dashboard
     // =========================================================================
 
@@ -416,6 +486,16 @@ public class DashboardServiceImpl implements DashboardService {
             return buildCrm(companyId, branchId, from, to);
         } catch (Exception ex) {
             log.warn("BI CRM panel failed for company {}: {}", companyId, ex.getMessage());
+            return null;
+        }
+    }
+
+    private SalesByBranchDto safeSalesByBranch(Long companyId, Long branchId,
+                                               LocalDate from, LocalDate to, String currency) {
+        try {
+            return buildSalesByBranch(companyId, branchId, from, to, currency);
+        } catch (Exception ex) {
+            log.warn("BI sales-by-branch panel failed for company {}: {}", companyId, ex.getMessage());
             return null;
         }
     }

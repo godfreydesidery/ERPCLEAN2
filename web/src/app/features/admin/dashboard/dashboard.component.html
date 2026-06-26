@@ -43,8 +43,9 @@
             <select id="branchPicker" name="branchPicker" class="form-select form-select-sm"
                     [ngModel]="selectedBranchId()"
                     (ngModelChange)="onBranchChange($event)">
+              <option value="">All branches</option>
               @if (branches().length === 0) {
-                <option value="">— no branches —</option>
+                <option value="" disabled>— no branches —</option>
               }
               @for (b of branches(); track b.uid) {
                 <option [value]="b.id">{{ b.code }} — {{ b.name }}</option>
@@ -552,6 +553,72 @@
         } @else {
           <div class="erp-empty mb-4">
             <i class="bi bi-graph-down"></i>No net profit trend data yet for this period.
+          </div>
+        }
+      }
+    }
+
+    <!-- ── Sales by Branch ──────────────────────────────────────────────────── -->
+    <h2 class="erp-section-title mt-3">
+      Sales by Branch
+      <a routerLink="/admin/sales/invoices" class="ms-2 small text-muted"
+         aria-label="Go to sales invoices">
+        <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
+      </a>
+    </h2>
+    @switch (salesByBranchState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-4" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-4" role="alert">Could not load sales by branch data.</p>
+      }
+      @case ('forbidden') {
+        <p class="text-muted mb-4">
+          <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>You do not have permission to view sales by branch.
+        </p>
+      }
+      @default {
+        @if (salesByBranch(); as sbb) {
+          @if (sbb.rows.length > 0) {
+            <div class="erp-table-wrap mb-4">
+              <table class="erp-table">
+                <caption class="visually-hidden">Sales by branch — finalised invoices, {{ sbb.currency }}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Branch</th>
+                    <th scope="col" class="num">Sales ({{ sbb.currency }})</th>
+                    <th scope="col" class="num">Invoices</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of sbb.rows; track row.branchId) {
+                    <tr>
+                      <td class="small">{{ row.branchCode }} — {{ row.branchName }}</td>
+                      <td class="num mono small">{{ +row.total | number:'1.2-2' }}</td>
+                      <td class="num mono small">{{ row.count }}</td>
+                    </tr>
+                  }
+                </tbody>
+                <tfoot>
+                  <tr class="fw-semibold">
+                    <th scope="row">Total</th>
+                    <td class="num mono small">{{ +sbb.grandTotal | number:'1.2-2' }}</td>
+                    <td class="num mono small">{{ sbb.invoiceCount }}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          } @else {
+            <div class="erp-empty mb-4">
+              <i class="bi bi-receipt"></i>No finalised invoices for this period.
+            </div>
+          }
+        } @else {
+          <div class="erp-empty mb-4">
+            <i class="bi bi-receipt"></i>No sales by branch data yet for this period.
           </div>
         }
       }

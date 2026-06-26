@@ -4,6 +4,7 @@ import com.erp.modules.bi.domain.dto.CrmSnapshotDto;
 import com.erp.modules.bi.domain.dto.DashboardDto;
 import com.erp.modules.bi.domain.dto.FinanceSummaryDto;
 import com.erp.modules.bi.domain.dto.InventorySummaryDto;
+import com.erp.modules.bi.domain.dto.SalesByBranchDto;
 import com.erp.modules.bi.domain.dto.TrendDto;
 import com.erp.modules.bi.domain.dto.WorkingCapitalDto;
 import com.erp.modules.bi.service.BiExportFlattener;
@@ -120,6 +121,18 @@ public class BiDashboardController {
     @PreAuthorize("@perm.has('BI.FINANCE.VIEW')")
     public ApiResponse<TrendDto> netProfitTrend(@RequestParam Long companyId) {
         return ApiResponse.ok(dashboardService.netProfitTrend(companyId));
+    }
+
+    @GetMapping("/sales-by-branch")
+    @PreAuthorize("@perm.has('BI.FINANCE.VIEW')")
+    public ApiResponse<SalesByBranchDto> salesByBranch(
+            @RequestParam Long companyId,
+            @RequestParam(required = false) Long branchId,
+            @RequestParam(required = false) @DateTimeFormat(iso = ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = ISO.DATE) LocalDate to) {
+        LocalDate effectiveFrom = from != null ? from : LocalDate.now().withDayOfMonth(1);
+        LocalDate effectiveTo   = to   != null ? to   : LocalDate.now();
+        return ApiResponse.ok(dashboardService.salesByBranch(companyId, branchId, effectiveFrom, effectiveTo));
     }
 
     // -------------------------------------------------------------------------

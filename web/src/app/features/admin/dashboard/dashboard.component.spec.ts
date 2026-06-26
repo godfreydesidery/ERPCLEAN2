@@ -111,6 +111,15 @@ const MOCK_DTO: DashboardDto = {
       { periodLabel: 'Dec 2025', periodStart: '2025-12-01', periodEnd: '2025-12-31', value: '-5000' },
     ],
   },
+  salesByBranch: {
+    currency: 'TZS',
+    grandTotal: '350000',
+    invoiceCount: 12,
+    rows: [
+      { branchId: '100', branchCode: 'HQ', branchName: 'Head Office', total: '250000', count: 8 },
+      { branchId: '101', branchCode: 'NBI', branchName: 'Nairobi Branch', total: '100000', count: 4 },
+    ],
+  },
   health: [
     { label: 'AR-GL', ties: true, difference: '0' },
     { label: 'AP-GL', ties: false, difference: '-500' },
@@ -127,6 +136,7 @@ const NULL_PANELS_DTO: DashboardDto = {
   crm: null,
   revenueTrend: null,
   netProfitTrend: null,
+  salesByBranch: null,
   health: [],
 };
 
@@ -211,7 +221,8 @@ describe('DashboardComponent', () => {
     TestBed.createComponent(DashboardComponent);
     TestBed.flushEffects();
     expect(svc.getDashboard).toHaveBeenCalledTimes(1);
-    expect(svc.getDashboard).toHaveBeenCalledWith('10', expect.anything(), expect.anything(), '100');
+    // selectedBranchId defaults to '' (All branches) → service receives undefined
+    expect(svc.getDashboard).toHaveBeenCalledWith('10', expect.anything(), expect.anything(), undefined);
   });
 
   // 2. isEmpty (no panels): when all DTO panels are null, all states settle to 'idle' (empty)
@@ -340,5 +351,55 @@ describe('DashboardComponent', () => {
     expect(comp.revenueTrendState()).toBe('idle');
     expect(comp.revenueTrend()?.points.length).toBe(2);
     expect(comp.health().length).toBe(2);
+  });
+
+  // 10. Sales by Branch: panel populates on success; null panel + no perm → forbidden
+  it('salesByBranch panel populates with rows and grand total', () => {
+    vi.useFakeTimers();
+    makeBed(of(MOCK_DTO));
+    const comp = TestBed.createComponent(DashboardComponent).componentInstance as any;
+    TestBed.flushEffects();
+    expect(comp.salesByBranchState()).toBe('idle');
+    expect(comp.salesByBranch()?.rows.length).toBe(2);
+    expect(comp.salesByBranch()?.grandTotal).toBe('350000');
+    expect(comp.salesByBranch()?.invoiceCount).toBe(12);
+  });
+
+  it('salesByBranch null + user lacks BI.FINANCE.VIEW → state forbidden', () => {
+    vi.useFakeTimers();
+    const restrictedSession = makeSession(['BI.VIEW', 'BI.OPS.VIEW', 'BI.CRM.VIEW']); // no BI.FINANCE.VIEW
+    makeBed(of(NULL_PANELS_DTO), restrictedSession);
+    const comp = TestBed.createComponent(DashboardComponent).componentInstance as any;
+    TestBed.flushEffects();
+    expect(comp.salesByBranchState()).toBe('forbidden');
+    expect(comp.salesByBranch()).toBeNull();
+  });
+
+  it('salesByBranch null + user has BI.FINANCE.VIEW → state idle (empty)', () => {
+    vi.useFakeTimers();
+    makeBed(of(NULL_PANELS_DTO), makeSession(['BI.VIEW', 'BI.FINANCE.VIEW']));
+    const comp = TestBed.createComponent(DashboardComponent).componentInstance as any;
+    TestBed.flushEffects();
+    expect(comp.salesByBranchState()).toBe('idle');
+    expect(comp.salesByBranch()).toBeNull();
+  });
+
+  // 11. Branch picker defaults to empty ("All branches")
+  it('selectedBranchId defaults to empty string after branch load', () => {
+    vi.useFakeTimers();
+    makeBed(of(MOCK_DTO));
+    const comp = TestBed.createComponent(DashboardComponent).componentInstance as any;
+    TestBed.flushEffects();
+    expect(comp.selectedBranchId()).toBe('');
+  });
+
+  // 12. 403 error includes salesByBranch in the forbidden sweep
+  it('403 error → salesByBranchState becomes forbidden', () => {
+    vi.useFakeTimers();
+    const err403 = new HttpErrorResponse({ status: 403, statusText: 'Forbidden' });
+    makeBed(throwError(() => err403));
+    const comp = TestBed.createComponent(DashboardComponent).componentInstance as any;
+    TestBed.flushEffects();
+    expect(comp.salesByBranchState()).toBe('forbidden');
   });
 });

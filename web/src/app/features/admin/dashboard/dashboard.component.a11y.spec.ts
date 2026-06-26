@@ -74,6 +74,15 @@ const FULL_DTO: DashboardDto = {
       { periodLabel: 'Dec 2025', periodStart: '2025-12-01', periodEnd: '2025-12-31', value: '-5000' },
     ],
   },
+  salesByBranch: {
+    currency: 'TZS',
+    grandTotal: '350000',
+    invoiceCount: 12,
+    rows: [
+      { branchId: '100', branchCode: 'HQ', branchName: 'Head Office', total: '250000', count: 8 },
+      { branchId: '101', branchCode: 'NBI', branchName: 'Nairobi Branch', total: '100000', count: 4 },
+    ],
+  },
   health: [
     { label: 'AR-GL', ties: true, difference: '0' },
     { label: 'AP-GL', ties: false, difference: '-500' },
@@ -83,7 +92,7 @@ const FULL_DTO: DashboardDto = {
 const NULL_PANELS_DTO: DashboardDto = {
   ...FULL_DTO,
   finance: null, workingCapital: null, inventory: null,
-  crm: null, revenueTrend: null, netProfitTrend: null, health: [],
+  crm: null, revenueTrend: null, netProfitTrend: null, salesByBranch: null, health: [],
 };
 
 function makeBed(dto: DashboardDto) {
