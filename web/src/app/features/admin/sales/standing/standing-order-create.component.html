@@ -168,18 +168,25 @@
                             placeholder="Select product"
                             [required]="true"
                             [disabled]="saving()"
-                            (ngModelChange)="updateLine(i, { productUid: $event })" />
+                            (ngModelChange)="onLineProductChange(i, $event)" />
                       </td>
                       <td style="min-width:140px">
-                        <app-uid-picker
-                            [id]="'lineUnit' + i"
-                            [ngModel]="line.unitUid"
-                            [name]="'lineUnit' + i"
-                            [options]="unitOptions()"
-                            placeholder="Select unit"
-                            [required]="true"
-                            [disabled]="saving()"
-                            (ngModelChange)="updateLine(i, { unitUid: $event })" />
+                        @if (line.lineUnitsLoading) {
+                          <div class="d-flex align-items-center gap-1" aria-live="polite">
+                            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                            <span class="small text-muted">Loading…</span>
+                          </div>
+                        } @else {
+                          <app-uid-picker
+                              [id]="'lineUnit' + i"
+                              [ngModel]="line.unitUid"
+                              [name]="'lineUnit' + i"
+                              [options]="line.lineUnitOptions"
+                              [placeholder]="line.productUid ? 'Select unit' : 'Select a product first'"
+                              [required]="true"
+                              [disabled]="saving() || !line.productUid || line.lineUnitOptions.length === 0"
+                              (ngModelChange)="updateLine(i, { unitUid: $event })" />
+                        }
                       </td>
                       <td class="num" style="min-width:90px">
                         <input [id]="'lineQty' + i" [name]="'lineQty' + i"

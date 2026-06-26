@@ -28,6 +28,9 @@ interface RfqLineEntry {
   /** resolved id string (FK for request body) */
   unitId: string;
   quantity: string;
+  /** Product-scoped unit options; empty until a product is selected. */
+  lineUnitOptions: UidOption[];
+  lineUnitsLoading: boolean;
 }
 
 /**
@@ -60,12 +63,11 @@ export class RfqCreateComponent {
 
   // ── Options for pickers ───────────────────────────────────────────────────
   readonly productOptions = signal<UidOption[]>([]);
-  readonly unitOptions = signal<UidOption[]>([]);
   readonly supplierOptions = signal<UidOption[]>([]);
 
   /** Raw models for id resolution. */
   private productMap = new Map<string, string>(); // uid → id
-  private unitMap = new Map<string, string>();     // uid → id
+  private unitMap = new Map<string, string>();    // uid → id (still populated for backwards compat)
 
   // ── Lines ──────────────────────────────────────────────────────────────────
   readonly lines = signal<RfqLineEntry[]>([this.blankLine()]);
@@ -135,10 +137,11 @@ export class RfqCreateComponent {
       },
       error: () => {},
     });
+    // unitMap is still populated so we can resolve unit id from uid after
+    // listProductUnits returns (which gives uid but not id directly).
     this.productService.listUnits(companyId, undefined, 0, 200).subscribe({
       next: ({ rows }) => {
         this.unitMap = new Map(rows.map((u) => [u.uid, u.id]));
-        this.unitOptions.set(rows.map((u) => ({ uid: u.uid, label: u.name, hint: u.code })));
       },
       error: () => {},
     });
@@ -162,7 +165,13 @@ export class RfqCreateComponent {
   // ── Line management ────────────────────────────────────────────────────────
 
   private blankLine(): RfqLineEntry {
-    return { productUid: '', productId: '', unitUid: '', unitId: '', quantity: '' };
+    return {
+      productUid: '', productId: '',
+      unitUid: '', unitId: '',
+      quantity: '',
+      lineUnitOptions: [],
+      lineUnitsLoading: false,
+    };
   }
 
   addLine(): void {
@@ -175,9 +184,37 @@ export class RfqCreateComponent {
 
   onProductPicked(index: number, uid: string): void {
     const id = this.productMap.get(uid) ?? '';
+    // Reset the unit selection and mark loading for this line.
     this.lines.update((ls) =>
-      ls.map((l, i) => (i === index ? { ...l, productUid: uid, productId: id } : l)),
+      ls.map((l, i) =>
+        i === index
+          ? { ...l, productUid: uid, productId: id, unitUid: '', unitId: '', lineUnitOptions: [], lineUnitsLoading: true }
+          : l,
+      ),
     );
+    if (!uid) return;
+    this.productService.listProductUnits(uid).subscribe({
+      next: (units) => {
+        const opts = units.map((u) => ({ uid: u.uid, label: u.name, hint: u.code }));
+        // Populate per-line unit map entries for id resolution.
+        units.forEach((u) => this.unitMap.set(u.uid, u.id));
+        // Default-select the first unit (base unit).
+        const defaultUid = units[0]?.uid ?? '';
+        const defaultId = units[0]?.id ?? '';
+        this.lines.update((ls) =>
+          ls.map((l, i) =>
+            i === index
+              ? { ...l, lineUnitOptions: opts, lineUnitsLoading: false, unitUid: defaultUid, unitId: defaultId }
+              : l,
+          ),
+        );
+      },
+      error: () => {
+        this.lines.update((ls) =>
+          ls.map((l, i) => (i === index ? { ...l, lineUnitsLoading: false } : l)),
+        );
+      },
+    });
   }
 
   onUnitPicked(index: number, uid: string): void {

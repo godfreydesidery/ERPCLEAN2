@@ -20,6 +20,7 @@ import com.erp.modules.parties.domain.enums.CustomerKind;
 import com.erp.modules.parties.domain.enums.PartyType;
 import com.erp.modules.parties.service.AgentService;
 import com.erp.modules.parties.service.CustomerService;
+import com.erp.modules.products.domain.dto.CreateBulkPackRequest;
 import com.erp.modules.products.domain.dto.CreatePriceListRequest;
 import com.erp.modules.products.domain.dto.CreateProductRequest;
 import com.erp.modules.products.domain.dto.CreateUnitOfMeasureRequest;
@@ -920,6 +921,54 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
     // test needs a non-root user + user_branch + INTERNAL agent fixture (BR-PARTY-10 forbids root
     // as an agent); the internal-agent lifecycle is already covered by AgentServiceImplIT, so the
     // query-level guard is verified there rather than duplicating the fixture here.
+
+    // -----------------------------------------------------------------------
+    // computeQtyInBase guard: unconfigured unit → IllegalStateException
+    // -----------------------------------------------------------------------
+
+    @Test
+    void addLine_withUnconfiguredUnit_throwsIllegalState() {
+        // Create a unit that is NOT the product's base and NOT a configured bulk-pack.
+        UnitOfMeasureDto kgUnit = unitService.create(
+                new CreateUnitOfMeasureRequest(companyA.getUid(), "KG", "Kilograms"));
+
+        SalesInvoiceDto draft = salesInvoiceService.create(invoiceRequest());
+
+        assertThatThrownBy(() -> salesInvoiceService.addLine(draft.uid(),
+                new AddInvoiceLineRequest(productAUid, kgUnit.uid(), new BigDecimal("1"), null, null)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("is not a valid unit for");
+    }
+
+    @Test
+    void addLine_withBaseUnit_qtyInBaseEquals1to1() {
+        // pcsUid is the product's base unit — must succeed and produce qty_in_base == qty.
+        SalesInvoiceDto draft = salesInvoiceService.create(invoiceRequest());
+        salesInvoiceService.addLine(draft.uid(),
+                new AddInvoiceLineRequest(productAUid, pcsUid, new BigDecimal("3"), null, null));
+
+        List<SalesInvoiceLineDto> lines = salesInvoiceService.listLines(draft.uid());
+        assertThat(lines).hasSize(1);
+        assertThat(lines.get(0).qtyInBase()).isEqualByComparingTo(new BigDecimal("3"));
+    }
+
+    @Test
+    void addLine_withConfiguredBulkPackUnit_qtyInBaseIsMultiplied() {
+        // Add a CARTON bulk-pack (factor 12) to productA then use it on an invoice line.
+        UnitOfMeasureDto cartonUnit = unitService.create(
+                new CreateUnitOfMeasureRequest(companyA.getUid(), "CTN", "Carton"));
+        productService.addBulkPack(productAUid,
+                new CreateBulkPackRequest(cartonUnit.uid(), new BigDecimal("12")));
+
+        SalesInvoiceDto draft = salesInvoiceService.create(invoiceRequest());
+        salesInvoiceService.addLine(draft.uid(),
+                new AddInvoiceLineRequest(productAUid, cartonUnit.uid(), new BigDecimal("2"), null, null));
+
+        List<SalesInvoiceLineDto> lines = salesInvoiceService.listLines(draft.uid());
+        assertThat(lines).hasSize(1);
+        // 2 cartons × 12 = 24 in base.
+        assertThat(lines.get(0).qtyInBase()).isEqualByComparingTo(new BigDecimal("24"));
+    }
 
     // -----------------------------------------------------------------------
     // Private helpers

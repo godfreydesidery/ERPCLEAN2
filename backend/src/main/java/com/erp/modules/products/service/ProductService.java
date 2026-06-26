@@ -12,6 +12,7 @@ import com.erp.modules.products.domain.dto.ProductComponentDto;
 import com.erp.modules.products.domain.dto.ProductDto;
 import com.erp.modules.products.domain.dto.SetProductPriceRequest;
 import com.erp.modules.products.domain.dto.ProductPriceDto;
+import com.erp.modules.products.domain.dto.UnitOfMeasureDto;
 import com.erp.modules.products.domain.dto.UpdateProductRequest;
 import java.util.List;
 import org.springframework.data.domain.Page;
@@ -67,6 +68,15 @@ public interface ProductService {
     void removePrice(String productUid, String priceListUid);
 
     List<ProductPriceDto> listPrices(String uid);
+
+    // --- Valid transaction units ---
+
+    /**
+     * Returns the ordered list of units valid for transaction lines against this product:
+     * the product's base unit first, then each configured ProductBulkPack unit (de-duplicated).
+     * Used by the /uid/{uid}/units endpoint to drive unit-of-measure pickers in line editors.
+     */
+    List<UnitOfMeasureDto> listProductUnits(String productUid);
 
     // --- Components ---
     ProductComponentDto addComponent(String uid, AddComponentRequest req);

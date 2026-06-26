@@ -992,19 +992,25 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     }
 
     /**
-     * Compute qty_in_base: if the chosen unit is a bulk pack of this product, multiply by
-     * factor_to_base; otherwise qty is already in base units.
+     * Compute qty_in_base: base unit → 1:1; configured bulk-pack → multiply by factorToBase;
+     * any other unit → rejected (data-integrity guard, prevents silent mis-conversion).
      */
     private BigDecimal computeQtyInBase(Product product, UnitOfMeasure unit, BigDecimal qty) {
-        // Check if unit matches any bulk pack for this product (filter in memory — list is small)
+        // Base unit: 1:1 conversion.
+        if (unit.getId().equals(product.getBaseUnit().getId())) {
+            return qty;
+        }
+        // Bulk-pack unit: find the configured factor.
         Optional<ProductBulkPack> pack = bulkPacks.findByProductId(product.getId()).stream()
                 .filter(bp -> bp.getUnit().getId().equals(unit.getId()))
                 .findFirst();
         if (pack.isPresent()) {
             return qty.multiply(pack.get().getFactorToBase());
         }
-        // Base unit: qty_in_base == qty
-        return qty;
+        // Unit is neither the base nor a configured pack — reject it.
+        throw new IllegalStateException(
+                unit.getName() + " is not a valid unit for " + product.getName()
+                        + ". Use the product's base unit or a configured pack unit.");
     }
 
     private void assertDraft(SalesInvoice inv, String operation) {
