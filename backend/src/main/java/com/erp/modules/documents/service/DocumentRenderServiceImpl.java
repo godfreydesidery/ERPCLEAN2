@@ -141,10 +141,20 @@ public class DocumentRenderServiceImpl implements DocumentRenderService {
         // 1. Resolve registry row; reject if missing or inactive (FR-DOC-13 / BR-DOC-04)
         Long companyId = principal != null ? principal.companyId() : null;
         DocumentTemplate tmpl = templates.findByCompanyIdAndDocumentType(companyId, type)
-                .orElseThrow(() -> new NotFoundException(
-                        "Document type not enabled: " + type + " for company " + companyId));
+                .orElseThrow(() -> {
+                    // Technical detail (type + company) goes to the log only; the user gets a
+                    // friendly, actionable message free of internal identifiers (error-hygiene).
+                    log.warn("No {} document template for company {} — render blocked; run company "
+                            + "\"Provision defaults\" to seed the document templates.", type, companyId);
+                    return new NotFoundException(
+                            "Document templates aren't set up for this company yet. Ask an administrator "
+                                    + "to run \"Provision defaults\" for the company, then try again.");
+                });
         if (tmpl.getStatus() != MasterStatus.ACTIVE) {
-            throw new IllegalStateException("Document type is not active: " + type);
+            log.warn("Document template {} for company {} is not ACTIVE — render blocked.", type, companyId);
+            throw new IllegalStateException(
+                    "This document layout is currently turned off. Ask an administrator to re-enable it, "
+                            + "then try again.");
         }
 
         // 2. Resolve source company via ScopeGuard (NFR-DOC-03 / ADR-0023 D-9)
