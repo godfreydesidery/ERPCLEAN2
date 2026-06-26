@@ -15,6 +15,9 @@ public interface UnitOfMeasureRepository extends JpaRepository<UnitOfMeasure, Lo
 
     Optional<UnitOfMeasure> findByCompanyIdAndUid(Long companyId, String uid);
 
+    /** Tenant-scoped id lookup — returns empty when the unit exists but belongs to a different company. */
+    Optional<UnitOfMeasure> findByCompanyIdAndId(Long companyId, Long id);
+
     boolean existsByCompanyIdAndCode(Long companyId, String code);
 
     Page<UnitOfMeasure> findByCompanyId(Long companyId, Pageable pageable);

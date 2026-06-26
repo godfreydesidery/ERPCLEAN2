@@ -44,8 +44,8 @@ public class PayComponentServiceImpl implements PayComponentService {
         if (payComponents.existsByCompanyIdAndCode(companyId, req.code())) {
             throw new ConflictException("Pay component code already exists: " + req.code());
         }
-        // #23 — resolve GL account before persistence; unknown id returns 404 not 500
-        if (!glAccounts.existsById(req.glAccountId())) {
+        // #23 — resolve GL account before persistence; company-scoped to prevent cross-tenant binding
+        if (!glAccounts.existsByIdAndCompanyId(req.glAccountId(), companyId)) {
             throw NotFoundException.of("GlAccount", String.valueOf(req.glAccountId()));
         }
         PayComponent pc = payComponents.save(new PayComponent(companyId, req.code(), req.name(),
@@ -79,8 +79,8 @@ public class PayComponentServiceImpl implements PayComponentService {
                 && payComponents.existsByCompanyIdAndCode(pc.getCompanyId(), req.code())) {
             throw new ConflictException("Pay component code already exists: " + req.code());
         }
-        // #23 — resolve GL account before persistence
-        if (!glAccounts.existsById(req.glAccountId())) {
+        // #23 — resolve GL account before persistence; company-scoped to prevent cross-tenant binding
+        if (!glAccounts.existsByIdAndCompanyId(req.glAccountId(), pc.getCompanyId())) {
             throw NotFoundException.of("GlAccount", String.valueOf(req.glAccountId()));
         }
         pc.setCode(req.code());

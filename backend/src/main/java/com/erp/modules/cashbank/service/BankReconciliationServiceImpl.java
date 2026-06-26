@@ -206,6 +206,12 @@ public class BankReconciliationServiceImpl implements BankReconciliationService 
     @Transactional(readOnly = true)
     public List<BankReconciliationDto> listByAccount(Long companyId, Long accountId) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        // Ownership check: verify the account belongs to companyId before returning its reconciliations.
+        // Without this, a caller may pass their own companyId (satisfying the scope guard above)
+        // but a foreign accountId and read another company's bank reconciliations (confused-deputy).
+        accounts.findById(accountId)
+                .filter(a -> a.getCompanyId().equals(companyId))
+                .orElseThrow(() -> new NotFoundException("Cash/bank account: " + accountId));
         return reconciliations.findByCashBankAccountId(accountId)
                 .stream().map(BankReconciliationServiceImpl::toDto).toList();
     }

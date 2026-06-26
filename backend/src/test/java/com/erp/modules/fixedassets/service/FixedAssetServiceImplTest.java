@@ -9,12 +9,14 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.erp.modules.costing.repository.DimensionValueRepository;
 import com.erp.modules.fixedassets.domain.dto.RegisterAssetRequest;
 import com.erp.modules.fixedassets.domain.entity.AssetCategory;
 import com.erp.modules.fixedassets.domain.enums.DepreciationMethod;
 import com.erp.modules.fixedassets.repository.AssetCategoryRepository;
 import com.erp.modules.fixedassets.repository.FixedAssetRepository;
 import com.erp.modules.ap.service.SupplierBillService;
+import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
@@ -45,6 +47,8 @@ class FixedAssetServiceImplTest {
 
     private FixedAssetRepository       assetRepo;
     private AssetCategoryRepository    categoryRepo;
+    private BranchRepository           branchRepo;
+    private DimensionValueRepository   dimValueRepo;
     private FixedAssetNumberGenerator  numberGen;
     private DepreciationScheduleService scheduleService;
     private FixedAssetGlPoster         glPoster;
@@ -59,6 +63,8 @@ class FixedAssetServiceImplTest {
     void setUp() {
         assetRepo       = mock(FixedAssetRepository.class);
         categoryRepo    = mock(AssetCategoryRepository.class);
+        branchRepo      = mock(BranchRepository.class);
+        dimValueRepo    = mock(DimensionValueRepository.class);
         numberGen       = mock(FixedAssetNumberGenerator.class);
         scheduleService = mock(DepreciationScheduleService.class);
         glPoster        = mock(FixedAssetGlPoster.class);
@@ -66,8 +72,13 @@ class FixedAssetServiceImplTest {
         scopeGuard      = mock(ScopeGuard.class);
         audit           = mock(AuditService.class);
 
-        service = new FixedAssetServiceImpl(assetRepo, categoryRepo, numberGen,
-                scheduleService, glPoster, billService, scopeGuard, audit);
+        service = new FixedAssetServiceImpl(assetRepo, categoryRepo, branchRepo, dimValueRepo,
+                numberGen, scheduleService, glPoster, billService, scopeGuard, audit);
+
+        // Stub: branch and cost-centre belong to the correct company (pass-through for existing tests)
+        when(branchRepo.existsByIdAndCompany_Id(anyLong(), anyLong())).thenReturn(true);
+        when(dimValueRepo.findByIdAndCompanyId(anyLong(), anyLong()))
+                .thenReturn(java.util.Optional.of(mock(com.erp.modules.costing.domain.entity.DimensionValue.class)));
 
         // Stub: category belongs to the correct company
         stubCategory = mock(AssetCategory.class);

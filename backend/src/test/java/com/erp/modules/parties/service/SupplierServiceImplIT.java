@@ -14,6 +14,9 @@ import com.erp.modules.parties.domain.dto.SupplierDto;
 import com.erp.modules.parties.domain.dto.UpdateSupplierRequest;
 import com.erp.modules.parties.domain.enums.PartyType;
 import com.erp.modules.parties.domain.enums.SupplierKind;
+import com.erp.modules.tax.domain.entity.WhtType;
+import com.erp.modules.tax.domain.enums.WhtKind;
+import com.erp.modules.tax.repository.WhtTypeRepository;
 import com.erp.platform.security.RequestContext;
 import com.erp.support.IamTestData;
 import com.erp.support.PostgresIntegrationTest;
@@ -38,8 +41,10 @@ class SupplierServiceImplIT extends PostgresIntegrationTest {
     @Autowired private AppUserRepository users;
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private IamTestData testData;
+    @Autowired private WhtTypeRepository whtTypeRepository;
 
     private Company companyA;
+    private Long whtTypeAId;
 
     @BeforeEach
     void setUp() {
@@ -56,6 +61,12 @@ class SupplierServiceImplIT extends PostgresIntegrationTest {
 
         RequestContext.set(new RequestContext.Principal(
                 root.getId(), "sup_root", true, companyA.getId(), branchA.getId(), null));
+
+        // Seed a real WhtType in companyA so D5-defaults tests can reference a real id.
+        WhtType wht = whtTypeRepository.save(
+                new WhtType(companyA.getId(), "WHT-STD", "Standard WHT",
+                        WhtKind.WHT_ON_PAYMENT, new BigDecimal("5.00"), root.getId()));
+        whtTypeAId = wht.getId();
     }
 
     @AfterEach
@@ -69,7 +80,7 @@ class SupplierServiceImplIT extends PostgresIntegrationTest {
                 companyA.getId(), PartyType.BUSINESS, "Defaults Supplier", null,
                 "TIN-S5", false, null, null, null, null, null, null, null, null, null,
                 SupplierKind.GOODS, 30, null,
-                "TZ", "usd", 14, new BigDecimal("250.00"), 9001L);
+                "TZ", "usd", 14, new BigDecimal("250.00"), whtTypeAId);
 
         SupplierDto dto = supplierService.create(req);
 
@@ -77,7 +88,7 @@ class SupplierServiceImplIT extends PostgresIntegrationTest {
         assertThat(dto.defaultCurrency()).isEqualTo("USD"); // normalised upper-case
         assertThat(dto.leadTimeDays()).isEqualTo(14);
         assertThat(dto.minOrderValue()).isEqualByComparingTo("250.00");
-        assertThat(dto.defaultWhtTypeId()).isEqualTo(9001L);
+        assertThat(dto.defaultWhtTypeId()).isEqualTo(whtTypeAId);
     }
 
     @Test
@@ -105,13 +116,13 @@ class SupplierServiceImplIT extends PostgresIntegrationTest {
                 PartyType.BUSINESS, "Edit Supplier", null, "TIN-ED", false, null,
                 null, null, null, null, null, null, null, null,
                 SupplierKind.SERVICE, null, null,
-                "KE", "kes", 7, new BigDecimal("99.00"), 1L));
+                "KE", "kes", 7, new BigDecimal("99.00"), whtTypeAId));
 
         assertThat(updated.supplierKind()).isEqualTo(SupplierKind.SERVICE);
         assertThat(updated.country()).isEqualTo("KE");
         assertThat(updated.defaultCurrency()).isEqualTo("KES");
         assertThat(updated.leadTimeDays()).isEqualTo(7);
         assertThat(updated.minOrderValue()).isEqualByComparingTo("99.00");
-        assertThat(updated.defaultWhtTypeId()).isEqualTo(1L);
+        assertThat(updated.defaultWhtTypeId()).isEqualTo(whtTypeAId);
     }
 }

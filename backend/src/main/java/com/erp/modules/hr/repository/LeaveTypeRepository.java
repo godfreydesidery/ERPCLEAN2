@@ -16,4 +16,7 @@ public interface LeaveTypeRepository extends JpaRepository<LeaveType, Long> {
     List<LeaveType> findByCompanyIdAndActiveTrue(Long companyId);
 
     boolean existsByCompanyIdAndCode(Long companyId, String code);
+
+    /** Company-scoped id lookup — used by LeaveServiceImpl to prevent cross-tenant leave-type binding. */
+    Optional<LeaveType> findByIdAndCompanyId(Long id, Long companyId);
 }

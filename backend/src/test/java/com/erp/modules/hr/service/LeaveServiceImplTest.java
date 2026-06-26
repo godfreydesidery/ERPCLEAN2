@@ -106,7 +106,7 @@ class LeaveServiceImplTest {
         when(employees.findByUid(EMPLOYEE_UID)).thenReturn(Optional.of(emp));
 
         LeaveType lt = makeLeaveType(true);
-        when(leaveTypes.findById(LEAVE_TYPE_ID)).thenReturn(Optional.of(lt));
+        when(leaveTypes.findByIdAndCompanyId(LEAVE_TYPE_ID, COMPANY_ID)).thenReturn(Optional.of(lt));
 
         LeaveRequest saved = new LeaveRequest(COMPANY_ID, EMPLOYEE_ID, LEAVE_TYPE_ID,
                 LocalDate.now(), LocalDate.now().plusDays(1), BigDecimal.ONE, null, 99L);
@@ -130,7 +130,7 @@ class LeaveServiceImplTest {
         when(employees.findByUid(EMPLOYEE_UID)).thenReturn(Optional.of(emp));
 
         LeaveType lt = makeLeaveType(false);
-        when(leaveTypes.findById(LEAVE_TYPE_ID)).thenReturn(Optional.of(lt));
+        when(leaveTypes.findByIdAndCompanyId(LEAVE_TYPE_ID, COMPANY_ID)).thenReturn(Optional.of(lt));
 
         SubmitLeaveRequest req = new SubmitLeaveRequest(LEAVE_TYPE_ID,
                 LocalDate.now(), LocalDate.now().plusDays(1), BigDecimal.ONE, null);
@@ -148,7 +148,7 @@ class LeaveServiceImplTest {
         when(employees.findByUid(EMPLOYEE_UID)).thenReturn(Optional.of(emp));
 
         LeaveType lt = makeLeaveType(true);
-        when(leaveTypes.findById(LEAVE_TYPE_ID)).thenReturn(Optional.of(lt));
+        when(leaveTypes.findByIdAndCompanyId(LEAVE_TYPE_ID, COMPANY_ID)).thenReturn(Optional.of(lt));
 
         LeaveRequest saved = new LeaveRequest(COMPANY_ID, EMPLOYEE_ID, LEAVE_TYPE_ID,
                 LocalDate.now(), LocalDate.now().plusDays(1), BigDecimal.ONE, null, 99L);

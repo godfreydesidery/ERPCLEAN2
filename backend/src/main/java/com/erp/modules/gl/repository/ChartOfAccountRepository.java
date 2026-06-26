@@ -30,6 +30,9 @@ public interface ChartOfAccountRepository extends JpaRepository<ChartOfAccount, 
     @Query("SELECT COUNT(l) > 0 FROM JournalLine l WHERE l.accountId = :accountId")
     boolean hasPostings(@Param("accountId") Long accountId);
 
+    /** Company-scoped id existence check — used by HR services to prevent cross-tenant GL account binding. */
+    boolean existsByIdAndCompanyId(Long id, Long companyId);
+
     /** Lookup by company + account_code — used by seeders resolving account_id by code. */
     Optional<ChartOfAccount> findByCompanyIdAndAccountCode(Long companyId, String accountCode);
 

@@ -72,10 +72,12 @@ public class PurchaseRequisitionServiceImpl implements PurchaseRequisitionServic
         r = requisitions.save(r);
 
         for (var l : req.lines()) {
-            Product product = products.findById(l.productId())
-                    .orElseThrow(() -> new NotFoundException("Product: " + l.productId()));
-            UnitOfMeasure unit = units.findById(l.unitId())
-                    .orElseThrow(() -> new NotFoundException("Unit: " + l.unitId()));
+            // SECURITY: resolve product/unit SCOPED to the requisition's company so a caller
+            // cannot embed a foreign-company product id and read its code/name back (confused-deputy).
+            Product product = products.findByCompanyIdAndId(companyId, l.productId())
+                    .orElseThrow(() -> new NotFoundException("Product not found"));
+            UnitOfMeasure unit = units.findByCompanyIdAndId(companyId, l.unitId())
+                    .orElseThrow(() -> new NotFoundException("Unit of measure not found"));
             short lineNo = (short) (reqLines.findMaxLineNo(r.getId()) + 1);
             PurchaseRequisitionLine line = new PurchaseRequisitionLine(
                     r.getId(), companyId, branchId, lineNo,

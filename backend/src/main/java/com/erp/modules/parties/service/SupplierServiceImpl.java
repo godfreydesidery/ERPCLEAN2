@@ -12,14 +12,17 @@ import com.erp.modules.parties.domain.entity.Supplier;
 import com.erp.modules.parties.domain.entity.SupplierBankAccount;
 import com.erp.modules.parties.domain.entity.SupplierBranch;
 import com.erp.modules.parties.domain.enums.PartyType;
+import com.erp.modules.parties.repository.PaymentTermsRepository;
 import com.erp.modules.parties.repository.SupplierBankAccountRepository;
 import com.erp.modules.parties.repository.SupplierBranchRepository;
 import com.erp.modules.parties.repository.SupplierRepository;
+import com.erp.modules.tax.repository.WhtTypeRepository;
 import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
+import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.security.RequestContext;
@@ -40,6 +43,8 @@ public class SupplierServiceImpl implements SupplierService {
     private final SupplierRepository suppliers;
     private final SupplierBranchRepository supplierBranches;
     private final SupplierBankAccountRepository bankAccounts;
+    private final PaymentTermsRepository paymentTermsRepo;
+    private final WhtTypeRepository whtTypeRepo;
     private final PartyCodeGenerator codeGen;
     private final PartyBranchGuard branchGuard;
     private final ScopeGuard scopeGuard;
@@ -48,6 +53,8 @@ public class SupplierServiceImpl implements SupplierService {
     public SupplierServiceImpl(SupplierRepository suppliers,
                                SupplierBranchRepository supplierBranches,
                                SupplierBankAccountRepository bankAccounts,
+                               PaymentTermsRepository paymentTermsRepo,
+                               WhtTypeRepository whtTypeRepo,
                                PartyCodeGenerator codeGen,
                                PartyBranchGuard branchGuard,
                                ScopeGuard scopeGuard,
@@ -55,6 +62,8 @@ public class SupplierServiceImpl implements SupplierService {
         this.suppliers = suppliers;
         this.supplierBranches = supplierBranches;
         this.bankAccounts = bankAccounts;
+        this.paymentTermsRepo = paymentTermsRepo;
+        this.whtTypeRepo = whtTypeRepo;
         this.codeGen = codeGen;
         this.branchGuard = branchGuard;
         this.scopeGuard = scopeGuard;
@@ -65,6 +74,7 @@ public class SupplierServiceImpl implements SupplierService {
     public SupplierDto create(CreateSupplierRequest req) {
         scopeGuard.assertCanActIn(RequestContext.get(), req.companyId());
         validateIdentifiers(req.partyType(), req.tin(), req.vrn(), req.vatRegistered());
+        validateFkOwnership(req.companyId(), req.paymentTermsId(), req.defaultWhtTypeId());
 
         String code = codeGen.next(req.companyId(), "SUPPLIER");
         Supplier s = new Supplier(req.companyId(), code, req.partyType(), req.displayName(),
@@ -114,6 +124,7 @@ public class SupplierServiceImpl implements SupplierService {
         Supplier s = require(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), s.getCompanyId());
         validateIdentifiers(req.partyType(), req.tin(), req.vrn(), req.vatRegistered());
+        validateFkOwnership(s.getCompanyId(), req.paymentTermsId(), req.defaultWhtTypeId());
 
         applyCommon(s, req.partyType(), req.displayName(), req.legalName(), req.tin(),
                 req.vatRegistered(), req.vrn(), req.businessRegNo(), req.mobileMoneyNo(),
@@ -324,6 +335,22 @@ public class SupplierServiceImpl implements SupplierService {
 
     private Supplier require(String uid) {
         return Lookups.orNotFound(suppliers.findByUid(uid), "Supplier", uid);
+    }
+
+    /**
+     * Verifies that each supplied optional FK belongs to {@code companyId}.
+     * Throws {@link NotFoundException} (404) on mismatch — no existence leak across company
+     * boundaries (CONFUSED_DEPUTY fix).
+     */
+    private void validateFkOwnership(Long companyId, Long paymentTermsId, Long defaultWhtTypeId) {
+        if (paymentTermsId != null
+                && !paymentTermsRepo.existsByCompanyIdAndId(companyId, paymentTermsId)) {
+            throw new NotFoundException("PaymentTerms not found.");
+        }
+        if (defaultWhtTypeId != null
+                && !whtTypeRepo.existsByCompanyIdAndId(companyId, defaultWhtTypeId)) {
+            throw new NotFoundException("WhtType not found.");
+        }
     }
 
     private void validateIdentifiers(PartyType partyType, String tin, String vrn,

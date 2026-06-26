@@ -91,10 +91,12 @@ public class RfqServiceImpl implements RfqService {
 
         // Lines
         for (var l : req.lines()) {
-            Product product = products.findById(l.productId())
-                    .orElseThrow(() -> new NotFoundException("Product: " + l.productId()));
-            UnitOfMeasure unit = units.findById(l.unitId())
-                    .orElseThrow(() -> new NotFoundException("Unit: " + l.unitId()));
+            // SECURITY: resolve product/unit SCOPED to the RFQ's company so a caller
+            // cannot embed a foreign-company product id and read its code/name back (confused-deputy).
+            Product product = products.findByCompanyIdAndId(companyId, l.productId())
+                    .orElseThrow(() -> new NotFoundException("Product not found"));
+            UnitOfMeasure unit = units.findByCompanyIdAndId(companyId, l.unitId())
+                    .orElseThrow(() -> new NotFoundException("Unit of measure not found"));
             short lineNo = (short) (rfqLines.findMaxLineNo(rfq.getId()) + 1);
             rfqLines.save(new RfqLine(rfq.getId(), companyId, branchId, lineNo,
                     product.getId(), product.getCode(), product.getName(),

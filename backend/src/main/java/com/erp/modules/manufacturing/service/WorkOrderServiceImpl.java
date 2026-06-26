@@ -28,6 +28,7 @@ import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.OutboxPublisher;
+import com.erp.modules.iam.domain.entity.Branch;
 import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
@@ -115,9 +116,7 @@ public class WorkOrderServiceImpl implements WorkOrderService {
             throw new IllegalArgumentException("Product does not belong to your company.");
         }
 
-        Long branchId = branches.findByUid(req.branchUid())
-                .orElseThrow(() -> new NotFoundException("Branch not found: " + req.branchUid()))
-                .getId();
+        Long branchId = requireBranchByUid(req.branchUid(), companyId).getId();
 
         String woNumber = numberGenerator.next(companyId);
         WorkOrder wo = new WorkOrder(companyId, branchId,
@@ -135,8 +134,8 @@ public class WorkOrderServiceImpl implements WorkOrderService {
 
         Long costCentreValueId = null;
         if (req.costCentreValueUid() != null) {
-            costCentreValueId = dimensionValues.findByUid(req.costCentreValueUid())
-                    .orElseThrow(() -> new NotFoundException("CostCentreValue not found: " + req.costCentreValueUid()))
+            costCentreValueId = dimensionValues.findByCompanyIdAndUid(companyId, req.costCentreValueUid())
+                    .orElseThrow(() -> new NotFoundException("Cost centre value not found."))
                     .getId();
         }
         wo.updateDraft(req.plannedQty(), branchId, req.plannedDate(), costCentreValueId, req.notes(), principal.userId());
@@ -166,15 +165,13 @@ public class WorkOrderServiceImpl implements WorkOrderService {
 
         Long branchId = wo.getBranchId();
         if (req.branchUid() != null) {
-            branchId = branches.findByUid(req.branchUid())
-                    .orElseThrow(() -> new NotFoundException("Branch not found: " + req.branchUid()))
-                    .getId();
+            branchId = requireBranchByUid(req.branchUid(), wo.getCompanyId()).getId();
         }
 
         Long costCentreValueId = wo.getCostCentreValueId();
         if (req.costCentreValueUid() != null) {
-            costCentreValueId = dimensionValues.findByUid(req.costCentreValueUid())
-                    .orElseThrow(() -> new NotFoundException("CostCentreValue not found: " + req.costCentreValueUid()))
+            costCentreValueId = dimensionValues.findByCompanyIdAndUid(wo.getCompanyId(), req.costCentreValueUid())
+                    .orElseThrow(() -> new NotFoundException("Cost centre value not found."))
                     .getId();
         }
 
@@ -329,6 +326,15 @@ public class WorkOrderServiceImpl implements WorkOrderService {
             throw new IllegalArgumentException("BOM does not belong to your company.");
         }
         return bom;
+    }
+
+    /**
+     * Company-scoped branch lookup. Returns the branch only when it belongs to {@code companyId};
+     * throws {@link NotFoundException} (404) otherwise — no existence leak for foreign-company uids.
+     */
+    private Branch requireBranchByUid(String branchUid, Long companyId) {
+        return branches.findByUidAndCompanyId(branchUid, companyId)
+                .orElseThrow(() -> new NotFoundException("Branch not found."));
     }
 
     // -------------------------------------------------------------------------

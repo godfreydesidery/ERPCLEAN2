@@ -20,9 +20,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * User administration by uid (ARCHITECTURE §7). Returns raw DTOs — {@code ApiResponseAdvice} wraps
- * them. Users are ORG-WIDE (a user may span companies, DATA-MODEL §1.4), so endpoints gate on the
- * plain {@code @perm.has('USER.*')} (not the company-scoped {@code @perm.scoped}) — matching the
- * RoleController/UserRoleController precedent (ADR-0002). {@code is_root} is never settable here.
+ * them. The permission gate is {@code @perm.has('USER.*')} (not the company-scoped variant); the
+ * company-membership tenant-isolation check is enforced inside {@code UserServiceImpl} via
+ * {@code requireInScope} on every mutating operation (security audit 2026-06-26). Read-only
+ * list/get paths apply the same membership check. {@code is_root} is never settable here.
  */
 @RestController
 @RequestMapping("/api/v1/users")

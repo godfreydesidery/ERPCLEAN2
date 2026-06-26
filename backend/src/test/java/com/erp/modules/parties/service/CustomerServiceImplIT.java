@@ -14,8 +14,13 @@ import com.erp.modules.parties.domain.dto.AssignPartyBranchRequest;
 import com.erp.modules.parties.domain.dto.CreateCustomerRequest;
 import com.erp.modules.parties.domain.dto.CustomerDto;
 import com.erp.modules.parties.domain.dto.MoneyDto;
+import com.erp.modules.parties.domain.entity.Agent;
+import com.erp.modules.parties.domain.enums.AgentKind;
 import com.erp.modules.parties.domain.enums.CustomerKind;
 import com.erp.modules.parties.domain.enums.PartyType;
+import com.erp.modules.parties.repository.AgentRepository;
+import com.erp.modules.products.domain.entity.PriceList;
+import com.erp.modules.products.repository.PriceListRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditLog;
 import com.erp.platform.audit.AuditRepository;
@@ -52,6 +57,8 @@ class CustomerServiceImplIT extends PostgresIntegrationTest {
     @Autowired private AppUserRepository users;
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private IamTestData testData;
+    @Autowired private PriceListRepository priceListRepository;
+    @Autowired private AgentRepository agentRepository;
 
     private Organisation org;
     private Company companyA;
@@ -59,6 +66,9 @@ class CustomerServiceImplIT extends PostgresIntegrationTest {
 
     // root user stored id used in Principal
     private Long rootId;
+    // real FK targets seeded per test run
+    private Long priceListAId;
+    private Long agentAId;
 
     @BeforeEach
     void setUp() {
@@ -79,6 +89,16 @@ class CustomerServiceImplIT extends PostgresIntegrationTest {
         // ROOT context: canActIn any company; ScopeGuard passes for all seeds.
         RequestContext.set(new RequestContext.Principal(
                 rootId, "pty_root", true, companyA.getId(), branchA.getId(), null));
+
+        // Seed real FK targets in companyA so D5-defaults tests can reference real ids.
+        PriceList pl = priceListRepository.save(
+                new PriceList(companyA.getId(), "RETAIL", "Retail Price List", rootId));
+        priceListAId = pl.getId();
+
+        Agent ag = agentRepository.save(
+                new Agent(companyA.getId(), "AGT-001", PartyType.INDIVIDUAL,
+                        "Test Agent", AgentKind.EXTERNAL, rootId));
+        agentAId = ag.getId();
     }
 
     @AfterEach
@@ -350,15 +370,15 @@ class CustomerServiceImplIT extends PostgresIntegrationTest {
                 companyA.getId(), PartyType.BUSINESS, "Defaults Co", null,
                 "TIN-D5", true, "VRN-D5", null, null, null, null, null, null, null, null,
                 CustomerKind.CREDIT_ACCOUNT, null, null, null,
-                "TZ", 7001L, 8001L,
+                "TZ", priceListAId, agentAId,
                 com.erp.modules.parties.domain.enums.CustomerSegment.WHOLESALE,
                 true, "EXEMPT-REF-1", "usd");
 
         CustomerDto dto = customerService.create(req);
 
         assertThat(dto.country()).isEqualTo("TZ");
-        assertThat(dto.defaultPriceListId()).isEqualTo(7001L);
-        assertThat(dto.defaultAgentId()).isEqualTo(8001L);
+        assertThat(dto.defaultPriceListId()).isEqualTo(priceListAId);
+        assertThat(dto.defaultAgentId()).isEqualTo(agentAId);
         assertThat(dto.segment())
                 .isEqualTo(com.erp.modules.parties.domain.enums.CustomerSegment.WHOLESALE);
         assertThat(dto.taxExempt()).isTrue();
@@ -390,13 +410,13 @@ class CustomerServiceImplIT extends PostgresIntegrationTest {
                         PartyType.BUSINESS, "Edit Co", null, "TIN-ED", false, null,
                         null, null, null, null, null, null, null, null,
                         CustomerKind.CREDIT_ACCOUNT, null, null, null,
-                        "KE", 1L, 2L,
+                        "KE", priceListAId, agentAId,
                         com.erp.modules.parties.domain.enums.CustomerSegment.GOVERNMENT,
                         true, "REF-2", "kes"));
 
         assertThat(updated.country()).isEqualTo("KE");
-        assertThat(updated.defaultPriceListId()).isEqualTo(1L);
-        assertThat(updated.defaultAgentId()).isEqualTo(2L);
+        assertThat(updated.defaultPriceListId()).isEqualTo(priceListAId);
+        assertThat(updated.defaultAgentId()).isEqualTo(agentAId);
         assertThat(updated.segment())
                 .isEqualTo(com.erp.modules.parties.domain.enums.CustomerSegment.GOVERNMENT);
         assertThat(updated.taxExempt()).isTrue();

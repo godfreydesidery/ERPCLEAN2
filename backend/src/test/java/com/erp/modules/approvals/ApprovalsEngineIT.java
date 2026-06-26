@@ -9,6 +9,7 @@ import com.erp.modules.approvals.domain.dto.CreateApprovalPolicyRequest;
 import com.erp.modules.approvals.domain.dto.DecideRequest;
 import com.erp.modules.approvals.domain.dto.PolicyStepInputDto;
 import com.erp.modules.approvals.domain.dto.SubmitForApprovalRequest;
+import com.erp.modules.approvals.domain.dto.UpdateApprovalPolicyRequest;
 import com.erp.modules.approvals.domain.enums.ApprovalRequestStatus;
 import com.erp.modules.approvals.domain.enums.DecisionAction;
 import com.erp.modules.approvals.domain.enums.PolicyBranchScope;
@@ -30,6 +31,7 @@ import com.erp.modules.iam.repository.RoleRepository;
 import com.erp.modules.iam.repository.UserBranchRepository;
 import com.erp.modules.iam.service.UserRoleService;
 import com.erp.platform.common.api.ConflictException;
+import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.RequestContext;
 import com.erp.support.IamTestData;
 import com.erp.support.PostgresIntegrationTest;
@@ -404,6 +406,61 @@ class ApprovalsEngineIT extends PostgresIntegrationTest {
                 .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
                 .hasMessageContaining("already resolved")
                 .hasMessageContaining("REJECTED");
+    }
+
+    // ------------------------------------------------------------------
+    // 10. Security: confused-deputy — foreign branch uid rejected on create and update
+    //     A Company-A admin POSTing/PUTting an approval policy with a branchUid that belongs to
+    //     Company-B must receive 404 (NotFoundException) — not 201/200 — and no cross-tenant FK
+    //     must be persisted.
+    // ------------------------------------------------------------------
+    @Test
+    void createPolicy_withForeignBranchUid_throwsNotFound() {
+        // Arrange: a second company + branch (Company B)
+        Company companyB = companies.save(new Company(org, "COMP-B", "Company B"));
+        Branch  branchB  = branches.save(new Branch(companyB, "B-HQ", "Company B HQ"));
+
+        asPrincipal(buyerUser); // scoped to company A
+
+        // Act + Assert: supplying companyB's branch uid while scopeGuard passes for companyA
+        assertThatThrownBy(() ->
+            policyService.create(new CreateApprovalPolicyRequest(
+                company.getId(), "PURCHASE_ORDER", "Bad Policy",
+                PolicyBranchScope.BRANCH, branchB.getUid(), // <-- foreign branch
+                new BigDecimal("1000000"), null, null,
+                List.of(new PolicyStepInputDto(1, "PURCHASING_MANAGER"))
+            ))
+        ).isInstanceOf(NotFoundException.class)
+         .hasMessageContaining("Branch not found");
+    }
+
+    @Test
+    void updatePolicy_withForeignBranchUid_throwsNotFound() {
+        // Arrange: create a valid COMPANY_WIDE policy in company A first
+        asPrincipal(buyerUser);
+        ApprovalPolicyDto policy = policyService.create(new CreateApprovalPolicyRequest(
+            company.getId(), "PURCHASE_ORDER", "Valid Policy",
+            PolicyBranchScope.COMPANY_WIDE, null,
+            new BigDecimal("1000000"), null, null,
+            List.of(new PolicyStepInputDto(1, "PURCHASING_MANAGER"))
+        ));
+
+        // Arrange: a second company + branch (Company B)
+        Company companyB  = companies.save(new Company(org, "COMP-B2", "Company B2"));
+        Branch  branchB   = branches.save(new Branch(companyB, "B2-HQ", "Company B2 HQ"));
+        String  policyUid = policy.uid();
+        String  foreignUid = branchB.getUid();
+        UpdateApprovalPolicyRequest badReq = new UpdateApprovalPolicyRequest(
+            "PURCHASE_ORDER", "Updated Policy",
+            PolicyBranchScope.BRANCH, foreignUid, // <-- foreign branch
+            new BigDecimal("1000000"), null, null, true,
+            List.of(new PolicyStepInputDto(1, "PURCHASING_MANAGER"))
+        );
+
+        // Act + Assert: update switches scope to BRANCH using companyB's branch uid
+        assertThatThrownBy(() -> policyService.update(policyUid, badReq))
+            .isInstanceOf(NotFoundException.class)
+            .hasMessageContaining("Branch not found");
     }
 
     // ------------------------------------------------------------------

@@ -25,4 +25,21 @@ public interface BranchRepository extends JpaRepository<Branch, Long> {
 
     /** The current default branch of a company, if one is set (BR-2). */
     Optional<Branch> findByCompanyIdAndIsDefaultTrue(Long companyId);
+
+    /**
+     * Company-scoped uid lookup. Returns empty when the branch does not exist OR belongs to a
+     * different company — callers should throw NotFoundException (404) in the empty case to avoid
+     * leaking cross-tenant existence. Used by ApprovalPolicyServiceImpl.resolveBranchId() to
+     * prevent confused-deputy attacks where a caller supplies a foreign branch uid.
+     */
+    Optional<Branch> findByUidAndCompanyId(String uid, Long companyId);
+
+    /**
+     * Ownership check: true when a branch with the given PK exists AND its parent company has the
+     * given id. Branch maps company via {@code @ManyToOne Company company}, so the derived-query
+     * path uses the underscore escape {@code Company_Id} to traverse the association.
+     * Used by fixed-asset services to prevent cross-tenant branch binding on register /
+     * acquireFromBill / transfer (tenant-isolation site 2 &amp; 3).
+     */
+    boolean existsByIdAndCompany_Id(Long id, Long companyId);
 }
