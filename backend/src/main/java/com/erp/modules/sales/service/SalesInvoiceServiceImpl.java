@@ -19,6 +19,7 @@ import com.erp.modules.products.repository.ProductBulkPackRepository;
 import com.erp.modules.products.repository.ProductPriceRepository;
 import com.erp.modules.products.repository.ProductRepository;
 import com.erp.modules.products.repository.UnitOfMeasureRepository;
+import com.erp.modules.sales.domain.dto.CreateTaxRateRequest;
 import com.erp.modules.sales.domain.dto.AddInvoiceLineRequest;
 import com.erp.modules.sales.domain.dto.AddPaymentRequest;
 import com.erp.modules.sales.domain.dto.CreateSalesInvoiceRequest;
@@ -702,6 +703,22 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                 .filter(r -> r.getCompanyId().equals(companyId))
                 .map(TaxRateDto::from)
                 .toList();
+    }
+
+    @Override
+    public TaxRateDto createTaxRate(CreateTaxRateRequest req) {
+        scopeGuard.assertCanActIn(RequestContext.get(), req.companyId());
+        if (taxRates.existsByCompanyIdAndVatStatus(req.companyId(), req.vatStatus())) {
+            throw new IllegalStateException(
+                    "A tax rate for this VAT classification already exists. Update the existing rate instead.");
+        }
+        TaxRate rate = new TaxRate(req.companyId(), req.vatStatus(), req.rate(), actorId());
+        taxRates.save(rate);
+        audit.record(AuditEvent.of(AuditActions.TAXRATE_CREATE, "tax_rates", rate.getId(), rate.getUid())
+                .detail(Map.of(
+                        "vatStatus", rate.getVatStatus().name(),
+                        "rate", req.rate().toPlainString())));
+        return TaxRateDto.from(rate);
     }
 
     @Override

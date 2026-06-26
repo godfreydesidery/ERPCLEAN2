@@ -112,6 +112,7 @@ public final class AuditActions {
     public static final String SALES_INVOICE_PAYMENT_ADD     = "SALES.INVOICE.PAYMENT.ADD";
     public static final String SALES_INVOICE_PAYMENT_REMOVE  = "SALES.INVOICE.PAYMENT.REMOVE";
     public static final String SALES_INVOICE_VOID            = "SALES.INVOICE.VOID";
+    public static final String TAXRATE_CREATE                = "TAXRATE.CREATE";
     public static final String TAXRATE_UPDATE                = "TAXRATE.UPDATE";
 
     // -- Stock module (ADR-0010 D-12; target_type = plural table names) -------
