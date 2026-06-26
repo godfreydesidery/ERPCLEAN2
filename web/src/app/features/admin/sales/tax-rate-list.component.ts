@@ -5,7 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import { Company } from '../models/company.model';
-import { TaxRateDto, UpdateTaxRateRequest, VatStatus } from '../models/sales.model';
+import { CreateTaxRateRequest, TaxRateDto, UpdateTaxRateRequest, VatStatus } from '../models/sales.model';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { SalesService } from './sales.service';
@@ -43,6 +43,24 @@ export class TaxRateListComponent {
   readonly editRate = signal('');
   readonly editSaving = signal(false);
   readonly editError = signal<string | null>(null);
+
+  // ── Add form ───────────────────────────────────────────────────────────────
+  /** All three VatStatus values in display order. */
+  readonly ALL_VAT_STATUSES: VatStatus[] = ['STANDARD', 'ZERO_RATED', 'EXEMPT'];
+
+  /** VatStatus values NOT yet present in the loaded rows — drives the add dropdown. */
+  readonly availableVatStatuses = computed<VatStatus[]>(() => {
+    const existing = new Set(this.rows().map((r) => r.vatStatus));
+    return this.ALL_VAT_STATUSES.filter((s) => !existing.has(s));
+  });
+
+  /** True when every classification is already configured. */
+  readonly allConfigured = computed(() => this.availableVatStatuses().length === 0);
+
+  readonly addVatStatus = signal<VatStatus>('STANDARD');
+  readonly addRate = signal('');
+  readonly addSaving = signal(false);
+  readonly addError = signal<string | null>(null);
 
   readonly canManage = computed(() => this.session.hasPermission('TAXRATE.MANAGE'));
   readonly isEmpty = computed(() => this.state() === 'idle' && this.rows().length === 0);
@@ -84,6 +102,10 @@ export class TaxRateListComponent {
       next: (rows) => {
         this.rows.set(rows);
         this.state.set('idle');
+        // Sync the Add-form default to a classification that is actually missing for this
+        // company — otherwise the dropdown shows the available one(s) but the signal still
+        // holds the initial 'STANDARD', and an untouched submit would post a duplicate (409).
+        this.resetAdd();
       },
       error: (err) =>
         this.state.set(err instanceof HttpErrorResponse && err.status === 403 ? 'forbidden' : 'error'),
@@ -107,6 +129,53 @@ export class TaxRateListComponent {
   cancelEdit(): void {
     this.editingUid.set(null);
     this.editError.set(null);
+  }
+
+  // ── Add form ────────────────────────────────────────────────────────────────
+
+  /** Reset the add form to defaults whenever the available list changes. */
+  resetAdd(): void {
+    const available = this.availableVatStatuses();
+    this.addVatStatus.set(available[0] ?? 'STANDARD');
+    this.addRate.set('');
+    this.addError.set(null);
+  }
+
+  submitAdd(): void {
+    const entered = this.addRate().trim();
+    const pct = Number(entered);
+    if (!entered || Number.isNaN(pct)) {
+      this.addError.set('Enter the rate as a percentage (e.g. 18).');
+      return;
+    }
+    if (pct < 0 || pct > 99.99) {
+      this.addError.set('Rate must be between 0 and 99.99%.');
+      return;
+    }
+    this.addSaving.set(true);
+    this.addError.set(null);
+    const request: CreateTaxRateRequest = {
+      companyId: this.selectedCompanyId(),
+      vatStatus: this.addVatStatus(),
+      rate: (pct / 100).toFixed(4),
+    };
+    this.salesService.createTaxRate(request).subscribe({
+      next: (created) => {
+        this.addSaving.set(false);
+        this.rows.update((rows) => [...rows, created]);
+        this.resetAdd();
+        this.alerts.success('Tax rate added');
+      },
+      error: (err) => {
+        this.addSaving.set(false);
+        const status = err instanceof HttpErrorResponse ? err.status : 0;
+        if (status === 409) {
+          this.addError.set('A rate for this classification already exists.');
+        } else {
+          this.addError.set(this.messageFrom(err, 'Could not add tax rate.'));
+        }
+      },
+    });
   }
 
   saveEdit(tr: TaxRateDto): void {

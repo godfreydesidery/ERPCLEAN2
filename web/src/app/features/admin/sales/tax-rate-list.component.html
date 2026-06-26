@@ -137,6 +137,54 @@
             </table>
           </div>
         }
+
+        <!-- ── Add tax rate ───────────────────────────────────────────────── -->
+        @if (canManage()) {
+          @if (allConfigured()) {
+            <p class="text-muted small mt-3 mb-0">
+              <i class="bi bi-check-circle me-1" aria-hidden="true"></i>
+              All VAT classifications are configured.
+            </p>
+          } @else {
+            <section class="mt-4" aria-labelledby="addTaxRateHeading">
+              <h2 id="addTaxRateHeading" class="h6 mb-3">Add tax rate</h2>
+              <form class="d-flex flex-wrap gap-3 align-items-end" (ngSubmit)="submitAdd()" aria-label="Add tax rate">
+                <div class="erp-field">
+                  <label for="addVatStatus">VAT classification</label>
+                  <select id="addVatStatus" name="addVatStatus" class="form-select"
+                          [ngModel]="addVatStatus()" (ngModelChange)="addVatStatus.set($event)"
+                          [disabled]="addSaving()">
+                    @for (s of availableVatStatuses(); track s) {
+                      <option [value]="s">{{ vatStatusLabel(s) }}</option>
+                    }
+                  </select>
+                </div>
+                <div class="erp-field">
+                  <label for="addRate">Rate (%)</label>
+                  <input id="addRate" name="addRate" type="text"
+                         class="form-control" style="max-width:120px"
+                         placeholder="e.g. 18"
+                         autocomplete="off"
+                         [ngModel]="addRate()" (ngModelChange)="addRate.set($event)"
+                         [disabled]="addSaving()" />
+                </div>
+                <div class="erp-field">
+                  <button type="submit" class="btn btn-primary" [disabled]="addSaving()">
+                    @if (addSaving()) {
+                      <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                    } @else {
+                      <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+                    }
+                    Add
+                  </button>
+                </div>
+              </form>
+              @if (addError(); as msg) {
+                <output class="text-danger small mt-2 d-block" aria-live="polite">{{ msg }}</output>
+              }
+            </section>
+          }
+        }
       }
     }
   }

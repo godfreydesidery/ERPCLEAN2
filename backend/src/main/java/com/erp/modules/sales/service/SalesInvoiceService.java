@@ -9,6 +9,7 @@ import com.erp.modules.sales.domain.dto.OverrideLinePriceRequest;
 import com.erp.modules.sales.domain.dto.SalesInvoiceDto;
 import com.erp.modules.sales.domain.dto.SalesInvoiceLineDto;
 import com.erp.modules.sales.domain.dto.SalesInvoicePaymentDto;
+import com.erp.modules.sales.domain.dto.CreateTaxRateRequest;
 import com.erp.modules.sales.domain.dto.TaxRateDto;
 import com.erp.modules.sales.domain.dto.UpdateInvoiceLineRequest;
 import com.erp.modules.sales.domain.dto.UpdateTaxRateRequest;
@@ -70,6 +71,8 @@ public interface SalesInvoiceService {
     TaxRateDto getTaxRateByUid(String uid);
 
     List<TaxRateDto> listTaxRates(Long companyId);
+
+    TaxRateDto createTaxRate(CreateTaxRateRequest req);
 
     TaxRateDto updateTaxRate(String uid, UpdateTaxRateRequest req);
 }
