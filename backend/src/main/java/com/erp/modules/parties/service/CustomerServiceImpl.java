@@ -11,13 +11,17 @@ import com.erp.modules.parties.domain.entity.CustomerBranch;
 import com.erp.modules.parties.domain.enums.CustomerKind;
 import com.erp.modules.parties.domain.enums.CustomerSegment;
 import com.erp.modules.parties.domain.enums.PartyType;
+import com.erp.modules.parties.repository.AgentRepository;
 import com.erp.modules.parties.repository.CustomerBranchRepository;
 import com.erp.modules.parties.repository.CustomerRepository;
+import com.erp.modules.parties.repository.PaymentTermsRepository;
+import com.erp.modules.products.repository.PriceListRepository;
 import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
+import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.security.RequestContext;
@@ -40,6 +44,9 @@ public class CustomerServiceImpl implements CustomerService {
 
     private final CustomerRepository customers;
     private final CustomerBranchRepository customerBranches;
+    private final PaymentTermsRepository paymentTermsRepo;
+    private final PriceListRepository priceListRepo;
+    private final AgentRepository agentRepo;
     private final PartyCodeGenerator codeGen;
     private final PartyBranchGuard branchGuard;
     private final ScopeGuard scopeGuard;
@@ -47,12 +54,18 @@ public class CustomerServiceImpl implements CustomerService {
 
     public CustomerServiceImpl(CustomerRepository customers,
                                CustomerBranchRepository customerBranches,
+                               PaymentTermsRepository paymentTermsRepo,
+                               PriceListRepository priceListRepo,
+                               AgentRepository agentRepo,
                                PartyCodeGenerator codeGen,
                                PartyBranchGuard branchGuard,
                                ScopeGuard scopeGuard,
                                AuditService audit) {
         this.customers = customers;
         this.customerBranches = customerBranches;
+        this.paymentTermsRepo = paymentTermsRepo;
+        this.priceListRepo = priceListRepo;
+        this.agentRepo = agentRepo;
         this.codeGen = codeGen;
         this.branchGuard = branchGuard;
         this.scopeGuard = scopeGuard;
@@ -64,6 +77,8 @@ public class CustomerServiceImpl implements CustomerService {
         scopeGuard.assertCanActIn(RequestContext.get(), req.companyId());
         validateIdentifiers(req.partyType(), req.tin(), req.vrn(), req.vatRegistered(),
                 req.customerKind(), req.displayName());
+        validateFkOwnership(req.companyId(), req.paymentTermsId(),
+                req.defaultPriceListId(), req.defaultAgentId());
 
         String code = codeGen.next(req.companyId(), "CUSTOMER");
         Customer c = new Customer(req.companyId(), code, req.partyType(), req.displayName(),
@@ -115,6 +130,8 @@ public class CustomerServiceImpl implements CustomerService {
         scopeGuard.assertCanActIn(RequestContext.get(), c.getCompanyId());
         validateIdentifiers(req.partyType(), req.tin(), req.vrn(), req.vatRegistered(),
                 req.customerKind(), req.displayName());
+        validateFkOwnership(c.getCompanyId(), req.paymentTermsId(),
+                req.defaultPriceListId(), req.defaultAgentId());
 
         applyCommon(c, req.partyType(), req.displayName(), req.legalName(), req.tin(),
                 req.vatRegistered(), req.vrn(), req.businessRegNo(), req.mobileMoneyNo(),
@@ -200,6 +217,27 @@ public class CustomerServiceImpl implements CustomerService {
 
     private Customer require(String uid) {
         return Lookups.orNotFound(customers.findByUid(uid), "Customer", uid);
+    }
+
+    /**
+     * Verifies that each supplied optional FK belongs to {@code companyId}.
+     * Throws {@link NotFoundException} (404) on mismatch — same as a non-existent resource,
+     * avoiding existence leaks across company boundaries (CONFUSED_DEPUTY fix).
+     */
+    private void validateFkOwnership(Long companyId, Long paymentTermsId,
+                                     Long defaultPriceListId, Long defaultAgentId) {
+        if (paymentTermsId != null
+                && !paymentTermsRepo.existsByCompanyIdAndId(companyId, paymentTermsId)) {
+            throw new NotFoundException("PaymentTerms not found.");
+        }
+        if (defaultPriceListId != null
+                && !priceListRepo.existsByCompanyIdAndId(companyId, defaultPriceListId)) {
+            throw new NotFoundException("PriceList not found.");
+        }
+        if (defaultAgentId != null
+                && !agentRepo.existsByCompanyIdAndId(companyId, defaultAgentId)) {
+            throw new NotFoundException("Agent not found.");
+        }
     }
 
     /**

@@ -12,6 +12,9 @@ public interface DocumentBrandingRepository extends JpaRepository<DocumentBrandi
 
     Optional<DocumentBranding> findByCompanyId(Long companyId);
 
+    /** Ownership guard: load a branding row only when it belongs to the given company. */
+    Optional<DocumentBranding> findByIdAndCompanyId(Long id, Long companyId);
+
     /** ScopeGuard support (ADR-0023 D-9). */
     @Query("SELECT b.companyId FROM DocumentBranding b WHERE b.uid = :uid")
     Optional<Long> findCompanyIdByUid(@Param("uid") String uid);

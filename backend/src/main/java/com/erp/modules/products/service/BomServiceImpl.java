@@ -301,6 +301,12 @@ public class BomServiceImpl implements BomService {
 
     private void cloneComponents(String sourceBomUid, Bom target) {
         Bom source = Lookups.orNotFound(boms.findByUid(sourceBomUid), "Bom (clone source)", sourceBomUid);
+        // Security: a cross-tenant clone would copy another company's recipe into the caller's
+        // tenant under the guise of a clone.  404 (not 403) — mirrors the require-scoped pattern
+        // used throughout this module and avoids confirming that a foreign BOM uid exists.
+        if (!source.getCompanyId().equals(target.getCompanyId())) {
+            throw new NotFoundException("Bom not found: " + sourceBomUid);
+        }
         List<com.erp.modules.products.domain.entity.BomComponent> sourceLines =
                 bomComponents.findByBomIdOrderByLineNo(source.getId());
         for (com.erp.modules.products.domain.entity.BomComponent src : sourceLines) {

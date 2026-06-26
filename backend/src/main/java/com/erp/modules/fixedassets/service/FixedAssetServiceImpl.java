@@ -4,6 +4,7 @@ import com.erp.modules.ap.domain.dto.SupplierBillDto;
 import com.erp.modules.ap.domain.dto.SupplierBillLineDto;
 import com.erp.modules.ap.domain.enums.SupplierBillStatus;
 import com.erp.modules.ap.service.SupplierBillService;
+import com.erp.modules.costing.repository.DimensionValueRepository;
 import com.erp.modules.fixedassets.domain.dto.AcquireFromBillRequest;
 import com.erp.modules.fixedassets.domain.dto.FixedAssetDto;
 import com.erp.modules.fixedassets.domain.dto.PlaceInServiceRequest;
@@ -17,6 +18,7 @@ import com.erp.modules.fixedassets.domain.enums.FixedAssetStatus;
 import com.erp.modules.fixedassets.repository.AssetCategoryRepository;
 import com.erp.modules.fixedassets.repository.FixedAssetRepository;
 import com.erp.modules.gl.domain.dto.JournalEntryDto;
+import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -37,6 +39,8 @@ public class FixedAssetServiceImpl implements FixedAssetService {
 
     private final FixedAssetRepository          assets;
     private final AssetCategoryRepository       categories;
+    private final BranchRepository              branches;
+    private final DimensionValueRepository      dimensionValues;
     private final FixedAssetNumberGenerator     numberGenerator;
     private final DepreciationScheduleService   scheduleService;
     private final FixedAssetGlPoster            glPoster;
@@ -46,6 +50,8 @@ public class FixedAssetServiceImpl implements FixedAssetService {
 
     public FixedAssetServiceImpl(FixedAssetRepository assets,
                                   AssetCategoryRepository categories,
+                                  BranchRepository branches,
+                                  DimensionValueRepository dimensionValues,
                                   FixedAssetNumberGenerator numberGenerator,
                                   DepreciationScheduleService scheduleService,
                                   FixedAssetGlPoster glPoster,
@@ -54,6 +60,8 @@ public class FixedAssetServiceImpl implements FixedAssetService {
                                   AuditService audit) {
         this.assets          = assets;
         this.categories      = categories;
+        this.branches        = branches;
+        this.dimensionValues = dimensionValues;
         this.numberGenerator = numberGenerator;
         this.scheduleService = scheduleService;
         this.glPoster        = glPoster;
@@ -66,6 +74,9 @@ public class FixedAssetServiceImpl implements FixedAssetService {
     public FixedAssetDto register(RegisterAssetRequest req) {
         scopeGuard.assertCanActIn(RequestContext.get(), req.companyId());
         requireCategory(req.companyId(), req.categoryId());
+        // Validate branch and cost-centre belong to the same company (tenant-isolation site 2).
+        requireBranchInCompany(req.companyId(), req.branchId());
+        requireCostCentreInCompany(req.companyId(), req.costCentreId());
 
         // Defect 4: reject a negative acquisitionCost before the DB constraint fires.
         if (req.acquisitionCost() != null && req.acquisitionCost().compareTo(BigDecimal.ZERO) < 0) {
@@ -104,6 +115,9 @@ public class FixedAssetServiceImpl implements FixedAssetService {
     public FixedAssetDto acquireFromBill(AcquireFromBillRequest req) {
         scopeGuard.assertCanActIn(RequestContext.get(), req.companyId());
         requireCategory(req.companyId(), req.categoryId());
+        // Validate branch and cost-centre belong to the same company (tenant-isolation site 2).
+        requireBranchInCompany(req.companyId(), req.branchId());
+        requireCostCentreInCompany(req.companyId(), req.costCentreId());
 
         // Read the AP bill DTO — no AP entity import (D-7, D-12)
         SupplierBillDto bill = billService.getByUid(req.billUid());
@@ -221,6 +235,10 @@ public class FixedAssetServiceImpl implements FixedAssetService {
             throw new IllegalArgumentException("Cannot transfer a disposed or written-off asset.");
         }
 
+        // Validate the target branch and cost-centre belong to the asset's company (tenant-isolation site 3).
+        requireBranchInCompany(asset.getCompanyId(), req.branchId());
+        requireCostCentreInCompany(asset.getCompanyId(), req.costCentreId());
+
         if (req.branchId() != null) asset.setBranchId(req.branchId());
         if (req.location() != null) asset.setLocation(req.location());
         if (req.costCentreId() != null) asset.setCostCentreId(req.costCentreId());
@@ -256,6 +274,29 @@ public class FixedAssetServiceImpl implements FixedAssetService {
         asset.setUpdatedBy(actorId());
 
         return asset;
+    }
+
+    /**
+     * Asserts that {@code branchId} belongs to {@code companyId}. Null branchId is allowed (field
+     * is optional on some requests). Throws {@link NotFoundException} (404) on a cross-tenant id so
+     * the caller cannot probe existence of a foreign branch (tenant-isolation sites 2 and 3).
+     */
+    private void requireBranchInCompany(Long companyId, Long branchId) {
+        if (branchId == null) return;
+        if (!branches.existsByIdAndCompany_Id(branchId, companyId)) {
+            throw NotFoundException.of("Branch", String.valueOf(branchId));
+        }
+    }
+
+    /**
+     * Asserts that {@code costCentreId} belongs to {@code companyId}. Null is allowed. Throws
+     * {@link NotFoundException} (404) on a cross-tenant id (tenant-isolation sites 2 and 3).
+     */
+    private void requireCostCentreInCompany(Long companyId, Long costCentreId) {
+        if (costCentreId == null) return;
+        if (dimensionValues.findByIdAndCompanyId(costCentreId, companyId).isEmpty()) {
+            throw NotFoundException.of("DimensionValue", String.valueOf(costCentreId));
+        }
     }
 
     private AssetCategory requireCategory(Long companyId, Long categoryId) {

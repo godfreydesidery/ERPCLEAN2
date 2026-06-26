@@ -14,6 +14,9 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 
     Optional<Product> findByCompanyIdAndUid(Long companyId, String uid);
 
+    /** Tenant-scoped id lookup — returns empty when the product exists but belongs to a different company. */
+    Optional<Product> findByCompanyIdAndId(Long companyId, Long id);
+
     Optional<Product> findByCompanyIdAndCode(Long companyId, String code);
 
     boolean existsByCompanyIdAndCode(Long companyId, String code);

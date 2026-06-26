@@ -27,6 +27,11 @@ import org.springframework.transaction.annotation.Transactional;
  * passwords go through {@link PasswordPolicy} + bcrypt. {@code is_root} is never set here — only
  * {@code BootstrapRunner} mints the root admin — so a created/updated user can never gain super-admin
  * via the API. Disabling a root user is refused (it could lock the deployment out of administration).
+ *
+ * <p><b>Tenant-isolation (security audit 2026-06-26).</b> All five mutators (update, disable,
+ * enable, unlock, setPassword) now gate on the same company-membership check as {@link #getByUid}:
+ * a non-root principal may only mutate users who are members of the principal's active company.
+ * Out-of-scope and root-user targets both yield {@code 404} to avoid existence leakage.
  */
 @Service
 @Transactional
@@ -119,7 +124,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public UserDto updateByUid(String uid, UpdateUserRequest request) {
-        AppUser user = requireByUid(uid);
+        AppUser user = requireInScope(uid);
         user.setDisplayName(request.displayName());
         user.setEmail(request.email());
         user.setPhone(request.phone());
@@ -132,7 +137,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public void disableByUid(String uid) {
-        AppUser user = requireByUid(uid);
+        AppUser user = requireInScope(uid);
         if (user.isRoot()) {
             throw new ConflictException("A root administrator cannot be disabled via the API.");
         }
@@ -145,7 +150,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public void enableByUid(String uid) {
-        AppUser user = requireByUid(uid);
+        AppUser user = requireInScope(uid);
         MasterStatus previous = user.getStatus();
         user.setStatus(MasterStatus.ACTIVE);
 
@@ -155,7 +160,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public void unlockByUid(String uid) {
-        AppUser user = requireByUid(uid);
+        AppUser user = requireInScope(uid);
         user.unlock();
 
         audit.record(AuditEvent.of(AuditActions.USER_UNLOCK, "app_users", user.getId(), user.getUid()));
@@ -163,7 +168,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public void setPasswordByUid(String uid, SetPasswordRequest request) {
-        AppUser user = requireByUid(uid);
+        AppUser user = requireInScope(uid);
         passwordPolicy.validate(request.password());
         user.changePassword(passwordEncoder.encode(request.password()), Instant.now());
 
@@ -173,5 +178,31 @@ public class UserServiceImpl implements UserService {
 
     private AppUser requireByUid(String uid) {
         return Lookups.orNotFound(users.findByUid(uid), "User", uid);
+    }
+
+    /**
+     * Loads the user by uid and enforces tenant-isolation for non-root callers.
+     *
+     * <p>Mirrors the check in {@link #getByUid}: root users short-circuit to allowed; non-root
+     * principals get {@code 404} (not {@code 403}) when the target is a root user OR the target
+     * does not belong to the principal's active company — avoiding existence leakage identical to
+     * the read path (security audit 2026-06-26).
+     *
+     * <p>This is intentionally 404, not 403, so a cross-tenant attacker cannot distinguish
+     * "user exists in another company" from "user does not exist at all".
+     */
+    private AppUser requireInScope(String uid) {
+        AppUser user = requireByUid(uid);
+        RequestContext.Principal principal = RequestContext.get();
+        if (principal == null || !principal.root()) {
+            if (user.isRoot()) {
+                throw NotFoundException.of("User", uid);
+            }
+            Long companyId = (principal != null) ? principal.companyId() : null;
+            if (companyId == null || !users.existsUserInCompany(user.getId(), companyId)) {
+                throw NotFoundException.of("User", uid);
+            }
+        }
+        return user;
     }
 }

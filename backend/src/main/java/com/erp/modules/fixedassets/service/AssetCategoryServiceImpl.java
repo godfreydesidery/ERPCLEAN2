@@ -5,6 +5,7 @@ import com.erp.modules.fixedassets.domain.dto.CreateAssetCategoryRequest;
 import com.erp.modules.fixedassets.domain.dto.UpdateAssetCategoryRequest;
 import com.erp.modules.fixedassets.domain.entity.AssetCategory;
 import com.erp.modules.fixedassets.repository.AssetCategoryRepository;
+import com.erp.modules.gl.repository.ChartOfAccountRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -24,13 +25,16 @@ import org.springframework.transaction.annotation.Transactional;
 public class AssetCategoryServiceImpl implements AssetCategoryService {
 
     private final AssetCategoryRepository categories;
-    private final ScopeGuard              scopeGuard;
-    private final AuditService            audit;
+    private final ChartOfAccountRepository glAccounts;
+    private final ScopeGuard               scopeGuard;
+    private final AuditService             audit;
 
     public AssetCategoryServiceImpl(AssetCategoryRepository categories,
+                                     ChartOfAccountRepository glAccounts,
                                      ScopeGuard scopeGuard,
                                      AuditService audit) {
         this.categories = categories;
+        this.glAccounts = glAccounts;
         this.scopeGuard = scopeGuard;
         this.audit      = audit;
     }
@@ -38,6 +42,11 @@ public class AssetCategoryServiceImpl implements AssetCategoryService {
     @Override
     public AssetCategoryDto create(CreateAssetCategoryRequest req) {
         scopeGuard.assertCanActIn(RequestContext.get(), req.companyId());
+
+        // Validate all three GL account ids belong to the same company (tenant-isolation site 1).
+        requireAccountInCompany(req.companyId(), req.assetAccountId());
+        requireAccountInCompany(req.companyId(), req.accumDepAccountId());
+        requireAccountInCompany(req.companyId(), req.depExpenseAccountId());
 
         if (categories.findByCompanyIdAndCode(req.companyId(), req.code()).isPresent()) {
             throw new ConflictException(
@@ -78,6 +87,11 @@ public class AssetCategoryServiceImpl implements AssetCategoryService {
         AssetCategory cat = require(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), cat.getCompanyId());
 
+        // Validate all three GL account ids belong to the category's company (tenant-isolation site 1).
+        requireAccountInCompany(cat.getCompanyId(), req.assetAccountId());
+        requireAccountInCompany(cat.getCompanyId(), req.accumDepAccountId());
+        requireAccountInCompany(cat.getCompanyId(), req.depExpenseAccountId());
+
         cat.setName(req.name());
         cat.setDefaultMethod(req.defaultMethod());
         cat.setDefaultLifePeriods(req.defaultLifePeriods());
@@ -106,6 +120,18 @@ public class AssetCategoryServiceImpl implements AssetCategoryService {
     }
 
     // -------------------------------------------------------------------------
+
+    /**
+     * Asserts that {@code accountId} belongs to {@code companyId}. Throws {@link NotFoundException}
+     * (404 — no existence leak) when the account does not exist in that company. This prevents a
+     * caller from poisoning a category with GL accounts from a foreign tenant (confused-deputy,
+     * tenant-isolation site 1).
+     */
+    private void requireAccountInCompany(Long companyId, Long accountId) {
+        if (!glAccounts.existsByIdAndCompanyId(accountId, companyId)) {
+            throw NotFoundException.of("ChartOfAccount", String.valueOf(accountId));
+        }
+    }
 
     private AssetCategory require(String uid) {
         return categories.findByUid(uid)

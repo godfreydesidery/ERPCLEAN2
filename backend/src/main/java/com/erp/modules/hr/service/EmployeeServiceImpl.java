@@ -59,7 +59,7 @@ public class EmployeeServiceImpl implements EmployeeService {
         Long companyId = p.companyId();
         scopeGuard.assertCanActIn(p, companyId);
 
-        validateFkReferences(req);
+        validateFkReferences(req, companyId);
         validatePayeeTarget(req);
 
         String number = generateEmployeeNumber(companyId);
@@ -94,7 +94,7 @@ public class EmployeeServiceImpl implements EmployeeService {
         scopeGuard.assertCanActIn(RequestContext.get(), emp.getCompanyId());
         RequestContext.Principal p = RequestContext.get();
 
-        validateFkReferences(req);
+        validateFkReferences(req, emp.getCompanyId());
         validatePayeeTarget(req);
         applyFields(emp, req);
         emp.setUpdatedAt(Instant.now());
@@ -120,9 +120,9 @@ public class EmployeeServiceImpl implements EmployeeService {
      * Validate FK references for departmentId and branchId before any persistence attempt.
      * Returns clean 404 rather than leaking a DB foreign-key violation as 500 (issue #22).
      */
-    private void validateFkReferences(CreateEmployeeRequest req) {
+    private void validateFkReferences(CreateEmployeeRequest req, Long companyId) {
         if (req.departmentId() != null
-                && !departments.existsById(req.departmentId())) {
+                && !departments.existsByIdAndCompanyId(req.departmentId(), companyId)) {
             throw NotFoundException.of("Department", String.valueOf(req.departmentId()));
         }
         if (req.branchId() != null

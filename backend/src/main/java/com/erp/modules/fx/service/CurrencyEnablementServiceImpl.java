@@ -9,6 +9,7 @@ import com.erp.modules.fx.domain.exception.CurrencyNotEnabledException;
 import com.erp.modules.fx.repository.BranchCurrencyRepository;
 import com.erp.modules.fx.repository.CompanyCurrencyRepository;
 import com.erp.modules.fx.repository.CurrencyRepository;
+import com.erp.modules.iam.domain.entity.Company;
 import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.platform.common.api.ConflictException;
@@ -17,6 +18,8 @@ import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.security.RequestContext;
 import java.time.Instant;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,6 +33,12 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Transactional
 public class CurrencyEnablementServiceImpl implements CurrencyEnablementService {
+
+    private static final Logger log = LoggerFactory.getLogger(CurrencyEnablementServiceImpl.class);
+
+    private static final String MSG_COMPANY_NOT_FOUND  = "The requested company was not found.";
+    private static final String MSG_BRANCH_NOT_FOUND   = "The requested branch was not found.";
+    private static final String CURRENCY_PREFIX        = "Currency '";
 
     private final CompanyCurrencyRepository companyCurrencies;
     private final BranchCurrencyRepository  branchCurrencies;
@@ -55,8 +64,11 @@ public class CurrencyEnablementServiceImpl implements CurrencyEnablementService 
     @Transactional(readOnly = true)
     public Long resolveCompanyId(String companyUid) {
         return companies.findByUid(companyUid)
-                .map(c -> c.getId())
-                .orElseThrow(() -> NotFoundException.of("Company", companyUid));
+                .map(Company::getId)
+                .orElseThrow(() -> {
+                    log.debug("resolveCompanyId: company uid {} not found", companyUid);
+                    return new NotFoundException(MSG_COMPANY_NOT_FOUND);
+                });
     }
 
     @Override
@@ -65,7 +77,11 @@ public class CurrencyEnablementServiceImpl implements CurrencyEnablementService 
         return branches.findByUid(branchUid)
                 .filter(b -> b.getCompany().getId().equals(companyId))
                 .map(b -> b.getId())
-                .orElseThrow(() -> NotFoundException.of("Branch", branchUid));
+                .orElseThrow(() -> {
+                    log.debug("resolveBranchId: branch uid {} not found or does not belong to company {}",
+                            branchUid, companyId);
+                    return new NotFoundException(MSG_BRANCH_NOT_FOUND);
+                });
     }
 
     // ── Query ─────────────────────────────────────────────────────────────────
@@ -116,8 +132,11 @@ public class CurrencyEnablementServiceImpl implements CurrencyEnablementService 
         }
         // 3) Company base (ultimate fallback)
         String base = companies.findById(companyId)
-                .map(c -> c.getBaseCurrency())
-                .orElseThrow(() -> NotFoundException.of("Company", String.valueOf(companyId)));
+                .map(Company::getBaseCurrency)
+                .orElseThrow(() -> {
+                    log.debug("resolveDefault: company id {} not found", companyId);
+                    return new NotFoundException(MSG_COMPANY_NOT_FOUND);
+                });
         return CurrencyCode.of(base);
     }
 
@@ -247,7 +266,7 @@ public class CurrencyEnablementServiceImpl implements CurrencyEnablementService 
         if (bc.isDefault()) {
             throw new ConflictException(
                     "Cannot deactivate the default document currency '" + code.value()
-                            + "' for branch " + branchId + ". Set another currency as default first.");
+                            + "' for this branch. Set another currency as default first.");
         }
 
         Long actorId = actorId();
@@ -310,52 +329,62 @@ public class CurrencyEnablementServiceImpl implements CurrencyEnablementService 
                         "Unknown currency: " + code.value()));
         if (!cur.isActive()) {
             throw new IllegalArgumentException(
-                    "Currency '" + code.value() + "' is not globally active in the currencies master.");
+                    CURRENCY_PREFIX + code.value() + "' is not globally active in the currencies master.");
         }
     }
 
     private void assertEnabledForCompany(Long companyId, CurrencyCode code) {
         companyCurrencies.findByCompanyIdAndCurrencyCodeAndActiveTrue(companyId, code)
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "Currency '" + code.value()
-                                + "' is not enabled for company " + companyId
-                                + ". Enable it at the company level first."));
+                        CURRENCY_PREFIX + code.value()
+                                + "' is not enabled for this company. Enable it at the company level first."));
     }
 
     private String requireBaseCurrency(Long companyId) {
         return companies.findById(companyId)
-                .map(c -> c.getBaseCurrency())
-                .orElseThrow(() -> NotFoundException.of("Company", String.valueOf(companyId)));
+                .map(Company::getBaseCurrency)
+                .orElseThrow(() -> {
+                    log.debug("requireBaseCurrency: company id {} not found", companyId);
+                    return new NotFoundException(MSG_COMPANY_NOT_FOUND);
+                });
     }
 
     private CompanyCurrency requireCompanyCurrency(Long companyId, CurrencyCode code) {
         return companyCurrencies.findByCompanyIdAndCurrencyCode(companyId, code)
-                .orElseThrow(() -> NotFoundException.of(
-                        "CompanyCurrency", companyId + "/" + code.value()));
+                .orElseThrow(() -> {
+                    log.debug("requireCompanyCurrency: currency {} not found for company id {}",
+                            code.value(), companyId);
+                    return new NotFoundException(
+                            CURRENCY_PREFIX + code.value() + "' is not configured for this company.");
+                });
     }
 
     private CompanyCurrency requireCompanyCurrencyActive(Long companyId, CurrencyCode code) {
         CompanyCurrency cc = requireCompanyCurrency(companyId, code);
         if (!cc.isActive()) {
             throw new ConflictException(
-                    "Currency '" + code.value() + "' is not active for company "
-                            + companyId + ". Re-enable it first.");
+                    CURRENCY_PREFIX + code.value() + "' is not active for this company."
+                            + " Re-enable it first.");
         }
         return cc;
     }
 
     private BranchCurrency requireBranchCurrency(Long branchId, CurrencyCode code) {
         return branchCurrencies.findByBranchIdAndCurrencyCode(branchId, code)
-                .orElseThrow(() -> NotFoundException.of(
-                        "BranchCurrency", branchId + "/" + code.value()));
+                .orElseThrow(() -> {
+                    log.debug("requireBranchCurrency: currency {} not found for branch id {}",
+                            code.value(), branchId);
+                    return new NotFoundException(
+                            CURRENCY_PREFIX + code.value() + "' is not configured for this branch.");
+                });
     }
 
     private BranchCurrency requireBranchCurrencyActive(Long branchId, CurrencyCode code) {
         BranchCurrency bc = requireBranchCurrency(branchId, code);
         if (!bc.isActive()) {
             throw new ConflictException(
-                    "Currency '" + code.value() + "' is not active for branch "
-                            + branchId + ". Re-enable it first.");
+                    CURRENCY_PREFIX + code.value() + "' is not active for this branch."
+                            + " Re-enable it first.");
         }
         return bc;
     }
