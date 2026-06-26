@@ -1,5 +1,8 @@
 package com.erp.support;
 
+import com.erp.modules.iam.repository.AppUserRepository;
+import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.modules.iam.service.UserCompanyService;
 import jakarta.persistence.EntityManager;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,9 +17,30 @@ import org.springframework.transaction.annotation.Transactional;
 public class IamTestData {
 
     private final EntityManager em;
+    private final UserCompanyService userCompanyService;
+    private final AppUserRepository appUsers;
+    private final CompanyRepository companies;
 
-    public IamTestData(EntityManager em) {
+    public IamTestData(EntityManager em,
+                       UserCompanyService userCompanyService,
+                       AppUserRepository appUsers,
+                       CompanyRepository companies) {
         this.em = em;
+        this.userCompanyService = userCompanyService;
+        this.appUsers = appUsers;
+        this.companies = companies;
+    }
+
+    /**
+     * ADR-0046 test helper: seed an explicit {@code user_company} membership so a test can then
+     * grant roles / assign branches (the authoritative gate now requires assign-company-first).
+     * Delegates to {@code ensureMembership}, which bypasses the scope check and is idempotent.
+     * Call once per (user, company) before granting/assigning in that company.
+     */
+    public void seedMembership(String userUid, String companyUid) {
+        Long userId = appUsers.findByUid(userUid).orElseThrow().getId();
+        Long companyId = companies.findByUid(companyUid).orElseThrow().getId();
+        userCompanyService.ensureMembership(userId, companyId, null);
     }
 
     @Transactional

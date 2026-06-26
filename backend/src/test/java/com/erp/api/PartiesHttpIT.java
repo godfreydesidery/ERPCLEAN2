@@ -454,6 +454,7 @@ class PartiesHttpIT extends PostgresIntegrationTest {
                 rootUser.getId(), rootUser.getUsername(), true,
                 companyA.getId(), branchA.getId(), null));
         try {
+            testData.seedMembership(user.getUid(), companyA.getUid());
             userRoleService.grant(new GrantRoleRequest(
                     user.getUid(), role.getUid(), companyA.getUid(), null));
             permissionResolver.invalidate();

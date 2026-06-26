@@ -7,7 +7,9 @@ import com.erp.modules.iam.domain.entity.Company;
 import com.erp.modules.iam.domain.entity.UserCompany;
 import com.erp.modules.iam.repository.AppUserRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.modules.iam.repository.UserBranchRepository;
 import com.erp.modules.iam.repository.UserCompanyRepository;
+import com.erp.modules.iam.repository.UserRoleRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -25,14 +27,14 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Non-authoritative user↔company membership (V77). The additive oracle means this service only
- * writes membership rows — it never reads them for an access decision at runtime. Access decisions
- * remain in {@link com.erp.platform.security.PermissionResolver} (role→permission path).
+ * Authoritative user↔company membership (ADR-0046, supersedes the non-authoritative phase of
+ * ADR-0045). Membership is a write-path prerequisite: {@link #isActiveMember} gates role grants and
+ * branch assignments (assign-company-first), and {@link #remove} refuses while access remains.
+ * Runtime access decisions still live in {@link com.erp.platform.security.PermissionResolver}
+ * (role→permission); the read/isolation oracle stays additive as a defensive superset.
  *
- * <p>{@link #ensureMembership} is the key hook: it is called by {@link UserRoleServiceImpl} and
- * {@link UserBranchServiceImpl} after a grant/assign persists so that a membership row always
- * exists whenever a user gains access to a company via either path. It is intentionally
- * exception-free — the auto-create must never fail a grant.
+ * <p>{@link #ensureMembership} remains only for the startup reconcile that back-fills memberships
+ * for pre-existing grants/branches (it is no longer called from grant/assign).
  */
 @Service
 @Transactional
@@ -43,17 +45,23 @@ public class UserCompanyServiceImpl implements UserCompanyService {
     private final UserCompanyRepository userCompanies;
     private final AppUserRepository     users;
     private final CompanyRepository     companies;
+    private final UserRoleRepository    userRoles;
+    private final UserBranchRepository  userBranches;
     private final ScopeGuard            scopeGuard;
     private final AuditService          audit;
 
     public UserCompanyServiceImpl(UserCompanyRepository userCompanies,
                                   AppUserRepository     users,
                                   CompanyRepository     companies,
+                                  UserRoleRepository    userRoles,
+                                  UserBranchRepository  userBranches,
                                   ScopeGuard            scopeGuard,
                                   AuditService          audit) {
         this.userCompanies = userCompanies;
         this.users         = users;
         this.companies     = companies;
+        this.userRoles     = userRoles;
+        this.userBranches  = userBranches;
         this.scopeGuard    = scopeGuard;
         this.audit         = audit;
     }
@@ -105,6 +113,15 @@ public class UserCompanyServiceImpl implements UserCompanyService {
         }
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public boolean isActiveMember(Long userId, Long companyId) {
+        if (userId == null || companyId == null) {
+            return false;
+        }
+        return userCompanies.existsByUserIdAndCompanyIdAndRevokedAtIsNull(userId, companyId);
+    }
+
     // -------------------------------------------------------------------------
     // Explicit assign / remove
     // -------------------------------------------------------------------------
@@ -140,6 +157,17 @@ public class UserCompanyServiceImpl implements UserCompanyService {
 
         if (!uc.isActive()) {
             throw new ConflictException("Membership already revoked: " + userCompanyUid);
+        }
+
+        // ADR-0046: authoritative membership — refuse to remove while the user still holds access in
+        // this company. Roles/branches must be cleared first (no silent cascade).
+        Long userId    = uc.getUserId();
+        Long companyId = uc.getCompany().getId();
+        if (userRoles.existsByUserIdAndCompanyIdAndRevokedAtIsNull(userId, companyId)
+                || userBranches.existsByUserIdAndBranchCompanyId(userId, companyId)) {
+            throw new ConflictException(
+                    "Remove this user's roles and branch assignments in "
+                            + uc.getCompany().getName() + " before removing the company membership.");
         }
 
         String userUid    = users.findById(uc.getUserId()).map(AppUser::getUid).orElse(null);

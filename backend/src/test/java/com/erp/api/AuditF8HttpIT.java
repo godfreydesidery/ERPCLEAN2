@@ -123,6 +123,7 @@ class AuditF8HttpIT extends PostgresIntegrationTest {
                 rootSentinel.getId(), rootSentinel.getUsername(), true,
                 companyC.getId(), branchB.getId(), null));
         try {
+            testData.seedMembership(userU.getUid(), companyC.getUid());
             userBranchService.assign(
                     new AssignBranchRequest(userU.getUid(), branchB.getUid(), true));
         } finally {

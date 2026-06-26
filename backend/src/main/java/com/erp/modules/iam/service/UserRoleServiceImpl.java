@@ -70,6 +70,11 @@ public class UserRoleServiceImpl implements UserRoleService {
         // ADR-0002 D-3: scope the grant to the caller's active company.
         scopeGuard.assertCanActIn(RequestContext.get(), company.getId());
 
+        // ADR-0046: authoritative membership — the user must already belong to the company.
+        if (!userCompanyService.isActiveMember(user.getId(), company.getId())) {
+            throw new ConflictException("Assign this user to the company before granting roles.");
+        }
+
         Branch branch = null;
         if (request.branchUid() != null && !request.branchUid().isBlank()) {
             branch = Lookups.orNotFound(branches.findByUid(request.branchUid()), "Branch", request.branchUid());
@@ -90,11 +95,7 @@ public class UserRoleServiceImpl implements UserRoleService {
         UserRole ur = new UserRole(user.getId(), role, company.getId(), branchId, grantedBy);
         userRoles.save(ur);
 
-        // Auto-create company membership (V77 additive oracle): ensure a user_company row exists
-        // for the company this role grant targets. Idempotent + exception-free — must not roll back
-        // the grant if the membership insert fails.
-        userCompanyService.ensureMembership(user.getId(), company.getId(), grantedBy);
-
+        // ADR-0046: membership is a prerequisite (asserted above), no longer auto-created here.
         permissionResolver.invalidate();
 
         String branchUid = branch != null ? branch.getUid() : null;

@@ -118,8 +118,10 @@ class ApprovalsEngineIT extends PostgresIntegrationTest {
 
         // Grant roles (as the buyer user acting as admin)
         asPrincipal(buyerUser);
+        testData.seedMembership(pmUser.getUid(), company.getUid());
         userRoleService.grant(new GrantRoleRequest(
                 pmUser.getUid(), pmRole.getUid(), company.getUid(), branch.getUid()));
+        testData.seedMembership(fmUser.getUid(), company.getUid());
         userRoleService.grant(new GrantRoleRequest(
                 fmUser.getUid(), fmRole.getUid(), company.getUid(), branch.getUid()));
         RequestContext.clear();
@@ -265,6 +267,7 @@ class ApprovalsEngineIT extends PostgresIntegrationTest {
     void sod_submitterCannotApproveOwnRequest() {
         // Give the buyer the PM role too
         asPrincipal(buyerUser);
+        testData.seedMembership(buyerUser.getUid(), company.getUid());
         userRoleService.grant(new GrantRoleRequest(
                 buyerUser.getUid(), pmRole.getUid(), company.getUid(), branch.getUid()));
 
@@ -316,6 +319,7 @@ class ApprovalsEngineIT extends PostgresIntegrationTest {
         // Three-step policy: PM → FM → buyer (we reuse buyerUser as step-3 role holder for simplicity)
         Role step3Role = roles.save(new Role("STEP3_ROLE", "Step3 Role"));
         asPrincipal(buyerUser);
+        testData.seedMembership(fmUser.getUid(), company.getUid());
         userRoleService.grant(new GrantRoleRequest(
                 fmUser.getUid(), step3Role.getUid(), company.getUid(), branch.getUid()));
 

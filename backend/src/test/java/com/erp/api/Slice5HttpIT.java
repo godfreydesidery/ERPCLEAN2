@@ -365,6 +365,7 @@ class Slice5HttpIT extends PostgresIntegrationTest {
      * subsequent HTTP requests build their own context from the JWT via JwtRequestContextFilter.
      */
     private void grantRoleAsRootInCompany(AppUser user, Role role, Company company, Branch branch) {
+        testData.seedMembership(user.getUid(), company.getUid());
         RequestContext.set(new RequestContext.Principal(
                 rootUser.getId(), rootUser.getUsername(), true,
                 company.getId(), branch.getId(), null));

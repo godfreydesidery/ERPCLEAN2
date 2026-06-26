@@ -1,6 +1,8 @@
 # ADR-0045: Explicit, non-authoritative user↔company membership (`user_company`)
 
 - **Status:** Accepted (2026-06-25)
+- **Superseded in part by:** ADR-0046 (the *authoritative phase* — flips the write path to
+  assign-company-first and drops auto-create; the table, permission, and assign/remove API here stay).
 - **Deciders:** Owner + Solutions Architect
 - **Supersedes (in part):** ADR-0001 D-A reasoning that company membership is *purely derived*.
 - **Related:** ADR-0001 (IAM architecture; users org-wide, default company from default branch), ADR-0002 (permission/grant scoping), BR-6 (branch assignment decoupled from role grants).
