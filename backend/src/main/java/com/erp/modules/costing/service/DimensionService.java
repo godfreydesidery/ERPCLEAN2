@@ -1,5 +1,6 @@
 package com.erp.modules.costing.service;
 
+import com.erp.modules.costing.domain.dto.CreateDimensionRequest;
 import com.erp.modules.costing.domain.dto.CreateDimensionValueRequest;
 import com.erp.modules.costing.domain.dto.DimensionDto;
 import com.erp.modules.costing.domain.dto.DimensionValueDto;
@@ -24,6 +25,13 @@ public interface DimensionService {
     // -------------------------------------------------------------------------
     // Dimension type operations (COSTING.VIEW / COSTING.MANAGE)
     // -------------------------------------------------------------------------
+
+    /**
+     * Create a custom dimension type claiming the first free spare slot (DIMENSION_3 then
+     * DIMENSION_4). At most two custom dimensions per company. Built-in slots (COST_CENTRE,
+     * DEPARTMENT) are seeder-owned and cannot be claimed here (FR-CC-01).
+     */
+    DimensionDto createDimension(CreateDimensionRequest req);
 
     List<DimensionDto> listDimensions(Long companyId);
 

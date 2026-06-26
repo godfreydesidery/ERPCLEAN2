@@ -38,6 +38,49 @@
     }
   }
 
+  @if (selectedCompanyId() && canManage()) {
+    @if (customSlotsFull()) {
+      <p class="text-muted small mb-3">
+        <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
+        Both custom dimension slots are in use. You can have at most 2 custom dimensions.
+      </p>
+    } @else {
+      <form class="card card-body mb-3" (ngSubmit)="addDimension()" aria-label="Add custom dimension">
+        <h2 class="h6 mb-3">Add Dimension</h2>
+        <div class="row g-2 align-items-end">
+          <div class="col-sm-3">
+            <label class="form-label small text-muted mb-1" for="newDimCode">Code</label>
+            <input id="newDimCode" name="newDimCode" type="text" class="form-control"
+                   [(ngModel)]="newDimCode" required [disabled]="addDimSaving()" />
+          </div>
+          <div class="col-sm-4">
+            <label class="form-label small text-muted mb-1" for="newDimName">Name</label>
+            <input id="newDimName" name="newDimName" type="text" class="form-control"
+                   [(ngModel)]="newDimName" required [disabled]="addDimSaving()" />
+          </div>
+          <div class="col-sm-3">
+            <label class="form-label small text-muted mb-1" for="newDimDesc">Description <span class="text-muted">(optional)</span></label>
+            <input id="newDimDesc" name="newDimDesc" type="text" class="form-control"
+                   [(ngModel)]="newDimDescription" [disabled]="addDimSaving()" />
+          </div>
+          <div class="col-sm-2">
+            <button type="submit" class="btn btn-primary w-100" [disabled]="addDimSaving()">
+              @if (addDimSaving()) {
+                <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                Saving…
+              } @else {
+                Add Dimension
+              }
+            </button>
+          </div>
+        </div>
+        <output class="text-danger small mt-2 d-block" aria-live="polite">
+          {{ addDimFormError() ?? '' }}
+        </output>
+      </form>
+    }
+  }
+
   @if (selectedCompanyId()) {
     <div class="erp-toolbar mb-3">
       <span class="erp-toolbar__spacer"></span>
