@@ -230,6 +230,7 @@ class AuditServiceImplIT extends PostgresIntegrationTest {
 
     @Test
     void roleGrant_emitsExactlyOneGrantRow() {
+        testData.seedMembership(targetUser.getUid(), companyA.getUid());
         UserRoleDto dto = userRoleService.grant(new GrantRoleRequest(
                 targetUser.getUid(), testRole.getUid(), companyA.getUid(), null));
 
@@ -256,6 +257,7 @@ class AuditServiceImplIT extends PostgresIntegrationTest {
 
     @Test
     void roleRevoke_emitsExactlyOneRevokeRow() {
+        testData.seedMembership(targetUser.getUid(), companyA.getUid());
         UserRoleDto dto = userRoleService.grant(new GrantRoleRequest(
                 targetUser.getUid(), testRole.getUid(), companyA.getUid(), null));
         auditRepo.deleteAll();
@@ -276,6 +278,7 @@ class AuditServiceImplIT extends PostgresIntegrationTest {
 
     @Test
     void branchAssign_emitsExactlyOneAssignRow() {
+        testData.seedMembership(targetUser.getUid(), companyA.getUid());
         UserBranchDto dto = userBranchService.assign(
                 new AssignBranchRequest(targetUser.getUid(), branchInA.getUid(), true));
 
@@ -295,8 +298,10 @@ class AuditServiceImplIT extends PostgresIntegrationTest {
 
     @Test
     void branchSetDefault_emitsExactlyOneSetDefaultRow() {
+        testData.seedMembership(targetUser.getUid(), companyA.getUid());
         userBranchService.assign(new AssignBranchRequest(targetUser.getUid(), branchInA.getUid(), true));
         // Assign a second branch so we can set it as the new default.
+        testData.seedMembership(targetUser.getUid(), companyB.getUid());
         userBranchService.assign(new AssignBranchRequest(targetUser.getUid(), branchInB.getUid(), false));
         auditRepo.deleteAll();
 
@@ -325,6 +330,7 @@ class AuditServiceImplIT extends PostgresIntegrationTest {
 
     @Test
     void branchUnassign_emitsExactlyOneUnassignRow() {
+        testData.seedMembership(targetUser.getUid(), companyA.getUid());
         UserBranchDto dto = userBranchService.assign(
                 new AssignBranchRequest(targetUser.getUid(), branchInA.getUid(), true));
         auditRepo.deleteAll();
@@ -393,6 +399,7 @@ class AuditServiceImplIT extends PostgresIntegrationTest {
     @Test
     void rootBypass_crossCompanyGrant_emitsBypassRow() {
         // Root's active company is A. Granting in company B is cross-company — ROOT.BYPASS must fire.
+        testData.seedMembership(targetUser.getUid(), companyB.getUid());
         userRoleService.grant(new GrantRoleRequest(
                 targetUser.getUid(), testRole.getUid(), companyB.getUid(), null));
 
@@ -421,6 +428,7 @@ class AuditServiceImplIT extends PostgresIntegrationTest {
     @Test
     void rootBypass_sameCompanyGrant_doesNotEmitBypassRow() {
         // Root acts IN its own active company — no bypass row expected.
+        testData.seedMembership(targetUser.getUid(), companyA.getUid());
         userRoleService.grant(new GrantRoleRequest(
                 targetUser.getUid(), testRole.getUid(), companyA.getUid(), null));
 

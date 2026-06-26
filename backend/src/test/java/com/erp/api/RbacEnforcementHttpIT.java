@@ -394,6 +394,7 @@ class RbacEnforcementHttpIT extends PostgresIntegrationTest {
      * requests will populate their own context from the JWT via JwtRequestContextFilter.
      */
     private void grantRoleAsRoot(AppUser user, Role role, Company company) {
+        testData.seedMembership(user.getUid(), company.getUid());
         RequestContext.set(new RequestContext.Principal(
                 rootUser.getId(), rootUser.getUsername(), true,
                 companyA.getId(), branchA.getId(), null));

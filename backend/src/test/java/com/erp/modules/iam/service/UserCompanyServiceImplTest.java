@@ -15,7 +15,9 @@ import com.erp.modules.iam.domain.entity.Company;
 import com.erp.modules.iam.domain.entity.UserCompany;
 import com.erp.modules.iam.repository.AppUserRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.modules.iam.repository.UserBranchRepository;
 import com.erp.modules.iam.repository.UserCompanyRepository;
+import com.erp.modules.iam.repository.UserRoleRepository;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.security.RequestContext;
@@ -44,6 +46,8 @@ class UserCompanyServiceImplTest {
     private UserCompanyRepository userCompanyRepo;
     private AppUserRepository     userRepo;
     private CompanyRepository     companyRepo;
+    private UserRoleRepository    userRoleRepo;
+    private UserBranchRepository  userBranchRepo;
     private ScopeGuard            scopeGuard;
     private AuditService          audit;
 
@@ -54,11 +58,13 @@ class UserCompanyServiceImplTest {
         userCompanyRepo = mock(UserCompanyRepository.class);
         userRepo        = mock(AppUserRepository.class);
         companyRepo     = mock(CompanyRepository.class);
+        userRoleRepo    = mock(UserRoleRepository.class);
+        userBranchRepo  = mock(UserBranchRepository.class);
         scopeGuard      = mock(ScopeGuard.class);
         audit           = mock(AuditService.class);
 
         service = new UserCompanyServiceImpl(
-                userCompanyRepo, userRepo, companyRepo, scopeGuard, audit);
+                userCompanyRepo, userRepo, companyRepo, userRoleRepo, userBranchRepo, scopeGuard, audit);
 
         // default: target user exists
         AppUser user = mock(AppUser.class);
@@ -153,21 +159,61 @@ class UserCompanyServiceImplTest {
     // -------------------------------------------------------------------------
 
     @Test
-    void remove_activeMembership_setsRevokedAt() {
+    void remove_activeMembership_noAccess_setsRevokedAt() {
         Company company = stubCompany(COMPANY_A, CO_UID_A);
         UserCompany uc = mock(UserCompany.class);
         when(uc.getId()).thenReturn(1L);
         when(uc.getUid()).thenReturn("uc-uid-1");
+        when(uc.getUserId()).thenReturn(USER_ID);
         when(uc.isActive()).thenReturn(true);
         when(uc.getCompany()).thenReturn(company);
 
         when(userCompanyRepo.findByUid("uc-uid-1")).thenReturn(Optional.of(uc));
+        // no active roles or branches in the company → removal allowed (mocks default to false)
 
         RequestContext.set(new RequestContext.Principal(99L, "admin", false, COMPANY_A, null, null));
 
         service.remove("uc-uid-1");
 
         verify(uc).revoke(any());
+    }
+
+    @Test
+    void remove_withActiveRole_throwsConflict() {
+        Company company = stubCompany(COMPANY_A, CO_UID_A);
+        UserCompany uc = mock(UserCompany.class);
+        when(uc.getUid()).thenReturn("uc-uid-1");
+        when(uc.getUserId()).thenReturn(USER_ID);
+        when(uc.isActive()).thenReturn(true);
+        when(uc.getCompany()).thenReturn(company);
+        when(userCompanyRepo.findByUid("uc-uid-1")).thenReturn(Optional.of(uc));
+        when(userRoleRepo.existsByUserIdAndCompanyIdAndRevokedAtIsNull(USER_ID, COMPANY_A))
+                .thenReturn(true);
+
+        RequestContext.set(new RequestContext.Principal(99L, "admin", false, COMPANY_A, null, null));
+
+        assertThatThrownBy(() -> service.remove("uc-uid-1"))
+                .isInstanceOf(ConflictException.class);
+        verify(uc, never()).revoke(any());
+    }
+
+    @Test
+    void remove_withActiveBranch_throwsConflict() {
+        Company company = stubCompany(COMPANY_A, CO_UID_A);
+        UserCompany uc = mock(UserCompany.class);
+        when(uc.getUid()).thenReturn("uc-uid-1");
+        when(uc.getUserId()).thenReturn(USER_ID);
+        when(uc.isActive()).thenReturn(true);
+        when(uc.getCompany()).thenReturn(company);
+        when(userCompanyRepo.findByUid("uc-uid-1")).thenReturn(Optional.of(uc));
+        when(userBranchRepo.existsByUserIdAndBranchCompanyId(USER_ID, COMPANY_A))
+                .thenReturn(true);
+
+        RequestContext.set(new RequestContext.Principal(99L, "admin", false, COMPANY_A, null, null));
+
+        assertThatThrownBy(() -> service.remove("uc-uid-1"))
+                .isInstanceOf(ConflictException.class);
+        verify(uc, never()).revoke(any());
     }
 
     @Test

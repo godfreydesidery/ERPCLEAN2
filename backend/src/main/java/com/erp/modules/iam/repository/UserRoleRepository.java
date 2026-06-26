@@ -35,6 +35,12 @@ public interface UserRoleRepository extends JpaRepository<UserRole, Long> {
     /** Active assignments for a user (any scope) — for the user-admin grant list. */
     List<UserRole> findByUserIdAndRevokedAtIsNull(Long userId);
 
+    /**
+     * {@code true} iff the user holds any active (non-revoked) role grant in the company. Used by the
+     * ADR-0046 company-removal guard (block while access remains).
+     */
+    boolean existsByUserIdAndCompanyIdAndRevokedAtIsNull(Long userId, Long companyId);
+
     // --- notifications (ADR-0024 D-9): audience resolution outside a request ---
 
     /**

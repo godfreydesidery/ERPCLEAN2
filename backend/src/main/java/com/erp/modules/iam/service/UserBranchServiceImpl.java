@@ -62,6 +62,11 @@ public class UserBranchServiceImpl implements UserBranchService {
         // Scope: the caller must be able to act in the branch's company (root bypasses).
         scopeGuard.assertCanActIn(RequestContext.get(), branch.getCompany().getId());
 
+        // ADR-0046: authoritative membership — the user must already belong to the branch's company.
+        if (!userCompanyService.isActiveMember(user.getId(), branch.getCompany().getId())) {
+            throw new ConflictException("Assign this user to the company before assigning branches.");
+        }
+
         if (userBranches.findByUserIdAndBranchId(user.getId(), branch.getId()).isPresent()) {
             throw new ConflictException("User is already assigned to that branch.");
         }
@@ -73,11 +78,7 @@ public class UserBranchServiceImpl implements UserBranchService {
         }
         UserBranch saved = userBranches.save(assignment);
 
-        // Auto-create company membership (V77 additive oracle): the branch's company is the
-        // companyId implied by this branch assignment. Idempotent + exception-free — must not
-        // roll back the branch assignment if the membership insert fails.
-        userCompanyService.ensureMembership(user.getId(), branch.getCompany().getId(), actorId());
-
+        // ADR-0046: membership is a prerequisite (asserted above), no longer auto-created here.
         audit.record(AuditEvent.of(AuditActions.BRANCH_ASSIGN, "user_branch", saved.getId(), saved.getUid())
                 .detail(Map.of("userUid", user.getUid(), "branchUid", branch.getUid(),
                         "madeDefault", request.makeDefault())));

@@ -323,6 +323,7 @@ class AuditHttpIT extends PostgresIntegrationTest {
     }
 
     private void grantRoleAsRoot(AppUser user, Role role) {
+        testData.seedMembership(user.getUid(), company.getUid());
         RequestContext.set(new RequestContext.Principal(
                 rootUser.getId(), rootUser.getUsername(), true,
                 company.getId(), branch.getId(), null));

@@ -311,6 +311,9 @@ class Slice4HttpIT extends PostgresIntegrationTest {
         Role assignRole = buildRole("S4_BRANCH_ASSIGNOR", "BRANCH.ASSIGN");
         grantRoleAsRoot(adminUser, assignRole, companyA);
 
+        // ADR-0046: the target user must be a member of the company before a branch there is assigned.
+        testData.seedMembership(targetUser.getUid(), companyA.getUid());
+
         // After grant → 201 (branchA belongs to companyA, same scope as the caller)
         mockMvc.perform(post("/api/v1/user-branches")
                         .header("Authorization", "Bearer " + adminToken)
@@ -342,6 +345,9 @@ class Slice4HttpIT extends PostgresIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(assignBodyB))
                 .andExpect(status().isForbidden());
+
+        // ADR-0046: root bypasses tenant SCOPE but the membership gate still applies — seed first.
+        testData.seedMembership(targetUser.getUid(), companyB.getUid());
 
         // Root assigning the same user to branch B → 201 (root bypasses scope)
         mockMvc.perform(post("/api/v1/user-branches")
@@ -413,6 +419,7 @@ class Slice4HttpIT extends PostgresIntegrationTest {
                 rootUser.getId(), rootUser.getUsername(), true,
                 companyA.getId(), branchA.getId(), null));
         try {
+            testData.seedMembership(user.getUid(), company.getUid());
             userRoleService.grant(new GrantRoleRequest(
                     user.getUid(), role.getUid(), company.getUid(), null));
         } finally {

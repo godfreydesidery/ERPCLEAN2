@@ -113,6 +113,7 @@ class PermissionResolverIT extends PostgresIntegrationTest {
 
     @Test
     void resolve_afterGrant_containsPermission() {
+        testData.seedMembership(nonRootUser.getUid(), companyA.getUid());
         userRoleService.grant(new GrantRoleRequest(
                 nonRootUser.getUid(), roleWithCompanyManage.getUid(),
                 companyA.getUid(), null));
@@ -128,6 +129,7 @@ class PermissionResolverIT extends PostgresIntegrationTest {
 
     @Test
     void resolve_grantInCompanyA_doesNotAppearInCompanyB() {
+        testData.seedMembership(nonRootUser.getUid(), companyA.getUid());
         userRoleService.grant(new GrantRoleRequest(
                 nonRootUser.getUid(), roleWithCompanyManage.getUid(),
                 companyA.getUid(), null));
@@ -148,6 +150,7 @@ class PermissionResolverIT extends PostgresIntegrationTest {
 
     @Test
     void resolve_branchScopedGrant_appearsAtGrantedBranchOnly() {
+        testData.seedMembership(nonRootUser.getUid(), companyA.getUid());
         userRoleService.grant(new GrantRoleRequest(
                 nonRootUser.getUid(), roleWithCompanyManage.getUid(),
                 companyA.getUid(), branchA1.getUid()));
@@ -164,6 +167,7 @@ class PermissionResolverIT extends PostgresIntegrationTest {
 
     @Test
     void resolve_companyWideGrant_appearsAtAllBranchesInThatCompany() {
+        testData.seedMembership(nonRootUser.getUid(), companyA.getUid());
         userRoleService.grant(new GrantRoleRequest(
                 nonRootUser.getUid(), roleWithCompanyManage.getUid(),
                 companyA.getUid(), null));
@@ -200,6 +204,7 @@ class PermissionResolverIT extends PostgresIntegrationTest {
 
     @Test
     void cacheBust_revokeAfterGrant_permissionGoneImmediately() {
+        testData.seedMembership(nonRootUser.getUid(), companyA.getUid());
         var dto = userRoleService.grant(new GrantRoleRequest(
                 nonRootUser.getUid(), roleWithCompanyManage.getUid(),
                 companyA.getUid(), null));
@@ -225,6 +230,7 @@ class PermissionResolverIT extends PostgresIntegrationTest {
         assertThat(noGrant).as("no grant yet").isEmpty();
 
         // Grant — UserRoleServiceImpl.grant() calls invalidate()
+        testData.seedMembership(nonRootUser.getUid(), companyA.getUid());
         userRoleService.grant(new GrantRoleRequest(
                 nonRootUser.getUid(), roleWithCompanyManage.getUid(),
                 companyA.getUid(), null));
@@ -241,6 +247,7 @@ class PermissionResolverIT extends PostgresIntegrationTest {
 
     @Test
     void resolve_nullCompanyId_returnsEmpty() {
+        testData.seedMembership(nonRootUser.getUid(), companyA.getUid());
         userRoleService.grant(new GrantRoleRequest(
                 nonRootUser.getUid(), roleWithCompanyManage.getUid(),
                 companyA.getUid(), null));
