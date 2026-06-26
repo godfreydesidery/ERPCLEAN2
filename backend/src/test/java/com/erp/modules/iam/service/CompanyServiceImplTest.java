@@ -242,4 +242,45 @@ class CompanyServiceImplTest {
 
         assertThat(service.listAccessibleByOrganisationUid(ORG_UID)).isEmpty();
     }
+
+    // -------------------------------------------------------------------------
+    // Plain admin list (GET /api/v1/companies) — must be scoped exactly like the picker.
+    // Regression guard for the cross-company enumeration leak fixed in the 2026-06-26 e2e audit:
+    // listByOrganisationUid previously returned EVERY company in the org to any COMPANY.VIEW holder.
+    // -------------------------------------------------------------------------
+
+    /** (8) Non-root single-company holder must NOT see other companies via the plain list. */
+    @Test
+    void plainList_nonRoot_roleGrantInA_seesOnlyA() {
+        Company companyA = stubCompany(COMPANY_A, "uid-a");
+        Company companyB = stubCompany(COMPANY_B, "uid-b");
+        when(companyRepo.findByOrganisationIdOrderByName(ORG_ID))
+                .thenReturn(List.of(companyA, companyB));
+
+        Long userId = 42L;
+        UserRole grantInA = stubUserRole(COMPANY_A);
+        when(userRoleRepo.findByUserIdAndRevokedAtIsNull(userId)).thenReturn(List.of(grantInA));
+        when(userBranchRepo.findActiveCompanyIdsByUserId(userId)).thenReturn(Set.of());
+        when(userCompanyRepo.findActiveCompanyIdsByUserId(userId)).thenReturn(Set.of());
+
+        RequestContext.set(new RequestContext.Principal(userId, "alice@test.com", false, COMPANY_A, null, null));
+
+        List<CompanyDto> result = service.listByOrganisationUid(ORG_UID);
+
+        assertThat(result).extracting(CompanyDto::uid).containsExactly("uid-a");
+    }
+
+    /** (9) Root still sees ALL companies via the plain list. */
+    @Test
+    void plainList_root_seesAllCompanies() {
+        Company companyA = stubCompany(COMPANY_A, "uid-a");
+        Company companyB = stubCompany(COMPANY_B, "uid-b");
+        when(companyRepo.findByOrganisationIdOrderByName(ORG_ID))
+                .thenReturn(List.of(companyA, companyB));
+
+        RequestContext.set(new RequestContext.Principal(1L, "root@test.com", true, null, null, null));
+
+        assertThat(service.listByOrganisationUid(ORG_UID))
+                .extracting(CompanyDto::uid).containsExactlyInAnyOrder("uid-a", "uid-b");
+    }
 }

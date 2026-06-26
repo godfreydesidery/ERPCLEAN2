@@ -119,31 +119,37 @@ public class CompanyServiceImpl implements CompanyService {
     @Override
     @Transactional(readOnly = true)
     public List<CompanyDto> listByOrganisationUid(String organisationUid) {
-        Organisation org = Lookups.orNotFound(
-                organisations.findByUid(organisationUid), "Organisation", organisationUid);
-        return companies.findByOrganisationIdOrderByName(org.getId()).stream()
-                .map(CompanyDto::from)
-                .toList();
+        // Scoped exactly like the picker: root sees all; everyone else only their assigned
+        // companies. COMPANY.VIEW is granted per-company, so the admin list must not enumerate the
+        // whole org's companies to a single-company holder. Both list paths share one private
+        // filter so they cannot drift. Tenant-isolation fix — e2e cross-company audit 2026-06-26.
+        return resolveAccessibleByOrganisationUid(organisationUid);
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<CompanyDto> listAccessibleByOrganisationUid(String organisationUid) {
+        return resolveAccessibleByOrganisationUid(organisationUid);
+    }
+
+    /**
+     * The companies the current principal may act in — shared by both the admin list
+     * ({@link #listByOrganisationUid}) and the picker ({@link #listAccessibleByOrganisationUid}) so
+     * the two paths cannot drift. Only ROOT sees every company in the org. A non-root user — even
+     * one holding COMPANY.VIEW via an all-permissions role scoped to a single company — sees ONLY
+     * companies they are assigned to via an active role grant OR branch assignment OR explicit
+     * user_company membership (V77 additive oracle). COMPANY.VIEW is granted per-company and must
+     * never leak the whole org's company list (tenant-isolation audits 2026-06-25 / 2026-06-26).
+     */
+    private List<CompanyDto> resolveAccessibleByOrganisationUid(String organisationUid) {
         Organisation org = Lookups.orNotFound(
                 organisations.findByUid(organisationUid), "Organisation", organisationUid);
         List<Company> all = companies.findByOrganisationIdOrderByName(org.getId());
 
-        // Only ROOT sees every company in the org. A non-root user — even one holding COMPANY.VIEW
-        // via an all-permissions role scoped to a single company — must see ONLY companies they are
-        // assigned to; COMPANY.VIEW is granted per-company and must never leak the whole org's
-        // company list (tenant-isolation fix, security audit 2026-06-25).
         RequestContext.Principal principal = RequestContext.get();
         if (principal != null && principal.root()) {
             return all.stream().map(CompanyDto::from).toList();
         }
-
-        // Everyone else: additive oracle — role grant OR branch assignment OR explicit
-        // user_company membership (V77). Any one path is sufficient to include a company.
         if (principal == null || principal.userId() == null) {
             return List.of();
         }
