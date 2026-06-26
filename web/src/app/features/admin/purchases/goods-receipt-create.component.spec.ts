@@ -179,6 +179,27 @@ describe('GoodsReceiptCreateComponent', () => {
     expect(req.lines[0].receivedQty).toBe(STUB_LINE.outstandingQtyInBase);
   });
 
+  // ── 3b. Receive-remaining regression: numeric outstandingQtyInBase on the wire ──
+  // BigDecimal serialises as a JSON *number*, so outstandingQtyInBase arrives numeric. The
+  // prefilled receivedQty must still be coerced to a string, else submit's receivedQty.trim()
+  // throws "trim is not a function" when the user accepts the remaining without editing.
+  it('submits the prefilled remaining when outstandingQtyInBase arrives as a number', async () => {
+    const numericLine = { ...STUB_LINE, outstandingQtyInBase: 60 as unknown as string };
+    const { createReceiptSpy } = makeBed({ listOrderLinesSpy: vi.fn(() => of([numericLine])) });
+    const fixture = TestBed.createComponent(GoodsReceiptCreateComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    // receivedQty must be a string even though the wire value was numeric.
+    expect(comp.receiveLines()[0].receivedQty).toBe('60');
+
+    expect(() => comp.submit()).not.toThrow();
+    await vi.runAllTimersAsync();
+
+    expect(createReceiptSpy).toHaveBeenCalledOnce();
+    expect(createReceiptSpy.mock.calls[0][0].lines[0].receivedQty).toBe('60');
+  });
+
   // ── 4. 409 over-receipt surfaces in formError ──────────────────────────────
 
   it('sets formError with over-receipt message on 409', async () => {

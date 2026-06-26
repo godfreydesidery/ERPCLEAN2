@@ -175,7 +175,10 @@ export class GoodsReceiptCreateComponent {
           .filter((l) => !l.fullyReceived)
           .map((l) => ({
             line: l,
-            receivedQty: l.outstandingQtyInBase,
+            // outstandingQtyInBase is a BigDecimal that arrives as a number on the wire; coerce to
+            // string so the prefilled "receive remaining" value still passes the downstream
+            // receivedQty.trim() (a numeric value crashes submit — TypeError: trim is not a function).
+            receivedQty: String(l.outstandingQtyInBase ?? ''),
             include: true,
             batchExpanded: false,
             lotNumber: '',
