@@ -44,6 +44,9 @@ export class CompanyListComponent {
   /** Rename is gated on COMPANY.MANAGE (the page itself only needs COMPANY.VIEW). */
   readonly canManage = computed(() => this.session.hasPermission('COMPANY.MANAGE'));
 
+  // Provision defaults: tracks which row's button is spinning (at most one at a time).
+  readonly provisioningUid = signal<string | null>(null);
+
   // Inline rename: at most one row is editable at a time (keyed by uid).
   readonly editingUid = signal<string | null>(null);
   readonly editName = signal('');
@@ -54,6 +57,26 @@ export class CompanyListComponent {
     this.editError.set(null);
     this.editName.set(c.name);
     this.editingUid.set(c.uid);
+  }
+
+  provisionDefaults(c: Company): void {
+    if (this.provisioningUid() !== null) return;
+    // Confirm before a bulk re-provision — it re-seeds every per-company default set.
+    if (!window.confirm(`Restore the default setup (tax rates, accounts, units, …) for "${c.name}"?`)) {
+      return;
+    }
+    this.provisioningUid.set(c.uid);
+    this.companyService.provisionDefaults(c.uid).subscribe({
+      next: (updated) => {
+        this.companies.update((list) => list.map((x) => (x.uid === updated.uid ? updated : x)));
+        this.provisioningUid.set(null);
+        this.alerts.success('Default setup restored', updated.name);
+      },
+      error: (err) => {
+        this.provisioningUid.set(null);
+        this.alerts.error('Could not restore defaults', this.messageFrom(err));
+      },
+    });
   }
 
   cancelEdit(): void {
