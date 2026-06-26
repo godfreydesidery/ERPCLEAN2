@@ -115,6 +115,23 @@ export interface CrmSnapshotDto {
   forecast: ForecastDto | null;
 }
 
+// ── Sales by Branch ───────────────────────────────────────────────────────────
+
+export interface BranchSalesRowDto {
+  branchId: string;   // Long serialised as string
+  branchCode: string;
+  branchName: string;
+  total: string;      // BigDecimal serialised as string
+  count: number;
+}
+
+export interface SalesByBranchDto {
+  currency: string;
+  grandTotal: string; // BigDecimal serialised as string
+  invoiceCount: number;
+  rows: BranchSalesRowDto[]; // sorted DESC by total (backend)
+}
+
 // ── Trend ─────────────────────────────────────────────────────────────────────
 
 export interface TrendPointDto {
@@ -140,5 +157,6 @@ export interface DashboardDto {
   crm: CrmSnapshotDto | null;              // null when BI.CRM.VIEW not held
   revenueTrend: TrendDto | null;           // null when BI.FINANCE.VIEW not held
   netProfitTrend: TrendDto | null;         // null when BI.FINANCE.VIEW not held
+  salesByBranch: SalesByBranchDto | null;  // null when BI.FINANCE.VIEW not held
   health: HealthIndicatorDto[];
 }

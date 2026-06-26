@@ -18,6 +18,7 @@ import {
   CrmSnapshotDto,
   TrendDto,
   HealthIndicatorDto,
+  SalesByBranchDto,
 } from './models/dashboard.model';
 
 type LoadState = 'loading' | 'idle' | 'error' | 'forbidden';
@@ -76,6 +77,10 @@ export class DashboardComponent {
   readonly revenueTrendState = signal<LoadState>('idle');
   readonly netProfitTrend = signal<TrendDto | null>(null);
   readonly netProfitTrendState = signal<LoadState>('idle');
+
+  // ── Sales by Branch panel ─────────────────────────────────────────────────────
+  readonly salesByBranch = signal<SalesByBranchDto | null>(null);
+  readonly salesByBranchState = signal<LoadState>('idle');
 
   // ── Health strip ──────────────────────────────────────────────────────────────
   readonly health = signal<HealthIndicatorDto[]>([]);
@@ -147,8 +152,9 @@ export class DashboardComponent {
       next: (list) => {
         this.branches.set(list);
         this.branchState.set('idle');
-        const branchId = list.length > 0 ? list[0].id : '';
-        this.selectedBranchId.set(branchId);
+        // Default to "All branches" (empty) so the sales-by-branch panel shows
+        // the full per-branch breakdown on first load.
+        this.selectedBranchId.set('');
         if (this.selectedCompanyId()) {
           this.loadDashboard();
         }
@@ -168,7 +174,8 @@ export class DashboardComponent {
 
   onBranchChange(id: string): void {
     this.selectedBranchId.set(id);
-    if (id) this.loadDashboard();
+    // Reload for any value — including empty ("All branches").
+    if (this.selectedCompanyId()) this.loadDashboard();
   }
 
   applyDates(): void {
@@ -188,12 +195,14 @@ export class DashboardComponent {
     this.crmState.set('loading');
     this.revenueTrendState.set('loading');
     this.netProfitTrendState.set('loading');
+    this.salesByBranchState.set('loading');
     this.finance.set(null);
     this.workingCapital.set(null);
     this.inventory.set(null);
     this.crm.set(null);
     this.revenueTrend.set(null);
     this.netProfitTrend.set(null);
+    this.salesByBranch.set(null);
     this.health.set([]);
 
     const branchId = this.selectedBranchId() || undefined;
@@ -267,6 +276,16 @@ export class DashboardComponent {
     } else {
       this.netProfitTrendState.set('idle');
     }
+
+    // Sales by Branch panel — gated by BI.FINANCE.VIEW (same as revenue panels)
+    if (dto.salesByBranch !== null && dto.salesByBranch !== undefined) {
+      this.salesByBranch.set(dto.salesByBranch);
+      this.salesByBranchState.set('idle');
+    } else if (!this.canFinance()) {
+      this.salesByBranchState.set('forbidden');
+    } else {
+      this.salesByBranchState.set('idle');
+    }
   }
 
   /**
@@ -284,6 +303,7 @@ export class DashboardComponent {
     this.crmState.set(state);
     this.revenueTrendState.set(state);
     this.netProfitTrendState.set(state);
+    this.salesByBranchState.set(state);
   }
 
   // ── Health chip helper ────────────────────────────────────────────────────────
