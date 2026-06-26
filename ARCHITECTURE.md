@@ -93,6 +93,30 @@ com.erp
   repository base interface that injects the tenant predicate from `RequestContext`. **IAM admin
   tables are exempt** from the blanket predicate (administration is inherently cross-branch);
   isolation there is by permission + explicit scope checks in the service (ADR-0001 D-A).
+- **Scope from the loaded entity, never from a caller parameter** (authoritative rule, hardened
+  in the 2026-06-26 tenant-isolation audit). The audit's e2e probe confirmed 28 cross-company leaks
+  across 11 modules, of two classes: (a) *confused-deputy via a secondary identifier* — an endpoint
+  scope-checks a caller-supplied `companyId` (the attacker passes their own → it passes) then loads
+  data by a separate, unverified `id`/`uid` (`accountId`, `productId`, `glAccountId`, …); (b)
+  *missing write-scope* — uid-addressed **mutators** loaded by uid without re-checking the loaded
+  entity's company, so you could write a record you cannot read (worst case: IAM user
+  update/disable/enable/unlock/set-password → cross-tenant account takeover via password reset).
+  All fixed at the **service layer** (company-scoped repository finders + ownership re-checks),
+  applying the same guard to **reads and writes**; the isolation read oracle is unchanged and there
+  is no schema change.
+- **Company list scoped.** `GET /api/v1/companies` now returns only companies the caller belongs to
+  (root sees all) — the same assigned-or-root filter as `/companies/accessible`. Company master data
+  is no longer enumerable cross-tenant.
+- **Authoritative `user_company` membership** (ADR-0046, supersedes the non-authoritative phase of
+  ADR-0045). `user_company` is a write-path prerequisite: `UserRoleService.grant` and
+  `UserBranchService.assign` **require an active membership for the target company** (else 409); the
+  earlier auto-create (`ensureMembership`) is removed. Removing a membership is blocked while the
+  user still has roles/branches in that company (no cascade). The read/isolation oracle stays
+  additive (role OR branch OR `user_company`) as a defensive superset. Root bypasses tenant scope but
+  **not** the membership gate; bootstrap/seeders write entities directly and are unaffected. Coverage
+  is guaranteed by an idempotent every-boot reconcile (`UserCompanyBackfill`, no Flyway migration);
+  `USER.COMPANY.MANAGE` gates explicit assign/remove. BR-6 re-decided: branch and role assignment
+  remain independent of each other, but each now requires prior company membership.
 
 ## 6. Audit
 - An **audit aspect** writes `audit_log` rows for IAM-significant actions (user/role/branch changes,
@@ -128,6 +152,10 @@ com.erp
   Testcontainers** (no mocked DB across a Flyway/query boundary). ArchUnit `ModuleBoundaryTest`
   green. The default-branch invariants and branch-override validation get dedicated integration
   tests.
+- **Tenant-scoping regression guard:** an ArchUnit `FreezingArchRule` (`TenantScopingRulesTest`)
+  fails the build if a `..service..` class makes a bare `findById`/`getReferenceById` on a Spring
+  Data repository, forcing company-scoped finders. The ~197 pre-existing audited calls are frozen as
+  a baseline (`allowStoreUpdate=false`) so no new violations slip in.
 - Web: unit + Playwright e2e + axe (WCAG 2.1 AA gate).
 
 ## 11. Open architectural items

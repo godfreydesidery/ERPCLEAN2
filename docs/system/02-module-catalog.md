@@ -20,21 +20,23 @@ These are not business modules — they are the shared infrastructure every modu
 
 The outbox has no controller, no REST surface, and no permission — it is internal plumbing.
 
-## IAM — Identity & Access (ADR-0001, ADR-0002, ADR-0003, ADR-0004)
+## IAM — Identity & Access (ADR-0001, ADR-0002, ADR-0003, ADR-0004, ADR-0046)
 
-- **Purpose.** The security spine: authentication, the org/company/branch tenant tree, users, roles, permissions, branch assignment, and the audit trail. Built first; everything hangs off it.
-- **Key entities.** `organisation`, `company`, `branch`, `app_user`, `permission`, `role`, `role_permission`, `user_role`, `user_branch`, `refresh_token`, `audit_log`.
-- **Permission family.** `USER.*`, `ROLE.*`, `PERMISSION.*`, `COMPANY.*`, `BRANCH.*`, `AUDIT.*`.
+- **Purpose.** The security spine: authentication, the org/company/branch tenant tree, users, roles, permissions, company/branch assignment, and the audit trail. Built first; everything hangs off it.
+- **Key entities.** `organisation`, `company`, `branch`, `app_user`, `permission`, `role`, `role_permission`, `user_role`, `user_branch`, `user_company`, `refresh_token`, `audit_log`.
+- **Company membership (assign-company-first, ADR-0046).** `user_company` is an **authoritative** write-path prerequisite (supersedes the non-authoritative phase of ADR-0045): a user must hold an active company membership before any role can be granted or branch assigned in that company (else 409) — the prior auto-create on grant/assign is removed, and a membership cannot be removed while roles/branches remain there. The read/isolation oracle stays additive (role OR branch OR membership). Root bypasses tenant scope but not the membership gate; bootstrap/seeders write directly and an every-boot `UserCompanyBackfill` reconcile guarantees coverage (no migration).
+- **Permission family.** `USER.*` (incl. `USER.COMPANY.MANAGE`), `ROLE.*`, `PERMISSION.*`, `COMPANY.*`, `BRANCH.*`, `AUDIT.*`.
 
 | Controller | Base path | Notes |
 |---|---|---|
 | `AuthController` | `/api/v1/auth` | login / refresh / logout (no permission — public/auth) |
 | `OrganisationController` | `/api/v1/organisations` | org tree root |
-| `CompanyController` | `/api/v1/companies` | legal entities; base currency |
+| `CompanyController` | `/api/v1/companies` | legal entities; base currency. The list returns only the caller's companies (root sees all) — same assigned-or-root filter as `/companies/accessible`, not enumerable cross-tenant |
 | `BranchController` | `/api/v1/branches` | locations; set-default |
 | `UserController` | `/api/v1/users` | user CRUD, set-password, unlock |
-| `UserBranchController` | `/api/v1/user-branches` | assign branches, set default |
-| `UserRoleController` | `/api/v1/user-roles` | grant/revoke roles, scoped to company/branch |
+| `UserCompanyController` | `/api/v1/user-companies` | assign/remove company membership (`USER.COMPANY.MANAGE`); prerequisite for role/branch assignment |
+| `UserBranchController` | `/api/v1/user-branches` | assign branches, set default — requires prior company membership |
+| `UserRoleController` | `/api/v1/user-roles` | grant/revoke roles, scoped to company/branch — requires prior company membership |
 | `RoleController` | `/api/v1/roles` | role + permission-bundle management |
 | `AuditController` | `/api/v1/audit` | read-only audit trail |
 
