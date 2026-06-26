@@ -7,6 +7,7 @@ import { RouterLink } from '@angular/router';
 import { debounceTime, distinctUntilChanged, Subject, switchMap } from 'rxjs';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
+import { blobErrorMessage } from '../../../core/api/blob-error';
 import { ProductModel, UnitOfMeasureDto } from '../models/product.model';
 import {
   AddPurchaseOrderLineRequest,
@@ -366,7 +367,9 @@ export class PurchaseOrderDetailComponent {
         },
         error: (err) => {
           this.printing.set(false);
-          this.printError.set(this.messageFrom(err, 'Could not generate the PDF.'));
+          // The error body is a Blob (responseType: 'blob'), so read the friendly server message
+          // out of it; falls back to a generic line if it isn't a JSON error envelope.
+          void blobErrorMessage(err, 'Could not generate the PDF.').then((m) => this.printError.set(m));
         },
       });
   }
