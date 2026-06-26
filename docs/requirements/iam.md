@@ -84,11 +84,22 @@ by. No transactional module can be built before it: every transactional table ca
   (e.g. `CASHIER`, `BRANCH_MANAGER`, `ACCOUNTANT`).
 - **FR-IAM-13** A **user→role assignment** binds a role to a user **scoped to a company**, and
   **optionally to a single branch**. Branch unset ⇒ the role applies to all branches of that
-  company that the user is assigned to.
+  company that the user is assigned to. Granting a role **requires an active company membership**
+  for the target company (FR-IAM-25); the grant is refused (409) otherwise.
 - **FR-IAM-14** A user may hold different roles in different companies (consequence of D5).
+- **FR-IAM-25** A **user↔company membership** (`user_company`) is an explicit, **authoritative**
+  prerequisite (ADR-0046, supersedes the non-authoritative phase of ADR-0045): a user must be a
+  member of a company **before** any role grant or branch assignment scoped to that company. There
+  is **no auto-create** on grant/assign — the membership is established explicitly first
+  (assign-company-first). Membership is gated by `USER.COMPANY.MANAGE`. The read/isolation oracle
+  stays **additive** (role OR branch OR company membership) as a defensive superset; the membership
+  gate applies to the **write path**. The **super-admin (root)** bypasses tenant scope but **not**
+  the membership gate. Bootstrap/seeders write entities directly and are exempt.
 
 ### Branch assignment & default branch (headline)
 - **FR-IAM-15** A user can be assigned to **many branches** (across the companies they belong to).
+  Assigning a branch **requires an active company membership** for that branch's company
+  (FR-IAM-25); the assignment is refused (409) otherwise.
 - **FR-IAM-16** A user has **exactly one default branch** at any time. On login the user lands in
   their default branch (and its company = the user's default company).
 - **FR-IAM-17** The default branch **must** be one of the user's current assignments. The system
@@ -100,10 +111,11 @@ by. No transactional module can be built before it: every transactional table ca
   **auto-promotes** the **earliest-assigned** remaining branch to default. If no assignment
   remains, the user has no active branch and cannot transact until reassigned. **Login still
   succeeds** into a read-only "no branch assigned — contact admin" state (ratified, was OQ-IAM-02).
-- **FR-IAM-24** **Branch assignment is decoupled from roles** (ratified, was OQ-IAM-01): an admin may
-  assign a user to a branch as "present" without the user holding a role in that company. The user
-  can only *act* at a branch where a role also covers it (FR-IAM-20 still requires both for actions).
-  Therefore BR-6 is **relaxed**: a branch assignment does **not** require a pre-existing role.
+- **FR-IAM-24** **Branch and role assignment are independent of each other** (was OQ-IAM-01): an
+  admin may assign a user to a branch as "present" without the user holding a role in that company,
+  and may grant a role without a branch assignment. Neither requires the other — but **each now
+  requires a prior company membership** (FR-IAM-25). The user can only *act* at a branch where a
+  role also covers it (FR-IAM-20 still requires both for actions). BR-6 re-decided accordingly.
 
 ### Authorisation enforcement
 - **FR-IAM-20** Authorisation for any company/branch-scoped action requires **both** (a) an active
@@ -119,10 +131,10 @@ by. No transactional module can be built before it: every transactional table ca
   to start). No interactive wizard.
 
 ### Audit
-- **FR-IAM-23** IAM-significant events are audited (append-only): user create/disable, role grant /
-  revoke, branch assignment add/remove, default-branch change, password change/reset, lockout and
-  unlock, login success/failure. Each record carries actor, action, target, timestamp, and
-  company/branch context.
+- **FR-IAM-23** IAM-significant events are audited (append-only): user create/disable, company
+  membership add/remove, role grant / revoke, branch assignment add/remove, default-branch change,
+  password change/reset, lockout and unlock, login success/failure. Each record carries actor,
+  action, target, timestamp, and company/branch context.
 
 ## 6. Business rules (invariants)
 - **BR-1** At most one default branch per user (`is_default` true on exactly one assignment).
@@ -131,9 +143,16 @@ by. No transactional module can be built before it: every transactional table ca
 - **BR-4** Username is unique across the whole organisation.
 - **BR-5** A role assignment's branch (when set) must belong to that assignment's company.
 - **BR-6** ~~A branch assignment's branch must belong to a company the user has at least one role
-  in.~~ **RELAXED (ratified):** branch assignment is decoupled from roles — a user may be assigned
-  to a branch without a role; they simply cannot *act* there without one (FR-IAM-20, FR-IAM-24).
+  in.~~ **RE-DECIDED (ADR-0046):** branch and role assignment are independent of each other — a
+  user may be assigned to a branch without a role (and vice versa) and simply cannot *act* there
+  without both (FR-IAM-20, FR-IAM-24) — but **each requires a prior active company membership**
+  for the target company (FR-IAM-25). No auto-create.
 - **BR-7** System roles and the root permission set cannot be deleted (audit anchor).
+- **BR-8** A role grant or branch assignment scoped to a company requires an **active**
+  `user_company` membership for that company; otherwise it is refused (FR-IAM-25). Root is not
+  exempt from this gate.
+- **BR-9** Removing a company membership is **blocked** while the user still holds any role or
+  branch assignment in that company (no cascade); those must be removed first.
 
 ## 7. Non-functional
 - Multi-tenant isolation by `company_id` + `branch_id`, enforced at the repository base
