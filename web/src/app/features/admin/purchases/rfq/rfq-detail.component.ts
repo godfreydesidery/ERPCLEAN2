@@ -80,9 +80,9 @@ export class RfqDetailComponent {
   readonly actionError = signal<string | null>(null);
 
   // ── Permissions ────────────────────────────────────────────────────────────
-  readonly canCreate = computed(() => this.session.hasPermission('PURCHASE.RFQ.CREATE'));
-  readonly canAward = computed(() => this.session.hasPermission('PURCHASE.RFQ.AWARD'));
-  readonly canCaptureQuote = computed(() => this.session.hasPermission('PURCHASE.QUOTE.CREATE'));
+  readonly canCreate = computed(() => this.session.hasPermission('PURCHASE.RFQ.MANAGE'));
+  readonly canAward = computed(() => this.session.hasPermission('PURCHASE.RFQ.MANAGE'));
+  readonly canCaptureQuote = computed(() => this.session.hasPermission('PURCHASE.RFQ.MANAGE'));
 
   constructor() {
     queueMicrotask(() => this.init());

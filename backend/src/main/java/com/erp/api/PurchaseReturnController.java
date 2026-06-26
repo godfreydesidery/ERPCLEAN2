@@ -57,7 +57,7 @@ public class PurchaseReturnController {
 
     /** Confirm: DRAFT → CONFIRMED; publishes PURCHASE.RETURNED outbox event. */
     @PostMapping("/uid/{uid}/confirm")
-    @PreAuthorize("@perm.scoped(#uid, 'purchasereturn', 'PURCHASE.RETURN.CONFIRM')")
+    @PreAuthorize("@perm.scoped(#uid, 'purchasereturn', 'PURCHASE.RETURN.CREATE')")
     public ApiResponse<PurchaseReturnDto> confirm(@PathVariable String uid) {
         return ApiResponse.ok(service.confirm(uid));
     }

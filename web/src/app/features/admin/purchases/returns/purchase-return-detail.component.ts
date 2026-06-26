@@ -28,7 +28,7 @@ export class PurchaseReturnDetailComponent {
   readonly confirming = signal(false);
   readonly confirmError = signal<string | null>(null);
 
-  readonly canConfirm = computed(() => this.session.hasPermission('PURCHASE.RETURN.CONFIRM'));
+  readonly canConfirm = computed(() => this.session.hasPermission('PURCHASE.RETURN.CREATE'));
   readonly isDraft = computed(() => this.entity()?.status === 'DRAFT');
 
   constructor() {

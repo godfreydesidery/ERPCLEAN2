@@ -45,7 +45,7 @@ export class RfqListComponent {
   readonly state = signal<'loading' | 'idle' | 'error' | 'forbidden'>('idle');
   readonly currentPage = signal(0);
 
-  readonly canCreate = computed(() => this.session.hasPermission('PURCHASE.RFQ.CREATE'));
+  readonly canCreate = computed(() => this.session.hasPermission('PURCHASE.RFQ.MANAGE'));
   readonly isEmpty = computed(() => this.state() === 'idle' && this.rows().length === 0);
 
   private readonly immediateTrigger$ = new Subject<LoadTrigger>();

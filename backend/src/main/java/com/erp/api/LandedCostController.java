@@ -35,19 +35,19 @@ public class LandedCostController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("@perm.scoped(#req.companyUid(), 'company', 'PURCHASE.LANDED_COST.CREATE')")
+    @PreAuthorize("@perm.scoped(#req.companyUid(), 'company', 'PURCHASE.LANDEDCOST.MANAGE')")
     public ApiResponse<LandedCostDto> create(@Valid @RequestBody CreateLandedCostRequest req) {
         return ApiResponse.ok(service.create(req));
     }
 
     @GetMapping("/uid/{uid}")
-    @PreAuthorize("@perm.scoped(#uid, 'landedcost', 'PURCHASE.LANDED_COST.VIEW')")
+    @PreAuthorize("@perm.scoped(#uid, 'landedcost', 'PURCHASE.LANDEDCOST.VIEW')")
     public ApiResponse<LandedCostDto> getByUid(@PathVariable String uid) {
         return ApiResponse.ok(service.getByUid(uid));
     }
 
     @GetMapping
-    @PreAuthorize("@perm.has('PURCHASE.LANDED_COST.VIEW')")
+    @PreAuthorize("@perm.has('PURCHASE.LANDEDCOST.VIEW')")
     public ApiResponse<List<LandedCostDto>> list(
             @RequestParam Long companyId,
             Pageable pageable) {
@@ -57,7 +57,7 @@ public class LandedCostController {
 
     /** Confirm: DRAFT → CONFIRMED; allocates charges to GR lines; publishes outbox event. */
     @PostMapping("/uid/{uid}/confirm")
-    @PreAuthorize("@perm.scoped(#uid, 'landedcost', 'PURCHASE.LANDED_COST.CONFIRM')")
+    @PreAuthorize("@perm.scoped(#uid, 'landedcost', 'PURCHASE.LANDEDCOST.MANAGE')")
     public ApiResponse<LandedCostDto> confirm(@PathVariable String uid) {
         return ApiResponse.ok(service.confirm(uid));
     }

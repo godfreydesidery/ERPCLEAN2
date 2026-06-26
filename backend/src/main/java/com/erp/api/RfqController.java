@@ -35,7 +35,7 @@ public class RfqController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("@perm.scoped(#req.companyUid(), 'company', 'PURCHASE.RFQ.CREATE')")
+    @PreAuthorize("@perm.scoped(#req.companyUid(), 'company', 'PURCHASE.RFQ.MANAGE')")
     public ApiResponse<RfqDto> create(@Valid @RequestBody CreateRfqRequest req) {
         return ApiResponse.ok(service.create(req));
     }
@@ -57,14 +57,14 @@ public class RfqController {
 
     /** Send RFQ to suppliers (DRAFT → SENT). */
     @PostMapping("/uid/{uid}/send")
-    @PreAuthorize("@perm.scoped(#uid, 'rfq', 'PURCHASE.RFQ.CREATE')")
+    @PreAuthorize("@perm.scoped(#uid, 'rfq', 'PURCHASE.RFQ.MANAGE')")
     public ApiResponse<RfqDto> send(@PathVariable String uid) {
         return ApiResponse.ok(service.send(uid));
     }
 
     /** Award RFQ to a supplier quote (SENT → AWARDED). Also creates PO from quote. */
     @PostMapping("/uid/{uid}/award")
-    @PreAuthorize("@perm.scoped(#uid, 'rfq', 'PURCHASE.RFQ.AWARD')")
+    @PreAuthorize("@perm.scoped(#uid, 'rfq', 'PURCHASE.RFQ.MANAGE')")
     public ApiResponse<RfqDto> award(
             @PathVariable String uid,
             @RequestParam String quoteUid) {
@@ -73,7 +73,7 @@ public class RfqController {
 
     /** Cancel RFQ (any active state → CANCELLED). */
     @PostMapping("/uid/{uid}/cancel")
-    @PreAuthorize("@perm.scoped(#uid, 'rfq', 'PURCHASE.RFQ.CREATE')")
+    @PreAuthorize("@perm.scoped(#uid, 'rfq', 'PURCHASE.RFQ.MANAGE')")
     public ApiResponse<RfqDto> cancel(@PathVariable String uid) {
         return ApiResponse.ok(service.cancel(uid));
     }

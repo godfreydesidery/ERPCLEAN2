@@ -84,7 +84,7 @@ export class RfqCreateComponent {
   readonly saving = signal(false);
   readonly formError = signal<string | null>(null);
 
-  readonly canCreate = computed(() => this.session.hasPermission('PURCHASE.RFQ.CREATE'));
+  readonly canCreate = computed(() => this.session.hasPermission('PURCHASE.RFQ.MANAGE'));
 
   /** Supplier options not yet invited (filter out already-added ones). */
   readonly availableSupplierOptions = computed<UidOption[]>(() => {

@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>Batch records are written internally on receipt; this controller exposes reads only.
  * Write-side operations (receiveQty, consumeFefo) are called by internal services.
  *
- * <p>Permission gate: {@code STOCK.BATCH.VIEW}.
+ * <p>Permission gate: {@code STOCK.VIEW}.
  */
 @RestController
 @RequestMapping("/api/v1/stock-batches")
@@ -35,7 +35,7 @@ public class StockBatchController {
     }
 
     @GetMapping("/uid/{uid}")
-    @PreAuthorize("@perm.scoped(#uid, 'stockbatch', 'STOCK.BATCH.VIEW')")
+    @PreAuthorize("@perm.scoped(#uid, 'stockbatch', 'STOCK.VIEW')")
     public StockBatchDto getByUid(@PathVariable String uid) {
         return batchService.getByUid(uid);
     }
@@ -44,7 +44,7 @@ public class StockBatchController {
      * GET /api/v1/stock-batches?companyId=&locationId=&productId= — paged batch list at a location.
      */
     @GetMapping
-    @PreAuthorize("@perm.has('STOCK.BATCH.VIEW')")
+    @PreAuthorize("@perm.has('STOCK.VIEW')")
     public ApiResponse<List<StockBatchDto>> listAtLocation(
             @RequestParam Long companyId,
             @RequestParam Long locationId,

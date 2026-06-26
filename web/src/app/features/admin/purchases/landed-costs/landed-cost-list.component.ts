@@ -41,7 +41,7 @@ export class LandedCostListComponent {
 
   private readonly immediateTrigger$ = new Subject<LoadTrigger>();
 
-  readonly canCreate = computed(() => this.session.hasPermission('PURCHASE.LANDED_COST.CREATE'));
+  readonly canCreate = computed(() => this.session.hasPermission('PURCHASE.LANDEDCOST.MANAGE'));
   readonly isEmpty = computed(() => this.state() === 'idle' && this.rows().length === 0);
 
   constructor() {

@@ -56,7 +56,7 @@ export class LandedCostCreateComponent {
   readonly submitting = signal(false);
   readonly formError = signal<string | null>(null);
 
-  readonly canCreate = computed(() => this.session.hasPermission('PURCHASE.LANDED_COST.CREATE'));
+  readonly canCreate = computed(() => this.session.hasPermission('PURCHASE.LANDEDCOST.MANAGE'));
 
   readonly basisOptions: Array<{ value: LandedCostBasis; label: string }> = [
     { value: 'BY_VALUE', label: 'By Value (pro-rata to line cost)' },

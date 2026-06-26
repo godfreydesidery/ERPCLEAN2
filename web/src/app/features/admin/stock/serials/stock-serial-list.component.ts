@@ -94,7 +94,7 @@ export class StockSerialListComponent {
   readonly currentPage = signal(0);
   readonly isEmpty = computed(() => this.state() === 'idle' && this.rows().length === 0);
 
-  readonly canView = computed(() => this.session.hasPermission('STOCK.SERIAL.VIEW'));
+  readonly canView = computed(() => this.session.hasPermission('STOCK.VIEW'));
 
   private readonly immediateTrigger$ = new Subject<LoadTrigger>();
 
