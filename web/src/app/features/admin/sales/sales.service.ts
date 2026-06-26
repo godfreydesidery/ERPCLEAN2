@@ -8,6 +8,7 @@ import {
   AddInvoiceLineRequest,
   AddPaymentRequest,
   CreateSalesInvoiceRequest,
+  CreateTaxRateRequest,
   FinaliseInvoiceRequest,
   SalesInvoiceDto,
   SalesInvoiceLineDto,
@@ -114,5 +115,9 @@ export class SalesService {
 
   updateTaxRate(uid: string, request: UpdateTaxRateRequest): Observable<TaxRateDto> {
     return this.http.put<TaxRateDto>(`${this.taxRateBase}/uid/${uid}`, request);
+  }
+
+  createTaxRate(request: CreateTaxRateRequest): Observable<TaxRateDto> {
+    return this.http.post<TaxRateDto>(this.taxRateBase, request);
   }
 }

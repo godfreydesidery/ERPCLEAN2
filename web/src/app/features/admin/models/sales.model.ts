@@ -154,3 +154,9 @@ export interface AddPaymentRequest {
 export interface UpdateTaxRateRequest {
   rate: string;
 }
+
+export interface CreateTaxRateRequest {
+  companyId: string;
+  vatStatus: VatStatus;
+  rate: string;
+}

@@ -112,6 +112,7 @@ public final class AuditActions {
     public static final String SALES_INVOICE_PAYMENT_ADD     = "SALES.INVOICE.PAYMENT.ADD";
     public static final String SALES_INVOICE_PAYMENT_REMOVE  = "SALES.INVOICE.PAYMENT.REMOVE";
     public static final String SALES_INVOICE_VOID            = "SALES.INVOICE.VOID";
+    public static final String TAXRATE_CREATE                = "TAXRATE.CREATE";
     public static final String TAXRATE_UPDATE                = "TAXRATE.UPDATE";
 
     // -- Stock module (ADR-0010 D-12; target_type = plural table names) -------
@@ -232,6 +233,7 @@ public final class AuditActions {
     public static final String BOM_COMPONENT_REMOVE = "BOM.COMPONENT.REMOVE";
     public static final String BOM_PROMOTE_RECIPE  = "BOM.PROMOTE_RECIPE";
     // ---- Cost-centre / Accounting-dimension framework (ADR-0025) ----
+    public static final String COSTING_DIMENSION_CREATE          = "COSTING.DIMENSION.CREATE";
     public static final String COSTING_VALUE_CREATE              = "COSTING.VALUE.CREATE";
     public static final String COSTING_VALUE_UPDATE              = "COSTING.VALUE.UPDATE";
     public static final String COSTING_VALUE_DEACTIVATE          = "COSTING.VALUE.DEACTIVATE";

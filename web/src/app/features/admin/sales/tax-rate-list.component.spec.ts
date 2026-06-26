@@ -9,6 +9,8 @@
  *  4. saveEdit() validation: requires a numeric rate.
  *  5. saveEdit() calls salesService.updateTaxRate.
  *  6. 403 response sets state to 'forbidden'.
+ *  7. submitAdd() calls createTaxRate with the active companyId, chosen vatStatus, fraction rate.
+ *  8. availableVatStatuses excludes classifications already present in rows().
  */
 import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -52,8 +54,16 @@ function makeSessionStore(canManage = false) {
   };
 }
 
-function makeBed(opts: { canManage?: boolean; listImpl?: () => any } = {}) {
-  const { canManage = false, listImpl = () => of([makeTaxRate()]) } = opts;
+function makeBed(opts: {
+  canManage?: boolean;
+  listImpl?: () => any;
+  createImpl?: () => any;
+} = {}) {
+  const {
+    canManage = false,
+    listImpl = () => of([makeTaxRate()]),
+    createImpl = () => of(makeTaxRate({ uid: 'TR2', id: '2', vatStatus: 'ZERO_RATED', rate: '0.0000' })),
+  } = opts;
   const sessionStore = makeSessionStore(canManage);
 
   TestBed.configureTestingModule({
@@ -67,6 +77,7 @@ function makeBed(opts: { canManage?: boolean; listImpl?: () => any } = {}) {
         useValue: {
           listTaxRates: vi.fn(listImpl),
           updateTaxRate: vi.fn(() => of(makeTaxRate({ rate: '0.2000' }))),
+          createTaxRate: vi.fn(createImpl),
         },
       },
       {
@@ -271,5 +282,152 @@ describe('TaxRateListComponent — 403 forbidden', () => {
     await vi.runAllTimersAsync();
 
     expect(comp.state()).toBe('forbidden');
+  });
+});
+
+// ── Add tax rate ───────────────────────────────────────────────────────────────
+
+describe('TaxRateListComponent — submitAdd()', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    makeBed({ canManage: true });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    TestBed.resetTestingModule();
+  });
+
+  it('calls createTaxRate with active companyId, chosen vatStatus and fraction rate', async () => {
+    const comp = TestBed.createComponent(TaxRateListComponent).componentInstance;
+    const svc = TestBed.inject(SalesService) as any;
+    await vi.runAllTimersAsync();
+
+    // rows() has one STANDARD row; pick ZERO_RATED for the add form
+    comp.addVatStatus.set('ZERO_RATED');
+    comp.addRate.set('18'); // user types 18 % -> fraction 0.1800
+    comp.submitAdd();
+
+    expect(svc.createTaxRate).toHaveBeenCalledOnce();
+    expect(svc.createTaxRate.mock.calls[0][0]).toEqual({
+      companyId: '10',
+      vatStatus: 'ZERO_RATED',
+      rate: '0.1800',
+    });
+  });
+
+  it('defaults addVatStatus to a MISSING classification after load, so an untouched submit is not a duplicate', async () => {
+    // Company already has STANDARD + ZERO_RATED → only EXEMPT is available.
+    makeBed({
+      canManage: true,
+      listImpl: () =>
+        of([makeTaxRate(), makeTaxRate({ uid: 'TR2', id: '2', vatStatus: 'ZERO_RATED', rate: '0.0000' })]),
+      createImpl: () => of(makeTaxRate({ uid: 'TR3', id: '3', vatStatus: 'EXEMPT', rate: '0.0000' })),
+    });
+    const comp = TestBed.createComponent(TaxRateListComponent).componentInstance;
+    const svc = TestBed.inject(SalesService) as any;
+    await vi.runAllTimersAsync();
+
+    // After load the default must follow the available list, not the initial 'STANDARD'.
+    expect(comp.addVatStatus()).toBe('EXEMPT');
+
+    // Submit WITHOUT touching the dropdown → must post the available classification, not STANDARD.
+    comp.addRate.set('0');
+    comp.submitAdd();
+    expect(svc.createTaxRate.mock.calls[0][0].vatStatus).toBe('EXEMPT');
+  });
+
+  it('appends the returned row to rows() on success', async () => {
+    const comp = TestBed.createComponent(TaxRateListComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    const initialCount = comp.rows().length; // 1 (STANDARD)
+    comp.addVatStatus.set('ZERO_RATED');
+    comp.addRate.set('0'); // zero-rated band is typically 0 %
+    comp.submitAdd();
+
+    expect(comp.rows().length).toBe(initialCount + 1);
+    expect(comp.rows().at(-1)?.vatStatus).toBe('ZERO_RATED');
+  });
+
+  it('sets addError on 409 without calling the global error modal', async () => {
+    makeBed({
+      canManage: true,
+      createImpl: () =>
+        throwError(() => new HttpErrorResponse({ status: 409, statusText: 'Conflict' })),
+    });
+    const comp = TestBed.createComponent(TaxRateListComponent).componentInstance;
+    const alerts = TestBed.inject(AlertService) as any;
+    await vi.runAllTimersAsync();
+
+    comp.addVatStatus.set('ZERO_RATED');
+    comp.addRate.set('18');
+    comp.submitAdd();
+
+    expect(comp.addError()).toBe('A rate for this classification already exists.');
+    expect(alerts.error).not.toHaveBeenCalled();
+  });
+
+  it('validates: empty rate sets addError and does not call createTaxRate', async () => {
+    const comp = TestBed.createComponent(TaxRateListComponent).componentInstance;
+    const svc = TestBed.inject(SalesService) as any;
+    await vi.runAllTimersAsync();
+
+    comp.addVatStatus.set('ZERO_RATED');
+    comp.addRate.set('');
+    comp.submitAdd();
+
+    expect(comp.addError()).toBeTruthy();
+    expect(svc.createTaxRate).not.toHaveBeenCalled();
+  });
+
+  it('validates: rate > 99.99 sets addError', async () => {
+    const comp = TestBed.createComponent(TaxRateListComponent).componentInstance;
+    const svc = TestBed.inject(SalesService) as any;
+    await vi.runAllTimersAsync();
+
+    comp.addVatStatus.set('ZERO_RATED');
+    comp.addRate.set('150');
+    comp.submitAdd();
+
+    expect(comp.addError()).toBeTruthy();
+    expect(svc.createTaxRate).not.toHaveBeenCalled();
+  });
+});
+
+// ── availableVatStatuses ───────────────────────────────────────────────────────
+
+describe('TaxRateListComponent — availableVatStatuses', () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => {
+    vi.useRealTimers();
+    TestBed.resetTestingModule();
+  });
+
+  it('excludes classifications already present in rows()', async () => {
+    // Seed with STANDARD — ZERO_RATED and EXEMPT should still be available.
+    makeBed({ listImpl: () => of([makeTaxRate({ vatStatus: 'STANDARD' })]) });
+    const comp = TestBed.createComponent(TaxRateListComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    const available = comp.availableVatStatuses();
+    expect(available).not.toContain('STANDARD');
+    expect(available).toContain('ZERO_RATED');
+    expect(available).toContain('EXEMPT');
+  });
+
+  it('allConfigured is true when all three classifications are in rows()', async () => {
+    makeBed({
+      listImpl: () =>
+        of([
+          makeTaxRate({ uid: 'TR1', vatStatus: 'STANDARD' }),
+          makeTaxRate({ uid: 'TR2', vatStatus: 'ZERO_RATED' }),
+          makeTaxRate({ uid: 'TR3', vatStatus: 'EXEMPT' }),
+        ]),
+    });
+    const comp = TestBed.createComponent(TaxRateListComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    expect(comp.allConfigured()).toBe(true);
+    expect(comp.availableVatStatuses().length).toBe(0);
   });
 });

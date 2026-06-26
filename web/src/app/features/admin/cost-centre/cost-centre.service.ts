@@ -5,6 +5,7 @@ import { ApiResponse, PageMeta } from '../../../core/api/api-response.model';
 import { SKIP_UNWRAP } from '../../../core/api/http-context.tokens';
 import { environment } from '../../../../environments/environment';
 import {
+  CreateDimensionRequest,
   CreateDimensionValueRequest,
   DimensionDto,
   DimensionSlicedTbDto,
@@ -48,6 +49,14 @@ export class CostCentreService {
   /** PATCH /dimensions/uid/{uid}/mandatory — toggle mandatory flag. */
   setMandatory(uid: string, request: SetDimensionMandatoryRequest): Observable<DimensionDto> {
     return this.http.patch<DimensionDto>(`${this.dimBase}/uid/${uid}/mandatory`, request);
+  }
+
+  /**
+   * POST /dimensions — create a custom dimension; backend assigns the next free slot
+   * (DIMENSION_3 then DIMENSION_4). Returns 409 when both custom slots are in use.
+   */
+  createDimension(request: CreateDimensionRequest): Observable<DimensionDto> {
+    return this.http.post<DimensionDto>(this.dimBase, request);
   }
 
   // ── Dimension values (paginated list + CRUD + actions) ────────────────────
