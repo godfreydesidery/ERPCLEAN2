@@ -97,6 +97,7 @@ class UserRoleServiceImplIT extends PostgresIntegrationTest {
 
     @Test
     void grant_rootGrantor_succeedsForAnyCompany() {
+        testData.seedMembership(targetUser.getUid(), companyA.getUid());
         UserRoleDto dtoA = userRoleService.grant(new GrantRoleRequest(
                 targetUser.getUid(), testRole.getUid(), companyA.getUid(), null));
         assertThat(dtoA.uid()).isNotBlank();
@@ -104,6 +105,7 @@ class UserRoleServiceImplIT extends PostgresIntegrationTest {
         assertThat(dtoA.branchUid()).isNull(); // company-wide
 
         // Root may also grant in company B (cross-company)
+        testData.seedMembership(nonRootUser.getUid(), companyB.getUid());
         UserRoleDto dtoB = userRoleService.grant(new GrantRoleRequest(
                 nonRootUser.getUid(), testRole.getUid(), companyB.getUid(), null));
         assertThat(dtoB.companyUid()).isEqualTo(companyB.getUid());
@@ -116,6 +118,8 @@ class UserRoleServiceImplIT extends PostgresIntegrationTest {
     @Test
     void grant_nonRootGrantorOutsideOwnCompany_throwsForbidden() {
         // nonRootUser is active in companyA; tries to grant in companyB
+        // Seed targetUser membership in companyB so only the grantor-scope check fires (ForbiddenException)
+        testData.seedMembership(targetUser.getUid(), companyB.getUid());
         RequestContext.set(new RequestContext.Principal(
                 nonRootUser.getId(), "nonroot", false, companyA.getId(), branchInA.getId(), null));
 
@@ -127,6 +131,7 @@ class UserRoleServiceImplIT extends PostgresIntegrationTest {
     @Test
     void grant_nonRootGrantorInOwnCompany_succeeds() {
         // nonRootUser is active in companyA; grants in companyA — should succeed
+        testData.seedMembership(targetUser.getUid(), companyA.getUid());
         RequestContext.set(new RequestContext.Principal(
                 nonRootUser.getId(), "nonroot", false, companyA.getId(), branchInA.getId(), null));
 
@@ -142,6 +147,8 @@ class UserRoleServiceImplIT extends PostgresIntegrationTest {
     @Test
     void grant_branchFromWrongCompany_throwsConflict() {
         // branchInB belongs to companyB, but we're granting in companyA
+        // Seed membership so only the branch-company mismatch ConflictException fires
+        testData.seedMembership(targetUser.getUid(), companyA.getUid());
         assertThatThrownBy(() -> userRoleService.grant(new GrantRoleRequest(
                 targetUser.getUid(), testRole.getUid(), companyA.getUid(), branchInB.getUid())))
                 .isInstanceOf(ConflictException.class)
@@ -154,6 +161,7 @@ class UserRoleServiceImplIT extends PostgresIntegrationTest {
 
     @Test
     void grant_duplicateActiveGrant_throwsConflict() {
+        testData.seedMembership(targetUser.getUid(), companyA.getUid());
         userRoleService.grant(new GrantRoleRequest(
                 targetUser.getUid(), testRole.getUid(), companyA.getUid(), null));
 
@@ -165,6 +173,7 @@ class UserRoleServiceImplIT extends PostgresIntegrationTest {
 
     @Test
     void grant_afterRevoke_succeedsAsNewGrant() {
+        testData.seedMembership(targetUser.getUid(), companyA.getUid());
         UserRoleDto first = userRoleService.grant(new GrantRoleRequest(
                 targetUser.getUid(), testRole.getUid(), companyA.getUid(), null));
         userRoleService.revoke(first.uid());
@@ -181,6 +190,7 @@ class UserRoleServiceImplIT extends PostgresIntegrationTest {
 
     @Test
     void grant_withBranchUid_recordsBranchInDto() {
+        testData.seedMembership(targetUser.getUid(), companyA.getUid());
         UserRoleDto dto = userRoleService.grant(new GrantRoleRequest(
                 targetUser.getUid(), testRole.getUid(), companyA.getUid(), branchInA.getUid()));
 
@@ -194,6 +204,7 @@ class UserRoleServiceImplIT extends PostgresIntegrationTest {
 
     @Test
     void revoke_grantDisappearsFromListForUser() {
+        testData.seedMembership(targetUser.getUid(), companyA.getUid());
         UserRoleDto dto = userRoleService.grant(new GrantRoleRequest(
                 targetUser.getUid(), testRole.getUid(), companyA.getUid(), null));
 
@@ -210,6 +221,7 @@ class UserRoleServiceImplIT extends PostgresIntegrationTest {
 
     @Test
     void revoke_alreadyRevoked_throwsConflict() {
+        testData.seedMembership(targetUser.getUid(), companyA.getUid());
         UserRoleDto dto = userRoleService.grant(new GrantRoleRequest(
                 targetUser.getUid(), testRole.getUid(), companyA.getUid(), null));
         userRoleService.revoke(dto.uid());
@@ -226,6 +238,7 @@ class UserRoleServiceImplIT extends PostgresIntegrationTest {
     @Test
     void listForUser_returnsOnlyActiveGrants() {
         // Grant two; revoke one
+        testData.seedMembership(targetUser.getUid(), companyA.getUid());
         UserRoleDto grantA = userRoleService.grant(new GrantRoleRequest(
                 targetUser.getUid(), testRole.getUid(), companyA.getUid(), null));
 
@@ -248,6 +261,7 @@ class UserRoleServiceImplIT extends PostgresIntegrationTest {
     @Test
     void revoke_nonRootOutsideGrantCompany_throwsForbidden() {
         // Root grants targetUser a role in companyB
+        testData.seedMembership(targetUser.getUid(), companyB.getUid());
         UserRoleDto dto = userRoleService.grant(new GrantRoleRequest(
                 targetUser.getUid(), testRole.getUid(), companyB.getUid(), null));
 

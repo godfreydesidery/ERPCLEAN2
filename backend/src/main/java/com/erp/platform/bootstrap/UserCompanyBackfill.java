@@ -5,7 +5,6 @@ import com.erp.modules.iam.domain.entity.Branch;
 import com.erp.modules.iam.domain.entity.UserRole;
 import com.erp.modules.iam.repository.AppUserRepository;
 import com.erp.modules.iam.repository.UserBranchRepository;
-import com.erp.modules.iam.repository.UserCompanyRepository;
 import com.erp.modules.iam.repository.UserRoleRepository;
 import com.erp.modules.iam.service.UserCompanyService;
 import java.util.LinkedHashSet;
@@ -20,17 +19,21 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * One-time startup backfill for the {@code user_company} table (V77).
+ * Idempotent startup <em>reconcile</em> for the {@code user_company} table (V77), the coverage
+ * guarantee behind the ADR-0046 authoritative gate (§5).
  *
- * <p>Guard: runs ONLY when {@code user_company} is empty ({@code count() == 0}). On every
- * subsequent boot the guard short-circuits immediately — the runner is a no-op once seeded.
+ * <p>Runs on EVERY boot (no empty-table guard) so that, before the assign-company-first gate can
+ * reject anything in the request path, every {@code (user, company)} reachable by a pre-existing
+ * active grant/branch already has a membership row — no existing user is locked out. Once coverage
+ * is complete it inserts nothing (each {@link UserCompanyService#ensureMembership} short-circuits),
+ * so steady-state cost is a scan, not writes. (Provisioning over data-migrations — ADR-0045/0046.)
  *
  * <p>Algorithm: union of all DISTINCT (user_id, company_id) pairs from active role grants
  * ({@code user_role.revoked_at IS NULL}) and ALL branch assignments ({@code user_branch},
  * deriving {@code company_id} via {@code branch.company}). For each pair call
  * {@link UserCompanyService#ensureMembership} (itself idempotent). Runs after
  * {@link BootstrapRunner} (Order 20 vs 10) so the org/company/root-user rows are guaranteed
- * present before we attempt to back-fill.
+ * present before we reconcile.
  */
 @Component
 @Order(20)
@@ -38,18 +41,15 @@ public class UserCompanyBackfill implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(UserCompanyBackfill.class);
 
-    private final UserCompanyRepository userCompanyRepository;
     private final UserRoleRepository    userRoleRepository;
     private final UserBranchRepository  userBranchRepository;
     private final AppUserRepository     appUserRepository;
     private final UserCompanyService    userCompanyService;
 
-    public UserCompanyBackfill(UserCompanyRepository userCompanyRepository,
-                               UserRoleRepository    userRoleRepository,
+    public UserCompanyBackfill(UserRoleRepository    userRoleRepository,
                                UserBranchRepository  userBranchRepository,
                                AppUserRepository     appUserRepository,
                                UserCompanyService    userCompanyService) {
-        this.userCompanyRepository = userCompanyRepository;
         this.userRoleRepository    = userRoleRepository;
         this.userBranchRepository  = userBranchRepository;
         this.appUserRepository     = appUserRepository;
@@ -59,12 +59,9 @@ public class UserCompanyBackfill implements ApplicationRunner {
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
-        if (userCompanyRepository.count() > 0) {
-            log.debug("UserCompanyBackfill: table not empty — skipping.");
-            return;
-        }
-
-        log.info("UserCompanyBackfill: user_company is empty — deriving memberships from role grants and branch assignments.");
+        // ADR-0046: idempotent reconcile on every boot (no empty-table guard) so the authoritative
+        // gate never blocks a user who already has access but is missing a membership row.
+        log.info("UserCompanyBackfill: reconciling user_company from active role grants and branch assignments.");
 
         // Collect distinct (userId, companyId) pairs.
         // Use a simple record as the key so Set deduplication works correctly.

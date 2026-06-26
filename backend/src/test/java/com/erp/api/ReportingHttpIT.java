@@ -212,6 +212,7 @@ class ReportingHttpIT extends PostgresIntegrationTest {
                 rootUser.getId(), rootUser.getUsername(), true,
                 company.getId(), branch.getId(), null));
         try {
+            testData.seedMembership(user.getUid(), company.getUid());
             userRoleService.grant(new GrantRoleRequest(
                     user.getUid(), role.getUid(), company.getUid(), null));
             permissionResolver.invalidate();

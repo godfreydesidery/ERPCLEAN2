@@ -63,6 +63,7 @@ class UserBranchServiceImplIT extends PostgresIntegrationTest {
     // shared entities reused across tests
     private AppUser rootUser;
     private AppUser targetUser;
+    private Company company;
     private Branch b1;
     private Branch b2;
     private Branch b3;
@@ -72,7 +73,7 @@ class UserBranchServiceImplIT extends PostgresIntegrationTest {
         testData.clearAll();
 
         Organisation org = organisations.save(new Organisation("Slice4 Org"));
-        Company company = companies.save(new Company(org, "S4C", "Slice4 Company"));
+        company = companies.save(new Company(org, "S4C", "Slice4 Company"));
 
         // Three branches with stable identity (code used as label). No company-default needed for
         // user-branch logic, but we must not archive the company-default branch (BR-2), so we
@@ -87,6 +88,9 @@ class UserBranchServiceImplIT extends PostgresIntegrationTest {
         rootUser = users.save(rootUser);
 
         targetUser = users.save(new AppUser("target_s4", passwordEncoder.encode(PASSWORD), "Target S4"));
+
+        // Seed membership so the authoritative gate in assign/grant passes for targetUser.
+        testData.seedMembership(targetUser.getUid(), company.getUid());
 
         // Set ROOT context: ScopeGuard.assertCanActIn passes for root in any company.
         RequestContext.set(new RequestContext.Principal(
