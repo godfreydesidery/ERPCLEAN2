@@ -76,17 +76,17 @@ public class ApprovalDecisionServiceImpl implements ApprovalDecisionService {
     private ApprovalRequestDto decideWithRetry(String requestUid, DecideRequest req, boolean isRetry) {
         RequestContext.Principal principal = RequestContext.get();
         ApprovalRequest request = requestRepo.findByUid(requestUid)
-                .orElseThrow(() -> new NotFoundException("Approval request not found: " + requestUid));
+                .orElseThrow(() -> new NotFoundException("Approval request not found."));
         scopeGuard.assertCanActIn(principal, request.getCompanyId());
 
         if (request.getStatus().isTerminal()) {
-            throw new ConflictException("Request " + requestUid + " is already " + request.getStatus());
+            throw new ConflictException("This request is already " + request.getStatus() + ".");
         }
 
         // Find the current open step (lowest-sequence PENDING)
         List<ApprovalRequestStep> pendingSteps = stepRepo.findPendingStepsOrdered(request.getId());
         if (pendingSteps.isEmpty()) {
-            throw new ConflictException("No open step found on request " + requestUid);
+            throw new ConflictException("No open step found on this request.");
         }
         ApprovalRequestStep openStep = pendingSteps.get(0);
 
@@ -136,8 +136,8 @@ public class ApprovalDecisionServiceImpl implements ApprovalDecisionService {
             if (isRetry) {
                 // Second race — the step has already been decided by a concurrent approver
                 throw new ConflictException(
-                        "Step " + openStep.getSequence() + " on request " + requestUid
-                        + " has already been decided by a concurrent approver");
+                        "Step " + openStep.getSequence()
+                        + " has already been decided by a concurrent approver.");
             }
             return decideWithRetry(requestUid, req, true);
         }
@@ -185,7 +185,7 @@ public class ApprovalDecisionServiceImpl implements ApprovalDecisionService {
     public ApprovalRequestDto recall(String requestUid) {
         RequestContext.Principal principal = RequestContext.get();
         ApprovalRequest request = requestRepo.findByUid(requestUid)
-                .orElseThrow(() -> new NotFoundException("Approval request not found: " + requestUid));
+                .orElseThrow(() -> new NotFoundException("Approval request not found."));
         scopeGuard.assertCanActIn(principal, request.getCompanyId());
 
         if (request.getStatus().isTerminal()) {
@@ -223,7 +223,7 @@ public class ApprovalDecisionServiceImpl implements ApprovalDecisionService {
     public ApprovalRequestDto cancel(String requestUid) {
         RequestContext.Principal principal = RequestContext.get();
         ApprovalRequest request = requestRepo.findByUid(requestUid)
-                .orElseThrow(() -> new NotFoundException("Approval request not found: " + requestUid));
+                .orElseThrow(() -> new NotFoundException("Approval request not found."));
         scopeGuard.assertCanActIn(principal, request.getCompanyId());
 
         if (request.getStatus().isTerminal()) {
@@ -251,7 +251,7 @@ public class ApprovalDecisionServiceImpl implements ApprovalDecisionService {
     public ApprovalRequestDto getByUid(String uid) {
         RequestContext.Principal principal = RequestContext.get();
         ApprovalRequest request = requestRepo.findByUid(uid)
-                .orElseThrow(() -> new NotFoundException("Approval request not found: " + uid));
+                .orElseThrow(() -> new NotFoundException("Approval request not found."));
         scopeGuard.assertCanActIn(principal, request.getCompanyId());
         return engine.toDto(request);
     }

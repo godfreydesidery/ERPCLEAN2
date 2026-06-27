@@ -214,7 +214,7 @@ public class DocumentRenderServiceImpl implements DocumentRenderService {
         RequestContext.Principal principal = RequestContext.get();
 
         GeneratedDocument gd = generatedDocs.findByUid(generatedDocumentUid)
-                .orElseThrow(() -> new NotFoundException("Generated document not found: " + generatedDocumentUid));
+                .orElseThrow(() -> new NotFoundException("Generated document not found."));
 
         scopeGuard.assertCanActIn(principal, gd.getCompanyId());
 
@@ -269,7 +269,7 @@ public class DocumentRenderServiceImpl implements DocumentRenderService {
     public GeneratedDocumentDto getByUid(String uid) {
         RequestContext.Principal principal = RequestContext.get();
         GeneratedDocument gd = generatedDocs.findByUid(uid)
-                .orElseThrow(() -> new NotFoundException("Generated document not found: " + uid));
+                .orElseThrow(() -> new NotFoundException("Generated document not found."));
         scopeGuard.assertCanActIn(principal, gd.getCompanyId());
         return GeneratedDocumentDto.from(gd);
     }
@@ -333,7 +333,7 @@ public class DocumentRenderServiceImpl implements DocumentRenderService {
                     throw new IllegalArgumentException("sourceParams must contain customerUid and asAt");
                 }
                 Long custCompanyId = scopeGuard.companyIdOf("customer", customerUid)
-                        .orElseThrow(() -> new NotFoundException("Customer not found: " + customerUid));
+                        .orElseThrow(() -> new NotFoundException("Customer not found."));
                 ArStatementDto stmt = arAgeingQuery.statementByCustomerUid(
                         custCompanyId, customerUid, LocalDate.parse(asAtStr));
                 StatementRenderModel stmtModel = modelBuilder.buildArStatement(stmt, branding, title);
@@ -357,7 +357,7 @@ public class DocumentRenderServiceImpl implements DocumentRenderService {
         if (type == DocumentType.AR_STATEMENT) {
             String customerUid = parseParams(sourceParams).get("customerUid");
             return scopeGuard.companyIdOf("customer", customerUid)
-                    .orElseThrow(() -> new NotFoundException("Customer not found: " + customerUid));
+                    .orElseThrow(() -> new NotFoundException("Customer not found."));
         }
 
         String targetType = switch (type) {
@@ -413,7 +413,7 @@ public class DocumentRenderServiceImpl implements DocumentRenderService {
         try {
             return objectMapper.readValue(json, new TypeReference<Map<String, String>>() {});
         } catch (JsonProcessingException e) {
-            throw new IllegalArgumentException("Invalid sourceParams JSON: " + e.getMessage());
+            throw new IllegalArgumentException("Invalid sourceParams JSON.");
         }
     }
 

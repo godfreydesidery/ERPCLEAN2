@@ -230,7 +230,7 @@ export class BomListComponent {
         this.saving.set(false);
         this.resetCreateForm();
         this.showCreateForm.set(false);
-        this.alerts.success('BOM created', `v${created.versionNo} — ${created.uid}`);
+        this.alerts.success('BOM created', `v${created.versionNo}`);
         this.load(this.currentPage());
       },
       error: (err: unknown) => {

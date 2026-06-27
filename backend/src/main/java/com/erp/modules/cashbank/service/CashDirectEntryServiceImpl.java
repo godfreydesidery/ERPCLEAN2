@@ -70,19 +70,19 @@ public class CashDirectEntryServiceImpl implements CashDirectEntryService {
     public CashTransactionDto recordDirectEntry(RecordDirectEntryRequest req) {
         Long companyId = companies.findByUid(req.companyUid())
                 .map(c -> c.getId())
-                .orElseThrow(() -> new NotFoundException("Company: " + req.companyUid()));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
 
         String currency = companies.findById(companyId)
                 .map(c -> c.getBaseCurrency()).orElse("TZS");
 
         CashBankAccount account = accounts.findByCompanyIdAndUid(companyId, req.cashBankAccountUid())
-                .orElseThrow(() -> new NotFoundException("Cash/bank account: " + req.cashBankAccountUid()));
+                .orElseThrow(() -> new NotFoundException("Cash/bank account not found."));
         if (!account.isActive())
             throw new IllegalStateException("Cash/bank account is inactive (BR-CASH-08).");
 
         ChartOfAccount counterGlAcct = glAccounts.findByCompanyIdAndUid(companyId, req.counterGlAccountUid())
-                .orElseThrow(() -> new NotFoundException("Counter GL account: " + req.counterGlAccountUid()));
+                .orElseThrow(() -> new NotFoundException("Counter GL account not found."));
         if (!counterGlAcct.isActive())
             throw new IllegalStateException("Counter GL account " + counterGlAcct.getAccountCode() + " is inactive.");
 
@@ -176,7 +176,7 @@ public class CashDirectEntryServiceImpl implements CashDirectEntryService {
         // but a foreign accountId and read another company's cash transactions (confused-deputy).
         accounts.findById(accountId)
                 .filter(a -> a.getCompanyId().equals(companyId))
-                .orElseThrow(() -> new NotFoundException("Cash/bank account: " + accountId));
+                .orElseThrow(() -> new NotFoundException("Cash/bank account not found."));
         return txns.findByCashBankAccountIdOrderByTxnDateAscIdAsc(accountId)
                 .stream().map(CashDirectEntryServiceImpl::toDto).toList();
     }

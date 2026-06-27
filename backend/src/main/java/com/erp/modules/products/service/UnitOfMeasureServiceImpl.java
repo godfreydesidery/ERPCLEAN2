@@ -153,7 +153,7 @@ public class UnitOfMeasureServiceImpl implements UnitOfMeasureService {
     private Long resolveCompanyId(String companyUid) {
         return companies.findByUid(companyUid)
                 .map(c -> c.getId())
-                .orElseThrow(() -> new NotFoundException("Company not found: " + companyUid));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
     }
 
     private Long actorId() {

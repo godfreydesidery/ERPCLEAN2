@@ -135,14 +135,14 @@ public class WhtCaptureServiceImpl implements WhtCaptureService {
 
     private WhtType resolveType(Long companyId, String whtTypeUid, WhtKind expectedKind) {
         WhtType whtType = whtTypes.findByUid(whtTypeUid)
-                .orElseThrow(() -> new NotFoundException("WhtType: " + whtTypeUid));
+                .orElseThrow(() -> new NotFoundException("WHT type not found."));
         if (!whtType.getCompanyId().equals(companyId)) {
             throw new IllegalStateException(
-                    "WhtType " + whtTypeUid + " does not belong to company " + companyId + ".");
+                    "WHT type does not belong to this company.");
         }
         if (!whtType.isActive()) {
             throw new IllegalStateException(
-                    "WhtType " + whtTypeUid + " is inactive.");
+                    "WHT type is inactive.");
         }
         if (whtType.getKind() != expectedKind) {
             throw new IllegalStateException(

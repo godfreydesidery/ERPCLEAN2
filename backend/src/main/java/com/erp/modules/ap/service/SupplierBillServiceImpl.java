@@ -79,11 +79,11 @@ public class SupplierBillServiceImpl implements SupplierBillService {
     public SupplierBillDto enterBill(EnterBillRequest req) {
         Long companyId = companies.findByUid(req.companyUid())
                 .map(c -> c.getId())
-                .orElseThrow(() -> new NotFoundException("Company not found: " + req.companyUid()));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
 
         Supplier supplier = suppliers.findByCompanyIdAndUid(companyId, req.supplierUid())
-                .orElseThrow(() -> new NotFoundException("Supplier not found: " + req.supplierUid()));
+                .orElseThrow(() -> new NotFoundException("Supplier not found."));
         Long supplierId = supplier.getId();
 
         // Cross-supplier PO ownership guard (issue #8): when a PO is referenced the bill's supplier

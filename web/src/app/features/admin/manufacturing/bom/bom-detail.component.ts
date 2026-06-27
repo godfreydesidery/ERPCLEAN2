@@ -182,7 +182,7 @@ export class BomDetailComponent {
         this.bom.set(updated);
         this.patchForm(updated);
         this.saving.set(false);
-        this.alerts.success('BOM updated', updated.uid);
+        this.alerts.success('BOM updated');
       },
       error: (err: unknown) => {
         this.saveError.set(this.messageFrom(err, 'Could not save BOM.'));
@@ -217,7 +217,7 @@ export class BomDetailComponent {
         this.activating.set(false);
         this.showActivateForm.set(false);
         this.fEffectiveFrom.set('');
-        this.alerts.success('BOM activated', updated.uid);
+        this.alerts.success('BOM activated');
       },
       error: (err: unknown) => {
         this.activateError.set(this.messageFrom(err, 'Could not activate BOM.'));
@@ -235,7 +235,7 @@ export class BomDetailComponent {
         this.bom.set(updated);
         this.patchForm(updated);
         this.archiving.set(false);
-        this.alerts.success('BOM archived', updated.uid);
+        this.alerts.success('BOM archived');
       },
       error: (err: unknown) => {
         this.alerts.error('Archive failed', this.messageFrom(err, 'Could not archive BOM.'));
@@ -371,7 +371,7 @@ export class BomDetailComponent {
           });
         }
         this.removingComponentUid.set(null);
-        this.alerts.success('Component removed', componentUid);
+        this.alerts.success('Component removed');
       },
       error: (err: unknown) => {
         this.alerts.error('Remove failed', this.messageFrom(err, 'Could not remove component.'));

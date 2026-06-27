@@ -162,9 +162,9 @@ public class RfqServiceImpl implements RfqService {
         }
 
         SupplierQuote winningQuote = quotes.findByUid(winningQuoteUid)
-                .orElseThrow(() -> new NotFoundException("SupplierQuote: " + winningQuoteUid));
+                .orElseThrow(() -> new NotFoundException("Supplier quote not found."));
         if (!winningQuote.getRfqId().equals(rfq.getId())) {
-            throw new IllegalArgumentException("Quote " + winningQuoteUid + " does not belong to RFQ " + uid);
+            throw new IllegalArgumentException("The selected quote does not belong to this RFQ.");
         }
 
         // Mark winning quote AWARDED, others NOT_AWARDED
@@ -221,14 +221,19 @@ public class RfqServiceImpl implements RfqService {
     private Long resolveCompanyId(String companyUid) {
         return companies.findByUid(companyUid)
                 .map(c -> c.getId())
-                .orElseThrow(() -> new NotFoundException("Company: " + companyUid));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
     }
 
     private RfqDto toDto(Rfq rfq) {
         List<RfqLineDto> lineDtos = rfqLines.findByRfqIdOrderByLineNo(rfq.getId())
                 .stream().map(RfqLineDto::from).toList();
-        List<String> supplierUids = rfqSuppliers.findByRfqId(rfq.getId())
-                .stream().map(rs -> "id:" + rs.getSupplierId()).toList(); // uid lookup skipped for simplicity
+        List<Long> supplierIds = rfqSuppliers.findByRfqId(rfq.getId())
+                .stream().map(rs -> rs.getSupplierId()).toList();
+        // Resolve invited suppliers to their real uids (company-scoped) so the UI shows
+        // code + name instead of a raw "id:" placeholder.
+        List<String> supplierUids = supplierIds.isEmpty()
+                ? List.of()
+                : suppliers.findUidsByCompanyIdAndIdIn(rfq.getCompanyId(), supplierIds);
         return RfqDto.from(rfq, lineDtos, supplierUids);
     }
 

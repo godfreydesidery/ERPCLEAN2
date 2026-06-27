@@ -83,7 +83,7 @@ public class DropshipServiceImpl implements DropshipService {
                 .orElseThrow(() -> NotFoundException.of("SalesOrderLine", lineUid));
 
         if (line.getFulfilmentMode() == FulfilmentMode.DROP_SHIP) {
-            throw new ConflictException("Line " + lineUid + " is already flagged as DROP_SHIP.");
+            throw new ConflictException("This line is already flagged as DROP_SHIP.");
         }
 
         var supplier = suppliers.findByUid(supplierUid)
@@ -134,7 +134,7 @@ public class DropshipServiceImpl implements DropshipService {
         scopeGuard.assertCanActIn(RequestContext.get(), line.getCompanyId());
 
         if (line.getFulfilmentMode() != FulfilmentMode.DROP_SHIP) {
-            throw new ConflictException("Line " + salesOrderLineUid + " is not a DROP_SHIP line.");
+            throw new ConflictException("This line is not a DROP_SHIP line.");
         }
 
         // Store the actual supplier cost on the line for COGS posting

@@ -61,7 +61,7 @@ public class CashBankAccountServiceImpl implements CashBankAccountService {
     public CashBankAccountDto create(CreateCashBankAccountRequest req) {
         Long companyId = companies.findByUid(req.companyUid())
                 .map(c -> c.getId())
-                .orElseThrow(() -> new NotFoundException("Company: " + req.companyUid()));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
 
         String currency = companies.findById(companyId)
@@ -73,7 +73,7 @@ public class CashBankAccountServiceImpl implements CashBankAccountService {
         if (req.branchUid() != null && !req.branchUid().isBlank()) {
             branchId = branches.findByUid(req.branchUid())
                     .map(b -> b.getId())
-                    .orElseThrow(() -> new NotFoundException("Branch: " + req.branchUid()));
+                    .orElseThrow(() -> new NotFoundException("Branch not found."));
         }
 
         // Validate bank-details rule (FR-CASH-01, chk_cash_bank_account_bank_details)
@@ -86,7 +86,7 @@ public class CashBankAccountServiceImpl implements CashBankAccountService {
 
         // Resolve the linked GL account
         ChartOfAccount glAcct = glAccounts.findByCompanyIdAndUid(companyId, req.glAccountUid())
-                .orElseThrow(() -> new NotFoundException("GL account: " + req.glAccountUid()));
+                .orElseThrow(() -> new NotFoundException("GL account not found."));
         if (!glAcct.isActive()) {
             throw new IllegalStateException("GL account " + glAcct.getAccountCode() + " is inactive.");
         }

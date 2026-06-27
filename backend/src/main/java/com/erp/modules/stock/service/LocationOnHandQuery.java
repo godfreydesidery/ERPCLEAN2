@@ -105,7 +105,7 @@ public class LocationOnHandQuery {
     public List<LocationOnHandRowDto> queryForProductByUid(Long companyId, String productUid) {
         Long productId = products.findByCompanyIdAndUid(companyId, productUid)
                 .map(p -> p.getId())
-                .orElseThrow(() -> new NotFoundException("Product not found: " + productUid));
+                .orElseThrow(() -> new NotFoundException("Product not found."));
         return queryForProduct(companyId, productId);
     }
 

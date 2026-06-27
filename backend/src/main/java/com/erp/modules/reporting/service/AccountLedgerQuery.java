@@ -65,7 +65,7 @@ public class AccountLedgerQuery {
                 accountRepo.findByUid(accountUid), "ChartOfAccount", accountUid);
 
         if (!account.getCompanyId().equals(companyId)) {
-            throw new NotFoundException("Account " + accountUid + " not found in company " + companyId);
+            throw new NotFoundException("Account not found.");
         }
 
         Long accountId = account.getId();

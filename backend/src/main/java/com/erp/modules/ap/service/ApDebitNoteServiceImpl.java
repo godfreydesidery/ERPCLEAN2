@@ -111,7 +111,7 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
     @Override
     public ApDebitNoteDto raise(RaiseDebitNoteRequest req) {
         Company company = companies.findByUid(req.companyUid())
-                .orElseThrow(() -> new NotFoundException("Company: " + req.companyUid()));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
         Long companyId = company.getId();
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
 
@@ -119,7 +119,7 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
 
         Long supplierId = suppliers.findByCompanyIdAndUid(companyId, req.supplierUid())
                 .map(s -> s.getId())
-                .orElseThrow(() -> new NotFoundException("Supplier: " + req.supplierUid()));
+                .orElseThrow(() -> new NotFoundException("Supplier not found."));
 
         BigDecimal netAmount   = req.netAmount() != null ? req.netAmount() : BigDecimal.ZERO;
         BigDecimal vatAmount   = req.vatAmount() != null ? req.vatAmount() : BigDecimal.ZERO;
@@ -131,7 +131,7 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
         Long branchId = branchId();
         if (req.supplierBillUid() != null && !req.supplierBillUid().isBlank()) {
             targetBill = bills.findByCompanyIdAndUid(companyId, req.supplierBillUid())
-                    .orElseThrow(() -> new NotFoundException("SupplierBill: " + req.supplierBillUid()));
+                    .orElseThrow(() -> new NotFoundException("Supplier bill not found."));
             docCurrency = targetBill.getCurrency().value();
             branchId    = targetBill.getBranchId();
 
@@ -222,7 +222,7 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
 
         Long applyCompanyId = noteForApply.getCompanyId();
         Company company = companies.findById(applyCompanyId)
-                .orElseThrow(() -> new NotFoundException("Company not found: " + applyCompanyId));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
         String baseCurrency = company.getBaseCurrency();
         int baseScale = baseMinorUnits(baseCurrency);
 
@@ -250,7 +250,7 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
 
         Long reapplyCompanyId = initial.getCompanyId();
         Company company = companies.findById(reapplyCompanyId)
-                .orElseThrow(() -> new NotFoundException("Company not found: " + reapplyCompanyId));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
         String baseCurrency = company.getBaseCurrency();
         int baseScale = baseMinorUnits(baseCurrency);
 

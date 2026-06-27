@@ -49,7 +49,7 @@ public class RouteAssignmentGuard {
      */
     public Long resolveCustomerAndAssertSameCompany(Long routeCompanyId, String customerUid) {
         var customer = customers.findByUid(customerUid)
-                .orElseThrow(() -> new NotFoundException("Customer not found: " + customerUid));
+                .orElseThrow(() -> new NotFoundException("Customer not found."));
         if (!customer.getCompanyId().equals(routeCompanyId)) {
             throw new ForbiddenException(
                     "Customer does not belong to the route's company (BR-ROUTE-03).");
@@ -69,7 +69,7 @@ public class RouteAssignmentGuard {
      */
     public Long resolveAgentAndAssertExternalSameCompany(Long routeCompanyId, String agentUid) {
         var agent = agents.findByUid(agentUid)
-                .orElseThrow(() -> new NotFoundException("Agent not found: " + agentUid));
+                .orElseThrow(() -> new NotFoundException("Agent not found."));
         if (agent.getAgentKind() == AgentKind.INTERNAL) {
             throw new ForbiddenException(
                     "Only EXTERNAL agents may be assigned to a route (BR-ROUTE-02).");
@@ -92,7 +92,7 @@ public class RouteAssignmentGuard {
      */
     public Long resolveBranchAndAssertSameCompany(Long routeCompanyId, String branchUid) {
         var branch = branches.findByUid(branchUid)
-                .orElseThrow(() -> new NotFoundException("Branch not found: " + branchUid));
+                .orElseThrow(() -> new NotFoundException("Branch not found."));
         Long branchCompanyId = branch.getCompany().getId();
         if (!branchCompanyId.equals(routeCompanyId)) {
             throw new ForbiddenException(

@@ -232,7 +232,7 @@ export class PosSessionListComponent {
         this.opening.set(false);
         this.resetOpenForm();
         this.showOpenForm.set(false);
-        this.alerts.success('Session opened', created.uid);
+        this.alerts.success('Session opened', created.sessionNumber ?? undefined);
         this.load(0);
       },
       error: (err: unknown) => {

@@ -38,7 +38,7 @@ public class PartyBranchGuard {
      */
     public void assertSameCompany(Long partyCompanyId, Long branchId) {
         var branch = branches.findById(branchId)
-                .orElseThrow(() -> new NotFoundException("Branch not found: " + branchId));
+                .orElseThrow(() -> new NotFoundException("Branch not found."));
         Long branchCompanyId = branch.getCompany().getId();
         if (!branchCompanyId.equals(partyCompanyId)) {
             throw new ForbiddenException(
@@ -56,7 +56,7 @@ public class PartyBranchGuard {
      */
     public void assertSameCompanyByUid(Long partyCompanyId, String branchUid) {
         var branch = branches.findByUid(branchUid)
-                .orElseThrow(() -> new NotFoundException("Branch not found: " + branchUid));
+                .orElseThrow(() -> new NotFoundException("Branch not found."));
         Long branchCompanyId = branch.getCompany().getId();
         if (!branchCompanyId.equals(partyCompanyId)) {
             throw new ForbiddenException(
@@ -73,7 +73,7 @@ public class PartyBranchGuard {
      */
     public Long resolveAndAssertSameCompany(Long partyCompanyId, String branchUid) {
         var branch = branches.findByUid(branchUid)
-                .orElseThrow(() -> new NotFoundException("Branch not found: " + branchUid));
+                .orElseThrow(() -> new NotFoundException("Branch not found."));
         Long branchCompanyId = branch.getCompany().getId();
         if (!branchCompanyId.equals(partyCompanyId)) {
             throw new ForbiddenException(

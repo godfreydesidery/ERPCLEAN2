@@ -148,12 +148,11 @@ public class SalesReturnServiceImpl implements SalesReturnService {
         for (CreateSalesReturnRequest.ReturnLineRequest lineReq : req.lines()) {
             DeliveryLine dl = dlByUid.get(lineReq.deliveryLineUid());
             if (dl == null) {
-                throw new NotFoundException("DeliveryLine not found: " + lineReq.deliveryLineUid());
+                throw new NotFoundException("Delivery line not found.");
             }
             if (!dl.getDeliveryId().equals(delivery.getId())) {
                 throw new IllegalArgumentException(
-                        "DeliveryLine " + lineReq.deliveryLineUid()
-                                + " does not belong to delivery " + req.deliveryUid());
+                        "A delivery line does not belong to the specified delivery.");
             }
 
             BigDecimal qtyReturnedBase = lineReq.qtyReturned();

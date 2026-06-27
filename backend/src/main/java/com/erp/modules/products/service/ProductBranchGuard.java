@@ -35,7 +35,7 @@ public class ProductBranchGuard {
      */
     public Long resolveAndAssertSameCompany(Long productCompanyId, String branchUid) {
         var branch = branches.findByUid(branchUid)
-                .orElseThrow(() -> new NotFoundException("Branch not found: " + branchUid));
+                .orElseThrow(() -> new NotFoundException("Branch not found."));
         Long branchCompanyId = branch.getCompany().getId();
         if (!branchCompanyId.equals(productCompanyId)) {
             throw new ForbiddenException(

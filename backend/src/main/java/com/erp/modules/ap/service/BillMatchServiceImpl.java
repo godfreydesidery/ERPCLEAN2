@@ -245,15 +245,15 @@ public class BillMatchServiceImpl implements BillMatchService {
         scopeGuard.assertCanActIn(RequestContext.get(), bill.getCompanyId());
 
         if (bill.getStatus() != SupplierBillStatus.HELD) {
-            throw new IllegalStateException("Bill " + billUid + " is not HELD.");
+            throw new IllegalStateException("This bill is not HELD.");
         }
 
         SupplierBillLine line = lines.findBySupplierBillIdAndUid(bill.getId(), billLineUid)
-                .orElseThrow(() -> new NotFoundException("BillLine not found: " + billLineUid));
+                .orElseThrow(() -> new NotFoundException("Bill line not found."));
 
         BillMatch match = matches.findBySupplierBillLineId(line.getId())
                 .orElseThrow(() -> new NotFoundException(
-                        "No match record for bill line: " + billLineUid));
+                        "No match record found for this bill line."));
 
         match.setMatchStatus(BillMatchStatus.VARIANCE_ACCEPTED);
         match.setAcceptedBy(actorId());

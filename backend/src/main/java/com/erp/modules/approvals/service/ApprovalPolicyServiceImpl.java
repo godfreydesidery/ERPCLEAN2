@@ -87,7 +87,7 @@ public class ApprovalPolicyServiceImpl implements ApprovalPolicyService {
     public ApprovalPolicyDto update(String uid, UpdateApprovalPolicyRequest req) {
         RequestContext.Principal principal = RequestContext.get();
         ApprovalPolicy policy = policyRepo.findByUid(uid)
-                .orElseThrow(() -> new NotFoundException("Approval policy not found: " + uid));
+                .orElseThrow(() -> new NotFoundException("Approval policy not found."));
         scopeGuard.assertCanActIn(principal, policy.getCompanyId());
 
         Long branchId = resolveBranchId(req.branchScope(), req.branchUid(), policy.getCompanyId());
@@ -121,7 +121,7 @@ public class ApprovalPolicyServiceImpl implements ApprovalPolicyService {
     public ApprovalPolicyDto deactivate(String uid) {
         RequestContext.Principal principal = RequestContext.get();
         ApprovalPolicy policy = policyRepo.findByUid(uid)
-                .orElseThrow(() -> new NotFoundException("Approval policy not found: " + uid));
+                .orElseThrow(() -> new NotFoundException("Approval policy not found."));
         scopeGuard.assertCanActIn(principal, policy.getCompanyId());
 
         policy.setActive(false);
@@ -139,7 +139,7 @@ public class ApprovalPolicyServiceImpl implements ApprovalPolicyService {
     public ApprovalPolicyDto getByUid(String uid) {
         RequestContext.Principal principal = RequestContext.get();
         ApprovalPolicy policy = policyRepo.findByUid(uid)
-                .orElseThrow(() -> new NotFoundException("Approval policy not found: " + uid));
+                .orElseThrow(() -> new NotFoundException("Approval policy not found."));
         scopeGuard.assertCanActIn(principal, policy.getCompanyId());
         return toDto(policy);
     }
@@ -175,7 +175,7 @@ public class ApprovalPolicyServiceImpl implements ApprovalPolicyService {
             // belongs to a different company. Throw 404 in both cases to avoid confirming
             // cross-tenant existence (confused-deputy guard, SECURITY-FIX).
             return branchRepo.findByUidAndCompanyId(branchUid, companyId)
-                    .orElseThrow(() -> new NotFoundException("Branch not found: " + branchUid))
+                    .orElseThrow(() -> new NotFoundException("Branch not found."))
                     .getId();
         }
         return null;

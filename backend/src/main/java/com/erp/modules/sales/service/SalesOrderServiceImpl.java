@@ -236,7 +236,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         scopeGuard.assertCanActIn(RequestContext.get(), order.getCompanyId());
         assertDraft(order);
         SalesOrderLine line = orderLines.findByUidAndSalesOrderId(lineUid, order.getId())
-                .orElseThrow(() -> new NotFoundException("SalesOrderLine not found: " + lineUid));
+                .orElseThrow(() -> new NotFoundException("Order line not found."));
         orderLines.delete(line);
         recomputeTotals(order);
         audit.record(AuditEvent.of(AuditActions.SO_LINE_REMOVE, "sales_order_lines",
@@ -327,24 +327,21 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         // (open qty can be released; fulfilled lines already have delivery records).
         switch (order.getStatus()) {
             case CANCELLED ->
-                throw new IllegalStateException("Order " + orderUid + " is already CANCELLED.");
+                throw new IllegalStateException("This order is already CANCELLED.");
             case FULFILLED ->
                 throw new com.erp.platform.common.api.ConflictException(
-                        "Cannot cancel order " + orderUid + ": it is FULFILLED. All stock has been "
-                                + "dispatched. Raise a sales return to reverse it "
-                                + "(FLOW-ORDER-TO-CASH-028).");
+                        "Cannot cancel a FULFILLED order. All stock has been dispatched. "
+                                + "Raise a sales return to reverse it.");
             case PARTIALLY_INVOICED ->
                 throw new com.erp.platform.common.api.ConflictException(
-                        "Cannot cancel order " + orderUid + ": it is PARTIALLY_INVOICED. "
-                                + "One or more invoices have been raised (FLOW-ORDER-TO-CASH-028).");
+                        "Cannot cancel a PARTIALLY_INVOICED order. "
+                                + "One or more invoices have already been raised.");
             case INVOICED ->
                 throw new com.erp.platform.common.api.ConflictException(
-                        "Cannot cancel order " + orderUid + ": it is INVOICED. "
-                                + "All lines have been invoiced (FLOW-ORDER-TO-CASH-028).");
+                        "Cannot cancel an INVOICED order. All lines have been invoiced.");
             case CLOSED ->
                 throw new com.erp.platform.common.api.ConflictException(
-                        "Cannot cancel order " + orderUid + ": it is CLOSED "
-                                + "(FLOW-ORDER-TO-CASH-028).");
+                        "Cannot cancel a CLOSED order.");
             default -> { /* DRAFT, CONFIRMED, PARTIALLY_FULFILLED — proceed */ }
         }
 
@@ -375,7 +372,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
     @Override
     public SalesOrderDto createFromQuotation(String quotationUid) {
         Quotation quote = quotations.findByUid(quotationUid)
-                .orElseThrow(() -> new NotFoundException("Quotation not found: " + quotationUid));
+                .orElseThrow(() -> new NotFoundException("Quotation not found."));
 
         // Principal/scope already asserted by QuotationService.accept
         SalesOrder order = new SalesOrder(
@@ -424,7 +421,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
     @Override
     public void recomputeStatus(Long salesOrderId) {
         SalesOrder order = orders.findById(salesOrderId)
-                .orElseThrow(() -> new NotFoundException("SalesOrder not found: " + salesOrderId));
+                .orElseThrow(() -> new NotFoundException("Sales order not found."));
         if (order.getStatus() == SalesOrderStatus.CANCELLED) return;
 
         List<SalesOrderLine> lines = orderLines.findBySalesOrderIdOrderByLineNo(salesOrderId);
@@ -477,12 +474,12 @@ public class SalesOrderServiceImpl implements SalesOrderService {
 
     private Long resolveCompanyId(String uid) {
         return companies.findByUid(uid).map(c -> c.getId())
-                .orElseThrow(() -> new NotFoundException("Company not found: " + uid));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
     }
 
     private Customer resolveCustomer(Long companyId, String uid) {
         return customers.findByCompanyIdAndUid(companyId, uid)
-                .orElseThrow(() -> new NotFoundException("Customer not found: " + uid));
+                .orElseThrow(() -> new NotFoundException("Customer not found."));
     }
 
     /**
@@ -493,7 +490,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         if (paymentTermsUid != null && !paymentTermsUid.isBlank()) {
             return paymentTermsRepo.findByUid(paymentTermsUid)
                     .map(pt -> pt.getId())
-                    .orElseThrow(() -> new NotFoundException("PaymentTerms not found: " + paymentTermsUid));
+                    .orElseThrow(() -> new NotFoundException("Payment terms not found."));
         }
         return customer != null ? customer.getPaymentTermsId() : null;
     }
@@ -519,10 +516,10 @@ public class SalesOrderServiceImpl implements SalesOrderService {
     /** Loads a customer address by uid and asserts it belongs to the document's customer (D2). */
     private CustomerAddress resolveCustomerAddress(Long customerId, String addressUid) {
         CustomerAddress addr = customerAddresses.findByUid(addressUid)
-                .orElseThrow(() -> new NotFoundException("Customer address not found: " + addressUid));
+                .orElseThrow(() -> new NotFoundException("Customer address not found."));
         if (!addr.getCustomerId().equals(customerId)) {
             throw new ConflictException(
-                    "Customer address " + addressUid + " does not belong to customer id=" + customerId);
+                    "Customer address does not belong to this customer.");
         }
         return addr;
     }
@@ -531,7 +528,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         if (agentUid != null && !agentUid.isBlank()) {
             return agents.findByCompanyIdAndUid(companyId, agentUid)
                     .map(Agent::getId)
-                    .orElseThrow(() -> new NotFoundException("Agent not found: " + agentUid));
+                    .orElseThrow(() -> new NotFoundException("Agent not found."));
         }
         if (ctx != null && ctx.userId() != null) {
             Optional<Long> auto = agents.findInternalAgentIdByCompanyAndUser(companyId, ctx.userId());
@@ -542,18 +539,18 @@ public class SalesOrderServiceImpl implements SalesOrderService {
 
     private Product resolveProduct(Long companyId, String uid) {
         return products.findByCompanyIdAndUid(companyId, uid)
-                .orElseThrow(() -> new NotFoundException("Product not found: " + uid));
+                .orElseThrow(() -> new NotFoundException("Product not found."));
     }
 
     private void assertSellable(Product product) {
         if (!product.isSellable() || product.getStatus() == MasterStatus.ARCHIVED) {
-            throw new IllegalArgumentException("Product not sellable: " + product.getUid());
+            throw new IllegalArgumentException("Product is not sellable.");
         }
     }
 
     private UnitOfMeasure resolveUnit(Long companyId, String uid) {
         return units.findByCompanyIdAndUid(companyId, uid)
-                .orElseThrow(() -> new NotFoundException("UnitOfMeasure not found: " + uid));
+                .orElseThrow(() -> new NotFoundException("Unit of measure not found."));
     }
 
     private BigDecimal resolveListPrice(Product product, Long companyId) {
@@ -564,7 +561,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
                 .filter(m -> m != null && m.getAmount() != null)
                 .map(m -> m.getAmount())
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "Product has no price for this company: " + product.getUid()));
+                        "Product has no price configured for this company."));
     }
 
     private BigDecimal resolveVatRate(Long companyId, Product product) {

@@ -114,7 +114,7 @@ public class BudgetServiceImpl implements BudgetService {
                     .filter(v -> v.companyId().equals(request.companyId()))
                     .orElseThrow(() -> NotFoundException.of("DimensionValue", request.costCentreValueUid()));
             if (!ccValue.active()) {
-                throw new ConflictException("Cost centre is inactive: " + request.costCentreValueUid());
+                throw new ConflictException("The selected cost centre is inactive.");
             }
             ccValueId = ccValue.id();
         }
@@ -287,11 +287,11 @@ public class BudgetServiceImpl implements BudgetService {
         for (UpsertBudgetLineRequest.LineInputDto input : inputs) {
             ChartOfAccount account = accounts.findByUid(input.accountUid())
                     .filter(a -> a.getCompanyId().equals(ver.getCompanyId()) && a.isActive())
-                    .orElseThrow(() -> new ConflictException("Account not found or inactive: " + input.accountUid()));
+                    .orElseThrow(() -> new ConflictException("Account not found or inactive."));
             FiscalPeriod period = fiscalPeriods.findByUid(input.fiscalPeriodUid())
                     .filter(p -> p.getFiscalYearId().equals(ver.getFiscalYearId()))
                     .orElseThrow(() -> new ConflictException(
-                            "Period not found or not in this budget's fiscal year: " + input.fiscalPeriodUid()));
+                            "Fiscal period not found or does not belong to this budget's fiscal year."));
             if (input.amount().compareTo(BigDecimal.ZERO) < 0) {
                 throw new ConflictException("Budget line amount must be >= 0 (BR-BUD-09)");
             }
@@ -319,7 +319,7 @@ public class BudgetServiceImpl implements BudgetService {
         }
         ChartOfAccount account = accounts.findByUid(accountUid)
                 .filter(a -> a.getCompanyId().equals(ver.getCompanyId()) && a.isActive())
-                .orElseThrow(() -> new ConflictException("Account not found or inactive: " + accountUid));
+                .orElseThrow(() -> new ConflictException("Account not found or inactive."));
 
         if (fyPeriods.size() != 12) {
             throw new ConflictException("Fiscal year must have 12 periods for annual spread");

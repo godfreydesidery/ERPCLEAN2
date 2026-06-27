@@ -1,6 +1,8 @@
 package com.erp.modules.parties.repository;
 
 import com.erp.modules.parties.domain.entity.Supplier;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -33,4 +35,9 @@ public interface SupplierRepository extends JpaRepository<Supplier, Long> {
 
     @Query("SELECT s.companyId FROM Supplier s WHERE s.uid = :uid")
     Optional<Long> findCompanyIdByUid(@Param("uid") String uid);
+
+    /** Resolve a set of supplier ids to their uids, scoped to the company (display enrichment). */
+    @Query("SELECT s.uid FROM Supplier s WHERE s.companyId = :companyId AND s.id IN :ids")
+    List<String> findUidsByCompanyIdAndIdIn(@Param("companyId") Long companyId,
+                                            @Param("ids") Collection<Long> ids);
 }

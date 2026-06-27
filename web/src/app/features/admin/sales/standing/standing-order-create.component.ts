@@ -293,7 +293,7 @@ export class StandingOrderCreateComponent {
     this.standingService.create(request).subscribe({
       next: (created) => {
         this.saving.set(false);
-        this.alerts.success('Standing order created', created.orderNumber ?? created.uid);
+        this.alerts.success('Standing order created', created.orderNumber ?? undefined);
         void this.router.navigate(['/admin/standing-orders/uid', created.uid]);
       },
       error: (err: unknown) => {

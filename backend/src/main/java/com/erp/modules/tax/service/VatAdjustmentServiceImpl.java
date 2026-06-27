@@ -74,14 +74,14 @@ public class VatAdjustmentServiceImpl implements VatAdjustmentService {
 
         if (vatReturn.getStatus() == VatReturnStatus.FILED) {
             throw new IllegalStateException(
-                    "Cannot remove adjustment from a FILED VAT return (BR-VAT-09): " + vatReturnUid);
+                    "Cannot remove an adjustment from a FILED VAT return.");
         }
 
         VatAdjustment adjustment = adjustments.findByUid(adjustmentUid)
-                .orElseThrow(() -> new NotFoundException("VatAdjustment: " + adjustmentUid));
+                .orElseThrow(() -> new NotFoundException("VAT adjustment not found."));
 
         if (!adjustment.getVatReturnId().equals(vatReturn.getId())) {
-            throw new NotFoundException("VatAdjustment " + adjustmentUid + " not on return " + vatReturnUid);
+            throw new NotFoundException("VAT adjustment not found on this return.");
         }
 
         adjustments.delete(adjustment);

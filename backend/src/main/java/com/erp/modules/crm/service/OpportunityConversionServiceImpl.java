@@ -112,7 +112,7 @@ public class OpportunityConversionServiceImpl implements OpportunityConversionSe
         }
 
         Company company = companies.findById(opp.getCompanyId())
-                .orElseThrow(() -> new NotFoundException("Company not found: " + opp.getCompanyId()));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
         String companyUid = company.getUid();
         // customer uid is stored on the opportunity
         String customerUid = opp.getCustomerUid();
@@ -140,9 +140,9 @@ public class OpportunityConversionServiceImpl implements OpportunityConversionSe
             // Add lines to the quotation
             for (OpportunityLine ol : oppLines) {
                 Product product = products.findById(ol.getProductId())
-                        .orElseThrow(() -> new NotFoundException("Product not found: " + ol.getProductId()));
+                        .orElseThrow(() -> new NotFoundException("Product not found."));
                 UnitOfMeasure unit = units.findById(ol.getUnitId())
-                        .orElseThrow(() -> new NotFoundException("Unit not found: " + ol.getUnitId()));
+                        .orElseThrow(() -> new NotFoundException("Unit of measure not found."));
                 AddQuotationLineRequest lineReq = new AddQuotationLineRequest(
                         product.getUid(), unit.getUid(),
                         ol.getEstimatedQty(),
@@ -167,9 +167,9 @@ public class OpportunityConversionServiceImpl implements OpportunityConversionSe
             // Add lines to the SO
             for (OpportunityLine ol : oppLines) {
                 Product product = products.findById(ol.getProductId())
-                        .orElseThrow(() -> new NotFoundException("Product not found: " + ol.getProductId()));
+                        .orElseThrow(() -> new NotFoundException("Product not found."));
                 UnitOfMeasure unit = units.findById(ol.getUnitId())
-                        .orElseThrow(() -> new NotFoundException("Unit not found: " + ol.getUnitId()));
+                        .orElseThrow(() -> new NotFoundException("Unit of measure not found."));
                 AddSalesOrderLineRequest lineReq = new AddSalesOrderLineRequest(
                         product.getUid(), unit.getUid(),
                         ol.getEstimatedQty(),
