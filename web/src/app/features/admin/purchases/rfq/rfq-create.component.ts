@@ -224,9 +224,9 @@ export class RfqCreateComponent {
     );
   }
 
-  onQtyChange(index: number, qty: string): void {
+  onQtyChange(index: number, qty: unknown): void {
     this.lines.update((ls) =>
-      ls.map((l, i) => (i === index ? { ...l, quantity: qty } : l)),
+      ls.map((l, i) => (i === index ? { ...l, quantity: String(qty ?? '') } : l)),
     );
   }
 

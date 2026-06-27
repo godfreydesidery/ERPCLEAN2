@@ -176,7 +176,7 @@
               <div class="col-sm-3">
                 <label class="form-label small text-muted mb-1" for="fPaymentTermsDays">Payment terms (days)</label>
                 <input id="fPaymentTermsDays" name="fPaymentTermsDays" type="number" min="0" class="form-control"
-                       [ngModel]="fPaymentTermsDays()" (ngModelChange)="fPaymentTermsDays.set($event)"
+                       [ngModel]="fPaymentTermsDays()" (ngModelChange)="fPaymentTermsDays.set(coerceNumStr($event))"
                        [disabled]="saving() || !canManage()" />
               </div>
             }

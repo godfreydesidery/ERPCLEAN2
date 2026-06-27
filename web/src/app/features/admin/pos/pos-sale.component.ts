@@ -402,9 +402,11 @@ export class PosSaleComponent {
     );
   }
 
-  onLineFieldChange(lineId: string, field: 'quantity' | 'lineDiscountAmount', value: string): void {
+  onLineFieldChange(lineId: string, field: 'quantity' | 'lineDiscountAmount', value: number | string | null): void {
+    // type="number" emits a JS number; coerce so SaleLine string fields never hold a raw number.
+    const str = value === null || value === undefined ? '' : String(value);
     this.lines.update((ls) =>
-      ls.map((l) => l.id === lineId ? { ...l, [field]: value } : l),
+      ls.map((l) => l.id === lineId ? { ...l, [field]: str } : l),
     );
   }
 
@@ -479,9 +481,10 @@ export class PosSaleComponent {
     const saleLines: PosSaleLineRequest[] = this.lines().map((l) => ({
       productId: l.productId,
       unitId: l.unitId,
-      quantity: l.quantity,
+      // type="number" emits a JS number; coerce before sending so the payload is always a string.
+      quantity: String(l.quantity ?? ''),
       unitPrice: l.unitPrice,
-      lineDiscountAmount: +l.lineDiscountAmount > 0 ? l.lineDiscountAmount : undefined,
+      lineDiscountAmount: +l.lineDiscountAmount > 0 ? String(l.lineDiscountAmount) : undefined,
     }));
 
     const request: PosSaleRequest = {

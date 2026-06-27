@@ -82,7 +82,7 @@
             <div class="erp-field">
               <label class="form-label" for="fAcquisitionCost">Acquisition Cost <span class="text-danger" aria-hidden="true">*</span></label>
               <input id="fAcquisitionCost" name="fAcquisitionCost" type="number" step="0.01" min="0" class="form-control"
-                     [ngModel]="fAcquisitionCost()" (ngModelChange)="fAcquisitionCost.set($event)"
+                     [ngModel]="fAcquisitionCost()" (ngModelChange)="fAcquisitionCost.set(coerceNumStr($event))"
                      [disabled]="saving()" />
             </div>
 
@@ -90,7 +90,7 @@
             <div class="erp-field">
               <label class="form-label" for="fSalvageValue">Salvage Value</label>
               <input id="fSalvageValue" name="fSalvageValue" type="number" step="0.01" min="0" class="form-control"
-                     [ngModel]="fSalvageValue()" (ngModelChange)="fSalvageValue.set($event)"
+                     [ngModel]="fSalvageValue()" (ngModelChange)="fSalvageValue.set(coerceNumStr($event))"
                      [disabled]="saving()" />
             </div>
 
@@ -110,7 +110,7 @@
             <div class="erp-field">
               <label class="form-label" for="fLifePeriods">Life (periods) <span class="text-danger" aria-hidden="true">*</span></label>
               <input id="fLifePeriods" name="fLifePeriods" type="number" min="1" class="form-control"
-                     [ngModel]="fLifePeriods()" (ngModelChange)="fLifePeriods.set($event)"
+                     [ngModel]="fLifePeriods()" (ngModelChange)="fLifePeriods.set(coerceNumStr($event))"
                      [disabled]="saving()" />
             </div>
 
@@ -118,7 +118,7 @@
               <div class="erp-field">
                 <label class="form-label" for="fReducingRate">Rate % <span class="text-danger" aria-hidden="true">*</span></label>
                 <input id="fReducingRate" name="fReducingRate" type="number" step="0.01" class="form-control"
-                       [ngModel]="fReducingRate()" (ngModelChange)="fReducingRate.set($event)"
+                       [ngModel]="fReducingRate()" (ngModelChange)="fReducingRate.set(coerceNumStr($event))"
                        [disabled]="saving()" />
               </div>
             }

@@ -167,6 +167,11 @@ export class LeaveRequestListComponent {
     this.fReason.set('');
   }
 
+  /** Coerce a value from ngModel on type="number" to string; prevents .trim() crashes. */
+  coerceNumStr(v: string | number | null | undefined): string {
+    return v === null || v === undefined ? '' : String(v);
+  }
+
   submit(): void {
     const employeeUid = this.fEmployeeUid().trim();
     const leaveTypeId = this.fLeaveTypeId().trim();

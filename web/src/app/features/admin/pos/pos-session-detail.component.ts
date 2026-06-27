@@ -109,7 +109,8 @@ export class PosSessionDetailComponent {
   }
 
   recordPayout(): void {
-    const amount = this.payoutAmount().trim();
+    // type="number" stores a JS number in the signal; coerce before .trim() to avoid crash.
+    const amount = String(this.payoutAmount() ?? '').trim();
     const reason = this.payoutReason().trim();
 
     if (!amount || isNaN(+amount) || +amount <= 0) { this.payoutError.set('Enter a valid positive amount.'); return; }
@@ -143,7 +144,8 @@ export class PosSessionDetailComponent {
   }
 
   closeSession(): void {
-    const counted = this.countedCash().trim();
+    // type="number" stores a JS number in the signal; coerce before .trim() to avoid crash.
+    const counted = String(this.countedCash() ?? '').trim();
     if (!counted || isNaN(+counted) || +counted < 0) { this.closeError.set('Enter a valid counted cash amount.'); return; }
 
     const request: CloseSessionRequest = { countedCashAmount: counted, notes: this.closeNotes().trim() || undefined };

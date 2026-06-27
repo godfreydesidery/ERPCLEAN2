@@ -162,6 +162,9 @@ export class WorkOrderDetailComponent {
     return this.canManage();
   });
 
+  // Expose global String constructor for use in templates.
+  protected readonly String = String;
+
   constructor() {
     queueMicrotask(() => this.init());
   }

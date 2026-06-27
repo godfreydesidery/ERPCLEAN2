@@ -132,6 +132,11 @@ export class FixedAssetCreateComponent {
     });
   }
 
+  /** Coerce a value from ngModel on type="number" to string; prevents .trim() crashes. */
+  coerceNumStr(v: string | number | null | undefined): string {
+    return v === null || v === undefined ? '' : String(v);
+  }
+
   create(): void {
     const categoryId = this.fCategoryId().trim();
     const branchUid = this.fBranchUid().trim();

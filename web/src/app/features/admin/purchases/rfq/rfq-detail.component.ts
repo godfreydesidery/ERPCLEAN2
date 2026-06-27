@@ -84,6 +84,9 @@ export class RfqDetailComponent {
   readonly canAward = computed(() => this.session.hasPermission('PURCHASE.RFQ.MANAGE'));
   readonly canCaptureQuote = computed(() => this.session.hasPermission('PURCHASE.RFQ.MANAGE'));
 
+  // Expose global String constructor for use in templates.
+  protected readonly String = String;
+
   constructor() {
     queueMicrotask(() => this.init());
   }
@@ -219,15 +222,15 @@ export class RfqDetailComponent {
     if (rfq) this.buildCaptureLines(rfq.lines);
   }
 
-  updateCaptureLineQty(index: number, val: string): void {
+  updateCaptureLineQty(index: number, val: unknown): void {
     this.captureLines.update((ls) =>
-      ls.map((l, i) => (i === index ? { ...l, quotedQty: val } : l)),
+      ls.map((l, i) => (i === index ? { ...l, quotedQty: String(val ?? '') } : l)),
     );
   }
 
-  updateCaptureLinePrice(index: number, val: string): void {
+  updateCaptureLinePrice(index: number, val: unknown): void {
     this.captureLines.update((ls) =>
-      ls.map((l, i) => (i === index ? { ...l, unitPriceAmount: val } : l)),
+      ls.map((l, i) => (i === index ? { ...l, unitPriceAmount: String(val ?? '') } : l)),
     );
   }
 

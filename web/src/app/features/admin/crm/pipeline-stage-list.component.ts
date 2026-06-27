@@ -124,9 +124,10 @@ export class PipelineStageListComponent {
   create(): void {
     const name = this.newName().trim();
     if (!name) { this.formError.set('Stage name is required.'); return; }
-    const order = this.newDisplayOrder().trim();
+    // type="number" stores a JS number in the signal; coerce before .trim() to avoid crash.
+    const order = String(this.newDisplayOrder() ?? '').trim();
     if (!order || isNaN(+order)) { this.formError.set('Display order must be a number.'); return; }
-    const prob = this.newDefaultProbability().trim();
+    const prob = String(this.newDefaultProbability() ?? '').trim();
     if (!prob || isNaN(+prob) || +prob < 0 || +prob > 100) {
       this.formError.set('Default probability must be 0–100.');
       return;
@@ -177,9 +178,10 @@ export class PipelineStageListComponent {
   saveEdit(stage: PipelineStageDto): void {
     const name = this.editName().trim();
     if (!name) { this.editError.set('Stage name is required.'); return; }
-    const order = this.editDisplayOrder().trim();
+    // type="number" stores a JS number in the signal; coerce before .trim() to avoid crash.
+    const order = String(this.editDisplayOrder() ?? '').trim();
     if (!order || isNaN(+order)) { this.editError.set('Display order must be a number.'); return; }
-    const prob = this.editDefaultProbability().trim();
+    const prob = String(this.editDefaultProbability() ?? '').trim();
     if (!prob || isNaN(+prob) || +prob < 0 || +prob > 100) {
       this.editError.set('Default probability must be 0–100.');
       return;

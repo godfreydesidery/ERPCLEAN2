@@ -76,6 +76,9 @@ export class BomListComponent {
   readonly canManage = computed(() => this.session.hasPermission('BOM.MANAGE'));
   readonly isEmpty = computed(() => this.state() === 'idle' && this.rows().length === 0);
 
+  // Expose global String constructor for use in templates.
+  protected readonly String = String;
+
   readonly statusOptions: Array<{ value: BomStatus | ''; label: string }> = [
     { value: '', label: 'All statuses' },
     { value: 'DRAFT', label: 'Draft' },

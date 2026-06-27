@@ -162,8 +162,12 @@ export class BudgetVersionDetailComponent {
     this.directLines.update((ls) => ls.filter((_, i) => i !== idx));
   }
 
-  updateDirectLine(idx: number, field: 'accountUid' | 'fiscalPeriodUid' | 'amount' | 'lineMemo', value: string): void {
-    this.directLines.update((ls) => ls.map((l, i) => i === idx ? { ...l, [field]: value } : l));
+  updateDirectLine(idx: number, field: 'accountUid' | 'fiscalPeriodUid' | 'amount' | 'lineMemo', value: string | number | null): void {
+    // ngModel on type="number" emits a number; coerce numeric fields to string so .trim() never crashes.
+    const stored: string = (field === 'amount')
+      ? (value === null || value === undefined ? '' : String(value as string | number))
+      : (value as string) ?? '';
+    this.directLines.update((ls) => ls.map((l, i) => i === idx ? { ...l, [field]: stored } : l));
   }
 
   toggleUpsertForm(): void {
@@ -226,6 +230,15 @@ export class BudgetVersionDetailComponent {
   }
 
   // ── Display helpers ───────────────────────────────────────────────────────
+
+  /**
+   * Coerce a value emitted by ngModel on type="number" to a string.
+   * Angular emits a JS number when the user edits a numeric input; calling
+   * .trim() on a raw number throws "x.trim is not a function".
+   */
+  coerceNumStr(v: string | number | null | undefined): string {
+    return v === null || v === undefined ? '' : String(v);
+  }
 
   grandTotal(lines: BudgetLineDto[]): number {
     return lines.reduce((sum, l) => sum + (+l.amount), 0);

@@ -46,6 +46,9 @@ export class PurchaseSettingsComponent {
   readonly canEdit = computed(() => this.session.hasPermission('PURCHASE.SETTINGS.MANAGE'));
   readonly canView = computed(() => this.session.hasPermission('PURCHASE.SETTINGS.MANAGE'));
 
+  // Expose global String constructor for use in templates.
+  protected readonly String = String;
+
   constructor() {
     this.loadCompanies();
   }

@@ -216,7 +216,8 @@ export class PosSessionListComponent {
 
   openSession(): void {
     const tillUid = this.newTillUid().trim();
-    const float = this.newOpeningFloat().trim();
+    // type="number" stores a JS number in the signal; coerce before .trim() to avoid crash.
+    const float = String(this.newOpeningFloat() ?? '').trim();
 
     if (!tillUid) { this.openError.set('Till is required.'); return; }
     if (!float || isNaN(+float) || +float < 0) { this.openError.set('Opening float must be a valid non-negative number.'); return; }

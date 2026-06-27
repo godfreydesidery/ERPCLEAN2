@@ -156,8 +156,9 @@ export class OpportunityCreateComponent {
       title,
       pipelineStageUid: stageUid,
       currency,
-      estimatedValueAmount: this.fEstimatedValue().trim() || undefined,
-      winProbability: this.fWinProbability().trim() || undefined,
+      // type="number" stores a JS number; coerce before .trim() to avoid crash.
+      estimatedValueAmount: String(this.fEstimatedValue() ?? '').trim() || undefined,
+      winProbability: String(this.fWinProbability() ?? '').trim() || undefined,
       expectedCloseDate: this.fExpectedCloseDate() || undefined,
       sourceLeadUid: this.fSourceLeadUid().trim() || undefined,
       notes: this.fNotes().trim() || undefined,

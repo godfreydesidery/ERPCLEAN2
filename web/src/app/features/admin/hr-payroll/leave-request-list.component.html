@@ -98,7 +98,7 @@
                 Days <span class="text-danger" aria-hidden="true">*</span>
               </label>
               <input id="lrDays" name="lrDays" type="number" step="0.5" class="form-control"
-                     [ngModel]="fDays()" (ngModelChange)="fDays.set($event)"
+                     [ngModel]="fDays()" (ngModelChange)="fDays.set(coerceNumStr($event))"
                      [disabled]="saving()" />
             </div>
             <div class="erp-field">

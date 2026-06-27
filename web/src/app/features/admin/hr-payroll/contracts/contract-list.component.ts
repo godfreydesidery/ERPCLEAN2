@@ -160,6 +160,11 @@ export class ContractListComponent {
     this.fSdlCounted.set(false);
   }
 
+  /** Coerce a value from ngModel on type="number" to string; prevents .trim() crashes. */
+  coerceNumStr(v: string | number | null | undefined): string {
+    return v === null || v === undefined ? '' : String(v);
+  }
+
   create(): void {
     const employeeUid = this.selectedEmployeeUid();
     const baseSalary = this.fBaseSalary().trim();

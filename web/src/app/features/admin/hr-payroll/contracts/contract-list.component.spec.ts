@@ -146,4 +146,19 @@ describe('ContractListComponent', () => {
       startDate: '2024-01-01',
     }));
   });
+
+  it('create() does not throw and posts a string when fBaseSalary receives a number (simulates type="number" input)', () => {
+    const { comp, cSvc } = makeBed();
+    comp.onEmployeePick('emp-uid-1');
+    comp.fContractType.set('PERMANENT');
+    // Simulate ngModel on type="number" emitting a JS number — coerceNumStr is what
+    // (ngModelChange) calls in the template.
+    comp.fBaseSalary.set(comp.coerceNumStr(750000));
+    comp.fStartDate.set('2024-01-01');
+    expect(() => comp.create()).not.toThrow();
+    expect(cSvc.create).toHaveBeenCalledOnce();
+    const req = cSvc.create.mock.calls[0][1] as { baseSalaryAmount: string };
+    expect(req.baseSalaryAmount).toBe('750000');
+    expect(typeof req.baseSalaryAmount).toBe('string');
+  });
 });

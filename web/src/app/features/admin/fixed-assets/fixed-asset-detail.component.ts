@@ -204,6 +204,11 @@ export class FixedAssetDetailComponent {
     });
   }
 
+  /** Coerce a value from ngModel on type="number" to string; prevents .trim() crashes. */
+  coerceNumStr(v: string | number | null | undefined): string {
+    return v === null || v === undefined ? '' : String(v);
+  }
+
   // ── Edit (DRAFT only) ─────────────────────────────────────────────────────────
 
   save(): void {

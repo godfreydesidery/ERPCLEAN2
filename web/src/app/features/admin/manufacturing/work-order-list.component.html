@@ -92,7 +92,7 @@
                 </label>
                 <input id="newPlannedQty" name="newPlannedQty" type="number" class="form-control"
                        placeholder="0.000000" min="0.000001" step="0.000001"
-                       [ngModel]="newPlannedQty()" (ngModelChange)="newPlannedQty.set($event)"
+                       [ngModel]="newPlannedQty()" (ngModelChange)="newPlannedQty.set(String($event ?? ''))"
                        [disabled]="saving()" />
               </div>
 

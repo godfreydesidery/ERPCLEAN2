@@ -150,9 +150,19 @@ export class StatutoryComponent {
     this.pBands.set(updated);
   }
 
-  updateBand(i: number, field: keyof BandRow, value: string): void {
+  /** Coerce a value from ngModel on type="number" to string; prevents .trim() crashes. */
+  coerceNumStr(v: string | number | null | undefined): string {
+    return v === null || v === undefined ? '' : String(v);
+  }
+
+  updateBand(i: number, field: keyof BandRow, value: string | number | null): void {
+    // ngModel on type="number" emits a JS number; coerce numeric string fields so
+    // they stay strings and the API receives the correct wire type.
     const updated = [...this.pBands()];
-    updated[i] = { ...updated[i], [field]: field === 'bandNo' ? Number(value) : value };
+    updated[i] = {
+      ...updated[i],
+      [field]: field === 'bandNo' ? Number(value) : this.coerceNumStr(value),
+    };
     this.pBands.set(updated);
   }
 

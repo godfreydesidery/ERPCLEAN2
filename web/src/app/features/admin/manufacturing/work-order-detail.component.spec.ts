@@ -267,6 +267,91 @@ describe('WorkOrderDetailComponent — release action', () => {
   });
 });
 
+// ── Number-input coercion (plannedQty) ───────────────────────────────────────
+
+describe('WorkOrderDetailComponent — number-input coercion', () => {
+  afterEach(() => { vi.clearAllTimers(); TestBed.resetTestingModule(); });
+
+  it('save() does not throw when fPlannedQty contains String(number)', async () => {
+    const svc = makeBed();
+    const fixture = TestBed.createComponent(WorkOrderDetailComponent);
+    fixture.componentRef.setInput('uid', 'wo-1');
+    vi.runAllTimers();
+    await fixture.whenStable();
+
+    const comp = fixture.componentInstance;
+    // Simulate what the fixed template does: String($event ?? '').
+    comp.fPlannedQty.set(String(50));
+
+    expect(() => comp.save()).not.toThrow();
+    vi.runAllTimers();
+    await fixture.whenStable();
+
+    expect(svc.update).toHaveBeenCalledOnce();
+    expect(svc.update.mock.calls[0][1].plannedQty).toBe('50');
+  });
+
+  it('save() rejects zero when fPlannedQty is String(0)', async () => {
+    const svc = makeBed();
+    const fixture = TestBed.createComponent(WorkOrderDetailComponent);
+    fixture.componentRef.setInput('uid', 'wo-1');
+    vi.runAllTimers();
+    await fixture.whenStable();
+
+    const comp = fixture.componentInstance;
+    comp.fPlannedQty.set(String(0));
+
+    expect(() => comp.save()).not.toThrow();
+    expect(svc.update).not.toHaveBeenCalled();
+    expect(comp.saveError()).toMatch(/positive number/i);
+  });
+
+  it('addOperation() does not throw when opSeqNo / opLabourAmount are String(number)', async () => {
+    const svc = makeBed();
+    const fixture = TestBed.createComponent(WorkOrderDetailComponent);
+    fixture.componentRef.setInput('uid', 'wo-1');
+    vi.runAllTimers();
+    await fixture.whenStable();
+
+    const comp = fixture.componentInstance;
+    comp.opSeqNo.set(String(1));
+    comp.opDescription.set('Test Op');
+    comp.opLabourAmount.set(String(200));
+    comp.opOverheadAmount.set(String(50));
+
+    expect(() => comp.addOperation()).not.toThrow();
+    vi.runAllTimers();
+    await fixture.whenStable();
+
+    expect(svc.addOperation).toHaveBeenCalledOnce();
+    const req = svc.addOperation.mock.calls[0][1];
+    expect(req.seqNo).toBe('1');
+    expect(req.labourAmount).toBe('200');
+  });
+
+  it('complete() does not throw when completeGoodQty is String(number)', async () => {
+    const svc = makeBed({ getByUid: vi.fn(() => of(makeWO({ status: 'IN_PROGRESS' }))) });
+    const fixture = TestBed.createComponent(WorkOrderDetailComponent);
+    fixture.componentRef.setInput('uid', 'wo-1');
+    vi.runAllTimers();
+    await fixture.whenStable();
+
+    const comp = fixture.componentInstance;
+    comp.completeGoodQty.set(String(80));
+    comp.completeScrapQty.set(String(5));
+    comp.completePostingDate.set('2024-06-15');
+
+    expect(() => comp.complete()).not.toThrow();
+    vi.runAllTimers();
+    await fixture.whenStable();
+
+    expect(svc.complete).toHaveBeenCalledOnce();
+    const req = svc.complete.mock.calls[0][1];
+    expect(req.goodQty).toBe('80');
+    expect(req.scrapQty).toBe('5');
+  });
+});
+
 // ── Issue components lifecycle action ────────────────────────────────────────
 
 describe('WorkOrderDetailComponent — issueComponents action', () => {

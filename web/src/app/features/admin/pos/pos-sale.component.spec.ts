@@ -534,3 +534,62 @@ describe('PosSaleComponent — product-scoped unit picker', () => {
     expect(prodSvc.listUnits).toBeUndefined();
   });
 });
+
+// ── numeric line field coercion (type="number" emits a number) ────────────────
+
+describe('PosSaleComponent — numeric line field coercion', () => {
+  beforeEach(() => { vi.useFakeTimers(); makeBed(); });
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('onLineFieldChange stores quantity as a string when passed a number', async () => {
+    const comp = TestBed.createComponent(PosSaleComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.addLine();
+    const lineId = comp.lines()[0].id;
+    // Simulate NumberValueAccessor emitting a JS number from type="number".
+    comp.onLineFieldChange(lineId, 'quantity', 3 as unknown as string);
+
+    expect(typeof comp.lines()[0].quantity).toBe('string');
+    expect(comp.lines()[0].quantity).toBe('3');
+  });
+
+  it('onLineFieldChange stores lineDiscountAmount as a string when passed a number', async () => {
+    const comp = TestBed.createComponent(PosSaleComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.addLine();
+    const lineId = comp.lines()[0].id;
+    comp.onLineFieldChange(lineId, 'lineDiscountAmount', 50.5 as unknown as string);
+
+    expect(typeof comp.lines()[0].lineDiscountAmount).toBe('string');
+    expect(comp.lines()[0].lineDiscountAmount).toBe('50.5');
+  });
+
+  it('submit() does not throw and posts stringified quantity when line field holds a number', async () => {
+    const comp = TestBed.createComponent(PosSaleComponent).componentInstance;
+    const svc = TestBed.inject(PosService) as any;
+    await vi.runAllTimersAsync();
+
+    comp.customers.set([stubCustomer]);
+    comp.agents.set([stubAgent]);
+    comp.selectedSessionUid.set('SESS1');
+    comp.selectedCustomerUid.set('CUST1');
+    comp.selectedAgentUid.set('AGENT1');
+    comp.currency.set('TZS');
+    comp.tenderedAmount.set('2000');
+    comp.lines.set([{
+      id: 'line-x', productUid: 'P1', productId: '10', productName: 'Widget',
+      unitUid: 'U1', unitId: '1', unitName: 'pcs',
+      quantity: 4 as unknown as string,   // number — simulates type="number" pre-edit state
+      unitPrice: '500.00',
+      lineDiscountAmount: '0.00',
+      vatRate: '0', priceState: 'ok', lineUnitOptions: [], lineUnitsLoading: false,
+    }]);
+
+    expect(() => comp.submit()).not.toThrow();
+    expect(svc.processSale).toHaveBeenCalledOnce();
+    const body = svc.processSale.mock.calls[0][0];
+    expect(body.lines[0].quantity).toBe('4');
+  });
+});

@@ -45,6 +45,7 @@ function makeBed(
     update: ReturnType<typeof vi.fn>;
     placeInService: ReturnType<typeof vi.fn>;
     dispose: ReturnType<typeof vi.fn>;
+    revalue: ReturnType<typeof vi.fn>;
     listSchedule: ReturnType<typeof vi.fn>;
     listRevaluations: ReturnType<typeof vi.fn>;
   }> = {},
@@ -56,6 +57,7 @@ function makeBed(
     update: vi.fn(() => of(makeAsset())),
     placeInService: vi.fn(() => of(makeAsset({ status: 'IN_SERVICE' }))),
     dispose: vi.fn(() => of({ uid: 'd1', disposalType: 'SALE' } as any)),
+    revalue: vi.fn(() => of({} as any)),
     listSchedule: vi.fn(() => of([])),
     listRevaluations: vi.fn(() => of([])),
     listCategories: vi.fn(() => of([])),
@@ -246,6 +248,80 @@ describe('FixedAssetDetailComponent — placeInService action', () => {
 
     expect(comp.placeInServiceError()).toBeTruthy();
     expect(comp.placingInService()).toBe(false);
+  });
+});
+
+// ── coerceNumStr — number-input safety ───────────────────────────────────────
+
+describe('FixedAssetDetailComponent — coerceNumStr (number-input crash guard)', () => {
+  afterEach(() => { vi.clearAllTimers(); TestBed.resetTestingModule(); });
+
+  it('coerceNumStr converts a JS number to a string', async () => {
+    makeBed();
+    const fixture = TestBed.createComponent(FixedAssetDetailComponent);
+    fixture.componentRef.setInput('uid', 'fa-1');
+    vi.runAllTimers();
+    await fixture.whenStable();
+
+    const comp = fixture.componentInstance;
+    expect(comp.coerceNumStr(12345)).toBe('12345');
+    expect(comp.coerceNumStr(0)).toBe('0');
+    expect(comp.coerceNumStr(null)).toBe('');
+    expect(comp.coerceNumStr(undefined)).toBe('');
+    expect(comp.coerceNumStr('99')).toBe('99');
+  });
+
+  it('dispose() does not throw when fProceedsAmount receives a number (simulates type="number" input)', async () => {
+    const disposeFn = vi.fn(() => of({
+      uid: 'd1', disposalType: 'SALE', disposalDate: '2024-06-01',
+      proceedsAmount: '500', nbvAtDisposal: '800', gainLossAmount: '-300',
+    } as any));
+    const merged = makeBed({
+      getByUid: vi.fn(() => of(makeAsset({ status: 'IN_SERVICE' }))),
+      dispose: disposeFn,
+      listSchedule: vi.fn(() => of([])),
+      listRevaluations: vi.fn(() => of([])),
+    });
+    const fixture = TestBed.createComponent(FixedAssetDetailComponent);
+    fixture.componentRef.setInput('uid', 'fa-1');
+    vi.runAllTimers();
+    await fixture.whenStable();
+
+    const comp = fixture.componentInstance;
+    // coerceNumStr is what (ngModelChange) calls in the template when the user types a number.
+    // Setting the signal this way reproduces the exact coercion path.
+    comp.fProceedsAmount.set(comp.coerceNumStr(500));
+    comp.fDisposalDate.set('2024-06-01');
+    expect(() => comp.dispose()).not.toThrow();
+    vi.runAllTimers();
+    await fixture.whenStable();
+    expect(merged.dispose).toHaveBeenCalledOnce();
+    const disposeArg = merged.dispose.mock.calls[0][1] as { proceedsAmount: string };
+    expect(disposeArg.proceedsAmount).toBe('500');
+  });
+
+  it('revalue() does not throw when fRevalDelta receives a number (simulates type="number" input)', async () => {
+    const svc = makeBed({
+      getByUid: vi.fn(() => of(makeAsset({ status: 'IN_SERVICE' }))),
+      revalue: vi.fn(() => of(makeAsset({ status: 'IN_SERVICE' }))),
+      listSchedule: vi.fn(() => of([])),
+      listRevaluations: vi.fn(() => of([])),
+    });
+    const fixture = TestBed.createComponent(FixedAssetDetailComponent);
+    fixture.componentRef.setInput('uid', 'fa-1');
+    vi.runAllTimers();
+    await fixture.whenStable();
+
+    const comp = fixture.componentInstance;
+    // coerceNumStr mirrors what (ngModelChange) does in the template when the user types a value.
+    comp.fRevalDelta.set(comp.coerceNumStr(50000));
+    comp.fRevalDate.set('2024-06-01');
+    expect(() => comp.revalue()).not.toThrow();
+    vi.runAllTimers();
+    await fixture.whenStable();
+    expect(svc.revalue).toHaveBeenCalledOnce();
+    const revalArg = svc.revalue.mock.calls[0][1] as { deltaAmount: string };
+    expect(revalArg.deltaAmount).toBe('50000');
   });
 });
 
