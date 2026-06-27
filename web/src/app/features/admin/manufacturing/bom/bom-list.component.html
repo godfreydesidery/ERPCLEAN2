@@ -90,7 +90,7 @@
                 </label>
                 <input id="newOutputQty" name="newOutputQty" type="number" min="0.000001" step="any"
                        class="form-control"
-                       [(ngModel)]="newOutputQty"
+                       [ngModel]="newOutputQty()" (ngModelChange)="newOutputQty.set(String($event ?? ''))"
                        placeholder="1" required />
               </div>
 
@@ -99,7 +99,7 @@
                 <input id="newYieldPercent" name="newYieldPercent" type="number"
                        min="0.0001" max="100" step="any"
                        class="form-control"
-                       [(ngModel)]="newYieldPercent"
+                       [ngModel]="newYieldPercent()" (ngModelChange)="newYieldPercent.set(String($event ?? ''))"
                        placeholder="100" />
               </div>
 

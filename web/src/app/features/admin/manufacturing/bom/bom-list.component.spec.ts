@@ -226,4 +226,49 @@ describe('BomListComponent', () => {
     expect(comp.showCreateForm()).toBe(false);
     expect(comp.saving()).toBe(false);
   });
+
+  // ── number-input coercion regression ─────────────────────────────────────
+
+  it('create() does not throw when newOutputQty was set as String(number) from number input', async () => {
+    const createFn = vi.fn(() => of(makeBom({ uid: 'bom-new' })));
+    const { fixture } = makeBed({ create: createFn });
+
+    fixture.detectChanges();
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const comp = fixture.componentInstance;
+    comp.showCreateForm.set(true);
+    comp.newParentProductUid.set('prod-uid-1');
+    // Simulate what the fixed template does: String($event ?? '').
+    comp.newOutputQty.set(String(10));
+    comp.newYieldPercent.set(String(95));
+
+    expect(() => comp.create()).not.toThrow();
+    await vi.runAllTimersAsync();
+
+    expect(createFn).toHaveBeenCalledOnce();
+    const req = (createFn.mock.calls as any[][])[0][1];
+    expect(req.outputQty).toBe('10');
+    expect(req.yieldPercent).toBe('95');
+  });
+
+  it('create() rejects zero outputQty even when set as String(0)', async () => {
+    const createFn = vi.fn();
+    const { fixture } = makeBed({ create: createFn });
+
+    fixture.detectChanges();
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const comp = fixture.componentInstance;
+    comp.showCreateForm.set(true);
+    comp.newParentProductUid.set('prod-uid-1');
+    comp.newOutputQty.set(String(0));
+
+    expect(() => comp.create()).not.toThrow();
+
+    expect(createFn).not.toHaveBeenCalled();
+    expect(comp.formError()).toMatch(/positive number/i);
+  });
 });

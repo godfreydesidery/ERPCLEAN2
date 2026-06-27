@@ -83,6 +83,11 @@ export class AssetCategoryDetailComponent {
     this.fDepExpenseAccountId.set(cat.depExpenseAccountId ?? '');
   }
 
+  /** Coerce a value from ngModel on type="number" to string; prevents .trim() crashes. */
+  coerceNumStr(v: string | number | null | undefined): string {
+    return v === null || v === undefined ? '' : String(v);
+  }
+
   save(): void {
     const name = this.fName().trim();
     const lifePeriods = parseInt(this.fLifePeriods().trim(), 10);

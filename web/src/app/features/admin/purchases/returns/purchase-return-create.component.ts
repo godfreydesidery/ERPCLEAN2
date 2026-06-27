@@ -135,9 +135,9 @@ export class PurchaseReturnCreateComponent {
     if (id) this.loadGrOptions();
   }
 
-  updateLineQty(index: number, qty: string): void {
+  updateLineQty(index: number, qty: unknown): void {
     this.returnLines.update((entries) =>
-      entries.map((e, i) => (i === index ? { ...e, returnedQty: qty } : e)),
+      entries.map((e, i) => (i === index ? { ...e, returnedQty: String(qty ?? '') } : e)),
     );
   }
 

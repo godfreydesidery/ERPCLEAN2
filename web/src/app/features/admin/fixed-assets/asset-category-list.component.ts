@@ -140,6 +140,11 @@ export class AssetCategoryListComponent {
     this.newDepExpenseAccountId.set('');
   }
 
+  /** Coerce a value from ngModel on type="number" to string; prevents .trim() crashes. */
+  coerceNumStr(v: string | number | null | undefined): string {
+    return v === null || v === undefined ? '' : String(v);
+  }
+
   create(): void {
     const code = this.newCode().trim();
     const name = this.newName().trim();

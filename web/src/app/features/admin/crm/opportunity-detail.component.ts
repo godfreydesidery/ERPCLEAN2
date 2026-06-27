@@ -210,8 +210,9 @@ export class OpportunityDetailComponent {
     this.saveError.set(null);
     const request: UpdateOpportunityRequest = {
       title,
-      estimatedValueAmount: this.fEstimatedValue().trim() || undefined,
-      winProbability: this.fWinProbability().trim() || undefined,
+      // type="number" stores a JS number in the signal; coerce before .trim() to avoid crash.
+      estimatedValueAmount: String(this.fEstimatedValue() ?? '').trim() || undefined,
+      winProbability: String(this.fWinProbability() ?? '').trim() || undefined,
       expectedCloseDate: this.fExpectedCloseDate() || undefined,
       notes: this.fNotes().trim() || undefined,
     };
@@ -248,7 +249,8 @@ export class OpportunityDetailComponent {
   addLine(): void {
     const product = this.selectedProduct();
     const unitUid = this.newLineUnitUid();
-    const qty = this.newLineQty().trim();
+    // type="number" stores a JS number; coerce before .trim() to avoid crash.
+    const qty = String(this.newLineQty() ?? '').trim();
     if (!product) { this.lineFormError.set('Product is required.'); return; }
     if (!unitUid) { this.lineFormError.set('Unit is required.'); return; }
     if (!qty || isNaN(+qty) || +qty <= 0) { this.lineFormError.set('Quantity must be > 0.'); return; }
@@ -259,8 +261,8 @@ export class OpportunityDetailComponent {
       productUid: product.uid,
       unitUid,
       estimatedQty: qty,
-      estimatedUnitPriceAmount: this.newLineUnitPrice().trim() || undefined,
-      lineDiscountPercent: this.newLineDiscountPct().trim() || undefined,
+      estimatedUnitPriceAmount: String(this.newLineUnitPrice() ?? '').trim() || undefined,
+      lineDiscountPercent: String(this.newLineDiscountPct() ?? '').trim() || undefined,
     };
     this.crmService.addOpportunityLine(this.uid(), request).subscribe({
       next: () => {
@@ -313,7 +315,8 @@ export class OpportunityDetailComponent {
     this.advanceError.set(null);
     const request: AdvanceStageRequest = {
       pipelineStageUid: stageUid,
-      winProbabilityOverride: this.advanceProbOverride().trim() || undefined,
+      // type="number" stores a JS number; coerce before .trim() to avoid crash.
+      winProbabilityOverride: String(this.advanceProbOverride() ?? '').trim() || undefined,
     };
     this.crmService.advanceStage(this.uid(), request).subscribe({
       next: (updated) => {

@@ -96,6 +96,9 @@ export class BomDetailComponent {
   readonly isDraft = computed(() => this.bom()?.status === 'DRAFT');
   readonly isActive = computed(() => this.bom()?.status === 'ACTIVE');
 
+  // Expose global String constructor for use in templates.
+  protected readonly String = String;
+
   readonly sourcingOptions: Array<{ value: ComponentSourcing | ''; label: string }> = [
     { value: '', label: 'Auto (derive from child)' },
     { value: 'MAKE', label: 'MAKE' },

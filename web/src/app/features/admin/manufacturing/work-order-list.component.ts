@@ -85,6 +85,9 @@ export class WorkOrderListComponent {
   readonly canCreate = computed(() => this.session.hasPermission('WORKORDER.MANAGE'));
   readonly isEmpty = computed(() => this.state() === 'idle' && this.rows().length === 0);
 
+  // Expose global String constructor for use in templates.
+  protected readonly String = String;
+
   readonly statusOptions: Array<{ value: WorkOrderStatus | ''; label: string }> = [
     { value: '', label: 'All statuses' },
     { value: 'PLANNED', label: 'Planned' },

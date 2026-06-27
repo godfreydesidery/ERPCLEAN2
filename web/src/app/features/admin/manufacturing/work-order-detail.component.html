@@ -140,7 +140,7 @@
                     </label>
                     <input id="fPlannedQty" name="fPlannedQty" type="number" class="form-control"
                            step="0.000001" min="0.000001"
-                           [ngModel]="fPlannedQty()" (ngModelChange)="fPlannedQty.set($event)"
+                           [ngModel]="fPlannedQty()" (ngModelChange)="fPlannedQty.set(String($event ?? ''))"
                            [disabled]="saving()" />
                   </div>
                   <div class="erp-field">
@@ -267,14 +267,14 @@
                     <label for="costLabourAmount">Labour Amount</label>
                     <input id="costLabourAmount" name="costLabourAmount" type="number" class="form-control form-control-sm"
                            step="0.0001" min="0"
-                           [ngModel]="costLabourAmount()" (ngModelChange)="costLabourAmount.set($event)"
+                           [ngModel]="costLabourAmount()" (ngModelChange)="costLabourAmount.set(String($event ?? ''))"
                            [disabled]="applyingCost()" />
                   </div>
                   <div class="erp-field" style="max-width:160px">
                     <label for="costOverheadAmount">Overhead Amount</label>
                     <input id="costOverheadAmount" name="costOverheadAmount" type="number" class="form-control form-control-sm"
                            step="0.0001" min="0"
-                           [ngModel]="costOverheadAmount()" (ngModelChange)="costOverheadAmount.set($event)"
+                           [ngModel]="costOverheadAmount()" (ngModelChange)="costOverheadAmount.set(String($event ?? ''))"
                            [disabled]="applyingCost()" />
                   </div>
                   <!-- Operation picker self-labels via placeholder -->
@@ -321,14 +321,14 @@
                     </label>
                     <input id="completeGoodQty" name="completeGoodQty" type="number" class="form-control form-control-sm"
                            step="0.000001" min="0.000001"
-                           [ngModel]="completeGoodQty()" (ngModelChange)="completeGoodQty.set($event)"
+                           [ngModel]="completeGoodQty()" (ngModelChange)="completeGoodQty.set(String($event ?? ''))"
                            [disabled]="completing()" />
                   </div>
                   <div class="erp-field" style="max-width:160px">
                     <label for="completeScrapQty">Scrap Qty</label>
                     <input id="completeScrapQty" name="completeScrapQty" type="number" class="form-control form-control-sm"
                            step="0.000001" min="0"
-                           [ngModel]="completeScrapQty()" (ngModelChange)="completeScrapQty.set($event)"
+                           [ngModel]="completeScrapQty()" (ngModelChange)="completeScrapQty.set(String($event ?? ''))"
                            [disabled]="completing()" />
                   </div>
                   <div class="erp-field" style="max-width:200px">
@@ -558,7 +558,7 @@
                     </label>
                     <input id="opSeqNo" name="opSeqNo" type="number" class="form-control form-control-sm"
                            min="1" step="1"
-                           [ngModel]="opSeqNo()" (ngModelChange)="opSeqNo.set($event)"
+                           [ngModel]="opSeqNo()" (ngModelChange)="opSeqNo.set(String($event ?? ''))"
                            [disabled]="addingOp()" />
                   </div>
                   <div class="erp-field" style="max-width:240px">
@@ -579,14 +579,14 @@
                     <label for="opLabourAmount">Labour Amt</label>
                     <input id="opLabourAmount" name="opLabourAmount" type="number" class="form-control form-control-sm"
                            step="0.0001" min="0"
-                           [ngModel]="opLabourAmount()" (ngModelChange)="opLabourAmount.set($event)"
+                           [ngModel]="opLabourAmount()" (ngModelChange)="opLabourAmount.set(String($event ?? ''))"
                            [disabled]="addingOp()" />
                   </div>
                   <div class="erp-field" style="max-width:130px">
                     <label for="opOverheadAmount">Overhead Amt</label>
                     <input id="opOverheadAmount" name="opOverheadAmount" type="number" class="form-control form-control-sm"
                            step="0.0001" min="0"
-                           [ngModel]="opOverheadAmount()" (ngModelChange)="opOverheadAmount.set($event)"
+                           [ngModel]="opOverheadAmount()" (ngModelChange)="opOverheadAmount.set(String($event ?? ''))"
                            [disabled]="addingOp()" />
                   </div>
                   <button type="submit" class="btn btn-sm btn-outline-primary" [disabled]="addingOp()">

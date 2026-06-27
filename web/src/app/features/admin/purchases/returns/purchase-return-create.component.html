@@ -114,6 +114,7 @@
                                [attr.aria-label]="'Return quantity for ' + entry.line.productName"
                                [ngModel]="entry.returnedQty"
                                (ngModelChange)="updateLineQty(i, $event)"
+                               [ngModelOptions]="{standalone: true}"
                                min="0.001" step="any"
                                [disabled]="submitting()" />
                       }

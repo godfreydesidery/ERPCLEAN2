@@ -330,7 +330,7 @@
                   <div class="erp-field">
                     <label class="form-label" for="fRevalDelta">Delta Amount <span class="text-danger" aria-hidden="true">*</span></label>
                     <input id="fRevalDelta" name="fRevalDelta" type="number" step="0.01" min="0.01" class="form-control"
-                           [ngModel]="fRevalDelta()" (ngModelChange)="fRevalDelta.set($event)"
+                           [ngModel]="fRevalDelta()" (ngModelChange)="fRevalDelta.set(coerceNumStr($event))"
                            [disabled]="revaluing()" />
                   </div>
                   <div class="erp-field">
@@ -386,7 +386,7 @@
                   <div class="erp-field">
                     <label class="form-label" for="fProceedsAmount">Proceeds Amount <span class="text-danger" aria-hidden="true">*</span></label>
                     <input id="fProceedsAmount" name="fProceedsAmount" type="number" step="0.01" min="0" class="form-control"
-                           [ngModel]="fProceedsAmount()" (ngModelChange)="fProceedsAmount.set($event)"
+                           [ngModel]="fProceedsAmount()" (ngModelChange)="fProceedsAmount.set(coerceNumStr($event))"
                            [disabled]="disposing()" />
                   </div>
                   <div class="erp-field">
