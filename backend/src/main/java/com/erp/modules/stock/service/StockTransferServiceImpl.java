@@ -137,10 +137,10 @@ public class StockTransferServiceImpl implements StockTransferService {
         StockTransfer transfer = findAndAssertScope(transferUid, principal);
 
         if (transfer.getStatus() != StockTransferStatus.DRAFT) {
-            throw new IllegalStateException("Transfer " + transferUid + " is not in DRAFT status.");
+            throw new IllegalStateException("This transfer is not in DRAFT status.");
         }
         if (transfer.getTransferMode() != StockTransferMode.INSTANT) {
-            throw new IllegalStateException("Transfer " + transferUid + " is not an INSTANT transfer.");
+            throw new IllegalStateException("This transfer is not an INSTANT transfer.");
         }
 
         List<StockTransferLine> lines = transferLines
@@ -160,9 +160,8 @@ public class StockTransferServiceImpl implements StockTransferService {
                 BigDecimal available = srcSoh != null ? srcSoh.availableQty() : BigDecimal.ZERO;
                 if (available.compareTo(line.getQtyTransferredBase()) < 0) {
                     throw new ConflictException(
-                            "Insufficient stock for product id=" + line.getProductId()
-                            + " at source location id=" + transfer.getSourceLocationId()
-                            + ": available=" + available.toPlainString()
+                            "Insufficient stock at source location: available="
+                            + available.toPlainString()
                             + ", requested=" + line.getQtyTransferredBase().toPlainString()
                             + ". The source location does not allow negative stock.");
                 }
@@ -216,10 +215,10 @@ public class StockTransferServiceImpl implements StockTransferService {
         StockTransfer transfer = findAndAssertScope(transferUid, principal);
 
         if (transfer.getStatus() != StockTransferStatus.DRAFT) {
-            throw new IllegalStateException("Transfer " + transferUid + " is not in DRAFT status.");
+            throw new IllegalStateException("This transfer is not in DRAFT status.");
         }
         if (transfer.getTransferMode() != StockTransferMode.IN_TRANSIT) {
-            throw new IllegalStateException("Transfer " + transferUid + " is not an IN_TRANSIT transfer.");
+            throw new IllegalStateException("This transfer is not an IN_TRANSIT transfer.");
         }
 
         List<StockTransferLine> lines = transferLines
@@ -236,9 +235,8 @@ public class StockTransferServiceImpl implements StockTransferService {
                 BigDecimal available = srcSoh != null ? srcSoh.availableQty() : BigDecimal.ZERO;
                 if (available.compareTo(line.getQtyTransferredBase()) < 0) {
                     throw new ConflictException(
-                            "Insufficient stock for product id=" + line.getProductId()
-                            + " at source location id=" + transfer.getSourceLocationId()
-                            + ": available=" + available.toPlainString()
+                            "Insufficient stock at source location: available="
+                            + available.toPlainString()
                             + ", requested=" + line.getQtyTransferredBase().toPlainString()
                             + ". The source location does not allow negative stock.");
                 }
@@ -286,7 +284,7 @@ public class StockTransferServiceImpl implements StockTransferService {
         StockTransfer transfer = findAndAssertScope(transferUid, principal);
 
         if (transfer.getStatus() != StockTransferStatus.DISPATCHED) {
-            throw new IllegalStateException("Transfer " + transferUid + " is not in DISPATCHED status.");
+            throw new IllegalStateException("This transfer is not in DISPATCHED status.");
         }
 
         transfer.receive(principal.userId());

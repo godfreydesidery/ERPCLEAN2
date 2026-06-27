@@ -46,7 +46,7 @@ public class WhtTypeServiceImpl implements WhtTypeService {
     public WhtTypeDto create(CreateWhtTypeRequest req) {
         Long companyId = companies.findByUid(req.companyUid())
                 .map(c -> c.getId())
-                .orElseThrow(() -> new NotFoundException("Company: " + req.companyUid()));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
 
         if (whtTypes.existsByCompanyIdAndCode(companyId, req.code())) {

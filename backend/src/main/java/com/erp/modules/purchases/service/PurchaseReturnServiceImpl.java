@@ -95,17 +95,17 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
     public PurchaseReturnDto create(CreatePurchaseReturnRequest req) {
         Long companyId = companies.findByUid(req.companyUid())
                 .map(c -> c.getId())
-                .orElseThrow(() -> new NotFoundException("Company: " + req.companyUid()));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
         RequestContext.Principal ctx = RequestContext.get();
         scopeGuard.assertCanActIn(ctx, companyId);
         Long branchId = branchId(ctx);
 
         GoodsReceipt gr = grRepo.findByCompanyIdAndUid(companyId, req.goodsReceiptUid())
-                .orElseThrow(() -> new NotFoundException("GoodsReceipt: " + req.goodsReceiptUid()));
+                .orElseThrow(() -> new NotFoundException("Goods receipt not found."));
 
         // Resolve supplier snapshot from the linked PO
         PurchaseOrder po = poRepo.findById(gr.getPurchaseOrderId())
-                .orElseThrow(() -> new NotFoundException("PurchaseOrder id: " + gr.getPurchaseOrderId()));
+                .orElseThrow(() -> new NotFoundException("Purchase order not found."));
 
         String returnNumber = numberGen.nextPurchaseReturn(companyId);
         PurchaseReturn ret = new PurchaseReturn(
@@ -118,12 +118,11 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         BigDecimal netTotal = BigDecimal.ZERO;
         for (var l : req.lines()) {
             GoodsReceiptLine grLine = grLineRepo.findByUid(l.goodsReceiptLineUid())
-                    .orElseThrow(() -> new NotFoundException("GoodsReceiptLine: " + l.goodsReceiptLineUid()));
+                    .orElseThrow(() -> new NotFoundException("Goods receipt line not found."));
             // Validate line belongs to this GR
             if (!grLine.getGoodsReceipt().getId().equals(gr.getId())) {
                 throw new IllegalArgumentException(
-                        "GR line " + l.goodsReceiptLineUid() + " does not belong to GR "
-                                + req.goodsReceiptUid());
+                        "A goods receipt line does not belong to the specified goods receipt.");
             }
             // Validate return qty doesn't exceed returnable balance
             BigDecimal alreadyReturned = returnLines.sumReturnedQtyInBaseForGrLine(grLine.getId());
@@ -247,10 +246,10 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         // DR AP / CR Purchases to reduce the supplier payable for the returned goods.
         if (totalReturnValue.signum() > 0) {
             String companyUid = companies.findById(ret.getCompanyId())
-                    .orElseThrow(() -> new NotFoundException("Company id: " + ret.getCompanyId()))
+                    .orElseThrow(() -> new NotFoundException("Company not found."))
                     .getUid();
             String supplierUid = suppliers.findById(ret.getSupplierId())
-                    .orElseThrow(() -> new NotFoundException("Supplier id: " + ret.getSupplierId()))
+                    .orElseThrow(() -> new NotFoundException("Supplier not found."))
                     .getUid();
 
             RaiseDebitNoteRequest debitNoteReq = new RaiseDebitNoteRequest(

@@ -69,11 +69,11 @@ public class BankReconciliationServiceImpl implements BankReconciliationService 
     public BankReconciliationDto open(OpenReconciliationRequest req) {
         Long companyId = companies.findByUid(req.companyUid())
                 .map(c -> c.getId())
-                .orElseThrow(() -> new NotFoundException("Company: " + req.companyUid()));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
 
         CashBankAccount account = accounts.findByCompanyIdAndUid(companyId, req.cashBankAccountUid())
-                .orElseThrow(() -> new NotFoundException("Cash/bank account: " + req.cashBankAccountUid()));
+                .orElseThrow(() -> new NotFoundException("Cash/bank account not found."));
 
         if (account.getAccountType() != CashBankAccountType.BANK)
             throw new IllegalArgumentException(
@@ -117,14 +117,14 @@ public class BankReconciliationServiceImpl implements BankReconciliationService 
 
         if (recon.getStatus() != ReconciliationStatus.DRAFT)
             throw new IllegalStateException(
-                    "Reconciliation " + reconciliationUid + " is COMPLETED — cleared flags are immutable (BR-CASH-07).");
+                    "This reconciliation is already COMPLETED — cleared flags are immutable.");
 
         List<CashTransaction> transactions = txns.findByUidIn(req.transactionUids());
 
         for (CashTransaction t : transactions) {
             if (!t.getCashBankAccountId().equals(recon.getCashBankAccountId()))
                 throw new IllegalArgumentException(
-                        "Transaction " + t.getUid() + " does not belong to the reconciled account.");
+                        "One or more transactions do not belong to the reconciled account.");
             if (req.cleared()) {
                 t.setCleared(true);
                 t.setClearedInReconciliationId(recon.getId());
@@ -157,7 +157,7 @@ public class BankReconciliationServiceImpl implements BankReconciliationService 
 
         if (recon.getStatus() != ReconciliationStatus.DRAFT)
             throw new IllegalStateException(
-                    "Reconciliation " + reconciliationUid + " is already COMPLETED (BR-CASH-07).");
+                    "This reconciliation is already COMPLETED.");
 
         // Compute the cleared book balance for this reconciliation (D-6)
         BigDecimal clearedBalance = txns.clearedBookBalance(recon.getId());
@@ -166,8 +166,8 @@ public class BankReconciliationServiceImpl implements BankReconciliationService 
         // BR-CASH-06: cleared book balance must equal the statement closing balance
         if (clearedBalance.compareTo(recon.getStatementClosingBalance()) != 0) {
             throw new IllegalStateException(String.format(
-                    "Cannot complete reconciliation %s: cleared book balance %s ≠ statement closing balance %s (BR-CASH-06).",
-                    reconciliationUid, clearedBalance.toPlainString(),
+                    "Cannot complete reconciliation: cleared book balance %s does not match statement closing balance %s.",
+                    clearedBalance.toPlainString(),
                     recon.getStatementClosingBalance().toPlainString()));
         }
 
@@ -211,7 +211,7 @@ public class BankReconciliationServiceImpl implements BankReconciliationService 
         // but a foreign accountId and read another company's bank reconciliations (confused-deputy).
         accounts.findById(accountId)
                 .filter(a -> a.getCompanyId().equals(companyId))
-                .orElseThrow(() -> new NotFoundException("Cash/bank account: " + accountId));
+                .orElseThrow(() -> new NotFoundException("Cash/bank account not found."));
         return reconciliations.findByCashBankAccountId(accountId)
                 .stream().map(BankReconciliationServiceImpl::toDto).toList();
     }

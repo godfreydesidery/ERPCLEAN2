@@ -67,7 +67,7 @@ public class BomCostRollUpServiceImpl implements BomCostRollUpService {
             var bom = Lookups.orNotFound(boms.findByUid(bomUid), "Bom", bomUid);
             resolvedParentUid = products.findById(bom.getParentProductId())
                     .map(p -> p.getUid())
-                    .orElseThrow(() -> new NotFoundException("Product not found for BOM: " + bomUid));
+                    .orElseThrow(() -> new NotFoundException("Product not found for BOM."));
             resolvedBomUid = bom.getUid();
         }
 
@@ -75,7 +75,7 @@ public class BomCostRollUpServiceImpl implements BomCostRollUpService {
         // Use findWithCompanyByUid (EntityGraph) so branch.company is eagerly loaded — avoids
         // LazyInitializationException when getCompany().getId() is called (MANUFACTURING-022).
         var branch = branches.findWithCompanyByUid(branchUid)
-                .orElseThrow(() -> new NotFoundException("Branch not found: " + branchUid));
+                .orElseThrow(() -> new NotFoundException("Branch not found."));
         Long companyId = branch.getCompany().getId();
         Long branchId = branch.getId();
         // NFR-BOM-06 / D-11: tenant isolation guard — reject cross-tenant cost reads

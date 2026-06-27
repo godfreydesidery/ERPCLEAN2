@@ -192,7 +192,7 @@ public class SupplierContactAddressServiceImpl implements SupplierContactAddress
     private SupplierContact requireContact(String contactUid, Long supplierId) {
         SupplierContact c = Lookups.orNotFound(contacts.findByUid(contactUid), "SupplierContact", contactUid);
         if (!c.getSupplierId().equals(supplierId)) {
-            throw new NotFoundException("SupplierContact " + contactUid + " not found");
+            throw new NotFoundException("Supplier contact not found.");
         }
         return c;
     }
@@ -200,7 +200,7 @@ public class SupplierContactAddressServiceImpl implements SupplierContactAddress
     private SupplierAddress requireAddress(String addressUid, Long supplierId) {
         SupplierAddress a = Lookups.orNotFound(addresses.findByUid(addressUid), "SupplierAddress", addressUid);
         if (!a.getSupplierId().equals(supplierId)) {
-            throw new NotFoundException("SupplierAddress " + addressUid + " not found");
+            throw new NotFoundException("Supplier address not found.");
         }
         return a;
     }

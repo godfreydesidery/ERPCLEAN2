@@ -91,7 +91,7 @@ public class PosSessionServiceImpl implements PosSessionService {
 
         // Enforce at-most-one-open constraint (mirrors DB partial unique index)
         if (sessions.findByPosTillIdAndStatus(till.getId(), PosSessionStatus.OPEN).isPresent()) {
-            throw new ConflictException("Till " + req.tillUid() + " already has an OPEN session.");
+            throw new ConflictException("This till already has an OPEN session.");
         }
 
         var session = new PosSession(till.getCompanyId(), till.getBranchId(), till.getId(),

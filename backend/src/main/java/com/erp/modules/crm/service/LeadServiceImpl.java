@@ -155,7 +155,7 @@ public class LeadServiceImpl implements LeadService {
         if (req.existingCustomerUid() != null && !req.existingCustomerUid().isBlank()) {
             // Link to existing customer — must belong to the same company
             var customer = customers.findByUid(req.existingCustomerUid())
-                    .orElseThrow(() -> new NotFoundException("Customer not found: " + req.existingCustomerUid()));
+                    .orElseThrow(() -> new NotFoundException("Customer not found."));
             scopeGuard.assertCanActIn(RequestContext.get(), customer.getCompanyId());
             customerId = customer.getId();
             customerUid = customer.getUid();

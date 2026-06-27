@@ -76,7 +76,7 @@ public class VatReturnServiceImpl implements VatReturnService {
     public VatReturnDto open(OpenVatReturnRequest req) {
         Long companyId = companies.findByUid(req.companyUid())
                 .map(c -> c.getId())
-                .orElseThrow(() -> new NotFoundException("Company: " + req.companyUid()));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
 
         short year  = req.periodYear().shortValue();

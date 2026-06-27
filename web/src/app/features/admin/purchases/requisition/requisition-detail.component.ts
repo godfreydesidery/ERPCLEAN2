@@ -75,7 +75,7 @@ export class RequisitionDetailComponent {
       next: (updated) => {
         this.entity.set(updated);
         this.actionBusy.set(false);
-        this.alerts.success('Requisition submitted', updated.requisitionNumber ?? updated.uid);
+        this.alerts.success('Requisition submitted', updated.requisitionNumber ?? undefined);
       },
       error: (err) => {
         this.actionError.set(this.messageFrom(err, 'Could not submit requisition.'));
@@ -91,7 +91,7 @@ export class RequisitionDetailComponent {
       next: (updated) => {
         this.entity.set(updated);
         this.actionBusy.set(false);
-        this.alerts.success('Requisition approved', updated.requisitionNumber ?? updated.uid);
+        this.alerts.success('Requisition approved', updated.requisitionNumber ?? undefined);
       },
       error: (err) => {
         this.actionError.set(this.messageFrom(err, 'Could not approve requisition.'));
@@ -111,7 +111,7 @@ export class RequisitionDetailComponent {
         this.actionBusy.set(false);
         this.showRejectForm.set(false);
         this.rejectReason.set('');
-        this.alerts.success('Requisition rejected', updated.requisitionNumber ?? updated.uid);
+        this.alerts.success('Requisition rejected', updated.requisitionNumber ?? undefined);
       },
       error: (err) => {
         this.actionError.set(this.messageFrom(err, 'Could not reject requisition.'));
@@ -129,7 +129,7 @@ export class RequisitionDetailComponent {
         this.actionBusy.set(false);
         this.showCancelForm.set(false);
         this.cancelReason.set('');
-        this.alerts.success('Requisition cancelled', updated.requisitionNumber ?? updated.uid);
+        this.alerts.success('Requisition cancelled', updated.requisitionNumber ?? undefined);
       },
       error: (err) => {
         this.actionError.set(this.messageFrom(err, 'Could not cancel requisition.'));
@@ -150,7 +150,7 @@ export class RequisitionDetailComponent {
         this.reqService.getByUid(this.uid()).subscribe({ next: (r) => this.entity.set(r) });
         this.alerts.success(
           'Requisition converted',
-          `Created ${this.convertTargetType()} — uid: ${resultUid}`,
+          `${this.convertTargetType() === 'RFQ' ? 'RFQ' : 'Purchase order'} created.`,
         );
       },
       error: (err) => {

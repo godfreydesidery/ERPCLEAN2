@@ -46,7 +46,7 @@ public class NotificationInboxServiceImpl implements NotificationInboxService {
     @Override
     public void markRead(String uid, Long callerUserId, Long callerCompanyId) {
         Notification n = notifications.findByUid(uid)
-                .orElseThrow(() -> new NotFoundException("Notification not found: " + uid));
+                .orElseThrow(() -> new NotFoundException("Notification not found."));
         // Enforce recipient-is-me (BR-NOTIF-04)
         if (!n.getRecipientUserId().equals(callerUserId)) {
             throw ForbiddenException.notPermitted();

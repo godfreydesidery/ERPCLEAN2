@@ -46,7 +46,7 @@ public class DocumentTemplateServiceImpl implements DocumentTemplateService {
     @Transactional
     public DocumentTemplateDto update(String uid, UpdateDocumentTemplateRequest req) {
         DocumentTemplate tmpl = templates.findByUid(uid)
-                .orElseThrow(() -> new NotFoundException("Document template not found: " + uid));
+                .orElseThrow(() -> new NotFoundException("Document template not found."));
 
         RequestContext.Principal principal = RequestContext.get();
 

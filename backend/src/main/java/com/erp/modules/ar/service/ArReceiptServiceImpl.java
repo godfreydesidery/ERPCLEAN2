@@ -89,6 +89,8 @@ public class ArReceiptServiceImpl implements ArReceiptService {
     private final ScopeGuard scopeGuard;
     private final AuditService audit;
 
+    private static final String ERR_AR_INVOICE_NOT_FOUND = "AR invoice not found.";
+
     public ArReceiptServiceImpl(ArReceiptRepository receipts,
                                  ArInvoiceRepository invoices,
                                  ArReceiptAllocationRepository allocations,
@@ -125,7 +127,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
     public ArReceiptDto recordAndAllocate(RecordReceiptRequest req) {
         // 1. Resolve company and scope guard
         Company company = companies.findByUid(req.companyUid())
-                .orElseThrow(() -> new NotFoundException("Company not found: " + req.companyUid()));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
         Long companyId = company.getId();
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
 
@@ -133,7 +135,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
 
         // 2. Resolve customer (must belong to the company)
         Customer customer = customers.findByCompanyIdAndUid(companyId, req.customerUid())
-                .orElseThrow(() -> new NotFoundException("Customer not found: " + req.customerUid()));
+                .orElseThrow(() -> new NotFoundException("Customer not found."));
 
         // ADR-0036 D-5 / D-9: read currency from req (no longer forced to base).
         // The single-currency fast path (req.currency() == base) still works byte-identically.
@@ -191,13 +193,12 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         List<ArReceiptAllocation> savedAllocs = new ArrayList<>();
         for (ArReceiptAllocation alloc : allocationList) {
             ArInvoice inv = invoices.findById(alloc.getArInvoiceId())
-                    .orElseThrow(() -> new NotFoundException("ArInvoice not found: " + alloc.getArInvoiceId()));
+                    .orElseThrow(() -> new NotFoundException(ERR_AR_INVOICE_NOT_FOUND));
             // Guard: allocation must not exceed current outstanding
             if (alloc.getAllocatedAmount().compareTo(inv.getOutstandingAmount()) > 0) {
                 throw new IllegalStateException(
                         "Allocation " + alloc.getAllocatedAmount()
-                                + " exceeds outstanding " + inv.getOutstandingAmount()
-                                + " on invoice uid=" + inv.getUid() + " (BR-AR-04).");
+                                + " exceeds invoice outstanding of " + inv.getOutstandingAmount() + ".");
             }
 
             // Per-allocation base amounts (ADR-0036 D-5, allocation-junction base capture D-4)
@@ -427,12 +428,12 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         List<ArReceiptAllocation> saved = new ArrayList<>();
         for (AllocationLineRequest line : newAllocations) {
             ArInvoice inv = invoices.findByCompanyIdAndUid(receipt.getCompanyId(), line.arInvoiceUid())
-                    .orElseThrow(() -> new NotFoundException("ArInvoice not found: " + line.arInvoiceUid()));
+                    .orElseThrow(() -> new NotFoundException(ERR_AR_INVOICE_NOT_FOUND));
             assertInvoiceBelongsToCustomer(inv, receipt.getCustomerId());
             if (line.allocatedAmount().compareTo(inv.getOutstandingAmount()) > 0) {
                 throw new IllegalStateException(
-                        "Re-allocation " + line.allocatedAmount()
-                                + " exceeds outstanding on invoice " + line.arInvoiceUid());
+                        "Re-allocation amount " + line.allocatedAmount()
+                                + " exceeds the invoice outstanding.");
             }
             BigDecimal invoiceRate = inv.getFxRate() != null ? inv.getFxRate() : BigDecimal.ONE;
             BigDecimal baseRelieved = line.allocatedAmount()
@@ -533,7 +534,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         for (AllocationLineRequest line : lines) {
             ArInvoice inv = invoices.findByCompanyIdAndUid(companyId, line.arInvoiceUid())
                     .orElseThrow(() -> new NotFoundException(
-                            "ArInvoice not found: " + line.arInvoiceUid()));
+                            ERR_AR_INVOICE_NOT_FOUND));
             assertInvoiceBelongsToCustomer(inv, receipt.getCustomerId());
             result.add(new ArReceiptAllocation(
                     companyId, receipt.getId(), inv.getId(),

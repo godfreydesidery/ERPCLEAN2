@@ -169,7 +169,7 @@ public class ProductServiceImpl implements ProductService {
     public ProductDto getById(Long id) {
         return products.findById(id)
                 .map(ProductDto::from)
-                .orElseThrow(() -> new NotFoundException("Product not found: " + id));
+                .orElseThrow(() -> new NotFoundException("Product not found."));
     }
 
     @Override
@@ -301,7 +301,7 @@ public class ProductServiceImpl implements ProductService {
         scopeGuard.assertCanActIn(RequestContext.get(), p.getCompanyId());
         // Security: resolve the child scoped to its parent product (SR finding F16).
         ProductBulkPack bp = bulkPacks.findByUidAndProductId(bulkPackUid, p.getId())
-                .orElseThrow(() -> new NotFoundException("BulkPack not found: " + bulkPackUid));
+                .orElseThrow(() -> new NotFoundException("BulkPack not found."));
         bulkPacks.delete(bp);
         audit.record(AuditEvent.of(AuditActions.PRODUCT_UPDATE, "products", p.getId(), p.getUid())
                 .detail(Map.of("action", "BULK_PACK_REMOVE", "packUid", bulkPackUid)));
@@ -363,7 +363,7 @@ public class ProductServiceImpl implements ProductService {
         scopeGuard.assertCanActIn(RequestContext.get(), p.getCompanyId());
         // Security: resolve the child scoped to its parent product (SR finding F16).
         ProductBarcode barcode = barcodes.findByUidAndProductId(barcodeUid, p.getId())
-                .orElseThrow(() -> new NotFoundException("Barcode not found: " + barcodeUid));
+                .orElseThrow(() -> new NotFoundException("Barcode not found."));
         barcodes.delete(barcode);
         audit.record(AuditEvent.of(AuditActions.PRODUCT_BARCODE_REMOVE, "product_barcodes",
                         p.getId(), p.getUid())
@@ -445,7 +445,7 @@ public class ProductServiceImpl implements ProductService {
 
         // Security: resolve price list scoped to the product's company (SR finding F15).
         var priceList = priceLists.findByCompanyIdAndUid(p.getCompanyId(), req.priceListUid())
-                .orElseThrow(() -> new NotFoundException("PriceList not found: " + req.priceListUid()));
+                .orElseThrow(() -> new NotFoundException("Price list not found."));
 
         // upsert: one price per (product, price_list)
         ProductPrice pp = prices.findByProductIdAndPriceListId(p.getId(), priceList.getId())
@@ -469,7 +469,7 @@ public class ProductServiceImpl implements ProductService {
         scopeGuard.assertCanActIn(RequestContext.get(), p.getCompanyId());
         // Security: scope the price list to the product's company (SR finding F15).
         var priceList = priceLists.findByCompanyIdAndUid(p.getCompanyId(), priceListUid)
-                .orElseThrow(() -> new NotFoundException("PriceList not found: " + priceListUid));
+                .orElseThrow(() -> new NotFoundException("Price list not found."));
         prices.findByProductIdAndPriceListId(p.getId(), priceList.getId())
                 .ifPresent(pp -> {
                     prices.delete(pp);
@@ -558,7 +558,7 @@ public class ProductServiceImpl implements ProductService {
     private Long resolveCompanyId(String companyUid) {
         return companies.findByUid(companyUid)
                 .map(c -> c.getId())
-                .orElseThrow(() -> new NotFoundException("Company not found: " + companyUid));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
     }
 
     /**
@@ -583,7 +583,7 @@ public class ProductServiceImpl implements ProductService {
      */
     private UnitOfMeasure resolveUnit(Long companyId, String unitUid) {
         return units.findByCompanyIdAndUid(companyId, unitUid)
-                .orElseThrow(() -> new NotFoundException("UnitOfMeasure not found: " + unitUid));
+                .orElseThrow(() -> new NotFoundException("Unit of measure not found."));
     }
 
     /**

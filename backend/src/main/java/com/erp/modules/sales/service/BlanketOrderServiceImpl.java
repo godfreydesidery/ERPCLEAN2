@@ -141,7 +141,7 @@ public class BlanketOrderServiceImpl implements BlanketOrderService {
         var blanket = requireBlanket(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), blanket.getCompanyId());
         if (blanket.getStatus() == BlanketStatus.CANCELLED) {
-            throw new ConflictException("Blanket " + uid + " is already CANCELLED.");
+            throw new ConflictException("This blanket order is already CANCELLED.");
         }
         blanket.setStatus(BlanketStatus.CANCELLED);
         blanket.setUpdatedAt(Instant.now());
@@ -156,10 +156,10 @@ public class BlanketOrderServiceImpl implements BlanketOrderService {
         scopeGuard.assertCanActIn(RequestContext.get(), blanket.getCompanyId());
 
         if (blanket.getStatus() != BlanketStatus.ACTIVE) {
-            throw new ConflictException("Blanket " + req.blanketUid() + " is not ACTIVE.");
+            throw new ConflictException("This blanket order is not ACTIVE.");
         }
         if (LocalDate.now().isAfter(blanket.getValidTo())) {
-            throw new ConflictException("Blanket " + req.blanketUid() + " has expired.");
+            throw new ConflictException("This blanket order has expired.");
         }
 
         var company = companies.findById(blanket.getCompanyId())

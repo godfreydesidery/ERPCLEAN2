@@ -305,7 +305,7 @@ public class BomServiceImpl implements BomService {
         // tenant under the guise of a clone.  404 (not 403) — mirrors the require-scoped pattern
         // used throughout this module and avoids confirming that a foreign BOM uid exists.
         if (!source.getCompanyId().equals(target.getCompanyId())) {
-            throw new NotFoundException("Bom not found: " + sourceBomUid);
+            throw new NotFoundException("BOM not found.");
         }
         List<com.erp.modules.products.domain.entity.BomComponent> sourceLines =
                 bomComponents.findByBomIdOrderByLineNo(source.getId());

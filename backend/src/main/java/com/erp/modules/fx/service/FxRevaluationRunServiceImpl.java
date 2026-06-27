@@ -315,7 +315,7 @@ public class FxRevaluationRunServiceImpl implements FxRevaluationRunService {
         scopeGuard.assertCanActIn(RequestContext.get(), run.getCompanyId());
 
         if (run.getStatus() == FxRevaluationRunStatus.PREVIEWED) {
-            throw new IllegalStateException("Run " + runUid + " has not been posted yet.");
+            throw new IllegalStateException("This revaluation run has not been posted yet.");
         }
         if (run.getStatus() == FxRevaluationRunStatus.REVERSED) {
             // Already reversed — idempotent no-op

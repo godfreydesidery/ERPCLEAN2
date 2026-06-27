@@ -193,7 +193,7 @@ export class RfqDetailComponent {
         this.awarding.set(false);
         this.awardingQuoteUid.set('');
         this.loadQuotes();
-        this.alerts.success('RFQ awarded', `PO ${updated.awardedPoUid ?? ''} created.`);
+        this.alerts.success('RFQ awarded', 'Purchase order created from this RFQ.');
       },
       error: (err) => {
         this.actionError.set(this.messageFrom(err, 'Could not award RFQ.'));

@@ -189,7 +189,7 @@ public class StockSerialServiceImpl implements StockSerialService {
         scopeGuard.assertCanActIn(principal, companyId);
         Long productId = products.findByCompanyIdAndUid(companyId, productUid)
                 .map(p -> p.getId())
-                .orElseThrow(() -> new NotFoundException("Product not found: " + productUid));
+                .orElseThrow(() -> new NotFoundException("Product not found."));
         return serials.findByCompanyIdAndProductId(companyId, productId, pageable)
                 .map(StockSerialServiceImpl::toDto);
     }

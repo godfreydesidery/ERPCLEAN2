@@ -111,7 +111,7 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         scopeGuard.assertCanActIn(principal, companyId);
 
         Product product = products.findByUid(req.finishedProductUid())
-                .orElseThrow(() -> new NotFoundException("Product not found: " + req.finishedProductUid()));
+                .orElseThrow(() -> new NotFoundException("Product not found."));
         if (!product.getCompanyId().equals(companyId)) {
             throw new IllegalArgumentException("Product does not belong to your company.");
         }
@@ -303,7 +303,7 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         scopeGuard.assertCanActIn(principal, wo.getCompanyId());
 
         WorkOrderOperation op = operations.findByWorkOrderIdAndUid(wo.getId(), operationUid)
-                .orElseThrow(() -> new NotFoundException("Operation not found: " + operationUid));
+                .orElseThrow(() -> new NotFoundException("Operation not found."));
         if (op.isApplied()) {
             throw new IllegalStateException("Cannot remove an already-applied operation.");
         }
@@ -316,12 +316,12 @@ public class WorkOrderServiceImpl implements WorkOrderService {
 
     private WorkOrder requireWorkOrder(String uid) {
         return workOrders.findByUid(uid)
-                .orElseThrow(() -> new NotFoundException("Work order not found: " + uid));
+                .orElseThrow(() -> new NotFoundException("Work order not found."));
     }
 
     private Bom requireBomByUid(String bomUid, Long companyId) {
         Bom bom = boms.findByUid(bomUid)
-                .orElseThrow(() -> new NotFoundException("BOM not found: " + bomUid));
+                .orElseThrow(() -> new NotFoundException("BOM not found."));
         if (!bom.getCompanyId().equals(companyId)) {
             throw new IllegalArgumentException("BOM does not belong to your company.");
         }

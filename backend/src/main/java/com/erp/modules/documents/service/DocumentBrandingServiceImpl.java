@@ -44,7 +44,7 @@ public class DocumentBrandingServiceImpl implements DocumentBrandingService {
     @Transactional
     public DocumentBrandingDto update(Long companyId, UpdateDocumentBrandingRequest req) {
         DocumentBranding branding = brandings.findByCompanyId(companyId)
-                .orElseThrow(() -> new NotFoundException("Document branding not found for company " + companyId));
+                .orElseThrow(() -> new NotFoundException("Document branding not found for this company."));
 
         RequestContext.Principal principal = RequestContext.get();
 
@@ -82,7 +82,7 @@ public class DocumentBrandingServiceImpl implements DocumentBrandingService {
     /** Fallback: build a minimal branding DTO from the companies row (BR-DOC-06). */
     private DocumentBrandingDto fallbackFromCompany(Long companyId) {
         Company company = companies.findById(companyId)
-                .orElseThrow(() -> new NotFoundException("Company not found: " + companyId));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
         return new DocumentBrandingDto(
                 null, null, companyId,
                 company.getName(), company.getLegalName(), company.getTaxId(),

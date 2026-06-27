@@ -125,12 +125,12 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
     // -------------------------------------------------------------------------
     private Project findProject(String uid) {
         return projects.findByUid(uid)
-                .orElseThrow(() -> new NotFoundException("Project not found: " + uid));
+                .orElseThrow(() -> new NotFoundException("Project not found."));
     }
 
     private ProjectTask findTask(String uid) {
         return tasks.findByUid(uid)
-                .orElseThrow(() -> new NotFoundException("ProjectTask not found: " + uid));
+                .orElseThrow(() -> new NotFoundException("Project task not found."));
     }
 
     private ProjectTaskDto toDto(ProjectTask t) {

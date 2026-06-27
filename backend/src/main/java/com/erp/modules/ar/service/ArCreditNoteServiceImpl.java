@@ -83,6 +83,8 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
     private final ScopeGuard scopeGuard;
     private final AuditService audit;
 
+    private static final String ERR_COMPANY_NOT_FOUND = "Company not found.";
+
     public ArCreditNoteServiceImpl(ArCreditNoteRepository creditNotes,
                                     ArCreditNoteAllocationRepository cnAllocations,
                                     ArInvoiceRepository invoices,
@@ -114,7 +116,7 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
     @Override
     public ArCreditNoteDto raise(RaiseCreditNoteRequest req) {
         Company company = companies.findByUid(req.companyUid())
-                .orElseThrow(() -> new NotFoundException("Company not found: " + req.companyUid()));
+                .orElseThrow(() -> new NotFoundException(ERR_COMPANY_NOT_FOUND));
         Long companyId = company.getId();
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
 
@@ -122,7 +124,7 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
 
         Long customerId = customers.findByCompanyIdAndUid(companyId, req.customerUid())
                 .map(c -> c.getId())
-                .orElseThrow(() -> new NotFoundException("Customer not found: " + req.customerUid()));
+                .orElseThrow(() -> new NotFoundException("Customer not found."));
 
         // D-6: carry the document currency from the request; default to base when blank.
         String docCurrency = (req.currency() != null && !req.currency().isBlank())
@@ -270,7 +272,7 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
 
         Long applyCompanyId = noteForApply.getCompanyId();
         Company company = companies.findById(applyCompanyId)
-                .orElseThrow(() -> new NotFoundException("Company not found: " + applyCompanyId));
+                .orElseThrow(() -> new NotFoundException(ERR_COMPANY_NOT_FOUND));
         String baseCurrency = company.getBaseCurrency();
         int baseScale = baseMinorUnits(baseCurrency);
 
@@ -298,7 +300,7 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
 
         Long reapplyCompanyId = initial.getCompanyId();
         Company company = companies.findById(reapplyCompanyId)
-                .orElseThrow(() -> new NotFoundException("Company not found: " + reapplyCompanyId));
+                .orElseThrow(() -> new NotFoundException(ERR_COMPANY_NOT_FOUND));
         String baseCurrency = company.getBaseCurrency();
         int baseScale = baseMinorUnits(baseCurrency);
         BigDecimal cnRate = initial.getFxRate() != null ? initial.getFxRate() : BigDecimal.ONE;

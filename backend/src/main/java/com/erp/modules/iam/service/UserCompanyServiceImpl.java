@@ -156,7 +156,7 @@ public class UserCompanyServiceImpl implements UserCompanyService {
         scopeGuard.assertCanActIn(RequestContext.get(), uc.getCompany().getId());
 
         if (!uc.isActive()) {
-            throw new ConflictException("Membership already revoked: " + userCompanyUid);
+            throw new ConflictException("This membership has already been revoked.");
         }
 
         // ADR-0046: authoritative membership — refuse to remove while the user still holds access in

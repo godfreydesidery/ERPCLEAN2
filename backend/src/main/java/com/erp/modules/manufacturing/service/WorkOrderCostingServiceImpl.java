@@ -225,9 +225,9 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
         // If tied to an operation, mark it applied (idempotency guard)
         if (req.operationUid() != null) {
             WorkOrderOperation op = operations.findByWorkOrderIdAndUid(wo.getId(), req.operationUid())
-                    .orElseThrow(() -> new NotFoundException("Operation not found: " + req.operationUid()));
+                    .orElseThrow(() -> new NotFoundException("Operation not found."));
             if (op.isApplied()) {
-                throw new IllegalStateException("Operation " + req.operationUid() + " already applied.");
+                throw new IllegalStateException("This operation has already been applied.");
             }
             op.markApplied(principal.userId());
         }
@@ -482,7 +482,7 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
 
     private WorkOrder requireWorkOrder(String uid) {
         return workOrders.findByUid(uid)
-                .orElseThrow(() -> new NotFoundException("Work order not found: " + uid));
+                .orElseThrow(() -> new NotFoundException("Work order not found."));
     }
 
     /**
