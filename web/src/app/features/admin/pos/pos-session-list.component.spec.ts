@@ -206,6 +206,27 @@ describe('PosSessionListComponent — branch selector', () => {
   });
 });
 
+// ── numeric opening float (type="number" emits a number) ──────────────────────
+
+describe('PosSessionListComponent — numeric opening float', () => {
+  beforeEach(() => { vi.useFakeTimers(); makeBed({ canOpen: true }); });
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('openSession() does not throw and posts stringified float when signal holds a number', async () => {
+    const comp = TestBed.createComponent(PosSessionListComponent).componentInstance;
+    const svc = TestBed.inject(PosService) as any;
+    await vi.runAllTimersAsync();
+
+    comp.newTillUid.set('TILL1');
+    // Simulate NumberValueAccessor storing a JS number instead of a string.
+    comp.newOpeningFloat.set(250 as unknown as string);
+
+    expect(() => comp.openSession()).not.toThrow();
+    expect(svc.openSession).toHaveBeenCalledOnce();
+    expect(svc.openSession.mock.calls[0][0].openingFloatAmount).toBe('250');
+  });
+});
+
 // ── status pill rendering ──────────────────────────────────────────────────────
 // The legacy statusBadgeClass() helper was removed in the UI revamp; status colour
 // now lives in the template as inline status-tag bindings. Assert the rendered DOM.

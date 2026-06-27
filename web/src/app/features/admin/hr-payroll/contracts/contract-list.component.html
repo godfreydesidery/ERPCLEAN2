@@ -99,7 +99,7 @@
                 Base Salary <span class="text-danger" aria-hidden="true">*</span>
               </label>
               <input id="fBaseSalary" name="fBaseSalary" type="number" min="0" class="form-control"
-                     [ngModel]="fBaseSalary()" (ngModelChange)="fBaseSalary.set($event)"
+                     [ngModel]="fBaseSalary()" (ngModelChange)="fBaseSalary.set(coerceNumStr($event))"
                      [disabled]="saving()" />
             </div>
             <div class="erp-field">

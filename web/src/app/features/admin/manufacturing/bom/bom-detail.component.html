@@ -134,7 +134,7 @@
                   <input id="fOutputQty" name="fOutputQty" type="number"
                          min="0.000001" step="any"
                          class="form-control"
-                         [(ngModel)]="fOutputQty"
+                         [ngModel]="fOutputQty()" (ngModelChange)="fOutputQty.set(String($event ?? ''))"
                          [disabled]="!isDraft() || !canManage()"
                          required />
                 </div>
@@ -144,7 +144,7 @@
                   <input id="fYieldPercent" name="fYieldPercent" type="number"
                          min="0.0001" max="100" step="any"
                          class="form-control"
-                         [(ngModel)]="fYieldPercent"
+                         [ngModel]="fYieldPercent()" (ngModelChange)="fYieldPercent.set(String($event ?? ''))"
                          [disabled]="!isDraft() || !canManage()" />
                 </div>
 
@@ -222,7 +222,7 @@
                         <input id="newComponentQtyPer" name="newComponentQtyPer"
                                type="number" min="0.000001" step="any"
                                class="form-control"
-                               [(ngModel)]="newComponentQtyPer"
+                               [ngModel]="newComponentQtyPer()" (ngModelChange)="newComponentQtyPer.set(String($event ?? ''))"
                                required />
                       </div>
 
@@ -243,7 +243,7 @@
                         <input id="newComponentScrapPercent" name="newComponentScrapPercent"
                                type="number" min="0" max="99.9999" step="any"
                                class="form-control"
-                               [(ngModel)]="newComponentScrapPercent" />
+                               [ngModel]="newComponentScrapPercent()" (ngModelChange)="newComponentScrapPercent.set(String($event ?? ''))" />
                       </div>
 
                       <div class="erp-field">
@@ -322,7 +322,7 @@
                             <input type="number" min="0.000001" step="any"
                                    class="form-control form-control-sm" style="width:90px"
                                    [attr.aria-label]="'Qty per for ' + c.componentProductCode"
-                                   [(ngModel)]="editQtyPer"
+                                   [ngModel]="editQtyPer()" (ngModelChange)="editQtyPer.set(String($event ?? ''))"
                                    [name]="'editQtyPer_' + c.uid" />
                           </td>
                           <td>
@@ -340,7 +340,7 @@
                             <input type="number" min="0" max="99.9999" step="any"
                                    class="form-control form-control-sm" style="width:80px"
                                    [attr.aria-label]="'Scrap % for ' + c.componentProductCode"
-                                   [(ngModel)]="editScrapPercent"
+                                   [ngModel]="editScrapPercent()" (ngModelChange)="editScrapPercent.set(String($event ?? ''))"
                                    [name]="'editScrapPercent_' + c.uid" />
                           </td>
                           <td>

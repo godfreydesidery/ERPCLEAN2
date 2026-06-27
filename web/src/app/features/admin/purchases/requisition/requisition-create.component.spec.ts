@@ -157,3 +157,31 @@ describe('RequisitionCreateComponent — product-scoped unit picker', () => {
     expect(comp.lines()[0].lineUnitOptions).toHaveLength(0);
   });
 });
+
+// ── Number-input coercion regression ──────────────────────────────────────────
+
+describe('RequisitionCreateComponent — number-input coercion', () => {
+  beforeEach(() => { vi.useFakeTimers(); makeBed(); });
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('updateLine with numeric requestedQty (via template coercion) stores a string', async () => {
+    const comp = TestBed.createComponent(RequisitionCreateComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    // Template coerces via ('' + $event); simulate the same.
+    comp.updateLine(0, { requestedQty: ('' + (10 as unknown as string)) || '' });
+
+    expect(typeof comp.lines()[0].requestedQty).toBe('string');
+    expect(comp.lines()[0].requestedQty).toBe('10');
+  });
+
+  it('updateLine with numeric estimatedUnitCost stores a string', async () => {
+    const comp = TestBed.createComponent(RequisitionCreateComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.updateLine(0, { estimatedUnitCost: ('' + (250.5 as unknown as string)) || '' });
+
+    expect(typeof comp.lines()[0].estimatedUnitCost).toBe('string');
+    expect(comp.lines()[0].estimatedUnitCost).toBe('250.5');
+  });
+});

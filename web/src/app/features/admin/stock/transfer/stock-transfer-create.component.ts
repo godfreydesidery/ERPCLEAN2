@@ -168,10 +168,13 @@ export class StockTransferCreateComponent {
     });
   }
 
-  updateLineQty(index: number, qty: string): void {
+  updateLineQty(index: number, qty: string | number | null): void {
+    // ngModel on type="number" emits a JS number; coerce to string so the wire
+    // payload stays a string and Number(line.qty) / .trim() never crash.
+    const qtyStr = qty === null || qty === undefined ? '' : String(qty);
     this.lines.update((ls) => {
       const copy = [...ls];
-      copy[index] = { ...copy[index], qty };
+      copy[index] = { ...copy[index], qty: qtyStr };
       return copy;
     });
   }

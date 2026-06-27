@@ -94,10 +94,12 @@ export class DeliveryCreateComponent {
     });
   }
 
-  updateQty(index: number, qty: string): void {
+  updateQty(index: number, qty: number | string | null): void {
+    // type="number" emits a JS number via ngModelChange; coerce so .qtyInput is always a string.
+    const qtyStr = qty === null || qty === undefined ? '' : String(qty);
     this.lineEntries.update((entries) => {
       const copy = [...entries];
-      copy[index] = { ...copy[index], qtyInput: qty };
+      copy[index] = { ...copy[index], qtyInput: qtyStr };
       return copy;
     });
   }
@@ -134,7 +136,8 @@ export class DeliveryCreateComponent {
       notes: this.notes().trim() || undefined,
       lines: selected.map((e) => ({
         salesOrderLineUid: e.line.uid,
-        qtyDelivered: e.qtyInput,
+        // type="number" may have stored a JS number in qtyInput; coerce so payload is always a string.
+        qtyDelivered: String(e.qtyInput ?? ''),
       })),
     };
 

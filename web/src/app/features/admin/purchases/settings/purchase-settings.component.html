@@ -82,7 +82,7 @@
                                class="form-control"
                                placeholder="0.00"
                                [ngModel]="fThresholdAmount()"
-                               (ngModelChange)="fThresholdAmount.set($event)"
+                               (ngModelChange)="fThresholdAmount.set(String($event ?? ''))"
                                min="0" step="any"
                                [disabled]="saving() || !canEdit()" />
                         <span class="hint">POs above this value require approval.</span>

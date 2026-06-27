@@ -175,6 +175,11 @@ export class LoanListComponent {
     this.fCurrency.set('TZS');
   }
 
+  /** Coerce a value from ngModel on type="number" to string; prevents .trim() crashes. */
+  coerceNumStr(v: string | number | null | undefined): string {
+    return v === null || v === undefined ? '' : String(v);
+  }
+
   create(): void {
     const employeeUid = this.fEmployeeUid().trim();
     const employeeId = this.employeeIdByUid.get(employeeUid) ?? '';

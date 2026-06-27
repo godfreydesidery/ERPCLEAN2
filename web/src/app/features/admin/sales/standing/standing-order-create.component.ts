@@ -184,8 +184,13 @@ export class StandingOrderCreateComponent {
   }
 
   updateLine(idx: number, patch: Partial<LineEntry>): void {
+    // Numeric inputs emit a JS number; coerce string fields so .trim() never runs on a number.
+    const safePatch = { ...patch };
+    if ('qty' in safePatch) safePatch.qty = String(safePatch.qty ?? '');
+    if ('qtyBase' in safePatch) safePatch.qtyBase = String(safePatch.qtyBase ?? '');
+    if ('unitPriceAmount' in safePatch) safePatch.unitPriceAmount = String(safePatch.unitPriceAmount ?? '');
     this.lines.update((ls) =>
-      ls.map((l, i) => (i === idx ? { ...l, ...patch } : l)),
+      ls.map((l, i) => (i === idx ? { ...l, ...safePatch } : l)),
     );
   }
 
@@ -250,9 +255,10 @@ export class StandingOrderCreateComponent {
       const unit = this.units().find((u) => u.uid === line.unitUid);
       if (!unit) { this.formError.set(`Line ${i + 1}: could not resolve unit.`); return; }
 
-      const qty = line.qty.trim();
-      const qtyBase = line.qtyBase.trim() || qty;
-      const price = line.unitPriceAmount.trim();
+      // type="number" emits a JS number; coerce before .trim() to avoid crash.
+      const qty = String(line.qty ?? '').trim();
+      const qtyBase = String(line.qtyBase ?? '').trim() || qty;
+      const price = String(line.unitPriceAmount ?? '').trim();
       if (!qty || isNaN(Number(qty)) || Number(qty) <= 0) {
         this.formError.set(`Line ${i + 1}: enter a valid quantity.`);
         return;

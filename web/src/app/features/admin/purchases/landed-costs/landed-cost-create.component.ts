@@ -145,9 +145,9 @@ export class LandedCostCreateComponent {
     );
   }
 
-  updateChargeAmount(index: number, amount: string): void {
+  updateChargeAmount(index: number, amount: unknown): void {
     this.charges.update((cs) =>
-      cs.map((c, i) => (i === index ? { ...c, amount } : c)),
+      cs.map((c, i) => (i === index ? { ...c, amount: String(amount ?? '') } : c)),
     );
   }
 

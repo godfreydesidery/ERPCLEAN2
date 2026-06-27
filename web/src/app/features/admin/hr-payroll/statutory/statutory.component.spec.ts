@@ -160,4 +160,43 @@ describe('StatutoryComponent', () => {
     const { comp } = makeBed({}, false);
     expect(comp.canManage()).toBe(false);
   });
+
+  it('createPayeBandSet() does not throw when pTaxFreeThreshold receives a number (simulates type="number" input)', () => {
+    const { comp, svc } = makeBed();
+    comp.pEffectiveFrom.set('2024-01-01');
+    // coerceNumStr mirrors (ngModelChange) in the template.
+    comp.pTaxFreeThreshold.set(comp.coerceNumStr(270000));
+    expect(() => comp.createPayeBandSet()).not.toThrow();
+    expect(svc.createPayeBandSet).toHaveBeenCalledOnce();
+    const req = svc.createPayeBandSet.mock.calls[0][0] as { taxFreeThreshold: string };
+    expect(req.taxFreeThreshold).toBe('270000');
+    expect(typeof req.taxFreeThreshold).toBe('string');
+  });
+
+  it('updateBand() coerces number input to string for lowerBound', () => {
+    const { comp } = makeBed();
+    // Simulate ngModel on type="number" emitting a number
+    comp.updateBand(0, 'lowerBound', 500000);
+    expect(comp.pBands()[0].lowerBound).toBe('500000');
+    expect(typeof comp.pBands()[0].lowerBound).toBe('string');
+  });
+
+  it('updateBand() coerces number input to string for marginalRate', () => {
+    const { comp } = makeBed();
+    comp.updateBand(0, 'marginalRate', 30);
+    expect(comp.pBands()[0].marginalRate).toBe('30');
+    expect(typeof comp.pBands()[0].marginalRate).toBe('string');
+  });
+
+  it('createRateSet() does not throw when rEmployeeRate receives a number (simulates type="number" input)', () => {
+    const { comp, svc } = makeBed();
+    comp.rEffectiveFrom.set('2024-01-01');
+    comp.rBasis.set('GROSS');
+    comp.rEmployeeRate.set(comp.coerceNumStr(10));
+    comp.rEmployerRate.set(comp.coerceNumStr(10));
+    expect(() => comp.createRateSet()).not.toThrow();
+    expect(svc.createRateSet).toHaveBeenCalledOnce();
+    const req = svc.createRateSet.mock.calls[0][0] as { employeeRate?: string };
+    expect(req.employeeRate).toBe('10');
+  });
 });
