@@ -231,7 +231,7 @@ public class PurchaseRequisitionServiceImpl implements PurchaseRequisitionServic
     private Long resolveCompanyId(String companyUid) {
         return companies.findByUid(companyUid)
                 .map(c -> c.getId())
-                .orElseThrow(() -> new NotFoundException("Company: " + companyUid));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
     }
 
     private PurchaseRequisitionDto toDto(PurchaseRequisition r) {

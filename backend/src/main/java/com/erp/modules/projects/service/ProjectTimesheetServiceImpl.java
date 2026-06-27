@@ -93,7 +93,7 @@ public class ProjectTimesheetServiceImpl implements ProjectTimesheetService {
     // -------------------------------------------------------------------------
     private Project findProject(String uid) {
         return projects.findByUid(uid)
-                .orElseThrow(() -> new NotFoundException("Project not found: " + uid));
+                .orElseThrow(() -> new NotFoundException("Project not found."));
     }
 
     private ProjectTimesheetDto toDto(ProjectTimesheet t) {

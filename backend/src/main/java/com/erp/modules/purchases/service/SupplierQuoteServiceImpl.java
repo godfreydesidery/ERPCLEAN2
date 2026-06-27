@@ -77,7 +77,7 @@ public class SupplierQuoteServiceImpl implements SupplierQuoteService {
         }
 
         var supplier = suppliers.findByCompanyIdAndUid(rfq.getCompanyId(), req.supplierUid())
-                .orElseThrow(() -> new NotFoundException("Supplier: " + req.supplierUid()));
+                .orElseThrow(() -> new NotFoundException("Supplier not found."));
 
         String quoteNumber = numberGen.nextSupplierQuote(rfq.getCompanyId());
         SupplierQuote quote = new SupplierQuote(
@@ -93,7 +93,7 @@ public class SupplierQuoteServiceImpl implements SupplierQuoteService {
         BigDecimal total = BigDecimal.ZERO;
         for (var l : req.lines()) {
             RfqLine rfqLine = rfqLines.findById(l.rfqLineId())
-                    .orElseThrow(() -> new NotFoundException("RfqLine: " + l.rfqLineId()));
+                    .orElseThrow(() -> new NotFoundException("RFQ line not found."));
             short lineNo = (short) (quoteLines.findMaxLineNo(quote.getId()) + 1);
             BigDecimal lineTotal = l.unitPriceAmount()
                     .multiply(l.quotedQty()).setScale(4, RoundingMode.HALF_UP);

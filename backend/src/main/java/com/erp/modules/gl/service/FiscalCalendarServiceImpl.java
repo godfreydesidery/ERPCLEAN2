@@ -119,7 +119,7 @@ public class FiscalCalendarServiceImpl implements FiscalCalendarService {
         scopeGuard.assertCanActIn(RequestContext.get(), period.getCompanyId());
 
         if (period.getStatus() == PeriodStatus.CLOSED) {
-            throw new ConflictException("Period " + periodUid + " is already CLOSED.");
+            throw new ConflictException("This period is already CLOSED.");
         }
         period.setStatus(PeriodStatus.CLOSED);
         period.setClosedAt(Instant.now());
@@ -140,7 +140,7 @@ public class FiscalCalendarServiceImpl implements FiscalCalendarService {
         scopeGuard.assertCanActIn(RequestContext.get(), period.getCompanyId());
 
         if (period.getStatus() == PeriodStatus.OPEN) {
-            throw new ConflictException("Period " + periodUid + " is already OPEN.");
+            throw new ConflictException("This period is already OPEN.");
         }
         period.setStatus(PeriodStatus.OPEN);
         period.setClosedAt(null);

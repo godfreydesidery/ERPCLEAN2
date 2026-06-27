@@ -157,7 +157,7 @@ export class PosSessionDetailComponent {
         this.closing.set(false);
         this.entity.set(updated);
         this.showCloseForm.set(false);
-        this.alerts.success('Session closed', updated.uid);
+        this.alerts.success('Session closed', updated.sessionNumber ?? undefined);
       },
       error: (err: unknown) => {
         this.closeError.set(this.messageFrom(err, 'Could not close session.'));
@@ -183,7 +183,7 @@ export class PosSessionDetailComponent {
         this.reconciling.set(false);
         this.zRead.set(z);
         this.showReconcileForm.set(false);
-        this.alerts.success('Session reconciled', z.sessionUid);
+        this.alerts.success('Session reconciled');
         // Refresh entity to get updated status
         this.posService.getSessionByUid(this.uid()).subscribe({ next: (s) => this.entity.set(s) });
       },

@@ -51,7 +51,7 @@ public class DocumentBrandingSeeder {
         // --- Branding ---
         if (brandings.findByCompanyId(companyId).isEmpty()) {
             Company company = companies.findById(companyId)
-                    .orElseThrow(() -> new IllegalStateException("Company not found: " + companyId));
+                    .orElseThrow(() -> new IllegalStateException("Company not found."));
             DocumentBranding branding = new DocumentBranding(companyId, company.getName());
             branding.setLegalName(company.getLegalName());
             branding.setTaxId(company.getTaxId());

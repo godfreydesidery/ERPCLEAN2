@@ -212,7 +212,7 @@ public class GLPostingServiceImpl implements GLPostingService {
                                          JournalSourceType sourceType, String sourceRef,
                                          Long postedBy, String reason) {
         JournalEntry original = entries.findByUid(originalEntryUid)
-                .orElseThrow(() -> new NotFoundException("JournalEntry not found: " + originalEntryUid));
+                .orElseThrow(() -> new NotFoundException("Journal entry not found."));
 
         // BR-GL-11a: idempotency guard — a journal entry can only be reversed once.
         // The reversed flag and reversedByEntryId are set together atomically at the end of this
@@ -385,7 +385,7 @@ public class GLPostingServiceImpl implements GLPostingService {
     private void enforceAccountDimensionRequirements(List<JournalEntryDraft.LineDraft> draftLines) {
         for (JournalEntryDraft.LineDraft ld : draftLines) {
             ChartOfAccount account = accounts.findById(ld.accountId())
-                    .orElseThrow(() -> new NotFoundException("Account not found: " + ld.accountId()));
+                    .orElseThrow(() -> new NotFoundException("Account not found."));
             if (account.isRequireCostCentre() && ld.costCentreValueId() == null) {
                 throw new com.erp.platform.common.api.ConflictException(
                         "Account " + account.getAccountCode()
@@ -419,27 +419,25 @@ public class GLPostingServiceImpl implements GLPostingService {
         }
         DimensionValue v = dimensionValues.findByIdAndCompanyId(valueId, companyId)
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "Dimension value id=" + valueId + " not found in company " + companyId
-                                + " (BR-CC-04 — cross-company or unknown value rejected)."));
+                        "Dimension value not found or does not belong to this company."));
         if (!v.isActive()) {
             throw new IllegalArgumentException(
-                    "Dimension value id=" + valueId + " (code='" + v.getCode()
-                            + "') is inactive; cannot tag a posting with it (BR-CC-04 / FR-CC-07).");
+                    "Dimension value '" + v.getCode()
+                            + "' is inactive; cannot tag a posting with it.");
         }
         Dimension dim = dimensionTypes.findById(v.getDimensionId())
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "Dimension not found for value id=" + valueId));
+                        "Dimension not found for the supplied dimension value."));
         if (dim.getSlot() != expectedSlot) {
             throw new IllegalArgumentException(
-                    "Dimension value id=" + valueId + " belongs to slot " + dim.getSlot()
-                            + " but was supplied in slot " + expectedSlot
-                            + " (BR-CC-04 — wrong-slot value rejected).");
+                    "Dimension value '" + v.getCode() + "' belongs to slot " + dim.getSlot()
+                            + " but was supplied in slot " + expectedSlot + ".");
         }
     }
 
     private String resolveBaseCurrency(Long companyId) {
         var company = companies.findById(companyId)
-                .orElseThrow(() -> new NotFoundException("Company not found: " + companyId));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
         return company.getBaseCurrency();
     }
 
@@ -465,11 +463,10 @@ public class GLPostingServiceImpl implements GLPostingService {
 
         // Active account, same company (BR-GL-04/BR-GL-05)
         ChartOfAccount account = accounts.findById(ld.accountId())
-                .orElseThrow(() -> new NotFoundException("Account not found: " + ld.accountId()));
+                .orElseThrow(() -> new NotFoundException("Account not found."));
         if (!account.getCompanyId().equals(companyId)) {
             throw new IllegalArgumentException(
-                    "Account " + account.getUid() + " belongs to company " + account.getCompanyId()
-                            + " but the entry is for company " + companyId + " (BR-GL-05).");
+                    "Account " + account.getAccountCode() + " does not belong to this company.");
         }
         if (!account.isActive() && !allowInactiveAccount) {
             throw new IllegalArgumentException(

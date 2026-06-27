@@ -98,13 +98,13 @@ public class YearEndCloseServiceImpl implements YearEndCloseService {
 
         // 2. Guards (D-8) — reject before any write
         if (year.getStatus() == PeriodStatus.CLOSED) {
-            throw new ConflictException("Fiscal year " + fiscalYearUid + " is already CLOSED "
-                    + "(BR-CLOSE-05). Reopen it first if a correction is needed.");
+            throw new ConflictException("This fiscal year is already CLOSED."
+                    + " Reopen it first if a correction is needed.");
         }
         List<FiscalPeriod> yearPeriods = periods.findByFiscalYearIdOrderByPeriodNo(year.getId());
         if (yearPeriods.isEmpty()) {
-            throw new ConflictException("Fiscal year " + fiscalYearUid + " has no periods "
-                    + "(BR-CLOSE-05). Seed the fiscal calendar first.");
+            throw new ConflictException("This fiscal year has no periods."
+                    + " Seed the fiscal calendar first.");
         }
         checkPriorYearClosed(year);
 
@@ -229,8 +229,8 @@ public class YearEndCloseServiceImpl implements YearEndCloseService {
 
         // 2. Guards (D-8)
         if (year.getStatus() != PeriodStatus.CLOSED) {
-            throw new ConflictException("Fiscal year " + fiscalYearUid + " is not CLOSED "
-                    + "— only a CLOSED year may be reopened.");
+            throw new ConflictException("This fiscal year is not CLOSED"
+                    + " — only a CLOSED year may be reopened.");
         }
         checkMostRecentlyClosed(year);
 
@@ -250,12 +250,10 @@ public class YearEndCloseServiceImpl implements YearEndCloseService {
         if (priorClosingJournalUid != null) {
             // Idempotency guard: the closing entry must not already be reversed
             JournalEntry closingEntry = journalEntries.findByUid(priorClosingJournalUid)
-                    .orElseThrow(() -> new NotFoundException(
-                            "Closing journal not found: " + priorClosingJournalUid));
+                    .orElseThrow(() -> new NotFoundException("Closing journal not found."));
             if (journalEntries.existsByReversalOfId(closingEntry.getId())) {
-                throw new ConflictException("The closing journal " + priorClosingJournalUid
-                        + " has already been reversed — this year may not be reopened again "
-                        + "without a fresh close.");
+                throw new ConflictException("The closing journal has already been reversed"
+                        + " — this year may not be reopened again without a fresh close.");
             }
             reversal = glPostingService.postReversal(
                     priorClosingJournalUid,
@@ -349,7 +347,7 @@ public class YearEndCloseServiceImpl implements YearEndCloseService {
 
     private String resolveBaseCurrency(Long companyId) {
         Company company = companies.findById(companyId)
-                .orElseThrow(() -> new NotFoundException("Company not found: " + companyId));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
         return company.getBaseCurrency();
     }
 

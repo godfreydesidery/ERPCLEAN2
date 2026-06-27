@@ -504,7 +504,7 @@ export class PosSaleComponent {
       next: (invoice) => {
         this.submitting.set(false);
         this.savedInvoice.set(invoice);
-        this.alerts.success('Sale recorded', invoice.invoiceNumber ?? invoice.uid);
+        this.alerts.success('Sale recorded', invoice.invoiceNumber ?? undefined);
       },
       error: (err: unknown) => {
         this.formError.set(this.messageFrom(err, 'Could not process sale.'));

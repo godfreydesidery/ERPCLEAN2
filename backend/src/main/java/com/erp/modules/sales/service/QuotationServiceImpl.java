@@ -182,7 +182,7 @@ public class QuotationServiceImpl implements QuotationService {
         scopeGuard.assertCanActIn(RequestContext.get(), q.getCompanyId());
         assertDraft(q);
         QuotationLine line = quotationLines.findByUidAndQuotationId(lineUid, q.getId())
-                .orElseThrow(() -> new NotFoundException("QuotationLine not found: " + lineUid));
+                .orElseThrow(() -> new NotFoundException("Quotation line not found."));
         quotationLines.delete(line);
         recomputeTotals(q);
     }
@@ -283,18 +283,18 @@ public class QuotationServiceImpl implements QuotationService {
     private Long resolveCompanyId(String uid) {
         return companies.findByUid(uid)
                 .map(c -> c.getId())
-                .orElseThrow(() -> new NotFoundException("Company not found: " + uid));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
     }
 
     private Customer resolveCustomer(Long companyId, String uid) {
         return customers.findByCompanyIdAndUid(companyId, uid)
-                .orElseThrow(() -> new NotFoundException("Customer not found: " + uid));
+                .orElseThrow(() -> new NotFoundException("Customer not found."));
     }
 
     private Long resolveAgentId(Long companyId, String agentUid, RequestContext.Principal ctx) {
         if (agentUid != null && !agentUid.isBlank()) {
             Agent a = agents.findByCompanyIdAndUid(companyId, agentUid)
-                    .orElseThrow(() -> new NotFoundException("Agent not found: " + agentUid));
+                    .orElseThrow(() -> new NotFoundException("Agent not found."));
             return a.getId();
         }
         if (ctx != null && ctx.userId() != null) {
@@ -306,18 +306,18 @@ public class QuotationServiceImpl implements QuotationService {
 
     private Product resolveProduct(Long companyId, String uid) {
         return products.findByCompanyIdAndUid(companyId, uid)
-                .orElseThrow(() -> new NotFoundException("Product not found: " + uid));
+                .orElseThrow(() -> new NotFoundException("Product not found."));
     }
 
     private void assertSellable(Product product) {
         if (!product.isSellable() || product.getStatus() == MasterStatus.ARCHIVED) {
-            throw new IllegalArgumentException("Product not sellable: " + product.getUid());
+            throw new IllegalArgumentException("Product is not sellable.");
         }
     }
 
     private UnitOfMeasure resolveUnit(Long companyId, String uid) {
         return units.findByCompanyIdAndUid(companyId, uid)
-                .orElseThrow(() -> new NotFoundException("UnitOfMeasure not found: " + uid));
+                .orElseThrow(() -> new NotFoundException("Unit of measure not found."));
     }
 
     private BigDecimal resolveListPrice(Product product, Long companyId) {
@@ -328,7 +328,7 @@ public class QuotationServiceImpl implements QuotationService {
                 .filter(m -> m != null && m.getAmount() != null)
                 .map(m -> m.getAmount())
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "Product has no price for this company: " + product.getUid()));
+                        "Product has no price configured for this company."));
     }
 
     private BigDecimal resolveVatRate(Long companyId, Product product) {

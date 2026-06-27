@@ -506,11 +506,11 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         UnitOfMeasure unit = resolveUnit(inv.getCompanyId(),
                 units.findById(line.getUnitId())
                         .map(u -> u.getUid())
-                        .orElseThrow(() -> new NotFoundException("Unit not found: " + line.getUnitId())));
+                        .orElseThrow(() -> new NotFoundException("Unit not found.")));
         Product product = resolveProduct(inv.getCompanyId(),
                 products.findById(line.getProductId())
                         .map(p -> p.getUid())
-                        .orElseThrow(() -> new NotFoundException("Product not found: " + line.getProductId())));
+                        .orElseThrow(() -> new NotFoundException("Product not found.")));
         BigDecimal qtyInBase = computeQtyInBase(product, unit, req.quantity());
 
         DiscountValidator.validateLineDiscount(req.lineDiscountAmount(), req.lineDiscountPercent());
@@ -626,7 +626,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         assertDraft(inv, "remove a payment from");
 
         SalesInvoicePayment payment = payments.findByUidAndInvoiceId(paymentUid, inv.getId())
-                .orElseThrow(() -> new NotFoundException("Payment not found: " + paymentUid));
+                .orElseThrow(() -> new NotFoundException("Payment not found."));
         payments.delete(payment);
 
         audit.record(AuditEvent.of(AuditActions.SALES_INVOICE_PAYMENT_REMOVE, "sales_invoice_payments",
@@ -867,7 +867,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
 
     private SalesInvoiceLine requireLine(String lineUid, Long invoiceId) {
         return lines.findByUidAndInvoiceId(lineUid, invoiceId)
-                .orElseThrow(() -> new NotFoundException("SalesInvoiceLine not found: " + lineUid));
+                .orElseThrow(() -> new NotFoundException("Invoice line not found."));
     }
 
     private TaxRate requireTaxRate(String uid) {
@@ -877,13 +877,13 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     private Long resolveCompanyId(String companyUid) {
         return companies.findByUid(companyUid)
                 .map(c -> c.getId())
-                .orElseThrow(() -> new NotFoundException("Company not found: " + companyUid));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
     }
 
     /** Cross-tenant safe customer lookup (F15 pattern). */
     private Customer resolveCustomer(Long companyId, String customerUid) {
         return customers.findByCompanyIdAndUid(companyId, customerUid)
-                .orElseThrow(() -> new NotFoundException("Customer not found: " + customerUid));
+                .orElseThrow(() -> new NotFoundException("Customer not found."));
     }
 
     /**
@@ -899,7 +899,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         return paymentTermsRepo.findByUid(paymentTermsUid)
                 .filter(pt -> companyId.equals(pt.getCompanyId()))
                 .map(pt -> pt.getId())
-                .orElseThrow(() -> new NotFoundException("PaymentTerms not found: " + paymentTermsUid));
+                .orElseThrow(() -> new NotFoundException("Payment terms not found."));
     }
 
     /**
@@ -909,7 +909,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     private Long resolveAgentId(Long companyId, String agentUid, RequestContext.Principal ctx) {
         if (agentUid != null && !agentUid.isBlank()) {
             Agent agent = agents.findByCompanyIdAndUid(companyId, agentUid)
-                    .orElseThrow(() -> new NotFoundException("Agent not found: " + agentUid));
+                    .orElseThrow(() -> new NotFoundException("Agent not found."));
             assertAgentActive(agent);
             return agent.getId();
         }
@@ -928,31 +928,31 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     private void assertAgentActive(Agent agent) {
         if (agent.getStatus() == MasterStatus.ARCHIVED) {
             throw new IllegalArgumentException(
-                    "Agent is archived and not selectable (BR-PARTY-10): " + agent.getUid());
+                    "Agent is archived and cannot be selected.");
         }
     }
 
     /** Cross-tenant safe product lookup (F15 pattern). */
     private Product resolveProduct(Long companyId, String productUid) {
         return products.findByCompanyIdAndUid(companyId, productUid)
-                .orElseThrow(() -> new NotFoundException("Product not found: " + productUid));
+                .orElseThrow(() -> new NotFoundException("Product not found."));
     }
 
     private void assertSellable(Product product) {
         if (!product.isSellable()) {
             throw new IllegalArgumentException(
-                    "Product is not sellable (BR-SALES-02): " + product.getUid());
+                    "Product is not sellable.");
         }
         if (product.getStatus() == MasterStatus.ARCHIVED) {
             throw new IllegalArgumentException(
-                    "Product is archived (BR-SALES-02): " + product.getUid());
+                    "Product is archived and cannot be added to an invoice.");
         }
     }
 
     /** Cross-tenant safe unit lookup (F15 pattern). */
     private UnitOfMeasure resolveUnit(Long companyId, String unitUid) {
         return units.findByCompanyIdAndUid(companyId, unitUid)
-                .orElseThrow(() -> new NotFoundException("UnitOfMeasure not found: " + unitUid));
+                .orElseThrow(() -> new NotFoundException("Unit of measure not found."));
     }
 
     /**
@@ -964,17 +964,17 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         List<ProductPrice> priceRows = prices.findByProductId(product.getId());
         if (priceRows.isEmpty()) {
             throw new IllegalArgumentException(
-                    "Product has no price on any price list (BR-SALES-03): " + product.getUid());
+                    "Product has no price on any price list.");
         }
         // Use first price found (company-scoped by denormalised companyId on ProductPrice)
         ProductPrice pp = priceRows.stream()
                 .filter(p -> companyId.equals(p.getCompanyId()))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "Product has no price for this company (BR-SALES-03): " + product.getUid()));
+                        "Product has no price configured for this company."));
         if (pp.getPrice() == null || pp.getPrice().getAmount() == null) {
             throw new IllegalArgumentException(
-                    "Product price is not set (BR-SALES-03): " + product.getUid());
+                    "Product price is not set.");
         }
         return pp.getPrice().getAmount();
     }
@@ -987,8 +987,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         return taxRates.findByCompanyIdAndVatStatus(companyId, product.getVatStatus())
                 .map(TaxRate::getRate)
                 .orElseThrow(() -> new IllegalStateException(
-                        "VAT rate not configured for " + product.getVatStatus()
-                                + " in company " + companyId));
+                        "VAT rate not configured for status " + product.getVatStatus() + "."));
     }
 
     /**

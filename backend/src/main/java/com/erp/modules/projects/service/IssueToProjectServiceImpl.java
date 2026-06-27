@@ -88,11 +88,11 @@ public class IssueToProjectServiceImpl implements IssueToProjectService {
                                          RequestContext.Principal principal) {
         // 1. Resolve company + branch
         var company = companies.findByUid(req.companyUid())
-                .orElseThrow(() -> new NotFoundException("Company not found: " + req.companyUid()));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
         scopeGuard.assertCanActIn(principal, company.getId());
 
         var branch = branches.findByUid(req.branchUid())
-                .orElseThrow(() -> new NotFoundException("Branch not found: " + req.branchUid()));
+                .orElseThrow(() -> new NotFoundException("Branch not found."));
 
         // 2. Validate + resolve the project tag (BR-PROJ-01/04, OQ-PROJ-06)
         ProjectTag tag = tagResolver.resolve(company.getId(), req.projectUid(), req.projectTaskUid());
@@ -111,7 +111,7 @@ public class IssueToProjectServiceImpl implements IssueToProjectService {
         // 4. Per-line: costIssue + stockPost
         for (IssueToProjectRequest.IssueLine line : req.lines()) {
             Product product = products.findByUid(line.productUid())
-                    .orElseThrow(() -> new NotFoundException("Product not found: " + line.productUid()));
+                    .orElseThrow(() -> new NotFoundException("Product not found."));
 
             // PROJECTS-044 gap-2: qty must not be null here; @NotNull on the DTO catches it at
             // the HTTP layer, but a programmatic/test call could still pass null → guard defensively.

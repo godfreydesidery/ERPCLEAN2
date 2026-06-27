@@ -218,7 +218,7 @@ export class RequisitionCreateComponent {
     this.reqService.create(request).subscribe({
       next: (created) => {
         this.saving.set(false);
-        this.alerts.success('Purchase requisition created', created.requisitionNumber ?? created.uid);
+        this.alerts.success('Purchase requisition created', created.requisitionNumber ?? undefined);
         this.router.navigate(['/admin/purchase-requisitions/uid', created.uid]);
       },
       error: (err) => {

@@ -107,7 +107,7 @@ public class OpportunityServiceImpl implements OpportunityService {
         // Wire to source lead (if any) and mark lead CONVERTED
         if (req.sourceLeadUid() != null && !req.sourceLeadUid().isBlank()) {
             Lead lead = leads.findByUid(req.sourceLeadUid())
-                    .orElseThrow(() -> new NotFoundException("Lead not found: " + req.sourceLeadUid()));
+                    .orElseThrow(() -> new NotFoundException("Lead not found."));
             if (lead.getLeadStatus() != LeadStatus.QUALIFIED) {
                 throw new IllegalStateException("Source lead must be QUALIFIED to create an opportunity; current: "
                         + lead.getLeadStatus());
@@ -177,9 +177,9 @@ public class OpportunityServiceImpl implements OpportunityService {
         assertOpen(opp);
 
         Product product = products.findByCompanyIdAndUid(opp.getCompanyId(), req.productUid())
-                .orElseThrow(() -> new NotFoundException("Product not found: " + req.productUid()));
+                .orElseThrow(() -> new NotFoundException("Product not found."));
         UnitOfMeasure unit = units.findByCompanyIdAndUid(opp.getCompanyId(), req.unitUid())
-                .orElseThrow(() -> new NotFoundException("UnitOfMeasure not found: " + req.unitUid()));
+                .orElseThrow(() -> new NotFoundException("Unit of measure not found."));
 
         short lineNo = (short) (lines.findMaxLineNo(opp.getId()) + 1);
         BigDecimal price = req.estimatedUnitPriceAmount() != null ? req.estimatedUnitPriceAmount() : BigDecimal.ZERO;
@@ -203,7 +203,7 @@ public class OpportunityServiceImpl implements OpportunityService {
         scopeGuard.assertCanActIn(RequestContext.get(), opp.getCompanyId());
         assertOpen(opp);
         OpportunityLine line = lines.findByUidAndOpportunityId(lineUid, opp.getId())
-                .orElseThrow(() -> new NotFoundException("OpportunityLine not found: " + lineUid));
+                .orElseThrow(() -> new NotFoundException("Opportunity line not found."));
         lines.delete(line);
     }
 
@@ -302,16 +302,16 @@ public class OpportunityServiceImpl implements OpportunityService {
 
     private Customer resolveCustomer(Long companyId, String uid) {
         return customers.findByCompanyIdAndUid(companyId, uid)
-                .orElseThrow(() -> new NotFoundException("Customer not found: " + uid));
+                .orElseThrow(() -> new NotFoundException("Customer not found."));
     }
 
     private PipelineStage resolveStage(Long companyId, String uid) {
         PipelineStage stage = Lookups.orNotFound(stages.findByUid(uid), "PipelineStage", uid);
         if (!stage.getCompanyId().equals(companyId)) {
-            throw new IllegalArgumentException("Pipeline stage does not belong to this company: " + uid);
+            throw new IllegalArgumentException("Pipeline stage does not belong to this company.");
         }
         if (!stage.isActive()) {
-            throw new IllegalArgumentException("Pipeline stage is deactivated: " + uid);
+            throw new IllegalArgumentException("Pipeline stage is deactivated.");
         }
         return stage;
     }
@@ -319,7 +319,7 @@ public class OpportunityServiceImpl implements OpportunityService {
     private Long resolveAgentId(Long companyId, String agentUid) {
         if (agentUid == null || agentUid.isBlank()) return null;
         Agent agent = agents.findByCompanyIdAndUid(companyId, agentUid)
-                .orElseThrow(() -> new NotFoundException("Agent not found: " + agentUid));
+                .orElseThrow(() -> new NotFoundException("Agent not found."));
         return agent.getId();
     }
 

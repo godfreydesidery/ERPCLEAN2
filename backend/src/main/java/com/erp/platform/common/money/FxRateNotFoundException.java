@@ -18,9 +18,9 @@ public class FxRateNotFoundException extends RuntimeException {
 
     public FxRateNotFoundException(Long companyId, String fromCurrency, String toCurrency, Object asOf) {
         super(String.format(
-                "No active exchange rate found for company %d: %s → %s as of %s. "
+                "No active exchange rate found for %s → %s as of %s. "
               + "Add a rate via the currency-rate maintenance screen before processing this document.",
-                companyId, fromCurrency, toCurrency, asOf));
+                fromCurrency, toCurrency, asOf));
         this.companyId    = companyId;
         this.fromCurrency = fromCurrency;
         this.toCurrency   = toCurrency;

@@ -144,7 +144,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
 
         BigDecimal toAllocate = req.amount().min(bill.getOutstandingAmount());
         if (toAllocate.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalStateException("Bill " + req.supplierBillUid() + " has zero outstanding.");
+            throw new IllegalStateException("This bill has zero outstanding amount.");
         }
 
         String currency = bill.getCurrency().value();
@@ -227,7 +227,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         if (req.supplierUid() != null && !req.supplierUid().isBlank()) {
             supplierId = suppliers.findByCompanyIdAndUid(companyId, req.supplierUid())
                     .map(s -> s.getId())
-                    .orElseThrow(() -> new NotFoundException("Supplier: " + req.supplierUid()));
+                    .orElseThrow(() -> new NotFoundException("Supplier not found."));
         }
 
         // Select bills (SELECT FOR UPDATE)
@@ -408,7 +408,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
                                              BigDecimal sumBaseSettled) {
         String baseCurrency = companies.findById(companyId)
                 .map(c -> c.getBaseCurrency())
-                .orElseThrow(() -> new IllegalStateException("Company not found: " + companyId));
+                .orElseThrow(() -> new IllegalStateException("Company not found."));
 
         ChartOfAccount apAcct = glConfig.resolve(companyId, GlConfigKey.ACCOUNTS_PAYABLE);
 
@@ -540,7 +540,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
     private Long resolveCompany(String uid) {
         return companies.findByUid(uid)
                 .map(c -> c.getId())
-                .orElseThrow(() -> new NotFoundException("Company: " + uid));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
     }
 
     private Long branchId() {

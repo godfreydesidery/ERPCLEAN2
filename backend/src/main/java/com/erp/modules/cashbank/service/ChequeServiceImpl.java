@@ -61,14 +61,14 @@ public class ChequeServiceImpl implements ChequeService {
     public ChequeDto register(RegisterChequeRequest req) {
         Long companyId = companies.findByUid(req.companyUid())
                 .map(c -> c.getId())
-                .orElseThrow(() -> new NotFoundException("Company: " + req.companyUid()));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
 
         String currency = companies.findById(companyId)
                 .map(c -> c.getBaseCurrency()).orElse("TZS");
 
         CashBankAccount account = accounts.findByCompanyIdAndUid(companyId, req.cashBankAccountUid())
-                .orElseThrow(() -> new NotFoundException("Cash/bank account: " + req.cashBankAccountUid()));
+                .orElseThrow(() -> new NotFoundException("Cash/bank account not found."));
 
         if (account.getAccountType() != CashBankAccountType.BANK)
             throw new IllegalArgumentException("Cheques may only be registered against BANK accounts (FR-CASH-10).");
@@ -142,14 +142,14 @@ public class ChequeServiceImpl implements ChequeService {
 
         if (cheque.getDirection() != ChequeDirection.INBOUND) {
             throw new IllegalStateException(
-                    "deposit() is only valid for INBOUND cheques — cheque " + uid
-                    + " is " + cheque.getDirection() + " (D-9).");
+                    "deposit() is only valid for INBOUND cheques; this cheque is "
+                    + cheque.getDirection() + ".");
         }
         if (cheque.getStatus() != ChequeStatus.ISSUED
                 && cheque.getStatus() != ChequeStatus.BOUNCED) {
             throw new IllegalStateException(
-                    "Cannot deposit cheque " + uid + " in status " + cheque.getStatus()
-                    + " — must be ISSUED or BOUNCED (re-present after bounce, D-9).");
+                    "Cannot deposit cheque in status " + cheque.getStatus()
+                    + " — must be ISSUED or BOUNCED.");
         }
 
         // Track re-presentations after a bounce
@@ -190,13 +190,13 @@ public class ChequeServiceImpl implements ChequeService {
 
         if (cheque.getDirection() != ChequeDirection.INBOUND) {
             throw new IllegalStateException(
-                    "bounce() is only valid for INBOUND cheques — cheque " + uid
-                    + " is " + cheque.getDirection() + " (D-9).");
+                    "bounce() is only valid for INBOUND cheques; this cheque is "
+                    + cheque.getDirection() + ".");
         }
         if (cheque.getStatus() != ChequeStatus.DEPOSITED) {
             throw new IllegalStateException(
-                    "Cannot bounce cheque " + uid + " in status " + cheque.getStatus()
-                    + " — must be DEPOSITED (D-9).");
+                    "Cannot bounce cheque in status " + cheque.getStatus()
+                    + " — must be DEPOSITED.");
         }
 
         cheque.setStatus(ChequeStatus.BOUNCED);

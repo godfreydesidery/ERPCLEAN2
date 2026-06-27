@@ -217,7 +217,7 @@ export class SalesReturnCreateComponent implements OnInit {
     this.soService.createReturn(request).subscribe({
       next: (ret: SalesReturnDto) => {
         this.saving.set(false);
-        this.alerts.success('Return created', ret.returnNumber ?? ret.uid);
+        this.alerts.success('Return created', ret.returnNumber ?? undefined);
         void this.router.navigate(['/admin/sales-returns/uid', ret.uid]);
       },
       error: (err: unknown) => {

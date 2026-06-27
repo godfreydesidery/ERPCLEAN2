@@ -199,7 +199,7 @@ public class CustomerContactAddressServiceImpl implements CustomerContactAddress
     private CustomerContact requireContact(String contactUid, Long customerId) {
         CustomerContact c = Lookups.orNotFound(contacts.findByUid(contactUid), "CustomerContact", contactUid);
         if (!c.getCustomerId().equals(customerId)) {
-            throw new NotFoundException("CustomerContact " + contactUid + " not found");
+            throw new NotFoundException("Customer contact not found.");
         }
         return c;
     }
@@ -207,7 +207,7 @@ public class CustomerContactAddressServiceImpl implements CustomerContactAddress
     private CustomerAddress requireAddress(String addressUid, Long customerId) {
         CustomerAddress a = Lookups.orNotFound(addresses.findByUid(addressUid), "CustomerAddress", addressUid);
         if (!a.getCustomerId().equals(customerId)) {
-            throw new NotFoundException("CustomerAddress " + addressUid + " not found");
+            throw new NotFoundException("Customer address not found.");
         }
         return a;
     }

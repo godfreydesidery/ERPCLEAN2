@@ -120,7 +120,7 @@ public class ArAgeingQuery {
     public ArStatementDto statementByCustomerUid(Long companyId, String customerUid, LocalDate asAt) {
         Long customerId = customers.findByUid(customerUid)
                 .map(c -> c.getId())
-                .orElseThrow(() -> new NotFoundException("Customer not found: " + customerUid));
+                .orElseThrow(() -> new NotFoundException("Customer not found."));
         return statement(companyId, customerId, asAt);
     }
 

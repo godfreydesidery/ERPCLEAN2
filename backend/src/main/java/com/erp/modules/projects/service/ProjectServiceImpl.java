@@ -60,11 +60,11 @@ public class ProjectServiceImpl implements ProjectService {
     @Override
     public ProjectDto create(CreateProjectRequest req, RequestContext.Principal principal) {
         var company = companies.findByUid(req.companyUid())
-                .orElseThrow(() -> new NotFoundException("Company not found: " + req.companyUid()));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
         scopeGuard.assertCanActIn(principal, company.getId());
 
         var branch = branches.findByUid(req.branchUid())
-                .orElseThrow(() -> new NotFoundException("Branch not found: " + req.branchUid()));
+                .orElseThrow(() -> new NotFoundException("Branch not found."));
 
         String number = numberGen.next(company.getId());
         var project = new Project(company.getId(), branch.getId(), number,
@@ -77,7 +77,7 @@ public class ProjectServiceImpl implements ProjectService {
 
         if (req.customerUid() != null) {
             var customer = customers.findByUid(req.customerUid())
-                    .orElseThrow(() -> new NotFoundException("Customer not found: " + req.customerUid()));
+                    .orElseThrow(() -> new NotFoundException("Customer not found."));
             project.setCustomerId(customer.getId());
         }
 
@@ -128,7 +128,7 @@ public class ProjectServiceImpl implements ProjectService {
 
         if (req.customerUid() != null) {
             var customer = customers.findByUid(req.customerUid())
-                    .orElseThrow(() -> new NotFoundException("Customer not found: " + req.customerUid()));
+                    .orElseThrow(() -> new NotFoundException("Customer not found."));
             project.setCustomerId(customer.getId());
         } else {
             project.setCustomerId(null);
@@ -189,7 +189,7 @@ public class ProjectServiceImpl implements ProjectService {
 
     private Project findActive(String uid) {
         return projects.findByUid(uid)
-                .orElseThrow(() -> new NotFoundException("Project not found: " + uid));
+                .orElseThrow(() -> new NotFoundException("Project not found."));
     }
 
     private void validateTransition(ProjectStatus from, ProjectStatus to) {

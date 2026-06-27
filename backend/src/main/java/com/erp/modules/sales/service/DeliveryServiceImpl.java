@@ -203,7 +203,7 @@ public class DeliveryServiceImpl implements DeliveryService {
             // handler needs the uid for productService.getByUid() / recipe explosion (ADR-0021 D-6).
             String productUid = productRepository.findById(sol.getProductId())
                     .map(p -> p.getUid())
-                    .orElseThrow(() -> new NotFoundException("Product not found id=" + sol.getProductId()));
+                    .orElseThrow(() -> new NotFoundException("Product not found."));
             payloadLines.add(new DeliveryConfirmedPayload.LineItem(
                     sol.getProductId(), productUid,
                     sol.getUnitId(), qtyDeliveredBase,
@@ -296,7 +296,7 @@ public class DeliveryServiceImpl implements DeliveryService {
         // Resolve the agent from the SO (the SO carries agentId from order creation)
         Long agentId = order.getAgentId();
         if (agentId == null) {
-            throw new IllegalStateException("SalesOrder " + order.getUid() + " has no agent.");
+            throw new IllegalStateException("The sales order has no agent assigned.");
         }
 
         // D-9 / FIX-4: if the SO carries a fixed docDiscountAmount, pro-rate it to the

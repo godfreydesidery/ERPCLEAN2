@@ -43,7 +43,7 @@ public class ProjectCostingQueryImpl implements ProjectCostingQuery {
     @Override
     public ProjectPnlDto projectPnl(String projectUid, RequestContext.Principal principal) {
         Project project = projects.findByUid(projectUid)
-                .orElseThrow(() -> new NotFoundException("Project not found: " + projectUid));
+                .orElseThrow(() -> new NotFoundException("Project not found."));
         scopeGuard.assertCanActIn(principal, project.getCompanyId());
         // Branch-level isolation (ADR-0033 D-2 / NFR-PROJ-01): projects are branch-scoped;
         // a principal from Branch A must not read Branch B's project costing.

@@ -162,9 +162,9 @@ public class RfqServiceImpl implements RfqService {
         }
 
         SupplierQuote winningQuote = quotes.findByUid(winningQuoteUid)
-                .orElseThrow(() -> new NotFoundException("SupplierQuote: " + winningQuoteUid));
+                .orElseThrow(() -> new NotFoundException("Supplier quote not found."));
         if (!winningQuote.getRfqId().equals(rfq.getId())) {
-            throw new IllegalArgumentException("Quote " + winningQuoteUid + " does not belong to RFQ " + uid);
+            throw new IllegalArgumentException("The selected quote does not belong to this RFQ.");
         }
 
         // Mark winning quote AWARDED, others NOT_AWARDED
@@ -221,7 +221,7 @@ public class RfqServiceImpl implements RfqService {
     private Long resolveCompanyId(String companyUid) {
         return companies.findByUid(companyUid)
                 .map(c -> c.getId())
-                .orElseThrow(() -> new NotFoundException("Company: " + companyUid));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
     }
 
     private RfqDto toDto(Rfq rfq) {

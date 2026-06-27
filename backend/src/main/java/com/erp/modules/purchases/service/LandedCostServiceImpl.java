@@ -87,7 +87,7 @@ public class LandedCostServiceImpl implements LandedCostService {
     public LandedCostDto create(CreateLandedCostRequest req) {
         Long companyId = companies.findByUid(req.companyUid())
                 .map(c -> c.getId())
-                .orElseThrow(() -> new NotFoundException("Company: " + req.companyUid()));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
         RequestContext.Principal ctx = RequestContext.get();
         scopeGuard.assertCanActIn(ctx, companyId);
         Long branchId = branchId(ctx);
@@ -100,7 +100,7 @@ public class LandedCostServiceImpl implements LandedCostService {
         // Link receipts
         for (String grUid : req.receiptUids()) {
             GoodsReceipt gr = grRepo.findByCompanyIdAndUid(companyId, grUid)
-                    .orElseThrow(() -> new NotFoundException("GoodsReceipt: " + grUid));
+                    .orElseThrow(() -> new NotFoundException("Goods receipt not found."));
             if (!lcReceipts.existsByLandedCostIdAndGoodsReceiptId(lc.getId(), gr.getId())) {
                 lcReceipts.save(new LandedCostReceipt(lc.getId(), gr.getId(), gr.getUid(),
                         companyId, branchId, actorId()));

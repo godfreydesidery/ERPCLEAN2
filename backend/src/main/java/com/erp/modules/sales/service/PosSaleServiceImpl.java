@@ -91,7 +91,7 @@ public class PosSaleServiceImpl implements PosSaleService {
                 .orElseThrow(() -> NotFoundException.of("PosSession", req.sessionUid()));
         scopeGuard.assertCanActIn(RequestContext.get(), session.getCompanyId());
         if (session.getStatus() != com.erp.modules.sales.domain.enums.PosSessionStatus.OPEN) {
-            throw new ConflictException("POS session " + req.sessionUid() + " is not OPEN.");
+            throw new ConflictException("This POS session is not OPEN.");
         }
 
         // 1b — Idempotency reserve-before-process (ADR-0042 D-1): claim the key in THIS transaction

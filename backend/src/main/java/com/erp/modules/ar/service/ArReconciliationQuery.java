@@ -56,7 +56,7 @@ public class ArReconciliationQuery {
 
         String currency = companies.findById(companyId)
                 .map(c -> c.getBaseCurrency())
-                .orElseThrow(() -> new NotFoundException("Company not found: " + companyId));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
 
         BigDecimal outstanding = invoices.sumOutstandingByCompany(companyId);
         BigDecimal unallocated = receipts.sumUnallocatedByCompany(companyId);

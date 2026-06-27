@@ -54,7 +54,7 @@ public class ArBalanceServiceImpl implements ArBalanceService {
         // Derive the base currency — company record holds it (V10 ADD COLUMN).
         String currency = companies.findById(companyId)
                 .map(c -> c.getBaseCurrency())
-                .orElseThrow(() -> new IllegalStateException("Company not found: " + companyId));
+                .orElseThrow(() -> new IllegalStateException("Company not found."));
 
         return new ArBalanceDto(companyId, customerId, balance, currency);
     }

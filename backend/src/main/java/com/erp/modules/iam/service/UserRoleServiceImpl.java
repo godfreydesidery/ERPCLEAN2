@@ -118,7 +118,7 @@ public class UserRoleServiceImpl implements UserRoleService {
         UserRole ur = Lookups.orNotFound(userRoles.findByUid(userRoleUid), "UserRole", userRoleUid);
         scopeGuard.assertCanActIn(RequestContext.get(), ur.getCompanyId());
         if (!ur.isActive()) {
-            throw new ConflictException("Assignment already revoked: " + userRoleUid);
+            throw new ConflictException("This role assignment has already been revoked.");
         }
 
         // Capture context before revoke mutates the row.

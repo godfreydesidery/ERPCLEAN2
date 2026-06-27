@@ -68,16 +68,16 @@ public class ArOpeningBalanceServiceImpl implements ArOpeningBalanceService {
     public ArInvoiceDto setOpeningBalance(SetOpeningBalanceRequest req) {
         Long companyId = companies.findByUid(req.companyUid())
                 .map(c -> c.getId())
-                .orElseThrow(() -> new NotFoundException("Company not found: " + req.companyUid()));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
 
         Long customerId = customers.findByCompanyIdAndUid(companyId, req.customerUid())
                 .map(c -> c.getId())
-                .orElseThrow(() -> new NotFoundException("Customer not found: " + req.customerUid()));
+                .orElseThrow(() -> new NotFoundException("Customer not found."));
 
         String currency = req.currency() != null ? req.currency()
                 : companies.findById(companyId).map(c -> c.getBaseCurrency())
-                        .orElseThrow(() -> new NotFoundException("Company not found: " + companyId));
+                        .orElseThrow(() -> new NotFoundException("Company not found."));
 
         // Guard: amount must be a positive value (null/zero/negative produces a cryptic GL error)
         if (req.amount() == null || req.amount().compareTo(BigDecimal.ZERO) <= 0) {

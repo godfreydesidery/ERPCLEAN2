@@ -71,16 +71,16 @@ public class CashTransferServiceImpl implements CashTransferService {
     public CashTransferDto recordTransfer(RecordTransferRequest req) {
         Long companyId = companies.findByUid(req.companyUid())
                 .map(c -> c.getId())
-                .orElseThrow(() -> new NotFoundException("Company: " + req.companyUid()));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
 
         String currency = companies.findById(companyId)
                 .map(c -> c.getBaseCurrency()).orElse("TZS");
 
         CashBankAccount source = accounts.findByCompanyIdAndUid(companyId, req.sourceAccountUid())
-                .orElseThrow(() -> new NotFoundException("Source account: " + req.sourceAccountUid()));
+                .orElseThrow(() -> new NotFoundException("Source account not found."));
         CashBankAccount dest   = accounts.findByCompanyIdAndUid(companyId, req.destinationAccountUid())
-                .orElseThrow(() -> new NotFoundException("Destination account: " + req.destinationAccountUid()));
+                .orElseThrow(() -> new NotFoundException("Destination account not found."));
 
         if (!source.isActive()) throw new IllegalStateException("Source account is inactive (BR-CASH-08).");
         if (!dest.isActive())   throw new IllegalStateException("Destination account is inactive (BR-CASH-08).");

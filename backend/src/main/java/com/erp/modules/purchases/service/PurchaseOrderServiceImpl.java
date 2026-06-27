@@ -83,6 +83,9 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     // APPROVALS-047: branch uid resolution for approval engine submit
     private final BranchRepository            branches;
 
+    private static final String ERR_PRODUCT_NOT_FOUND = "Product not found.";
+    private static final String ERR_UNIT_NOT_FOUND    = "Unit not found.";
+
     public PurchaseOrderServiceImpl(PurchaseOrderRepository orders,
                                     PurchaseOrderLineRepository lines,
                                     GoodsReceiptRepository receipts,
@@ -267,9 +270,9 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
 
         // Recompute base qty for the new ordered qty (unit doesn't change on update)
         UnitOfMeasure unit = units.findById(line.getUnitId())
-                .orElseThrow(() -> new NotFoundException("Unit not found: " + line.getUnitId()));
+                .orElseThrow(() -> new NotFoundException(ERR_UNIT_NOT_FOUND));
         Product product = products.findById(line.getProductId())
-                .orElseThrow(() -> new NotFoundException("Product not found: " + line.getProductId()));
+                .orElseThrow(() -> new NotFoundException(ERR_PRODUCT_NOT_FOUND));
         BigDecimal qtyInBase = computeQtyInBase(product, unit, req.orderedQty());
         BigDecimal lineTotal = req.unitCostAmount().multiply(req.orderedQty());
 
@@ -510,15 +513,15 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     private Long resolveCompanyId(String companyUid) {
         return companies.findByUid(companyUid)
                 .map(c -> c.getId())
-                .orElseThrow(() -> new NotFoundException("Company not found: " + companyUid));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
     }
 
     private Supplier resolveSupplier(Long companyId, String supplierUid) {
         Supplier s = suppliers.findByCompanyIdAndUid(companyId, supplierUid)
-                .orElseThrow(() -> new NotFoundException("Supplier not found: " + supplierUid));
+                .orElseThrow(() -> new NotFoundException("Supplier not found."));
         if (s.getStatus() == MasterStatus.ARCHIVED) {
             throw new IllegalArgumentException(
-                    "Supplier is archived and not selectable (BR-PURCH-02): " + supplierUid);
+                    "Supplier is archived and cannot be selected.");
         }
         return s;
     }
@@ -531,24 +534,24 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         if (paymentTermsUid != null && !paymentTermsUid.isBlank()) {
             return paymentTermsRepo.findByUid(paymentTermsUid)
                     .map(pt -> pt.getId())
-                    .orElseThrow(() -> new NotFoundException("PaymentTerms not found: " + paymentTermsUid));
+                    .orElseThrow(() -> new NotFoundException("Payment terms not found."));
         }
         return supplier != null ? supplier.getPaymentTermsId() : null;
     }
 
     private Product resolveProduct(Long companyId, String productUid) {
         Product p = products.findByCompanyIdAndUid(companyId, productUid)
-                .orElseThrow(() -> new NotFoundException("Product not found: " + productUid));
+                .orElseThrow(() -> new NotFoundException(ERR_PRODUCT_NOT_FOUND));
         if (p.getStatus() == MasterStatus.ARCHIVED) {
             throw new IllegalArgumentException(
-                    "Product is archived (BR-PURCH-03): " + productUid);
+                    "Product is archived and cannot be ordered.");
         }
         return p;
     }
 
     private UnitOfMeasure resolveUnit(Long companyId, String unitUid) {
         return units.findByCompanyIdAndUid(companyId, unitUid)
-                .orElseThrow(() -> new NotFoundException("UnitOfMeasure not found: " + unitUid));
+                .orElseThrow(() -> new NotFoundException("Unit of measure not found."));
     }
 
     private BigDecimal computeQtyInBase(Product product, UnitOfMeasure unit, BigDecimal qty) {
@@ -687,7 +690,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         // Resolve branch uid for the engine's policy lookup
         String branchUid = branches.findById(po.getBranchId())
                 .map(Branch::getUid)
-                .orElseThrow(() -> new NotFoundException("Branch not found: " + po.getBranchId()));
+                .orElseThrow(() -> new NotFoundException("Branch not found."));
 
         approvalGate.submit(po, branchUid);   // sets approval_status + approval_request_uid on po
         po.setUpdatedAt(Instant.now());
@@ -706,11 +709,11 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         RequestContext.Principal ctx = RequestContext.get();
 
         SupplierQuote quote = quotes.findByUid(quoteUid)
-                .orElseThrow(() -> new NotFoundException("SupplierQuote not found: " + quoteUid));
+                .orElseThrow(() -> new NotFoundException("Supplier quote not found."));
         scopeGuard.assertCanActIn(ctx, quote.getCompanyId());
 
         Supplier supplier = suppliers.findById(quote.getSupplierId())
-                .orElseThrow(() -> new NotFoundException("Supplier not found for quote: " + quoteUid));
+                .orElseThrow(() -> new NotFoundException("Supplier not found for this quote."));
 
         Long branchId = branchIdFromContext(ctx);
 
@@ -725,9 +728,9 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         List<SupplierQuoteLine> qlines = quoteLines.findBySupplierQuoteIdOrderByLineNo(quote.getId());
         for (SupplierQuoteLine ql : qlines) {
             Product product = products.findById(ql.getProductId())
-                    .orElseThrow(() -> new NotFoundException("Product not found: " + ql.getProductId()));
+                    .orElseThrow(() -> new NotFoundException(ERR_PRODUCT_NOT_FOUND));
             UnitOfMeasure unit = units.findById(ql.getUnitId())
-                    .orElseThrow(() -> new NotFoundException("Unit not found: " + ql.getUnitId()));
+                    .orElseThrow(() -> new NotFoundException(ERR_UNIT_NOT_FOUND));
             BigDecimal qtyInBase = computeQtyInBase(product, unit, ql.getQuotedQty());
             BigDecimal lineTotal = ql.getUnitPriceAmount().multiply(ql.getQuotedQty());
             short lineNo = (short) (lines.findMaxLineNo(saved.getId()) + 1);

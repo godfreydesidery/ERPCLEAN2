@@ -78,12 +78,12 @@ public class ApOpeningBalanceServiceImpl implements ApOpeningBalanceService {
     public SupplierBillDto setOpeningBalance(SetApOpeningBalanceRequest req) {
         Long companyId = companies.findByUid(req.companyUid())
                 .map(c -> c.getId())
-                .orElseThrow(() -> new NotFoundException("Company: " + req.companyUid()));
+                .orElseThrow(() -> new NotFoundException("Company not found."));
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
 
         Long supplierId = suppliers.findByCompanyIdAndUid(companyId, req.supplierUid())
                 .map(s -> s.getId())
-                .orElseThrow(() -> new NotFoundException("Supplier: " + req.supplierUid()));
+                .orElseThrow(() -> new NotFoundException("Supplier not found."));
 
         String currency = req.currency() != null && !req.currency().isBlank()
                 ? req.currency()

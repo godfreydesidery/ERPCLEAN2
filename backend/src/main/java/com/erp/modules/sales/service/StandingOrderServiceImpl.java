@@ -141,7 +141,7 @@ public class StandingOrderServiceImpl implements StandingOrderService {
         var standing = requireStanding(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), standing.getCompanyId());
         if (standing.getStatus() != StandingStatus.ACTIVE) {
-            throw new ConflictException("Standing order " + uid + " is not ACTIVE.");
+            throw new ConflictException("This standing order is not ACTIVE.");
         }
         standing.setStatus(StandingStatus.PAUSED);
         standing.setUpdatedAt(Instant.now());
@@ -155,7 +155,7 @@ public class StandingOrderServiceImpl implements StandingOrderService {
         var standing = requireStanding(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), standing.getCompanyId());
         if (standing.getStatus() != StandingStatus.PAUSED) {
-            throw new ConflictException("Standing order " + uid + " is not PAUSED.");
+            throw new ConflictException("This standing order is not PAUSED.");
         }
         standing.setStatus(StandingStatus.ACTIVE);
         standing.setUpdatedAt(Instant.now());
@@ -169,7 +169,7 @@ public class StandingOrderServiceImpl implements StandingOrderService {
         var standing = requireStanding(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), standing.getCompanyId());
         if (standing.getStatus() == StandingStatus.CANCELLED) {
-            throw new ConflictException("Standing order " + uid + " is already CANCELLED.");
+            throw new ConflictException("This standing order is already CANCELLED.");
         }
         standing.setStatus(StandingStatus.CANCELLED);
         standing.setUpdatedAt(Instant.now());
@@ -183,7 +183,7 @@ public class StandingOrderServiceImpl implements StandingOrderService {
         var standing = requireStanding(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), standing.getCompanyId());
         if (standing.getStatus() != StandingStatus.ACTIVE) {
-            throw new ConflictException("Standing order " + uid + " is not ACTIVE.");
+            throw new ConflictException("This standing order is not ACTIVE.");
         }
         generateSo(standing, LocalDate.now());
         return toDto(standing, standingLines.findByStandingOrderId(standing.getId()));
