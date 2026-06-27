@@ -370,6 +370,38 @@ public class SalesOrderServiceImpl implements SalesOrderService {
     }
 
     @Override
+    public SalesOrderDto setAgent(String uid, String agentUid) {
+        SalesOrder order = require(uid);
+        // Scope-check from the LOADED entity (rule: never from a caller param).
+        scopeGuard.assertCanActIn(RequestContext.get(), order.getCompanyId());
+
+        // Guard status: allow setting/changing the agent only while the order can still produce an
+        // uninvoiced invoice — i.e. before any invoice exists. Allowed: DRAFT, CONFIRMED,
+        // PARTIALLY_FULFILLED, FULFILLED. Rejected once invoiced, closed, or cancelled.
+        switch (order.getStatus()) {
+            case DRAFT, CONFIRMED, PARTIALLY_FULFILLED, FULFILLED -> { /* proceed */ }
+            case CANCELLED ->
+                throw new ConflictException(
+                        "This order has been cancelled, so its agent cannot be changed.");
+            default ->
+                throw new ConflictException(
+                        "This order has already been invoiced, so its agent can no longer be changed.");
+        }
+
+        // Resolve the agent exactly as create() does: must exist, be active, belong to the company.
+        Long agentId = resolveAgentId(order.getCompanyId(), agentUid, RequestContext.get());
+
+        order.setAgentId(agentId);
+        order.setUpdatedAt(Instant.now());
+        order.setUpdatedBy(actorId());
+
+        audit.record(AuditEvent.of(AuditActions.SO_SET_AGENT, "sales_orders",
+                order.getId(), order.getUid())
+                .detail(Map.of("agentUid", agentUid)));
+        return toDto(order);
+    }
+
+    @Override
     public SalesOrderDto createFromQuotation(String quotationUid) {
         Quotation quote = quotations.findByUid(quotationUid)
                 .orElseThrow(() -> new NotFoundException("Quotation not found."));
@@ -526,9 +558,12 @@ public class SalesOrderServiceImpl implements SalesOrderService {
 
     private Long resolveAgentId(Long companyId, String agentUid, RequestContext.Principal ctx) {
         if (agentUid != null && !agentUid.isBlank()) {
-            return agents.findByCompanyIdAndUid(companyId, agentUid)
-                    .map(Agent::getId)
+            Agent agent = agents.findByCompanyIdAndUid(companyId, agentUid)
                     .orElseThrow(() -> new NotFoundException("Agent not found."));
+            if (agent.getStatus() == MasterStatus.ARCHIVED) {
+                throw new IllegalArgumentException("Agent is archived and cannot be selected.");
+            }
+            return agent.getId();
         }
         if (ctx != null && ctx.userId() != null) {
             Optional<Long> auto = agents.findInternalAgentIdByCompanyAndUser(companyId, ctx.userId());
