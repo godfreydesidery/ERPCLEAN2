@@ -227,8 +227,13 @@ public class RfqServiceImpl implements RfqService {
     private RfqDto toDto(Rfq rfq) {
         List<RfqLineDto> lineDtos = rfqLines.findByRfqIdOrderByLineNo(rfq.getId())
                 .stream().map(RfqLineDto::from).toList();
-        List<String> supplierUids = rfqSuppliers.findByRfqId(rfq.getId())
-                .stream().map(rs -> "id:" + rs.getSupplierId()).toList(); // uid lookup skipped for simplicity
+        List<Long> supplierIds = rfqSuppliers.findByRfqId(rfq.getId())
+                .stream().map(rs -> rs.getSupplierId()).toList();
+        // Resolve invited suppliers to their real uids (company-scoped) so the UI shows
+        // code + name instead of a raw "id:" placeholder.
+        List<String> supplierUids = supplierIds.isEmpty()
+                ? List.of()
+                : suppliers.findUidsByCompanyIdAndIdIn(rfq.getCompanyId(), supplierIds);
         return RfqDto.from(rfq, lineDtos, supplierUids);
     }
 
