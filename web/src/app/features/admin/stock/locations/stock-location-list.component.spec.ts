@@ -27,6 +27,8 @@ import { StockLocationListComponent } from './stock-location-list.component';
 
 const STUB_ORG = { uid: 'ORG1', id: '1', name: 'Acme' };
 const STUB_COMPANY = { uid: 'CO1', id: '10', name: 'Main Co' };
+const STUB_BRANCH_ACTIVE = { id: '5', uid: 'BR-ACTIVE', companyId: '10', companyUid: 'CO1', code: 'B1', name: 'Active Branch', timeZone: 'UTC', isDefault: true, status: 'ACTIVE' };
+const STUB_BRANCH_OTHER = { id: '7', uid: 'BR-OTHER', companyId: '10', companyUid: 'CO1', code: 'B2', name: 'Other Branch', timeZone: 'UTC', isDefault: false, status: 'ACTIVE' };
 const STUB_LOCATION = {
   uid: 'LOC1', id: '100',
   companyId: '10', branchId: '5',
@@ -35,6 +37,8 @@ const STUB_LOCATION = {
   isDefault: true,
   status: 'ACTIVE' as const,
 };
+// A location created in the OTHER branch (branchId 7 → uid BR-OTHER).
+const STUB_LOCATION_OTHER_BRANCH = { ...STUB_LOCATION, uid: 'LOC2', id: '101', branchId: '7', code: 'WH-02', isDefault: false };
 
 const emptyPage = () => ({
   rows: [],
@@ -82,7 +86,7 @@ function makeBed(overrides: {
       },
       {
         provide: BranchService,
-        useValue: { list: vi.fn(() => of([])) },
+        useValue: { list: vi.fn(() => of([STUB_BRANCH_ACTIVE, STUB_BRANCH_OTHER])) },
       },
       { provide: AlertService, useValue: { success: vi.fn(), error: vi.fn() } },
       {
@@ -92,7 +96,7 @@ function makeBed(overrides: {
           isAuthenticated: signal(true),
           user: signal(null),
           permissions: signal([]),
-          activeBranchUid: signal(null),
+          activeBranchUid: signal('BR-ACTIVE'),
         },
       },
     ],
@@ -205,5 +209,53 @@ describe('StockLocationListComponent', () => {
 
     expect(deactivateSpy).toHaveBeenCalledWith(STUB_LOCATION.uid);
     expect(comp.rows()[0].status).toBe('INACTIVE');
+  });
+
+  // ── 7. Branch filter passes branchUid ───────────────────────────────────────
+
+  it('defaults the filter to the active branch and passes branchUid on filter change', async () => {
+    const { listSpy } = makeBed();
+    const fixture = TestBed.createComponent(StockLocationListComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    // Filter defaults to the active branch uid.
+    expect(comp.filterBranchUid()).toBe('BR-ACTIVE');
+
+    // Change the filter to another accessible branch → list re-scopes to that branchUid.
+    comp.onFilterBranchChange('BR-OTHER');
+    await vi.runAllTimersAsync();
+
+    const lastCall = listSpy.mock.calls.at(-1)!;
+    // list(page, size, branchUid)
+    expect(lastCall[2]).toBe('BR-OTHER');
+  });
+
+  // ── 8. Post-create filter switches to created branch ─────────────────────────
+
+  it('switches the filter to the created location branch and reloads after create', async () => {
+    const createSpy = vi.fn(() => of(STUB_LOCATION_OTHER_BRANCH));
+    const { listSpy } = makeBed({ createSpy });
+    const fixture = TestBed.createComponent(StockLocationListComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    // Filter starts on the active branch.
+    expect(comp.filterBranchUid()).toBe('BR-ACTIVE');
+
+    comp.showCreateForm.set(true);
+    comp.fCode.set('WH-02');
+    comp.fName.set('Other Branch Store');
+    comp.fLocationType.set('STORE');
+    comp.fBranchUid.set('BR-OTHER');
+
+    comp.submitCreate();
+    await vi.runAllTimersAsync();
+
+    // The created location's branch (branchId 7 → BR-OTHER) becomes the active filter…
+    expect(comp.filterBranchUid()).toBe('BR-OTHER');
+    // …and the list reloads scoped to that branch so the new row is visible.
+    const lastCall = listSpy.mock.calls.at(-1)!;
+    expect(lastCall[2]).toBe('BR-OTHER');
   });
 });

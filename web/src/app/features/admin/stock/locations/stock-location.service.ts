@@ -28,10 +28,13 @@ export class StockLocationService {
 
   // ── Reads ─────────────────────────────────────────────────────────────────
 
-  list(page = 0, size = 20): Observable<StockLocationPage> {
-    const params = new HttpParams()
+  list(page = 0, size = 20, branchUid?: string): Observable<StockLocationPage> {
+    let params = new HttpParams()
       .set('page', String(page))
       .set('size', String(size));
+    if (branchUid) {
+      params = params.set('branchUid', branchUid);
+    }
     const context = new HttpContext().set(SKIP_UNWRAP, true);
     return this.http
       .get<ApiResponse<StockLocationDto[]>>(this.base, { params, context })

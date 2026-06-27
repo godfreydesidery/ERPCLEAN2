@@ -28,6 +28,21 @@
     </div>
   }
 
+  <!-- Branch filter — scopes the list to a branch the user can access -->
+  @if (branches().length > 0) {
+    <div class="mb-3">
+      <label for="branchFilter" class="form-label">Branch</label>
+      <select id="branchFilter" class="form-select form-select-sm w-auto"
+              [ngModel]="filterBranchUid()"
+              (ngModelChange)="onFilterBranchChange($event)"
+              aria-label="Filter stock locations by branch">
+        @for (b of branches(); track b.uid) {
+          <option [value]="b.uid">{{ b.name }}</option>
+        }
+      </select>
+    </div>
+  }
+
   <!-- Create form -->
   @if (showCreateForm() && canManage()) {
     <div class="erp-card mb-4">
