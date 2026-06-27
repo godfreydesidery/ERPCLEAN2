@@ -21,7 +21,10 @@
       </p>
     }
     @default {
-      @if (companies().length > 1) {
+      <!-- Company picker is NOT shown on the On-Hand view (scope = global branch switcher).
+           It remains available for the By-Location / By-Product tabs, which require an explicit
+           company to query, and only when the tenant actually spans multiple companies. -->
+      @if (companies().length > 1 && viewMode() !== 'on-hand') {
         <div class="mb-3" style="max-width:320px">
           <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
           <select id="companyPicker" name="companyPicker" class="form-select"
@@ -37,40 +40,30 @@
   }
 
   @if (selectedCompanyId()) {
-    <!-- Branch filter + search + actions toolbar -->
+    <!-- Search + actions toolbar.
+         Company/branch scope is governed by the global branch switcher (shell) — there are no
+         per-page company/branch dropdowns on the On-Hand view. The Search box filters on-hand rows
+         server-side by product code/name within the active branch. -->
     <div class="erp-toolbar mb-3">
-      @if (branches().length > 0) {
-        <div>
-          <label class="form-label small text-muted mb-1" for="branchFilter">Branch</label>
-          <select id="branchFilter" name="branchFilter" class="form-select"
-                  style="min-width:160px"
-                  [ngModel]="selectedBranchId()"
-                  (ngModelChange)="onBranchChange($event)">
-            <option value="">All branches</option>
-            @for (b of branches(); track b.uid) {
-              <option [value]="b.id">{{ b.name }}</option>
-            }
-          </select>
-        </div>
-      }
-
-      <form class="d-flex gap-2" (ngSubmit)="load(0)" aria-label="Search stock">
-        <div>
-          <label class="form-label small text-muted mb-1" for="stockSearch">Search</label>
-          <div class="erp-toolbar__search">
-            <input id="stockSearch" name="stockSearch" type="search"
-                   class="form-control" placeholder="Product…"
-                   [ngModel]="searchQ()" (ngModelChange)="searchQ.set($event)"
-                   autocomplete="off" [attr.aria-busy]="state() === 'loading'" />
+      @if (viewMode() === 'on-hand') {
+        <form class="d-flex gap-2" (ngSubmit)="load(0)" aria-label="Search stock">
+          <div>
+            <label class="form-label small text-muted mb-1" for="stockSearch">Search</label>
+            <div class="erp-toolbar__search">
+              <input id="stockSearch" name="stockSearch" type="search"
+                     class="form-control" placeholder="Product…"
+                     [ngModel]="searchQ()" (ngModelChange)="searchQ.set($event)"
+                     autocomplete="off" [attr.aria-busy]="state() === 'loading'" />
+            </div>
           </div>
-        </div>
-        <div class="align-self-end">
-          <button type="submit" class="btn btn-outline-secondary">
-            <i class="bi bi-search" aria-hidden="true"></i>
-            <span class="visually-hidden">Search</span>
-          </button>
-        </div>
-      </form>
+          <div class="align-self-end">
+            <button type="submit" class="btn btn-outline-secondary">
+              <i class="bi bi-search" aria-hidden="true"></i>
+              <span class="visually-hidden">Search</span>
+            </button>
+          </div>
+        </form>
+      }
 
       <span class="erp-toolbar__spacer"></span>
 
@@ -482,8 +475,21 @@
 
     <!-- ── By Location tab ─────────────────────────────────────────────── -->
     @if (viewMode() === 'by-location') {
+      @if (branches().length > 0) {
+        <div class="mb-3" style="max-width:260px">
+          <label class="form-label small text-muted mb-1" for="branchFilter">Branch</label>
+          <select id="branchFilter" name="branchFilter" class="form-select"
+                  [ngModel]="selectedBranchId()"
+                  (ngModelChange)="onByLocationBranchChange($event)">
+            <option value="">Select a branch…</option>
+            @for (b of branches(); track b.uid) {
+              <option [value]="b.id">{{ b.name }}</option>
+            }
+          </select>
+        </div>
+      }
       @if (!selectedBranchId()) {
-        <div class="erp-empty"><i class="bi bi-geo-alt"></i> Select a branch above to view on-hand by location.</div>
+        <div class="erp-empty"><i class="bi bi-geo-alt"></i> Select a branch to view on-hand by location.</div>
       } @else {
         @switch (byLocationState()) {
           @case ('loading') {

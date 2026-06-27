@@ -137,6 +137,51 @@ describe('StockListComponent', () => {
     expect(comp.state()).toBe('idle');
   });
 
+  // ── 1b. On-hand list sends ONLY q (no companyId/branchId) ───────────────────
+
+  it('sends the search term as q and does not send companyId/branchId', async () => {
+    const { listOnHandSpy } = makeBed();
+    const fixture = TestBed.createComponent(StockListComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    // Type into the search box (debounced) and let the pipeline fire.
+    comp.searchQ.set('apple');
+    await vi.runAllTimersAsync();
+
+    // New service signature is listOnHand(q, page, size) — no company/branch args.
+    expect(listOnHandSpy).toHaveBeenCalled();
+    const lastCall = listOnHandSpy.mock.calls.at(-1)!;
+    expect(lastCall[0]).toBe('apple');                 // q
+    expect(typeof lastCall[1]).toBe('number');         // page
+    expect(typeof lastCall[2]).toBe('number');         // size
+    // No argument should look like a company/branch id payload object.
+    expect(lastCall.length).toBeLessThanOrEqual(3);
+  });
+
+  // ── 1c. On-Hand view no longer renders Company/Branch dropdowns ─────────────
+
+  it('does not render Company or Branch dropdowns on the On-Hand view', async () => {
+    // Two companies + a branch available — yet neither dropdown should show on On-Hand.
+    makeBed({});
+    TestBed.overrideProvider(CompanyService, {
+      useValue: { list: vi.fn(() => of([STUB_COMPANY, { ...STUB_COMPANY, uid: 'CO2', id: '11', name: 'Second Co' }])) },
+    });
+    TestBed.overrideProvider(BranchService, {
+      useValue: { list: vi.fn(() => of([{ uid: 'BR1', id: '1', name: 'Main Branch' }])) },
+    });
+
+    const fixture = TestBed.createComponent(StockListComponent);
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const el: HTMLElement = fixture.nativeElement;
+    expect(el.querySelector('#companyPicker')).toBeNull();
+    expect(el.querySelector('#branchFilter')).toBeNull();
+    // The search box IS present on the On-Hand view.
+    expect(el.querySelector('#stockSearch')).not.toBeNull();
+  });
+
   // ── 2. Adjust ──────────────────────────────────────────────────────────────
 
   it('calls stockService.adjust with correct payload', async () => {

@@ -37,9 +37,11 @@ public interface StockService {
 
     /**
      * Paged on-hand list for the caller's active branch. Results carry derived negative/low flags.
+     * Scope (company + branch) comes from the request context. When {@code q} is non-blank, results
+     * are filtered to products whose code/name matches (case-insensitive contains), within scope.
      * Gate: STOCK.VIEW.
      */
-    Page<StockOnHandDto> listOnHand(Pageable pageable);
+    Page<StockOnHandDto> listOnHand(String q, Pageable pageable);
 
     /**
      * Paged movement ledger for a product (by uid) at the caller's active branch (FR-STOCK-11).

@@ -135,8 +135,10 @@ export class StockListComponent {
           if (!companyId) return [];
           this.state.set('loading');
           this.currentPage.set(page);
-          const branchId = this.selectedBranchId() || undefined;
-          return this.stockService.listOnHand(companyId, branchId, q || undefined, page, DEFAULT_SIZE);
+          // Scope (company + branch) is governed server-side by the request context / global branch
+          // switcher — only the search term is sent. companyId here just gates the pipeline and
+          // drives the product-name cache + the other tabs / pickers.
+          return this.stockService.listOnHand(q || undefined, page, DEFAULT_SIZE);
         }),
         takeUntilDestroyed(),
       )
@@ -256,12 +258,18 @@ export class StockListComponent {
     this.selectedBranchId.set('');
     const company = this.companies().find((c) => c.id === id);
     if (company) this.loadBranches(company.uid);
+    // The company picker is only shown on the by-location / by-product tabs; refresh on-hand in
+    // the background so a later tab switch is consistent, and clear any stale by-* selections.
     if (id) this.load(0);
   }
 
-  onBranchChange(id: string): void {
+  /**
+   * Branch selection for the By-Location tab only. The On-Hand view's branch scope is governed by
+   * the global branch switcher (shell), not this control — so this handler drives by-location only.
+   */
+  onByLocationBranchChange(id: string): void {
     this.selectedBranchId.set(id);
-    this.load(0);
+    if (id) this.loadByLocation(0);
   }
 
   load(page: number): void {
