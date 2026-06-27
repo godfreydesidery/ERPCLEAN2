@@ -42,7 +42,7 @@ public class PurchaseRequisitionController {
     }
 
     @GetMapping("/uid/{uid}")
-    @PreAuthorize("@perm.scoped(#uid, 'purchaserequisition', 'PURCHASE.REQUISITION.VIEW')")
+    @PreAuthorize("@perm.scoped(#uid, 'requisition', 'PURCHASE.REQUISITION.VIEW')")
     public ApiResponse<PurchaseRequisitionDto> getByUid(@PathVariable String uid) {
         return ApiResponse.ok(service.getByUid(uid));
     }
@@ -58,21 +58,21 @@ public class PurchaseRequisitionController {
 
     /** Submit for approval (DRAFT → SUBMITTED). */
     @PostMapping("/uid/{uid}/submit")
-    @PreAuthorize("@perm.scoped(#uid, 'purchaserequisition', 'PURCHASE.REQUISITION.CREATE')")
+    @PreAuthorize("@perm.scoped(#uid, 'requisition', 'PURCHASE.REQUISITION.CREATE')")
     public ApiResponse<PurchaseRequisitionDto> submit(@PathVariable String uid) {
         return ApiResponse.ok(service.submit(uid));
     }
 
     /** Approve (SUBMITTED → APPROVED). */
     @PostMapping("/uid/{uid}/approve")
-    @PreAuthorize("@perm.scoped(#uid, 'purchaserequisition', 'PURCHASE.REQUISITION.APPROVE')")
+    @PreAuthorize("@perm.scoped(#uid, 'requisition', 'PURCHASE.REQUISITION.APPROVE')")
     public ApiResponse<PurchaseRequisitionDto> approve(@PathVariable String uid) {
         return ApiResponse.ok(service.approve(uid));
     }
 
     /** Reject (SUBMITTED → REJECTED). */
     @PostMapping("/uid/{uid}/reject")
-    @PreAuthorize("@perm.scoped(#uid, 'purchaserequisition', 'PURCHASE.REQUISITION.APPROVE')")
+    @PreAuthorize("@perm.scoped(#uid, 'requisition', 'PURCHASE.REQUISITION.APPROVE')")
     public ApiResponse<PurchaseRequisitionDto> reject(
             @PathVariable String uid,
             @RequestParam(required = false, defaultValue = "") String reason) {
@@ -81,7 +81,7 @@ public class PurchaseRequisitionController {
 
     /** Convert to RFQ or PO (APPROVED → CONVERTED). Returns uid of the created document. */
     @PostMapping("/uid/{uid}/convert")
-    @PreAuthorize("@perm.scoped(#uid, 'purchaserequisition', 'PURCHASE.REQUISITION.APPROVE')")
+    @PreAuthorize("@perm.scoped(#uid, 'requisition', 'PURCHASE.REQUISITION.APPROVE')")
     public ApiResponse<String> convert(
             @PathVariable String uid,
             @RequestParam String targetType) {
@@ -90,7 +90,7 @@ public class PurchaseRequisitionController {
 
     /** Cancel (any non-final state → CANCELLED). */
     @PostMapping("/uid/{uid}/cancel")
-    @PreAuthorize("@perm.scoped(#uid, 'purchaserequisition', 'PURCHASE.REQUISITION.CREATE')")
+    @PreAuthorize("@perm.scoped(#uid, 'requisition', 'PURCHASE.REQUISITION.CREATE')")
     public ApiResponse<PurchaseRequisitionDto> cancel(
             @PathVariable String uid,
             @RequestParam(required = false, defaultValue = "") String reason) {

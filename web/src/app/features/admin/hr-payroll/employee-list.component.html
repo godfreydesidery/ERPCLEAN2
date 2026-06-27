@@ -109,18 +109,26 @@
                      [disabled]="saving()" autocomplete="off" />
             </div>
             <div class="erp-field">
-              <label class="form-label" for="fDepartmentId">Department ID</label>
-              <input id="fDepartmentId" name="fDepartmentId" type="text" class="form-control"
-                     placeholder="Numeric id"
-                     [ngModel]="fDepartmentId()" (ngModelChange)="fDepartmentId.set($event)"
-                     [disabled]="saving()" autocomplete="off" />
+              <label class="form-label" for="fDepartmentId">Department</label>
+              <select id="fDepartmentId" name="fDepartmentId" class="form-select"
+                      [ngModel]="fDepartmentId()" (ngModelChange)="fDepartmentId.set($event)"
+                      [disabled]="saving()">
+                <option value="">— none —</option>
+                @for (d of departments(); track d.id) {
+                  <option [value]="d.id">{{ d.name }}</option>
+                }
+              </select>
             </div>
             <div class="erp-field">
-              <label class="form-label" for="fBranchId">Branch ID</label>
-              <input id="fBranchId" name="fBranchId" type="text" class="form-control"
-                     placeholder="Numeric id"
-                     [ngModel]="fBranchId()" (ngModelChange)="fBranchId.set($event)"
-                     [disabled]="saving()" autocomplete="off" />
+              <label class="form-label" for="fBranchId">Branch</label>
+              <select id="fBranchId" name="fBranchId" class="form-select"
+                      [ngModel]="fBranchId()" (ngModelChange)="fBranchId.set($event)"
+                      [disabled]="saving()">
+                <option value="">— none —</option>
+                @for (b of branches(); track b.id) {
+                  <option [value]="b.id">{{ b.name }}</option>
+                }
+              </select>
             </div>
           </div>
 

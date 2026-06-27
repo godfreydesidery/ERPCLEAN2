@@ -25,6 +25,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -234,14 +235,30 @@ public class StockServiceImpl implements StockService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<StockOnHandDto> listOnHand(Pageable pageable) {
+    public Page<StockOnHandDto> listOnHand(String q, Pageable pageable) {
         RequestContext.Principal principal = RequestContext.get();
         if (principal == null || principal.companyId() == null || principal.branchId() == null) {
             throw new IllegalStateException("No active company/branch in request context.");
         }
         scopeGuard.assertCanActIn(principal, principal.companyId());
 
-        return onHands.findByCompanyIdAndBranchId(principal.companyId(), principal.branchId(), pageable)
+        if (q == null || q.isBlank()) {
+            return onHands.findByCompanyIdAndBranchId(principal.companyId(), principal.branchId(), pageable)
+                    .map(StockOnHandDto::from);
+        }
+
+        // Resolve the product ids matching the search term WITHIN company scope via the products
+        // module (code/name case-insensitive contains) — no cross-module entity join (D-1 boundary).
+        List<Long> productIds = productService
+                .list(principal.companyId(), q.trim(), Pageable.unpaged())
+                .map(ProductDto::id)
+                .getContent();
+        if (productIds.isEmpty()) {
+            return Page.empty(pageable);
+        }
+
+        return onHands.findByCompanyIdAndBranchIdAndProductIdIn(
+                        principal.companyId(), principal.branchId(), productIds, pageable)
                 .map(StockOnHandDto::from);
     }
 

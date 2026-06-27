@@ -143,7 +143,8 @@ export class OpeningValuationComponent implements OnInit {
 
         // Cross-reference with on-hand list to get stockOnHandUid (= StockOnHandDto.uid).
         // Fetch a broad page; product IDs are matched by productId (Long id as string).
-        this.stockService.listOnHand(companyId, undefined, undefined, 0, 500).subscribe({
+        // Scope (company + active branch) is governed server-side by the request context.
+        this.stockService.listOnHand(undefined, 0, 500).subscribe({
           next: ({ rows: onHandRows }) => {
             const productIdToOnHandUid = new Map<string, string>(
               onHandRows.map((oh: StockOnHandDto) => [oh.productId, oh.uid]),

@@ -96,11 +96,17 @@ public class StockController {
     /**
      * GET /api/v1/stock/on-hand — paged on-hand list at the caller's active branch.
      * Returns derived negative/low flags on each row.
+     *
+     * <p>Scope (company + branch) is always taken from the request context — the active branch is
+     * governed by the global branch switcher (X-Branch-Uid), never a request param. The optional
+     * {@code q} filters within that scope by product code/name (case-insensitive contains).
      */
     @GetMapping("/on-hand")
     @PreAuthorize("@perm.has('STOCK.VIEW')")
-    public ApiResponse<List<StockOnHandDto>> listOnHand(Pageable pageable) {
-        Page<StockOnHandDto> page = stockService.listOnHand(pageable);
+    public ApiResponse<List<StockOnHandDto>> listOnHand(
+            @RequestParam(required = false) String q,
+            Pageable pageable) {
+        Page<StockOnHandDto> page = stockService.listOnHand(q, pageable);
         return ApiResponse.ok(page.getContent(), PageMeta.from(page));
     }
 

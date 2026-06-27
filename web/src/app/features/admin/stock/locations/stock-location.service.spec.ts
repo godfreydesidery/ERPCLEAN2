@@ -34,6 +34,15 @@ describe('StockLocationService', () => {
     expect(req.request.method).toBe('GET');
     expect(req.request.params.get('page')).toBe('0');
     expect(req.request.params.get('size')).toBe('20');
+    expect(req.request.params.get('branchUid')).toBeNull();
+    req.flush({ data: [], errors: [] });
+  });
+
+  it('list() forwards branchUid when provided', () => {
+    service.list(0, 20, 'BR-OTHER').subscribe();
+    const req = httpMock.expectOne((r) => r.url.includes('/stock-locations') && !r.url.includes('/uid'));
+    expect(req.request.method).toBe('GET');
+    expect(req.request.params.get('branchUid')).toBe('BR-OTHER');
     req.flush({ data: [], errors: [] });
   });
 

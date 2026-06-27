@@ -4,8 +4,13 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
+import { Branch } from '../models/branch.model';
+import { CompanyService } from '../company/company.service';
+import { OrganisationService } from '../organisation/organisation.service';
+import { BranchService } from '../branch/branch.service';
 import { HrPayrollService } from './hr-payroll.service';
-import { CreateEmployeeRequest, EmployeeDto, EmploymentStatus } from './models/hr-payroll.model';
+import { HrDepartmentService } from './departments/hr-department.service';
+import { CreateEmployeeRequest, DepartmentDto, EmployeeDto, EmploymentStatus } from './models/hr-payroll.model';
 
 /**
  * Employee detail + edit screen.
@@ -19,6 +24,10 @@ import { CreateEmployeeRequest, EmployeeDto, EmploymentStatus } from './models/h
 })
 export class EmployeeDetailComponent {
   private readonly hrService = inject(HrPayrollService);
+  private readonly deptService = inject(HrDepartmentService);
+  private readonly branchService = inject(BranchService);
+  private readonly companyService = inject(CompanyService);
+  private readonly organisationService = inject(OrganisationService);
   private readonly alerts = inject(AlertService);
   protected readonly session = inject(SessionStore);
 
@@ -26,6 +35,10 @@ export class EmployeeDetailComponent {
 
   readonly employee = signal<EmployeeDto | null>(null);
   readonly state = signal<'loading' | 'idle' | 'error'>('loading');
+
+  // ── Department / branch dropdowns ────────────────────────────────────────────
+  readonly departments = signal<DepartmentDto[]>([]);
+  readonly branches = signal<Branch[]>([]);
 
   // ── Edit form ────────────────────────────────────────────────────────────────
   readonly fFirstName = signal('');
@@ -61,8 +74,40 @@ export class EmployeeDetailComponent {
         this.employee.set(e);
         this.state.set('idle');
         this.patchForm(e);
+        this.loadDepartmentsAndBranches(e.companyId);
       },
       error: () => this.state.set('error'),
+    });
+  }
+
+  /**
+   * Loads department list (by numeric companyId) and branch list (by company uid).
+   * Branch list requires the company uid — resolved by loading the accessible companies
+   * and matching on numeric id, same pattern as the employee-list screen.
+   */
+  private loadDepartmentsAndBranches(companyId: string): void {
+    this.deptService.list(companyId).subscribe({
+      next: (list) => this.departments.set(list),
+      error: () => this.departments.set([]),
+    });
+
+    // Resolve companyId → uid to call BranchService.list(companyUid)
+    this.organisationService.current().subscribe({
+      next: (org) => {
+        this.companyService.list(org.uid).subscribe({
+          next: (companies) => {
+            const companyUid = companies.find((c) => c.id === companyId)?.uid ?? '';
+            if (companyUid) {
+              this.branchService.list(companyUid).subscribe({
+                next: (list) => this.branches.set(list),
+                error: () => this.branches.set([]),
+              });
+            }
+          },
+          error: () => this.branches.set([]),
+        });
+      },
+      error: () => this.branches.set([]),
     });
   }
 

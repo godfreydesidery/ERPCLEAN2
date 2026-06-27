@@ -33,6 +33,15 @@ public interface StockLocationService {
     /** Paged list of locations for the caller's active branch. */
     Page<StockLocationDto> listForBranch(Pageable pageable);
 
+    /**
+     * Paged list of locations for an explicitly-chosen branch. When {@code branchUid} is null/blank
+     * this is equivalent to {@link #listForBranch(Pageable)} (the caller's active branch). Otherwise
+     * the branch is resolved by uid and validated to belong to the caller's company and (for a
+     * non-root caller) to be one of their active {@code user_branch} assignments — mirroring the
+     * X-Branch-Uid override check (ADR-0003).
+     */
+    Page<StockLocationDto> listForBranch(String branchUid, Pageable pageable);
+
     /** All active locations for a branch (dropdown use). */
     List<StockLocationDto> activeForBranch(String branchUid);
 }

@@ -65,6 +65,8 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -80,6 +82,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Transactional
 public class SalesInvoiceServiceImpl implements SalesInvoiceService {
+
+    private static final Logger log = LoggerFactory.getLogger(SalesInvoiceServiceImpl.class);
 
     private final SalesInvoiceRepository invoices;
     private final SalesInvoiceLineRepository lines;
@@ -920,9 +924,12 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                 return auto.get();
             }
         }
+        // Technical context goes to the log only; the user-facing message stays friendly and
+        // carries no internal codes/identifiers (error-message hygiene standing rule).
+        log.warn("Agent resolution failed (BR-SALES-06): no agentUid supplied and no internal agent "
+                + "for companyId={} userId={}", companyId, ctx != null ? ctx.userId() : null);
         throw new IllegalArgumentException(
-                "No agent specified and the logged-in user has no internal agent record in this company. "
-                        + "Please supply agentUid (BR-SALES-06).");
+                "This sales order has no agent assigned. Assign an agent before invoicing.");
     }
 
     private void assertAgentActive(Agent agent) {

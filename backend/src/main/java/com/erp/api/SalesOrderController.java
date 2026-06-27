@@ -5,6 +5,7 @@ import com.erp.modules.sales.domain.dto.CancelSalesOrderRequest;
 import com.erp.modules.sales.domain.dto.CreateSalesOrderRequest;
 import com.erp.modules.sales.domain.dto.SalesOrderDto;
 import com.erp.modules.sales.domain.dto.SalesOrderLineDto;
+import com.erp.modules.sales.domain.dto.SetSalesOrderAgentRequest;
 import com.erp.modules.sales.service.SalesOrderService;
 import com.erp.platform.common.api.ApiResponse;
 import com.erp.platform.common.api.PageMeta;
@@ -16,6 +17,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -103,5 +105,16 @@ public class SalesOrderController {
     public void cancel(@PathVariable String uid,
                        @RequestBody(required = false) CancelSalesOrderRequest request) {
         salesOrderService.cancel(uid, request);
+    }
+
+    /**
+     * Sets or changes the order's sales agent so an agentless (or wrong-agent) order can be
+     * invoiced. Allowed only in pre-invoice states; reuses the SALES.ORDER.CREATE permission.
+     */
+    @PatchMapping("/uid/{uid}/agent")
+    @PreAuthorize("@perm.scoped(#uid,'salesorder','SALES.ORDER.CREATE')")
+    public SalesOrderDto setAgent(@PathVariable String uid,
+                                  @Valid @RequestBody SetSalesOrderAgentRequest request) {
+        return salesOrderService.setAgent(uid, request.agentUid());
     }
 }

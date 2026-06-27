@@ -1,6 +1,8 @@
 package com.erp.modules.stock.service;
 
+import com.erp.modules.iam.domain.entity.Branch;
 import com.erp.modules.iam.repository.BranchRepository;
+import com.erp.modules.iam.repository.UserBranchRepository;
 import com.erp.modules.stock.domain.dto.CreateStockLocationRequest;
 import com.erp.modules.stock.domain.dto.StockLocationDto;
 import com.erp.modules.stock.domain.dto.UpdateStockLocationRequest;
@@ -29,17 +31,20 @@ public class StockLocationServiceImpl implements StockLocationService {
 
     private final StockLocationRepository locations;
     private final BranchRepository        branches;
+    private final UserBranchRepository    userBranches;
     private final ScopeGuard              scopeGuard;
     private final AuditService            audit;
 
     public StockLocationServiceImpl(StockLocationRepository locations,
                                      BranchRepository branches,
+                                     UserBranchRepository userBranches,
                                      ScopeGuard scopeGuard,
                                      AuditService audit) {
-        this.locations  = locations;
-        this.branches   = branches;
-        this.scopeGuard = scopeGuard;
-        this.audit      = audit;
+        this.locations    = locations;
+        this.branches     = branches;
+        this.userBranches = userBranches;
+        this.scopeGuard   = scopeGuard;
+        this.audit        = audit;
     }
 
     @Override
@@ -163,11 +168,45 @@ public class StockLocationServiceImpl implements StockLocationService {
     @Override
     @Transactional(readOnly = true)
     public Page<StockLocationDto> listForBranch(Pageable pageable) {
+        return listForBranch(null, pageable);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<StockLocationDto> listForBranch(String branchUid, Pageable pageable) {
         RequestContext.Principal principal = RequestContext.get();
         scopeGuard.assertCanActIn(principal, principal.companyId());
+
+        // No explicit branch → keep the historic behaviour: the caller's active branch.
+        Long branchId = (branchUid == null || branchUid.isBlank())
+                ? principal.branchId()
+                : resolveAccessibleBranchId(branchUid, principal);
+
         return locations.findByCompanyIdAndBranchId(
-                        principal.companyId(), principal.branchId(), pageable)
+                        principal.companyId(), branchId, pageable)
                 .map(l -> toDto(l));
+    }
+
+    /**
+     * Resolve a branch uid the caller is allowed to list locations for. Mirrors the X-Branch-Uid
+     * override validation in {@code JwtRequestContextFilter} (ADR-0003): the branch must belong to
+     * the caller's company, and a non-root caller must have an active {@code user_branch} assignment
+     * to it. Any defect fails closed (403).
+     */
+    private Long resolveAccessibleBranchId(String branchUid, RequestContext.Principal principal) {
+        Branch branch = branches.findByUid(branchUid)
+                .orElseThrow(() -> NotFoundException.of("Branch", branchUid));
+
+        // Same-company is the floor for everyone (root may act cross-company per ScopeGuard).
+        scopeGuard.assertCanActIn(principal, branch.getCompany().getId());
+
+        // Non-root callers may only list a branch they are actively assigned to — same rule the
+        // request-scope branch override enforces.
+        if (!principal.root()
+                && userBranches.findByUserIdAndBranchId(principal.userId(), branch.getId()).isEmpty()) {
+            throw com.erp.platform.common.api.ForbiddenException.notPermitted();
+        }
+        return branch.getId();
     }
 
     @Override

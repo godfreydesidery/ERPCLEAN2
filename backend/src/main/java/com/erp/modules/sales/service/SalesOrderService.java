@@ -30,6 +30,13 @@ public interface SalesOrderService {
     void cancel(String orderUid, CancelSalesOrderRequest req);
 
     /**
+     * Sets or changes the order's sales agent — fixing an agentless (or wrong-agent) order so it
+     * can be invoiced. Allowed only in pre-invoice states (DRAFT, CONFIRMED, PARTIALLY_FULFILLED,
+     * FULFILLED); rejected once the order is invoiced, closed, or cancelled.
+     */
+    SalesOrderDto setAgent(String uid, String agentUid);
+
+    /**
      * Creates a SalesOrder from an accepted quotation — called internally by QuotationService.
      * Copies lines + pricing; allocates SO-####.
      */

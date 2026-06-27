@@ -292,7 +292,7 @@ export const ADMIN_ROUTES: Routes = [
   },
   {
     path: 'goods-receipts',
-    canActivate: [requirePermission('PURCHASE.ORDER.VIEW')],
+    canActivate: [requirePermission('PURCHASE.GOODS_RECEIPT.VIEW')],
     loadComponent: () =>
       import('./purchases/goods-receipt-list.component').then((m) => m.GoodsReceiptListComponent),
   },
@@ -304,7 +304,7 @@ export const ADMIN_ROUTES: Routes = [
   },
   {
     path: 'goods-receipts/uid/:uid',
-    canActivate: [requirePermission('PURCHASE.ORDER.VIEW')],
+    canActivate: [requirePermission('PURCHASE.GOODS_RECEIPT.VIEW')],
     loadComponent: () =>
       import('./purchases/goods-receipt-detail.component').then((m) => m.GoodsReceiptDetailComponent),
   },

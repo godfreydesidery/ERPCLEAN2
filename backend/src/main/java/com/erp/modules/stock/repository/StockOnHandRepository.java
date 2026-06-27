@@ -51,6 +51,15 @@ public interface StockOnHandRepository extends JpaRepository<StockOnHand, Long> 
     Page<StockOnHand> findByCompanyIdAndBranchId(Long companyId, Long branchId, Pageable pageable);
 
     /**
+     * Paged on-hand view at the active branch, restricted to a set of product ids
+     * (the on-hand search path, FR-STOCK-11). The product-id set is resolved upstream by a
+     * company-scoped product code/name search (ProductService) — keeping the cross-module
+     * boundary intact (no join to the products entity from the stock module).
+     */
+    Page<StockOnHand> findByCompanyIdAndBranchIdAndProductIdIn(
+            Long companyId, Long branchId, List<Long> productIds, Pageable pageable);
+
+    /**
      * Single-column projection: the company owning a stock-on-hand row identified by uid.
      * Used by {@link com.erp.platform.security.ScopeGuard#companyIdOf} (D-10).
      */
