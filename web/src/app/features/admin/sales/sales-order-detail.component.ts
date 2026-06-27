@@ -7,6 +7,7 @@ import { RouterLink } from '@angular/router';
 import { debounceTime, distinctUntilChanged, Subject, switchMap } from 'rxjs';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
+import { AgentModel } from '../models/party.model';
 import { ProductModel, UnitOfMeasureDto } from '../models/product.model';
 import {
   AddSalesOrderLineRequest,
@@ -15,6 +16,7 @@ import {
   SalesOrderDto,
   SalesOrderLineDto,
 } from '../models/sales-orders.model';
+import { AgentService } from '../parties/agent.service';
 import { ProductService } from '../products/product.service';
 import { SalesOrdersService } from './sales-orders.service';
 
@@ -37,6 +39,7 @@ type LoadState = 'loading' | 'idle' | 'error';
 export class SalesOrderDetailComponent {
   private readonly soService = inject(SalesOrdersService);
   private readonly productService = inject(ProductService);
+  private readonly agentService = inject(AgentService);
   private readonly alerts = inject(AlertService);
   protected readonly session = inject(SessionStore);
 
@@ -79,6 +82,15 @@ export class SalesOrderDetailComponent {
   readonly cancelling = signal(false);
   readonly cancelError = signal<string | null>(null);
 
+  // ── Set/Change agent ──────────────────────────────────────────────────────────
+  readonly showAgentForm = signal(false);
+  readonly agentSearchQ = signal('');
+  readonly agentResults = signal<AgentModel[]>([]);
+  readonly selectedAgent = signal<{ uid: string; label: string } | null>(null);
+  readonly savingAgent = signal(false);
+  readonly agentError = signal<string | null>(null);
+  private readonly agentSearch$ = new Subject<string>();
+
   // ── Permissions ───────────────────────────────────────────────────────────────
   readonly canCreate = computed(() => this.session.hasPermission('SALES.ORDER.CREATE'));
   readonly canConfirm = computed(() => this.session.hasPermission('SALES.ORDER.CONFIRM'));
@@ -102,6 +114,18 @@ export class SalesOrderDetailComponent {
     this.isDraft() && this.canConfirm() && this.lines().length > 0,
   );
 
+  // ── Agent state ────────────────────────────────────────────────────────────────
+  readonly hasAgent = computed(() => this.order()?.agentId != null);
+  // setAgent is allowed only in pre-invoice states (DRAFT, CONFIRMED, PARTIALLY_FULFILLED,
+  // FULFILLED) — mirrors the backend guard. Reuses SALES.ORDER.CREATE (the endpoint's gate).
+  readonly canSetAgentNow = computed(() => {
+    const s = this.order()?.status;
+    if (!s) return false;
+    const allowed = s === 'DRAFT' || s === 'CONFIRMED'
+      || s === 'PARTIALLY_FULFILLED' || s === 'FULFILLED';
+    return allowed && this.canCreate();
+  });
+
   readonly orderLabel = computed(() => this.order()?.orderNumber ?? 'DRAFT');
 
   private readonly productSearch$ = new Subject<string>();
@@ -121,6 +145,22 @@ export class SalesOrderDetailComponent {
       .subscribe({
         next: ({ rows }) => this.productResults.set(rows.filter((r) => r.status !== 'ARCHIVED')),
         error: () => this.productResults.set([]),
+      });
+
+    this.agentSearch$
+      .pipe(
+        debounceTime(300),
+        distinctUntilChanged(),
+        switchMap((q) => {
+          const companyId = this.order()?.companyId;
+          if (!companyId || !q.trim()) { this.agentResults.set([]); return []; }
+          return this.agentService.list(companyId, q.trim(), 0, 10);
+        }),
+        takeUntilDestroyed(),
+      )
+      .subscribe({
+        next: ({ rows }) => this.agentResults.set(rows.filter((a) => a.status === 'ACTIVE')),
+        error: () => this.agentResults.set([]),
       });
 
     queueMicrotask(() => this.init());
@@ -312,6 +352,48 @@ export class SalesOrderDetailComponent {
       error: (err: unknown) => {
         this.cancelError.set(this.messageFrom(err, 'Could not cancel order.'));
         this.cancelling.set(false);
+      },
+    });
+  }
+
+  // ── Set/Change agent ─────────────────────────────────────────────────────────
+
+  toggleAgentForm(): void {
+    this.showAgentForm.update((v) => !v);
+    this.agentError.set(null);
+    this.selectedAgent.set(null);
+    this.agentSearchQ.set('');
+    this.agentResults.set([]);
+  }
+
+  onAgentSearchChange(q: string): void {
+    this.agentSearchQ.set(q);
+    this.selectedAgent.set(null);
+    this.agentSearch$.next(q);
+  }
+
+  selectAgent(a: AgentModel): void {
+    this.selectedAgent.set({ uid: a.uid, label: `${a.code} — ${a.displayName}` });
+    this.agentResults.set([]);
+    this.agentSearchQ.set(`${a.code} — ${a.displayName}`);
+  }
+
+  submitAgent(): void {
+    if (this.savingAgent()) return;
+    const agent = this.selectedAgent();
+    if (!agent) { this.agentError.set('Select an agent.'); return; }
+    this.savingAgent.set(true);
+    this.agentError.set(null);
+    this.soService.setOrderAgent(this.uid(), { agentUid: agent.uid }).subscribe({
+      next: (updated) => {
+        this.savingAgent.set(false);
+        this.showAgentForm.set(false);
+        this.order.set(updated);
+        this.alerts.success('Agent assigned');
+      },
+      error: (err: unknown) => {
+        this.agentError.set(this.messageFrom(err, 'Could not assign agent.'));
+        this.savingAgent.set(false);
       },
     });
   }

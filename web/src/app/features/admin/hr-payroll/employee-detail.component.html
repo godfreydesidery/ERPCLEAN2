@@ -122,18 +122,26 @@
                        [disabled]="saving()" />
               </div>
               <div class="erp-field">
-                <label class="form-label" for="dDeptId">Department ID</label>
-                <input id="dDeptId" name="dDeptId" type="text" class="form-control"
-                       placeholder="Numeric id"
-                       [ngModel]="fDepartmentId()" (ngModelChange)="fDepartmentId.set($event)"
-                       [disabled]="saving()" />
+                <label class="form-label" for="dDeptId">Department</label>
+                <select id="dDeptId" name="dDeptId" class="form-select"
+                        [ngModel]="fDepartmentId()" (ngModelChange)="fDepartmentId.set($event)"
+                        [disabled]="saving()">
+                  <option value="">— none —</option>
+                  @for (d of departments(); track d.id) {
+                    <option [value]="d.id">{{ d.name }}</option>
+                  }
+                </select>
               </div>
               <div class="erp-field">
-                <label class="form-label" for="dBranchId">Branch ID</label>
-                <input id="dBranchId" name="dBranchId" type="text" class="form-control"
-                       placeholder="Numeric id"
-                       [ngModel]="fBranchId()" (ngModelChange)="fBranchId.set($event)"
-                       [disabled]="saving()" />
+                <label class="form-label" for="dBranchId">Branch</label>
+                <select id="dBranchId" name="dBranchId" class="form-select"
+                        [ngModel]="fBranchId()" (ngModelChange)="fBranchId.set($event)"
+                        [disabled]="saving()">
+                  <option value="">— none —</option>
+                  @for (b of branches(); track b.id) {
+                    <option [value]="b.id">{{ b.name }}</option>
+                  }
+                </select>
               </div>
             </div>
 

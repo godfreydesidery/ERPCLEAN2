@@ -18,6 +18,7 @@ import {
   SalesOrderDto,
   SalesOrderLineDto,
   SalesReturnDto,
+  SetSalesOrderAgentRequest,
 } from '../models/sales-orders.model';
 import { SalesInvoiceDto } from '../models/sales.model';
 
@@ -148,6 +149,10 @@ export class SalesOrdersService {
 
   cancelOrder(uid: string, request?: CancelSalesOrderRequest): Observable<void> {
     return this.http.put<void>(`${this.orderBase}/uid/${uid}/cancel`, request ?? {});
+  }
+
+  setOrderAgent(uid: string, request: SetSalesOrderAgentRequest): Observable<SalesOrderDto> {
+    return this.http.patch<SalesOrderDto>(`${this.orderBase}/uid/${uid}/agent`, request);
   }
 
   // ── Deliveries ────────────────────────────────────────────────────────────────

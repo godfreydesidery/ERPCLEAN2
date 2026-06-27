@@ -41,18 +41,20 @@ export class StockService {
 
   // ── On-hand list ─────────────────────────────────────────────────────────────
 
+  /**
+   * GET /api/v1/stock/on-hand — paged on-hand list at the caller's active branch.
+   * Scope (company + branch) is governed server-side by the request context (JWT company +
+   * the global branch switcher's X-Branch-Uid); the page deliberately does NOT send companyId/
+   * branchId — only the optional `q` search filters within that scope by product code/name.
+   */
   listOnHand(
-    companyId: string,
-    branchId?: string,
     q?: string,
     page = 0,
     size = 20,
   ): Observable<StockOnHandPage> {
     let params = new HttpParams()
-      .set('companyId', companyId)
       .set('page', String(page))
       .set('size', String(size));
-    if (branchId?.trim()) params = params.set('branchId', branchId.trim());
     if (q?.trim()) params = params.set('q', q.trim());
 
     const context = new HttpContext().set(SKIP_UNWRAP, true);

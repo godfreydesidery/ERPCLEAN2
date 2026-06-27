@@ -10,16 +10,22 @@ import static org.mockito.Mockito.when;
 
 import com.erp.modules.iam.domain.entity.Branch;
 import com.erp.modules.iam.domain.entity.Company;
+import com.erp.modules.iam.domain.entity.UserBranch;
 import com.erp.modules.iam.repository.BranchRepository;
+import com.erp.modules.iam.repository.UserBranchRepository;
 import com.erp.modules.stock.domain.dto.CreateStockLocationRequest;
 import com.erp.modules.stock.domain.dto.StockLocationDto;
 import com.erp.modules.stock.domain.entity.StockLocation;
 import com.erp.modules.stock.domain.enums.LocationType;
 import com.erp.modules.stock.repository.StockLocationRepository;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.api.ForbiddenException;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -44,6 +50,7 @@ class StockLocationServiceImplTest {
 
     private StockLocationRepository locations;
     private BranchRepository        branches;
+    private UserBranchRepository    userBranches;
     private ScopeGuard               scopeGuard;
     private AuditService             audit;
 
@@ -55,12 +62,13 @@ class StockLocationServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        locations  = mock(StockLocationRepository.class);
-        branches   = mock(BranchRepository.class);
-        scopeGuard = mock(ScopeGuard.class);
-        audit      = mock(AuditService.class);
+        locations    = mock(StockLocationRepository.class);
+        branches     = mock(BranchRepository.class);
+        userBranches = mock(UserBranchRepository.class);
+        scopeGuard   = mock(ScopeGuard.class);
+        audit        = mock(AuditService.class);
 
-        service = new StockLocationServiceImpl(locations, branches, scopeGuard, audit);
+        service = new StockLocationServiceImpl(locations, branches, userBranches, scopeGuard, audit);
 
         RequestContext.set(new RequestContext.Principal(
                 USER_ID, "user@test.com", false, COMPANY_ID, BRANCH_ID, null));
@@ -142,6 +150,64 @@ class StockLocationServiceImplTest {
         // findByCompanyIdAndBranchIdAndIsDefaultTrue must NOT be called when makeDefault=false
         verify(locations, never()).findByCompanyIdAndBranchIdAndIsDefaultTrue(any(), any());
         verify(locations, never()).saveAndFlush(any());
+    }
+
+    // -------------------------------------------------------------------------
+    // Branch-filtered list: an explicit branchUid lists that branch (not just the
+    // caller's active branch) so a location created for any branch is findable.
+    // -------------------------------------------------------------------------
+
+    private static final Long OTHER_BRANCH_ID = 30L;
+    private static final Pageable PAGEABLE     = PageRequest.of(0, 20);
+
+    @Test
+    void listForBranch_noBranchUid_usesActiveBranch() {
+        when(locations.findByCompanyIdAndBranchId(COMPANY_ID, BRANCH_ID, PAGEABLE))
+                .thenReturn(Page.empty(PAGEABLE));
+
+        service.listForBranch(null, PAGEABLE);
+
+        // Active branch from the principal, never the assignment-resolved path.
+        verify(locations).findByCompanyIdAndBranchId(COMPANY_ID, BRANCH_ID, PAGEABLE);
+        verify(branches, never()).findByUid(any());
+    }
+
+    @Test
+    void listForBranch_withBranchUid_listsThatBranch_whenAssigned() {
+        Company company = mock(Company.class);
+        when(company.getId()).thenReturn(COMPANY_ID);
+        Branch other = mock(Branch.class);
+        when(other.getId()).thenReturn(OTHER_BRANCH_ID);
+        when(other.getCompany()).thenReturn(company);
+        when(branches.findByUid("OTHER-BRANCH-UID")).thenReturn(Optional.of(other));
+        // Non-root caller is actively assigned to the requested branch.
+        when(userBranches.findByUserIdAndBranchId(USER_ID, OTHER_BRANCH_ID))
+                .thenReturn(Optional.of(mock(UserBranch.class)));
+        when(locations.findByCompanyIdAndBranchId(COMPANY_ID, OTHER_BRANCH_ID, PAGEABLE))
+                .thenReturn(Page.empty(PAGEABLE));
+
+        service.listForBranch("OTHER-BRANCH-UID", PAGEABLE);
+
+        // Lists the REQUESTED branch, not the active one.
+        verify(locations).findByCompanyIdAndBranchId(COMPANY_ID, OTHER_BRANCH_ID, PAGEABLE);
+    }
+
+    @Test
+    void listForBranch_withBranchUid_forbidden_whenNotAssigned() {
+        Company company = mock(Company.class);
+        when(company.getId()).thenReturn(COMPANY_ID);
+        Branch other = mock(Branch.class);
+        when(other.getId()).thenReturn(OTHER_BRANCH_ID);
+        when(other.getCompany()).thenReturn(company);
+        when(branches.findByUid("OTHER-BRANCH-UID")).thenReturn(Optional.of(other));
+        // Same company (assertCanActIn passes) but NOT assigned to the branch.
+        when(userBranches.findByUserIdAndBranchId(USER_ID, OTHER_BRANCH_ID))
+                .thenReturn(Optional.empty());
+
+        org.junit.jupiter.api.Assertions.assertThrows(ForbiddenException.class,
+                () -> service.listForBranch("OTHER-BRANCH-UID", PAGEABLE));
+
+        verify(locations, never()).findByCompanyIdAndBranchId(any(), any(), any());
     }
 
     // -------------------------------------------------------------------------

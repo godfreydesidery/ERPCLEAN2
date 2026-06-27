@@ -8,10 +8,13 @@ import { PageMeta } from '../../../core/api/api-response.model';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import { Company } from '../models/company.model';
+import { Branch } from '../models/branch.model';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
+import { BranchService } from '../branch/branch.service';
 import { HrPayrollService, EmployeePage } from './hr-payroll.service';
-import { CreateEmployeeRequest, EmployeeDto } from './models/hr-payroll.model';
+import { HrDepartmentService } from './departments/hr-department.service';
+import { CreateEmployeeRequest, DepartmentDto, EmployeeDto } from './models/hr-payroll.model';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
 const DEFAULT_SIZE = 20;
@@ -32,6 +35,8 @@ export class EmployeeListComponent {
   private readonly hrService = inject(HrPayrollService);
   private readonly companyService = inject(CompanyService);
   private readonly organisationService = inject(OrganisationService);
+  private readonly branchService = inject(BranchService);
+  private readonly deptService = inject(HrDepartmentService);
   private readonly alerts = inject(AlertService);
   protected readonly session = inject(SessionStore);
 
@@ -39,6 +44,10 @@ export class EmployeeListComponent {
   readonly companies = signal<Company[]>([]);
   readonly selectedCompanyId = signal('');
   readonly companyState = signal<'loading' | 'idle' | 'error'>('loading');
+
+  // ── Department / branch dropdowns for create form ────────────────────────────
+  readonly departments = signal<DepartmentDto[]>([]);
+  readonly branches = signal<Branch[]>([]);
 
   // ── List state ───────────────────────────────────────────────────────────────
   readonly rows = signal<EmployeeDto[]>([]);
@@ -107,6 +116,7 @@ export class EmployeeListComponent {
             if (list.length > 0) {
               this.selectedCompanyId.set(list[0].id);
               this.load(0);
+              this.loadDepartmentsAndBranches(list[0].id);
             }
           },
           error: () => this.companyState.set('error'),
@@ -116,9 +126,31 @@ export class EmployeeListComponent {
     });
   }
 
+  /**
+   * Loads the department list (by numeric companyId) and the branch list (by company uid)
+   * for use in the create-employee form dropdowns.
+   */
+  private loadDepartmentsAndBranches(companyId: string): void {
+    this.deptService.list(companyId).subscribe({
+      next: (list) => this.departments.set(list),
+      error: () => this.departments.set([]),
+    });
+
+    const companyUid = this.companies().find((c) => c.id === companyId)?.uid ?? '';
+    if (companyUid) {
+      this.branchService.list(companyUid).subscribe({
+        next: (list) => this.branches.set(list),
+        error: () => this.branches.set([]),
+      });
+    }
+  }
+
   onCompanyChange(id: string): void {
     this.selectedCompanyId.set(id);
-    if (id) this.load(0);
+    if (id) {
+      this.load(0);
+      this.loadDepartmentsAndBranches(id);
+    }
   }
 
   load(page: number): void {
@@ -161,6 +193,9 @@ export class EmployeeListComponent {
     this.saving.set(true);
     this.formError.set(null);
 
+    const deptId = this.fDepartmentId();
+    const branchId = this.fBranchId();
+
     const request: CreateEmployeeRequest = {
       firstName,
       lastName,
@@ -168,8 +203,8 @@ export class EmployeeListComponent {
       jobTitle: this.fJobTitle().trim() || undefined,
       gender: this.fGender().trim() || undefined,
       nationalId: this.fNationalId().trim() || undefined,
-      departmentId: this.fDepartmentId().trim() || undefined,
-      branchId: this.fBranchId().trim() || undefined,
+      departmentId: deptId || undefined,
+      branchId: branchId || undefined,
     };
 
     this.hrService.createEmployee(request).subscribe({

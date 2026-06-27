@@ -224,6 +224,10 @@ export interface CancelSalesOrderRequest {
   reason?: string;
 }
 
+export interface SetSalesOrderAgentRequest {
+  agentUid: string;
+}
+
 export interface CreateDeliveryRequest {
   salesOrderUid: string;
   deliveryDate: string;

@@ -59,6 +59,11 @@ export class StockLocationListComponent {
     this.branches().map((b) => ({ uid: b.uid, label: b.name, hint: b.code })),
   );
 
+  // ── Branch filter (list scope) ────────────────────────────────────────────
+  // Defaults to the caller's active branch. Selecting another branch the user can
+  // access re-scopes the list so a location created for that branch is findable.
+  readonly filterBranchUid = signal<string>(this.session.activeBranchUid() ?? '');
+
   // ── List state ────────────────────────────────────────────────────────────
   readonly rows = signal<StockLocationDto[]>([]);
   readonly meta = signal<PageMeta>({ page: 0, size: DEFAULT_SIZE, totalElements: 0, totalPages: 0, hasNext: false });
@@ -100,7 +105,7 @@ export class StockLocationListComponent {
         switchMap(({ page }) => {
           this.state.set('loading');
           this.currentPage.set(page);
-          return this.locationService.list(page, DEFAULT_SIZE);
+          return this.locationService.list(page, DEFAULT_SIZE, this.filterBranchUid() || undefined);
         }),
         takeUntilDestroyed(),
       )
@@ -154,6 +159,11 @@ export class StockLocationListComponent {
     if (id) this.load(0);
   }
 
+  onFilterBranchChange(branchUid: string): void {
+    this.filterBranchUid.set(branchUid);
+    this.load(0);
+  }
+
   load(page: number): void {
     this.immediateTrigger$.next({ page });
   }
@@ -199,7 +209,18 @@ export class StockLocationListComponent {
         this.showCreateForm.set(false);
         this.resetCreateForm();
         this.alerts.success('Location created', loc.code);
-        this.load(this.currentPage());
+        // Make the new row visible: if it was created for a branch other than the one the
+        // list is currently filtered to, switch the filter to the created branch and reload
+        // from page 0. The created DTO carries branchId (numeric); map it to the branch uid
+        // the filter is keyed by. Fall back to the form's submitted branchUid if unmapped.
+        const createdBranchUid =
+          this.branches().find((b) => b.id === loc.branchId)?.uid ?? branchUid;
+        if (createdBranchUid && createdBranchUid !== this.filterBranchUid()) {
+          this.filterBranchUid.set(createdBranchUid);
+          this.load(0);
+        } else {
+          this.load(this.currentPage());
+        }
       },
       error: (err) => {
         this.formError.set(this.messageFrom(err, 'Could not create location.'));

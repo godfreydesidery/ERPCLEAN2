@@ -457,7 +457,7 @@ class StockServiceImplIT extends PostgresIntegrationTest {
                 rootId, "stk_root", false, companyB.getId(), branchB.getId(), null));
 
         // Company B's list returns empty (its own branch has nothing)
-        Page<StockOnHandDto> bPage = stockService.listOnHand(Pageable.unpaged());
+        Page<StockOnHandDto> bPage = stockService.listOnHand(null, Pageable.unpaged());
         assertThat(bPage.getContent()).isEmpty();
 
         // Non-root user in B must not be able to act in A's scope
@@ -466,6 +466,36 @@ class StockServiceImplIT extends PostgresIntegrationTest {
                     rootId, "stk_root", false, companyB.getId(), branchB.getId(), null));
             stockService.listMovements(productA.uid(), Pageable.unpaged());
         }).isInstanceOf(Exception.class); // ForbiddenException: productA belongs to A
+    }
+
+    // =========================================================================
+    // 11b. On-hand search (q): filters by product code/name within branch scope
+    // =========================================================================
+
+    @Test
+    void listOnHand_withSearchTerm_filtersByProductNameWithinScope() {
+        ProductDto apple  = stockableProduct("Apple Juice");
+        ProductDto banana = stockableProduct("Banana Bread");
+        stockService.openingBalance(new OpeningBalanceRequest(apple.uid(),  BigDecimal.TEN, null));
+        stockService.openingBalance(new OpeningBalanceRequest(banana.uid(), BigDecimal.TEN, null));
+
+        // No term → both rows visible
+        Page<StockOnHandDto> all = stockService.listOnHand(null, Pageable.unpaged());
+        assertThat(all.getContent()).hasSize(2);
+
+        // Term matches one product name (case-insensitive contains) → only that row
+        Page<StockOnHandDto> filtered = stockService.listOnHand("banana", Pageable.unpaged());
+        assertThat(filtered.getContent())
+                .extracting(StockOnHandDto::productId)
+                .containsExactly(banana.id());
+
+        // Blank term behaves like no term
+        Page<StockOnHandDto> blank = stockService.listOnHand("   ", Pageable.unpaged());
+        assertThat(blank.getContent()).hasSize(2);
+
+        // Term matching nothing → empty page
+        Page<StockOnHandDto> none = stockService.listOnHand("zzzzz-no-match", Pageable.unpaged());
+        assertThat(none.getContent()).isEmpty();
     }
 
     // =========================================================================
