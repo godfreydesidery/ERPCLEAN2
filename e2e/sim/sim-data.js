@@ -21,7 +21,7 @@ const ROLES = [
     keywords: ['sales', 'purchas', 'stock', 'inventory', 'ledger', 'gl.', 'report', 'approv', 'dashboard', 'bi.', 'customer', 'supplier', 'product', 'branch', 'view', 'read'] },
   { key: 'FINANCE_DIRECTOR', name: 'Finance Director', desc: 'Full finance: GL, AR, AP, cash/bank, tax, assets, budgeting',
     keywords: ['ledger', 'gl.', 'journal', 'receivable', 'ar.', 'payable', 'ap.', 'cash', 'bank', 'tax', 'vat', 'asset', 'budget', 'fx', 'cost', 'report', 'approv', 'credit'],
-    extraPerms: ['CUSTOMER.VIEW', 'SUPPLIER.VIEW'] }, // F22 role-read-dependency: AR/AP party pickers
+    extraPerms: ['CUSTOMER.VIEW', 'SUPPLIER.VIEW', 'BI.VIEW', 'BI.FINANCE.VIEW'] }, // F22 party pickers + the CFO's core job is the finance dashboard
   { key: 'BRANCH_MANAGER', name: 'Branch Manager', desc: 'Branch sales/purchase approvals, stock view & transfers, reports',
     keywords: ['sales', 'purchas', 'stock', 'inventory', 'transfer', 'report', 'approv', 'customer', 'supplier', 'branch'] },
   { key: 'ACCOUNTANT', name: 'Accountant', desc: 'GL postings, AR/AP invoicing, tax, period-end, financial reports',

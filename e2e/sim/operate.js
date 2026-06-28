@@ -29,6 +29,18 @@ const ACCESS = {
   HR_PAYROLL_OFFICER: [['/admin/users', 'Users (people)']],
 };
 
+// SWEEP mode (SWEEP=1): every persona visits EVERY operational screen (the 15 launchpad destinations),
+// recording OK / FORBIDDEN / REDIRECTED_HOME per screen — an access matrix to systematically find any
+// role silently blocked from a screen its job needs (the Goods-Receipt/PURCHASE.RECEIVE class).
+const SWEEP_TARGETS = [
+  ['/admin/dashboard', 'Dashboard'], ['/admin/sales-orders', 'Sales orders'], ['/admin/pos/sell', 'POS sell'],
+  ['/admin/customers', 'Customers'], ['/admin/purchase-orders', 'Purchase orders'], ['/admin/goods-receipts/create', 'Goods receipt'],
+  ['/admin/suppliers', 'Suppliers'], ['/admin/stock', 'Stock on-hand'], ['/admin/stock-counts/create', 'Stock count'],
+  ['/admin/stock-transfers/create', 'Stock transfer'], ['/admin/ar/receipts/record', 'Record receipt'],
+  ['/admin/ap/payments/record', 'Record payment'], ['/admin/ap/supplier-bills/enter', 'Enter supplier bill'],
+  ['/admin/gl/journals/post', 'Post journal'], ['/admin/work-orders', 'Work orders'],
+];
+
 // ---- helpers reused from qa-ui-drive proven flow ----
 async function createOne(page, buf, rec, opts) {
   // opts: {path, openLabel, anchor, fields:[[sel,val,how]], submitField, name, workflow}
@@ -332,8 +344,8 @@ async function runDeep(page, buf, rec) {
     console.log('  landed ->', li.landedUrl);
     await L.shot(page, `${persona.slug}-home`);
 
-    // ACCESS missions: can I open my own screens?
-    const targets = ACCESS[persona.role] || [];
+    // ACCESS missions: can I open my own screens? (SWEEP=1 → every operational screen, for the matrix)
+    const targets = process.env.SWEEP ? SWEEP_TARGETS : (ACCESS[persona.role] || []);
     for (const [path, label] of targets) {
       buf.clear();
       await L.goto(page, path);
@@ -366,11 +378,12 @@ async function runDeep(page, buf, rec) {
       }
     }
 
-    // ACTION missions: enter the master data I own
-    await runActions(page, buf, rec);
-
-    // DEEP missions: actually do my transactional work (opt-in)
-    if (process.env.DEEP) await runDeep(page, buf, rec);
+    // ACTION missions: enter the master data I own (skipped in SWEEP — sweep is read-only access matrix)
+    if (!process.env.SWEEP) {
+      await runActions(page, buf, rec);
+      // DEEP missions: actually do my transactional work (opt-in)
+      if (process.env.DEEP) await runDeep(page, buf, rec);
+    }
 
   } catch (e) {
     rec.problem('BLOCKED', 'operate', 'fatal', String(e && e.message || e).slice(0, 140), buf.snapshot());

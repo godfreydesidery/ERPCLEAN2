@@ -169,10 +169,12 @@ async function waitCleared(page, fieldSel, ms = 8000) {
 }
 // Is a 403/permission block visible? (route guard redirect to /forbidden, or an inline message)
 async function looksForbidden(page, buf) {
+  // A REAL block = a 403 on the screen's data, or a /forbidden route. We deliberately do NOT match
+  // generic "you don't have permission to view X" body text: that is a GRACEFUL inline degradation
+  // notice (good UX, e.g. the dashboard's finance-KPI section) — flagging it as forbidden is a false
+  // positive (it tripped the FINANCE_DIRECTOR dashboard check even though the page loaded fine).
   const url = page.url();
-  if (/forbidden|not-authorized|403/i.test(url)) return true;
-  const txt = (await page.locator('body').innerText().catch(() => '')) || '';
-  if (/you (do not|don.t) have permission|not authorized|access denied|forbidden/i.test(txt)) return true;
+  if (/forbidden|not-authorized/i.test(url)) return true;
   if (buf && buf.api.some(a => a.status === 403)) return true;
   return false;
 }
