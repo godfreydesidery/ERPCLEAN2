@@ -39,7 +39,8 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>Reuses {@link PermissionCodesSeededTest}'s scanner, PERM_CODE_PATTERN, and
  * {@code loadSeededCodes()} (same seed resource, no second implementation).
  *
- * <p>Manifest: {@code backend/src/test/resources/security/screen-read-closure.json}.
+ * <p>Manifest: {@code backend/src/main/resources/security/screen-read-closure.json}
+ * (main-resources so the runtime validator and this test share one file — no second copy).
  */
 class RolePermissionClosureTest {
 
@@ -153,6 +154,20 @@ class RolePermissionClosureTest {
                                 + ctx);
                     }
                 }
+            }
+        }
+
+        // ── (d) Every screen has a non-blank accessPermission that is seeded ────
+        for (JsonNode screenNode : screens) {
+            final String screen = screenNode.path("screen").asText();
+            final String accessPermission = screenNode.path("accessPermission").asText(null);
+            if (accessPermission == null || accessPermission.isBlank()) {
+                failures.add("(d) Screen '" + screen
+                        + "' is missing the 'accessPermission' field in the manifest");
+            } else if (!seededCodes.contains(accessPermission)) {
+                failures.add("(d) Screen '" + screen
+                        + "' accessPermission '" + accessPermission
+                        + "' is not seeded in R__seed_permissions.sql");
             }
         }
 
@@ -317,7 +332,7 @@ class RolePermissionClosureTest {
                 RolePermissionClosureTest.class.getResourceAsStream(MANIFEST_RESOURCE)) {
             if (is == null) {
                 fail("Cannot find manifest " + MANIFEST_RESOURCE
-                        + " — expected at backend/src/test/resources/security/screen-read-closure.json");
+                        + " — expected at backend/src/main/resources/security/screen-read-closure.json");
             }
             return new ObjectMapper().readTree(is);
         }

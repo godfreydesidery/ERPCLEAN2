@@ -1,10 +1,11 @@
 {
   "_adr": "ADR-0047 (docs/decisions/0047-role-permission-read-closure.md)",
-  "_description": "Screen-read closure manifest. Declares, per guarded screen, the supporting reads it fires on load. RolePermissionClosureTest verifies (a) each declared gate matches the live @PreAuthorize, (b) required closure-bearing reads are seeded, (c) no phantom codes. Do NOT edit without running RolePermissionClosureTest.",
+  "_description": "Screen-read closure manifest. Declares, per guarded screen, the supporting reads it fires on load. RolePermissionClosureTest verifies (a) each declared gate matches the live @PreAuthorize, (b) required closure-bearing reads are seeded, (c) no phantom codes, (d) every screen has a non-blank accessPermission seeded. Do NOT edit without running RolePermissionClosureTest.",
   "_gate_forms": "has | scoped | hasOrMember | scopedOrMember | disjunction. A 'disjunction' row carries code (primary) and altCode (the OR-branch).",
   "screens": [
     {
       "screen": "ar.record-receipt",
+      "accessPermission": "AR.RECEIPT.RECORD",
       "reads": [
         {
           "controller": "CustomerController",
@@ -34,6 +35,7 @@
     },
     {
       "screen": "ap.record-payment",
+      "accessPermission": "AP.PAYMENT.RUN",
       "reads": [
         {
           "controller": "SupplierController",
@@ -63,6 +65,7 @@
     },
     {
       "screen": "ap.enter-supplier-bill",
+      "accessPermission": "AP.BILL.ENTER",
       "reads": [
         {
           "controller": "SupplierController",
@@ -93,6 +96,7 @@
     },
     {
       "screen": "manufacturing.work-orders",
+      "accessPermission": "MANUFACTURING.VIEW",
       "reads": [
         {
           "controller": "ProductController",
@@ -110,6 +114,7 @@
     },
     {
       "screen": "manufacturing.bom",
+      "accessPermission": "BOM.VIEW",
       "reads": [
         {
           "controller": "ProductController",
@@ -121,6 +126,7 @@
     },
     {
       "screen": "stock.transfer",
+      "accessPermission": "STOCK.TRANSFER.CREATE",
       "reads": [
         {
           "controller": "ProductController",
@@ -138,6 +144,7 @@
     },
     {
       "screen": "stock.on-hand",
+      "accessPermission": "STOCK.VIEW",
       "reads": [
         {
           "controller": "BranchController",
@@ -155,6 +162,7 @@
     },
     {
       "screen": "stock.count",
+      "accessPermission": "STOCK.COUNT.VIEW",
       "reads": [
         {
           "controller": "BranchController",
@@ -172,6 +180,7 @@
     },
     {
       "screen": "pos.sell",
+      "accessPermission": "POS.SALE.CREATE",
       "reads": [
         {
           "controller": "BranchController",
