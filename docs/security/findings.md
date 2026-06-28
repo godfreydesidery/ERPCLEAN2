@@ -200,6 +200,23 @@ comments are exempt and stay as-is.
 |----|--------|----------|-------|--------|-----|
 | F24 | sim 2026-06-28 (approvals) | MEDIUM (UX + information hygiene; no auth/tenant impact) | ~168 user-facing validation/exception messages across 78 files leak internal rule codes (BR-/ADR-/FR-/D-n), and some leak ULIDs / permission codes / endpoint paths, into `ApiResponse.errors[]`. The business meaning is fine; the internal tags are not user-safe. | IN PROGRESS (technical team) | Rewrite each **user-facing** message in plain, calm language that states the rule without the internal tag/ULID/perm-code/endpoint; keep the rule code in a `//` comment if useful (comments are not user-facing); leave `log.*` untouched; update any test asserting a removed substring. |
 
+## F25 — PO approval is unreachable from the web UI (orphaned backend feature)
+
+Found by the daily-operations simulation while wiring the approval chain end-to-end. The PO-approval
+backend is complete (ADR-0027 D-6): `PurchaseSettings` gate (`poApprovalEnabled` + threshold, with a
+wired UI at `/admin/purchase-settings`), `PoApprovalGate.requiresApproval/submit`, and
+`PurchaseOrderController` `/submit-for-approval` + `/approve` + `/reject`. **But the web client never
+wired the submit/approve actions for POs.** The PO detail has only a **"Place Order"** button; placing an
+above-threshold PO throws *"PO requires approval … Submit for approval and wait for APPROVED status
+before placing."* — yet there is **no "Submit for Approval" action** in the PO detail and **no
+`submitForApproval`/`approve` method** in `purchases` services. Net: once an admin enables PO approval,
+every above-threshold PO is **stranded** — it can't be placed (rejected) and can't be submitted (no UI).
+(The reject message also leaks `FR-PROC-13` — folded into F24.)
+
+| ID | Source | Severity | Issue | Status | Fix |
+|----|--------|----------|-------|--------|-----|
+| F25 | sim 2026-06-28 (approvals) | HIGH (feature unusable: enabling PO approval strands all over-threshold POs) | Backend PO-approval flow (submit/approve/reject + threshold gate) is fully implemented and the threshold UI exists, but the web PO detail exposes no Submit-for-Approval / Approve action and `purchasesService` has no such method — so a placed-above-threshold PO is rejected with nowhere to go. | IN PROGRESS (technical team) | Frontend: add `submitForApproval(uid)` to the purchases service; show a **"Submit for Approval"** button on a DRAFT PO whose total ≥ the company PO-approval threshold (when approval is enabled), routing it to PENDING; surface the pending/approved/rejected status on the PO detail. Approval decision is taken in the already-wired generic Approvals inbox. No backend change, no migration. |
+
 ## Production-gating (carried, still OPEN)
 - **G1** (Slice 2): stable RS256 signing key from a secret store — dev key is in-memory (everyone logged out on restart; not prod-safe).
 - **G2** (Slice 2): access-token denylist on logout (access token currently valid until expiry after logout).
