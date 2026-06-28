@@ -58,7 +58,8 @@ actually flow in a deployed product: *user pain in → triaged engineering work 
 | [UPR-REGISTER.md](UPR-REGISTER.md) | The log of every **User Problem Report** filed in a run — id, persona, screen, severity, status, linked Issue. (Output) |
 | [ISSUES-REGISTER.md](ISSUES-REGISTER.md) | The **technical team's triage** of those UPRs into reproducible Issues + Fix Plans, grounded in the code. (Output) |
 | [SIM-RUN-REPORT.md](SIM-RUN-REPORT.md) | The end-to-end **run report** — what was built, how it ran, what was found, the systemic finding, how to re-run. |
-| [run-2026-06-28/](run-2026-06-28/) | Raw run evidence: `all-problems.json` (29 captured problems), `onboard-summary.json`. |
+| [run-2026-06-28/](run-2026-06-28/) | Raw run evidence: `all-problems.json` (29 captured problems), `onboard-summary.json`, `rerun-after-fix.json` (0 blockers after the fix). |
+| [BACKLOG.md](BACKLOG.md) | Deferred simulation-program ideas, queued for later (e.g. SIM-BL-001 skill-development + persona⇄team learning loop). |
 
 > The world bible, persona files and harness are the simulation's *inputs*; the UPR
 > register, the issues register and the run report are its *outputs*. The 2026-06-28
