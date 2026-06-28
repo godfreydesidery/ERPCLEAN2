@@ -26,7 +26,7 @@ const ACCESS = {
   STOREKEEPER: [['/admin/stock', 'Stock on-hand'], ['/admin/goods-receipts/create', 'Goods receipt'], ['/admin/stock-counts/create', 'Stock count']],
   STORES_SUPERVISOR: [['/admin/stock', 'Stock on-hand'], ['/admin/stock-counts/create', 'Stock count'], ['/admin/stock-transfers/create', 'Stock transfer']],
   PRODUCTION_OFFICER: [['/admin/work-orders', 'Work orders'], ['/admin/boms', 'Bills of materials']],
-  HR_PAYROLL_OFFICER: [['/admin/users', 'Users (people)']],
+  HR_PAYROLL_OFFICER: [['/admin/hr/employees', 'Employees']], // HR owns employees, NOT IAM system users
 };
 
 // SWEEP mode (SWEEP=1): every persona visits EVERY operational screen (the 15 launchpad destinations),
@@ -331,6 +331,39 @@ async function runDeep(page, buf, rec) {
           }
         }
       } catch (e) { rec.problem('SLOW', wf, screen, `opening balance: ${String(e.message || e).slice(0, 90)}`, buf.snapshot()); }
+    }
+  }
+
+  // HR/PAYROLL: register a new employee — the daily HR intake
+  if (persona.role === 'HR_PAYROLL_OFFICER') {
+    const wf = 'register a new employee', screen = '/admin/hr/employees';
+    await L.goto(page, screen);
+    if (await L.looksForbidden(page, buf)) { rec.problem('BLOCKED', wf, screen, 'not allowed to open Employees', buf.snapshot()); }
+    else {
+      try {
+        await L.pickFirstReal(page, '#companyPicker').catch(() => {});
+        await page.waitForTimeout(400);
+        await L.clickButton(page, /new employee/i);
+        await page.locator('#fFirstName').waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+        buf.clear();
+        await L.setField(page, '#fFirstName', 'Asha').catch(() => {});
+        await L.setField(page, '#fLastName', 'Mtema').catch(() => {});
+        await L.setField(page, '#fHireDate', today).catch(() => {});
+        await L.setField(page, '#fJobTitle', 'Sales Clerk').catch(() => {});
+        await L.setField(page, '#fNationalId', 'NIDA-' + Date.now()).catch(() => {});
+        await L.pickFirstReal(page, '#fGender').catch(() => {});
+        await L.pickFirstReal(page, '#fDepartmentId').catch(() => {});
+        await L.pickFirstReal(page, '#fBranchId').catch(() => {});
+        const deptOpts = await page.locator('#fDepartmentId option').count().catch(() => 0);
+        await page.waitForTimeout(300);
+        buf.clear();
+        await L.clickButton(page, /create employee/i);
+        await page.waitForTimeout(1500);
+        const s = buf.snapshot();
+        if (s.api.some(a => a.status >= 500)) rec.problem('BLOCKED', wf, screen, 'server error creating the employee', s);
+        else if (worst(s)) rec.problem('SLOW', wf, screen, `employee rejected (${worst(s).status})${deptOpts <= 1 ? ' — no department options to assign' : ''}`, s);
+        else rec.ok('register employee');
+      } catch (e) { rec.problem('SLOW', wf, screen, `registering employee: ${String(e.message || e).slice(0, 90)}`, buf.snapshot()); }
     }
   }
 
