@@ -29,8 +29,15 @@ a good baseline, not a desktop page crammed onto a phone.
   screens × mobile+tablet**. a11y holds at small screens.
 - Flag any screen that is functionally reachable but visually broken on a small screen as a UX UPR
   (frontend-engineer), distinct from a defect.
-- Consider a couple of representative real devices (a low-end Android phone, an iPad) via Playwright device
-  descriptors, not just raw viewports.
+- ~~Consider a couple of representative real devices via Playwright device descriptors~~ — **DONE**:
+  harness supports `DEVICE=pixel|iphone|ipad` (real Pixel 5 / iPhone 13 / iPad Mini descriptors).
+
+**Status 2026-06-28:** SIM-BL-002 substantially delivered — multi-device review done; the two real
+defects fixed (phone wide-table overflow; create-screen wrong-branch default); axe-at-mobile clean
+(0 serious/critical); a real role-composition bug surfaced + fixed (storekeeper lacked `PURCHASE.RECEIVE`
+→ silent home-redirect, now also detected by the harness); real-device descriptors added. Remaining =
+diminishing returns (full 16-persona × 4-profile matrix; an actual descriptor run) + the GM dashboard
+feature gap (separate).
 
 **Open questions:** which screens are mobile-critical (POS/counter sales and route-agent capture are the
 obvious phone/tablet ones; period-close/GL are desktop)? Do we set a minimum supported width? Should the

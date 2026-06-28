@@ -9,7 +9,7 @@
 //   NODE_PATH=d:/My_Works/ERP/ERPCLEAN2/web/node_modules node e2e/sim/<driver>.js
 //
 // Env: WEB_BASE (default http://localhost:4200), SIM_OUT (results dir).
-const { chromium } = require('playwright-core');
+const { chromium, devices } = require('playwright-core');
 const fs = require('fs');
 const path = require('path');
 
@@ -66,11 +66,16 @@ async function launch() {
 }
 // Device profiles — real users are on desktops, laptops, tablets and phones. Set DEVICE=mobile|tablet|
 // laptop|desktop to run a persona at that viewport (tablet/mobile also emulate touch + mobile UA).
+const stripDev = (d) => { if (!d) return null; const { defaultBrowserType, ...rest } = d; return rest; };
 const DEVICES = {
   desktop: { viewport: { width: 1440, height: 1000 } },
   laptop: { viewport: { width: 1366, height: 768 } },
   tablet: { viewport: { width: 834, height: 1112 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 },
   mobile: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3 },
+  // real Playwright device descriptors (realistic UA + dimensions) — DEVICE=pixel|iphone|ipad
+  pixel: stripDev(devices['Pixel 5']) || { viewport: { width: 393, height: 851 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2.75 },
+  iphone: stripDev(devices['iPhone 13']) || { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3 },
+  ipad: stripDev(devices['iPad Mini']) || { viewport: { width: 768, height: 1024 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 },
 };
 const DEVICE = (process.env.DEVICE || 'desktop').toLowerCase();
 async function newSession(browser) {

@@ -66,7 +66,7 @@ dashboard) — separated out below and **not** counted as responsive breakage.
 |---|---|---|---|
 | Saidi Karume | New Stock Count — Branch field | mobile + tablet | Branch dropdown defaults to a *different company's* branch ("Alpha IIJBRT HQ") while the header shows "Dar es Salaam HQ" — affects **both** devices, so it's a default/data-scope bug, not responsive. Flag to backend/UX as its own Issue. |
 | Bakari Mbaga | Group Dashboard | mobile + tablet | Shows the blank "workspace ready" placeholder on both — the dashboard isn't built/wired, not a layout failure. Out of scope for responsive; it's a missing feature. |
-| Saidi Karume | Goods Receipt | mobile + tablet | Screenshot captured the home screen, not the GR form — a **harness coverage gap**, so GR is *unverified* on handhelds (not a confirmed bug). Re-capture next pass. |
+| Saidi Karume | Goods Receipt | mobile + tablet | **RESOLVED — was a real role bug, not a capture gap.** `/admin/goods-receipts/create` requires `PURCHASE.RECEIVE` (route guard *and* backend endpoint both gate on it — parity is correct, code is seeded), which the STOREKEEPER role lacked (its keywords matched `goods`/`receipt` but not `receive`). `permission.guard` then **silently redirected to home** (by design — a gap is a redirect, not a 403), so the screenshot showed home and the harness scored it "OK". Fixed: granted `PURCHASE.RECEIVE` to the storekeeper/supervisor roles — Saidi now reaches Goods Receipt. The harness now flags this class (`REDIRECTED_HOME`). UX note for the owner: a silent home-redirect gives the user no feedback ("I clicked Goods Receipt and landed on home") — consider a brief "you don't have access" message; route to system-analyst/frontend. |
 
 ---
 
@@ -144,11 +144,12 @@ polish" ticket if desired; none blocks work.
     (on-hand/count/goods-receipt), purchase orders and the dashboard. **Result: 0 serious/critical
     violations** at either viewport. Accessibility holds at small screens; the responsive defect was
     purely visual-layout (clipped columns / off-screen actions), now fixed, not an a11y-semantics break.
-  - **One screen unverified:** Goods Receipt — the harness captured the home screen instead of the
-    GR form on both devices, so GR's handheld usability is *unverified* (re-capture next pass). It's
-    Saidi's most-used screen, so prioritise it.
+  - **Goods Receipt — resolved (turned out to be a real bug, not a capture gap).** The home-screen
+    capture was the symptom of a silent permission home-redirect; see the findings note above. Fixed +
+    the harness now detects silent home-redirects (`REDIRECTED_HOME`).
   - **Harness login flake at high concurrency** — under parallel persona logins the harness
     occasionally races the auth/session step; reviews were re-captured serially where that occurred.
     Noted for the coverage runner (lower concurrency or a retry on the login step).
-  - Representative **real-device descriptors** (a low-end Android, an iPad) per the backlog item were
-    not used — raw viewports only.
+  - Representative **real-device descriptors** are now supported (`DEVICE=pixel|iphone|ipad` — real
+    Playwright Pixel 5 / iPhone 13 / iPad Mini UA + dimensions), in addition to the raw
+    mobile/tablet/laptop/desktop viewports.

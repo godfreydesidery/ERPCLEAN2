@@ -342,6 +342,12 @@ async function runDeep(page, buf, rec) {
       let outcome = 'OK';
       if (url.includes('/login')) { outcome = 'KICKED_TO_LOGIN'; rec.problem('BLOCKED', `open ${label}`, path, 'I was thrown back to the login screen trying to open my own screen', buf.snapshot()); }
       else if (await L.looksForbidden(page, buf)) { outcome = 'FORBIDDEN'; rec.problem('BLOCKED', `open ${label}`, path, `I'm told I don't have permission to open ${label}, but it's part of my job (${persona.role})`, buf.snapshot()); }
+      else if (/\/admin\/home$|\/admin$/.test(url) && !/\/home$|^\/admin$/.test(path)) {
+        // the route guard (permission.guard) silently redirects a permission gap to home, not /forbidden —
+        // looks like a success unless you notice you landed on home instead of the screen you asked for.
+        outcome = 'REDIRECTED_HOME';
+        rec.problem('BLOCKED', `open ${label}`, path, `silently bounced to the home screen — I could not reach ${label} (a permission gap the guard hides as a home-redirect, with no message telling me why)`, buf.snapshot());
+      }
       else {
         const snap = buf.snapshot();
         const realCon = snap.console.filter(e => !/favicon|ResizeObserver|net::ERR_/.test(e));

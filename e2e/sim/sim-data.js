@@ -37,9 +37,11 @@ const ROLES = [
   { key: 'PROCUREMENT_OFFICER', name: 'Procurement Officer', desc: 'Requisitions, RFQs, purchase orders, suppliers, GRN init',
     keywords: ['purchas', 'requisition', 'rfq', 'order', 'supplier', 'party', 'goods', 'receipt', 'return'] },
   { key: 'STOREKEEPER', name: 'Storekeeper / Stock Controller', desc: 'Goods receipt, issues, counts, locations, batches, transfers',
-    keywords: ['stock', 'inventory', 'goods', 'receipt', 'issue', 'count', 'location', 'batch', 'transfer', 'adjust'] },
+    keywords: ['stock', 'inventory', 'goods', 'receipt', 'issue', 'count', 'location', 'batch', 'transfer', 'adjust'],
+    extraPerms: ['PURCHASE.RECEIVE'] }, // receiving goods is the core job; route+endpoint gate on PURCHASE.RECEIVE ('receive' != 'receipt' keyword)
   { key: 'STORES_SUPERVISOR', name: 'Stores / Warehouse Supervisor', desc: 'Storekeeper duties + approve adjustments/transfers, valuation',
-    keywords: ['stock', 'inventory', 'goods', 'receipt', 'issue', 'count', 'location', 'batch', 'transfer', 'adjust', 'valuation', 'approv'] },
+    keywords: ['stock', 'inventory', 'goods', 'receipt', 'issue', 'count', 'location', 'batch', 'transfer', 'adjust', 'valuation', 'approv'],
+    extraPerms: ['PURCHASE.RECEIVE'] }, // oversees receiving
   { key: 'PRODUCTION_OFFICER', name: 'Production Officer', desc: 'Work orders, BOM consumption, finished-goods receipt, costing',
     keywords: ['manufactur', 'work', 'bom', 'production', 'stock', 'cost'] },
   { key: 'HR_PAYROLL_OFFICER', name: 'HR / Payroll Officer', desc: 'Employees, contracts, leave, attendance, payroll, payslips',
