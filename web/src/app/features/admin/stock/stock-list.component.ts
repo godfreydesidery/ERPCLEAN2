@@ -429,7 +429,13 @@ export class StockListComponent {
         this.load(this.currentPage());
       },
       error: (err) => {
-        this.openingError.set(this.messageFrom(err, 'Could not record opening balance.'));
+        this.openingError.set(
+          this.messageFrom(
+            err,
+            'Could not record opening balance.',
+            'An opening balance already exists for this product.',
+          ),
+        );
         this.openingBusy.set(false);
       },
     });
@@ -644,8 +650,11 @@ export class StockListComponent {
 
   // ── Display helpers ───────────────────────────────────────────────────────────
 
-  private messageFrom(err: unknown, fallback: string): string {
+  private messageFrom(err: unknown, fallback: string, conflictMessage?: string): string {
     if (err instanceof HttpErrorResponse) {
+      if (err.status === 409 && conflictMessage) {
+        return conflictMessage;
+      }
       const errors = (err.error as { errors?: string[] })?.errors;
       if (errors?.length) return errors[0];
     }

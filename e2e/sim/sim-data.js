@@ -20,13 +20,16 @@ const ROLES = [
   { key: 'GROUP_GM', name: 'Group General Manager', desc: 'Group-wide oversight, dashboards and final approvals',
     keywords: ['sales', 'purchas', 'stock', 'inventory', 'ledger', 'gl.', 'report', 'approv', 'dashboard', 'bi.', 'customer', 'supplier', 'product', 'branch', 'view', 'read'] },
   { key: 'FINANCE_DIRECTOR', name: 'Finance Director', desc: 'Full finance: GL, AR, AP, cash/bank, tax, assets, budgeting',
-    keywords: ['ledger', 'gl.', 'journal', 'receivable', 'ar.', 'payable', 'ap.', 'cash', 'bank', 'tax', 'vat', 'asset', 'budget', 'fx', 'cost', 'report', 'approv', 'credit'] },
+    keywords: ['ledger', 'gl.', 'journal', 'receivable', 'ar.', 'payable', 'ap.', 'cash', 'bank', 'tax', 'vat', 'asset', 'budget', 'fx', 'cost', 'report', 'approv', 'credit'],
+    extraPerms: ['CUSTOMER.VIEW', 'SUPPLIER.VIEW'] }, // F22 role-read-dependency: AR/AP party pickers
   { key: 'BRANCH_MANAGER', name: 'Branch Manager', desc: 'Branch sales/purchase approvals, stock view & transfers, reports',
     keywords: ['sales', 'purchas', 'stock', 'inventory', 'transfer', 'report', 'approv', 'customer', 'supplier', 'branch'] },
   { key: 'ACCOUNTANT', name: 'Accountant', desc: 'GL postings, AR/AP invoicing, tax, period-end, financial reports',
-    keywords: ['ledger', 'gl.', 'journal', 'receivable', 'ar.', 'payable', 'ap.', 'tax', 'vat', 'invoice', 'report', 'bank'] },
+    keywords: ['ledger', 'gl.', 'journal', 'receivable', 'ar.', 'payable', 'ap.', 'tax', 'vat', 'invoice', 'report', 'bank'],
+    extraPerms: ['CUSTOMER.VIEW', 'SUPPLIER.VIEW'] }, // F22: AR/AP party pickers
   { key: 'CASHIER', name: 'Cashier / Cash & Bank Officer', desc: 'Cash & bank receipts, payments, petty cash, deposits',
-    keywords: ['cash', 'bank', 'receipt', 'payment', 'petty', 'deposit'] },
+    keywords: ['cash', 'bank', 'receipt', 'payment', 'petty', 'deposit'],
+    extraPerms: ['CUSTOMER.VIEW', 'AR.VIEW'] }, // F22 read-closure of Record Receipt: customer picker + open-items query
   { key: 'SALES_OFFICER', name: 'Sales Officer', desc: 'Quotations, sales orders/invoices, deliveries, POS, customers',
     keywords: ['sales', 'quotation', 'order', 'invoice', 'delivery', 'customer', 'party', 'pos', 'receipt'] },
   { key: 'FIELD_SALES_AGENT', name: 'Field / Route Sales Agent', desc: 'Route sales orders & invoices, cash collections',

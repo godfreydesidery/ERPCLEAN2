@@ -95,3 +95,32 @@ node e2e/sim/run-personas.js     # all 16 personas log in (non-root) and work th
 Raw evidence for this run: [run-2026-06-28/all-problems.json](run-2026-06-28/all-problems.json).
 Personas are also invokable as subagents by slug (e.g. `sabina-aloyce`, `amina-mwanga`) in a fresh
 session, to role-play and re-test a fix in their own voice.
+
+---
+
+## Deep transactional run (continuation, 2026-06-28)
+
+With the access blockers cleared, the harness was extended past *opening* screens to the **real
+transactional work** (`DEEP=1`). Evidence: [run-2026-06-28/deep-run.json](run-2026-06-28/deep-run.json).
+
+**What works end-to-end (typed through the UI):**
+- **Procure-to-pay** — Yusuf raises a PO to Mbasha Holdings, **adds a line, and places** the order.
+- **GL** — Amina and Grace **post balanced manual journals**.
+- **Cash/AR** — John **records a customer receipt** for Joseph Ulimboka.
+- **Stock** — Saidi **records an opening balance**.
+- **Master data** — procurement registers suppliers + sourced/manufactured products.
+
+**What the deeper layer surfaced (all role-spec, same F22 family — no gate relaxation):**
+- The transactional screens have a **read-dependency closure** that peels open one layer at a time:
+  Record-Receipt needs `CUSTOMER.VIEW` (picker) **and** `AR.VIEW` (open-items to allocate). A cashier
+  legitimately needs both, so the cash/AR role was composed with them (security finding **F22**:
+  customer/supplier/AR are sensitive — the gate stays; the role gains the read). Confirmed by re-run:
+  John then records a receipt with 0 problems.
+- This is exactly what **ISSUE-008** argues for: there is no guard that a role's grants are *closed*
+  over the reads its screens fire, so each composition gap ships invisibly until a non-root user hits
+  it. The durable fix is that guard/tooling, not whack-a-mole grants.
+
+**Residual (non-blocking, correct-by-design):** duplicate "RETAIL price list" and duplicate "Cement"
+opening balance both now surface a **friendly 409 message** (working-as-designed duplicate data). One
+**harness** gap remains: the sales-order line picker on the SO *detail* page wasn't driven (the PO
+equivalent works) — a driver-selector follow-up, not a product defect.

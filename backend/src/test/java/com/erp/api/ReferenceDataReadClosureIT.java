@@ -87,13 +87,27 @@ class ReferenceDataReadClosureIT extends PostgresIntegrationTest {
     private AppUser      apClerkUser;
     /** Has zero grants — a freshly created user with no role at all. */
     private AppUser      nonMemberUser;
+    /**
+     * Has CUSTOMER.VIEW (and nothing else). Proves the gate admits a proper holder
+     * and anchors the F22 decision: customer/supplier gates are NOT relaxed to a member
+     * read-floor — they stay permission-gated by design.
+     */
+    private AppUser      customerViewUser;
+    /**
+     * Has SUPPLIER.VIEW (and nothing else). Mirror of customerViewUser for the supplier gate.
+     */
+    private AppUser      supplierViewUser;
     private String       rootToken;
     private String       apClerkToken;
     private String       nonMemberToken;
+    private String       customerViewToken;
+    private String       supplierViewToken;
 
-    private static final String ROOT_PASS      = "RdrcRootH1!";
-    private static final String AP_CLERK_PASS  = "RdrcClrkH1!";
-    private static final String NO_ROLE_PASS   = "RdrcNoneH1!";
+    private static final String ROOT_PASS           = "RdrcRootH1!";
+    private static final String AP_CLERK_PASS       = "RdrcClrkH1!";
+    private static final String NO_ROLE_PASS        = "RdrcNoneH1!";
+    private static final String CUST_VIEW_PASS      = "RdrcCustH1!";
+    private static final String SUPP_VIEW_PASS      = "RdrcSuppH1!";
 
     @BeforeEach
     void setUp() {
@@ -134,12 +148,31 @@ class ReferenceDataReadClosureIT extends PostgresIntegrationTest {
         noneAssign.markDefault();
         userBranches.save(noneAssign);
 
+        // Customer-view user: CUSTOMER.VIEW only. Verifies the gate passes for a proper holder.
+        customerViewUser = new AppUser("rdrc_custview", passwordEncoder.encode(CUST_VIEW_PASS), "RDRC Cust Viewer");
+        customerViewUser = users.save(customerViewUser);
+        UserBranch custAssign = new UserBranch(customerViewUser.getId(), branch, rootUser.getId());
+        custAssign.markDefault();
+        userBranches.save(custAssign);
+
+        // Supplier-view user: SUPPLIER.VIEW only. Verifies the gate passes for a proper holder.
+        supplierViewUser = new AppUser("rdrc_suppview", passwordEncoder.encode(SUPP_VIEW_PASS), "RDRC Supp Viewer");
+        supplierViewUser = users.save(supplierViewUser);
+        UserBranch suppAssign = new UserBranch(supplierViewUser.getId(), branch, rootUser.getId());
+        suppAssign.markDefault();
+        userBranches.save(suppAssign);
+
         // Issue the clerk a role containing ONLY AP.BILL.ENTER.
         grantRoleAsRoot(apClerkUser, buildRole("RDRC_AP_CLERK_ROLE", "AP.BILL.ENTER"));
+        // Issue customer/supplier view roles — single-permission, no manage codes.
+        grantRoleAsRoot(customerViewUser, buildRole("RDRC_CUST_VIEW_ROLE", "CUSTOMER.VIEW"));
+        grantRoleAsRoot(supplierViewUser, buildRole("RDRC_SUPP_VIEW_ROLE", "SUPPLIER.VIEW"));
 
-        rootToken     = jwtService.issueAccessToken(rootUser,     company.getId(), branch.getId()).value();
-        apClerkToken  = jwtService.issueAccessToken(apClerkUser,  company.getId(), branch.getId()).value();
-        nonMemberToken = jwtService.issueAccessToken(nonMemberUser, company.getId(), branch.getId()).value();
+        rootToken          = jwtService.issueAccessToken(rootUser,         company.getId(), branch.getId()).value();
+        apClerkToken       = jwtService.issueAccessToken(apClerkUser,      company.getId(), branch.getId()).value();
+        nonMemberToken     = jwtService.issueAccessToken(nonMemberUser,    company.getId(), branch.getId()).value();
+        customerViewToken  = jwtService.issueAccessToken(customerViewUser, company.getId(), branch.getId()).value();
+        supplierViewToken  = jwtService.issueAccessToken(supplierViewUser, company.getId(), branch.getId()).value();
     }
 
     @AfterEach
@@ -258,6 +291,96 @@ class ReferenceDataReadClosureIT extends PostgresIntegrationTest {
     void nonMember_noPurchasingGrant_listPurchaseOrders_returns403() throws Exception {
         // Zero grants → neither PURCHASE.ORDER.VIEW nor AP.BILL.ENTER → 403.
         mockMvc.perform(get("/api/v1/purchase-orders")
+                        .param("companyId", company.getId().toString())
+                        .header("Authorization", "Bearer " + nonMemberToken))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errors").isArray());
+    }
+
+    // =========================================================================
+    // F22 — Customer/supplier party-picker gate is INTENTIONALLY strict (option b).
+    //
+    // The security decision (2026-06-28) is: CUSTOMER.VIEW / SUPPLIER.VIEW gates are
+    // NOT relaxed to a member read-floor because party master data (TIN, VRN, credit
+    // limit, mobile-money) is more sensitive than ambient reference lists. The fix is
+    // role composition (grant CUSTOMER.VIEW to cash/AR roles; SUPPLIER.VIEW to AP
+    // roles), not a gate change. These tests pin that decision so a future "helpfully"
+    // relaxed gate immediately turns red.
+    // =========================================================================
+
+    /**
+     * A user holding only {@code AP.BILL.ENTER} (no {@code CUSTOMER.VIEW}) must get
+     * 403 on {@code GET /customers}.  The gate is correct — the role is mis-specified.
+     * Pin this so a future {@code hasOrMember} relaxation fails the build.
+     */
+    @Test
+    void apClerk_withoutCustomerView_listCustomers_returns403() throws Exception {
+        mockMvc.perform(get("/api/v1/customers")
+                        .param("companyId", company.getId().toString())
+                        .header("Authorization", "Bearer " + apClerkToken))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errors").isArray());
+    }
+
+    /**
+     * A user holding only {@code AP.BILL.ENTER} (no {@code SUPPLIER.VIEW}) must get
+     * 403 on {@code GET /suppliers}.  Same rationale as the customer gate above.
+     */
+    @Test
+    void apClerk_withoutSupplierView_listSuppliers_returns403() throws Exception {
+        mockMvc.perform(get("/api/v1/suppliers")
+                        .param("companyId", company.getId().toString())
+                        .header("Authorization", "Bearer " + apClerkToken))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errors").isArray());
+    }
+
+    /**
+     * A user holding {@code CUSTOMER.VIEW} (and nothing else) must be admitted to
+     * {@code GET /customers}.  Confirms the gate is live and that a legitimate
+     * role-grant works — the fix is additive grants, not a gate change.
+     */
+    @Test
+    void customerViewHolder_canListCustomers() throws Exception {
+        mockMvc.perform(get("/api/v1/customers")
+                        .param("companyId", company.getId().toString())
+                        .header("Authorization", "Bearer " + customerViewToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").isArray());
+    }
+
+    /**
+     * A user holding {@code SUPPLIER.VIEW} (and nothing else) must be admitted to
+     * {@code GET /suppliers}.
+     */
+    @Test
+    void supplierViewHolder_canListSuppliers() throws Exception {
+        mockMvc.perform(get("/api/v1/suppliers")
+                        .param("companyId", company.getId().toString())
+                        .header("Authorization", "Bearer " + supplierViewToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").isArray());
+    }
+
+    /**
+     * A zero-grant (non-member) user must be 403'd on {@code GET /customers}.
+     * Fail-closed baseline matching the branch/product/WHT non-member tests above.
+     */
+    @Test
+    void nonMember_noCustomerViewGrant_listCustomers_returns403() throws Exception {
+        mockMvc.perform(get("/api/v1/customers")
+                        .param("companyId", company.getId().toString())
+                        .header("Authorization", "Bearer " + nonMemberToken))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errors").isArray());
+    }
+
+    /**
+     * A zero-grant (non-member) user must be 403'd on {@code GET /suppliers}.
+     */
+    @Test
+    void nonMember_noSupplierViewGrant_listSuppliers_returns403() throws Exception {
+        mockMvc.perform(get("/api/v1/suppliers")
                         .param("companyId", company.getId().toString())
                         .header("Authorization", "Bearer " + nonMemberToken))
                 .andExpect(status().isForbidden())

@@ -92,6 +92,56 @@ capability that the dependent screen's own primary verb already requires.
   wants the pickers to **degrade gracefully** on any future 403 (e.g. branch picker → user's default
   branch) rather than blanking a screen — flagged for frontend-engineer.
 
+## F22 — Customer/supplier party-picker reads are correctly gated; the fix is role-composition (NOT a gate relaxation)
+
+**2026-06-28 — business-operations simulation deep-run (`docs/simulation/run-2026-06-28/deep-run.json`).**
+Same READ-CLOSURE family as F21, but the **opposite remediation** — recorded explicitly so the
+distinction is on the audit trail (the "no silent fix" rule) and so a future reviewer does not
+"complete" F21 by relaxing these two gates.
+
+A CASHIER (role holds cash/receipt perms, not `CUSTOMER.VIEW`) opened Record-Receipt (which loads
+after the F21 fix) but its **customer picker** hard-failed: `GET /api/v1/customers?companyId=3 → 403`
+(`@perm.has('CUSTOMER.VIEW')`, `CustomerController.list`). The analogous supplier picker is
+`SupplierController.list @perm.has('SUPPLIER.VIEW')`.
+
+| # | Source | Severity | Finding | Status | Resolution |
+|---|---|---|---|---|---|
+| F22 | sim 2026-06-28 (deep-run) | HIGH (blocker for the affected roles) | **Customer/supplier party pickers 403 narrowly-scoped cash/AR/AP roles** because the role omits `CUSTOMER.VIEW` / `SUPPLIER.VIEW`. Surfaced on Record-Receipt (cashier) and supplier-bill (AP). Same read-closure shape as F21 (the codes are seeded; not a tenant leak). | ACCEPTED (gate correct) → ROLE-SPEC fix | **The gate is NOT changed.** Customer/supplier master data (names, TIN, VRN, mobile-money account numbers, credit limits, balances, addresses) is the **most sensitive party master on the platform** — more sensitive than the branch/product/WHT reference lists F21 opened to a member read-floor, and at least as sensitive as the POs F21 deliberately **left transactional-gated**. So `CUSTOMER.VIEW` / `SUPPLIER.VIEW` stay as the gate; the read-closure gap is closed by **role composition**: a cash/AR role MUST include `CUSTOMER.VIEW` and an AP role MUST include `SUPPLIER.VIEW` as a CORE grant. No code change, no migration. |
+
+**Decision rationale — why (b) role-spec, not (a) a `hasOrMember` read-floor.**
+F21 established a sensitivity gradient and acted on it: low-sensitivity ambient reference data
+(branch/product/WHT) was opened to a within-tenant member read-floor, while transactional documents
+(POs — "amounts, suppliers") were **not** opened to plain membership and only broadened to the
+adjacent `AP.BILL.ENTER` verb. Customer/supplier master sits on the **sensitive** side of that line:
+- It carries financial + tax + payment-instrument fields (TIN, VRN, mobile-money, credit limit,
+  balance) — disclosure-grade data, not an ambient dropdown of codes/names.
+- Relaxing to `@perm.hasOrMember` would let **any** role-holder in the company (a stock clerk, a POS
+  cashier with no customer remit, a production officer) enumerate the entire customer/supplier master
+  including those financials. That is a least-privilege regression, and it would contradict the exact
+  boundary F21 drew by declining to open POs to plain membership.
+- `CUSTOMER.VIEW` / `SUPPLIER.VIEW` are *select* permissions by design (seed description: "View and
+  select customers/suppliers"). A role that records customer receipts but cannot view customers — or
+  enters supplier bills but cannot view suppliers — is **mis-specified**: the picker is the core data
+  of the task, not a supporting side-load. The gate is right; the role is incomplete.
+
+Tenant isolation is unchanged either way: `CustomerServiceImpl.list` / `SupplierServiceImpl.list`
+already call `scopeGuard.assertCanActIn(RequestContext.get(), companyId)` before querying (F12 fix),
+so a holder reads only their own company's parties regardless of the gate form.
+
+**Required action (deployment / sim onboarding — NOT a code change).**
+- Grant **`CUSTOMER.VIEW`** to every cash/AR-facing role (cashier, AR clerk, receipts/credit roles).
+- Grant **`SUPPLIER.VIEW`** to every AP-facing role (AP clerk, supplier-bill/payment roles).
+- These are seeded permission codes (`R__seed_permissions.sql` lines for `CUSTOMER.VIEW` /
+  `SUPPLIER.VIEW`); the fix is a role/provisioning grant, applied via the IAM admin UI or the
+  onboarding/provisioning seed for the simulation personas — no migration, no gate edit.
+
+**Follow-ups.**
+- Same residual as F21/ISSUE-008: a `RolePermissionClosureTest` (qa-engineer) should assert that each
+  role's grants are closed over the *core-data* reads of the screens it is meant to operate — this
+  would have flagged a receipts role missing `CUSTOMER.VIEW` at build time, not in the sim.
+- Frontend defence-in-depth (carried from F21): a party picker should degrade to a friendly,
+  permission-aware empty state on a 403 rather than blanking the whole screen.
+
 ## Production-gating (carried, still OPEN)
 - **G1** (Slice 2): stable RS256 signing key from a secret store — dev key is in-memory (everyone logged out on restart; not prod-safe).
 - **G2** (Slice 2): access-token denylist on logout (access token currently valid until expiry after logout).

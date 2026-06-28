@@ -105,7 +105,8 @@ async function openDetail(page, rowText, linkText) {
           const cb = boxes.nth(i);
           const id = (await cb.getAttribute('id').catch(() => '')) || '';
           const code = id.replace(/^perm-/, '').toLowerCase();
-          if (r.keywords.some(k => code.includes(k.toLowerCase()))) {
+          const extra = (r.extraPerms || []).map(c => c.toLowerCase());
+          if (r.keywords.some(k => code.includes(k.toLowerCase())) || extra.includes(code)) {
             if (!await cb.isChecked().catch(() => true)) await cb.check().catch(() => {});
             checked++;
           }

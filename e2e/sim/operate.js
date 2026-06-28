@@ -93,6 +93,194 @@ async function runActions(page, buf, rec) {
   }
 }
 
+// DEEP transactional missions — the real work each role does once the screens open. Tolerant: a failure
+// is captured as a finding (BLOCKED on 5xx/permission, SLOW otherwise), never a crash. Opt-in via DEEP=1.
+async function runDeep(page, buf, rec) {
+  const today = new Date().toISOString().slice(0, 10);
+  const tag = Date.now().toString().slice(-5);
+  const worst = (s) => s.api.filter(a => a.status >= 400).sort((a, b) => b.status - a.status)[0];
+
+  // ACCOUNTANT / FINANCE: post a balanced 2-line manual journal (GL posting integrity)
+  if (persona.role === 'ACCOUNTANT' || persona.role === 'FINANCE_DIRECTOR') {
+    const wf = 'post a manual journal', screen = '/admin/gl/journals/post';
+    await L.goto(page, screen);
+    if (await L.looksForbidden(page, buf)) { rec.problem('BLOCKED', wf, screen, 'not allowed to open Post Journal', buf.snapshot()); }
+    else {
+      try {
+        buf.clear();
+        await L.setField(page, '#postingDate', today).catch(() => {});
+        await L.setField(page, '#description', `Sim journal ${tag}`).catch(() => {});
+        const addBtn = page.locator('button', { hasText: /add line/i }).first();
+        let acc = page.locator('select[id^="lineAccount_"]');
+        let guard = 0;
+        while ((await acc.count()) < 2 && (await addBtn.count()) && guard++ < 4) { await addBtn.click(); await page.waitForTimeout(250); acc = page.locator('select[id^="lineAccount_"]'); }
+        const n = await acc.count();
+        const optCount = n ? await acc.first().locator('option').count() : 0;
+        if (n < 2) rec.problem('SLOW', wf, screen, 'could not get two journal lines to enter', buf.snapshot());
+        else if (optCount < 2) rec.problem('BLOCKED', wf, screen, 'no GL accounts to post against (chart of accounts empty for my company?)', buf.snapshot());
+        else {
+          const id0 = (await acc.nth(0).getAttribute('id')).replace('lineAccount_', '');
+          const id1 = (await acc.nth(1).getAttribute('id')).replace('lineAccount_', '');
+          await acc.nth(0).selectOption({ index: 1 }).catch(() => {});
+          await acc.nth(1).selectOption({ index: optCount > 2 ? 2 : 1 }).catch(() => {});
+          await L.setField(page, `#lineDebit_${id0}`, '10000').catch(() => {});
+          await L.setField(page, `#lineCreditAmt_${id1}`, '10000').catch(() => {});
+          await page.waitForTimeout(300);
+          buf.clear();
+          const posted = await L.clickButton(page, /post journal/i);
+          await page.waitForTimeout(1300);
+          const s = buf.snapshot();
+          if (!posted) rec.problem('SLOW', wf, screen, 'Post Journal stayed disabled (not balanced / missing field)', s);
+          else if (s.api.some(a => a.status >= 500)) rec.problem('BLOCKED', wf, screen, 'server error posting the journal', s);
+          else if (worst(s)) rec.problem('SLOW', wf, screen, `journal rejected (${worst(s).status})`, s);
+          else rec.ok('post journal');
+        }
+      } catch (e) { rec.problem('SLOW', wf, screen, `posting journal: ${String(e.message || e).slice(0, 90)}`, buf.snapshot()); }
+    }
+  }
+
+  // PROCUREMENT: raise a PO to Mbasha Holdings -> add a line -> place
+  if (persona.role === 'PROCUREMENT_OFFICER') {
+    const wf = 'raise a purchase order', screen = '/admin/purchase-orders';
+    await L.goto(page, screen);
+    if (await L.looksForbidden(page, buf)) { rec.problem('BLOCKED', wf, screen, 'not allowed to open Purchase Orders', buf.snapshot()); }
+    else {
+      try {
+        await L.ensureFormOpen(page, 'New Order', '#supplierSearch');
+        buf.clear();
+        const sup = await L.searchPick(page, '#supplierSearch', 'Mbasha');
+        await L.setField(page, '#newExpectedDate', today).catch(() => {});
+        if (!sup) rec.problem('SLOW', wf, screen, 'could not pick supplier Mbasha Holdings in the PO form', buf.snapshot());
+        else {
+          await L.clickButton(page, /create order/i);
+          await page.waitForTimeout(1600);
+          const s1 = buf.snapshot();
+          if (s1.api.some(a => a.status >= 500)) rec.problem('BLOCKED', wf, screen, 'server error creating the PO', s1);
+          else if (worst(s1)) rec.problem('SLOW', wf, screen, `PO header rejected (${worst(s1).status})`, s1);
+          else {
+            // header created -> we're on the list; open the new (top) PO's detail to add a line (DRAFT)
+            const link = page.locator('a[href*="/admin/purchase-orders/uid/"]').first();
+            if (await link.count()) { await link.click(); await page.waitForTimeout(1300); }
+            buf.clear();
+            const prod = await L.searchPick(page, '#lineProductSearch', 'Cement');
+            if (!prod) rec.problem('SLOW', wf, '/admin/purchase-orders/uid', 'could not pick a product for the PO line', buf.snapshot());
+            else {
+              await L.pickFirstReal(page, '#lineUnit').catch(() => {});
+              await L.setField(page, '#lineQty', '100').catch(() => {});
+              await L.setField(page, '#lineUnitCost', '15000').catch(() => {});
+              await L.clickButton(page, /add line/i);
+              await page.waitForTimeout(1000);
+              const s2 = buf.snapshot();
+              if (worst(s2)) rec.problem('SLOW', wf, '/admin/purchase-orders/uid', `could not add the PO line (${worst(s2).status})`, s2);
+              else {
+                rec.ok('raise PO + line');
+                buf.clear();
+                await L.clickButton(page, /^\s*place\b/i);
+                await page.waitForTimeout(1100);
+                const s3 = buf.snapshot();
+                if (worst(s3)) rec.problem('SLOW', wf, '/admin/purchase-orders/uid', `could not place the order (${worst(s3).status})`, s3);
+                else rec.ok('place PO');
+              }
+            }
+          }
+        }
+      } catch (e) { rec.problem('SLOW', wf, screen, `raising PO: ${String(e.message || e).slice(0, 90)}`, buf.snapshot()); }
+    }
+  }
+
+  // SALES: create a sales order for Kariakoo -> add a line
+  if (persona.role === 'SALES_OFFICER') {
+    const wf = 'create a sales order', screen = '/admin/sales-orders';
+    await L.goto(page, screen);
+    if (await L.looksForbidden(page, buf)) { rec.problem('BLOCKED', wf, screen, 'not allowed to open Sales Orders', buf.snapshot()); }
+    else {
+      try {
+        await L.ensureFormOpen(page, 'New Sales Order', '#customerSearch');
+        buf.clear();
+        const cust = await L.searchPick(page, '#customerSearch', 'Kariakoo');
+        await L.setField(page, '#newOrderDate', today).catch(() => {});
+        if (!cust) rec.problem('SLOW', wf, screen, 'could not pick customer Kariakoo Wholesale Mart', buf.snapshot());
+        else {
+          await L.clickButton(page, /create order/i);
+          await page.waitForTimeout(1600);
+          const s1 = buf.snapshot();
+          if (s1.api.some(a => a.status >= 500)) rec.problem('BLOCKED', wf, screen, 'server error creating the sales order', s1);
+          else if (worst(s1)) rec.problem('SLOW', wf, screen, `sales order header rejected (${worst(s1).status})`, s1);
+          else {
+            // header created -> we're on the list; open the new (top) SO's detail to add a line (DRAFT)
+            const link = page.locator('a[href*="/admin/sales-orders/uid/"]').first();
+            if (await link.count()) { await link.click(); await page.waitForTimeout(1300); }
+            buf.clear();
+            const prod = await L.searchPick(page, '#lineProductSearch', 'Sugar');
+            if (!prod) rec.problem('SLOW', wf, '/admin/sales-orders/uid', 'could not pick a product for the SO line', buf.snapshot());
+            else {
+              await L.pickFirstReal(page, '#lineUnit').catch(() => {});
+              await L.setField(page, '#lineQty', '20').catch(() => {});
+              await L.clickButton(page, /add line/i);
+              await page.waitForTimeout(1000);
+              const s2 = buf.snapshot();
+              if (worst(s2)) rec.problem('SLOW', wf, '/admin/sales-orders/uid', `could not add the SO line (${worst(s2).status})`, s2);
+              else rec.ok('create SO + line');
+            }
+          }
+        }
+      } catch (e) { rec.problem('SLOW', wf, screen, `creating SO: ${String(e.message || e).slice(0, 90)}`, buf.snapshot()); }
+    }
+  }
+
+  // STORES: record a stock opening balance
+  if (persona.role === 'STOREKEEPER' || persona.role === 'STORES_SUPERVISOR') {
+    const wf = 'record stock opening balance', screen = '/admin/stock';
+    await L.goto(page, screen);
+    if (await L.looksForbidden(page, buf)) { rec.problem('BLOCKED', wf, screen, 'not allowed to open Stock', buf.snapshot()); }
+    else {
+      try {
+        buf.clear();
+        await L.ensureFormOpen(page, 'Opening', '#openingProductSearch').catch(() => {});
+        if (!(await page.locator('#openingProductSearch').first().count())) rec.problem('SLOW', wf, screen, 'could not find the opening-balance form', buf.snapshot());
+        else {
+          const prod = await L.searchPick(page, '#openingProductSearch', 'Cement');
+          if (!prod) rec.problem('SLOW', wf, screen, 'could not pick a product for the opening balance', buf.snapshot());
+          else {
+            await L.setField(page, '#openingQty', '500').catch(() => {});
+            await L.clickButton(page, /^\s*record\b/i);
+            await page.waitForTimeout(1000);
+            const s = buf.snapshot();
+            if (s.api.some(a => a.status >= 500)) rec.problem('BLOCKED', wf, screen, 'server error recording opening balance', s);
+            else if (worst(s)) rec.problem('SLOW', wf, screen, `opening balance rejected (${worst(s).status})`, s);
+            else rec.ok('stock opening');
+          }
+        }
+      } catch (e) { rec.problem('SLOW', wf, screen, `opening balance: ${String(e.message || e).slice(0, 90)}`, buf.snapshot()); }
+    }
+  }
+
+  // CASHIER: record an on-account customer receipt for Joseph Ulimboka
+  if (persona.role === 'CASHIER') {
+    const wf = 'record a customer receipt', screen = '/admin/ar/receipts/record';
+    await L.goto(page, screen);
+    if (await L.looksForbidden(page, buf)) { rec.problem('BLOCKED', wf, screen, 'not allowed to open Record Receipt', buf.snapshot()); }
+    else {
+      try {
+        buf.clear();
+        const cust = await L.searchPick(page, '#customerSearch', 'Joseph');
+        if (!cust) rec.problem('SLOW', wf, screen, 'could not pick customer Joseph Ulimboka', buf.snapshot());
+        else {
+          await L.setField(page, '#receiptAmount', '50000').catch(() => {});
+          await L.setField(page, '#receiptDate', today).catch(() => {});
+          await page.locator('#tenderType').selectOption('CASH').catch(() => {});
+          await L.clickButton(page, /record receipt/i);
+          await page.waitForTimeout(1200);
+          const s = buf.snapshot();
+          if (s.api.some(a => a.status >= 500)) rec.problem('BLOCKED', wf, screen, 'server error recording the receipt', s);
+          else if (worst(s)) rec.problem('SLOW', wf, screen, `receipt rejected (${worst(s).status})`, s);
+          else rec.ok('record receipt');
+        }
+      } catch (e) { rec.problem('SLOW', wf, screen, `recording receipt: ${String(e.message || e).slice(0, 90)}`, buf.snapshot()); }
+    }
+  }
+}
+
 (async () => {
   const browser = await L.launch();
   const { page, buf } = await L.newSession(browser);
@@ -135,6 +323,9 @@ async function runActions(page, buf, rec) {
 
     // ACTION missions: enter the master data I own
     await runActions(page, buf, rec);
+
+    // DEEP missions: actually do my transactional work (opt-in)
+    if (process.env.DEEP) await runDeep(page, buf, rec);
 
   } catch (e) {
     rec.problem('BLOCKED', 'operate', 'fatal', String(e && e.message || e).slice(0, 140), buf.snapshot());
