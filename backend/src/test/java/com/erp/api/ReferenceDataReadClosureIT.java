@@ -97,17 +97,26 @@ class ReferenceDataReadClosureIT extends PostgresIntegrationTest {
      * Has SUPPLIER.VIEW (and nothing else). Mirror of customerViewUser for the supplier gate.
      */
     private AppUser      supplierViewUser;
+    /**
+     * Has PURCHASE.RECEIVE (and nothing else) — a storekeeper. Represents the goods-receipt-create
+     * read-closure (2026-06-28 sim): the GR screen's PO picker fires GET /purchase-orders, and the
+     * chosen PO's header/lines come from the scoped /uid/{uid}(/lines) reads. The verb that owns the
+     * GR write must also satisfy these reads (F21-family read-closure).
+     */
+    private AppUser      storekeeperUser;
     private String       rootToken;
     private String       apClerkToken;
     private String       nonMemberToken;
     private String       customerViewToken;
     private String       supplierViewToken;
+    private String       storekeeperToken;
 
     private static final String ROOT_PASS           = "RdrcRootH1!";
     private static final String AP_CLERK_PASS       = "RdrcClrkH1!";
     private static final String NO_ROLE_PASS        = "RdrcNoneH1!";
     private static final String CUST_VIEW_PASS      = "RdrcCustH1!";
     private static final String SUPP_VIEW_PASS      = "RdrcSuppH1!";
+    private static final String STOREKEEPER_PASS    = "RdrcStrkH1!";
 
     @BeforeEach
     void setUp() {
@@ -162,17 +171,28 @@ class ReferenceDataReadClosureIT extends PostgresIntegrationTest {
         suppAssign.markDefault();
         userBranches.save(suppAssign);
 
+        // Storekeeper: PURCHASE.RECEIVE only (no PURCHASE.ORDER.VIEW / AP.BILL.ENTER). Represents the
+        // goods-receipt-create read-closure — must read the PO picker list and the chosen PO.
+        storekeeperUser = new AppUser("rdrc_storekeeper", passwordEncoder.encode(STOREKEEPER_PASS), "RDRC Storekeeper");
+        storekeeperUser = users.save(storekeeperUser);
+        UserBranch storeAssign = new UserBranch(storekeeperUser.getId(), branch, rootUser.getId());
+        storeAssign.markDefault();
+        userBranches.save(storeAssign);
+
         // Issue the clerk a role containing ONLY AP.BILL.ENTER.
         grantRoleAsRoot(apClerkUser, buildRole("RDRC_AP_CLERK_ROLE", "AP.BILL.ENTER"));
         // Issue customer/supplier view roles — single-permission, no manage codes.
         grantRoleAsRoot(customerViewUser, buildRole("RDRC_CUST_VIEW_ROLE", "CUSTOMER.VIEW"));
         grantRoleAsRoot(supplierViewUser, buildRole("RDRC_SUPP_VIEW_ROLE", "SUPPLIER.VIEW"));
+        // Storekeeper role: PURCHASE.RECEIVE only.
+        grantRoleAsRoot(storekeeperUser, buildRole("RDRC_STOREKEEPER_ROLE", "PURCHASE.RECEIVE"));
 
         rootToken          = jwtService.issueAccessToken(rootUser,         company.getId(), branch.getId()).value();
         apClerkToken       = jwtService.issueAccessToken(apClerkUser,      company.getId(), branch.getId()).value();
         nonMemberToken     = jwtService.issueAccessToken(nonMemberUser,    company.getId(), branch.getId()).value();
         customerViewToken  = jwtService.issueAccessToken(customerViewUser, company.getId(), branch.getId()).value();
         supplierViewToken  = jwtService.issueAccessToken(supplierViewUser, company.getId(), branch.getId()).value();
+        storekeeperToken   = jwtService.issueAccessToken(storekeeperUser,  company.getId(), branch.getId()).value();
     }
 
     @AfterEach
@@ -289,10 +309,41 @@ class ReferenceDataReadClosureIT extends PostgresIntegrationTest {
 
     @Test
     void nonMember_noPurchasingGrant_listPurchaseOrders_returns403() throws Exception {
-        // Zero grants → neither PURCHASE.ORDER.VIEW nor AP.BILL.ENTER → 403.
+        // Zero grants → neither PURCHASE.ORDER.VIEW nor AP.BILL.ENTER nor PURCHASE.RECEIVE → 403.
         mockMvc.perform(get("/api/v1/purchase-orders")
                         .param("companyId", company.getId().toString())
                         .header("Authorization", "Bearer " + nonMemberToken))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errors").isArray());
+    }
+
+    // =========================================================================
+    // GET /api/v1/purchase-orders — goods-receipt-create read-closure (PURCHASE.RECEIVE)
+    // 2026-06-28 sim (Saidi Karume / STOREKEEPER): the GR-create PO picker fires this read.
+    // The list gate is now "PURCHASE.ORDER.VIEW or AP.BILL.ENTER or PURCHASE.RECEIVE" so the
+    // storekeeper who owns the GR write can find the open POs to receive against — WITHOUT
+    // widening tenant scope (the service still applies its own company-scope predicate).
+    // =========================================================================
+
+    @Test
+    void storekeeper_withOnlyPurchaseReceive_canListPurchaseOrders_ownCompany() throws Exception {
+        // Storekeeper holds PURCHASE.RECEIVE only (not PURCHASE.ORDER.VIEW / AP.BILL.ENTER).
+        // The widened list gate must admit them for their OWN company's POs.
+        mockMvc.perform(get("/api/v1/purchase-orders")
+                        .param("companyId", company.getId().toString())
+                        .header("Authorization", "Bearer " + storekeeperToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").isArray());
+    }
+
+    @Test
+    void storekeeper_withOnlyPurchaseReceive_cannotListPurchaseOrdersOfCompanyB() throws Exception {
+        // Tenant isolation: the gate widening is permission-only. The storekeeper is a member of
+        // Company A and has no relationship to Company B; the service's assertCanActIn on the
+        // companyId param rejects another company's POs even though the caller holds PURCHASE.RECEIVE.
+        mockMvc.perform(get("/api/v1/purchase-orders")
+                        .param("companyId", otherCompany.getId().toString())
+                        .header("Authorization", "Bearer " + storekeeperToken))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.errors").isArray());
     }

@@ -95,6 +95,24 @@
       ]
     },
     {
+      "screen": "purchases.goods-receipt-create",
+      "accessPermission": "PURCHASE.RECEIVE",
+      "_notes": [
+        "PO picker list (PurchaseOrderController list handler) is gated 'PURCHASE.ORDER.VIEW or AP.BILL.ENTER or PURCHASE.RECEIVE' — declared below as a disjunction (the gate-parser pins the first two codes; PURCHASE.RECEIVE is the third disjunct and is seed-verified via this screen's accessPermission).",
+        "The chosen PO's header (GET /uid/{uid}) and lines (GET /uid/{uid}/lines) are scoped reads gated 'PURCHASE.ORDER.VIEW or PURCHASE.RECEIVE'; the closure test only parses the list handler per controller, so these uid-path reads are documented here rather than as separate parseable rows.",
+        "Org/company bootstrap reads (GET /organisations/current, GET /companies/accessible) are isAuthenticated()-only, not permission-gated, so they are intentionally not declared (a storekeeper passes them)."
+      ],
+      "reads": [
+        {
+          "controller": "PurchaseOrderController",
+          "code": "PURCHASE.ORDER.VIEW",
+          "necessity": "required",
+          "gate": "disjunction",
+          "altCode": "AP.BILL.ENTER"
+        }
+      ]
+    },
+    {
       "screen": "manufacturing.work-orders",
       "accessPermission": "MANUFACTURING.VIEW",
       "reads": [

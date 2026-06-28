@@ -170,12 +170,17 @@ async function runDeep(page, buf, rec) {
           if (s1.api.some(a => a.status >= 500)) rec.problem('BLOCKED', wf, screen, 'server error creating the PO', s1);
           else if (worst(s1)) rec.problem('SLOW', wf, screen, `PO header rejected (${worst(s1).status})`, s1);
           else {
-            // header created -> we're on the list; open the new (top) PO's detail to add a line (DRAFT)
-            const link = page.locator('a[href*="/admin/purchase-orders/uid/"]').first();
-            if (await link.count()) { await link.click(); await page.waitForTimeout(1300); }
+            // header created -> the app may redirect to the new PO's detail OR land on the list. Make
+            // sure we're on the NEW DRAFT PO, then WAIT for the add-line form (it is @if(isDraft &&
+            // canCreate) under @default, so it only renders once lines finish loading async).
+            if (!/\/purchase-orders\/uid\//.test(page.url())) {
+              const link = page.locator('a[href*="/admin/purchase-orders/uid/"]').first();
+              if (await link.count()) { await link.click(); }
+            }
+            await page.locator('#lineProductSearch').waitFor({ state: 'visible', timeout: 6000 }).catch(() => {});
             buf.clear();
             const prod = await L.searchPick(page, '#lineProductSearch', 'Cement');
-            if (!prod) rec.problem('SLOW', wf, '/admin/purchase-orders/uid', 'could not pick a product for the PO line', buf.snapshot());
+            if (!prod) rec.problem('SLOW', wf, '/admin/purchase-orders/uid', 'could not pick a product for the PO line (add-line form not shown — PO not DRAFT, no CREATE perm, or still loading)', buf.snapshot());
             else {
               await L.pickFirstReal(page, '#lineUnit').catch(() => {});
               await L.setField(page, '#lineQty', '100').catch(() => {});
@@ -294,6 +299,40 @@ async function runDeep(page, buf, rec) {
           }
         }
       } catch (e) { rec.problem('SLOW', wf, screen, `opening balance: ${String(e.message || e).slice(0, 90)}`, buf.snapshot()); }
+    }
+  }
+
+  // STOREKEEPER: receive goods against a PO (GRN) — the core daily warehouse operation
+  if (persona.role === 'STOREKEEPER') {
+    const wf = 'receive goods against a PO', screen = '/admin/goods-receipts/create';
+    await L.goto(page, screen);
+    if (await L.looksForbidden(page, buf)) { rec.problem('BLOCKED', wf, screen, 'not allowed to open Goods Receipt', buf.snapshot()); }
+    else {
+      try {
+        buf.clear();
+        const po = await L.searchPick(page, '#poSearch', 'Mbasha');
+        await page.waitForTimeout(900);
+        const qtyInputs = page.locator('input[id^="qty-"]');
+        const n = await qtyInputs.count();
+        if (!po) rec.problem('SLOW', wf, screen, 'could not find a PO to receive (none ordered yet?)', buf.snapshot());
+        else if (!n) rec.problem('SLOW', wf, screen, 'PO selected but no receivable lines appeared', buf.snapshot());
+        else {
+          for (let i = 0; i < n; i++) {
+            const qid = (await qtyInputs.nth(i).getAttribute('id')) || '';
+            const uid = qid.replace('qty-', '');
+            await page.locator('#inc-' + uid).check().catch(() => {});
+            await qtyInputs.nth(i).fill('10').catch(() => {});
+          }
+          await L.setField(page, '#grNotes', 'Daily receipt').catch(() => {});
+          buf.clear();
+          await L.clickButton(page, /record receipt/i);
+          await page.waitForTimeout(1600);
+          const s = buf.snapshot();
+          if (s.api.some(a => a.status >= 500)) rec.problem('BLOCKED', wf, screen, 'server error recording the goods receipt', s);
+          else if (worst(s)) rec.problem('SLOW', wf, screen, `goods receipt rejected (${worst(s).status})`, s);
+          else rec.ok('receive goods (GRN)');
+        }
+      } catch (e) { rec.problem('SLOW', wf, screen, `receiving goods: ${String(e.message || e).slice(0, 90)}`, buf.snapshot()); }
     }
   }
 

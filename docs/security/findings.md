@@ -149,6 +149,37 @@ so a holder reads only their own company's parties regardless of the gate form.
 | F21-FU | F21/F22 follow-up | CLOSED | **No build-time assertion that a screen's supporting reads are correctly gated and seeded** (ISSUE-008 residual). Root/ORG_ADMIN always bypassed; CI only checked a gate exists, not that its closure was declared and seeded. | FIXED | ADR-0047: `backend/src/test/resources/security/screen-read-closure.json` (manifest, 9 screens × supporting reads) + `RolePermissionClosureTest` (surefire, no DB) asserts gate-honesty + required-closure-seeded + no-phantom. Completes the four-link parity chain. |
 | F22-FU | F21/F22 follow-up | CLOSED | **The F22 "grant CUSTOMER.VIEW / SUPPLIER.VIEW to cash/AR/AP roles" rule lived only in the findings memo** — no checked artefact kept it honest against future gate relaxation. | FIXED | ADR-0047 manifest pins `CUSTOMER.VIEW` (gate=`has`) on `ar.record-receipt` and `SUPPLIER.VIEW` (gate=`has`) on `ap.record-payment`/`ap.enter-supplier-bill`. If a reviewer relaxes either gate to `hasOrMember`, check (a) in `RolePermissionClosureTest` goes red — the manifest becomes the enforcement anchor. |
 
+## F23 — Goods-receipt-create PO read-closure: a storekeeper could open the GR screen but not read the POs it receives against
+
+**2026-06-28 — business-operations simulation (`docs/simulation/run-2026-06-28`, Saidi Karume / STOREKEEPER).**
+Same F21/F22 read-closure family. Closed the WHOLE goods-receipt-create read-dependency in one pass
+(the F22 lesson: a transactional screen's read-dependency peels one 403 layer at a time — fix them all
+together so a re-run doesn't just hit the next read).
+
+Enumerated closure of `/admin/goods-receipts/create` (storekeeper = PURCHASE.RECEIVE + the F21
+within-company read-floor): `GET /organisations/current` (`isAuthenticated()`, OK), `GET
+/companies/accessible` (`isAuthenticated()`, OK), `GET /purchase-orders` (**was 403**), `GET
+/purchase-orders/uid/{uid}` (**was 403**), `GET /purchase-orders/uid/{uid}/lines` (**was 403**),
+`POST /goods-receipts` (`PURCHASE.RECEIVE`, the write, already OK).
+
+| # | Source | Severity | Finding | Status | Resolution |
+|---|---|---|---|---|---|
+| F23 | sim 2026-06-28 (STOREKEEPER) | HIGH (blocker for the storekeeper's core daily job) | **The GR-create screen loads under PURCHASE.RECEIVE but its three PO read-dependencies were gated only on PURCHASE.ORDER.VIEW / AP.BILL.ENTER** — the PO picker list (`@perm.has('PURCHASE.ORDER.VIEW') or @perm.has('AP.BILL.ENTER')`), the chosen PO header and its lines (`@perm.scoped(..,'purchaseorder','PURCHASE.ORDER.VIEW')`). A storekeeper holding PURCHASE.RECEIVE (route-guard + GR write, parity-correct + seeded) but not PURCHASE.ORDER.VIEW could open the screen and not read the POs to receive against — picker 403, blank page. Seeded codes, not a tenant leak: a role-grant vs screen-read-dependency closure gap. | FIXED | Gate-layer read-floor (no grant, no migration): list gate → `@perm.has('PURCHASE.ORDER.VIEW') or @perm.has('AP.BILL.ENTER') or @perm.has('PURCHASE.RECEIVE')`; PO header + lines reads → `@perm.scoped(#uid,'purchaseorder','PURCHASE.ORDER.VIEW') or @perm.scoped(#uid,'purchaseorder','PURCHASE.RECEIVE')`. Tenant isolation **unchanged**: `PurchaseOrderServiceImpl.list` keeps `assertCanActIn(ctx, companyId)`, and `getByUid`/`listLines` scope from the **loaded** PO's company; both scoped gate branches run `ScopeGuard.canActOn` against the loaded PO ('purchaseorder' target type → `purchaseOrders.findCompanyIdByUid`), so a PURCHASE.RECEIVE holder reads only their OWN company's POs. POs stay transactional-gated (NOT opened to plain membership) — broadened only to the adjacent PURCHASE.RECEIVE verb whose own GR write already requires it, exactly mirroring the AP.BILL.ENTER precedent. Manifest: added `purchases.goods-receipt-create` (accessPermission=PURCHASE.RECEIVE) to `screen-read-closure.json`, pinned by `RolePermissionClosureTest`. Test: `ReferenceDataReadClosureIT` adds a PURCHASE.RECEIVE-only storekeeper → 200 on own-company PO list, 403 cross-tenant; non-member still 403. |
+
+**Decision rationale.** This is F21's PO branch extended, not F22's customer/supplier branch. POs are
+transactional documents, so they are NOT opened to plain company membership; the gate is broadened only
+to the **adjacent transactional verb** (PURCHASE.RECEIVE) whose dependent screen's own primary verb
+already requires it — the identical reasoning that previously admitted AP.BILL.ENTER to the same list.
+The read-floor is applied symmetrically to all three PO reads the screen fires (list + header + lines)
+so the closure is complete and a re-run cannot peel to a next 403. No disclosure-grade gate was relaxed.
+
+**Residual / follow-ups.**
+- Frontend defence-in-depth (carried from F21/F22): the GR-create PO picker should degrade to a
+  permission-aware empty state on any future 403 rather than blanking the screen — flagged for
+  frontend-engineer.
+- Whether STOREKEEPER should additionally hold a standalone PURCHASE.ORDER.VIEW as a role-spec matter
+  (vs. relying on the read-floor) is a role-composition question for system-analyst — out of scope.
+
 ## Production-gating (carried, still OPEN)
 - **G1** (Slice 2): stable RS256 signing key from a secret store — dev key is in-memory (everyone logged out on restart; not prod-safe).
 - **G2** (Slice 2): access-token denylist on logout (access token currently valid until expiry after logout).
