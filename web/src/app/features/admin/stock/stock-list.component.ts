@@ -58,6 +58,8 @@ export class StockListComponent {
   readonly companyState = signal<'loading' | 'idle' | 'error'>('loading');
   readonly branches = signal<Branch[]>([]);
   readonly selectedBranchId = signal('');
+  /** True when the branch list could not be loaded (non-fatal; by-location tab shows a notice). */
+  readonly branchesUnavailable = signal(false);
 
   // ── List state ────────────────────────────────────────────────────────────────
   readonly rows = signal<StockOnHandDto[]>([]);
@@ -247,9 +249,10 @@ export class StockListComponent {
   }
 
   private loadBranches(companyUid: string): void {
+    this.branchesUnavailable.set(false);
     this.branchService.list(companyUid).subscribe({
       next: (list) => this.branches.set(list),
-      error: () => this.branches.set([]),
+      error: () => { this.branches.set([]); this.branchesUnavailable.set(true); },
     });
   }
 

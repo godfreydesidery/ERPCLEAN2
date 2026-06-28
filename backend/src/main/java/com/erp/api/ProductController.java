@@ -57,8 +57,13 @@ public class ProductController {
     // Core CRUD
     // -------------------------------------------------------------------------
 
+    // Product list is the picker most operational screens (manufacturing, stock, sales) render on
+    // load. Allow PRODUCT.VIEW holders OR any scoped member of the active company: products are
+    // low-sensitivity, company-scoped reference data, and the service applies its own company-scope
+    // predicate (assertCanActIn on companyId), so this widens a READ within the tenant only — it does
+    // NOT relax isolation (sim 2026-06-28, ISSUE-003/005/006).
     @GetMapping
-    @PreAuthorize("@perm.has('PRODUCT.VIEW')")
+    @PreAuthorize("@perm.hasOrMember('PRODUCT.VIEW')")
     public ApiResponse<List<ProductDto>> list(@RequestParam Long companyId,
                                               @RequestParam(required = false) String q,
                                               Pageable pageable) {

@@ -57,9 +57,16 @@ public class PurchaseOrderController {
         return ApiResponse.ok(service.getByUid(uid));
     }
 
-    /** Paged list / search for a company. */
+    /**
+     * Paged list / search for a company. POs are transactional documents (amounts, suppliers), so —
+     * unlike the pure reference-data pickers — this list is NOT opened to plain company membership.
+     * It additionally accepts AP.BILL.ENTER because the supplier-bill entry screen fires this read to
+     * three-way-match a bill against an ORDERED PO; a user who may enter bills legitimately needs the
+     * match list without holding the whole purchasing read (sim 2026-06-28, ISSUE-002). The service
+     * applies its own company-scope predicate, so this stays within-tenant.
+     */
     @GetMapping
-    @PreAuthorize("@perm.has('PURCHASE.ORDER.VIEW')")
+    @PreAuthorize("@perm.has('PURCHASE.ORDER.VIEW') or @perm.has('AP.BILL.ENTER')")
     public ApiResponse<List<PurchaseOrderDto>> list(
             @RequestParam Long companyId,
             @RequestParam(required = false) String q,

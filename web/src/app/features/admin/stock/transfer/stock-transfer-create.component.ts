@@ -81,6 +81,12 @@ export class StockTransferCreateComponent {
   // ── Lines ─────────────────────────────────────────────────────────────────────
   readonly lines = signal<LineEntry[]>([{ productUid: '', qty: '' }]);
 
+  // ── Reference-data availability ───────────────────────────────────────────────
+  /** True when the branch list could not be loaded (non-fatal; user sees notice and can retry). */
+  readonly branchesUnavailable = signal(false);
+  /** True when the product list could not be loaded (non-fatal; user sees notice and can retry). */
+  readonly productsUnavailable = signal(false);
+
   // ── Form state ────────────────────────────────────────────────────────────────
   readonly saving = signal(false);
   readonly formError = signal<string | null>(null);
@@ -115,16 +121,18 @@ export class StockTransferCreateComponent {
   }
 
   private loadBranches(companyUid: string): void {
+    this.branchesUnavailable.set(false);
     this.branchService.list(companyUid).subscribe({
       next: (list) => this.branches.set(list),
-      error: () => this.branches.set([]),
+      error: () => { this.branches.set([]); this.branchesUnavailable.set(true); },
     });
   }
 
   private loadProducts(companyId: string): void {
+    this.productsUnavailable.set(false);
     this.productService.list(companyId, '', 0, 200).subscribe({
       next: ({ rows }) => this.products.set(rows.filter((p) => p.status !== 'ARCHIVED')),
-      error: () => this.products.set([]),
+      error: () => { this.products.set([]); this.productsUnavailable.set(true); },
     });
   }
 

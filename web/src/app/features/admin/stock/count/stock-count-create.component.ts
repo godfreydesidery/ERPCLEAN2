@@ -52,6 +52,10 @@ export class StockCountCreateComponent {
   readonly fCountType = signal<'FULL' | 'CYCLE'>('FULL');
   readonly fNotes = signal('');
 
+  // ── Reference-data availability ───────────────────────────────────────────────
+  /** True when the branch list could not be loaded (non-fatal; location picker uses first branch only). */
+  readonly branchesUnavailable = signal(false);
+
   // ── Submit state ──────────────────────────────────────────────────────────────
   readonly submitting = signal(false);
   readonly formError = signal<string | null>(null);
@@ -85,6 +89,7 @@ export class StockCountCreateComponent {
   }
 
   private loadBranches(companyUid: string): void {
+    this.branchesUnavailable.set(false);
     this.branchService.list(companyUid).subscribe({
       next: (list) => {
         this.branches.set(list);
@@ -93,7 +98,7 @@ export class StockCountCreateComponent {
           this.loadLocations(list[0].uid);
         }
       },
-      error: () => this.branches.set([]),
+      error: () => { this.branches.set([]); this.branchesUnavailable.set(true); },
     });
   }
 

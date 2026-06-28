@@ -54,6 +54,8 @@ export class WorkOrderDetailComponent {
 
   // ── Picker options ────────────────────────────────────────────────────────
   readonly branchOptions = signal<UidOption[]>([]);
+  /** True when the branch list could not be loaded (non-fatal; branch field shows a notice). */
+  readonly branchesUnavailable = signal(false);
   /** Operation options for the "Apply Cost" action (derived from the loaded WO). */
   readonly operationOptions = computed<UidOption[]>(() => {
     const ops = this.wo()?.operations ?? [];
@@ -189,6 +191,7 @@ export class WorkOrderDetailComponent {
   private loadBranchOptions(w: WorkOrderDto): void {
     // WorkOrderDto.companyId is the numeric id. BranchService.list needs companyUid.
     // Resolve: load all companies for the current org and match by id.
+    this.branchesUnavailable.set(false);
     this.organisationService.current().subscribe({
       next: (org) => {
         this.companyService.list(org.uid).subscribe({
@@ -201,13 +204,13 @@ export class WorkOrderDetailComponent {
                   branches.filter((b) => b.status === 'ACTIVE').map((b) => ({ uid: b.uid, label: b.name, hint: b.code })),
                 );
               },
-              error: () => {},
+              error: () => { this.branchOptions.set([]); this.branchesUnavailable.set(true); },
             });
           },
-          error: () => {},
+          error: () => { this.branchesUnavailable.set(true); },
         });
       },
-      error: () => {},
+      error: () => { this.branchesUnavailable.set(true); },
     });
   }
 

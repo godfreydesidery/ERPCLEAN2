@@ -17,6 +17,41 @@
 > **UPR-001**(Sabina POS) & **UPR-003**(Frank stock)→**ISSUE-004**(+003); **UPR-006**(Sabina price
 > list)→**ISSUE-007**; all → systemic **ISSUE-008**.
 
+## Resolution — fixed & verified (2026-06-28)
+
+The technical team fixed the blockers the same day — **no migration** (the DB is frozen and all four
+codes were already seeded). The fix lives in the **gate layer**: the low-sensitivity, company-scoped
+reference *pickers* (branch / product / WHT-type lists) now allow a provisioned member of their **own**
+company to read them (`@perm.scopedOrMember` / `hasOrMember`); the PO list was broadened to
+`PURCHASE.ORDER.VIEW or AP.BILL.ENTER` for the supplier-bill matcher only. **Tenant isolation is
+unchanged** — every list still enforces its company-scope predicate, so a member reads only their own
+company's data (read-widening, never a write, never cross-tenant). The affected screens also **degrade
+gracefully** now instead of blanking. Recorded as security finding **F21**; guarded by
+`ReferenceDataReadClosureIT` (11/11, incl. a cross-tenant 403 assertion). Gates green:
+EndpointAuthorizationTest, PermissionCodesSeededTest, ModuleBoundaryTest, web build + 894 web assertions.
+
+**Verified by re-running the blocked personas through the UI** (evidence:
+[`run-2026-06-28/rerun-after-fix.json`](run-2026-06-28/rerun-after-fix.json)) — **0 blockers remain
+(was 28)**:
+
+| Issue | Was | Now | Status |
+|---|---|---|---|
+| ISSUE-001 (`WHT.VIEW` → receipts/payments) | Grace, John **BLOCKED** | screens open | **Fixed** |
+| ISSUE-002 (`PURCHASE.ORDER.VIEW` → supplier bill) | Grace, Amina **BLOCKED** | opens | **Fixed** |
+| ISSUE-003/005 (`PRODUCT`/`BRANCH.VIEW` → work-orders/BOMs/stock) | Editha, Editrude, Frank, Saidi **BLOCKED** | open | **Fixed** |
+| ISSUE-004 (`BRANCH.VIEW` → POS/stock) | Sabina, Frank, Saidi **BLOCKED** | open | **Fixed** |
+| ISSUE-007 (price-list bare 409) | opaque conflict | friendly message | **Fixed** |
+| ISSUE-008 (no closure guard) | — | `ReferenceDataReadClosureIT` | **Done** |
+| ISSUE-006 (PRODUCTION_OFFICER can't *create* product master data) | n/a (was masked) | view OK; create needs `PRODUCT.MANAGE` | **Deferred → system-analyst** (role-spec, not a defect) |
+
+The only residual items in the after re-run are non-blocking and correct-by-design: production officers
+can now *view* products and run their work-order/BOM screens, but creating product **master data** needs
+`PRODUCT.MANAGE` — a legitimate role-design question (does a production officer own product master data,
+or only procurement?), routed to **system-analyst**. The "RETAIL already exists" item is expected
+duplicate data, now shown as a friendly message.
+
+---
+
 ## How we read this run
 
 Sixteen Tembo Group personas logged into the live web UI **as themselves** — each on a

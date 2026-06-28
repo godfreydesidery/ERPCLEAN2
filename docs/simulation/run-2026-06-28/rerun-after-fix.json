@@ -1,0 +1,461 @@
+{
+  "totals": {
+    "problems": 13,
+    "bySeverity": {
+      "SLOW": 13
+    }
+  },
+  "perPersona": [
+    {
+      "persona": "Bakari Mbaga",
+      "slug": "bakari-mbaga",
+      "ran": false
+    },
+    {
+      "persona": "Grace Mhina",
+      "slug": "grace-mhina",
+      "ran": true,
+      "loggedIn": true,
+      "role": "FINANCE_DIRECTOR",
+      "access": [
+        {
+          "path": "/admin/gl/journals/post",
+          "label": "Post journal",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/ar/receipts/record",
+          "label": "Record receipt",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/ap/payments/record",
+          "label": "Record payment",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/ap/supplier-bills/enter",
+          "label": "Enter supplier bill",
+          "outcome": "OK"
+        }
+      ],
+      "created": {},
+      "problemCount": 0
+    },
+    {
+      "persona": "Halima Juma",
+      "slug": "halima-juma",
+      "ran": false
+    },
+    {
+      "persona": "Emanuel Mushi",
+      "slug": "emanuel-mushi",
+      "ran": false
+    },
+    {
+      "persona": "Daudi Kessy",
+      "slug": "daudi-kessy",
+      "ran": false
+    },
+    {
+      "persona": "Rehema Salum",
+      "slug": "rehema-salum",
+      "ran": false
+    },
+    {
+      "persona": "Editha Mhagama",
+      "slug": "editha-mhagama",
+      "ran": true,
+      "loggedIn": true,
+      "role": "PRODUCTION_OFFICER",
+      "access": [
+        {
+          "path": "/admin/work-orders",
+          "label": "Work orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/boms",
+          "label": "Bills of materials",
+          "outcome": "OK"
+        }
+      ],
+      "created": {},
+      "problemCount": 6
+    },
+    {
+      "persona": "Neema Kileo",
+      "slug": "neema-kileo",
+      "ran": false
+    },
+    {
+      "persona": "Frank Materu",
+      "slug": "frank-materu",
+      "ran": true,
+      "loggedIn": true,
+      "role": "STORES_SUPERVISOR",
+      "access": [
+        {
+          "path": "/admin/stock",
+          "label": "Stock on-hand",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/stock-counts/create",
+          "label": "Stock count",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/stock-transfers/create",
+          "label": "Stock transfer",
+          "outcome": "OK"
+        }
+      ],
+      "created": {},
+      "problemCount": 0
+    },
+    {
+      "persona": "Editrude Mwakalukwa",
+      "slug": "editrude-mwakalukwa",
+      "ran": true,
+      "loggedIn": true,
+      "role": "PRODUCTION_OFFICER",
+      "access": [
+        {
+          "path": "/admin/work-orders",
+          "label": "Work orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/boms",
+          "label": "Bills of materials",
+          "outcome": "OK"
+        }
+      ],
+      "created": {},
+      "problemCount": 6
+    },
+    {
+      "persona": "Amina Mwanga",
+      "slug": "amina-mwanga",
+      "ran": true,
+      "loggedIn": true,
+      "role": "ACCOUNTANT",
+      "access": [
+        {
+          "path": "/admin/gl/journals/post",
+          "label": "Post journal",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/ar/receipts/record",
+          "label": "Record receipt",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/ap/supplier-bills/enter",
+          "label": "Enter supplier bill",
+          "outcome": "OK"
+        }
+      ],
+      "created": {},
+      "problemCount": 0
+    },
+    {
+      "persona": "John Komba",
+      "slug": "john-komba",
+      "ran": true,
+      "loggedIn": true,
+      "role": "CASHIER",
+      "access": [
+        {
+          "path": "/admin/ar/receipts/record",
+          "label": "Record receipt",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/ap/payments/record",
+          "label": "Record payment",
+          "outcome": "OK"
+        }
+      ],
+      "created": {},
+      "problemCount": 0
+    },
+    {
+      "persona": "Sabina Aloyce",
+      "slug": "sabina-aloyce",
+      "ran": true,
+      "loggedIn": true,
+      "role": "SALES_OFFICER",
+      "access": [
+        {
+          "path": "/admin/sales-orders",
+          "label": "Sales orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/customers",
+          "label": "Customers",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/pos/sell",
+          "label": "POS sell",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/products",
+          "label": "Products",
+          "outcome": "OK"
+        }
+      ],
+      "created": {
+        "register customer": 5
+      },
+      "problemCount": 1
+    },
+    {
+      "persona": "Hamisi Ngassa",
+      "slug": "hamisi-ngassa",
+      "ran": false
+    },
+    {
+      "persona": "Saidi Karume",
+      "slug": "saidi-karume",
+      "ran": true,
+      "loggedIn": true,
+      "role": "STOREKEEPER",
+      "access": [
+        {
+          "path": "/admin/stock",
+          "label": "Stock on-hand",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/goods-receipts/create",
+          "label": "Goods receipt",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/stock-counts/create",
+          "label": "Stock count",
+          "outcome": "OK"
+        }
+      ],
+      "created": {},
+      "problemCount": 0
+    },
+    {
+      "persona": "Yusuf Mbwana",
+      "slug": "yusuf-mbwana",
+      "ran": false
+    }
+  ],
+  "problems": [
+    {
+      "persona": "Editha Mhagama",
+      "designation": "Production Manager",
+      "username": "emhagama",
+      "severity": "SLOW",
+      "workflow": "create manufactured product",
+      "screen": "/admin/products",
+      "detail": "entering \"Tembo Cooking Oil (1 L bottle)\": create form did not open",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      },
+      "slug": "editha-mhagama"
+    },
+    {
+      "persona": "Editha Mhagama",
+      "designation": "Production Manager",
+      "username": "emhagama",
+      "severity": "SLOW",
+      "workflow": "create manufactured product",
+      "screen": "/admin/products",
+      "detail": "entering \"Tembo Bar Soap (800 g)\": create form did not open",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      },
+      "slug": "editha-mhagama"
+    },
+    {
+      "persona": "Editha Mhagama",
+      "designation": "Production Manager",
+      "username": "emhagama",
+      "severity": "SLOW",
+      "workflow": "create manufactured product",
+      "screen": "/admin/products",
+      "detail": "entering \"Tembo Washing Powder (1 kg)\": create form did not open",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      },
+      "slug": "editha-mhagama"
+    },
+    {
+      "persona": "Editha Mhagama",
+      "designation": "Production Manager",
+      "username": "emhagama",
+      "severity": "SLOW",
+      "workflow": "create manufactured product",
+      "screen": "/admin/products",
+      "detail": "entering \"Tembo Drinking Water (500 ml)\": create form did not open",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      },
+      "slug": "editha-mhagama"
+    },
+    {
+      "persona": "Editha Mhagama",
+      "designation": "Production Manager",
+      "username": "emhagama",
+      "severity": "SLOW",
+      "workflow": "create manufactured product",
+      "screen": "/admin/products",
+      "detail": "entering \"Tembo Maize Flour Sembe (25 kg)\": create form did not open",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      },
+      "slug": "editha-mhagama"
+    },
+    {
+      "persona": "Editha Mhagama",
+      "designation": "Production Manager",
+      "username": "emhagama",
+      "severity": "SLOW",
+      "workflow": "create manufactured product",
+      "screen": "/admin/products",
+      "detail": "entering \"Tembo Office Desk (1.2 m)\": create form did not open",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      },
+      "slug": "editha-mhagama"
+    },
+    {
+      "persona": "Editrude Mwakalukwa",
+      "designation": "Production Supervisor",
+      "username": "emwakalukwa",
+      "severity": "SLOW",
+      "workflow": "create manufactured product",
+      "screen": "/admin/products",
+      "detail": "entering \"Tembo Cooking Oil (1 L bottle)\": create form did not open",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      },
+      "slug": "editrude-mwakalukwa"
+    },
+    {
+      "persona": "Editrude Mwakalukwa",
+      "designation": "Production Supervisor",
+      "username": "emwakalukwa",
+      "severity": "SLOW",
+      "workflow": "create manufactured product",
+      "screen": "/admin/products",
+      "detail": "entering \"Tembo Bar Soap (800 g)\": create form did not open",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      },
+      "slug": "editrude-mwakalukwa"
+    },
+    {
+      "persona": "Editrude Mwakalukwa",
+      "designation": "Production Supervisor",
+      "username": "emwakalukwa",
+      "severity": "SLOW",
+      "workflow": "create manufactured product",
+      "screen": "/admin/products",
+      "detail": "entering \"Tembo Washing Powder (1 kg)\": create form did not open",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      },
+      "slug": "editrude-mwakalukwa"
+    },
+    {
+      "persona": "Editrude Mwakalukwa",
+      "designation": "Production Supervisor",
+      "username": "emwakalukwa",
+      "severity": "SLOW",
+      "workflow": "create manufactured product",
+      "screen": "/admin/products",
+      "detail": "entering \"Tembo Drinking Water (500 ml)\": create form did not open",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      },
+      "slug": "editrude-mwakalukwa"
+    },
+    {
+      "persona": "Editrude Mwakalukwa",
+      "designation": "Production Supervisor",
+      "username": "emwakalukwa",
+      "severity": "SLOW",
+      "workflow": "create manufactured product",
+      "screen": "/admin/products",
+      "detail": "entering \"Tembo Maize Flour Sembe (25 kg)\": create form did not open",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      },
+      "slug": "editrude-mwakalukwa"
+    },
+    {
+      "persona": "Editrude Mwakalukwa",
+      "designation": "Production Supervisor",
+      "username": "emwakalukwa",
+      "severity": "SLOW",
+      "workflow": "create manufactured product",
+      "screen": "/admin/products",
+      "detail": "entering \"Tembo Office Desk (1.2 m)\": create form did not open",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      },
+      "slug": "editrude-mwakalukwa"
+    },
+    {
+      "persona": "Sabina Aloyce",
+      "designation": "Salesperson",
+      "username": "saloyce",
+      "severity": "SLOW",
+      "workflow": "create price list",
+      "screen": "/admin/price-lists",
+      "detail": "could not save \"RETAIL\" (validation/409)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 409 (Conflict)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/price-lists",
+            "status": 409,
+            "method": "POST",
+            "body": "{\"data\":null,\"errors\":[\"A record with the same unique identifier already exists.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "sabina-aloyce"
+    }
+  ]
+}

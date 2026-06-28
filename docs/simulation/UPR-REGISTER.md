@@ -376,12 +376,17 @@ How often:
 
 | UPR-ID | Reporter | Screen | Severity | Status | Linked Issue(s) |
 | --- | --- | --- | --- | --- | --- |
-| UPR-001 | Sabina Aloyce (Salesperson) | Sales > Counter Sale (POS) — `/admin/pos/sell` | Can't do my job | Triaged | ISSUE-004 (BRANCH.VIEW) |
-| UPR-002 | Editha Mhagama (Production Manager) | Manufacturing > Work Orders / Bills of Materials / Products list | Can't do my job | Triaged | ISSUE-003, ISSUE-005, ISSUE-006 (PRODUCT/BRANCH.VIEW) |
-| UPR-003 | Frank Materu (Stores / Warehouse Supervisor) | Stock > On-hand / Stock counts > Create / Stock transfers > Create | Can't do my job | Triaged | ISSUE-004, ISSUE-003 (BRANCH/PRODUCT.VIEW) |
-| UPR-004 | Grace Mhina (Finance Director / CFO) | AR > Record customer receipt; AP > Record supplier payment | Can't do my job | Triaged | ISSUE-001 (WHT.VIEW) |
-| UPR-005 | Amina Mwanga (Accountant) | AP > Supplier Bills > Enter Supplier Bill | Can't do my job | Triaged | ISSUE-002 (PURCHASE.ORDER.VIEW) |
-| UPR-006 | Sabina Aloyce (Salesperson) | Price lists > New | Slows me down | Triaged | ISSUE-007 (409 message hygiene) |
+| UPR-001 | Sabina Aloyce (Salesperson) | Sales > Counter Sale (POS) — `/admin/pos/sell` | Can't do my job | **Closed — verified** | ISSUE-004 (BRANCH.VIEW) |
+| UPR-002 | Editha Mhagama (Production Manager) | Manufacturing > Work Orders / Bills of Materials / Products list | Can't do my job | **Closed — verified** (work-orders/BOMs open; product *create* → ISSUE-006 role-spec) | ISSUE-003, ISSUE-005, ISSUE-006 (PRODUCT/BRANCH.VIEW) |
+| UPR-003 | Frank Materu (Stores / Warehouse Supervisor) | Stock > On-hand / Stock counts > Create / Stock transfers > Create | Can't do my job | **Closed — verified** | ISSUE-004, ISSUE-003 (BRANCH/PRODUCT.VIEW) |
+| UPR-004 | Grace Mhina (Finance Director / CFO) | AR > Record customer receipt; AP > Record supplier payment | Can't do my job | **Closed — verified** | ISSUE-001 (WHT.VIEW) |
+| UPR-005 | Amina Mwanga (Accountant) | AP > Supplier Bills > Enter Supplier Bill | Can't do my job | **Closed — verified** | ISSUE-002 (PURCHASE.ORDER.VIEW) |
+| UPR-006 | Sabina Aloyce (Salesperson) | Price lists > New | Slows me down | **Fixed — friendly message** | ISSUE-007 (409 message hygiene) |
+
+> **Closed — verified (2026-06-28):** after the technical team's gate-layer fix (security finding F21,
+> no migration), the blocked personas were re-run through the UI — every "Can't do my job" screen now
+> opens. Before/after evidence: [run-2026-06-28/rerun-after-fix.json](run-2026-06-28/rerun-after-fix.json);
+> resolution detail: [ISSUES-REGISTER.md](ISSUES-REGISTER.md#resolution--fixed--verified-2026-06-28).
 
 All six also feed the systemic **ISSUE-008** (no test asserts a role's grant set is closed over
 the reference reads its screens fire).

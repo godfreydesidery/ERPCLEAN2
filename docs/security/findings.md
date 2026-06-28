@@ -56,6 +56,42 @@ An empirical end-to-end probe (two real tenants, every uid/id-addressed endpoint
 | F19 | IAM | HIGH | **`GET /api/v1/companies` enumerated all organisation companies** — any `COMPANY.VIEW` holder received every company's master data, regardless of membership. | FIXED | The list now applies the same **assigned-or-root** filter as `/companies/accessible` (root sees all; everyone else sees only companies they belong to). Company master data is no longer enumerable cross-tenant. |
 | F20 | (cross-cutting) | (regression guard) | No build-time fence prevented a future `..service..` class from re-introducing a bare, unscoped `findById`/`getReferenceById` (the root cause of classes (a)/(b)). | FIXED | Added ArchUnit `FreezingArchRule` **`TenantScopingRulesTest`**: a `..service..` class making a bare `findById`/`getReferenceById` on a Spring Data repository **fails the build**, forcing company-scoped finders. The **~197 pre-existing audited calls are frozen as a baseline** (`allowStoreUpdate=false`), so the baseline cannot grow. |
 
+## F21 — Reference-data picker reads hard-403 narrowly-scoped operational roles (role-grant read-closure gap)
+
+**2026-06-28 — business-operations simulation (16 real Tembo-Group personas, non-root, non-ORG_ADMIN).**
+Source: [`docs/simulation/ISSUES-REGISTER.md`](../simulation/ISSUES-REGISTER.md) ISSUE-001..006.
+
+Operational/finance roles (hand-curated permission subsets) were blocked from core screens because a
+**supporting reference-data read the screen fires on load returned 403 and blanked the whole page** —
+the role held the screen's primary verb but not the supporting `*.VIEW` read-dependency. Not phantom
+codes (all four are seeded) and not a tenant leak — a **role-grant vs screen-read-dependency closure
+gap**. The DB schema/seed is frozen, so this is fixed in the **gate layer**, not by editing grants.
+
+| # | Source | Severity | Finding | Status | Resolution |
+|---|---|---|---|---|---|
+| F21 | sim 2026-06-28 (ISSUE-001..006) | HIGH (blocker for the affected roles) | **Supporting picker reads (`GET /branches`, `GET /products`, `GET /wht/types`, `GET /purchase-orders`) 403'd narrowly-scoped operational/finance roles**, blanking Record-receipt/payment, supplier-bill, work-order/BOM, stock-transfer and POS screens. Root/ORG_ADMIN never hit it (they hold every code), so CI's gate-exists / code-seeded checks stayed green. | FIXED | Relaxed the **picker** gates to a within-tenant read floor, **without weakening isolation** (every list service keeps its own company-scope predicate; the branch gate keeps the company resolution in `scopedOrMember`): branch list → `@perm.scopedOrMember(#companyUid,'company','BRANCH.VIEW')`; product list → `@perm.hasOrMember('PRODUCT.VIEW')`; WHT-type list → `@perm.hasOrMember('WHT.VIEW')`. New `@perm` helpers back these (`PermissionChecks.hasOrMember` / `scopedOrMember`, `PermissionResolver.isMember` = caller holds ≥1 role in their active company). **PO list left transactional-gated** but broadened to `PURCHASE.ORDER.VIEW or AP.BILL.ENTER` so the supplier-bill three-way-match picker loads for bill-enterers without a blanket purchasing read. No migration; endpoints stay permission-gated (fail closed for a non-member / cross-company target). |
+
+**Decision rationale.** Branch/product/WHT lists are low-sensitivity, company-scoped reference data
+used as pickers by nearly every operational screen — a member of the company legitimately reads them.
+"Member" = the caller resolves ≥1 role in their *own* active company; membership is computed from the
+caller's own grants, and the company-scope predicate is unchanged (service `assertCanActIn`, or the
+gate's company resolution for branches), so a member can only ever read **their own** company's data —
+no cross-tenant widening, read-only, never a write. POs are transactional documents (amounts,
+suppliers), so they were NOT opened to plain membership — only to the adjacent `AP.BILL.ENTER`
+capability that the dependent screen's own primary verb already requires.
+
+**Residual / follow-ups.**
+- ISSUE-006 (PRODUCTION_OFFICER cannot view products *at all*, a core-job gap, not just a side-load):
+  the `hasOrMember` floor unblocks the product picker, but whether PRODUCTION_OFFICER should also hold
+  a product **create/manage** capability is a role-spec question for system-analyst — out of scope for
+  this gate fix.
+- ISSUE-008 (no test asserts a role's grants are closed over its screens' reference reads):
+  `RolePermissionClosureTest` is a qa-engineer deliverable; this gate fix removes the runtime blocker
+  but does not replace that guard.
+- **Frontend:** the picker reads no longer hard-403 the affected roles, but defence-in-depth still
+  wants the pickers to **degrade gracefully** on any future 403 (e.g. branch picker → user's default
+  branch) rather than blanking a screen — flagged for frontend-engineer.
+
 ## Production-gating (carried, still OPEN)
 - **G1** (Slice 2): stable RS256 signing key from a secret store — dev key is in-memory (everyone logged out on restart; not prod-safe).
 - **G2** (Slice 2): access-token denylist on logout (access token currently valid until expiry after logout).

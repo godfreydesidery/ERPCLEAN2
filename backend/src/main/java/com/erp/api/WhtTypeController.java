@@ -52,8 +52,13 @@ public class WhtTypeController {
         return service.getByUid(uid);
     }
 
+    // WHT-type list feeds the withholding-tax dropdown on cash/AR/AP capture screens. It is
+    // low-sensitivity, company-scoped rate reference data; allow WHT.VIEW holders OR any scoped member
+    // of the active company so the dropdown never hard-403s a finance/cashier capture form (sim
+    // 2026-06-28, ISSUE-001). The service applies its own company-scope predicate, so this is a
+    // within-tenant read widening only.
     @GetMapping
-    @PreAuthorize("@perm.has('WHT.VIEW')")
+    @PreAuthorize("@perm.hasOrMember('WHT.VIEW')")
     public List<WhtTypeDto> listByCompany(@RequestParam Long companyId) {
         return service.listByCompany(companyId);
     }

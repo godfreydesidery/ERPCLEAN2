@@ -57,6 +57,29 @@ public class PermissionResolver {
     }
 
     /**
+     * Whether the caller is a provisioned, scoped MEMBER of their active company — i.e. they hold at
+     * least one role (any permission) in the active (company, branch) scope. Root is always a member.
+     *
+     * <p>This is the read-floor for low-sensitivity, company-scoped reference-data pickers (branch
+     * list, product list, WHT-type list): a screen's branch/product picker must not hard-403 a user
+     * who legitimately belongs to the company and holds the screen's primary verb but not the
+     * supporting {@code *.VIEW} read (the role-grant read-closure gap from the 2026-06-28 sim,
+     * ISSUE-001..006). It is NOT a tenant-isolation relaxation: membership is established from the
+     * caller's OWN resolved grants in their OWN active company, and every list service still applies
+     * its company-scope predicate downstream, so a member can only ever read their own company's data.
+     */
+    public boolean isMember(RequestContext.Principal principal, long nowMillis) {
+        if (principal == null) {
+            return false;
+        }
+        if (principal.root()) {
+            return true;
+        }
+        return !resolve(principal.userId(), principal.companyId(), principal.branchId(), nowMillis)
+                .isEmpty();
+    }
+
+    /**
      * Whether the caller may exercise {@code permissionCode} in their active scope. Root is always
      * allowed (and audited elsewhere); otherwise the code must be in the resolved set.
      */
