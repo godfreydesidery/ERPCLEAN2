@@ -169,3 +169,61 @@ no migration, and it has one source of truth that a code reviewer can read.
    the persona re-run), but it cannot be the build-gate guard because there is no canonical role list
    to assert against. The manifest-property test sidesteps that by asserting the screen→read contract,
    which *is* in the repo.
+
+## Grant-time validator (follow-up — now implemented)
+
+> **Status of this section:** Accepted, 2026-06-28. This **flips Alternative #2 ("Grant-time
+> role-composition validator"), which the original decision deferred.** The build-time
+> `RolePermissionClosureTest` pins the screen→read contract but is structurally blind to a tenant's
+> actual mis-composed role (Consequences §"Harder/constrained", final bullet). This follow-up adds the
+> **runtime, advisory** half — it inspects a real role's grant set and surfaces the gaps the CI test
+> cannot see. It "consumes the same manifest," exactly as the deferral promised: **no new declaration
+> surface, no new drift class.**
+
+The validator resolves the input the deferral said the system lacked — *"which screens is this role
+meant to operate"* — **not** by adding a new input, but by deriving it: a role is meant to operate
+screen X **iff it already holds X's `accessPermission`** (the route-guard permission that opens the
+screen). That makes the check a **pure function of `(role grants, manifest)`** with no extra state.
+
+**Three design calls (and why):**
+
+1. **Manifest moves to `backend/src/main/resources/security/screen-read-closure.json` (single copy,
+   no second source).** The validator needs it at runtime; a duplicated test-resource copy would be a
+   new drift surface — the precise failure family this ADR exists to close. `RolePermissionClosureTest`
+   is retargeted to read the **main-resources** copy (main is on the test classpath already), so the
+   build gate and the runtime validator share one file. No second JSON, ever.
+
+2. **Each screen gains an `accessPermission` field** = the screen's route-guard / primary-action
+   permission, sourced from the controller action's `@PreAuthorize` (verified per screen — see the
+   spec's table). It is the same code the Angular `requirePermission(...)` route guard uses, which is
+   the existing route-guard↔endpoint parity invariant — so no *new* code is introduced, only named.
+
+3. **Advisory, never blocking.** The validator is a **read-only report**, surfaced on the role-edit
+   screen and via a new read-only endpoint. It does **not** gate `PUT .../permissions` — blocking a
+   grant would break legitimate compositions (a role may intentionally be view-only for one screen and
+   operate another) and regress the F21 least-privilege posture. It informs the admin; the admin
+   decides.
+
+**The check (pure function).** For a role with granted codes `G` and manifest `M`: for each screen
+`s ∈ M` where `s.accessPermission ∈ G`, compute `missing(s) = { read.code | read ∈ s.reads,
+read.necessity = required, gateForm(read) ∈ {has, scoped}, read.code ∉ G }`. (Member-floor
+`hasOrMember`/`scopedOrMember`, `disjunction`, and `optional` reads are satisfied otherwise — the
+**identical classification** check (b) uses.) Output: `[{ screen, accessPermission, missingReads[] }]`
+for every screen with a non-empty `missing(s)`. Root/`ORG_ADMIN`-style blanket holders naturally have
+empty gaps because they hold every read; the report is meaningful exactly for the minimally-granted
+operational roles that ISSUE-008 was about.
+
+**Surface.** New gated read-only endpoint `GET /api/v1/roles/uid/{uid}/read-closure-gaps`
+(`@perm.has('ROLE.VIEW')` — same gate as role read; already seeded, no migration), returning
+`List<ScreenReadGapDto>`. The role-edit component renders an advisory panel:
+*"This role can open **Record receipt** but is missing **CUSTOMER.VIEW**, **AR.VIEW** — users with
+only this role will be blocked on that screen."* Permission codes are shown verbatim (this is an admin
+RBAC screen — codes are the working vocabulary; the error-hygiene rule that hides ULIDs/internals from
+end users does not apply to admins reasoning about grants). No ULIDs, no exception text.
+
+**Why this is now safe to build (vs the original "more surface than ISSUE-008 needs"):** the manifest
+already exists and is gate-honest (checks a–c keep it so), the `accessPermission` is the route-guard
+code we already maintain, and the surface is a read-only report — no grant-path mutation, no new
+drift class, no migration. It is the layered enhancement the deferral foresaw, not a re-architecture.
+See the implementation spec (handed to backend-engineer + web-engineer) for package/endpoint/component
+names and the per-screen `accessPermission` verification table.
