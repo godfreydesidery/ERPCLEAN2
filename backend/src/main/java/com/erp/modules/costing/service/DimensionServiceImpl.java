@@ -220,9 +220,10 @@ public class DimensionServiceImpl implements DimensionService {
         scopeGuard.assertCanActIn(RequestContext.get(), v.getCompanyId());
 
         if (values.hasPostings(v.getId())) {
+            // BR-CC-05: dimension values with posted journal lines cannot be hard-deleted
             throw new IllegalStateException(
-                    "Dimension value " + uid + " is referenced by posted journal lines "
-                            + "and cannot be hard-deleted (BR-CC-05). Use deactivate instead.");
+                    "This dimension value has been used on posted journal lines"
+                            + " and cannot be deleted. Please deactivate it instead.");
         }
         values.delete(v);
     }
@@ -299,8 +300,9 @@ public class DimensionServiceImpl implements DimensionService {
         DimensionValue parent = values.findByCompanyIdAndUid(dim.getCompanyId(), parentUid)
                 .orElseThrow(() -> NotFoundException.of("DimensionValue (parent)", parentUid));
         if (!parent.getDimensionId().equals(dim.getId())) {
+            // BR-CC-09: parent must belong to the same dimension
             throw new IllegalArgumentException(
-                    "Parent value " + parentUid + " belongs to a different dimension (BR-CC-09).");
+                    "The selected parent value belongs to a different dimension and cannot be used here.");
         }
         return parent.getId();
     }
@@ -309,8 +311,9 @@ public class DimensionServiceImpl implements DimensionService {
     private void assertNoCycle(Long valueId, Long newParentId) {
         if (newParentId == null || newParentId.equals(valueId)) {
             if (newParentId != null && newParentId.equals(valueId)) {
+                // BR-CC-09: self-referencing parent is not allowed
                 throw new IllegalArgumentException(
-                        "A dimension value cannot be its own parent (BR-CC-09).");
+                        "A dimension value cannot be its own parent.");
             }
             return;
         }
@@ -319,8 +322,9 @@ public class DimensionServiceImpl implements DimensionService {
         Long cursor = newParentId;
         while (cursor != null && !visited.contains(cursor)) {
             if (cursor.equals(valueId)) {
+                // BR-CC-09: circular hierarchy is not allowed
                 throw new IllegalArgumentException(
-                        "Setting parent would create a cycle in the dimension hierarchy (BR-CC-09).");
+                        "The selected parent would create a circular hierarchy. Please choose a different parent.");
             }
             visited.add(cursor);
             Long finalCursor = cursor;

@@ -160,7 +160,8 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         scopeGuard.assertCanActIn(principal, wo.getCompanyId());
 
         if (wo.getStatus() != WorkOrderStatus.PLANNED) {
-            throw new IllegalStateException("Work order can only be edited while PLANNED (BR-MFG-04).");
+            // BR-MFG-04: edits only allowed in PLANNED status
+            throw new IllegalStateException("This work order can no longer be edited because it has already been released or closed.");
         }
 
         Long branchId = wo.getBranchId();
@@ -213,8 +214,9 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         } else {
             bom = boms.findByParentProductIdAndStatus(wo.getFinishedProductId(), BomStatus.ACTIVE)
                     .orElseThrow(() -> new IllegalArgumentException(
-                            "No ACTIVE BOM for product " + wo.getFinishedProductCode()
-                            + ". Pin a BOM before releasing (BR-MFG-02)."));
+                            // BR-MFG-02: no active BOM found at release
+                            "No active bill of materials is available for this product. "
+                            + "Please pin a BOM to the work order before releasing it."));
         }
 
         wo.release(bom.getId(), bom.getUid(), principal.userId());

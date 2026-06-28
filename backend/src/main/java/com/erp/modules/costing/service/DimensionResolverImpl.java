@@ -54,24 +54,27 @@ public class DimensionResolverImpl implements DimensionResolver {
         }
         DimensionValue v = valueRepo.findByIdAndCompanyId(valueId, companyId)
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "Dimension value id=" + valueId + " not found in company " + companyId
-                                + " (BR-CC-04 — cross-company or unknown value rejected)."));
+                        // BR-CC-04: dimension value must belong to this company
+                        "The selected dimension value is not valid for this company."));
 
         if (!v.isActive()) {
+            // BR-CC-04 / FR-CC-07: inactive dimension values cannot be used for posting
             throw new IllegalArgumentException(
-                    "Dimension value " + v.getUid() + " ('" + v.getCode()
-                            + "') is inactive; cannot tag a posting with it (BR-CC-04 / FR-CC-07).");
+                    "Dimension value '" + v.getCode()
+                            + "' is inactive and cannot be used to tag a posting."
+                            + " Please select an active dimension value.");
         }
 
-        // Assert the value belongs to the dimension occupying the expected slot
+        // Assert the value belongs to the dimension occupying the expected slot.
+        // BR-CC-04: the dimension record must exist for the value being validated.
         Dimension dim = dimensionRepo.findById(v.getDimensionId())
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "Dimension not found for value id=" + valueId));
+                        "The dimension configuration for the selected value could not be found."));
         if (dim.getSlot() != slot) {
+            // BR-CC-04: value supplied in the wrong dimension slot
             throw new IllegalArgumentException(
-                    "Dimension value " + v.getUid() + " belongs to slot " + dim.getSlot()
-                            + " but was supplied in slot " + slot
-                            + " (BR-CC-04 — wrong-slot value rejected).");
+                    "Dimension value '" + v.getCode() + "' cannot be used for the " + slot
+                            + " field — it belongs to a different dimension slot.");
         }
     }
 
@@ -90,25 +93,27 @@ public class DimensionResolverImpl implements DimensionResolver {
         if (uid == null) {
             return null;
         }
+        // BR-CC-04: dimension value must exist and belong to this company
         DimensionValue v = valueRepo.findByCompanyIdAndUid(companyId, uid)
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "Dimension value uid='" + uid + "' not found in company " + companyId
-                                + " (BR-CC-04 — cross-company or unknown value rejected)."));
+                        "The selected dimension value is not valid for this company."));
 
         if (!v.isActive()) {
+            // BR-CC-04 / FR-CC-04: inactive dimension values cannot be used for posting
             throw new IllegalArgumentException(
-                    "Dimension value '" + uid + "' (code='" + v.getCode()
-                            + "') is inactive; cannot tag a posting with it (FR-CC-04 / BR-CC-04).");
+                    "Dimension value '" + v.getCode()
+                            + "' is inactive and cannot be used to tag a posting."
+                            + " Please select an active dimension value.");
         }
 
         // Verify the value's dimension occupies the expected slot
         Dimension dim = dimensionRepo.findById(v.getDimensionId())
                 .orElseThrow(() -> NotFoundException.of("Dimension", v.getDimensionId().toString()));
         if (dim.getSlot() != slot) {
+            // BR-CC-04: value supplied in the wrong dimension slot
             throw new IllegalArgumentException(
-                    "Dimension value '" + uid + "' belongs to slot " + dim.getSlot()
-                            + " but was supplied for slot " + slot
-                            + " (BR-CC-04 — wrong-slot value rejected).");
+                    "Dimension value '" + v.getCode() + "' cannot be used for the " + slot
+                            + " field — it belongs to a different dimension slot.");
         }
         return v.getId();
     }

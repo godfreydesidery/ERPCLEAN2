@@ -7,6 +7,8 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
@@ -22,6 +24,8 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class OutstandingTracker {
+
+    private static final Logger log = LoggerFactory.getLogger(OutstandingTracker.class);
 
     private final PurchaseOrderLineRepository poLines;
 
@@ -66,9 +70,12 @@ public class OutstandingTracker {
             BigDecimal newReceived = line.getReceivedQtyInBase().add(delta);
             // Defensive guard (the DB CHECK is the structural backstop but we want a clear message)
             if (newReceived.compareTo(BigDecimal.ZERO) < 0) {
+                // uid and delta logged here only — not surfaced to the caller (error-hygiene rule)
+                log.warn("Outstanding tracker: reversing receipt would drive received_qty_in_base below 0 "
+                        + "on PO line uid={} (delta={})", line.getUid(), delta);
                 throw new IllegalStateException(
-                        "Outstanding tracker: reversing receipt would drive received_qty_in_base below 0 "
-                                + "on PO line " + line.getUid() + " (delta=" + delta + ")");
+                        "Reversing this receipt would produce a negative received quantity. "
+                                + "The receipt may have already been reversed.");
             }
             line.setReceivedQtyInBase(newReceived);
         }

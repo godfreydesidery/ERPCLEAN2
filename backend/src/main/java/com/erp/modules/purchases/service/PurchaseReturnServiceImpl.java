@@ -130,8 +130,8 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
                     alreadyReturned != null ? alreadyReturned : BigDecimal.ZERO);
             if (l.returnedQty().compareTo(maxReturnable) > 0) {
                 throw new IllegalArgumentException(
-                        "Return qty " + l.returnedQty() + " exceeds returnable qty "
-                                + maxReturnable + " for line " + l.goodsReceiptLineUid());
+                        "The return quantity exceeds the remaining returnable quantity for one of the lines. "
+                                + "Maximum returnable: " + maxReturnable + ".");
             }
 
             short lineNo = (short) (returnLines.findMaxLineNo(ret.getId()) + 1);
@@ -205,11 +205,11 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
                         ? grLine.getReturnedQtyInBase() : BigDecimal.ZERO;
                 BigDecimal newTotal = current.add(line.getReturnedQtyInBase());
                 if (newTotal.compareTo(grLine.getQtyInBase()) > 0) {
+                    // BR-PROC-10: total returned quantity cannot exceed the original receipted quantity
                     throw new IllegalArgumentException(
-                            "Return qty " + line.getReturnedQtyInBase() + " for GR line "
-                            + line.getGoodsReceiptLineUid() + " would exceed receipted qty "
-                            + grLine.getQtyInBase() + " (already returned: " + current
-                            + ", total would be: " + newTotal + ") — BR-PROC-10");
+                            "The return quantity cannot exceed the original receipted quantity for this line. "
+                            + "Already returned: " + current + ", receipted: " + grLine.getQtyInBase()
+                            + ", requested additional: " + line.getReturnedQtyInBase() + ".");
                 }
                 grLine.setReturnedQtyInBase(newTotal);
                 grLineRepo.save(grLine);

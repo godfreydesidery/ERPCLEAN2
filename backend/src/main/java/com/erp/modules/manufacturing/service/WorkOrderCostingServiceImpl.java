@@ -259,9 +259,10 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
         BigDecimal totalOut = goodQty.add(scrapQty);
 
         if (!Boolean.TRUE.equals(req.allowOverRun()) && totalOut.compareTo(wo.getPlannedQty()) > 0) {
+            // BR-MFG-07: output exceeds planned quantity without override flag
             throw new IllegalArgumentException(
-                    "Output (" + totalOut + ") exceeds planned qty (" + wo.getPlannedQty()
-                    + "). Set allowOverRun=true to override (BR-MFG-07).");
+                    "The total output quantity (" + totalOut + ") exceeds the planned quantity ("
+                    + wo.getPlannedQty() + "). Enable the over-run option if you intend to produce more than planned.");
         }
 
         // Compute WIP cost allocated to this completion: wipDebit − wipCredit so far = open WIP

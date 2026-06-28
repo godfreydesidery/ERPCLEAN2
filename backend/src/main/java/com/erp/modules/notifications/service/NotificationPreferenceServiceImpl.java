@@ -41,8 +41,8 @@ public class NotificationPreferenceServiceImpl implements NotificationPreference
                                                     String typeKey, SetPreferenceRequest req) {
         // Defect 1: guard against unknown typeKey — reject before creating an orphan row.
         if (types.findByCompanyIdAndTypeKey(companyId, typeKey).isEmpty()) {
-            throw new NotFoundException(
-                    "NotificationType not found: company=" + companyId + " typeKey=" + typeKey);
+            // companyId and typeKey intentionally not surfaced (error-hygiene rule)
+            throw new NotFoundException("The specified notification type was not found.");
         }
         // Defect 2: both fields are boolean primitives; an empty body {} deserialises to
         // muted=false/channelsEnabled=null — treat a null channelsEnabled as an ambiguous body.

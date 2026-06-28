@@ -153,7 +153,7 @@ class SalesOrderCreditBlockIT extends PostgresIntegrationTest {
         assertThatThrownBy(() -> salesOrderService.confirm(so.uid()))
                 .as("STOPPED credit customer must be hard-blocked at SO confirm (ADR-0040 D-5)")
                 .isInstanceOf(ConflictException.class)
-                .hasMessageContaining("SALES.CREDIT.OVERRIDE");
+                .hasMessageContaining("do not have permission to override the credit restriction");
 
         // The order must remain unconfirmed (TX rolled back).
         setRootCtx();

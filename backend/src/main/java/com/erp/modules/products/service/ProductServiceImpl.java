@@ -630,8 +630,9 @@ public class ProductServiceImpl implements ProductService {
      */
     private static void assertServiceNotStockable(ProductType type, boolean stockable) {
         if (ProductType.SERVICE.equals(type) && stockable) {
+            // BR-PROD-01
             throw new IllegalArgumentException(
-                    "Service products cannot be stockable (BR-PROD-01).");
+                    "Service products cannot be marked as stockable.");
         }
     }
 

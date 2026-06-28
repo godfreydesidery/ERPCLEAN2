@@ -70,16 +70,17 @@ public class ChequeServiceImpl implements ChequeService {
         CashBankAccount account = accounts.findByCompanyIdAndUid(companyId, req.cashBankAccountUid())
                 .orElseThrow(() -> new NotFoundException("Cash/bank account not found."));
 
+        // FR-CASH-10: cheques are only valid for bank accounts, not petty-cash accounts
         if (account.getAccountType() != CashBankAccountType.BANK)
-            throw new IllegalArgumentException("Cheques may only be registered against BANK accounts (FR-CASH-10).");
+            throw new IllegalArgumentException("Cheques can only be registered against a bank account, not a petty-cash account.");
 
         if (req.valueDate().isBefore(req.issueDate()))
             throw new IllegalArgumentException("value_date must be >= issue_date (chk_cheque_dates).");
 
-        // Uniqueness: cheque number per bank account (BR-CASH-12)
+        // BR-CASH-12: cheque number must be unique per bank account
         if (cheques.findByCashBankAccountIdAndChequeNumber(account.getId(), req.chequeNumber()).isPresent()) {
             throw new ConflictException("Cheque number " + req.chequeNumber()
-                    + " already exists for this bank account (BR-CASH-12).");
+                    + " has already been registered for this bank account.");
         }
 
         Long actor = actorId();
@@ -243,25 +244,28 @@ public class ChequeServiceImpl implements ChequeService {
     // -------------------------------------------------------------------------
 
     /** OUTBOUND clear: must be ISSUED. */
+    // D-5: only an ISSUED outbound cheque may be marked cleared
     private void assertTransitionAllowed(Cheque cheque, ChequeStatus target) {
         if (cheque.getStatus() != ChequeStatus.ISSUED) {
             throw new IllegalStateException(
-                    "Cheque " + cheque.getChequeNumber() + " is already in state "
-                            + cheque.getStatus() + " — cannot transition to " + target + " (D-5).");
+                    "Cheque " + cheque.getChequeNumber() + " is already in status "
+                            + cheque.getStatus() + " and cannot be marked as " + target + ".");
         }
     }
 
     /** Cancel: ISSUED or DEPOSITED may be cancelled; CLEARED/BOUNCED are terminal. */
+    // D-5/D-9: cleared and bounced cheques are in a terminal state and cannot be cancelled
     private void assertCancelAllowed(Cheque cheque) {
         if (cheque.getStatus() == ChequeStatus.CLEARED
                 || cheque.getStatus() == ChequeStatus.BOUNCED) {
             throw new IllegalStateException(
-                    "Cheque " + cheque.getChequeNumber() + " is in terminal state "
-                            + cheque.getStatus() + " — cannot cancel (D-5/D-9).");
+                    "Cheque " + cheque.getChequeNumber() + " has already been "
+                            + cheque.getStatus().toString().toLowerCase()
+                            + " and cannot be cancelled.");
         }
         if (cheque.getStatus() == ChequeStatus.CANCELLED) {
             throw new IllegalStateException(
-                    "Cheque " + cheque.getChequeNumber() + " is already CANCELLED.");
+                    "Cheque " + cheque.getChequeNumber() + " has already been cancelled.");
         }
     }
 

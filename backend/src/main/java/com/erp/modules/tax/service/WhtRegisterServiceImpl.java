@@ -67,12 +67,12 @@ public class WhtRegisterServiceImpl implements WhtRegisterService {
     @Transactional
     public void markRemitted(String whtTransactionUid, String remittancePeriod, String remittanceRef) {
         WhtTransaction txn = whtTransactions.findByUid(whtTransactionUid)
-                .orElseThrow(() -> new NotFoundException(
-                        "WHT transaction not found: " + whtTransactionUid));
+                .orElseThrow(() -> new NotFoundException("WHT transaction not found."));
         scopeGuard.assertCanActIn(RequestContext.get(), txn.getCompanyId());
         if (txn.isRemitted()) {
+            // WHT transaction uid not exposed in the message
             throw new ConflictException(
-                    "WHT transaction already remitted: " + whtTransactionUid);
+                    "This WHT transaction has already been marked as remitted.");
         }
         txn.setRemitted(true);
         txn.setRemittancePeriod(remittancePeriod);

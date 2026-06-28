@@ -54,9 +54,10 @@ public class ProjectTimesheetServiceImpl implements ProjectTimesheetService {
         // BR-PROJ-04: timesheets are only accepted when the project is ACTIVE.
         // DRAFT / ON_HOLD / COMPLETED / CANCELLED all reject (PROJECTS-037 / PROJECTS-038).
         if (project.getProjectStatus() != ProjectStatus.ACTIVE) {
+            // BR-PROJ-04: timesheets are only accepted on ACTIVE projects.
             throw new ConflictException(
                     "Timesheets can only be recorded on an ACTIVE project. "
-                    + "Project " + projectUid + " is currently " + project.getProjectStatus() + ".");
+                    + "This project is currently " + project.getProjectStatus() + ".");
         }
 
         var ts = new ProjectTimesheet(project.getId(), project.getCompanyId(), project.getBranchId(),
@@ -68,7 +69,7 @@ public class ProjectTimesheetServiceImpl implements ProjectTimesheetService {
         if (req.projectTaskUid() != null && !req.projectTaskUid().isBlank()) {
             var task = tasks.findByUidAndProjectId(req.projectTaskUid(), project.getId())
                     .orElseThrow(() -> new NotFoundException(
-                            "Task not found or does not belong to project: " + req.projectTaskUid()));
+                            "The specified task was not found on this project."));
             ts.setProjectTaskId(task.getId());
         }
 

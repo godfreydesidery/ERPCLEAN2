@@ -213,8 +213,9 @@ public class PosSaleServiceImpl implements PosSaleService {
 
         // Must be a POS sale (ADR-0042 D-2) — non-POS invoices use the standard back-office void.
         if (inv.getOrigin() != DocumentOrigin.POS || inv.getPosSessionId() == null) {
+            // invoiceUid intentionally not surfaced (error-hygiene rule)
             throw new ConflictException(
-                    "Invoice " + invoiceUid + " is not a POS sale; use the standard invoice void.");
+                    "This invoice is not a POS sale; use the standard invoice void.");
         }
 
         // Drawer rule (ADR-0042 D-2): the originating session must be OPEN so the till absorbs the

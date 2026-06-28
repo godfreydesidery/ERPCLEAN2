@@ -157,16 +157,18 @@ public class SalesReturnServiceImpl implements SalesReturnService {
 
             BigDecimal qtyReturnedBase = lineReq.qtyReturned();
             if (qtyReturnedBase.compareTo(BigDecimal.ZERO) <= 0) {
+                // dl.getUid() intentionally not surfaced (error-hygiene rule)
                 throw new IllegalArgumentException(
-                        "Return qty must be > 0 for delivery line " + dl.getUid());
+                        "Return quantity must be greater than zero.");
             }
 
             // BR-SO-11: returned ≤ delivered − already_returned
             BigDecimal returnableQty = dl.getQtyDeliveredBase().subtract(dl.getReturnedQtyBase());
             if (qtyReturnedBase.compareTo(returnableQty) > 0) {
+                // BR-SO-11: cannot return more than the outstanding returnable qty
                 throw new IllegalStateException(
-                        "Return qty " + qtyReturnedBase + " exceeds returnable qty " + returnableQty
-                                + " on delivery line " + dl.getUid() + " (BR-SO-11).");
+                        "The return quantity (" + qtyReturnedBase + ") exceeds the quantity "
+                                + "available to return (" + returnableQty + ") for this delivery line.");
             }
 
             // OQ-SO-05: pro-rate original issued cost for this partial return

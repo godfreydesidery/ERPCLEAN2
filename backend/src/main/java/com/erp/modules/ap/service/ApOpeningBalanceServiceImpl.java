@@ -95,9 +95,10 @@ public class ApOpeningBalanceServiceImpl implements ApOpeningBalanceService {
 
         // Duplicate guard
         if (bills.existsByCompanyIdAndSupplierIdAndSupplierInvoiceNo(companyId, supplierId, invoiceNo)) {
+            // req.supplierUid() intentionally not surfaced in the user message (error-hygiene rule)
             throw new IllegalStateException(
-                    "Opening balance already entered for supplier " + req.supplierUid()
-                            + " with invoice ref '" + invoiceNo + "'.");
+                    "An opening balance has already been entered for this supplier with invoice ref '"
+                            + invoiceNo + "'.");
         }
 
         SupplierBill bill = new SupplierBill(

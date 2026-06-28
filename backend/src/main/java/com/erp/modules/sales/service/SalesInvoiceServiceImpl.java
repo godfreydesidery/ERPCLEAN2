@@ -255,7 +255,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         // ADR-0014 D-9/D-10: resolve customer kind to decide cash-vs-credit path.
         Customer customer = customers.findById(inv.getCustomerId())
                 .orElseThrow(() -> new NotFoundException(
-                        "Customer not found for invoice " + inv.getUid() + " (id=" + inv.getCustomerId() + ")"));
+                        "The customer linked to this invoice could not be found."));
         boolean isCreditCustomer = customer.getCustomerKind()
                 == com.erp.modules.parties.domain.enums.CustomerKind.CREDIT_ACCOUNT;
 
@@ -285,10 +285,11 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
             // Currency check: mirror BR-CUR-07 (same rule as assertPaidInFull, different path).
             for (SalesInvoicePayment p : paymentList) {
                 if (!inv.getCurrency().equals(p.getCurrency())) {
-                    throw new IllegalStateException(
-                            "Payment currency " + p.getCurrency()
-                                    + " does not match invoice currency " + inv.getCurrency()
-                                    + " (BR-CUR-07).");
+                    // BR-CUR-07: payment currency must match the invoice currency
+                throw new IllegalStateException(
+                            "The payment currency (" + p.getCurrency()
+                                    + ") does not match the invoice currency (" + inv.getCurrency()
+                                    + "). All payments must be in the same currency as the invoice.");
                 }
             }
 
@@ -303,12 +304,12 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                     boolean hasOverride = permissionResolver.hasPermission(
                             RequestContext.get(), "SALES.CREDIT.OVERRIDE", System.currentTimeMillis());
                     if (!hasOverride) {
+                        // ADR-0014 D-9 / SALES.CREDIT.OVERRIDE permission required for override
                         throw new IllegalStateException(
-                                "Credit limit exceeded for customer " + customer.getUid()
-                                        + ". Limit: " + creditLimit.getAmount().toPlainString()
-                                        + " " + creditLimit.getCurrency().value()
-                                        + ", projected balance: " + projectedBalance.toPlainString()
-                                        + " (ADR-0014 D-9). Requires SALES.CREDIT.OVERRIDE permission.");
+                                "This customer's credit limit has been reached. "
+                                        + "The outstanding balance would exceed the allowed limit "
+                                        + "if this invoice is finalised. "
+                                        + "You do not have permission to override the credit limit.");
                     }
                     audit.record(AuditEvent.of(AuditActions.SALES_CREDIT_OVERRIDE, "sales_invoices",
                                     inv.getId(), inv.getUid())
@@ -393,10 +394,10 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         // posted against this invoice (settled or partially settled). A void on a settled invoice
         // would leave orphaned AR allocations and an unbalanced sub-ledger.
         if (arBalanceService.hasAllocations(inv.getCompanyId(), inv.getUid())) {
+            // FLOW-ORDER-TO-CASH-027: block void when AR receipts/allocations have been posted
             throw new com.erp.platform.common.api.ConflictException(
-                    "Invoice " + uid + " cannot be voided because it has AR receipt allocations "
-                            + "(settled or partially settled). Raise a credit note to reverse it "
-                            + "(FLOW-ORDER-TO-CASH-027).");
+                    "This invoice cannot be voided because payments have already been received and "
+                            + "allocated against it. Please raise a credit note to reverse it.");
         }
         // FLOW-ORDER-TO-CASH-027 (direct-payment path): block void when any direct tender has
         // been applied via sales_invoice_payments. Effective amount = amount − change_amount;
@@ -408,10 +409,10 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                         : p.getAmount())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         if (settled.compareTo(BigDecimal.ZERO) > 0) {
+            // FLOW-ORDER-TO-CASH-027: block void when direct tenders have been applied
             throw new com.erp.platform.common.api.ConflictException(
-                    "Invoice " + uid + " cannot be voided because direct payments totalling "
-                            + settled.toPlainString() + " have been applied. "
-                            + "Raise a credit note to reverse it (FLOW-ORDER-TO-CASH-027).");
+                    "This invoice cannot be voided because direct payments have been applied to it. "
+                            + "Please raise a credit note to reverse it.");
         }
         inv.setStatus(InvoiceStatus.VOID);
         inv.setVoidedAt(Instant.now());
@@ -1020,10 +1021,11 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     }
 
     private void assertDraft(SalesInvoice inv, String operation) {
+        // BR-SALES-08: only DRAFT invoices are mutable
         if (inv.getStatus() != InvoiceStatus.DRAFT) {
             throw new IllegalStateException(
-                    "Cannot " + operation + " an invoice in status " + inv.getStatus()
-                            + " (BR-SALES-08). Only DRAFT invoices are mutable.");
+                    "Cannot " + operation + " an invoice that is no longer in draft. "
+                            + "Only draft invoices can be changed.");
         }
     }
 
@@ -1034,9 +1036,10 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
      * Mobile-money over-tender → reject (no change for mobile).
      */
     private void assertPaidInFull(SalesInvoice inv, List<SalesInvoicePayment> paymentList) {
+        // FR-SALES-18: at least one tender must be recorded before finalising a cash invoice
         if (paymentList.isEmpty()) {
             throw new IllegalStateException(
-                    "Invoice has no payments. Add tenders before finalising (FR-SALES-18).");
+                    "This invoice has no payments recorded. Please add at least one payment before finalising.");
         }
 
         BigDecimal gross = inv.getGrossTotalAmount();
@@ -1045,10 +1048,11 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         int cmp = totalTendered.compareTo(gross);
+        // BR-SALES-07: tenders must cover the invoice gross total
         if (cmp < 0) {
             throw new IllegalStateException(
-                    "Tenders under-cover the gross total. Required: " + gross
-                            + ", tendered: " + totalTendered + " (BR-SALES-07).");
+                    "The total payments received do not cover the invoice amount. "
+                            + "Required: " + gross + ", received: " + totalTendered + ".");
         }
         if (cmp > 0) {
             // Over-tender: only CASH accepts change (BR-SALES-07)
@@ -1056,9 +1060,10 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
             SalesInvoicePayment cashPayment = paymentList.stream()
                     .filter(p -> p.getTenderType() == TenderType.CASH)
                     .findFirst()
+                    // BR-SALES-07: only CASH accepts change
                     .orElseThrow(() -> new IllegalStateException(
-                            "Over-tender of " + change
-                                    + " with no CASH tender to receive change (BR-SALES-07)."));
+                            "The amount tendered exceeds the invoice total, but there is no cash "
+                                    + "payment to give change against. Please adjust the tender amounts."));
             // Mobile money over-tender check: if no cash row or mobile covers the excess
             boolean onlyCashOverTender = paymentList.stream()
                     .filter(p -> p.getTenderType() == TenderType.MOBILE_MONEY)
@@ -1066,19 +1071,21 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                     .reduce(BigDecimal.ZERO, BigDecimal::add)
                     .compareTo(gross) <= 0;
             if (!onlyCashOverTender) {
+                // BR-SALES-07: mobile money does not support change
                 throw new IllegalStateException(
-                        "Mobile-money over-tender is not accepted (BR-SALES-07). "
-                                + "Change can only be given for cash.");
+                        "Mobile money payments cannot be over-tendered — change is not accepted for this payment method. "
+                                + "Please adjust the mobile money amount to match the invoice total.");
             }
             cashPayment.setChangeAmount(change);
         }
         // Validate all payment currencies match header (BR-CUR-07)
         for (SalesInvoicePayment p : paymentList) {
             if (!inv.getCurrency().equals(p.getCurrency())) {
+                // BR-CUR-07: payment currency must match the invoice currency
                 throw new IllegalStateException(
-                        "Payment currency " + p.getCurrency()
-                                + " does not match invoice currency " + inv.getCurrency()
-                                + " (BR-CUR-07).");
+                        "The payment currency (" + p.getCurrency()
+                                + ") does not match the invoice currency (" + inv.getCurrency()
+                                + "). All payments must be in the same currency as the invoice.");
             }
         }
     }

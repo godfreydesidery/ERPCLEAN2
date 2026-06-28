@@ -32,14 +32,14 @@ public class ProjectTagResolverImpl implements ProjectTagResolver {
         // (a) Resolve project uid → entity; enforce same company (BR-PROJ-01)
         Project project = projects.findByUidAndCompanyId(projectUid, companyId)
                 .orElseThrow(() -> new NotFoundException(
-                        "Project not found or belongs to a different company: " + projectUid));
+                        "Project not found."));
 
         // (b) Must be open for tagging (BR-PROJ-04, OQ-PROJ-06)
         if (!project.getProjectStatus().allowsTagging()) {
+            // BR-PROJ-04: project must be in an open status to accept cost/revenue tags.
             throw new IllegalStateException(
-                    "Project " + projectUid + " is not open for tagging (status="
-                            + project.getProjectStatus() + "). The tag is rejected. "
-                            + "Re-open the project or use a different project.");
+                    "This project is not open for tagging (status: " + project.getProjectStatus()
+                    + "). Please re-open the project or select a different one.");
         }
 
         // (c) Resolve task if supplied; must belong to the project
@@ -47,8 +47,7 @@ public class ProjectTagResolverImpl implements ProjectTagResolver {
         if (projectTaskUid != null && !projectTaskUid.isBlank()) {
             ProjectTask task = tasks.findByUidAndProjectId(projectTaskUid, project.getId())
                     .orElseThrow(() -> new NotFoundException(
-                            "ProjectTask not found or does not belong to project "
-                                    + projectUid + ": " + projectTaskUid));
+                            "The specified task was not found on this project."));
             taskId = task.getId();
         }
 

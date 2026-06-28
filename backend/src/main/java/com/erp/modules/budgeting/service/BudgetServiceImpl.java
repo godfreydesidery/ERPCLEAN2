@@ -293,7 +293,8 @@ public class BudgetServiceImpl implements BudgetService {
                     .orElseThrow(() -> new ConflictException(
                             "Fiscal period not found or does not belong to this budget's fiscal year."));
             if (input.amount().compareTo(BigDecimal.ZERO) < 0) {
-                throw new ConflictException("Budget line amount must be >= 0 (BR-BUD-09)");
+                // BR-BUD-09: budget line amounts must be zero or positive.
+                throw new ConflictException("Budget line amounts must be zero or greater.");
             }
 
             Optional<BudgetLine> existing = lines.findByBudgetVersionIdAndAccountIdAndFiscalPeriodId(
@@ -373,8 +374,9 @@ public class BudgetServiceImpl implements BudgetService {
         }
         // Must have at least one line (BR-BUD-11)
         if (!lines.existsByBudgetVersionId(ver.getId())) {
+            // BR-BUD-11: a budget version must contain at least one line before it can be submitted.
             throw new ConflictException(
-                    "A budget version must have at least one line before submission (BR-BUD-11)");
+                    "A budget version must have at least one budget line before it can be submitted.");
         }
 
         Long actorId = principal != null ? principal.userId() : null;

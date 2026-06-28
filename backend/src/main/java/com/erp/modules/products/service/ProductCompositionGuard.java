@@ -30,16 +30,19 @@ public class ProductCompositionGuard {
     public void assertCanAddComponent(Product composed, Product component) {
         // Defect 6a: self-reference — clear message before the DB CHECK fires.
         if (composed.getId() != null && composed.getId().equals(component.getId())) {
+            // BR-PROD-05: self-reference
             throw new IllegalArgumentException(
-                    "A product cannot be a component of itself (BR-PROD-05).");
+                    "A product cannot be a component of itself.");
         }
         if (!component.getCompanyId().equals(composed.getCompanyId())) {
+            // BR-PROD-06: cross-company component
             throw new ForbiddenException(
-                    "Component must belong to the same company as the composed product (BR-PROD-06).");
+                    "The selected component product does not belong to the same company as the composed product.");
         }
         if (MasterStatus.ARCHIVED.equals(component.getStatus())) {
+            // BR-PROD-05: archived component
             throw new IllegalArgumentException(
-                    "Cannot add an ARCHIVED product as a component (BR-PROD-05).");
+                    "The selected component product is archived and cannot be added to a recipe.");
         }
     }
 }

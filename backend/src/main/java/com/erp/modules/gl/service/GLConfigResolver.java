@@ -36,20 +36,23 @@ public class GLConfigResolver {
     public ChartOfAccount resolve(Long companyId, GlConfigKey key) {
         GlConfig config = configs.findByCompanyIdAndConfigKey(companyId, key)
                 .orElseThrow(() -> new IllegalStateException(
-                        "gl_configs mapping missing for key " + key
-                                + " in company " + companyId
-                                + " — set it via GL.MANAGE before auto-posting (BR-GL-10)."));
+                        // BR-GL-10: posting role mapping must be configured before posting can proceed
+                        "No GL account is mapped for the posting role '" + key
+                                + "'. Please configure the account mapping under General Ledger settings"
+                                + " before posting can proceed."));
 
         ChartOfAccount account = accounts.findById(config.getAccountId())
                 .orElseThrow(() -> new IllegalStateException(
-                        "gl_configs maps key " + key + " to account id " + config.getAccountId()
-                                + " which no longer exists in company " + companyId + "."));
+                        // BR-GL-10: mapped account no longer exists
+                        "The account mapped to the posting role '" + key
+                                + "' no longer exists. Please update the GL account mapping."));
 
         if (!account.isActive()) {
+            // BR-GL-10: mapped account must be active
             throw new IllegalStateException(
-                    "gl_configs maps key " + key + " to inactive account "
-                            + account.getAccountCode() + " in company " + companyId
-                            + ". Activate the account or remap the config (BR-GL-10).");
+                    "The account '" + account.getAccountCode()
+                            + "' mapped to the posting role '" + key
+                            + "' is inactive. Please activate the account or update the GL account mapping.");
         }
         return account;
     }

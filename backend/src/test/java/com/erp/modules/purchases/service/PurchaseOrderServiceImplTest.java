@@ -115,8 +115,7 @@ class PurchaseOrderServiceImplTest {
 
         assertThatThrownBy(() -> service.placeOrder("PO-UID-2"))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("PO requires approval")
-                .hasMessageContaining("FR-PROC-13");
+                .hasMessageContaining("requires approval before it can be placed");
 
         verify(po, never()).setStatus(PurchaseOrderStatus.ORDERED);
     }
@@ -132,7 +131,7 @@ class PurchaseOrderServiceImplTest {
 
         assertThatThrownBy(() -> service.placeOrder("PO-UID-3"))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("PO requires approval");
+                .hasMessageContaining("requires approval before it can be placed");
     }
 
     @Test
@@ -161,7 +160,7 @@ class PurchaseOrderServiceImplTest {
 
         assertThatThrownBy(() -> service.voidOrder("PO-UID-5", new VoidPurchaseOrderRequest(null)))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("void reason is required");
+                .hasMessageContaining("A reason is required to void a purchase order.");
 
         verify(po, never()).setStatus(PurchaseOrderStatus.VOID);
     }
@@ -173,7 +172,7 @@ class PurchaseOrderServiceImplTest {
 
         assertThatThrownBy(() -> service.voidOrder("PO-UID-6", new VoidPurchaseOrderRequest("  ")))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("void reason is required");
+                .hasMessageContaining("A reason is required to void a purchase order.");
 
         verify(po, never()).setStatus(PurchaseOrderStatus.VOID);
     }

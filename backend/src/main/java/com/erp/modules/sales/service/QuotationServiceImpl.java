@@ -233,8 +233,9 @@ public class QuotationServiceImpl implements QuotationService {
             q.setExpiredAt(Instant.now());
             q.setUpdatedAt(Instant.now());
             q.setUpdatedBy(actorId());
-            throw new IllegalStateException("Quotation " + q.getQuoteNumber() + " has expired (valid until "
-                    + q.getValidUntil() + ") and cannot be accepted (BR-SO-01).");
+            // BR-SO-01: expired quotations cannot be accepted
+            throw new IllegalStateException("This quotation expired on " + q.getValidUntil()
+                    + " and can no longer be accepted.");
         }
 
         SalesOrderDto so = salesOrderService.createFromQuotation(quotationUid);

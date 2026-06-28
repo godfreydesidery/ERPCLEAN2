@@ -167,6 +167,6 @@ class CashTransferServiceIT extends PostgresIntegrationTest {
 
         assertThatThrownBy(() -> transferService.recordTransfer(sameReq))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("BR-CASH-04");
+                .hasMessageContaining("source and destination accounts must be different");
     }
 }

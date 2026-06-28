@@ -304,10 +304,11 @@ public class YearEndCloseServiceImpl implements YearEndCloseService {
             }
         }
         if (priorYear != null && priorYear.getStatus() != PeriodStatus.CLOSED) {
+            // BR-CLOSE-04: the immediately prior fiscal year must be closed first
             throw new ConflictException(
                     "The immediately prior fiscal year (" + priorYear.getYearCode()
                             + ") must be CLOSED before closing " + year.getYearCode()
-                            + " (BR-CLOSE-04).");
+                            + ". Please close the prior fiscal year first.");
         }
     }
 
@@ -319,10 +320,11 @@ public class YearEndCloseServiceImpl implements YearEndCloseService {
                 break; // reached this year — no later CLOSED year found
             }
             if (fy.getStatus() == PeriodStatus.CLOSED) {
+                // BR-CLOSE-10: only the most-recently-closed year may be reopened
                 throw new ConflictException(
                         "Only the most-recently-closed fiscal year may be reopened. "
                                 + "Year " + fy.getYearCode() + " is CLOSED and starts later "
-                                + "than " + year.getYearCode() + " — reopen it first (BR-CLOSE-10).");
+                                + "than " + year.getYearCode() + " — please reopen it first.");
             }
         }
     }

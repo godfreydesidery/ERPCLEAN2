@@ -195,9 +195,10 @@ public class ChartOfAccountServiceImpl implements ChartOfAccountService {
         scopeGuard.assertCanActIn(RequestContext.get(), account.getCompanyId());
 
         if (accounts.hasPostings(account.getId())) {
+            // BR-GL-07: accounts with posted transactions cannot be hard-deleted
             throw new ConflictException(
                     "Account " + account.getAccountCode()
-                            + " has postings and cannot be deleted (BR-GL-07). Deactivate it instead.");
+                            + " has existing transactions and cannot be deleted. Deactivate it instead.");
         }
         accounts.delete(account);
     }

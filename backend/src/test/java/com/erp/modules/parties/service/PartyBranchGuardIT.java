@@ -107,7 +107,7 @@ class PartyBranchGuardIT extends PostgresIntegrationTest {
                 customerService.assignBranch(customer.uid(),
                         new AssignPartyBranchRequest(branchB1.getUid())))
                 .isInstanceOf(ForbiddenException.class)
-                .hasMessageContaining("BR-PARTY-01");
+                .hasMessageContaining("does not belong to the same company");
     }
 
     @Test
@@ -143,7 +143,7 @@ class PartyBranchGuardIT extends PostgresIntegrationTest {
                 supplierService.assignBranch(supplier.uid(),
                         new AssignPartyBranchRequest(branchB1.getUid())))
                 .isInstanceOf(ForbiddenException.class)
-                .hasMessageContaining("BR-PARTY-01");
+                .hasMessageContaining("does not belong to the same company");
     }
 
     // -----------------------------------------------------------------------

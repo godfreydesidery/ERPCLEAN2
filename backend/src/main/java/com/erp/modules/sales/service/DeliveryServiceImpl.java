@@ -158,22 +158,23 @@ public class DeliveryServiceImpl implements DeliveryService {
 
             if (!sol.getSalesOrderId().equals(order.getId())) {
                 throw new IllegalArgumentException(
-                        "SalesOrderLine " + lineReq.salesOrderLineUid() + " does not belong to order "
-                                + req.salesOrderUid());
+                        "One or more delivery lines do not belong to the specified sales order.");
             }
 
             BigDecimal qtyDeliveredBase = lineReq.qtyDelivered();  // UI sends base qty; unit=base in v1
             if (qtyDeliveredBase.compareTo(BigDecimal.ZERO) <= 0) {
+                // sol.getUid() intentionally not surfaced (error-hygiene rule)
                 throw new IllegalArgumentException(
-                        "Delivery qty must be > 0 for line " + sol.getUid());
+                        "Delivery quantity must be greater than zero.");
             }
 
             // BR-SO-11: cannot deliver more than the open (unfulfilled) qty on the SO line
             BigDecimal openQty = sol.getQtyOrderedBase().subtract(sol.getQtyFulfilledBase());
             if (qtyDeliveredBase.compareTo(openQty) > 0) {
+                // BR-SO-11: cannot deliver more than the outstanding (unfulfilled) qty
                 throw new IllegalStateException(
-                        "Delivery qty " + qtyDeliveredBase + " exceeds open qty " + openQty
-                                + " on SO line " + sol.getUid() + " (BR-SO-11).");
+                        "The delivery quantity (" + qtyDeliveredBase + ") exceeds the remaining "
+                                + "quantity available to deliver (" + openQty + ") for this order line.");
             }
 
             DeliveryLine dl = new DeliveryLine(
@@ -289,8 +290,9 @@ public class DeliveryServiceImpl implements DeliveryService {
                 .toList();
 
         if (billable.isEmpty()) {
+            // deliveryUid intentionally not surfaced (error-hygiene rule)
             throw new IllegalStateException(
-                    "Delivery " + deliveryUid + " has no uninvoiced lines.");
+                    "This delivery has no uninvoiced lines.");
         }
 
         // Resolve the agent from the SO (the SO carries agentId from order creation)

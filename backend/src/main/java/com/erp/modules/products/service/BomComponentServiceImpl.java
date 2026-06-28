@@ -77,18 +77,20 @@ public class BomComponentServiceImpl implements BomComponentService {
         // BR-BOM-10: same company
         if (!comp.getCompanyId().equals(bom.getCompanyId())) {
             throw new com.erp.platform.common.api.ForbiddenException(
-                    "Component must belong to the same company as the BOM (BR-BOM-10).");
+                    "The selected component product does not belong to the same company as this BOM.");
         }
         // BR-BOM-12: not archived
         if (MasterStatus.ARCHIVED.equals(comp.getStatus())) {
+            // BR-BOM-12
             throw new IllegalArgumentException(
-                    "Cannot add an ARCHIVED product as a BOM component (BR-BOM-12).");
+                    "The selected component product is archived and cannot be added to a BOM.");
         }
 
         // BR-BOM-02: no duplicate child
         if (bomComponents.findByBomIdAndComponentProductId(bom.getId(), comp.getId()).isPresent()) {
+            // BR-BOM-02
             throw new ConflictException(
-                    "Component is already in this BOM version (BR-BOM-02). Edit the existing line.");
+                    "This component is already in the current BOM version. Edit the existing line instead.");
         }
 
         // BR-BOM-01: transitive cycle check
@@ -185,8 +187,9 @@ public class BomComponentServiceImpl implements BomComponentService {
 
     private static void requireDraft(Bom bom) {
         if (!BomStatus.DRAFT.equals(bom.getStatus())) {
+            // BR-BOM-03: components frozen on non-DRAFT versions
             throw new IllegalStateException(
-                    "BOM components can only be edited on a DRAFT version (BR-BOM-03). " +
+                    "BOM components can only be edited on a DRAFT version. " +
                     "Current status: " + bom.getStatus() +
                     ". Create a new DRAFT version to make changes.");
         }

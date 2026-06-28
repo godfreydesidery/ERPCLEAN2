@@ -72,15 +72,16 @@ public class ArWriteOffServiceImpl implements ArWriteOffService {
 
         if (inv.getStatus() == ArInvoiceStatus.PAID
                 || inv.getStatus() == ArInvoiceStatus.WRITTEN_OFF) {
+            // inv.getUid() intentionally not surfaced in the user message (error-hygiene rule)
             throw new IllegalStateException(
-                    "Invoice " + inv.getUid() + " is already " + inv.getStatus()
-                            + " — cannot write off.");
+                    "This invoice is already " + inv.getStatus() + " and cannot be written off.");
         }
 
         BigDecimal faceOutstanding = inv.getOutstandingAmount();
         if (faceOutstanding.compareTo(BigDecimal.ZERO) <= 0) {
+            // inv.getUid() intentionally not surfaced in the user message (error-hygiene rule)
             throw new IllegalStateException(
-                    "Invoice " + inv.getUid() + " has no outstanding balance to write off.");
+                    "This invoice has no outstanding balance to write off.");
         }
 
         // ADR-0036 D-3/D-4: relieve AR and debit Bad Debt at the CARRYING BASE value.

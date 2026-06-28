@@ -82,10 +82,12 @@ public class CashTransferServiceImpl implements CashTransferService {
         CashBankAccount dest   = accounts.findByCompanyIdAndUid(companyId, req.destinationAccountUid())
                 .orElseThrow(() -> new NotFoundException("Destination account not found."));
 
-        if (!source.isActive()) throw new IllegalStateException("Source account is inactive (BR-CASH-08).");
-        if (!dest.isActive())   throw new IllegalStateException("Destination account is inactive (BR-CASH-08).");
+        // BR-CASH-08: inactive accounts cannot send or receive transfers
+        if (!source.isActive()) throw new IllegalStateException("The source account is inactive and cannot be used for a transfer.");
+        if (!dest.isActive())   throw new IllegalStateException("The destination account is inactive and cannot be used for a transfer.");
+        // BR-CASH-04: a transfer between the same account is not allowed
         if (source.getId().equals(dest.getId()))
-            throw new IllegalArgumentException("Source and destination must differ (BR-CASH-04).");
+            throw new IllegalArgumentException("The source and destination accounts must be different.");
 
         Long branchId = branchId();
         Long actor    = actorId();

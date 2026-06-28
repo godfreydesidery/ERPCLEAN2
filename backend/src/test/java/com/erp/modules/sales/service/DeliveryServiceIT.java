@@ -387,7 +387,7 @@ class DeliveryServiceIT extends PostgresIntegrationTest {
                         List.of(new CreateDeliveryRequest.DeliveryLineRequest(
                                 solUid, new BigDecimal("6")))))  // 6 > open qty 5
         ).isInstanceOf(IllegalStateException.class)
-         .hasMessageContaining("BR-SO-11");
+         .hasMessageContaining("exceeds the remaining quantity available to deliver");
     }
 
     // =========================================================================

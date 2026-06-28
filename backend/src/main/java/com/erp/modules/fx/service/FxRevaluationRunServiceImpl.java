@@ -253,9 +253,10 @@ public class FxRevaluationRunServiceImpl implements FxRevaluationRunService {
             // we must clean up on failure).
             runLines.deleteAll(savedLines);
             runs.delete(run);
+            // GL infrastructure failure: missing GL config accounts or closed period.
             throw new IllegalStateException(
-                    "FX revaluation GL post failed for period " + req.fiscalPeriodUid()
-                    + " — GL config missing or period closed. Run was NOT committed. Retry after fixing GL config.");
+                    "The FX revaluation could not be posted because the general ledger is not fully configured or the period is closed. "
+                    + "Please check the GL configuration and try again.");
         }
 
         if (glEntry != null) {
@@ -323,14 +324,14 @@ public class FxRevaluationRunServiceImpl implements FxRevaluationRunService {
         }
         if (run.getGlEntryUid() == null) {
             throw new IllegalStateException(
-                    "Run " + runUid + " has no GL entry to reverse (GL may have failed at post time).");
+                    "This revaluation run has no general ledger entry to reverse. The GL post may have failed — please contact support.");
         }
 
         // Idempotency via existsByReversalOfId
         final String glEntryUidForLookup = run.getGlEntryUid();
         var glEntry = journalEntries.findByUid(glEntryUidForLookup)
                 .orElseThrow(() -> new IllegalStateException(
-                        "GL entry not found for run " + runUid + ": " + glEntryUidForLookup));
+                        "The general ledger entry for this revaluation run could not be found. Please contact support."));
         if (journalEntries.existsByReversalOfId(glEntry.getId())) {
             // Already reversed externally — update status and return
             run.setStatus(FxRevaluationRunStatus.REVERSED);
@@ -561,10 +562,9 @@ public class FxRevaluationRunServiceImpl implements FxRevaluationRunService {
         BigDecimal draftCredit = lines.stream()
                 .map(LineDraft::creditAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
         if (draftDebit.compareTo(draftCredit) != 0) {
+            // Programming error: per-line FX complement pairs must always self-balance.
             throw new IllegalStateException(
-                    "FX revaluation journal is unbalanced before posting (run=" + runUid
-                    + "): Σdebit=" + draftDebit + " Σcredit=" + draftCredit
-                    + " — this is a programming error; inspect computeRevalLines/postRevaluationJournal.");
+                    "The FX revaluation journal could not be posted because it is not balanced. Please contact support.");
         }
 
         JournalEntryDraft draft = new JournalEntryDraft(

@@ -121,11 +121,10 @@ public class DepreciationRunServiceImpl implements DepreciationRunService {
         Optional<DepreciationRun> existing =
                 runs.findByCompanyIdAndFiscalPeriodId(req.companyId(), period.getId());
         if (existing.isPresent()) {
+            // ADR-0030 D-4: only one depreciation run is allowed per company per fiscal period.
             throw new IllegalStateException(
-                    "Depreciation run already posted for company=" + req.companyId()
-                            + " period=" + req.fiscalPeriodUid()
-                            + " (run=" + existing.get().getRunNumber() + "). "
-                            + "Duplicate runs are not allowed (ADR-0030 D-4).");
+                    "A depreciation run has already been posted for the selected fiscal period. "
+                    + "Only one run per period is allowed.");
         }
 
         // Period gate — must be OPEN and postingDate must fall in it
@@ -136,8 +135,9 @@ public class DepreciationRunServiceImpl implements DepreciationRunService {
                 schedules.findEligibleForRun(req.companyId(), period.getStartDate());
 
         if (eligibleLines.isEmpty()) {
+            // req.fiscalPeriodUid() intentionally not surfaced (error-hygiene rule)
             throw new IllegalStateException(
-                    "No eligible assets found for depreciation run in period " + req.fiscalPeriodUid());
+                    "No eligible assets were found for a depreciation run in the selected period.");
         }
 
         // Build per-category charge map (ADR-0030 D-4, step 5)
@@ -147,13 +147,13 @@ public class DepreciationRunServiceImpl implements DepreciationRunService {
         for (DepreciationScheduleLine sl : eligibleLines) {
             FixedAsset asset = assets.findById(sl.getFixedAssetId())
                     .orElseThrow(() -> new IllegalStateException(
-                            "Asset not found: " + sl.getFixedAssetId()));
+                            "A fixed asset referenced by the depreciation schedule could not be found. Please contact support."));
             assetMap.put(asset.getId(), asset);
 
             Long catId = asset.getCategoryId();
             AssetCategory cat = categories.findById(catId)
                     .orElseThrow(() -> new IllegalStateException(
-                            "Category not found: " + catId));
+                            "An asset category referenced by the depreciation schedule could not be found. Please contact support."));
 
             categoryCharges.merge(catId,
                     new CategoryCharge(cat, sl.getPlannedCharge()),

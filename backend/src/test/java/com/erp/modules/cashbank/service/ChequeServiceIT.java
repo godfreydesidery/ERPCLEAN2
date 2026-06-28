@@ -128,7 +128,7 @@ class ChequeServiceIT extends PostgresIntegrationTest {
 
         assertThatThrownBy(() -> chequeService.register(req))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("FR-CASH-10");
+                .hasMessageContaining("only be registered against a bank account");
     }
 
     @Test
@@ -143,7 +143,7 @@ class ChequeServiceIT extends PostgresIntegrationTest {
 
         assertThatThrownBy(() -> chequeService.register(dupReq))
                 .isInstanceOf(ConflictException.class)
-                .hasMessageContaining("BR-CASH-12");
+                .hasMessageContaining("already been registered for this bank account");
     }
 
     @Test

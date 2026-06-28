@@ -49,8 +49,9 @@ public class VatAdjustmentServiceImpl implements VatAdjustmentService {
         scopeGuard.assertCanActIn(RequestContext.get(), vatReturn.getCompanyId());
 
         if (vatReturn.getStatus() == VatReturnStatus.FILED) {
+            // BR-VAT-09: filed returns cannot be adjusted
             throw new IllegalStateException(
-                    "Cannot add adjustment to a FILED VAT return (BR-VAT-09): " + vatReturnUid);
+                    "This VAT return has already been filed, so it can no longer be adjusted.");
         }
 
         VatAdjustment adjustment = new VatAdjustment(

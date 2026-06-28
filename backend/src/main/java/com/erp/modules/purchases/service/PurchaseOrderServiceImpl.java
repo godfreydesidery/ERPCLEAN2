@@ -318,7 +318,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         List<PurchaseOrderLine> lineList = lines.findByPurchaseOrderIdOrderByLineNo(po.getId());
         if (lineList.isEmpty()) {
             throw new IllegalStateException(
-                    "Cannot place an order with no lines (FR-PURCH-04).");
+                    "Cannot place an order with no lines. Please add at least one line before placing.");
         }
 
         // Freeze totals
@@ -330,8 +330,8 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         if (approvalGate.requiresApproval(po, null)
                 && po.getApprovalStatus() != PoApprovalStatus.APPROVED) {
             throw new IllegalStateException(
-                    "PO requires approval (total >= threshold, FR-PROC-13). "
-                            + "Submit for approval and wait for APPROVED status before placing.");
+                    "This purchase order requires approval before it can be placed. "
+                            + "Please submit it for approval and wait until it is approved.");
         }
 
         // ADR-0041 D1 — backfill payment terms from the supplier default at place if not set at create.
@@ -388,14 +388,15 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
 
         // FLOW-PROCURE-TO-PAY-035 (a): null/blank reason must be rejected before any Map.of call
         if (req.reason() == null || req.reason().isBlank()) {
-            throw new IllegalArgumentException("A void reason is required (FR-PURCH-09).");
+            throw new IllegalArgumentException("A reason is required to void a purchase order.");
         }
 
         if (po.getStatus() == PurchaseOrderStatus.RECEIVED
                 || po.getStatus() == PurchaseOrderStatus.CLOSED) {
+            // ADR-0011 D-6: RECEIVED and CLOSED POs cannot be voided
             throw new IllegalStateException(
-                    "Cannot void a " + po.getStatus() + " PO (ADR-0011 D-6). "
-                            + "Void all GRs first if PARTIALLY_RECEIVED.");
+                    "A purchase order in " + po.getStatus() + " status cannot be voided. "
+                            + "If partially received, void all goods receipts first.");
         }
         if (po.getStatus() == PurchaseOrderStatus.VOID) {
             throw new IllegalStateException("PO is already VOID.");
@@ -408,9 +409,10 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                     .filter(gr -> gr.getStatus() != GoodsReceiptStatus.VOID)
                     .toList();
             if (!nonVoidGrs.isEmpty()) {
+                // ADR-0011 D-6: all goods receipts must be voided before the PO can be voided
                 throw new IllegalStateException(
                         "Cannot void a PO that has non-void goods receipts. "
-                                + "Void all GRs first (ADR-0011 D-6).");
+                                + "Please void all goods receipts first.");
             }
         }
 
@@ -573,29 +575,32 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     }
 
     private void assertDraft(PurchaseOrder po, String operation) {
+        // BR-PURCH-05: only DRAFT POs are mutable
         if (po.getStatus() != PurchaseOrderStatus.DRAFT) {
             throw new IllegalStateException(
-                    "Cannot " + operation + " a PO in status " + po.getStatus()
-                            + " (BR-PURCH-05). Only DRAFT POs are mutable.");
+                    "Cannot " + operation + " a purchase order in " + po.getStatus()
+                            + " status. Only draft purchase orders can be modified.");
         }
     }
 
     private void assertPositiveQty(BigDecimal qty) {
+        // FR-PURCH-04: ordered quantity must be positive
         if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException(
-                    "Ordered quantity must be > 0 (FR-PURCH-04).");
+                    "Ordered quantity must be greater than zero.");
         }
     }
 
     private void assertCostValid(BigDecimal cost, String note) {
+        // OQ-PURCH-04 / ADR-0011 D-5: cost must be non-negative; zero cost requires a note
         if (cost == null || cost.compareTo(BigDecimal.ZERO) < 0) {
             throw new IllegalArgumentException(
-                    "Unit cost must be >= 0 (OQ-PURCH-04).");
+                    "Unit cost must be zero or greater.");
         }
         if (cost.compareTo(BigDecimal.ZERO) == 0
                 && (note == null || note.isBlank())) {
             throw new IllegalArgumentException(
-                    "A note/reason is required when unit cost is 0 (OQ-PURCH-04, ADR-0011 D-5).");
+                    "A note or reason is required when the unit cost is zero.");
         }
     }
 
@@ -678,13 +683,15 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         assertDraft(po, "submit for approval");
 
         if (!approvalGate.requiresApproval(po, null)) {
+            // ADR-0027 D-6: below threshold or gate disabled — direct placement is correct path
             throw new IllegalStateException(
-                    "PO does not require approval (below threshold or gate disabled, ADR-0027 D-6). "
-                            + "Place it directly via /place.");
+                    "This purchase order is below the approval threshold and does not require approval. "
+                            + "You can place it directly.");
         }
         if (po.getApprovalStatus() == PoApprovalStatus.PENDING) {
+            // approval_request_uid is internal; not exposed to the user
             throw new IllegalStateException(
-                    "PO is already pending approval (approval_request_uid=" + po.getApprovalRequestUid() + ").");
+                    "This purchase order has already been submitted for approval and is awaiting a decision.");
         }
 
         // Resolve branch uid for the engine's policy lookup

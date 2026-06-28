@@ -88,8 +88,9 @@ public class BomServiceImpl implements BomService {
                     "Parent product does not belong to the specified company.");
         }
         if (MasterStatus.ARCHIVED.equals(parent.getStatus())) {
+            // BR-BOM-12: archived parent
             throw new IllegalArgumentException(
-                    "Cannot create a BOM for an ARCHIVED product (BR-BOM-12).");
+                    "A bill of materials cannot be created for an archived product.");
         }
 
         // Allocate version_no (uq_bom_parent_version is the race backstop)
@@ -261,8 +262,9 @@ public class BomServiceImpl implements BomService {
 
         List<ProductComponent> legacyLines = legacyComponents.findByComposedProductId(parent.getId());
         if (legacyLines.isEmpty()) {
+            // OQ-BOM-01: no legacy recipe rows to promote
             throw new NotFoundException(
-                    "Product has no legacy single-level recipe to promote: " + parentProductUid);
+                    "This product has no existing recipe to promote into a bill of materials.");
         }
 
         int nextVersion = boms.maxVersionNo(parent.getId()) + 1;
