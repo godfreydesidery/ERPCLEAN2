@@ -6,6 +6,36 @@
 
 ---
 
+## SIM-BL-002 — Multi-device / responsive coverage (desktop, laptop, tablet, mobile)
+
+**Status:** OPEN — owner-raised 2026-06-28. Harness primitive landed; systematic coverage queued.
+
+Real users hit the ERP on **desktops, laptops, tablets and phones**, so the simulation should exercise
+each persona at those viewports — a screen that works at 1440px can be unusable at 390px.
+
+**Already shipped (the primitive):** the harness now takes a `DEVICE` env (`desktop|laptop|tablet|mobile`)
+— `sim-lib.js` sets the viewport (+ touch/mobile UA for tablet/mobile), and `operate.js` captures a
+screenshot per screen when `DEVICE` is set. First mobile pass (Sabina @ 390px) showed the POS screen is
+**genuinely responsive** (header collapses to a hamburger, content stacks, empty/info states intact) —
+a good baseline, not a desktop page crammed onto a phone.
+
+**Queued (the coverage):**
+- Run **all personas across all four device profiles**, capturing per-screen screenshots.
+- Have the **end-user agent review the screenshots** for responsive/usability breakage (overflow, off-screen
+  actions, cramped forms, tap targets) — automation drives clicks regardless of layout, so *visual* review
+  is the gate, not just functional pass/fail.
+- Run the **axe a11y gate at mobile/tablet viewports** (not just desktop) — touch-target size, reflow, focus order.
+- Flag any screen that is functionally reachable but visually broken on a small screen as a UX UPR
+  (frontend-engineer), distinct from a defect.
+- Consider a couple of representative real devices (a low-end Android phone, an iPad) via Playwright device
+  descriptors, not just raw viewports.
+
+**Open questions:** which screens are mobile-critical (POS/counter sales and route-agent capture are the
+obvious phone/tablet ones; period-close/GL are desktop)? Do we set a minimum supported width? Should the
+nav/branch-switcher get specific mobile review (it's the most-used control)?
+
+---
+
 ## SIM-BL-001 — Skill-development plan + bidirectional learning loop (personas ⇄ technical team)
 
 **Status:** DEFERRED — owner-requested 2026-06-28. **Keep in queue; consider later. Do not build yet.**

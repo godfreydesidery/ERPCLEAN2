@@ -337,6 +337,7 @@ async function runDeep(page, buf, rec) {
     for (const [path, label] of targets) {
       buf.clear();
       await L.goto(page, path);
+      if (process.env.DEVICE) await L.shot(page, `${persona.slug}-${process.env.DEVICE}-${label}`); // responsive evidence
       const url = page.url().replace(L.BASE, '');
       let outcome = 'OK';
       if (url.includes('/login')) { outcome = 'KICKED_TO_LOGIN'; rec.problem('BLOCKED', `open ${label}`, path, 'I was thrown back to the login screen trying to open my own screen', buf.snapshot()); }

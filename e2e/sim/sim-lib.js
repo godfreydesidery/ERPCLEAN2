@@ -64,8 +64,17 @@ function watch(page) {
 async function launch() {
   return chromium.launch({ executablePath: BIN, headless: true });
 }
+// Device profiles — real users are on desktops, laptops, tablets and phones. Set DEVICE=mobile|tablet|
+// laptop|desktop to run a persona at that viewport (tablet/mobile also emulate touch + mobile UA).
+const DEVICES = {
+  desktop: { viewport: { width: 1440, height: 1000 } },
+  laptop: { viewport: { width: 1366, height: 768 } },
+  tablet: { viewport: { width: 834, height: 1112 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 },
+  mobile: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3 },
+};
+const DEVICE = (process.env.DEVICE || 'desktop').toLowerCase();
 async function newSession(browser) {
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  const ctx = await browser.newContext(DEVICES[DEVICE] || DEVICES.desktop);
   const page = await ctx.newPage();
   const buf = watch(page);
   return { ctx, page, buf };
