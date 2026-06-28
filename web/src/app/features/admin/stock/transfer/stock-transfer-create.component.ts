@@ -106,7 +106,11 @@ export class StockTransferCreateComponent {
             this.companies.set(companies);
             this.contextState.set('idle');
             if (companies.length > 0) {
-              const co = companies[0];
+              // Default to the active company from session; fall back to companies[0].
+              const activeCompanyUid = this.session.user()?.activeCompanyUid ?? null;
+              const co = activeCompanyUid
+                ? (companies.find((c) => c.uid === activeCompanyUid) ?? companies[0])
+                : companies[0];
               this.selectedCompanyId.set(co.id);
               this.selectedCompanyUid.set(co.uid);
               this.loadBranches(co.uid);
