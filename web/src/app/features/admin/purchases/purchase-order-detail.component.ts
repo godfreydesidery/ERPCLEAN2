@@ -11,13 +11,16 @@ import { blobErrorMessage } from '../../../core/api/blob-error';
 import { ProductModel, UnitOfMeasureDto } from '../models/product.model';
 import {
   AddPurchaseOrderLineRequest,
+  PoApprovalStatus,
   PurchaseOrderDto,
   PurchaseOrderLineDto,
+  PurchaseSettingsDto,
   VoidPurchaseOrderRequest,
 } from '../models/purchases.model';
 import { ProductService } from '../products/product.service';
 import { DocumentsService } from '../documents/documents.service';
 import { PurchasesService } from './purchases.service';
+import { PurchaseSettingsService } from './settings/purchase-settings.service';
 
 type LoadState = 'loading' | 'idle' | 'error';
 
@@ -26,11 +29,19 @@ type LoadState = 'loading' | 'idle' | 'error';
  * Header: status, order number, supplier, totals.
  * Lines panel (DRAFT only): add/edit/remove lines — product + unit picker, qty, unit cost.
  * Actions:
- *   DRAFT  → Place (PURCHASE.ORDER.CREATE), Void (PURCHASE.ORDER.VOID)
+ *   DRAFT  → Submit for Approval (when approval gate enabled + total >= threshold),
+ *             Place (PURCHASE.ORDER.CREATE — only when APPROVED or no approval required),
+ *             Void (PURCHASE.ORDER.VOID)
  *   ORDERED / PARTIALLY_RECEIVED → Receive (link to GR create), Close, Void
  *   RECEIVED → Close, Void
  *   CLOSED / VOID → read-only
  * Received / outstanding qty shown per line from server DTO fields — no client computation.
+ *
+ * Approval status note: the backend PurchaseOrderDto record does not yet include approvalStatus
+ * in its serialised output. The component therefore fetches PurchaseSettings to decide whether to
+ * show the Submit-for-Approval button, and tracks the current session's approval state via a local
+ * signal (localApprovalStatus) so the PENDING banner persists while the user stays on the page.
+ * If the DTO later gains the field, po().approvalStatus takes precedence via effectiveApprovalStatus.
  */
 @Component({
   selector: 'app-purchase-order-detail',
@@ -40,6 +51,7 @@ type LoadState = 'loading' | 'idle' | 'error';
 })
 export class PurchaseOrderDetailComponent {
   private readonly purchasesService = inject(PurchasesService);
+  private readonly purchaseSettingsService = inject(PurchaseSettingsService);
   private readonly productService = inject(ProductService);
   private readonly documentsService = inject(DocumentsService);
   private readonly alerts = inject(AlertService);
@@ -52,6 +64,16 @@ export class PurchaseOrderDetailComponent {
   // ── PO header ──────────────────────────────────────────────────────────────
   readonly po = signal<PurchaseOrderDto | null>(null);
   readonly poState = signal<LoadState>('loading');
+
+  // ── Purchase Settings (approval gate) ──────────────────────────────────────
+  /** Null = not yet loaded or unavailable; loaded once on init. */
+  readonly purchaseSettings = signal<PurchaseSettingsDto | null>(null);
+
+  /**
+   * Local approval-status mirror. Seeded from po().approvalStatus if the backend ever emits it;
+   * otherwise updated when the user submits for approval in this session.
+   */
+  readonly localApprovalStatus = signal<PoApprovalStatus | null>(null);
 
   // ── Lines ──────────────────────────────────────────────────────────────────
   readonly lines = signal<PurchaseOrderLineDto[]>([]);
@@ -76,6 +98,10 @@ export class PurchaseOrderDetailComponent {
   // ── Place ──────────────────────────────────────────────────────────────────
   readonly placing = signal(false);
   readonly placeError = signal<string | null>(null);
+
+  // ── Submit for Approval ────────────────────────────────────────────────────
+  readonly submitting = signal(false);
+  readonly submitError = signal<string | null>(null);
 
   // ── Close ──────────────────────────────────────────────────────────────────
   readonly closing = signal(false);
@@ -121,9 +147,51 @@ export class PurchaseOrderDetailComponent {
 
   readonly hasLines = computed(() => this.lines().length > 0);
 
-  readonly canPlace = computed(() =>
-    this.isDraft() && this.hasLines() && this.canCreate(),
-  );
+  /**
+   * The effective approval status: prefer the field from the PO DTO (if the backend ever emits
+   * it), otherwise fall back to the locally tracked signal that reflects this session's action.
+   */
+  readonly effectiveApprovalStatus = computed<PoApprovalStatus | null>(() => {
+    const fromDto = this.po()?.approvalStatus;
+    if (fromDto) return fromDto;
+    return this.localApprovalStatus();
+  });
+
+  /**
+   * True when the approval gate is enabled and the PO's current total meets or exceeds the
+   * threshold. BigDecimal comes as a JSON string from the wire — coerce with Number() before
+   * comparing. If settings are unavailable, returns false (fail-safe: don't block "Place").
+   */
+  readonly requiresApproval = computed(() => {
+    const settings = this.purchaseSettings();
+    const po = this.po();
+    if (!settings || !po) return false;
+    if (!settings.poApprovalEnabled) return false;
+    const threshold = Number(settings.poApprovalThresholdAmount);
+    const total = Number(po.orderTotalAmount);
+    return Number.isFinite(total) && Number.isFinite(threshold) && total >= threshold;
+  });
+
+  /**
+   * DRAFT POs show "Submit for Approval" when the gate requires it AND the order isn't already
+   * pending or approved.
+   */
+  readonly showSubmitForApproval = computed(() => {
+    if (!this.isDraft() || !this.canCreate()) return false;
+    if (!this.requiresApproval()) return false;
+    const status = this.effectiveApprovalStatus();
+    return status !== 'PENDING' && status !== 'APPROVED';
+  });
+
+  /**
+   * "Place Order" is available on DRAFT when: no approval is required, OR approval has been
+   * granted (APPROVED). Hidden while PENDING or REJECTED.
+   */
+  readonly canPlace = computed(() => {
+    if (!this.isDraft() || !this.hasLines() || !this.canCreate()) return false;
+    if (!this.requiresApproval()) return true;
+    return this.effectiveApprovalStatus() === 'APPROVED';
+  });
 
   constructor() {
     this.productSearch$
@@ -148,6 +216,7 @@ export class PurchaseOrderDetailComponent {
   private init(): void {
     this.loadPo();
     this.loadLines();
+    this.loadSettings();
   }
 
   // ── PO ─────────────────────────────────────────────────────────────────────
@@ -158,6 +227,10 @@ export class PurchaseOrderDetailComponent {
       next: (po) => {
         this.po.set(po);
         this.poState.set('idle');
+        // Seed the local approval status from the DTO field when the backend provides it.
+        if (po.approvalStatus) {
+          this.localApprovalStatus.set(po.approvalStatus);
+        }
       },
       error: () => this.poState.set('error'),
     });
@@ -165,7 +238,25 @@ export class PurchaseOrderDetailComponent {
 
   private refetchPo(): void {
     this.purchasesService.getOrderByUid(this.uid()).subscribe({
-      next: (po) => this.po.set(po),
+      next: (po) => {
+        this.po.set(po);
+        if (po.approvalStatus) {
+          this.localApprovalStatus.set(po.approvalStatus);
+        }
+      },
+      error: () => undefined,
+    });
+  }
+
+  // ── Settings (approval gate) ───────────────────────────────────────────────
+
+  private loadSettings(): void {
+    const companyUid = this.session.user()?.activeCompanyUid;
+    if (!companyUid) return;
+    this.purchaseSettingsService.getByCompany(companyUid).subscribe({
+      next: (s) => this.purchaseSettings.set(s),
+      // Non-critical: if settings fail to load, approval logic falls back to "not required"
+      // (fail-safe) — the user can still place the order; backend enforces the gate regardless.
       error: () => undefined,
     });
   }
@@ -227,11 +318,11 @@ export class PurchaseOrderDetailComponent {
 
     if (!selected) { this.lineFormError.set('Select a product.'); return; }
     if (!unitUid) { this.lineFormError.set('Select a unit.'); return; }
-    if (!qty || isNaN(Number(qty)) || Number(qty) <= 0) {
+    if (!qty || Number.isNaN(Number(qty)) || Number(qty) <= 0) {
       this.lineFormError.set('Enter a valid quantity greater than zero.');
       return;
     }
-    if (!cost || isNaN(Number(cost)) || Number(cost) < 0) {
+    if (!cost || Number.isNaN(Number(cost)) || Number(cost) < 0) {
       this.lineFormError.set('Enter a valid unit cost (zero or positive).');
       return;
     }
@@ -279,6 +370,27 @@ export class PurchaseOrderDetailComponent {
         this.refetchPo();
       },
       error: () => this.rowBusyLineUid.set(null),
+    });
+  }
+
+  // ── Submit for Approval ────────────────────────────────────────────────────
+
+  submitForApproval(): void {
+    if (this.submitting()) return;
+    this.submitting.set(true);
+    this.submitError.set(null);
+    this.purchasesService.submitForApproval(this.uid()).subscribe({
+      next: () => {
+        this.submitting.set(false);
+        this.alerts.success('Order submitted for approval');
+        // The backend response DTO does not yet carry approvalStatus; track locally.
+        this.localApprovalStatus.set('PENDING');
+        this.refetchPo();
+      },
+      error: (err) => {
+        this.submitError.set(this.messageFrom(err, 'Could not submit order for approval.'));
+        this.submitting.set(false);
+      },
     });
   }
 
