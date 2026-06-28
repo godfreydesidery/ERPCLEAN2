@@ -338,6 +338,62 @@ async function runDeep(page, buf, rec) {
     }
   }
 
+  // BRANCH_MANAGER: raise an inter-branch stock transfer — daily logistics
+  if (persona.role === 'BRANCH_MANAGER') {
+    const wf = 'raise an inter-branch transfer', screen = '/admin/stock-transfers/create';
+    await L.goto(page, screen);
+    if (await L.looksForbidden(page, buf)) { rec.problem('BLOCKED', wf, screen, 'not allowed to open Stock Transfer', buf.snapshot()); }
+    else {
+      try {
+        buf.clear();
+        const srcB = page.locator('select[aria-labelledby="srcBranchLabel"]');
+        const branchOpts = await srcB.locator('option').count().catch(() => 0);
+        await srcB.selectOption({ index: 1 }).catch(() => {});
+        await page.waitForTimeout(800);
+        await page.locator('select[aria-labelledby="srcLocLabel"]').selectOption({ index: 1 }).catch(() => {});
+        await page.locator('select[aria-labelledby="destBranchLabel"]').selectOption({ index: branchOpts > 2 ? 2 : 1 }).catch(() => {});
+        await page.waitForTimeout(800);
+        await page.locator('select[aria-labelledby="destLocLabel"]').selectOption({ index: 1 }).catch(() => {});
+        await page.locator('#lineProd0').selectOption({ index: 1 }).catch(() => {});
+        await L.setField(page, '#lineQty0', '5').catch(() => {});
+        await page.waitForTimeout(300);
+        if (branchOpts <= 2) { rec.problem('SLOW', wf, screen, 'only one branch is selectable for this manager — cannot pick a different destination for an inter-branch transfer', buf.snapshot()); }
+        buf.clear();
+        await L.clickButton(page, /create transfer/i);
+        await page.waitForTimeout(1500);
+        const s = buf.snapshot();
+        if (s.api.some(a => a.status >= 500)) rec.problem('BLOCKED', wf, screen, 'server error creating the transfer', s);
+        else if (worst(s)) rec.problem('SLOW', wf, screen, `transfer rejected (${worst(s).status}) — likely no stock at the source location to move`, s);
+        else rec.ok('raise inter-branch transfer');
+      } catch (e) { rec.problem('SLOW', wf, screen, `raising transfer: ${String(e.message || e).slice(0, 90)}`, buf.snapshot()); }
+    }
+  }
+
+  // APPROVERS (GM / branch manager / CFO): clear the approval inbox — daily oversight
+  if (['GROUP_GM', 'BRANCH_MANAGER', 'FINANCE_DIRECTOR'].includes(persona.role)) {
+    const wf = 'decide on pending approvals', screen = '/admin/approvals/inbox';
+    await L.goto(page, screen);
+    if (await L.looksForbidden(page, buf)) { rec.problem('BLOCKED', wf, screen, 'not allowed to open the Approval Inbox', buf.snapshot()); }
+    else {
+      try {
+        await page.waitForTimeout(900);
+        const decide = page.locator('[aria-label^="Decide on request"], button:has-text("Decide")');
+        const n = await decide.count().catch(() => 0);
+        if (!n) { rec.ok('approval inbox open (nothing pending to decide)'); }
+        else {
+          await decide.first().click();
+          await page.locator('#lineProductSearch, button:has-text("Approve")').first().waitFor({ state: 'visible', timeout: 4000 }).catch(() => {});
+          buf.clear();
+          await L.clickButton(page, /^\s*approve\b/i);
+          await page.waitForTimeout(1200);
+          const s = buf.snapshot();
+          if (worst(s)) rec.problem('SLOW', wf, screen, `could not approve the request (${worst(s).status})`, s);
+          else rec.ok('approve a pending request');
+        }
+      } catch (e) { rec.problem('SLOW', wf, screen, `deciding approvals: ${String(e.message || e).slice(0, 90)}`, buf.snapshot()); }
+    }
+  }
+
   // HR/PAYROLL: register a new employee — the daily HR intake
   if (persona.role === 'HR_PAYROLL_OFFICER') {
     const wf = 'register a new employee', screen = '/admin/hr/employees';
