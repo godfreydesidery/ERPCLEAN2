@@ -315,7 +315,7 @@ async function runDeep(page, buf, rec) {
   const browser = await L.launch();
   const { page, buf } = await L.newSession(browser);
   const rec = L.makeRecorder(persona);
-  const result = { persona: persona.fullName, username: persona.username, role: persona.role, access: [], loggedIn: false };
+  const result = { persona: persona.fullName, username: persona.username, role: persona.role, access: [], axe: [], loggedIn: false };
 
   try {
     console.log(`=== ${persona.fullName} (${persona.designation}) login as ${persona.username} ===`);
@@ -350,6 +350,14 @@ async function runDeep(page, buf, rec) {
       }
       result.access.push({ path, label, outcome });
       console.log(`  ${outcome.padEnd(16)} ${path}`);
+      if (process.env.AXE && outcome === 'OK') {
+        const ax = await L.runAxe(page);
+        result.axe.push({ screen: label, path, device: process.env.DEVICE || 'desktop', ran: ax.ran, violations: ax.violations });
+        if (ax.violations.length) {
+          console.log(`    axe[${process.env.DEVICE || 'desktop'}]: ${ax.violations.length} serious/critical -> ${ax.violations.map(v => `${v.id}(${v.n})`).join(', ')}`);
+          for (const v of ax.violations) rec.problem('SLOW', `a11y on ${label}`, path, `${v.impact} a11y: ${v.id} — ${v.help} (${v.n} node(s))`, { axe: v });
+        }
+      }
     }
 
     // ACTION missions: enter the master data I own

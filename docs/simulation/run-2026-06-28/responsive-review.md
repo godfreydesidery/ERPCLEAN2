@@ -136,9 +136,14 @@ polish" ticket if desired; none blocks work.
   Karume (warehouse/stores), Bakari Mbaga (GM), Amina Mwanga (accountant) — the mobile-critical
   seats. Other personas (period-close/GL/HR) are desktop-bound and deferred.
 - **Limits / not done yet:**
-  - **No axe at mobile/tablet yet.** These are full-page screenshots only — the **axe a11y gate at
-    mobile/tablet viewports** (touch-target size, reflow, focus order) is the **next SIM-BL-002
-    step**, not run here.
+  - **Axe at mobile/tablet — DONE, clean.** The harness now injects axe-core at the active `DEVICE`
+    viewport (`sim-lib.js runAxe`, `AXE=1`) with WCAG 2.0/2.1/2.2 + best-practice tags **including
+    `target-size`** (the tap-target rule), color-contrast disabled to match the web suite's headless
+    gate. It ran on **32 screen-runs — 16 distinct screens × mobile (390) + tablet (834)** — covering
+    sales (orders/POS/customers/products), finance (receipt, supplier bill, journal), stock
+    (on-hand/count/goods-receipt), purchase orders and the dashboard. **Result: 0 serious/critical
+    violations** at either viewport. Accessibility holds at small screens; the responsive defect was
+    purely visual-layout (clipped columns / off-screen actions), now fixed, not an a11y-semantics break.
   - **One screen unverified:** Goods Receipt — the harness captured the home screen instead of the
     GR form on both devices, so GR's handheld usability is *unverified* (re-capture next pass). It's
     Saidi's most-used screen, so prioritise it.

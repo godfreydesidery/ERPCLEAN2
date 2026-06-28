@@ -24,7 +24,9 @@ a good baseline, not a desktop page crammed onto a phone.
 - Have the **end-user agent review the screenshots** for responsive/usability breakage (overflow, off-screen
   actions, cramped forms, tap targets) — automation drives clicks regardless of layout, so *visual* review
   is the gate, not just functional pass/fail.
-- Run the **axe a11y gate at mobile/tablet viewports** (not just desktop) — touch-target size, reflow, focus order.
+- ~~Run the **axe a11y gate at mobile/tablet viewports**~~ — **DONE 2026-06-28**: harness `runAxe` (AXE=1)
+  injects axe-core at the DEVICE viewport (WCAG 2.2 incl. `target-size`); **0 serious/critical across 16
+  screens × mobile+tablet**. a11y holds at small screens.
 - Flag any screen that is functionally reachable but visually broken on a small screen as a UX UPR
   (frontend-engineer), distinct from a defect.
 - Consider a couple of representative real devices (a low-end Android phone, an iPad) via Playwright device

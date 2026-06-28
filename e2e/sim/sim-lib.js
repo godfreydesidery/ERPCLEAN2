@@ -172,6 +172,37 @@ async function looksForbidden(page, buf) {
   return false;
 }
 
+// ---------------------------------------------------------------- axe a11y (mobile-aware)
+// Inject axe-core and run it at the page's current viewport. Includes WCAG 2.2 target-size (the
+// mobile tap-target rule); disables color-contrast (can't compute headless without a theme — matches
+// the web suite's gate). Returns serious/critical violations.
+let _axeSrc = null;
+function axeSource() {
+  if (_axeSrc === null) {
+    const axePath = path.join(path.dirname(require.resolve('axe-core')), 'axe.min.js');
+    _axeSrc = fs.readFileSync(axePath, 'utf8');
+  }
+  return _axeSrc;
+}
+async function runAxe(page) {
+  try {
+    await page.evaluate(axeSource());
+    const results = await page.evaluate(async () => {
+      // eslint-disable-next-line no-undef
+      return window.axe.run(document, {
+        runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'] },
+        rules: { 'color-contrast': { enabled: false } },
+      });
+    });
+    const v = results.violations
+      .filter(x => x.impact === 'serious' || x.impact === 'critical')
+      .map(x => ({ id: x.id, impact: x.impact, help: x.help, n: x.nodes.length, sample: ((x.nodes[0] || {}).target || []).join(' ').slice(0, 120) }));
+    return { ran: true, violations: v };
+  } catch (e) {
+    return { ran: false, error: String(e.message || e).slice(0, 120), violations: [] };
+  }
+}
+
 function saveResults(name, payload) {
   const f = path.join(OUT, name);
   fs.writeFileSync(f, JSON.stringify(payload, null, 2));
@@ -182,5 +213,5 @@ module.exports = {
   BASE, OUT, SIM_PASSWORD,
   makeRecorder, watch, launch, newSession, goto, login, shot,
   setField, pickFirstReal, pickByLabel, searchPick, ensureFormOpen, clickButton,
-  submitByEnter, waitDetached, waitCleared, looksForbidden, saveResults,
+  submitByEnter, waitDetached, waitCleared, looksForbidden, saveResults, runAxe,
 };
