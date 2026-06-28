@@ -1,0 +1,33 @@
+{
+  "summary": {
+    "branches": {
+      "created": 0,
+      "existing": 9
+    },
+    "roles": {
+      "created": 0,
+      "existing": 12,
+      "perms": {
+        "GROUP_GM": "146/230",
+        "FINANCE_DIRECTOR": "61/230",
+        "BRANCH_MANAGER": "89/230",
+        "ACCOUNTANT": "39/230",
+        "CASHIER": "12/230",
+        "SALES_OFFICER": "61/230",
+        "FIELD_SALES_AGENT": "52/230",
+        "PROCUREMENT_OFFICER": "36/230",
+        "STOREKEEPER": "23/230",
+        "STORES_SUPERVISOR": "33/230",
+        "PRODUCTION_OFFICER": "24/230",
+        "HR_PAYROLL_OFFICER": "17/230"
+      }
+    },
+    "users": {
+      "created": 0,
+      "existing": 16,
+      "granted": 16,
+      "branchAssigned": 0
+    }
+  },
+  "created": {}
+}

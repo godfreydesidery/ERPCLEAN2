@@ -58,7 +58,6 @@ async function createOne(page, buf, rec, opts) {
 
 // ---- per-persona ACTION missions (typed master-data entry by its rightful owner) ----
 async function runActions(page, buf, rec) {
-  const u = Date.now().toString().slice(-5);
   if (persona.role === 'SALES_OFFICER') {
     // Sabina registers real customers + a price list
     for (const c of D.CUSTOMERS.slice(0, 5)) {
@@ -129,8 +128,9 @@ async function runActions(page, buf, rec) {
       else if (await L.looksForbidden(page, buf)) { outcome = 'FORBIDDEN'; rec.problem('BLOCKED', `open ${label}`, path, `I'm told I don't have permission to open ${label}, but it's part of my job (${persona.role})`, buf.snapshot()); }
       else {
         const snap = buf.snapshot();
+        const realCon = snap.console.filter(e => !/favicon|ResizeObserver|net::ERR_/.test(e));
         if (snap.api.some(a => a.status >= 500)) { outcome = 'SERVER_ERROR'; rec.problem('BLOCKED', `open ${label}`, path, `${label} failed to load (server error)`, snap); }
-        else if (snap.page.length || snap.realConsole().length) { outcome = 'JS_ERROR'; rec.problem('SLOW', `open ${label}`, path, `${label} opened but the screen reported an error`, snap); }
+        else if (snap.page.length || realCon.length) { outcome = 'JS_ERROR'; rec.problem('SLOW', `open ${label}`, path, `${label} opened but the screen reported an error`, { ...snap, console: realCon }); }
       }
       result.access.push({ path, label, outcome });
       console.log(`  ${outcome.padEnd(16)} ${path}`);
