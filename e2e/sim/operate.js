@@ -206,6 +206,10 @@ async function runDeep(page, buf, rec) {
             // sure we're on the NEW DRAFT PO, then WAIT for the add-line form (it is @if(isDraft &&
             // canCreate) under @default, so it only renders once lines finish loading async).
             if (!/\/purchase-orders\/uid\//.test(page.url())) {
+              // create() stays on the list — filter to DRAFT so we open a PO that still has the add-line
+              // form (concurrency-safe: never opens a PO another procurement persona just placed/ORDERED).
+              await page.selectOption('#statusFilter', 'DRAFT').catch(() => {});
+              await page.waitForTimeout(900);
               const link = page.locator('a[href*="/admin/purchase-orders/uid/"]').first();
               if (await link.count()) { await link.click(); }
             }
