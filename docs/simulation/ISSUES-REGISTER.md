@@ -42,13 +42,17 @@ EndpointAuthorizationTest, PermissionCodesSeededTest, ModuleBoundaryTest, web bu
 | ISSUE-004 (`BRANCH.VIEW` → POS/stock) | Sabina, Frank, Saidi **BLOCKED** | open | **Fixed** |
 | ISSUE-007 (price-list bare 409) | opaque conflict | friendly message | **Fixed** |
 | ISSUE-008 (no closure guard) | — | `ReferenceDataReadClosureIT` | **Done** |
-| ISSUE-006 (PRODUCTION_OFFICER can't *create* product master data) | n/a (was masked) | view OK; create needs `PRODUCT.MANAGE` | **Deferred → system-analyst** (role-spec, not a defect) |
+| ISSUE-006 (PRODUCTION_OFFICER can't *create* product master data) | n/a (was masked) | view OK; create needs `PRODUCT.MANAGE` | **Works-as-designed** (system-analyst 2026-06-28): product master data is a procurement/master-data function; production views+requests, doesn't create — [requirements ruling](../requirements/product-master-data-ownership.md) |
 
 The only residual items in the after re-run are non-blocking and correct-by-design: production officers
 can now *view* products and run their work-order/BOM screens, but creating product **master data** needs
 `PRODUCT.MANAGE` — a legitimate role-design question (does a production officer own product master data,
-or only procurement?), routed to **system-analyst**. The "RETAIL already exists" item is expected
-duplicate data, now shown as a friendly message.
+or only procurement?), routed to **system-analyst**. **Resolved 2026-06-28 (works-as-designed):** product
+master data is a controlled procurement / master-data function (`PRODUCT.MANAGE`); production *views,
+consumes and requests* SKUs (`PRODUCT.VIEW`) but does not create them — the product's existing
+`PRODUCT.MANAGE` gate is correct. Ruling + the corrected scenario in
+[docs/requirements/product-master-data-ownership.md](../requirements/product-master-data-ownership.md).
+The "RETAIL already exists" item is expected duplicate data, now shown as a friendly message.
 
 ---
 

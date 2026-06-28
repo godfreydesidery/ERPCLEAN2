@@ -69,26 +69,23 @@ async function runActions(page, buf, rec) {
       fields: [['#newCode', 'RETAIL'], ['#newName', 'Retail price list']], submitField: '#newName', name: 'RETAIL', workflow: 'create price list' });
   }
   if (persona.role === 'PROCUREMENT_OFFICER') {
-    // Yusuf / Rehema register real suppliers + sourced products
+    // Procurement / master-data owns product master data — sourced AND manufactured — and registers
+    // suppliers. Production only requests new SKUs (ISSUE-006 / US-PRODUCTS-001;
+    // docs/requirements/product-master-data-ownership.md).
     for (const s of D.SUPPLIERS.slice(0, 5)) {
       await createOne(page, buf, rec, { path: '/admin/suppliers', openLabel: 'New Supplier', anchor: '#newDisplayName',
         fields: [['#newDisplayName', s.name], ['#newPartyType', 'ORGANISATION', 'selectVal'], ['#newSupplierKind', '', 'first']],
         submitField: '#newDisplayName', name: s.name, workflow: 'register supplier' });
     }
-    for (const p of D.PRODUCTS_SOURCED.slice(0, 5)) {
+    for (const p of [...D.PRODUCTS_SOURCED.slice(0, 5), ...D.PRODUCTS_MANUFACTURED]) {
       await createOne(page, buf, rec, { path: '/admin/products', openLabel: 'New Product', anchor: '#newName',
         fields: [['#newName', p], ['#newBaseUnit', '', 'first'], ['#newVatStatus', 'STANDARD', 'selectVal']],
-        submitField: '#newName', name: p, workflow: 'create sourced product' });
+        submitField: '#newName', name: p, workflow: 'register product master data' });
     }
   }
-  if (persona.role === 'PRODUCTION_OFFICER') {
-    // Editha registers manufactured products
-    for (const p of D.PRODUCTS_MANUFACTURED) {
-      await createOne(page, buf, rec, { path: '/admin/products', openLabel: 'New Product', anchor: '#newName',
-        fields: [['#newName', p], ['#newBaseUnit', '', 'first'], ['#newVatStatus', 'STANDARD', 'selectVal']],
-        submitField: '#newName', name: p, workflow: 'create manufactured product' });
-    }
-  }
+  // PRODUCTION_OFFICER does NOT create product master data (it needs PRODUCT.MANAGE, a procurement /
+  // master-data function). Production views/consumes products and requests new SKUs — its value in this
+  // run is the access checks on Work Orders + BOMs. See ISSUE-006 / US-PRODUCTS-001.
   if (persona.role === 'FIELD_SALES_AGENT') {
     await createOne(page, buf, rec, { path: '/admin/customers', openLabel: 'New Customer', anchor: '#newDisplayName',
       fields: [['#newDisplayName', 'Joseph Ulimboka'], ['#newPartyType', 'INDIVIDUAL', 'selectVal'], ['#newCustomerKind', 'CREDIT_ACCOUNT', 'selectVal']],

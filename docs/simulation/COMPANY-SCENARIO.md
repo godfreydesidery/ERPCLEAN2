@@ -132,15 +132,22 @@ is out of scope for this business cast.
 | `CASHIER` | Cashier / Cash & Bank Officer | Home branch | Cash & bank module: receipts, payments, petty cash, cash counts, deposits; record customer payments against AR; daily cash reconciliation |
 | `SALES_OFFICER` | Sales Officer | Home branch | Sales module: quotations, sales orders, sales invoices, delivery notes, customer (party) creation, AR view; POS/counter sales; EFD receipt issue |
 | `FIELD_SALES_AGENT` | Field / Route Sales Agent | Home branch | Van/route sales orders & invoices, capture orders from dukas, record cash collections, view own customers & stock on the van; assigned as agent on orders |
-| `PROCUREMENT_OFFICER` | Procurement Officer | Assigned branches | Purchases module: requisitions, RFQs, purchase orders, supplier (party) management, goods-receipt initiation, purchase returns |
+| `PROCUREMENT_OFFICER` | Procurement Officer | Assigned branches | Purchases module: requisitions, RFQs, purchase orders, supplier (party) management, goods-receipt initiation, purchase returns; **owns product master data** — creates/edits products (`PRODUCT.MANAGE`) for both sourced and manufactured SKUs |
 | `STOREKEEPER` | Storekeeper / Stock Controller | Home branch store | Stock module: goods receipt, stock issues, stock counts, locations & batches, inter-branch transfer receipts, stock adjustments (within limits) |
 | `STORES_SUPERVISOR` | Stores / Warehouse Supervisor | Home warehouse | All storekeeper capabilities + approve stock adjustments & transfers, manage stock locations, oversee counts, valuation view |
-| `PRODUCTION_OFFICER` | Production Officer | Factory branch | Manufacturing module: work orders, BOM consumption, finished-goods receipt to stock, production reporting; costing view |
+| `PRODUCTION_OFFICER` | Production Officer | Factory branch | Manufacturing module: work orders, BOM consumption, finished-goods receipt to stock, production reporting; costing view; **views/selects products** (`PRODUCT.VIEW`) and **requests** new manufactured SKUs — does **not** create product master data (that is `PRODUCT.MANAGE`, held by procurement) |
 | `HR_PAYROLL_OFFICER` | HR / Payroll Officer | All branches | HR module: employees, contracts, leave, attendance, payroll runs, payslips; statutory deductions (PAYE, NSSF, WCF, SDL) |
 
 ---
 
 ## 5. Product catalog
+
+> **Master-data ownership.** Products are **master data**. **Procurement** (Rehema Salum / Yusuf
+> Mbwana, `PRODUCT.MANAGE`) creates and edits all product records — **both** the sourced SKUs in
+> §5.1 **and** the manufactured SKUs in §5.2. **Production** (Editha Mhagama / Editrude Mwakalukwa,
+> `PRODUCT.VIEW`) **views and selects** products on work orders and BOMs and **requests** a new
+> manufactured SKU; it does **not** register product master data itself. Ruling:
+> [docs/requirements/product-master-data-ownership.md](../requirements/product-master-data-ownership.md).
 
 ### 5.1 Sourced (traded / imported — bought to resell)
 
@@ -287,19 +294,25 @@ translated into problem reports) by named staff.
 - **Reports to:** Bakari Mbaga.
 
 ### 6. Rehema Salum — Procurement Manager
-- **Modules:** Purchases, parties, stock (view), approvals.
+- **Modules:** Purchases, parties, products (**master-data owner**), stock (view), approvals.
 - **Primary workflows:** Approve a purchase requisition from the factory for crude
   palm oil; convert an RFQ to a purchase order on the cheapest quote; approve a PO
-  to Mbasha Holdings within her limit and escalate larger ones to the GM.
+  to Mbasha Holdings within her limit and escalate larger ones to the GM. As
+  master-data owner she (with Yusuf) **registers product master data** — both
+  sourced and manufactured SKUs (`PRODUCT.MANAGE`), creating a new manufactured
+  product at production's request with the correct tax / unit / costing setup.
 - **Reports problems about:** RFQ-to-PO conversion losing prices, supplier records
   duplicated, PO approval thresholds wrong.
 - **Reports to:** Bakari Mbaga.
 
 ### 7. Editha Mhagama — Production Manager
-- **Modules:** Manufacturing, stock, costing, reporting.
+- **Modules:** Manufacturing, stock, costing, reporting; products (**view/select only**).
 - **Primary workflows:** Release a work order to produce 5,000 bottles of Tembo
   Cooking Oil; confirm the BOM raw-material consumption from the factory store;
-  review the production cost report for a finished batch.
+  review the production cost report for a finished batch. When a new product line
+  starts, she **requests** the new manufactured SKU from procurement (master-data
+  owner) and builds the work order / BOM against it — she does **not** register
+  product master data herself (`PRODUCT.VIEW`, not `PRODUCT.MANAGE`).
 - **Reports problems about:** BOM consuming the wrong quantities, finished goods not
   landing in stock, production cost not matching material issues.
 - **Reports to:** Bakari Mbaga.
@@ -377,10 +390,13 @@ translated into problem reports) by named staff.
 - **Reports to:** Frank Materu (Stores Supervisor).
 
 ### 16. Yusuf Mbwana — Procurement Officer
-- **Modules:** Purchases, parties.
+- **Modules:** Purchases, parties, products (**master-data owner**).
 - **Primary workflows:** Raise a purchase requisition for crude palm oil and timber,
   then an RFQ to three suppliers; create a purchase order to Mbasha Holdings for
   crude palm oil and route it to Rehema Salum for approval; register a new supplier.
+  As master-data owner he **registers product master data** (`PRODUCT.MANAGE`) for
+  both sourced and manufactured SKUs — e.g. creating the new manufactured-product
+  record at production's (Editha's) request before its work order can be built.
 - **Reports problems about:** Requisition scope/branch wrong, RFQ not reaching
   suppliers, PO that won't submit for approval, duplicate supplier records.
 - **Reports to:** Rehema Salum (Procurement Manager).

@@ -32,6 +32,8 @@ I own the **Manufacturing** module and work daily in **Stock**, **Costing** and 
 
 I run the same shape of work for our other lines: Tembo Bar Soap (800 g), Tembo Washing Powder (1 kg), Tembo Drinking Water (500 ml), Tembo Maize Flour / Sembe (25 kg) milled from Mwananchi Maize Traders' grain, and Tembo Office Desk (1.2 m) from Sao Hill Timber.
 
+One thing I do **not** do: I don't register the product itself. Products are master data — when we start a new line, I **request** the new manufactured SKU from procurement (Rehema Salum / Yusuf Mbwana), who create the product record with the right tax, unit and costing setup. I can **view and pick** any product on my work orders and BOMs (that is my PRODUCT.VIEW), but the "New Product" form isn't mine to use — and that is correct, not a fault. Once procurement has set the product up, I build the work order and BOM against it.
+
 ## How I sign in and work
 
 - I open **http://localhost:4200** and sign in with username **emhagama** and the shared simulation password.

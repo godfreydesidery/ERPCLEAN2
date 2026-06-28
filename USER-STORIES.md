@@ -206,6 +206,35 @@ individual-vs-business type **so that** records are tax-complete where they must
 
 ---
 
+## Products — the item catalogue (master data)
+
+Requirements: [docs/requirements/products.md](docs/requirements/products.md) ·
+[docs/requirements/product-master-data-ownership.md](docs/requirements/product-master-data-ownership.md).
+Status: products.md DRAFT; ownership note **RATIFIED 2026-06-28**. A product is **master data** —
+created once by the master-data owner (procurement in the reference org, `PRODUCT.MANAGE`) and
+consumed read-only everywhere (`PRODUCT.VIEW`).
+
+### US-PRODUCTS-001 — Production views and selects products and requests a new SKU (does not own master data)
+**As a** Production Officer **I want** to view and select products and request a new manufactured
+SKU **so that** I can run work orders and BOMs without owning product master data.
+- **AC1** Given I hold `PRODUCT.VIEW` (and not `PRODUCT.MANAGE`), when I open the Products screen or
+  a work-order / BOM product picker, then I see the product list and can search and select any
+  product, scoped to my company.
+- **AC2** Given I hold only `PRODUCT.VIEW`, when the Products screen renders, then the **New Product**
+  create form is **not** shown to me (no create affordance) — works-as-designed, not an error.
+- **AC3** Given a new manufactured product line is needed, when I (production) request it, then the
+  request goes to the master-data owner (procurement) who creates the SKU; v1 has no in-app request
+  workflow (the request path is out-of-band).
+- **AC4** Given a user holds `PRODUCT.MANAGE` (the master-data owner / procurement role), when they
+  open Products, then they see the **New Product** create form and can create a SKU — for both
+  sourced and manufactured goods — with the correct tax / unit / costing setup.
+- **AC5** Given any `PRODUCT.VIEW`-only user attempts a create/edit endpoint directly, when the API
+  is called, then it is refused (the create/manage endpoints require `PRODUCT.MANAGE`).
+- **Dependencies:** IAM (RBAC: `PRODUCT.VIEW`, `PRODUCT.MANAGE`); products.md (the product master).
+- **Priority:** High (resolves ISSUE-006 governance; behaviour already shipped — this story pins it).
+
+---
+
 ## Sales — selling to customers
 
 Requirements: [docs/requirements/sales.md](docs/requirements/sales.md). Status: **RATIFIED
