@@ -53,14 +53,16 @@ actually flow in a deployed product: *user pain in → triaged engineering work 
 | [COMPANY-SCENARIO.md](COMPANY-SCENARIO.md) | **World bible** — the canonical Tembo Group: company, 9 branches, org chart, ERP roles, product catalog, customers, suppliers, and the full persona roster + detail. Single source of truth; read before role-playing anyone. |
 | [USER-PROBLEM-REPORT-TEMPLATE.md](USER-PROBLEM-REPORT-TEMPLATE.md) | The **UPR form** a persona fills in when a screen blocks them (what I was doing / expected / happened / screen / severity / reference). Business language only — no bug terms. |
 | [TRIAGE-PROCESS.md](TRIAGE-PROCESS.md) | How the **technical team** triages a UPR: reproduce, classify (real defect / WAD / UX / permission gap), and promote real defects into Issues with fix plans. |
-| [`.claude/agents/personas/`](../../.claude/agents/personas/) | The **persona team** — one agent file per staff member (`amina-mwanga.md`, `saidi-karume.md`, …) plus the two external parties (`joseph-ulimboka.md`, `mbasha-holdings-ltd.md`). Each is a reusable, in-character operator scoped to its seat. |
-| `UPR-REGISTER.md` *(produced by a run)* | The running log of every UPR filed in a session — id, persona, screen, severity, status, link to triage outcome. Created/appended during a loop. |
-| [`../testing/ISSUES-REGISTER.md`](../testing/ISSUES-REGISTER.md) | Where triaged **real defects** land as engineering Issues (shared with the rest of the testing programme). UPRs that survive triage are promoted here. |
+| [`.claude/agents/personas/`](../../.claude/agents/personas/) | The **persona team** — one agent file per staff member (`amina-mwanga.md`, `saidi-karume.md`, …) plus the two external parties (`joseph-ulimboka.md`, `mbasha-holdings-ltd.md`). Each is a reusable, in-character operator scoped to its seat, invokable as a subagent by slug. |
+| [`../../e2e/sim/`](../../e2e/sim/) | The **UI-driving harness** (Playwright, no seeding): `sim-data.js` (canon), `sim-lib.js` (login + form helpers + problem capture), `onboard.js` (rootadmin builds the company via the UI), `operate.js` / `run-personas.js` (each persona logs in and works its screens). |
+| [UPR-REGISTER.md](UPR-REGISTER.md) | The log of every **User Problem Report** filed in a run — id, persona, screen, severity, status, linked Issue. (Output) |
+| [ISSUES-REGISTER.md](ISSUES-REGISTER.md) | The **technical team's triage** of those UPRs into reproducible Issues + Fix Plans, grounded in the code. (Output) |
+| [SIM-RUN-REPORT.md](SIM-RUN-REPORT.md) | The end-to-end **run report** — what was built, how it ran, what was found, the systemic finding, how to re-run. |
+| [run-2026-06-28/](run-2026-06-28/) | Raw run evidence: `all-problems.json` (29 captured problems), `onboard-summary.json`. |
 
-> The first three rows under "produced by a run" plus the persona register are the
-> simulation's *inputs*; the UPR register and the issues register are its *outputs*.
-> `COMPANY-SCENARIO.md` and the persona files exist today; the UPR register is created
-> when you first run the loop.
+> The world bible, persona files and harness are the simulation's *inputs*; the UPR
+> register, the issues register and the run report are its *outputs*. The 2026-06-28
+> run is recorded in [SIM-RUN-REPORT.md](SIM-RUN-REPORT.md).
 
 ---
 
@@ -82,9 +84,18 @@ npm install && npm start                                 # web on :4200
 
 Confirm the app answers at **http://localhost:4200** before invoking any persona.
 (Note: port 4200 may host a different project locally — make sure it's *this* ERP.)
-The personas, branches, roles and parties they reference must exist in the DB; provision
-them through the UI per [COMPANY-SCENARIO.md](COMPANY-SCENARIO.md) (users with the right
-`erpRole`, branch assignments, the customers and suppliers, the product catalog).
+
+The personas, branches, roles and parties must exist in the DB — all provisioned **through
+the UI** (no seeding). Fast path: the harness does it.
+
+```bash
+export NODE_PATH=d:/My_Works/ERP/ERPCLEAN2/web/node_modules   # for playwright-core
+node e2e/sim/onboard.js        # rootadmin builds 9 branches, 12 roles+perms, 16 accounts via the UI
+node e2e/sim/run-personas.js   # all 16 personas log in (non-root) and work their screens → all-problems.json
+```
+
+Or provision by hand per [COMPANY-SCENARIO.md](COMPANY-SCENARIO.md) and invoke the persona
+agents directly (next step). Sim login password: `Tembo@2026!`.
 
 ### 2. Invoke a persona (or several)
 
@@ -108,12 +119,13 @@ Append each UPR to the session's **`UPR-REGISTER.md`**.
 
 ### 4. Triage
 
-The technical team works `UPR-REGISTER.md` per [TRIAGE-PROCESS.md](TRIAGE-PROCESS.md):
-reproduce each report, classify it (real defect / works-as-designed / UX trap /
+The technical team works [UPR-REGISTER.md](UPR-REGISTER.md) per
+[TRIAGE-PROCESS.md](TRIAGE-PROCESS.md): reproduce each report **as the reporter's role**
+(never root — root masks RBAC), classify it (real defect / works-as-designed / UX trap /
 permission gap — note the standing traps: phantom permission codes, route-guard ↔
-endpoint parity, error-message hygiene), and promote the real defects into
-[`../testing/ISSUES-REGISTER.md`](../testing/ISSUES-REGISTER.md) with a fix plan. Fixes
-then follow the normal branch → PR → `develop` workflow.
+endpoint parity, error-message hygiene), and promote real defects into
+[ISSUES-REGISTER.md](ISSUES-REGISTER.md) with a fix plan. Fixes then follow the normal
+branch → PR → `develop` workflow.
 
 ### Replaying a persona session through Playwright (optional)
 
