@@ -41,7 +41,7 @@ EndpointAuthorizationTest, PermissionCodesSeededTest, ModuleBoundaryTest, web bu
 | ISSUE-003/005 (`PRODUCT`/`BRANCH.VIEW` → work-orders/BOMs/stock) | Editha, Editrude, Frank, Saidi **BLOCKED** | open | **Fixed** |
 | ISSUE-004 (`BRANCH.VIEW` → POS/stock) | Sabina, Frank, Saidi **BLOCKED** | open | **Fixed** |
 | ISSUE-007 (price-list bare 409) | opaque conflict | friendly message | **Fixed** |
-| ISSUE-008 (no closure guard) | — | `ReferenceDataReadClosureIT` | **Done** |
+| ISSUE-008 (no closure guard) | — | runtime pin `ReferenceDataReadClosureIT` (17/17) **+ systemic guard** `RolePermissionClosureTest` + `screen-read-closure.json` manifest (ADR-0047) | **Done** |
 | ISSUE-006 (PRODUCTION_OFFICER can't *create* product master data) | n/a (was masked) | view OK; create needs `PRODUCT.MANAGE` | **Works-as-designed** (system-analyst 2026-06-28): product master data is a procurement/master-data function; production views+requests, doesn't create — [requirements ruling](../requirements/product-master-data-ownership.md) |
 
 The only residual items in the after re-run are non-blocking and correct-by-design: production officers

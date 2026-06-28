@@ -142,6 +142,13 @@ so a holder reads only their own company's parties regardless of the gate form.
 - Frontend defence-in-depth (carried from F21): a party picker should degrade to a friendly,
   permission-aware empty state on a 403 rather than blanking the whole screen.
 
+## F21/F22 follow-up — Read-closure manifest + CI guard (ADR-0047)
+
+| # | Source | Severity | Finding | Status | Resolution |
+|---|---|---|---|---|---|
+| F21-FU | F21/F22 follow-up | CLOSED | **No build-time assertion that a screen's supporting reads are correctly gated and seeded** (ISSUE-008 residual). Root/ORG_ADMIN always bypassed; CI only checked a gate exists, not that its closure was declared and seeded. | FIXED | ADR-0047: `backend/src/test/resources/security/screen-read-closure.json` (manifest, 9 screens × supporting reads) + `RolePermissionClosureTest` (surefire, no DB) asserts gate-honesty + required-closure-seeded + no-phantom. Completes the four-link parity chain. |
+| F22-FU | F21/F22 follow-up | CLOSED | **The F22 "grant CUSTOMER.VIEW / SUPPLIER.VIEW to cash/AR/AP roles" rule lived only in the findings memo** — no checked artefact kept it honest against future gate relaxation. | FIXED | ADR-0047 manifest pins `CUSTOMER.VIEW` (gate=`has`) on `ar.record-receipt` and `SUPPLIER.VIEW` (gate=`has`) on `ap.record-payment`/`ap.enter-supplier-bill`. If a reviewer relaxes either gate to `hasOrMember`, check (a) in `RolePermissionClosureTest` goes red — the manifest becomes the enforcement anchor. |
+
 ## Production-gating (carried, still OPEN)
 - **G1** (Slice 2): stable RS256 signing key from a secret store — dev key is in-memory (everyone logged out on restart; not prod-safe).
 - **G2** (Slice 2): access-token denylist on logout (access token currently valid until expiry after logout).

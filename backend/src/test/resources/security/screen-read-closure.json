@@ -1,0 +1,197 @@
+{
+  "_adr": "ADR-0047 (docs/decisions/0047-role-permission-read-closure.md)",
+  "_description": "Screen-read closure manifest. Declares, per guarded screen, the supporting reads it fires on load. RolePermissionClosureTest verifies (a) each declared gate matches the live @PreAuthorize, (b) required closure-bearing reads are seeded, (c) no phantom codes. Do NOT edit without running RolePermissionClosureTest.",
+  "_gate_forms": "has | scoped | hasOrMember | scopedOrMember | disjunction. A 'disjunction' row carries code (primary) and altCode (the OR-branch).",
+  "screens": [
+    {
+      "screen": "ar.record-receipt",
+      "reads": [
+        {
+          "controller": "CustomerController",
+          "code": "CUSTOMER.VIEW",
+          "necessity": "required",
+          "gate": "has"
+        },
+        {
+          "controller": "ArReceiptController",
+          "code": "AR.VIEW",
+          "necessity": "required",
+          "gate": "has"
+        },
+        {
+          "controller": "BranchController",
+          "code": "BRANCH.VIEW",
+          "necessity": "required",
+          "gate": "scopedOrMember"
+        },
+        {
+          "controller": "WhtTypeController",
+          "code": "WHT.VIEW",
+          "necessity": "optional",
+          "gate": "hasOrMember"
+        }
+      ]
+    },
+    {
+      "screen": "ap.record-payment",
+      "reads": [
+        {
+          "controller": "SupplierController",
+          "code": "SUPPLIER.VIEW",
+          "necessity": "required",
+          "gate": "has"
+        },
+        {
+          "controller": "ApPaymentController",
+          "code": "AP.VIEW",
+          "necessity": "required",
+          "gate": "has"
+        },
+        {
+          "controller": "BranchController",
+          "code": "BRANCH.VIEW",
+          "necessity": "required",
+          "gate": "scopedOrMember"
+        },
+        {
+          "controller": "WhtTypeController",
+          "code": "WHT.VIEW",
+          "necessity": "optional",
+          "gate": "hasOrMember"
+        }
+      ]
+    },
+    {
+      "screen": "ap.enter-supplier-bill",
+      "reads": [
+        {
+          "controller": "SupplierController",
+          "code": "SUPPLIER.VIEW",
+          "necessity": "required",
+          "gate": "has"
+        },
+        {
+          "controller": "PurchaseOrderController",
+          "code": "PURCHASE.ORDER.VIEW",
+          "necessity": "required",
+          "gate": "disjunction",
+          "altCode": "AP.BILL.ENTER"
+        },
+        {
+          "controller": "ProductController",
+          "code": "PRODUCT.VIEW",
+          "necessity": "required",
+          "gate": "hasOrMember"
+        },
+        {
+          "controller": "BranchController",
+          "code": "BRANCH.VIEW",
+          "necessity": "required",
+          "gate": "scopedOrMember"
+        }
+      ]
+    },
+    {
+      "screen": "manufacturing.work-orders",
+      "reads": [
+        {
+          "controller": "ProductController",
+          "code": "PRODUCT.VIEW",
+          "necessity": "required",
+          "gate": "hasOrMember"
+        },
+        {
+          "controller": "BranchController",
+          "code": "BRANCH.VIEW",
+          "necessity": "required",
+          "gate": "scopedOrMember"
+        }
+      ]
+    },
+    {
+      "screen": "manufacturing.bom",
+      "reads": [
+        {
+          "controller": "ProductController",
+          "code": "PRODUCT.VIEW",
+          "necessity": "required",
+          "gate": "hasOrMember"
+        }
+      ]
+    },
+    {
+      "screen": "stock.transfer",
+      "reads": [
+        {
+          "controller": "ProductController",
+          "code": "PRODUCT.VIEW",
+          "necessity": "required",
+          "gate": "hasOrMember"
+        },
+        {
+          "controller": "BranchController",
+          "code": "BRANCH.VIEW",
+          "necessity": "required",
+          "gate": "scopedOrMember"
+        }
+      ]
+    },
+    {
+      "screen": "stock.on-hand",
+      "reads": [
+        {
+          "controller": "BranchController",
+          "code": "BRANCH.VIEW",
+          "necessity": "required",
+          "gate": "scopedOrMember"
+        },
+        {
+          "controller": "ProductController",
+          "code": "PRODUCT.VIEW",
+          "necessity": "required",
+          "gate": "hasOrMember"
+        }
+      ]
+    },
+    {
+      "screen": "stock.count",
+      "reads": [
+        {
+          "controller": "BranchController",
+          "code": "BRANCH.VIEW",
+          "necessity": "required",
+          "gate": "scopedOrMember"
+        },
+        {
+          "controller": "ProductController",
+          "code": "PRODUCT.VIEW",
+          "necessity": "required",
+          "gate": "hasOrMember"
+        }
+      ]
+    },
+    {
+      "screen": "pos.sell",
+      "reads": [
+        {
+          "controller": "BranchController",
+          "code": "BRANCH.VIEW",
+          "necessity": "required",
+          "gate": "scopedOrMember"
+        },
+        {
+          "controller": "ProductController",
+          "code": "PRODUCT.VIEW",
+          "necessity": "required",
+          "gate": "hasOrMember"
+        },
+        {
+          "controller": "CustomerController",
+          "code": "CUSTOMER.VIEW",
+          "necessity": "optional",
+          "gate": "has"
+        }
+      ]
+    }
+  ]
+}
