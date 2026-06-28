@@ -120,7 +120,13 @@ transactional work** (`DEEP=1`). Evidence: [run-2026-06-28/deep-run.json](run-20
   over the reads its screens fire, so each composition gap ships invisibly until a non-root user hits
   it. The durable fix is that guard/tooling, not whack-a-mole grants.
 
+**Full order-to-cash, UI-only (closed):** the sales-order line gap was a data mismatch (the driver
+searched an unregistered product), not a product defect. Once corrected, the line is correctly stopped
+by a friendly, working-as-designed 400 — *"Product has no price configured for this company."* — the
+real upstream prerequisite. With a persona doing that step in the UI too (procurement prices the product
+on the product-detail **Set price** form, `PRODUCT.MANAGE`), the chain completes end to end:
+**register product → price it → create customer → sales order → priced line** — every step typed into
+the UI. Verified: Yusuf `price product`, Sabina `create SO + line`.
+
 **Residual (non-blocking, correct-by-design):** duplicate "RETAIL price list" and duplicate "Cement"
-opening balance both now surface a **friendly 409 message** (working-as-designed duplicate data). One
-**harness** gap remains: the sales-order line picker on the SO *detail* page wasn't driven (the PO
-equivalent works) — a driver-selector follow-up, not a product defect.
+opening balance both surface a **friendly 409 message** (working-as-designed duplicate data).

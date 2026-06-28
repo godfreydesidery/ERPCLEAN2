@@ -188,6 +188,34 @@ async function runDeep(page, buf, rec) {
     }
   }
 
+  // PROCUREMENT (master-data, PRODUCT.MANAGE): price a product into the RETAIL list so it is sellable.
+  // A sales order cannot add a line for an unpriced product ("Product has no price configured") — this
+  // is the order-to-cash prerequisite a normal user enters in the UI.
+  if (persona.role === 'PROCUREMENT_OFFICER') {
+    const wf = 'price a product for sale', screen = '/admin/products';
+    await L.goto(page, screen);
+    try {
+      const row = page.locator('tr', { hasText: 'Cement' }).first();
+      const link = row.locator('a[href*="/admin/products/uid/"]').first();
+      if (!(await link.count())) rec.problem('SLOW', wf, screen, 'could not find the Cement product to price it', buf.snapshot());
+      else {
+        await link.click(); await page.waitForTimeout(1200);
+        buf.clear();
+        if (!(await page.locator('#newPriceList').first().count())) rec.problem('SLOW', wf, '/admin/products/uid', 'no Set-price form (pricing needs PRODUCT.MANAGE)', buf.snapshot());
+        else {
+          if (!(await L.pickByLabel(page, '#newPriceList', 'RETAIL'))) await L.pickFirstReal(page, '#newPriceList');
+          await L.setField(page, '#newPriceAmount', '18000').catch(() => {});
+          if (!(await L.clickButton(page, /set price|save price|add price/i))) await L.submitByEnter(page, '#newPriceAmount');
+          await page.waitForTimeout(1000);
+          const s = buf.snapshot();
+          if (s.api.some(a => a.status >= 500)) rec.problem('BLOCKED', wf, '/admin/products/uid', 'server error setting the price', s);
+          else if (worst(s) && worst(s).status !== 409) rec.problem('SLOW', wf, '/admin/products/uid', `could not set the price (${worst(s).status})`, s);
+          else rec.ok('price product');
+        }
+      }
+    } catch (e) { rec.problem('SLOW', wf, screen, `pricing product: ${String(e.message || e).slice(0, 90)}`, buf.snapshot()); }
+  }
+
   // SALES: create a sales order for Kariakoo -> add a line
   if (persona.role === 'SALES_OFFICER') {
     const wf = 'create a sales order', screen = '/admin/sales-orders';
@@ -211,11 +239,13 @@ async function runDeep(page, buf, rec) {
             const link = page.locator('a[href*="/admin/sales-orders/uid/"]').first();
             if (await link.count()) { await link.click(); await page.waitForTimeout(1300); }
             buf.clear();
-            const prod = await L.searchPick(page, '#lineProductSearch', 'Sugar');
+            // search a product procurement actually registered (the first sourced products are created)
+            const prod = await L.searchPick(page, '#lineProductSearch', 'Cement');
             if (!prod) rec.problem('SLOW', wf, '/admin/sales-orders/uid', 'could not pick a product for the SO line', buf.snapshot());
             else {
               await L.pickFirstReal(page, '#lineUnit').catch(() => {});
               await L.setField(page, '#lineQty', '20').catch(() => {});
+              await L.setField(page, '#lineUnitPrice', '18000').catch(() => {}); // Cement has no price-list default; supply a selling price
               await L.clickButton(page, /add line/i);
               await page.waitForTimeout(1000);
               const s2 = buf.snapshot();
