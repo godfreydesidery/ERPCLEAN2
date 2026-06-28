@@ -151,6 +151,38 @@ async function runDeep(page, buf, rec) {
     }
   }
 
+  // ACCOUNTANT: enter a supplier bill (AP) against Mbasha — the daily payables intake
+  if (persona.role === 'ACCOUNTANT') {
+    const wf = 'enter a supplier bill', screen = '/admin/ap/supplier-bills/enter';
+    await L.goto(page, screen);
+    if (await L.looksForbidden(page, buf)) { rec.problem('BLOCKED', wf, screen, 'not allowed to open Enter Supplier Bill', buf.snapshot()); }
+    else {
+      try {
+        buf.clear();
+        const sup = await L.searchPick(page, '#supplierSearch', 'Mbasha');
+        await L.setField(page, '#supplierInvoiceNo', 'BILL-' + Date.now());
+        await L.setField(page, '#billDate', today).catch(() => {});
+        await L.setField(page, '#dueDate', today).catch(() => {});
+        if (!sup) rec.problem('SLOW', wf, screen, 'could not pick supplier Mbasha Holdings on the bill', buf.snapshot());
+        else {
+          await L.clickButton(page, /add line/i);
+          await page.waitForTimeout(500);
+          await L.setField(page, '#desc_0', 'Cement supply').catch(() => {});
+          await L.setField(page, '#qty_0', '10').catch(() => {});
+          await L.setField(page, '#cost_0', '15000').catch(() => {});
+          await page.waitForTimeout(400);
+          buf.clear();
+          await L.clickButton(page, /enter bill/i);
+          await page.waitForTimeout(1600);
+          const s = buf.snapshot();
+          if (s.api.some(a => a.status >= 500)) rec.problem('BLOCKED', wf, screen, 'server error entering the supplier bill', s);
+          else if (worst(s)) rec.problem('SLOW', wf, screen, `supplier bill rejected (${worst(s).status})`, s);
+          else rec.ok('enter supplier bill');
+        }
+      } catch (e) { rec.problem('SLOW', wf, screen, `entering bill: ${String(e.message || e).slice(0, 90)}`, buf.snapshot()); }
+    }
+  }
+
   // PROCUREMENT: raise a PO to Mbasha Holdings -> add a line -> place
   if (persona.role === 'PROCUREMENT_OFFICER') {
     const wf = 'raise a purchase order', screen = '/admin/purchase-orders';
@@ -299,6 +331,39 @@ async function runDeep(page, buf, rec) {
           }
         }
       } catch (e) { rec.problem('SLOW', wf, screen, `opening balance: ${String(e.message || e).slice(0, 90)}`, buf.snapshot()); }
+    }
+  }
+
+  // PRODUCTION: release a work order — the core daily factory operation
+  if (persona.role === 'PRODUCTION_OFFICER') {
+    const wf = 'release a work order', screen = '/admin/work-orders';
+    await L.goto(page, screen);
+    if (await L.looksForbidden(page, buf)) { rec.problem('BLOCKED', wf, screen, 'not allowed to open Work Orders', buf.snapshot()); }
+    else {
+      try {
+        await L.pickFirstReal(page, '#companyPicker').catch(() => {}); // list/form prereq: a company in context
+        await page.waitForTimeout(400);
+        await L.clickButton(page, /new work order/i);
+        await page.locator('#newPlannedQty').waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+        buf.clear();
+        const selects = page.locator('#createWorkOrderForm select');
+        const ns = await selects.count();
+        if (ns >= 1) await selects.nth(0).selectOption({ index: 1 }).catch(() => {}); // finished product to build
+        await L.setField(page, '#newPlannedQty', '100').catch(() => {});
+        if (ns >= 2) await selects.nth(1).selectOption({ index: 1 }).catch(() => {}); // branch
+        await L.setField(page, '#newPlannedDate', today).catch(() => {});
+        const prodVal = ns >= 1 ? (await selects.nth(0).inputValue().catch(() => '')) : '';
+        if (!prodVal) rec.problem('SLOW', wf, screen, 'no manufactured product available to build (product picker empty)', buf.snapshot());
+        else {
+          buf.clear();
+          await L.clickButton(page, /create work order/i);
+          await page.waitForTimeout(1600);
+          const s = buf.snapshot();
+          if (s.api.some(a => a.status >= 500)) rec.problem('BLOCKED', wf, screen, 'server error creating the work order', s);
+          else if (worst(s)) rec.problem('SLOW', wf, screen, `work order rejected (${worst(s).status})`, s);
+          else rec.ok('release work order');
+        }
+      } catch (e) { rec.problem('SLOW', wf, screen, `releasing work order: ${String(e.message || e).slice(0, 90)}`, buf.snapshot()); }
     }
   }
 
