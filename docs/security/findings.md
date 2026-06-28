@@ -180,6 +180,26 @@ so the closure is complete and a re-run cannot peel to a next 403. No disclosure
 - Whether STOREKEEPER should additionally hold a standalone PURCHASE.ORDER.VIEW as a role-spec matter
   (vs. relying on the read-floor) is a role-composition question for system-analyst — out of scope.
 
+## F24 — Systemic error-message hygiene: user-facing validation messages leak internal references
+
+Found by the daily-operations simulation (Bakari/the approval flow): submitting a below-threshold PO for
+approval returns a 409 whose message — surfaced verbatim to the user in `ApiResponse.errors[]` — reads
+*"PO does not require approval (below threshold or gate disabled, **ADR-0027 D-6**). Place it directly via
+**/place**."* It leaks an internal ADR reference **and** an internal endpoint path to the end user.
+
+A backend scan shows this is **systemic, not a one-off**: ~168 user-facing validation/exception messages
+across **78 files** embed internal references — `BR-…`, `ADR-…`, `FR-…`, `D-n` rule codes (tax, budgeting,
+costing, sales, cash/bank, GL, AR/AP, …), and some additionally concatenate ULIDs/`uid`s, permission codes,
+or endpoint paths into the user message. This violates the **error-message-hygiene standing rule** (owner,
+2026-06-22): user-facing errors must be friendly and expose **no** system/internal info (no ULIDs, field
+names, BR-/ADR- codes, exception text); technical detail belongs in **logs/comments only**. Confirmed
+reaching users (the live 409 returned the ADR code in `errors[]`). Log statements (`log.*`) and code
+comments are exempt and stay as-is.
+
+| ID | Source | Severity | Issue | Status | Fix |
+|----|--------|----------|-------|--------|-----|
+| F24 | sim 2026-06-28 (approvals) | MEDIUM (UX + information hygiene; no auth/tenant impact) | ~168 user-facing validation/exception messages across 78 files leak internal rule codes (BR-/ADR-/FR-/D-n), and some leak ULIDs / permission codes / endpoint paths, into `ApiResponse.errors[]`. The business meaning is fine; the internal tags are not user-safe. | IN PROGRESS (technical team) | Rewrite each **user-facing** message in plain, calm language that states the rule without the internal tag/ULID/perm-code/endpoint; keep the rule code in a `//` comment if useful (comments are not user-facing); leave `log.*` untouched; update any test asserting a removed substring. |
+
 ## Production-gating (carried, still OPEN)
 - **G1** (Slice 2): stable RS256 signing key from a secret store — dev key is in-memory (everyone logged out on restart; not prod-safe).
 - **G2** (Slice 2): access-token denylist on logout (access token currently valid until expiry after logout).
