@@ -243,6 +243,22 @@ async function scanVisibleIds(page) {
         const v = ((el.value != null ? el.value : el.textContent) || '').trim();
         if (/^[0-9A-HJKMNP-TV-Z]{26}$/i.test(v)) hits.add(v);
       });
+      // A bare NUMERIC foreign-key id shown where an ENTITY NAME belongs (e.g. a "Product" column showing
+      // "4217" instead of the product name/code — the stock-on-hand class). Only entity-name columns are
+      // checked (they must show names, not numbers), so a legitimate numeric column isn't flagged.
+      const NAME_COL = /\b(product|item|customer|supplier|party|employee|manufacturer|brand|vendor|account name)\b/;
+      document.querySelectorAll('table').forEach(tbl => {
+        const heads = [...tbl.querySelectorAll('thead th')].map(th => (th.innerText || '').toLowerCase());
+        const cols = heads.map((h, i) => (NAME_COL.test(h) ? i : -1)).filter(i => i >= 0);
+        if (!cols.length) return;
+        tbl.querySelectorAll('tbody tr').forEach(tr => {
+          const cells = tr.children;
+          cols.forEach(ci => {
+            const t = ((cells[ci] || {}).innerText || '').trim();
+            if (/^\d{1,9}$/.test(t)) hits.add('id-not-name:' + t); // a bare integer in a name column = leaked FK id
+          });
+        });
+      });
       const arr = [...hits];
       let snippet = '';
       if (arr[0]) { const i = text.indexOf(arr[0]); snippet = text.slice(Math.max(0, i - 35), i + 40).replace(/\s+/g, ' ').trim(); }
