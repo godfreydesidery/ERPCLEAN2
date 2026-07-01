@@ -122,6 +122,19 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./products/product-detail.component').then((m) => m.ProductDetailComponent),
   },
+  // Product Master — full-wizard create + edit form.
+  {
+    path: 'products/master',
+    canActivate: [requirePermission('PRODUCT.MANAGE')],
+    loadComponent: () =>
+      import('./products/product-master.component').then((m) => m.ProductMasterComponent),
+  },
+  {
+    path: 'products/master/uid/:uid',
+    canActivate: [requirePermission('PRODUCT.MANAGE')],
+    loadComponent: () =>
+      import('./products/product-master.component').then((m) => m.ProductMasterComponent),
+  },
   {
     path: 'price-lists',
     canActivate: [requirePermission('PRICELIST.VIEW')],
