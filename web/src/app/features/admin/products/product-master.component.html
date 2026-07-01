@@ -1,0 +1,892 @@
+<section class="admin-page">
+
+  <!-- Page header -->
+  <div class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>
+        <i class="bi bi-box-seam me-2" aria-hidden="true"></i>
+        {{ isEdit() ? 'Edit Product' : 'New Product' }}
+      </h1>
+      <p class="subtitle">
+        {{ isEdit() ? 'Update product details across all sections.' : 'Set up a product with pricing, stock and branch availability.' }}
+      </p>
+    </div>
+    <div class="erp-page-head__actions">
+      <a routerLink="/admin/products" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Products
+      </a>
+    </div>
+  </div>
+
+  <!-- Company selector (create only — immutable after create) -->
+  @if (!isEdit()) {
+    @switch (companyState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-3" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load companies.
+        </p>
+      }
+      @default {
+        @if (companies().length > 1) {
+          <div class="mb-3" style="max-width:340px">
+            <label class="form-label small text-muted mb-1" for="masterCompanyPicker">Company</label>
+            <select id="masterCompanyPicker" name="masterCompanyPicker" class="form-select"
+                    [ngModel]="selectedCompanyId()" (ngModelChange)="onCompanyChange($event)"
+                    [disabled]="saving()">
+              @for (c of companies(); track c.uid) {
+                <option [value]="c.id">{{ c.name }}</option>
+              }
+            </select>
+          </div>
+        }
+      }
+    }
+  } @else {
+    <!-- Edit mode: show product load state -->
+    @if (productLoadState() === 'loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading product…
+      </p>
+    }
+    @if (productLoadState() === 'error') {
+      <p class="text-danger mb-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load product.
+      </p>
+    }
+  }
+
+  <!-- Permission guard -->
+  @if (!canManage()) {
+    <div class="alert alert-warning" role="alert">
+      <i class="bi bi-shield-lock me-2" aria-hidden="true"></i>
+      You do not have permission to manage products.
+    </div>
+  } @else if (selectedCompanyId() || isEdit()) {
+
+    <!-- Tab nav -->
+    <ul class="nav nav-tabs mb-3" role="tablist" aria-label="Product sections">
+      <li class="nav-item" role="none">
+        <button type="button" class="nav-link" role="tab"
+                [class.active]="activeTab() === 'general'"
+                [attr.aria-selected]="activeTab() === 'general'"
+                id="tab-general" aria-controls="panel-general"
+                (click)="setTab('general')">
+          <i class="bi bi-info-circle me-1" aria-hidden="true"></i>General
+        </button>
+      </li>
+      <li class="nav-item" role="none">
+        <button type="button" class="nav-link" role="tab"
+                [class.active]="activeTab() === 'pricing'"
+                [attr.aria-selected]="activeTab() === 'pricing'"
+                id="tab-pricing" aria-controls="panel-pricing"
+                (click)="setTab('pricing')">
+          <i class="bi bi-currency-dollar me-1" aria-hidden="true"></i>Pricing
+        </button>
+      </li>
+      <li class="nav-item" role="none">
+        <button type="button" class="nav-link" role="tab"
+                [class.active]="activeTab() === 'supplier'"
+                [attr.aria-selected]="activeTab() === 'supplier'"
+                id="tab-supplier" aria-controls="panel-supplier"
+                (click)="setTab('supplier')">
+          <i class="bi bi-truck me-1" aria-hidden="true"></i>Supplier &amp; UoM
+        </button>
+      </li>
+      <li class="nav-item" role="none">
+        <button type="button" class="nav-link" role="tab"
+                [class.active]="activeTab() === 'stock'"
+                [attr.aria-selected]="activeTab() === 'stock'"
+                id="tab-stock" aria-controls="panel-stock"
+                (click)="setTab('stock')">
+          <i class="bi bi-upc-scan me-1" aria-hidden="true"></i>Stock &amp; Barcodes
+        </button>
+      </li>
+      <li class="nav-item" role="none">
+        <button type="button" class="nav-link" role="tab"
+                [class.active]="activeTab() === 'branches'"
+                [attr.aria-selected]="activeTab() === 'branches'"
+                id="tab-branches" aria-controls="panel-branches"
+                (click)="setTab('branches')">
+          <i class="bi bi-diagram-3 me-1" aria-hidden="true"></i>Branches
+        </button>
+      </li>
+    </ul>
+
+    <!-- ── Tab 1: General ──────────────────────────────────────────────── -->
+    <div id="panel-general" role="tabpanel" aria-labelledby="tab-general"
+         [hidden]="activeTab() !== 'general'">
+      <div class="erp-card">
+        <div class="erp-card__head"><h2>General (Identity)</h2></div>
+        <div class="erp-card__body">
+          <div class="row g-3">
+
+            <!-- Code -->
+            <div class="col-sm-3">
+              <label class="form-label" for="masterCode">Code</label>
+              <input id="masterCode" name="masterCode" type="text" class="form-control"
+                     placeholder="auto (PROD-####)"
+                     [ngModel]="fCode()" (ngModelChange)="fCode.set($event)"
+                     [disabled]="saving() || isEdit()"
+                     aria-describedby="masterCodeHelp" autocomplete="off" />
+              <div id="masterCodeHelp" class="form-text">Blank = PROD-####. Not editable after create.</div>
+            </div>
+
+            <!-- Name (required) -->
+            <div class="col-sm-5">
+              <label class="form-label" for="masterName">
+                Name <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="masterName" name="masterName" type="text" class="form-control"
+                     required
+                     [ngModel]="fName()" (ngModelChange)="fName.set($event)"
+                     [disabled]="saving()" autocomplete="off" />
+            </div>
+
+            <!-- Type -->
+            <div class="col-sm-2">
+              <label class="form-label" for="masterType">Type</label>
+              <select id="masterType" name="masterType" class="form-select"
+                      [ngModel]="fType()" (ngModelChange)="onTypeChange($event)"
+                      [disabled]="saving()">
+                <option value="GOODS">Goods</option>
+                <option value="SERVICE">Service</option>
+              </select>
+            </div>
+
+            <!-- VAT Status -->
+            <div class="col-sm-2">
+              <label class="form-label" for="masterVatStatus">VAT Status</label>
+              <select id="masterVatStatus" name="masterVatStatus" class="form-select"
+                      [ngModel]="fVatStatus()" (ngModelChange)="fVatStatus.set($event)"
+                      [disabled]="saving()">
+                <option value="STANDARD">Standard</option>
+                <option value="ZERO_RATED">Zero Rated</option>
+                <option value="EXEMPT">Exempt</option>
+              </select>
+            </div>
+
+            <!-- Description -->
+            <div class="col-sm-8">
+              <label class="form-label" for="masterDescription">Description</label>
+              <textarea id="masterDescription" name="masterDescription" class="form-control"
+                        rows="2"
+                        [ngModel]="fDescription()" (ngModelChange)="fDescription.set($event)"
+                        [disabled]="saving()"></textarea>
+            </div>
+
+            <!-- Department / Category -->
+            <div class="col-sm-4">
+              <label class="form-label" for="masterCategory">Department / Category</label>
+              <input id="masterCategory" name="masterCategory" type="text" class="form-control"
+                     placeholder="Free text — no FK"
+                     [ngModel]="fCategory()" (ngModelChange)="fCategory.set($event)"
+                     [disabled]="saving()" autocomplete="off" />
+              <div class="form-text">Free-text label; not linked to HR departments.</div>
+            </div>
+
+            <!-- Brand -->
+            <div class="col-sm-3">
+              <label class="form-label" for="masterBrand">Brand / Trade name</label>
+              <input id="masterBrand" name="masterBrand" type="text" class="form-control"
+                     [ngModel]="fBrand()" (ngModelChange)="fBrand.set($event)"
+                     [disabled]="saving()" autocomplete="off" />
+            </div>
+
+            <!-- Manufacturer -->
+            <div class="col-sm-3">
+              <label class="form-label" for="masterManufacturer">Manufacturer</label>
+              <input id="masterManufacturer" name="masterManufacturer" type="text" class="form-control"
+                     [ngModel]="fManufacturer()" (ngModelChange)="fManufacturer.set($event)"
+                     [disabled]="saving()" autocomplete="off" />
+            </div>
+
+            <!-- HS Code -->
+            <div class="col-sm-3">
+              <label class="form-label" for="masterHsCode">HS Code</label>
+              <input id="masterHsCode" name="masterHsCode" type="text" class="form-control"
+                     [ngModel]="fHsCode()" (ngModelChange)="fHsCode.set($event)"
+                     [disabled]="saving()" autocomplete="off" />
+            </div>
+
+            <!-- Image URL -->
+            <div class="col-sm-3">
+              <label class="form-label" for="masterImageUrl">Image URL</label>
+              <input id="masterImageUrl" name="masterImageUrl" type="url" class="form-control"
+                     placeholder="https://…"
+                     [ngModel]="fImageUrl()" (ngModelChange)="fImageUrl.set($event)"
+                     [disabled]="saving()" autocomplete="off" />
+            </div>
+
+            <!-- Flags: Sellable / Stockable / Purchasable -->
+            <div class="col-sm-4">
+              <fieldset>
+                <legend class="form-label">Flags</legend>
+                <div class="form-check">
+                  <input id="masterSellable" name="masterSellable" type="checkbox" class="form-check-input"
+                         [ngModel]="fSellable()" (ngModelChange)="fSellable.set($event)"
+                         [disabled]="saving()" />
+                  <label class="form-check-label" for="masterSellable">Sellable</label>
+                </div>
+                <div class="form-check">
+                  <input id="masterStockable" name="masterStockable" type="checkbox" class="form-check-input"
+                         [ngModel]="fStockable()" (ngModelChange)="fStockable.set($event)"
+                         [disabled]="saving() || stockableDisabled()"
+                         [attr.aria-disabled]="stockableDisabled() || null" />
+                  <label class="form-check-label" for="masterStockable">
+                    Stockable
+                    @if (stockableDisabled()) {
+                      <span class="text-muted small"> (N/A for service)</span>
+                    }
+                  </label>
+                </div>
+                <div class="form-check">
+                  <input id="masterPurchasable" name="masterPurchasable" type="checkbox" class="form-check-input"
+                         [ngModel]="fPurchasable()" (ngModelChange)="fPurchasable.set($event)"
+                         [disabled]="saving()" />
+                  <label class="form-check-label" for="masterPurchasable">Purchasable</label>
+                </div>
+              </fieldset>
+            </div>
+
+            <!-- Tracking flags (stockable only) -->
+            <div class="col-sm-4">
+              <fieldset [disabled]="stockableDisabled()">
+                <legend class="form-label">Tracking <span class="text-muted small">(stockable only)</span></legend>
+                <div class="form-check">
+                  <input id="masterLotTracked" name="masterLotTracked" type="checkbox" class="form-check-input"
+                         [ngModel]="fLotTracked()" (ngModelChange)="fLotTracked.set($event)"
+                         [disabled]="saving() || stockableDisabled()" />
+                  <label class="form-check-label" for="masterLotTracked">Lot tracked</label>
+                </div>
+                <div class="form-check">
+                  <input id="masterSerialTracked" name="masterSerialTracked" type="checkbox" class="form-check-input"
+                         [ngModel]="fSerialTracked()" (ngModelChange)="fSerialTracked.set($event)"
+                         [disabled]="saving() || stockableDisabled()" />
+                  <label class="form-check-label" for="masterSerialTracked">Serial tracked</label>
+                </div>
+                <div class="form-check">
+                  <input id="masterExpiryTracked" name="masterExpiryTracked" type="checkbox" class="form-check-input"
+                         [ngModel]="fExpiryTracked()" (ngModelChange)="fExpiryTracked.set($event)"
+                         [disabled]="saving() || stockableDisabled()" />
+                  <label class="form-check-label" for="masterExpiryTracked">Expiry tracked</label>
+                </div>
+              </fieldset>
+            </div>
+
+            <!-- Notes -->
+            <div class="col-sm-12">
+              <label class="form-label" for="masterNotes">Internal Notes</label>
+              <textarea id="masterNotes" name="masterNotes" class="form-control" rows="2"
+                        [ngModel]="fNotes()" (ngModelChange)="fNotes.set($event)"
+                        [disabled]="saving()"></textarea>
+            </div>
+
+          </div><!-- row -->
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Tab 2: Pricing ───────────────────────────────────────────────── -->
+    <div id="panel-pricing" role="tabpanel" aria-labelledby="tab-pricing"
+         [hidden]="activeTab() !== 'pricing'">
+      <div class="erp-card">
+        <div class="erp-card__head"><h2>Pricing</h2></div>
+        <div class="erp-card__body">
+
+          <!-- Cost (buying) price -->
+          <fieldset class="mb-4">
+            <legend class="form-label fw-semibold">Cost (buying) price</legend>
+            <div class="row g-3">
+              <div class="col-sm-4">
+                <label class="form-label" for="masterCostAmount">Amount</label>
+                <input id="masterCostAmount" name="masterCostAmount" type="text" class="form-control"
+                       placeholder="e.g. 1000.00"
+                       [ngModel]="fCostAmount()" (ngModelChange)="fCostAmount.set($event)"
+                       [disabled]="saving()" autocomplete="off" />
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label" for="masterCostCurrency">Currency</label>
+                <app-currency-select id="masterCostCurrency" name="masterCostCurrency"
+                                     [(ngModel)]="fCostCurrency"
+                                     [companyUid]="selectedCompanyUid()"
+                                     [disabled]="saving()" />
+              </div>
+            </div>
+          </fieldset>
+
+          <!-- Selling price rows -->
+          <div class="mb-2 d-flex align-items-center justify-content-between">
+            <span class="fw-semibold">Selling prices</span>
+            <button type="button" class="btn btn-sm btn-outline-secondary"
+                    (click)="addPriceRow()" [disabled]="saving()">
+              <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add price list
+            </button>
+          </div>
+
+          @if (priceListsState() === 'loading') {
+            <p class="text-muted small" aria-live="polite">
+              <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Loading price lists…
+            </p>
+          } @else if (priceLists().length === 0) {
+            <p class="text-muted small">
+              No active price lists.
+              <a routerLink="/admin/price-lists">Create one first</a>
+            </p>
+          } @else {
+            @for (row of priceRows(); track trackByIdx($index); let i = $index) {
+              <div class="row g-2 align-items-end mb-2">
+                <div class="col-sm-3">
+                  <label [for]="'priceList_' + i" class="form-label small">Price list</label>
+                  <select [id]="'priceList_' + i" [name]="'priceList_' + i" class="form-select form-select-sm"
+                          [ngModel]="row.priceListUid"
+                          (ngModelChange)="updatePriceRow(i, { priceListUid: $event })"
+                          [disabled]="saving()">
+                    <option value="">— select —</option>
+                    @for (pl of priceLists(); track pl.uid) {
+                      <option [value]="pl.uid">{{ pl.code }} — {{ pl.name }}</option>
+                    }
+                  </select>
+                </div>
+                <div class="col-sm-3">
+                  <label [for]="'priceAmt_' + i" class="form-label small">Amount</label>
+                  <input [id]="'priceAmt_' + i" [name]="'priceAmt_' + i" type="text"
+                         class="form-control form-control-sm" placeholder="e.g. 1500.00"
+                         [ngModel]="row.amount"
+                         (ngModelChange)="updatePriceRow(i, { amount: $event })"
+                         [disabled]="saving()" autocomplete="off" />
+                </div>
+                <div class="col-sm-2">
+                  <label [for]="'priceCurr_' + i" class="form-label small">Currency</label>
+                  <app-currency-select [id]="'priceCurr_' + i" [name]="'priceCurr_' + i"
+                                       [ngModel]="row.currency"
+                                       (ngModelChange)="updatePriceRow(i, { currency: $event })"
+                                       [companyUid]="selectedCompanyUid()"
+                                       [disabled]="saving()" />
+                </div>
+                <div class="col-sm-2">
+                  <label [for]="'priceFrom_' + i" class="form-label small">Effective from</label>
+                  <input [id]="'priceFrom_' + i" [name]="'priceFrom_' + i" type="date"
+                         class="form-control form-control-sm"
+                         [ngModel]="row.effectiveFrom"
+                         (ngModelChange)="updatePriceRow(i, { effectiveFrom: $event })"
+                         [disabled]="saving()" />
+                </div>
+                <div class="col-sm-2 d-flex align-items-end">
+                  <button type="button" class="btn btn-sm btn-outline-danger"
+                          (click)="removePriceRow(i)" [disabled]="saving()"
+                          [attr.aria-label]="'Remove price row ' + (i + 1)">
+                    <i class="bi bi-trash" aria-hidden="true"></i>
+                  </button>
+                </div>
+              </div>
+            }
+          }
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Tab 3: Supplier & UoM ───────────────────────────────────────── -->
+    <div id="panel-supplier" role="tabpanel" aria-labelledby="tab-supplier"
+         [hidden]="activeTab() !== 'supplier'">
+      <div class="erp-card">
+        <div class="erp-card__head"><h2>Supplier &amp; Unit of Measure</h2></div>
+        <div class="erp-card__body">
+
+          <!-- Base unit (required) -->
+          <div class="row g-3 mb-4">
+            <div class="col-sm-4">
+              <label class="form-label" for="masterBaseUnit">
+                Base unit of measure <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              @if (unitsState() === 'loading') {
+                <div class="form-control d-flex align-items-center gap-2 text-muted small">
+                  <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+                </div>
+              } @else if (companyUnits().length === 0) {
+                <p class="text-muted small mb-0 mt-1">
+                  No units yet. <a routerLink="/admin/units">Create units first</a>
+                </p>
+              } @else {
+                <select id="masterBaseUnit" name="masterBaseUnit" class="form-select"
+                        required
+                        [ngModel]="fBaseUnitUid()" (ngModelChange)="fBaseUnitUid.set($event)"
+                        [disabled]="saving()">
+                  <option value="">— select unit —</option>
+                  @for (u of companyUnits(); track u.uid) {
+                    <option [value]="u.uid">{{ u.code }} — {{ u.name }}</option>
+                  }
+                </select>
+              }
+            </div>
+          </div>
+
+          <!-- Pack / bulk units -->
+          <div class="mb-2 d-flex align-items-center justify-content-between">
+            <span class="fw-semibold">Pack / bulk units</span>
+          </div>
+          <div class="row g-2 align-items-end mb-2">
+            <div class="col-sm-3">
+              <label class="form-label small" for="masterNewPackUnit">Unit</label>
+              <select id="masterNewPackUnit" name="masterNewPackUnit" class="form-select form-select-sm"
+                      [ngModel]="newBulkPackUnitUid()" (ngModelChange)="newBulkPackUnitUid.set($event)"
+                      [disabled]="saving()">
+                <option value="">— select unit —</option>
+                @for (u of companyUnits(); track u.uid) {
+                  <option [value]="u.uid">{{ u.code }} — {{ u.name }}</option>
+                }
+              </select>
+            </div>
+            <div class="col-sm-2">
+              <label class="form-label small" for="masterNewPackFactor">Factor to base</label>
+              <input id="masterNewPackFactor" name="masterNewPackFactor" type="text"
+                     class="form-control form-control-sm" placeholder="e.g. 12"
+                     [ngModel]="newBulkPackFactor()" (ngModelChange)="newBulkPackFactor.set($event)"
+                     [disabled]="saving()" autocomplete="off" />
+            </div>
+            <div class="col-sm-2 d-flex align-items-end">
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      (click)="addBulkPackRow()" [disabled]="saving()">
+                <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add
+              </button>
+            </div>
+          </div>
+          @if (bulkPackRows().length > 0) {
+            <div class="erp-table-wrap mb-4">
+              <table class="erp-table">
+                <caption class="sr-only">Pack unit rows</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Unit</th>
+                    <th scope="col">Factor to base</th>
+                    <th scope="col"><span class="sr-only">Remove</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of bulkPackRows(); track trackByLocalId($index, row)) {
+                    <tr>
+                      <td>{{ unitLabel(row.unitUid) }}</td>
+                      <td>{{ row.factorToBase }}</td>
+                      <td>
+                        <button type="button" class="btn btn-sm btn-outline-danger"
+                                (click)="removeBulkPackRow(row.localId)"
+                                [disabled]="saving()"
+                                [attr.aria-label]="'Remove pack unit ' + unitLabel(row.unitUid)">
+                          <i class="bi bi-trash" aria-hidden="true"></i>
+                        </button>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+
+          <!-- Preferred supplier -->
+          <div class="mb-4">
+            <span class="form-label fw-semibold d-block">Preferred supplier</span>
+            @if (selectedSupplier()) {
+              <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-secondary">{{ selectedSupplier()!.displayName }}</span>
+                <button type="button" class="btn btn-sm btn-outline-secondary" (click)="clearSupplier()"
+                        [disabled]="saving()" aria-label="Clear supplier">
+                  <i class="bi bi-x" aria-hidden="true"></i>
+                </button>
+              </div>
+            } @else {
+              <div class="row g-2 align-items-end mt-1">
+                <div class="col-sm-4">
+                  <label class="form-label small" for="masterSupplierSearch">Search suppliers</label>
+                  <input id="masterSupplierSearch" name="masterSupplierSearch" type="search"
+                         class="form-control form-control-sm"
+                         placeholder="Name…"
+                         [ngModel]="supplierSearchQ()" (ngModelChange)="supplierSearchQ.set($event)"
+                         [disabled]="saving()" autocomplete="off" />
+                </div>
+                <div class="col-sm-2 d-flex align-items-end">
+                  <button type="button" class="btn btn-sm btn-outline-secondary"
+                          (click)="searchSuppliers()"
+                          [disabled]="saving() || supplierSearchState() === 'loading'"
+                          aria-label="Search">
+                    @if (supplierSearchState() === 'loading') {
+                      <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                    } @else {
+                      <i class="bi bi-search" aria-hidden="true"></i>
+                    }
+                  </button>
+                </div>
+              </div>
+              @if (supplierResults().length > 0) {
+                <ul class="list-group mt-1" style="max-width:400px" role="listbox"
+                    aria-label="Supplier search results">
+                  @for (s of supplierResults(); track s.uid) {
+                    <li class="list-group-item list-group-item-action" role="option"
+                        style="cursor:pointer"
+                        (click)="selectSupplier(s)"
+                        (keydown.enter)="selectSupplier(s)"
+                        (keydown.space)="selectSupplier(s)"
+                        tabindex="0">
+                      {{ s.displayName }} <span class="text-muted small ms-2">{{ s.code }}</span>
+                    </li>
+                  }
+                </ul>
+              }
+              @if (supplierSearchState() === 'done' && supplierResults().length === 0) {
+                <p class="text-muted small mt-1">No suppliers found.</p>
+              }
+            }
+          </div>
+
+          <!-- Reorder / planning -->
+          <fieldset [disabled]="stockableDisabled()">
+            <legend class="form-label fw-semibold">
+              Stock planning defaults
+              @if (stockableDisabled()) {
+                <span class="text-muted small"> (N/A for service)</span>
+              }
+            </legend>
+            <div class="row g-3">
+              <div class="col-sm-2">
+                <label class="form-label small" for="masterReorderLevel">Reorder level</label>
+                <input id="masterReorderLevel" name="masterReorderLevel" type="text" class="form-control form-control-sm"
+                       [ngModel]="fReorderLevel()" (ngModelChange)="fReorderLevel.set($event)"
+                       [disabled]="saving() || stockableDisabled()" autocomplete="off" />
+              </div>
+              <div class="col-sm-2">
+                <label class="form-label small" for="masterReorderQty">Reorder qty</label>
+                <input id="masterReorderQty" name="masterReorderQty" type="text" class="form-control form-control-sm"
+                       [ngModel]="fReorderQty()" (ngModelChange)="fReorderQty.set($event)"
+                       [disabled]="saving() || stockableDisabled()" autocomplete="off" />
+              </div>
+              <div class="col-sm-2">
+                <label class="form-label small" for="masterSafetyStock">Safety stock</label>
+                <input id="masterSafetyStock" name="masterSafetyStock" type="text" class="form-control form-control-sm"
+                       [ngModel]="fSafetyStock()" (ngModelChange)="fSafetyStock.set($event)"
+                       [disabled]="saving() || stockableDisabled()" autocomplete="off" />
+              </div>
+              <div class="col-sm-2">
+                <label class="form-label small" for="masterMinStock">Min stock</label>
+                <input id="masterMinStock" name="masterMinStock" type="text" class="form-control form-control-sm"
+                       [ngModel]="fMinStock()" (ngModelChange)="fMinStock.set($event)"
+                       [disabled]="saving() || stockableDisabled()" autocomplete="off" />
+              </div>
+              <div class="col-sm-2">
+                <label class="form-label small" for="masterMaxStock">Max stock</label>
+                <input id="masterMaxStock" name="masterMaxStock" type="text" class="form-control form-control-sm"
+                       [ngModel]="fMaxStock()" (ngModelChange)="fMaxStock.set($event)"
+                       [disabled]="saving() || stockableDisabled()" autocomplete="off" />
+              </div>
+            </div>
+          </fieldset>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Tab 4: Stock & Barcodes ─────────────────────────────────────── -->
+    <div id="panel-stock" role="tabpanel" aria-labelledby="tab-stock"
+         [hidden]="activeTab() !== 'stock'">
+      <div class="erp-card">
+        <div class="erp-card__head"><h2>Stock &amp; Barcodes</h2></div>
+        <div class="erp-card__body">
+
+          <!-- Barcodes -->
+          <div class="mb-4">
+            <span class="form-label fw-semibold d-block mb-2">Barcodes / Article numbers</span>
+            <div class="row g-2 align-items-end mb-2">
+              <div class="col-sm-3">
+                <label class="form-label small" for="masterNewBarcode">Barcode value</label>
+                <input id="masterNewBarcode" name="masterNewBarcode" type="text"
+                       class="form-control form-control-sm"
+                       [ngModel]="newBarcodeValue()" (ngModelChange)="newBarcodeValue.set($event)"
+                       [disabled]="saving()" autocomplete="off" />
+              </div>
+              <div class="col-sm-2">
+                <label class="form-label small" for="masterNewBarcodeType">Type</label>
+                <input id="masterNewBarcodeType" name="masterNewBarcodeType" type="text"
+                       class="form-control form-control-sm" placeholder="EAN_13…"
+                       [ngModel]="newBarcodeBarcodeType()" (ngModelChange)="newBarcodeBarcodeType.set($event)"
+                       [disabled]="saving()" autocomplete="off" />
+              </div>
+              <div class="col-sm-2">
+                <label class="form-label small" for="masterNewBarcodeUom">Unit</label>
+                <select id="masterNewBarcodeUom" name="masterNewBarcodeUom" class="form-select form-select-sm"
+                        [ngModel]="newBarcodeUomUid()" (ngModelChange)="newBarcodeUomUid.set($event)"
+                        [disabled]="saving()">
+                  <option value="">— any —</option>
+                  @for (u of companyUnits(); track u.uid) {
+                    <option [value]="u.uid">{{ u.code }}</option>
+                  }
+                </select>
+              </div>
+              <div class="col-sm-2 d-flex align-items-end gap-2">
+                <div class="form-check mb-0">
+                  <input id="masterNewBarcodePrimary" name="masterNewBarcodePrimary" type="checkbox"
+                         class="form-check-input"
+                         [ngModel]="newBarcodePrimary()" (ngModelChange)="newBarcodePrimary.set($event)"
+                         [disabled]="saving()" />
+                  <label class="form-check-label small" for="masterNewBarcodePrimary">Primary</label>
+                </div>
+              </div>
+              <div class="col-sm-1 d-flex align-items-end">
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="addBarcodeRow()" [disabled]="saving() || !newBarcodeValue()">
+                  <i class="bi bi-plus-lg" aria-hidden="true"></i>
+                  <span class="sr-only">Add barcode</span>
+                </button>
+              </div>
+            </div>
+            @if (barcodeRows().length > 0) {
+              <div class="erp-table-wrap">
+                <table class="erp-table">
+                  <caption class="sr-only">Barcode rows</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Barcode</th>
+                      <th scope="col">Type</th>
+                      <th scope="col">Unit</th>
+                      <th scope="col">Primary</th>
+                      <th scope="col"><span class="sr-only">Actions</span></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (row of barcodeRows(); track trackByLocalId($index, row)) {
+                      <tr>
+                        <td class="mono">{{ row.barcode }}</td>
+                        <td>{{ row.barcodeType || '—' }}</td>
+                        <td>{{ row.uomUid ? unitLabel(row.uomUid) : '—' }}</td>
+                        <td>
+                          @if (row.isPrimary) {
+                            <i role="img" class="bi bi-check-circle-fill text-success" aria-label="Primary"></i>
+                          } @else {
+                            <button type="button" class="btn btn-link btn-sm p-0"
+                                    (click)="setPrimaryBarcode(row.localId)"
+                                    [disabled]="saving()"
+                                    [attr.aria-label]="'Set barcode ' + row.barcode + ' as primary'">
+                              Set primary
+                            </button>
+                          }
+                        </td>
+                        <td>
+                          <button type="button" class="btn btn-sm btn-outline-danger"
+                                  (click)="removeBarcodeRow(row.localId)"
+                                  [disabled]="saving()"
+                                  [attr.aria-label]="'Remove barcode ' + row.barcode">
+                            <i class="bi bi-trash" aria-hidden="true"></i>
+                          </button>
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          </div>
+
+          <!-- Opening stock -->
+          @if (!stockableDisabled() && fStockable()) {
+            <fieldset class="mb-2">
+              <legend class="form-label fw-semibold">Opening stock</legend>
+              <p class="text-muted small mb-2">
+                Opening quantity is seeded into the active branch
+                (<strong>{{ activeBranchUid() || 'none set' }}</strong>).
+                To seed another branch, switch active branch first.
+              </p>
+              <div class="row g-3">
+                <div class="col-sm-3">
+                  <label class="form-label small" for="masterOpeningQty">Quantity</label>
+                  <input id="masterOpeningQty" name="masterOpeningQty" type="text"
+                         class="form-control form-control-sm" placeholder="0"
+                         [ngModel]="openingQty()" (ngModelChange)="openingQty.set($event)"
+                         [disabled]="saving()" autocomplete="off" />
+                </div>
+                <div class="col-sm-5">
+                  <label class="form-label small" for="masterOpeningNote">Note</label>
+                  <input id="masterOpeningNote" name="masterOpeningNote" type="text"
+                         class="form-control form-control-sm"
+                         [ngModel]="openingNote()" (ngModelChange)="openingNote.set($event)"
+                         [disabled]="saving()" autocomplete="off" />
+                </div>
+              </div>
+            </fieldset>
+          }
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Tab 5: Branch availability ─────────────────────────────────── -->
+    <div id="panel-branches" role="tabpanel" aria-labelledby="tab-branches"
+         [hidden]="activeTab() !== 'branches'">
+      <div class="erp-card">
+        <div class="erp-card__head"><h2>Branch Availability</h2></div>
+        <div class="erp-card__body">
+
+          <div class="form-check form-switch mb-3">
+            <input id="masterAllBranches" name="masterAllBranches" type="checkbox"
+                   class="form-check-input" role="switch"
+                   [ngModel]="allBranchesToggle()"
+                   (ngModelChange)="onAllBranchesToggleChange($event)"
+                   [disabled]="saving()" />
+            <label class="form-check-label" for="masterAllBranches">
+              Make available in <strong>all branches</strong>
+            </label>
+          </div>
+
+          @if (branchesState() === 'loading') {
+            <p class="text-muted small" aria-live="polite">
+              <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading branches…
+            </p>
+          } @else if (companyBranches().length === 0) {
+            <p class="text-muted small">No branches configured for this company.</p>
+          } @else {
+            <div class="erp-table-wrap">
+              <table class="erp-table">
+                <caption class="sr-only">Branch availability rows</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Branch</th>
+                    <th scope="col">Active</th>
+                    @if (!stockableDisabled() && fStockable()) {
+                      <th scope="col">Reorder level</th>
+                    }
+                    <th scope="col">Branch price</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of branchRows(); track row.branch.uid; let i = $index) {
+                    <tr>
+                      <td>{{ row.branch.code }} — {{ row.branch.name }}</td>
+                      <td>
+                        <div class="form-check form-switch mb-0">
+                          <input [id]="'branchActive_' + i" [name]="'branchActive_' + i"
+                                 type="checkbox" class="form-check-input" role="switch"
+                                 [ngModel]="row.active"
+                                 (ngModelChange)="updateBranchRow(i, { active: $event })"
+                                 [disabled]="saving() || allBranchesToggle()" />
+                          <label [for]="'branchActive_' + i" class="form-check-label sr-only">
+                            Active in {{ row.branch.name }}
+                          </label>
+                        </div>
+                      </td>
+                      @if (!stockableDisabled() && fStockable()) {
+                        <td>
+                          <input [id]="'branchReorder_' + i" [name]="'branchReorder_' + i"
+                                 type="text" class="form-control form-control-sm" style="width:90px"
+                                 [ngModel]="row.reorderLevel"
+                                 (ngModelChange)="updateBranchRow(i, { reorderLevel: $event })"
+                                 [disabled]="saving()"
+                                 [attr.aria-label]="'Reorder level for ' + row.branch.name" />
+                        </td>
+                      }
+                      <td>
+                        <input [id]="'branchPrice_' + i" [name]="'branchPrice_' + i"
+                               type="text" class="form-control form-control-sm" style="width:110px"
+                               placeholder="inherit"
+                               [ngModel]="row.branchPrice"
+                               (ngModelChange)="updateBranchRow(i, { branchPrice: $event })"
+                               [disabled]="saving()"
+                               [attr.aria-label]="'Branch price for ' + row.branch.name" />
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Save bar ──────────────────────────────────────────────────────── -->
+    @if (formError()) {
+      <div class="alert alert-danger mt-3" role="alert">
+        <i class="bi bi-exclamation-circle me-2" aria-hidden="true"></i>{{ formError() }}
+      </div>
+    }
+
+    @if (!saveComplete()) {
+      <div class="d-flex gap-2 mt-3">
+        <button type="button" class="btn btn-primary"
+                (click)="save()" [disabled]="saving()">
+          @if (saving()) {
+            <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Saving…
+          } @else {
+            <i class="bi bi-check-lg me-1" aria-hidden="true"></i>{{ isEdit() ? 'Update product' : 'Create product' }}
+          }
+        </button>
+        <a routerLink="/admin/products" class="btn btn-outline-secondary" [class.pe-none]="saving()">
+          Cancel
+        </a>
+      </div>
+    }
+
+    <!-- ── Save result panel ─────────────────────────────────────────────── -->
+    @if (saveComplete()) {
+      <div class="erp-card mt-3" role="status" aria-live="polite">
+        <div class="erp-card__head">
+          <h2>
+            @if (hasAnyFailure()) {
+              <i class="bi bi-exclamation-triangle-fill text-warning me-2" aria-hidden="true"></i>
+              Product saved. Some details need attention.
+            } @else {
+              <i class="bi bi-check-circle-fill text-success me-2" aria-hidden="true"></i>
+              All done.
+            }
+          </h2>
+        </div>
+        <div class="erp-card__body">
+          <ul class="list-unstyled mb-3">
+            @for (section of sectionResults(); track section.label) {
+              <li class="d-flex align-items-start gap-2 mb-2">
+                @if (section.status === 'done') {
+                  <i class="bi bi-check-circle-fill text-success" aria-hidden="true"></i>
+                } @else if (section.status === 'failed') {
+                  <i class="bi bi-x-circle-fill text-danger" aria-hidden="true"></i>
+                } @else if (section.status === 'saving') {
+                  <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                } @else {
+                  <i class="bi bi-dash text-muted" aria-hidden="true"></i>
+                }
+                <div>
+                  <strong>{{ section.label }}</strong>
+                  @if (section.status === 'failed' && section.error) {
+                    <span class="text-danger ms-2">— {{ section.error }}</span>
+                    @let sIdx = sectionResults().indexOf(section);
+                    @if (sIdx > 0) {
+                      <button type="button" class="btn btn-link btn-sm p-0 ms-2"
+                              (click)="retrySection(sIdx)"
+                              [attr.aria-label]="'Retry ' + section.label">
+                        Retry
+                      </button>
+                    }
+                  }
+                </div>
+              </li>
+            }
+          </ul>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-primary" (click)="openProduct()">
+              <i class="bi bi-box-arrow-up-right me-1" aria-hidden="true"></i>Open product
+            </button>
+            <a routerLink="/admin/products" class="btn btn-outline-secondary">
+              Back to list
+            </a>
+            @if (hasAnyFailure()) {
+              <button type="button" class="btn btn-outline-primary" (click)="saveComplete.set(false)">
+                <i class="bi bi-pencil me-1" aria-hidden="true"></i>Continue editing
+              </button>
+            }
+          </div>
+        </div>
+      </div>
+    }
+
+  }<!-- /canManage && selectedCompany -->
+</section>
