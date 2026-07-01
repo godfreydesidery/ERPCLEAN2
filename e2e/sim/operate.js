@@ -653,19 +653,25 @@ async function runDeep(page, buf, rec) {
     // ACCESS missions: can I open my own screens? (SWEEP=1 → every operational screen, for the matrix)
     const targets = process.env.SWEEP ? SWEEP_TARGETS : (ACCESS[persona.role] || []);
     for (const [path, label] of targets) {
-      buf.clear();
-      await L.goto(page, path);
+      // Probe the screen. A REDIRECTED_HOME / KICKED under concurrent (busy-week) load is often a transient
+      // "session not loaded yet" bounce, NOT a real permission gap — so retry ONCE with a settle before
+      // believing it. This keeps the busy-week reports (and the UPRs users file from them) honest.
+      const probe = async () => {
+        buf.clear();
+        await L.goto(page, path);
+        const u = page.url().replace(L.BASE, '');
+        if (u.includes('/login')) return 'KICKED_TO_LOGIN';
+        if (await L.looksForbidden(page, buf)) return 'FORBIDDEN';
+        if (/\/admin\/home$|\/admin$/.test(u) && !/\/home$|^\/admin$/.test(path)) return 'REDIRECTED_HOME';
+        return 'OPEN';
+      };
+      let o = await probe();
+      if (o === 'KICKED_TO_LOGIN' || o === 'REDIRECTED_HOME') { await page.waitForTimeout(1600); o = await probe(); }
       if (process.env.DEVICE) await L.shot(page, `${persona.slug}-${process.env.DEVICE}-${label}`); // responsive evidence
-      const url = page.url().replace(L.BASE, '');
       let outcome = 'OK';
-      if (url.includes('/login')) { outcome = 'KICKED_TO_LOGIN'; rec.problem('BLOCKED', `open ${label}`, path, 'I was thrown back to the login screen trying to open my own screen', buf.snapshot()); }
-      else if (await L.looksForbidden(page, buf)) { outcome = 'FORBIDDEN'; rec.problem('BLOCKED', `open ${label}`, path, `I'm told I don't have permission to open ${label}, but it's part of my job (${persona.role})`, buf.snapshot()); }
-      else if (/\/admin\/home$|\/admin$/.test(url) && !/\/home$|^\/admin$/.test(path)) {
-        // the route guard (permission.guard) silently redirects a permission gap to home, not /forbidden —
-        // looks like a success unless you notice you landed on home instead of the screen you asked for.
-        outcome = 'REDIRECTED_HOME';
-        rec.problem('BLOCKED', `open ${label}`, path, `silently bounced to the home screen — I could not reach ${label} (a permission gap the guard hides as a home-redirect, with no message telling me why)`, buf.snapshot());
-      }
+      if (o === 'KICKED_TO_LOGIN') { outcome = 'KICKED_TO_LOGIN'; rec.problem('BLOCKED', `open ${label}`, path, 'I was thrown back to the login screen trying to open my own screen', buf.snapshot()); }
+      else if (o === 'FORBIDDEN') { outcome = 'FORBIDDEN'; rec.problem('BLOCKED', `open ${label}`, path, `I'm told I don't have permission to open ${label}, but it's part of my job (${persona.role})`, buf.snapshot()); }
+      else if (o === 'REDIRECTED_HOME') { outcome = 'REDIRECTED_HOME'; rec.problem('BLOCKED', `open ${label}`, path, `silently bounced to the home screen — I still could not reach ${label} even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)`, buf.snapshot()); }
       else {
         const snap = buf.snapshot();
         const realCon = snap.console.filter(e => !/favicon|ResizeObserver|net::ERR_/.test(e));
@@ -714,7 +720,8 @@ async function runDeep(page, buf, rec) {
     result.created = rec.created;
     result.usage = rec.usage; // per-component usage log for this user
     result.problemCount = rec.problems.length;
-    console.log(`\n=== ${persona.fullName}: created=${JSON.stringify(rec.created)} problems=${rec.problems.length} ===`);
+    result.uprs = L.writeUprs(persona, rec.problems); // users report each GENUINE problem via the UPR form
+    console.log(`\n=== ${persona.fullName}: created=${JSON.stringify(rec.created)} problems=${rec.problems.length} filed-UPRs=${result.uprs.length} ===`);
     L.saveResults(`operate-${persona.slug}.json`, { ...result, problems: rec.problems });
     await browser.close();
     process.exit(0);

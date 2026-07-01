@@ -96,13 +96,18 @@ async function goto(page, p) {
 }
 // Returns { ok, landedUrl }. Uses the type-based selectors proven by qa-ui-drive.js.
 async function login(page, user, pass) {
-  await goto(page, '/login');
-  await page.fill('input[type="text"]', user).catch(() => {});
-  await page.fill('input[type="password"]', pass).catch(() => {});
-  await page.click('button[type="submit"]').catch(() => {});
-  await page.waitForTimeout(2200);
-  const landedUrl = page.url().replace(BASE, '');
-  return { ok: !page.url().includes('/login'), landedUrl };
+  // Retry up to 3x with back-off — under busy-week concurrency the login page/endpoint can flake
+  // transiently (fields not ready, load blip); a real user simply tries again.
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    await goto(page, '/login');
+    await page.fill('input[type="text"]', user).catch(() => {});
+    await page.fill('input[type="password"]', pass).catch(() => {});
+    await page.click('button[type="submit"]').catch(() => {});
+    await page.waitForTimeout(2200);
+    if (!page.url().includes('/login')) return { ok: true, landedUrl: page.url().replace(BASE, '') };
+    await page.waitForTimeout(1500 * attempt);
+  }
+  return { ok: false, landedUrl: page.url().replace(BASE, '') };
 }
 async function shot(page, name) {
   const f = path.join(OUT, name.replace(/[^a-z0-9_-]+/gi, '_').slice(0, 80) + '.png');
@@ -246,6 +251,65 @@ async function scanVisibleIds(page) {
   } catch (e) { return { hits: [], snippet: '', error: String(e.message || e).slice(0, 80) }; }
 }
 
+// Users report a problem THROUGH THE GIVEN FORM — the User Problem Report
+// (docs/simulation/USER-PROBLEM-REPORT-TEMPLATE.md). This renders each GENUINE problem the persona hit
+// into a filled-in UPR, in the reporter's own work-voice, and writes it to OUT for the triage pipeline.
+// Idempotency 409s (a busy day re-creating a record that already exists) are NOT problems and are skipped.
+function writeUprs(persona, problems) {
+  const genuine = (problems || []).filter(
+    p => !(p.severity === 'SLOW' && /\b409\b|already|exist|duplicate|idempot/i.test(p.detail || '')));
+  const badness = {
+    BLOCKED: 'It stopped me completely — I could not do this at all.',
+    SLOW: 'I found a way around it, but it slowed me down.',
+    ANNOY: 'Just annoying / cosmetic — I could still work.',
+    HYGIENE: 'I could work, but I saw codes / reference numbers on screen that I should not need to see.',
+  };
+  const onScreen = (ev) => {
+    if (!ev || !ev.api) return '(nothing I could read — no short message)';
+    const friendly = ev.api.map(a => a.body).find(b => b && !/^\s*[{<]/.test(b) && b.length < 160);
+    if (friendly) return friendly.trim();
+    const bad = ev.api.find(a => a.status >= 400);
+    return bad ? `(a ${bad.status} error — no friendly message was shown)` : '(nothing I could read)';
+  };
+  const ids = [];
+  genuine.forEach((p, i) => {
+    const id = `UPR-${persona.slug}-${String(i + 1).padStart(2, '0')}`;
+    const body = `# User Problem Report — ${id}
+
+UPR-ID:                  ${id}
+Date:                    ${new Date().toISOString().slice(0, 10)}
+
+Reporter
+  Name:                  ${persona.fullName}
+  Designation:           ${persona.designation}
+  Branch:                ${persona.homeBranch}
+
+Role / permissions:      ${persona.role}
+
+What I was trying to do:
+  ${p.workflow || 'use one of my screens'}.
+
+What I expected to happen:
+  It would let me ${p.workflow || 'do my work'} and show or save the result.
+
+What actually happened:
+  ${p.detail}
+
+Screen / menu path:
+  ${p.screen}
+
+On-screen reference or number:
+  ${onScreen(p.evidence)}
+
+How badly it stopped me:
+  [${p.severity}] ${badness[p.severity] || ''}
+`;
+    fs.writeFileSync(path.join(OUT, `${id}.md`), body);
+    ids.push(id);
+  });
+  return ids;
+}
+
 function saveResults(name, payload) {
   const f = path.join(OUT, name);
   fs.writeFileSync(f, JSON.stringify(payload, null, 2));
@@ -256,5 +320,5 @@ module.exports = {
   BASE, OUT, SIM_PASSWORD,
   makeRecorder, watch, launch, newSession, goto, login, shot,
   setField, pickFirstReal, pickByLabel, searchPick, ensureFormOpen, clickButton,
-  submitByEnter, waitDetached, waitCleared, looksForbidden, saveResults, runAxe, scanVisibleIds,
+  submitByEnter, waitDetached, waitCleared, looksForbidden, saveResults, runAxe, scanVisibleIds, writeUprs,
 };
