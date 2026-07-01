@@ -48,6 +48,8 @@ export class BomDetailComponent {
 
   // ── Picker options ────────────────────────────────────────────────────────
   readonly productOptions = signal<UidOption[]>([]);
+  /** True when the product list could not be loaded (non-fatal; component picker is disabled with a notice). */
+  readonly productsUnavailable = signal(false);
 
   // ── Entity state ──────────────────────────────────────────────────────────
   readonly bom = signal<BomDto | null>(null);
@@ -118,10 +120,8 @@ export class BomDetailComponent {
         this.state.set('idle');
         this.loadProductOptions(bom.companyId);
       },
-      error: (err: unknown) => {
-        this.state.set(
-          err instanceof HttpErrorResponse && err.status === 403 ? 'error' : 'error',
-        );
+      error: () => {
+        this.state.set('error');
       },
     });
   }
@@ -134,6 +134,7 @@ export class BomDetailComponent {
 
   private loadProductOptions(companyId: string): void {
     // Resolve companyId → list products: need companyId as string
+    this.productsUnavailable.set(false);
     this.organisationService.current().subscribe({
       next: (org) => {
         this.companyService.list(org.uid).subscribe({
@@ -148,14 +149,14 @@ export class BomDetailComponent {
                       .map((p) => ({ uid: p.uid, label: p.name, hint: p.code })),
                   );
                 },
-                error: () => {},
+                error: () => { this.productOptions.set([]); this.productsUnavailable.set(true); },
               });
             }
           },
-          error: () => {},
+          error: () => { this.productsUnavailable.set(true); },
         });
       },
-      error: () => {},
+      error: () => { this.productsUnavailable.set(true); },
     });
   }
 

@@ -110,6 +110,12 @@ One definition per term, used consistently across the team. Add terms as modules
 
 - **Product / Item** — a catalogue entry the company produces, buys, or sells; the master definition,
   **not** a stock quantity. "Product" is canonical; "item" is a synonym.
+- **Product master data** — the controlled, shared definition of a product (code, barcode, unit +
+  conversion, sellable/stockable, VAT status, prices, cost, composition). Created once by the
+  **master-data owner** (procurement, `PRODUCT.MANAGE`) and consumed read-only everywhere
+  (`PRODUCT.VIEW`); **production views and consumes products, it does not create them** (it requests
+  a new SKU). Applies to sourced and manufactured goods alike. Ruling:
+  [product-master-data-ownership.md](product-master-data-ownership.md).
 - **Goods** — a tangible product. **Service** — an intangible product. Every product is one or the other.
 - **Sellable** — may appear on a customer sale. **Stockable** — inventory quantities are tracked (in
   the future Stock module). Two independent flags; a service is non-stockable, a raw good may be

@@ -215,7 +215,7 @@ class ChartOfAccountServiceIT extends PostgresIntegrationTest {
                 company.getId(), "5100").orElseThrow();
         assertThatThrownBy(() -> chartOfAccountService.delete(cogsAccount.getUid()))
                 .isInstanceOf(ConflictException.class)
-                .hasMessageContaining("BR-GL-07");
+                .hasMessageContaining("existing transactions and cannot be deleted");
 
         // Deactivate must succeed (BR-GL-07: "deactivate it instead")
         AccountDto deactivated = chartOfAccountService.deactivate(cogsAccount.getUid());

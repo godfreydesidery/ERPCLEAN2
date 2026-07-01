@@ -42,36 +42,38 @@ public class CashBankAccountResolver {
         CashBankAccount account;
         if (cashBankAccountUid != null && !cashBankAccountUid.isBlank()) {
             account = cashAccounts.findByCompanyIdAndUid(companyId, cashBankAccountUid)
-                    .orElseThrow(() -> new NotFoundException(
-                            "Cash/bank account not found: " + cashBankAccountUid));
+                    .orElseThrow(() -> NotFoundException.of("Cash/bank account", cashBankAccountUid));
             if (!account.isActive()) {
+                // FR-CASH-07, BR-CASH-08: inactive accounts cannot be used for settlement
                 throw new IllegalStateException(
-                        "Cash/bank account " + cashBankAccountUid
-                                + " is inactive; cannot be used for settlement (FR-CASH-07, BR-CASH-08).");
+                        "The selected cash/bank account is inactive and cannot be used for settlement.");
             }
         } else {
             account = cashAccounts.findByCompanyIdAndIsDefaultTrue(companyId)
                     .orElseThrow(() -> new IllegalStateException(
-                            "No cash/bank account specified and no company default exists for company "
-                                    + companyId + " (BR-CASH-09). Set a default account via CASH.ACCOUNT.MANAGE."));
+                            // BR-CASH-09: a default account must be configured before it can be used implicitly
+                            "No cash/bank account was specified and no default account has been set for this company. "
+                                    + "Please set a default cash/bank account before proceeding."));
             if (!account.isActive()) {
+                // FR-CASH-07, BR-CASH-08: inactive accounts cannot be used for settlement
                 throw new IllegalStateException(
-                        "Company default cash/bank account is inactive for company " + companyId
-                                + "; cannot post settlement (FR-CASH-07, BR-CASH-08).");
+                        "The company default cash/bank account is currently inactive and cannot be used for settlement. "
+                                + "Please activate it or set a different default account.");
             }
         }
 
         ChartOfAccount glAcct = glAccounts.findById(account.getGlAccountId())
                 .orElseThrow(() -> new IllegalStateException(
-                        "Cash/bank account " + account.getUid()
-                                + " references gl_account_id=" + account.getGlAccountId()
-                                + " which does not exist."));
+                        // Data-integrity guard: the linked GL account was deleted after the cash account was set up
+                        "The GL account linked to this cash/bank account no longer exists. "
+                                + "Please update the cash/bank account configuration."));
 
         if (!glAcct.isActive()) {
+            // BR-GL-10: inactive GL accounts cannot receive postings
             throw new IllegalStateException(
-                    "Linked GL account " + glAcct.getAccountCode()
-                            + " for cash/bank account " + account.getUid()
-                            + " is inactive (BR-GL-10).");
+                    "The GL account linked to this cash/bank account ("
+                            + glAcct.getAccountCode()
+                            + ") is inactive. Please reactivate it or reassign the cash/bank account to an active GL account.");
         }
 
         return new CashAccountGlResolutionDto(

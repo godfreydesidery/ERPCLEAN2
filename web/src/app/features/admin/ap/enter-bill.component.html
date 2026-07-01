@@ -282,12 +282,19 @@
                 <span id="poPickerLabel" class="form-label d-block">
                   Purchase Order <span class="text-muted small">(optional — for 3-way match)</span>
                 </span>
-                <app-uid-picker [ngModel]="purchaseOrderUid()"
-                                (ngModelChange)="onPoUidChange($event)"
-                                [options]="poOptions()"
-                                placeholder="Select PO or leave blank"
-                                name="purchaseOrderUid"
-                                [ariaLabelledby]="'poPickerLabel'" />
+                @if (poListUnavailable()) {
+                  <p class="form-text text-info d-flex align-items-center gap-1 mb-0" role="note">
+                    <i class="bi bi-info-circle-fill flex-shrink-0" aria-hidden="true"></i>
+                    Purchase order list could not be loaded. Bill entry continues — PO matching can be done later.
+                  </p>
+                } @else {
+                  <app-uid-picker [ngModel]="purchaseOrderUid()"
+                                  (ngModelChange)="onPoUidChange($event)"
+                                  [options]="poOptions()"
+                                  placeholder="Select PO or leave blank"
+                                  name="purchaseOrderUid"
+                                  [ariaLabelledby]="'poPickerLabel'" />
+                }
               </div>
 
             </div>

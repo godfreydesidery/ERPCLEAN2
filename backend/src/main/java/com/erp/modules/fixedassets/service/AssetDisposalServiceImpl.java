@@ -86,7 +86,8 @@ public class AssetDisposalServiceImpl implements AssetDisposalService {
         scopeGuard.assertCanActIn(RequestContext.get(), asset.getCompanyId());
 
         if (asset.getStatus() != FixedAssetStatus.IN_SERVICE) {
-            throw new IllegalStateException("Only IN_SERVICE assets can be disposed (BR-FA-03).");
+            // BR-FA-03: only assets that are currently in service may be disposed or written off.
+            throw new IllegalStateException("Only assets that are currently in service can be disposed or written off.");
         }
         if (disposals.findByFixedAssetId(asset.getId()).isPresent()) {
             throw new IllegalStateException("Asset has already been disposed.");
@@ -180,7 +181,7 @@ public class AssetDisposalServiceImpl implements AssetDisposalService {
     private AssetCategory requireCategory(FixedAsset asset) {
         return categories.findById(asset.getCategoryId())
                 .orElseThrow(() -> new IllegalStateException(
-                        "Category not found: " + asset.getCategoryId()));
+                        "The asset's category could not be found."));
     }
 
     private Long actorId() {

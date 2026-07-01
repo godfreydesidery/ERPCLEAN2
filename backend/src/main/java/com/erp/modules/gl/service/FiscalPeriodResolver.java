@@ -29,8 +29,9 @@ public class FiscalPeriodResolver {
     public FiscalPeriod resolveOpen(Long companyId, LocalDate postingDate) {
         return periods.findOpenPeriodForDate(companyId, postingDate, PeriodStatus.OPEN)
                 .orElseThrow(() -> new IllegalStateException(
-                        "No OPEN fiscal period found for company " + companyId
-                                + " and date " + postingDate
-                                + ". Check that a fiscal year/period exists and is OPEN (BR-GL-03)."));
+                        // BR-GL-03: posting date must fall within an open fiscal period
+                        "There is no open fiscal period covering " + postingDate
+                                + ". Please ensure the fiscal year and period for this date"
+                                + " have been set up and are open before posting."));
     }
 }

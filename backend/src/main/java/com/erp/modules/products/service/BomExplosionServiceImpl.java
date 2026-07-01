@@ -155,9 +155,10 @@ public class BomExplosionServiceImpl implements BomExplosionService {
                                                     Map<Long, LeafAccumulator> leafMap,
                                                     Long companyId) {
         if (depth > maxDepth) {
+            // BR-BOM-11: max nesting depth exceeded during explosion
             throw new IllegalStateException(
-                    "BOM exceeds maximum nesting depth (" + maxDepth +
-                    ") during explosion (BR-BOM-11). Check for a pathological structure.");
+                    "The bill of materials exceeds the maximum allowed nesting depth (" + maxDepth + "). "
+                    + "Please review and simplify the BOM structure.");
         }
 
         List<BomComponent> components = bomComponents.findByBomIdOrderByLineNo(bom.getId());
@@ -260,7 +261,7 @@ public class BomExplosionServiceImpl implements BomExplosionService {
         }
         return boms.findByParentProductIdAndStatus(parentProductId, BomStatus.ACTIVE)
                 .orElseThrow(() -> new NotFoundException(
-                        "No ACTIVE BOM found for product: " + parentProductUid));
+                        "No active bill of materials found for this product."));
     }
 
     private static BigDecimal scrapInflate(BigDecimal scrapPercent) {

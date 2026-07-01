@@ -60,15 +60,16 @@ public class BomCycleGuard {
      */
     public void assertNoCycle(Long parentProductId, Long candidateChildProductId) {
         if (parentProductId.equals(candidateChildProductId)) {
+            // BR-BOM-01: self-reference
             throw new IllegalArgumentException(
-                    "Cannot add a product as a component of itself — self-reference cycle (BR-BOM-01).");
+                    "A product cannot be added as a component of itself.");
         }
         Set<Long> visited = new HashSet<>();
         visited.add(parentProductId); // the product we are checking against
         if (reachable(candidateChildProductId, parentProductId, visited, 0)) {
+            // BR-BOM-01: transitive cycle
             throw new IllegalArgumentException(
-                    "Adding this component would create a BOM cycle (BR-BOM-01): " +
-                    "the candidate child's structure already contains the parent product.");
+                    "Adding this component would create a circular dependency in the bill of materials.");
         }
     }
 
@@ -85,9 +86,10 @@ public class BomCycleGuard {
     private boolean reachable(Long currentProductId, Long targetProductId,
                                Set<Long> visited, int depth) {
         if (depth > maxDepth) {
+            // BR-BOM-11: max nesting depth exceeded during cycle check
             throw new IllegalStateException(
-                    "BOM exceeds maximum nesting depth (" + maxDepth + ") during cycle check " +
-                    "(BR-BOM-11). Check for a pathological or mid-edit structure.");
+                    "The bill of materials exceeds the maximum allowed nesting depth (" + maxDepth + "). "
+                    + "Please review and simplify the BOM structure.");
         }
         Optional<Bom> activeBom = boms.findByParentProductIdAndStatus(currentProductId, BomStatus.ACTIVE);
         if (activeBom.isEmpty()) {

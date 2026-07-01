@@ -110,8 +110,9 @@ public class BillMatchServiceImpl implements BillMatchService {
 
         if (bill.getStatus() != SupplierBillStatus.DRAFT
                 && bill.getStatus() != SupplierBillStatus.HELD) {
+            // billUid intentionally not surfaced in the user message (error-hygiene rule)
             throw new IllegalStateException(
-                    "Bill " + billUid + " is in status " + bill.getStatus()
+                    "This bill is in status " + bill.getStatus()
                             + " — can only match DRAFT or HELD bills.");
         }
 

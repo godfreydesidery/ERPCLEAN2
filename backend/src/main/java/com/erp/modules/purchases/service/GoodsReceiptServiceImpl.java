@@ -130,9 +130,10 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
 
         // 4. Validate and create GR lines; reject over-receipt before ANY update (BR-PURCH-10)
         List<GoodsReceiptLine> savedLines = new ArrayList<>();
+        // FR-PURCH-07: a goods receipt must contain at least one line
         if (req.lines() == null || req.lines().isEmpty()) {
             throw new IllegalArgumentException(
-                    "A Goods Receipt must have at least one line (FR-PURCH-07).");
+                    "A goods receipt must have at least one line.");
         }
         for (GoodsReceiptLineRequest lineReq : req.lines()) {
             GoodsReceiptLine grLine = buildGrLine(saved, po, lineReq);
@@ -221,8 +222,9 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
     @Override
     public GoodsReceiptDto voidReceipt(String uid, VoidGoodsReceiptRequest req) {
         // PROCURE-RECEIVING: null/blank reason must be rejected before any Map.of call (NPE guard)
+        // FR-PURCH-09: a reason is mandatory when voiding a goods receipt
         if (req.reason() == null || req.reason().isBlank()) {
-            throw new IllegalArgumentException("A void reason is required (FR-PURCH-09).");
+            throw new IllegalArgumentException("A reason is required to void a goods receipt.");
         }
 
         GoodsReceipt gr = requireReceipt(uid);
@@ -290,13 +292,13 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
         PurchaseOrderLine poLine = poLines.findByUidAndPurchaseOrderId(
                         lineReq.purchaseOrderLineUid(), po.getId())
                 .orElseThrow(() -> new NotFoundException(
-                        "PurchaseOrderLine not found or does not belong to PO "
-                                + po.getUid() + ": " + lineReq.purchaseOrderLineUid()));
+                        "The specified purchase order line was not found on this purchase order."));
 
         // Validate received qty > 0
         if (lineReq.receivedQty() == null || lineReq.receivedQty().compareTo(BigDecimal.ZERO) <= 0) {
+            // lineReq.purchaseOrderLineUid() intentionally not surfaced (error-hygiene rule)
             throw new IllegalArgumentException(
-                    "Received quantity must be > 0 on line " + lineReq.purchaseOrderLineUid());
+                    "Received quantity must be greater than zero.");
         }
 
         // Compute qty_in_base: receivedQty × (poLine.orderedQtyInBase / poLine.orderedQty)

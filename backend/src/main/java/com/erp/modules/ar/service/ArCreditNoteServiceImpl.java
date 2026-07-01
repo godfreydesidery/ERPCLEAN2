@@ -140,7 +140,7 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
         if (req.arInvoiceUid() != null) {
             targetInvoice = invoices.findByCompanyIdAndUid(companyId, req.arInvoiceUid())
                     .orElseThrow(() -> new NotFoundException(
-                            "ArInvoice not found: " + req.arInvoiceUid()));
+                            "Invoice not found."));
 
             // BR-AR customer-match: credit note customer must own the target invoice (issue #1)
             assertInvoiceBelongsToCustomer(targetInvoice, customerId);
@@ -148,16 +148,14 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
             // Currency must match (BR-CUR-06)
             if (!docCurrency.equals(targetInvoice.getCurrency().value())) {
                 throw new IllegalStateException(
-                        "Credit note currency " + docCurrency
-                                + " does not match invoice currency " + targetInvoice.getCurrency()
-                                + " on invoice " + req.arInvoiceUid());
+                        "The credit note currency does not match the currency of the selected invoice."
+                        + " Please ensure both the credit note and the invoice use the same currency.");
             }
             // Face check at raise (BR-AR-04)
             if (totalAmount.compareTo(targetInvoice.getOutstandingAmount()) > 0) {
                 throw new IllegalStateException(
-                        "Credit note amount " + totalAmount
-                                + " exceeds outstanding " + targetInvoice.getOutstandingAmount()
-                                + " on invoice " + req.arInvoiceUid());
+                        "The credit note amount exceeds the outstanding balance on the selected invoice."
+                        + " Please enter an amount that does not exceed what the customer still owes.");
             }
         }
 
@@ -266,8 +264,9 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
         scopeGuard.assertCanActIn(RequestContext.get(), noteForApply.getCompanyId());
 
         if (noteForApply.getStatus() == ArCreditNoteStatus.APPLIED) {
+            // CN uid not exposed in the message
             throw new IllegalStateException(
-                    "Credit note " + req.creditNoteUid() + " is already fully APPLIED.");
+                    "This credit note has already been fully applied and cannot be applied again.");
         }
 
         Long applyCompanyId = noteForApply.getCompanyId();
@@ -400,26 +399,26 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
         for (AllocationLineRequest line : lines) {
             ArInvoice inv = invoices.findByCompanyIdAndUid(companyId, line.arInvoiceUid())
                     .orElseThrow(() -> new NotFoundException(
-                            "ArInvoice not found: " + line.arInvoiceUid()));
+                            "Invoice not found."));
 
             // BR-AR customer-match: credit note customer must own the target invoice (issue #1)
             assertInvoiceBelongsToCustomer(inv, note.getCustomerId());
 
             // Guard: slice must not exceed current invoice outstanding (BR-AR-04)
             if (line.allocatedAmount().compareTo(inv.getOutstandingAmount()) > 0) {
+                // BR-AR-04: allocation must not exceed invoice outstanding
                 throw new IllegalStateException(
-                        "Allocation " + line.allocatedAmount()
-                                + " exceeds outstanding " + inv.getOutstandingAmount()
-                                + " on invoice uid=" + inv.getUid() + " (BR-AR-04).");
+                        "The amount being applied exceeds the outstanding balance on one of the selected invoices."
+                        + " Please reduce the allocation amount for that invoice.");
             }
 
             // Guard: slice must not exceed remaining CN unapplied
             BigDecimal remaining = note.getUnappliedAmount().subtract(totalApplied);
             if (line.allocatedAmount().compareTo(remaining) > 0) {
+                // CN unapplied guard — do not expose CN uid
                 throw new IllegalStateException(
-                        "Allocation " + line.allocatedAmount()
-                                + " exceeds CN remaining unapplied " + remaining
-                                + " on note uid=" + note.getUid() + ".");
+                        "The amount being applied exceeds the remaining unapplied balance on this credit note."
+                        + " Please reduce the allocation amount so it does not exceed the available credit.");
             }
 
             // Per-allocation base amounts (mirrors receipt allocation mechanics)
@@ -453,12 +452,11 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
             sumBaseSettled  = sumBaseSettled.add(baseSettledSlice);
         }
 
-        // Guard: total applied must not exceed CN unapplied (Σ invariant)
+        // Guard: total applied must not exceed CN unapplied (Σ invariant — CN uid not exposed)
         if (totalApplied.compareTo(note.getUnappliedAmount()) > 0) {
             throw new IllegalStateException(
-                    "Total allocation " + totalApplied
-                            + " exceeds CN unapplied " + note.getUnappliedAmount()
-                            + " (CN uid=" + note.getUid() + ").");
+                    "The combined allocation total exceeds the unapplied balance remaining on this credit note."
+                    + " Please adjust the allocation lines so they do not exceed the available credit.");
         }
 
         // ── Post realized-FX plug per this batch (OMITTED when rates identical) ──
@@ -524,10 +522,10 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
      */
     private static void assertInvoiceBelongsToCustomer(ArInvoice invoice, Long expectedCustomerId) {
         if (!invoice.getCustomerId().equals(expectedCustomerId)) {
+            // BR-AR customer-match: allocation may only target an invoice belonging to the same customer as the credit note
             throw new ConflictException(
-                    "Allocation invoice belongs to a different customer"
-                    + " (invoice customerId=" + invoice.getCustomerId()
-                    + ", credit note customerId=" + expectedCustomerId + ").");
+                    "The selected invoice does not belong to this customer."
+                    + " Please choose an invoice raised for the same customer as this credit note.");
         }
     }
 

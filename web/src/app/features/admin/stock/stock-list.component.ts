@@ -58,6 +58,8 @@ export class StockListComponent {
   readonly companyState = signal<'loading' | 'idle' | 'error'>('loading');
   readonly branches = signal<Branch[]>([]);
   readonly selectedBranchId = signal('');
+  /** True when the branch list could not be loaded (non-fatal; by-location tab shows a notice). */
+  readonly branchesUnavailable = signal(false);
 
   // ── List state ────────────────────────────────────────────────────────────────
   readonly rows = signal<StockOnHandDto[]>([]);
@@ -247,9 +249,10 @@ export class StockListComponent {
   }
 
   private loadBranches(companyUid: string): void {
+    this.branchesUnavailable.set(false);
     this.branchService.list(companyUid).subscribe({
       next: (list) => this.branches.set(list),
-      error: () => this.branches.set([]),
+      error: () => { this.branches.set([]); this.branchesUnavailable.set(true); },
     });
   }
 
@@ -426,7 +429,13 @@ export class StockListComponent {
         this.load(this.currentPage());
       },
       error: (err) => {
-        this.openingError.set(this.messageFrom(err, 'Could not record opening balance.'));
+        this.openingError.set(
+          this.messageFrom(
+            err,
+            'Could not record opening balance.',
+            'An opening balance already exists for this product.',
+          ),
+        );
         this.openingBusy.set(false);
       },
     });
@@ -641,8 +650,11 @@ export class StockListComponent {
 
   // ── Display helpers ───────────────────────────────────────────────────────────
 
-  private messageFrom(err: unknown, fallback: string): string {
+  private messageFrom(err: unknown, fallback: string, conflictMessage?: string): string {
     if (err instanceof HttpErrorResponse) {
+      if (err.status === 409 && conflictMessage) {
+        return conflictMessage;
+      }
       const errors = (err.error as { errors?: string[] })?.errors;
       if (errors?.length) return errors[0];
     }

@@ -80,15 +80,17 @@ public class FixedAssetServiceImpl implements FixedAssetService {
 
         // Defect 4: reject a negative acquisitionCost before the DB constraint fires.
         if (req.acquisitionCost() != null && req.acquisitionCost().compareTo(BigDecimal.ZERO) < 0) {
+            // BR-FA-04: acquisition cost must be zero or positive.
             throw new IllegalArgumentException(
-                    "acquisitionCost must be zero or positive (BR-FA-04).");
+                    "The acquisitionCost must be zero or a positive value.");
         }
         // Defect 3: REDUCING_BALANCE requires a positive reducingRate — catch before schedule
         // generation causes an NPE on asset.getReducingRate().divide(...).
         if (req.depreciationMethod() == DepreciationMethod.REDUCING_BALANCE
                 && (req.reducingRate() == null || req.reducingRate().compareTo(BigDecimal.ZERO) <= 0)) {
+            // BR-FA-05: reducing-balance method requires a positive reducingRate.
             throw new IllegalArgumentException(
-                    "REDUCING_BALANCE depreciation requires a positive reducingRate (BR-FA-05).");
+                    "REDUCING_BALANCE depreciation requires a positive reducingRate.");
         }
 
         String assetNumber = numberGenerator.nextAssetNumber(req.companyId());
@@ -125,15 +127,16 @@ public class FixedAssetServiceImpl implements FixedAssetService {
             throw new IllegalArgumentException("Bill does not belong to the specified company.");
         }
         if (bill.status() != SupplierBillStatus.MATCHED) {
+            // ADR-0030 D-7: only a matched supplier bill may be used to capitalise a fixed asset.
             throw new IllegalArgumentException(
-                    "Bill must be MATCHED to capitalise an asset from it (ADR-0030 D-7).");
+                    "The supplier bill must be in MATCHED status before it can be used to register a fixed asset.");
         }
 
         SupplierBillLineDto line = bill.lines().stream()
                 .filter(l -> l.uid().equals(req.billLineUid()))
                 .findFirst()
                 .orElseThrow(() -> new NotFoundException(
-                        "Bill line '" + req.billLineUid() + "' not found on bill '" + req.billUid() + "'."));
+                        "The specified bill line was not found on this supplier bill."));
 
         BigDecimal acquisitionCost = line.lineNetAmount(); // net, VAT excluded (BR-FA-07)
         BigDecimal salvage = req.salvageValue() != null ? req.salvageValue() : BigDecimal.ZERO;
@@ -188,8 +191,9 @@ public class FixedAssetServiceImpl implements FixedAssetService {
         scopeGuard.assertCanActIn(RequestContext.get(), asset.getCompanyId());
 
         if (asset.getStatus() != FixedAssetStatus.DRAFT) {
+            // BR-FA-09: asset fields are only editable while the asset is in DRAFT status.
             throw new IllegalArgumentException(
-                    "Non-financial fields can only be updated while DRAFT (BR-FA-09).");
+                    "Asset details can only be edited while the asset is in DRAFT status.");
         }
 
         asset.setName(req.name());

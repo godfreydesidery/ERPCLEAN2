@@ -85,9 +85,14 @@ export class FixedAssetCreateComponent {
             this.companies.set(list);
             this.companyState.set('idle');
             if (list.length > 0) {
-              this.selectedCompanyId.set(list[0].id);
-              this.loadCategories(list[0].id);
-              this.loadBranchOptions(list[0].uid);
+              // Default to the active company from session; fall back to list[0].
+              const activeCompanyUid = this.session.user()?.activeCompanyUid ?? null;
+              const active = activeCompanyUid
+                ? (list.find((c) => c.uid === activeCompanyUid) ?? list[0])
+                : list[0];
+              this.selectedCompanyId.set(active.id);
+              this.loadCategories(active.id);
+              this.loadBranchOptions(active.uid);
             }
           },
           error: () => this.companyState.set('error'),
@@ -102,9 +107,18 @@ export class FixedAssetCreateComponent {
       next: (branches) => {
         this.branchIdByUid.clear();
         branches.forEach((b) => this.branchIdByUid.set(b.uid, b.id));
-        this.branchOptions.set(
-          branches.filter((b) => b.status === 'ACTIVE').map((b) => ({ uid: b.uid, label: b.name, hint: b.code })),
-        );
+        const activeOptions = branches
+          .filter((b) => b.status === 'ACTIVE')
+          .map((b) => ({ uid: b.uid, label: b.name, hint: b.code }));
+        this.branchOptions.set(activeOptions);
+        // Default to the user's active branch; fall back to first active branch.
+        if (!this.fBranchUid()) {
+          const activeBranchUid = this.session.activeBranchUid() ?? null;
+          const defaultBranch = activeBranchUid
+            ? (branches.find((b) => b.uid === activeBranchUid && b.status === 'ACTIVE') ?? branches.find((b) => b.status === 'ACTIVE'))
+            : branches.find((b) => b.status === 'ACTIVE');
+          if (defaultBranch) this.fBranchUid.set(defaultBranch.uid);
+        }
       },
       error: () => {},
     });

@@ -152,8 +152,15 @@
                   <!-- Branch: picker self-labels via placeholder -->
                   <div class="erp-field">
                     <span class="erp-field__label">Branch</span>
-                    <app-uid-picker [(ngModel)]="fBranchUid" [options]="branchOptions()"
-                                    placeholder="Select branch" name="fBranchUid" />
+                    @if (branchesUnavailable()) {
+                      <p class="form-text text-info d-flex align-items-center gap-1 mb-0" role="note">
+                        <i class="bi bi-info-circle-fill flex-shrink-0" aria-hidden="true"></i>
+                        Branch list could not be loaded — contact your administrator.
+                      </p>
+                    } @else {
+                      <app-uid-picker [(ngModel)]="fBranchUid" [options]="branchOptions()"
+                                      placeholder="Select branch" name="fBranchUid" />
+                    }
                   </div>
                   <div class="erp-field">
                     <label for="fPlannedDate">Planned Date</label>

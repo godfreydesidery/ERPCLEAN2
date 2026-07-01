@@ -91,9 +91,10 @@ public class SupplierBillServiceImpl implements SupplierBillService {
         if (req.purchaseOrderUid() != null && !req.purchaseOrderUid().isBlank()) {
             purchaseMatchReader.findPo(req.purchaseOrderUid()).ifPresent(po -> {
                 if (!supplierId.equals(po.supplierId())) {
+                    // req.purchaseOrderUid() intentionally not surfaced (error-hygiene rule)
                     throw new ConflictException(
-                            "Purchase order " + req.purchaseOrderUid()
-                                    + " belongs to a different supplier and cannot be referenced by this bill.");
+                            "The selected purchase order belongs to a different supplier"
+                                    + " and cannot be referenced by this bill.");
                 }
             });
         }

@@ -165,8 +165,9 @@ public class StockCountServiceImpl implements StockCountService {
         StockCount count = findAndAssertScope(countUid, principal);
 
         if (count.getStatus() != StockCountStatus.COUNTING) {
+            // countUid intentionally not surfaced (error-hygiene rule)
             throw new IllegalStateException(
-                    "Count " + countUid + " is not in COUNTING status (status=" + count.getStatus() + ").");
+                    "This stock count is not in COUNTING status (current status: " + count.getStatus() + ").");
         }
 
         for (EnterCountRequest.LineEntry entry : request.lines()) {
@@ -174,8 +175,9 @@ public class StockCountServiceImpl implements StockCountService {
                     .orElseThrow(() -> NotFoundException.of("StockCountLine",
                             String.valueOf(entry.lineId())));
             if (!line.getStockCountId().equals(count.getId())) {
+                // entry.lineId() and countUid intentionally not surfaced (error-hygiene rule)
                 throw new IllegalArgumentException(
-                        "Line " + entry.lineId() + " does not belong to count " + countUid);
+                        "One or more count lines do not belong to the specified stock count.");
             }
             line.enterCount(entry.countedQty(), principal.userId());
             countLines.save(line);
@@ -198,8 +200,9 @@ public class StockCountServiceImpl implements StockCountService {
         StockCount count = findAndAssertScope(countUid, principal);
 
         if (count.getStatus() != StockCountStatus.COUNTING) {
+            // countUid intentionally not surfaced (error-hygiene rule)
             throw new IllegalStateException(
-                    "Count " + countUid + " must be in COUNTING status to post.");
+                    "This stock count must be in COUNTING status before it can be posted.");
         }
 
         List<StockCountLine> lines = countLines.findByStockCountIdOrderByLineNoAsc(count.getId());

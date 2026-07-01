@@ -1,0 +1,32 @@
+{
+  "persona": "Yusuf Mbwana",
+  "username": "ymbwana",
+  "role": "PROCUREMENT_OFFICER",
+  "access": [
+    {
+      "path": "/admin/purchase-orders",
+      "label": "Purchase orders",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/suppliers",
+      "label": "Suppliers",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/products",
+      "label": "Products",
+      "outcome": "OK"
+    }
+  ],
+  "loggedIn": true,
+  "created": {
+    "register supplier": 5,
+    "register product master data": 11,
+    "raise PO + line": 1,
+    "place PO": 1,
+    "price product": 1
+  },
+  "problemCount": 0,
+  "problems": []
+}

@@ -73,6 +73,8 @@ export class RecordPaymentComponent {
   readonly whtTypes = signal<WhtTypeDto[]>([]);
   readonly whtTypeUid = signal('');
   readonly whtAmount = signal('');
+  /** True when the WHT type list could not be loaded (non-fatal; WHT section is optional). */
+  readonly whtUnavailable = signal(false);
 
   // ── Submit state ───────────────────────────────────────────────────────────
   readonly submitting = signal(false);
@@ -150,15 +152,17 @@ export class RecordPaymentComponent {
   }
 
   private loadWhtTypes(companyId: string): void {
+    this.whtUnavailable.set(false);
     this.taxService.listWhtTypes(companyId).subscribe({
       next: (list) => this.whtTypes.set(list.filter((t) => t.active && t.kind === 'WHT_ON_PAYMENT')),
-      error: () => this.whtTypes.set([]),
+      error: () => { this.whtTypes.set([]); this.whtUnavailable.set(true); },
     });
   }
 
   onCompanyChange(id: string): void {
     this.selectedCompanyId.set(id);
     this.resetSupplier();
+    this.whtUnavailable.set(false);
     if (id) this.loadWhtTypes(id);
   }
 

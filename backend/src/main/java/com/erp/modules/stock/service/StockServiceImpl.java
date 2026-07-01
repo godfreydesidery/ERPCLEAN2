@@ -286,9 +286,10 @@ public class StockServiceImpl implements StockService {
                                                RequestContext.Principal principal) {
         ProductDto product = productService.getByUid(productUid);
         scopeGuard.assertCanActIn(principal, product.companyId());
+        // BR-STOCK-02: only stockable products may have stock movements
         if (!product.stockable()) {
             throw new IllegalArgumentException(
-                    "Product '" + productUid + "' is not stockable (BR-STOCK-02).");
+                    "The selected product is not set up for stock tracking and cannot be used in stock operations.");
         }
         return product;
     }

@@ -97,15 +97,15 @@ public class ApprovalEngineImpl implements ApprovalEngine {
                           existingReq.getUid(), req.documentType(), req.documentUid());
                 return toDto(existingReq);
             }
+            // req.documentUid() and internal code OQ-APR-06 intentionally not surfaced (error-hygiene rule)
             throw new com.erp.platform.common.api.ConflictException(
-                    "Document '" + req.documentType() + "/" + req.documentUid()
-                    + "' was already resolved with status " + existingReq.getStatus()
-                    + "; submit with a new document UID (OQ-APR-06)");
+                    "This document has already been resolved with status " + existingReq.getStatus()
+                    + ". To re-submit, create a new version of the document.");
         }
 
         Long branchId = branchRepo.findByUid(req.branchUid())
-                .orElseThrow(() -> new com.erp.platform.common.api.NotFoundException(
-                        "Branch not found: " + req.branchUid()))
+                .orElseThrow(() -> com.erp.platform.common.api.NotFoundException.of(
+                        "Branch", req.branchUid()))
                 .getId();
 
         Long actorId = principal != null ? principal.userId() : req.submittedByUserId();

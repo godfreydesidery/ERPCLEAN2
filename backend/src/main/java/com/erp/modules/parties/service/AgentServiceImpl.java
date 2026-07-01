@@ -202,11 +202,13 @@ public class AgentServiceImpl implements AgentService {
 
     private void validateIdentifiers(PartyType partyType, String tin, String vrn,
                                      Boolean vatRegistered) {
+        // BR-PARTY-04
         if (partyType == PartyType.BUSINESS && (tin == null || tin.isBlank())) {
-            throw new IllegalArgumentException("A business agent must have a TIN (BR-PARTY-04).");
+            throw new IllegalArgumentException("A business agent must have a Tax Identification Number (TIN).");
         }
+        // BR-PARTY-06
         if (vrn != null && !vrn.isBlank() && !Boolean.TRUE.equals(vatRegistered)) {
-            throw new IllegalArgumentException("VRN may only be set when the agent is VAT-registered (BR-PARTY-06).");
+            throw new IllegalArgumentException("A VAT Registration Number (VRN) can only be entered when the agent is marked as VAT-registered.");
         }
     }
 
@@ -221,19 +223,21 @@ public class AgentServiceImpl implements AgentService {
      */
     private void validateAgentKind(AgentKind kind, Long appUserId, Long companyId) {
         if (kind == AgentKind.INTERNAL) {
+            // BR-PARTY-10: INTERNAL agent must reference an ACTIVE, non-root user in the same company
             if (appUserId == null) {
                 throw new IllegalArgumentException(
-                        "An internal agent must reference an app user (BR-PARTY-10).");
+                        "An internal agent must be linked to a user account.");
             }
             if (!userLookup.isActiveUserInCompany(appUserId, companyId)) {
                 throw new IllegalArgumentException(
-                        "The referenced app user must be an ACTIVE, non-root user belonging to the "
-                        + "agent's company (BR-PARTY-10). The super-admin cannot be a sales agent.");
+                        "The selected user account must be active, belong to this company, "
+                        + "and cannot be the system administrator.");
             }
         } else {
+            // BR-PARTY-11: EXTERNAL agent must not be linked to a user account
             if (appUserId != null) {
                 throw new IllegalArgumentException(
-                        "An external agent must not reference an app user (BR-PARTY-11).");
+                        "An external agent cannot be linked to a user account.");
             }
         }
     }

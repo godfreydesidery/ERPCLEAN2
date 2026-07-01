@@ -34,8 +34,12 @@ public class BranchController {
         this.branches = branches;
     }
 
+    // Branch list is the picker nearly every operational screen renders. Allow BRANCH.VIEW holders
+    // OR any scoped member of the target company (low-sensitivity, company-scoped reference data) so a
+    // missing supporting read never blanks a whole screen (sim 2026-06-28, ISSUE-004/005). The company
+    // predicate stays: scopedOrMember resolves the company uid to the caller's own company.
     @GetMapping
-    @PreAuthorize("@perm.scoped(#companyUid, 'company', 'BRANCH.VIEW')")
+    @PreAuthorize("@perm.scopedOrMember(#companyUid, 'company', 'BRANCH.VIEW')")
     public List<BranchDto> list(@RequestParam String companyUid) {
         return branches.listByCompanyUid(companyUid);
     }

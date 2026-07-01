@@ -138,9 +138,8 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
             // Face check at raise — DN must not exceed the bill outstanding.
             if (grossAmount.compareTo(targetBill.getOutstandingAmount()) > 0) {
                 throw new IllegalStateException(
-                        "Debit note amount " + grossAmount
-                                + " exceeds outstanding " + targetBill.getOutstandingAmount()
-                                + " on bill " + req.supplierBillUid());
+                        "The debit note amount exceeds the outstanding balance on the selected supplier bill."
+                        + " Please enter an amount that does not exceed what is still owed on the bill.");
             }
         }
 
@@ -216,8 +215,9 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
         scopeGuard.assertCanActIn(RequestContext.get(), noteForApply.getCompanyId());
 
         if (noteForApply.getStatus() == ApDebitNoteStatus.APPLIED) {
+            // DN uid not exposed in the message
             throw new IllegalStateException(
-                    "Debit note " + req.debitNoteUid() + " is already fully APPLIED.");
+                    "This debit note has already been fully applied and cannot be applied again.");
         }
 
         Long applyCompanyId = noteForApply.getCompanyId();
@@ -397,24 +397,21 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
 
         for (AllocationLineRequest line : lines) {
             SupplierBill bill = bills.findByCompanyIdAndUid(companyId, line.supplierBillUid())
-                    .orElseThrow(() -> new NotFoundException(
-                            "SupplierBill not found: " + line.supplierBillUid()));
+                    .orElseThrow(() -> new NotFoundException("Supplier bill not found."));
 
-            // Guard: slice must not exceed current bill outstanding
+            // Guard: slice must not exceed current bill outstanding (bill uid not exposed)
             if (line.allocatedAmount().compareTo(bill.getOutstandingAmount()) > 0) {
                 throw new IllegalStateException(
-                        "Allocation " + line.allocatedAmount()
-                                + " exceeds outstanding " + bill.getOutstandingAmount()
-                                + " on bill uid=" + bill.getUid() + ".");
+                        "The amount being applied exceeds the outstanding balance on one of the selected bills."
+                        + " Please reduce the allocation amount for that bill.");
             }
 
-            // Guard: slice must not exceed remaining DN unapplied
+            // Guard: slice must not exceed remaining DN unapplied (DN uid not exposed)
             BigDecimal remaining = note.getUnappliedAmount().subtract(totalApplied);
             if (line.allocatedAmount().compareTo(remaining) > 0) {
                 throw new IllegalStateException(
-                        "Allocation " + line.allocatedAmount()
-                                + " exceeds DN remaining unapplied " + remaining
-                                + " on note uid=" + note.getUid() + ".");
+                        "The amount being applied exceeds the remaining unapplied balance on this debit note."
+                        + " Please reduce the allocation amount so it does not exceed the available credit.");
             }
 
             // Per-allocation base amounts (mirrors payment allocation mechanics)
@@ -448,12 +445,11 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
             sumBaseSettled  = sumBaseSettled.add(baseSettledSlice);
         }
 
-        // Guard: total applied must not exceed DN unapplied (Σ invariant)
+        // Guard: total applied must not exceed DN unapplied (Σ invariant — DN uid not exposed)
         if (totalApplied.compareTo(note.getUnappliedAmount()) > 0) {
             throw new IllegalStateException(
-                    "Total allocation " + totalApplied
-                            + " exceeds DN unapplied " + note.getUnappliedAmount()
-                            + " (DN uid=" + note.getUid() + ").");
+                    "The combined allocation total exceeds the unapplied balance remaining on this debit note."
+                    + " Please adjust the allocation lines so they do not exceed the available credit.");
         }
 
         // ── Post realized-FX plug per this batch (OMITTED when rates identical) ──

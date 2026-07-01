@@ -71,9 +71,10 @@ public class SupplierQuoteServiceImpl implements SupplierQuoteService {
         // PURCHASES-058: only SENT or QUOTES_RECEIVED RFQs accept quote captures (FR-PROC-09)
         if (rfq.getStatus() != RfqStatus.SENT
                 && rfq.getStatus() != RfqStatus.QUOTES_RECEIVED) {
+            // internal codes intentionally not surfaced (error-hygiene rule)
             throw new ConflictException(
                     "Cannot capture a quote against an RFQ in status " + rfq.getStatus()
-                            + "; RFQ must be SENT or QUOTES_RECEIVED (PURCHASES-058, FR-PROC-09).");
+                            + ". The RFQ must be in SENT or QUOTES_RECEIVED status.");
         }
 
         var supplier = suppliers.findByCompanyIdAndUid(rfq.getCompanyId(), req.supplierUid())

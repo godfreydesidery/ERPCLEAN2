@@ -185,7 +185,7 @@ class GLPostingServiceIT extends PostgresIntegrationTest {
 
         assertThatThrownBy(() -> postingService.post(draft))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("BR-GL-01");
+                .hasMessageContaining("unbalanced");
 
         // Nothing written
         assertThat(lineRepo.count()).isEqualTo(linesBefore);
@@ -251,7 +251,7 @@ class GLPostingServiceIT extends PostgresIntegrationTest {
 
         assertThatThrownBy(() -> postingService.post(draft))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("BR-GL-03");
+                .hasMessageContaining("no open fiscal period");
     }
 
     // =========================================================================
@@ -276,7 +276,7 @@ class GLPostingServiceIT extends PostgresIntegrationTest {
 
         assertThatThrownBy(() -> postingService.post(draft))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("BR-GL-04");
+                .hasMessageContaining("inactive and cannot be posted to");
     }
 
     // =========================================================================
@@ -318,7 +318,7 @@ class GLPostingServiceIT extends PostgresIntegrationTest {
 
         assertThatThrownBy(() -> postingService.post(draft))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("BR-GL-05");
+                .hasMessageContaining("does not belong to this company");
     }
 
     // =========================================================================
@@ -339,7 +339,7 @@ class GLPostingServiceIT extends PostgresIntegrationTest {
 
         assertThatThrownBy(() -> postingService.post(draft))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("BR-GL-06");
+                .hasMessageContaining("base currency");
     }
 
     // =========================================================================

@@ -59,9 +59,7 @@ class LocationResolverImplTest {
         assertThatThrownBy(() -> resolver.inTransitLocationId(COMPANY_ID, BRANCH_ID))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("in-transit location")
-                .hasMessageContaining("company=" + COMPANY_ID)
-                .hasMessageContaining("branch=" + BRANCH_ID)
-                .hasMessageContaining("V37 migration");
+                .hasMessageContaining("system administrator");
     }
 
     @Test

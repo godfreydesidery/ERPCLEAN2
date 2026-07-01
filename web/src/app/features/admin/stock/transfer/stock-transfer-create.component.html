@@ -23,6 +23,24 @@
       </div>
     }
     @default {
+      <!-- Reference-data notices (non-blocking) -->
+      @if (branchesUnavailable()) {
+        <div class="alert alert-info d-flex align-items-center gap-2 py-2 mb-3" role="note">
+          <i class="bi bi-info-circle-fill flex-shrink-0" aria-hidden="true"></i>
+          <span>
+            Branch list could not be loaded. The branch pickers below are empty — contact your administrator to be granted access to branch data.
+          </span>
+        </div>
+      }
+      @if (productsUnavailable()) {
+        <div class="alert alert-info d-flex align-items-center gap-2 py-2 mb-3" role="note">
+          <i class="bi bi-info-circle-fill flex-shrink-0" aria-hidden="true"></i>
+          <span>
+            Product list could not be loaded. Product selection is unavailable — contact your administrator to be granted access to product data.
+          </span>
+        </div>
+      }
+
       <form class="erp-card" (ngSubmit)="submit()" #f="ngForm" novalidate>
         <div class="erp-card__body">
 

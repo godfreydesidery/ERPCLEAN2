@@ -111,8 +111,7 @@ public class PosTillServiceImpl implements PosTillService {
                 .or(() -> cashAccounts.findByCompanyIdAndActive(companyId, true)
                         .stream().findFirst())
                 .orElseThrow(() -> new ConflictException(
-                        "No cash/bank account found for company " + companyId
-                        + ". Create a cash account before creating a POS till."))
+                        "No cash/bank account is configured for this company. Please create a cash account before setting up a POS till."))
                 .getId();
     }
 

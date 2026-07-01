@@ -252,7 +252,7 @@ class SalesReturnServiceIT extends PostgresIntegrationTest {
                         List.of(new CreateSalesReturnRequest.ReturnLineRequest(
                                 dlUid, new BigDecimal("5")))))   // 5 > 4 delivered
         ).isInstanceOf(IllegalStateException.class)
-         .hasMessageContaining("BR-SO-11");
+         .hasMessageContaining("exceeds the quantity available to return");
     }
 
     // =========================================================================
@@ -303,7 +303,7 @@ class SalesReturnServiceIT extends PostgresIntegrationTest {
                         List.of(new CreateSalesReturnRequest.ReturnLineRequest(
                                 dlUid, new BigDecimal("2")))))   // only 1 returnable left
         ).isInstanceOf(IllegalStateException.class)
-         .hasMessageContaining("BR-SO-11");
+         .hasMessageContaining("exceeds the quantity available to return");
     }
 
     // =========================================================================

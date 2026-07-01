@@ -420,7 +420,7 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
 
         assertThatThrownBy(() -> salesInvoiceService.finalise(draft.uid(), new FinaliseInvoiceRequest()))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("BR-SALES-07");
+                .hasMessageContaining("do not cover the invoice amount");
     }
 
     @Test
@@ -457,7 +457,7 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
 
         assertThatThrownBy(() -> salesInvoiceService.finalise(draft.uid(), new FinaliseInvoiceRequest()))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("BR-SALES-07");
+                .hasMessageContaining("Mobile money payments cannot be over-tendered");
     }
 
     @Test
@@ -492,7 +492,7 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
 
         assertThatThrownBy(() -> salesInvoiceService.finalise(draft.uid(), new FinaliseInvoiceRequest()))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("FR-SALES-18");
+                .hasMessageContaining("no payments recorded");
     }
 
     // -----------------------------------------------------------------------
@@ -529,8 +529,7 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
         assertThatThrownBy(() -> salesInvoiceService.voidInvoice(draft.uid(),
                 new VoidInvoiceRequest("should be blocked")))
                 .isInstanceOf(ConflictException.class)
-                .hasMessageContaining("direct payments")
-                .hasMessageContaining("FLOW-ORDER-TO-CASH-027");
+                .hasMessageContaining("direct payments have been applied");
     }
 
     @Test
@@ -546,8 +545,7 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
         assertThatThrownBy(() -> salesInvoiceService.voidInvoice(draft.uid(),
                 new VoidInvoiceRequest("should be blocked")))
                 .isInstanceOf(ConflictException.class)
-                .hasMessageContaining("direct payments")
-                .hasMessageContaining("FLOW-ORDER-TO-CASH-027");
+                .hasMessageContaining("direct payments have been applied");
     }
 
     @Test
@@ -569,7 +567,7 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
         assertThatThrownBy(() -> salesInvoiceService.addLine(draft.uid(),
                 new AddInvoiceLineRequest(productAUid, pcsUid, new BigDecimal("1"), null, null)))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("BR-SALES-08");
+                .hasMessageContaining("no longer in draft");
     }
 
     @Test
@@ -582,7 +580,7 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
         List<SalesInvoiceLineDto> lineList = salesInvoiceService.listLines(draft.uid());
         assertThatThrownBy(() -> salesInvoiceService.removeLine(draft.uid(), lineList.get(0).uid()))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("BR-SALES-08");
+                .hasMessageContaining("no longer in draft");
     }
 
     @Test
@@ -595,7 +593,7 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
         assertThatThrownBy(() -> salesInvoiceService.addPayment(draft.uid(),
                 new AddPaymentRequest(TenderType.CASH, new BigDecimal("100"), "TZS", null)))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("BR-SALES-08");
+                .hasMessageContaining("no longer in draft");
     }
 
     // -----------------------------------------------------------------------

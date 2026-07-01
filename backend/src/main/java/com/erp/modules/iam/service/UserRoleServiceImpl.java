@@ -80,8 +80,9 @@ public class UserRoleServiceImpl implements UserRoleService {
             branch = Lookups.orNotFound(branches.findByUid(request.branchUid()), "Branch", request.branchUid());
             // BR-5: branch must belong to the specified company.
             if (!branch.getCompany().getId().equals(company.getId())) {
+                // branchUid and companyUid intentionally not surfaced (error-hygiene rule)
                 throw new ConflictException(
-                        "Branch " + request.branchUid() + " does not belong to company " + request.companyUid());
+                        "The selected branch does not belong to the specified company.");
             }
         }
 

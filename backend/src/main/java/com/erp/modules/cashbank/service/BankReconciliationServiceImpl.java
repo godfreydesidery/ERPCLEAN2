@@ -75,12 +75,14 @@ public class BankReconciliationServiceImpl implements BankReconciliationService 
         CashBankAccount account = accounts.findByCompanyIdAndUid(companyId, req.cashBankAccountUid())
                 .orElseThrow(() -> new NotFoundException("Cash/bank account not found."));
 
+        // BR-CASH-11: only bank accounts can be reconciled against a bank statement
         if (account.getAccountType() != CashBankAccountType.BANK)
             throw new IllegalArgumentException(
-                    "Bank reconciliation is only supported for BANK accounts (BR-CASH-11).");
+                    "Bank reconciliation is only available for bank accounts, not petty-cash accounts.");
 
+        // BR-CASH-08: inactive accounts cannot be reconciled
         if (!account.isActive())
-            throw new IllegalStateException("Cash/bank account is inactive (BR-CASH-08).");
+            throw new IllegalStateException("The selected cash/bank account is inactive and cannot be reconciled.");
 
         if (req.statementClosingBalance() == null)
             throw new IllegalArgumentException("statementClosingBalance is required.");
@@ -115,9 +117,10 @@ public class BankReconciliationServiceImpl implements BankReconciliationService 
                 reconciliations.findByUid(reconciliationUid), "BankReconciliation", reconciliationUid);
         scopeGuard.assertCanActIn(RequestContext.get(), recon.getCompanyId());
 
+        // BR-CASH-07: cleared flags are immutable once a reconciliation is completed
         if (recon.getStatus() != ReconciliationStatus.DRAFT)
             throw new IllegalStateException(
-                    "This reconciliation is already COMPLETED — cleared flags are immutable.");
+                    "This reconciliation has already been completed and its cleared transactions cannot be changed.");
 
         List<CashTransaction> transactions = txns.findByUidIn(req.transactionUids());
 
@@ -163,10 +166,12 @@ public class BankReconciliationServiceImpl implements BankReconciliationService 
         BigDecimal clearedBalance = txns.clearedBookBalance(recon.getId());
         if (clearedBalance == null) clearedBalance = BigDecimal.ZERO;
 
-        // BR-CASH-06: cleared book balance must equal the statement closing balance
+        // BR-CASH-06: cleared book balance must equal the statement closing balance before completing
         if (clearedBalance.compareTo(recon.getStatementClosingBalance()) != 0) {
             throw new IllegalStateException(String.format(
-                    "Cannot complete reconciliation: cleared book balance %s does not match statement closing balance %s.",
+                    "The reconciliation cannot be completed: the total of cleared transactions (%s) "
+                            + "does not match the bank statement closing balance (%s). "
+                            + "Please mark the correct transactions as cleared before completing.",
                     clearedBalance.toPlainString(),
                     recon.getStatementClosingBalance().toPlainString()));
         }

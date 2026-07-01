@@ -41,8 +41,9 @@ public class PartyBranchGuard {
                 .orElseThrow(() -> new NotFoundException("Branch not found."));
         Long branchCompanyId = branch.getCompany().getId();
         if (!branchCompanyId.equals(partyCompanyId)) {
+            // BR-PARTY-01: branch must belong to the same company as the party
             throw new ForbiddenException(
-                    "Branch does not belong to the party's company (BR-PARTY-01).");
+                    "The selected branch does not belong to the same company as this party.");
         }
     }
 
@@ -59,8 +60,9 @@ public class PartyBranchGuard {
                 .orElseThrow(() -> new NotFoundException("Branch not found."));
         Long branchCompanyId = branch.getCompany().getId();
         if (!branchCompanyId.equals(partyCompanyId)) {
+            // BR-PARTY-01: branch must belong to the same company as the party
             throw new ForbiddenException(
-                    "Branch does not belong to the party's company (BR-PARTY-01).");
+                    "The selected branch does not belong to the same company as this party.");
         }
     }
 
@@ -76,8 +78,9 @@ public class PartyBranchGuard {
                 .orElseThrow(() -> new NotFoundException("Branch not found."));
         Long branchCompanyId = branch.getCompany().getId();
         if (!branchCompanyId.equals(partyCompanyId)) {
+            // BR-PARTY-01: branch must belong to the same company as the party
             throw new ForbiddenException(
-                    "Branch does not belong to the party's company (BR-PARTY-01).");
+                    "The selected branch does not belong to the same company as this party.");
         }
         return branch.getId();
     }

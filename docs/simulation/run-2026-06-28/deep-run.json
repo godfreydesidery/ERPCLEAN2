@@ -1,0 +1,321 @@
+{
+  "totals": {
+    "problems": 4,
+    "bySeverity": {
+      "SLOW": 4
+    }
+  },
+  "perPersona": [
+    {
+      "persona": "Bakari Mbaga",
+      "slug": "bakari-mbaga",
+      "ran": false
+    },
+    {
+      "persona": "Grace Mhina",
+      "slug": "grace-mhina",
+      "ran": true,
+      "loggedIn": true,
+      "role": "FINANCE_DIRECTOR",
+      "access": [
+        {
+          "path": "/admin/gl/journals/post",
+          "label": "Post journal",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/ar/receipts/record",
+          "label": "Record receipt",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/ap/payments/record",
+          "label": "Record payment",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/ap/supplier-bills/enter",
+          "label": "Enter supplier bill",
+          "outcome": "OK"
+        }
+      ],
+      "created": {
+        "post journal": 1
+      },
+      "problemCount": 0
+    },
+    {
+      "persona": "Halima Juma",
+      "slug": "halima-juma",
+      "ran": false
+    },
+    {
+      "persona": "Emanuel Mushi",
+      "slug": "emanuel-mushi",
+      "ran": false
+    },
+    {
+      "persona": "Daudi Kessy",
+      "slug": "daudi-kessy",
+      "ran": false
+    },
+    {
+      "persona": "Rehema Salum",
+      "slug": "rehema-salum",
+      "ran": false
+    },
+    {
+      "persona": "Editha Mhagama",
+      "slug": "editha-mhagama",
+      "ran": false
+    },
+    {
+      "persona": "Neema Kileo",
+      "slug": "neema-kileo",
+      "ran": false
+    },
+    {
+      "persona": "Frank Materu",
+      "slug": "frank-materu",
+      "ran": true,
+      "loggedIn": true,
+      "role": "STORES_SUPERVISOR",
+      "access": [
+        {
+          "path": "/admin/stock",
+          "label": "Stock on-hand",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/stock-counts/create",
+          "label": "Stock count",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/stock-transfers/create",
+          "label": "Stock transfer",
+          "outcome": "OK"
+        }
+      ],
+      "created": {},
+      "problemCount": 1
+    },
+    {
+      "persona": "Editrude Mwakalukwa",
+      "slug": "editrude-mwakalukwa",
+      "ran": false
+    },
+    {
+      "persona": "Amina Mwanga",
+      "slug": "amina-mwanga",
+      "ran": true,
+      "loggedIn": true,
+      "role": "ACCOUNTANT",
+      "access": [
+        {
+          "path": "/admin/gl/journals/post",
+          "label": "Post journal",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/ar/receipts/record",
+          "label": "Record receipt",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/ap/supplier-bills/enter",
+          "label": "Enter supplier bill",
+          "outcome": "OK"
+        }
+      ],
+      "created": {
+        "post journal": 1
+      },
+      "problemCount": 0
+    },
+    {
+      "persona": "John Komba",
+      "slug": "john-komba",
+      "ran": true,
+      "loggedIn": true,
+      "role": "CASHIER",
+      "access": [
+        {
+          "path": "/admin/ar/receipts/record",
+          "label": "Record receipt",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/ap/payments/record",
+          "label": "Record payment",
+          "outcome": "OK"
+        }
+      ],
+      "created": {},
+      "problemCount": 1
+    },
+    {
+      "persona": "Sabina Aloyce",
+      "slug": "sabina-aloyce",
+      "ran": true,
+      "loggedIn": true,
+      "role": "SALES_OFFICER",
+      "access": [
+        {
+          "path": "/admin/sales-orders",
+          "label": "Sales orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/customers",
+          "label": "Customers",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/pos/sell",
+          "label": "POS sell",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/products",
+          "label": "Products",
+          "outcome": "OK"
+        }
+      ],
+      "created": {
+        "register customer": 5
+      },
+      "problemCount": 2
+    },
+    {
+      "persona": "Hamisi Ngassa",
+      "slug": "hamisi-ngassa",
+      "ran": false
+    },
+    {
+      "persona": "Saidi Karume",
+      "slug": "saidi-karume",
+      "ran": false
+    },
+    {
+      "persona": "Yusuf Mbwana",
+      "slug": "yusuf-mbwana",
+      "ran": true,
+      "loggedIn": true,
+      "role": "PROCUREMENT_OFFICER",
+      "access": [
+        {
+          "path": "/admin/purchase-orders",
+          "label": "Purchase orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/suppliers",
+          "label": "Suppliers",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/products",
+          "label": "Products",
+          "outcome": "OK"
+        }
+      ],
+      "created": {
+        "register supplier": 5,
+        "register product master data": 11,
+        "raise PO + line": 1,
+        "place PO": 1
+      },
+      "problemCount": 0
+    }
+  ],
+  "problems": [
+    {
+      "persona": "Frank Materu",
+      "designation": "Stores / Warehouse Supervisor",
+      "username": "fmateru",
+      "severity": "SLOW",
+      "workflow": "record stock opening balance",
+      "screen": "/admin/stock",
+      "detail": "opening balance rejected (409)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 409 (Conflict)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/stock/opening-balances",
+            "status": 409,
+            "method": "POST",
+            "body": "{\"data\":null,\"errors\":[\"An on-hand record already exists for this product at the active branch. Use an ADJUSTMENT to correct an existing level.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "frank-materu"
+    },
+    {
+      "persona": "John Komba",
+      "designation": "Cashier / Cash & Bank Officer",
+      "username": "jkomba",
+      "severity": "SLOW",
+      "workflow": "record a customer receipt",
+      "screen": "/admin/ar/receipts/record",
+      "detail": "receipt rejected (403)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/ar/invoices?companyId=3&page=0&size=200&customerUid=01KW60DQH1MYY6BB3CMEJZBQ1T",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "john-komba"
+    },
+    {
+      "persona": "Sabina Aloyce",
+      "designation": "Salesperson",
+      "username": "saloyce",
+      "severity": "SLOW",
+      "workflow": "create price list",
+      "screen": "/admin/price-lists",
+      "detail": "could not save \"RETAIL\" (validation/409)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 409 (Conflict)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/price-lists",
+            "status": 409,
+            "method": "POST",
+            "body": "{\"data\":null,\"errors\":[\"A record with the same unique identifier already exists.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "sabina-aloyce"
+    },
+    {
+      "persona": "Sabina Aloyce",
+      "designation": "Salesperson",
+      "username": "saloyce",
+      "severity": "SLOW",
+      "workflow": "create a sales order",
+      "screen": "/admin/sales-orders/uid",
+      "detail": "could not pick a product for the SO line",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      },
+      "slug": "sabina-aloyce"
+    }
+  ]
+}

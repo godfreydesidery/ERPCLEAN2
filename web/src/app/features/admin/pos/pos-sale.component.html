@@ -43,6 +43,16 @@
           </div>
         }
 
+        <!-- Branch list unavailable notice (non-blocking) -->
+        @if (branchesError()) {
+          <div class="alert alert-info d-flex align-items-center gap-2 py-2 mb-3" role="note">
+            <i class="bi bi-info-circle-fill flex-shrink-0" aria-hidden="true"></i>
+            <span>
+              Branch information could not be loaded. You may not have access to the branch list — all open sessions are shown below. Contact your administrator if you need branch filtering.
+            </span>
+          </div>
+        }
+
         <!-- Branch filter — narrows the open-session list to one branch -->
         @if (branches().length > 0) {
           <div class="mb-3" style="max-width:320px">

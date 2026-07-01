@@ -52,6 +52,10 @@ export class StockCountCreateComponent {
   readonly fCountType = signal<'FULL' | 'CYCLE'>('FULL');
   readonly fNotes = signal('');
 
+  // ── Reference-data availability ───────────────────────────────────────────────
+  /** True when the branch list could not be loaded (non-fatal; location picker uses first branch only). */
+  readonly branchesUnavailable = signal(false);
+
   // ── Submit state ──────────────────────────────────────────────────────────────
   readonly submitting = signal(false);
   readonly formError = signal<string | null>(null);
@@ -73,8 +77,13 @@ export class StockCountCreateComponent {
             this.companies.set(list);
             this.companyState.set('idle');
             if (list.length > 0) {
-              this.selectedCompanyId.set(list[0].id);
-              this.loadBranches(list[0].uid);
+              // Default to the active company from session; fall back to list[0].
+              const activeCompanyUid = this.session.user()?.activeCompanyUid ?? null;
+              const active = activeCompanyUid
+                ? (list.find((c) => c.uid === activeCompanyUid) ?? list[0])
+                : list[0];
+              this.selectedCompanyId.set(active.id);
+              this.loadBranches(active.uid);
             }
           },
           error: () => this.companyState.set('error'),
@@ -85,15 +94,21 @@ export class StockCountCreateComponent {
   }
 
   private loadBranches(companyUid: string): void {
+    this.branchesUnavailable.set(false);
     this.branchService.list(companyUid).subscribe({
       next: (list) => {
         this.branches.set(list);
         if (list.length > 0) {
-          this.selectedBranchUid.set(list[0].uid);
-          this.loadLocations(list[0].uid);
+          // Default to the user's active branch; fall back to list[0].
+          const activeBranchUid = this.session.activeBranchUid() ?? null;
+          const active = activeBranchUid
+            ? (list.find((b) => b.uid === activeBranchUid) ?? list[0])
+            : list[0];
+          this.selectedBranchUid.set(active.uid);
+          this.loadLocations(active.uid);
         }
       },
-      error: () => this.branches.set([]),
+      error: () => { this.branches.set([]); this.branchesUnavailable.set(true); },
     });
   }
 

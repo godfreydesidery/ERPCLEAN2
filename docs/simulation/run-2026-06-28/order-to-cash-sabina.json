@@ -1,0 +1,58 @@
+{
+  "persona": "Sabina Aloyce",
+  "username": "saloyce",
+  "role": "SALES_OFFICER",
+  "access": [
+    {
+      "path": "/admin/sales-orders",
+      "label": "Sales orders",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/customers",
+      "label": "Customers",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/pos/sell",
+      "label": "POS sell",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/products",
+      "label": "Products",
+      "outcome": "OK"
+    }
+  ],
+  "loggedIn": true,
+  "created": {
+    "register customer": 5,
+    "create SO + line": 1
+  },
+  "problemCount": 1,
+  "problems": [
+    {
+      "persona": "Sabina Aloyce",
+      "designation": "Salesperson",
+      "username": "saloyce",
+      "severity": "SLOW",
+      "workflow": "create price list",
+      "screen": "/admin/price-lists",
+      "detail": "could not save \"RETAIL\" (validation/409)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 409 (Conflict)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/price-lists",
+            "status": 409,
+            "method": "POST",
+            "body": "{\"data\":null,\"errors\":[\"A record with the same unique identifier already exists.\"],\"meta\":null}"
+          }
+        ]
+      }
+    }
+  ]
+}

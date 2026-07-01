@@ -38,8 +38,9 @@ public class ProductBranchGuard {
                 .orElseThrow(() -> new NotFoundException("Branch not found."));
         Long branchCompanyId = branch.getCompany().getId();
         if (!branchCompanyId.equals(productCompanyId)) {
+            // BR-PROD-09: cross-company branch assignment
             throw new ForbiddenException(
-                    "Branch does not belong to the product's company (BR-PROD-09).");
+                    "The selected branch does not belong to the same company as the product.");
         }
         return branch.getId();
     }

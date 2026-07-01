@@ -178,6 +178,16 @@
           </div>
         </div>
 
+        <!-- Product list unavailable notice (non-blocking) -->
+        @if (productsUnavailable()) {
+          <div class="alert alert-info d-flex align-items-center gap-2 py-2 mb-3" role="note">
+            <i class="bi bi-info-circle-fill flex-shrink-0" aria-hidden="true"></i>
+            <span>
+              Product list could not be loaded. The component product picker is unavailable — contact your administrator to be granted access to product data.
+            </span>
+          </div>
+        }
+
         <!-- Components section -->
         <div class="erp-card">
           <div class="erp-card__head">

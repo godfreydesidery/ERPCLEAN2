@@ -183,7 +183,7 @@ public class ApprovalPolicyServiceImpl implements ApprovalPolicyService {
 
     private void validateSteps(List<PolicyStepInputDto> steps) {
         if (steps == null || steps.isEmpty()) {
-            throw new ConflictException("A policy must have at least one step (BR-APR-03)");
+            throw new ConflictException("A policy must have at least one approval step.");
         }
         for (PolicyStepInputDto step : steps) {
             if (!roleRepo.existsByCode(step.approverRoleCode())) {
@@ -194,7 +194,7 @@ public class ApprovalPolicyServiceImpl implements ApprovalPolicyService {
         List<Integer> seqs = steps.stream().map(PolicyStepInputDto::sequence).sorted().toList();
         for (int i = 0; i < seqs.size(); i++) {
             if (seqs.get(i) != i + 1) {
-                throw new ConflictException("Step sequences must be dense from 1 (BR-APR-03)");
+                throw new ConflictException("Step sequence numbers must be consecutive starting from 1 with no gaps.");
             }
         }
     }
@@ -211,9 +211,10 @@ public class ApprovalPolicyServiceImpl implements ApprovalPolicyService {
                 companyId, documentType, scope, branchId,
                 minAmount, effectiveMax, MasterStatus.ACTIVE, excludeId);
         if (!overlaps.isEmpty()) {
+            // BR-APR-02: approval policy bands must not overlap for the same document type and branch scope.
             throw new ConflictException(
-                    "Band [" + minAmount + ", " + effectiveMax + ") overlaps an existing active policy band " +
-                    "for documentType=" + documentType + " (BR-APR-02)");
+                    "The amount range you entered overlaps an existing active approval policy for this document type. "
+                    + "Please adjust the minimum or maximum amount so the ranges do not overlap.");
         }
     }
 

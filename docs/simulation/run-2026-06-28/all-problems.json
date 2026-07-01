@@ -1,0 +1,1156 @@
+{
+  "totals": {
+    "problems": 29,
+    "bySeverity": {
+      "BLOCKED": 28,
+      "SLOW": 1
+    }
+  },
+  "perPersona": [
+    {
+      "persona": "Bakari Mbaga",
+      "slug": "bakari-mbaga",
+      "ran": true,
+      "loggedIn": true,
+      "role": "GROUP_GM",
+      "access": [
+        {
+          "path": "/admin/home",
+          "label": "Group dashboard",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/sales-orders",
+          "label": "Sales orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/purchase-orders",
+          "label": "Purchase orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/stock",
+          "label": "Stock on-hand",
+          "outcome": "OK"
+        }
+      ],
+      "created": {},
+      "problemCount": 0
+    },
+    {
+      "persona": "Grace Mhina",
+      "slug": "grace-mhina",
+      "ran": true,
+      "loggedIn": true,
+      "role": "FINANCE_DIRECTOR",
+      "access": [
+        {
+          "path": "/admin/gl/journals/post",
+          "label": "Post journal",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/ar/receipts/record",
+          "label": "Record receipt",
+          "outcome": "FORBIDDEN"
+        },
+        {
+          "path": "/admin/ap/payments/record",
+          "label": "Record payment",
+          "outcome": "FORBIDDEN"
+        },
+        {
+          "path": "/admin/ap/supplier-bills/enter",
+          "label": "Enter supplier bill",
+          "outcome": "FORBIDDEN"
+        }
+      ],
+      "created": {},
+      "problemCount": 3
+    },
+    {
+      "persona": "Halima Juma",
+      "slug": "halima-juma",
+      "ran": true,
+      "loggedIn": true,
+      "role": "BRANCH_MANAGER",
+      "access": [
+        {
+          "path": "/admin/sales-orders",
+          "label": "Sales orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/purchase-orders",
+          "label": "Purchase orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/stock",
+          "label": "Stock on-hand",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/stock-transfers/create",
+          "label": "Stock transfer",
+          "outcome": "OK"
+        }
+      ],
+      "created": {},
+      "problemCount": 0
+    },
+    {
+      "persona": "Emanuel Mushi",
+      "slug": "emanuel-mushi",
+      "ran": true,
+      "loggedIn": true,
+      "role": "BRANCH_MANAGER",
+      "access": [
+        {
+          "path": "/admin/sales-orders",
+          "label": "Sales orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/purchase-orders",
+          "label": "Purchase orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/stock",
+          "label": "Stock on-hand",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/stock-transfers/create",
+          "label": "Stock transfer",
+          "outcome": "OK"
+        }
+      ],
+      "created": {},
+      "problemCount": 0
+    },
+    {
+      "persona": "Daudi Kessy",
+      "slug": "daudi-kessy",
+      "ran": true,
+      "loggedIn": true,
+      "role": "BRANCH_MANAGER",
+      "access": [
+        {
+          "path": "/admin/sales-orders",
+          "label": "Sales orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/purchase-orders",
+          "label": "Purchase orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/stock",
+          "label": "Stock on-hand",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/stock-transfers/create",
+          "label": "Stock transfer",
+          "outcome": "OK"
+        }
+      ],
+      "created": {},
+      "problemCount": 0
+    },
+    {
+      "persona": "Rehema Salum",
+      "slug": "rehema-salum",
+      "ran": true,
+      "loggedIn": true,
+      "role": "PROCUREMENT_OFFICER",
+      "access": [
+        {
+          "path": "/admin/purchase-orders",
+          "label": "Purchase orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/suppliers",
+          "label": "Suppliers",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/products",
+          "label": "Products",
+          "outcome": "OK"
+        }
+      ],
+      "created": {
+        "register supplier": 5,
+        "create sourced product": 5
+      },
+      "problemCount": 0
+    },
+    {
+      "persona": "Editha Mhagama",
+      "slug": "editha-mhagama",
+      "ran": true,
+      "loggedIn": true,
+      "role": "PRODUCTION_OFFICER",
+      "access": [
+        {
+          "path": "/admin/work-orders",
+          "label": "Work orders",
+          "outcome": "FORBIDDEN"
+        },
+        {
+          "path": "/admin/boms",
+          "label": "Bills of materials",
+          "outcome": "FORBIDDEN"
+        }
+      ],
+      "created": {},
+      "problemCount": 8
+    },
+    {
+      "persona": "Neema Kileo",
+      "slug": "neema-kileo",
+      "ran": true,
+      "loggedIn": true,
+      "role": "HR_PAYROLL_OFFICER",
+      "access": [
+        {
+          "path": "/admin/users",
+          "label": "Users (people)",
+          "outcome": "OK"
+        }
+      ],
+      "created": {},
+      "problemCount": 0
+    },
+    {
+      "persona": "Frank Materu",
+      "slug": "frank-materu",
+      "ran": true,
+      "loggedIn": true,
+      "role": "STORES_SUPERVISOR",
+      "access": [
+        {
+          "path": "/admin/stock",
+          "label": "Stock on-hand",
+          "outcome": "FORBIDDEN"
+        },
+        {
+          "path": "/admin/stock-counts/create",
+          "label": "Stock count",
+          "outcome": "FORBIDDEN"
+        },
+        {
+          "path": "/admin/stock-transfers/create",
+          "label": "Stock transfer",
+          "outcome": "FORBIDDEN"
+        }
+      ],
+      "created": {},
+      "problemCount": 3
+    },
+    {
+      "persona": "Editrude Mwakalukwa",
+      "slug": "editrude-mwakalukwa",
+      "ran": true,
+      "loggedIn": true,
+      "role": "PRODUCTION_OFFICER",
+      "access": [
+        {
+          "path": "/admin/work-orders",
+          "label": "Work orders",
+          "outcome": "FORBIDDEN"
+        },
+        {
+          "path": "/admin/boms",
+          "label": "Bills of materials",
+          "outcome": "FORBIDDEN"
+        }
+      ],
+      "created": {},
+      "problemCount": 8
+    },
+    {
+      "persona": "Amina Mwanga",
+      "slug": "amina-mwanga",
+      "ran": true,
+      "loggedIn": true,
+      "role": "ACCOUNTANT",
+      "access": [
+        {
+          "path": "/admin/gl/journals/post",
+          "label": "Post journal",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/ar/receipts/record",
+          "label": "Record receipt",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/ap/supplier-bills/enter",
+          "label": "Enter supplier bill",
+          "outcome": "FORBIDDEN"
+        }
+      ],
+      "created": {},
+      "problemCount": 1
+    },
+    {
+      "persona": "John Komba",
+      "slug": "john-komba",
+      "ran": true,
+      "loggedIn": true,
+      "role": "CASHIER",
+      "access": [
+        {
+          "path": "/admin/ar/receipts/record",
+          "label": "Record receipt",
+          "outcome": "FORBIDDEN"
+        },
+        {
+          "path": "/admin/ap/payments/record",
+          "label": "Record payment",
+          "outcome": "FORBIDDEN"
+        }
+      ],
+      "created": {},
+      "problemCount": 2
+    },
+    {
+      "persona": "Sabina Aloyce",
+      "slug": "sabina-aloyce",
+      "ran": true,
+      "loggedIn": true,
+      "role": "SALES_OFFICER",
+      "access": [
+        {
+          "path": "/admin/sales-orders",
+          "label": "Sales orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/customers",
+          "label": "Customers",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/pos/sell",
+          "label": "POS sell",
+          "outcome": "FORBIDDEN"
+        },
+        {
+          "path": "/admin/products",
+          "label": "Products",
+          "outcome": "OK"
+        }
+      ],
+      "created": {
+        "register customer": 5
+      },
+      "problemCount": 2
+    },
+    {
+      "persona": "Hamisi Ngassa",
+      "slug": "hamisi-ngassa",
+      "ran": true,
+      "loggedIn": true,
+      "role": "FIELD_SALES_AGENT",
+      "access": [
+        {
+          "path": "/admin/sales-orders",
+          "label": "Sales orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/customers",
+          "label": "Customers",
+          "outcome": "OK"
+        }
+      ],
+      "created": {
+        "register route customer": 1
+      },
+      "problemCount": 0
+    },
+    {
+      "persona": "Saidi Karume",
+      "slug": "saidi-karume",
+      "ran": true,
+      "loggedIn": true,
+      "role": "STOREKEEPER",
+      "access": [
+        {
+          "path": "/admin/stock",
+          "label": "Stock on-hand",
+          "outcome": "FORBIDDEN"
+        },
+        {
+          "path": "/admin/goods-receipts/create",
+          "label": "Goods receipt",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/stock-counts/create",
+          "label": "Stock count",
+          "outcome": "FORBIDDEN"
+        }
+      ],
+      "created": {},
+      "problemCount": 2
+    },
+    {
+      "persona": "Yusuf Mbwana",
+      "slug": "yusuf-mbwana",
+      "ran": true,
+      "loggedIn": true,
+      "role": "PROCUREMENT_OFFICER",
+      "access": [
+        {
+          "path": "/admin/purchase-orders",
+          "label": "Purchase orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/suppliers",
+          "label": "Suppliers",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/products",
+          "label": "Products",
+          "outcome": "OK"
+        }
+      ],
+      "created": {
+        "register supplier": 5,
+        "create sourced product": 5
+      },
+      "problemCount": 0
+    }
+  ],
+  "problems": [
+    {
+      "persona": "Grace Mhina",
+      "designation": "Finance Director (CFO)",
+      "username": "gmhina",
+      "severity": "BLOCKED",
+      "workflow": "open Record receipt",
+      "screen": "/admin/ar/receipts/record",
+      "detail": "I'm told I don't have permission to open Record receipt, but it's part of my job (FINANCE_DIRECTOR)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/wht/types?companyId=3",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "grace-mhina"
+    },
+    {
+      "persona": "Grace Mhina",
+      "designation": "Finance Director (CFO)",
+      "username": "gmhina",
+      "severity": "BLOCKED",
+      "workflow": "open Record payment",
+      "screen": "/admin/ap/payments/record",
+      "detail": "I'm told I don't have permission to open Record payment, but it's part of my job (FINANCE_DIRECTOR)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/wht/types?companyId=3",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "grace-mhina"
+    },
+    {
+      "persona": "Grace Mhina",
+      "designation": "Finance Director (CFO)",
+      "username": "gmhina",
+      "severity": "BLOCKED",
+      "workflow": "open Enter supplier bill",
+      "screen": "/admin/ap/supplier-bills/enter",
+      "detail": "I'm told I don't have permission to open Enter supplier bill, but it's part of my job (FINANCE_DIRECTOR)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/purchase-orders?companyId=3&page=0&size=200&status=ORDERED",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "grace-mhina"
+    },
+    {
+      "persona": "Editha Mhagama",
+      "designation": "Production Manager",
+      "username": "emhagama",
+      "severity": "BLOCKED",
+      "workflow": "open Work orders",
+      "screen": "/admin/work-orders",
+      "detail": "I'm told I don't have permission to open Work orders, but it's part of my job (PRODUCTION_OFFICER)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/branches?companyUid=01KW17PVFC09X1YZEG4E0VKTDN",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          },
+          {
+            "url": "/api/v1/products?companyId=3&page=0&size=500",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "editha-mhagama"
+    },
+    {
+      "persona": "Editha Mhagama",
+      "designation": "Production Manager",
+      "username": "emhagama",
+      "severity": "BLOCKED",
+      "workflow": "open Bills of materials",
+      "screen": "/admin/boms",
+      "detail": "I'm told I don't have permission to open Bills of materials, but it's part of my job (PRODUCTION_OFFICER)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/products?companyId=3&page=0&size=500",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "editha-mhagama"
+    },
+    {
+      "persona": "Editha Mhagama",
+      "designation": "Production Manager",
+      "username": "emhagama",
+      "severity": "BLOCKED",
+      "workflow": "create manufactured product",
+      "screen": "/admin/products",
+      "detail": "permission denied opening /admin/products (role PRODUCTION_OFFICER should allow this)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/products?companyId=3&page=0&size=500",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "editha-mhagama"
+    },
+    {
+      "persona": "Editha Mhagama",
+      "designation": "Production Manager",
+      "username": "emhagama",
+      "severity": "BLOCKED",
+      "workflow": "create manufactured product",
+      "screen": "/admin/products",
+      "detail": "permission denied opening /admin/products (role PRODUCTION_OFFICER should allow this)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/products?companyId=3&page=0&size=500",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "editha-mhagama"
+    },
+    {
+      "persona": "Editha Mhagama",
+      "designation": "Production Manager",
+      "username": "emhagama",
+      "severity": "BLOCKED",
+      "workflow": "create manufactured product",
+      "screen": "/admin/products",
+      "detail": "permission denied opening /admin/products (role PRODUCTION_OFFICER should allow this)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/products?companyId=3&page=0&size=500",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "editha-mhagama"
+    },
+    {
+      "persona": "Editha Mhagama",
+      "designation": "Production Manager",
+      "username": "emhagama",
+      "severity": "BLOCKED",
+      "workflow": "create manufactured product",
+      "screen": "/admin/products",
+      "detail": "permission denied opening /admin/products (role PRODUCTION_OFFICER should allow this)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/products?companyId=3&page=0&size=500",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "editha-mhagama"
+    },
+    {
+      "persona": "Editha Mhagama",
+      "designation": "Production Manager",
+      "username": "emhagama",
+      "severity": "BLOCKED",
+      "workflow": "create manufactured product",
+      "screen": "/admin/products",
+      "detail": "permission denied opening /admin/products (role PRODUCTION_OFFICER should allow this)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/products?companyId=3&page=0&size=500",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "editha-mhagama"
+    },
+    {
+      "persona": "Editha Mhagama",
+      "designation": "Production Manager",
+      "username": "emhagama",
+      "severity": "BLOCKED",
+      "workflow": "create manufactured product",
+      "screen": "/admin/products",
+      "detail": "permission denied opening /admin/products (role PRODUCTION_OFFICER should allow this)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/products?companyId=3&page=0&size=500",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "editha-mhagama"
+    },
+    {
+      "persona": "Frank Materu",
+      "designation": "Stores / Warehouse Supervisor",
+      "username": "fmateru",
+      "severity": "BLOCKED",
+      "workflow": "open Stock on-hand",
+      "screen": "/admin/stock",
+      "detail": "I'm told I don't have permission to open Stock on-hand, but it's part of my job (STORES_SUPERVISOR)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/branches?companyUid=01KW17PVFC09X1YZEG4E0VKTDN",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "frank-materu"
+    },
+    {
+      "persona": "Frank Materu",
+      "designation": "Stores / Warehouse Supervisor",
+      "username": "fmateru",
+      "severity": "BLOCKED",
+      "workflow": "open Stock count",
+      "screen": "/admin/stock-counts/create",
+      "detail": "I'm told I don't have permission to open Stock count, but it's part of my job (STORES_SUPERVISOR)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/branches?companyUid=01KW17PVFC09X1YZEG4E0VKTDN",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "frank-materu"
+    },
+    {
+      "persona": "Frank Materu",
+      "designation": "Stores / Warehouse Supervisor",
+      "username": "fmateru",
+      "severity": "BLOCKED",
+      "workflow": "open Stock transfer",
+      "screen": "/admin/stock-transfers/create",
+      "detail": "I'm told I don't have permission to open Stock transfer, but it's part of my job (STORES_SUPERVISOR)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/branches?companyUid=01KW17PVFC09X1YZEG4E0VKTDN",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          },
+          {
+            "url": "/api/v1/products?companyId=3&page=0&size=200",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "frank-materu"
+    },
+    {
+      "persona": "Editrude Mwakalukwa",
+      "designation": "Production Supervisor",
+      "username": "emwakalukwa",
+      "severity": "BLOCKED",
+      "workflow": "open Work orders",
+      "screen": "/admin/work-orders",
+      "detail": "I'm told I don't have permission to open Work orders, but it's part of my job (PRODUCTION_OFFICER)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/branches?companyUid=01KW17PVFC09X1YZEG4E0VKTDN",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          },
+          {
+            "url": "/api/v1/products?companyId=3&page=0&size=500",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "editrude-mwakalukwa"
+    },
+    {
+      "persona": "Editrude Mwakalukwa",
+      "designation": "Production Supervisor",
+      "username": "emwakalukwa",
+      "severity": "BLOCKED",
+      "workflow": "open Bills of materials",
+      "screen": "/admin/boms",
+      "detail": "I'm told I don't have permission to open Bills of materials, but it's part of my job (PRODUCTION_OFFICER)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/products?companyId=3&page=0&size=500",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "editrude-mwakalukwa"
+    },
+    {
+      "persona": "Editrude Mwakalukwa",
+      "designation": "Production Supervisor",
+      "username": "emwakalukwa",
+      "severity": "BLOCKED",
+      "workflow": "create manufactured product",
+      "screen": "/admin/products",
+      "detail": "permission denied opening /admin/products (role PRODUCTION_OFFICER should allow this)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/products?companyId=3&page=0&size=500",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "editrude-mwakalukwa"
+    },
+    {
+      "persona": "Editrude Mwakalukwa",
+      "designation": "Production Supervisor",
+      "username": "emwakalukwa",
+      "severity": "BLOCKED",
+      "workflow": "create manufactured product",
+      "screen": "/admin/products",
+      "detail": "permission denied opening /admin/products (role PRODUCTION_OFFICER should allow this)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/products?companyId=3&page=0&size=500",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "editrude-mwakalukwa"
+    },
+    {
+      "persona": "Editrude Mwakalukwa",
+      "designation": "Production Supervisor",
+      "username": "emwakalukwa",
+      "severity": "BLOCKED",
+      "workflow": "create manufactured product",
+      "screen": "/admin/products",
+      "detail": "permission denied opening /admin/products (role PRODUCTION_OFFICER should allow this)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/products?companyId=3&page=0&size=500",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "editrude-mwakalukwa"
+    },
+    {
+      "persona": "Editrude Mwakalukwa",
+      "designation": "Production Supervisor",
+      "username": "emwakalukwa",
+      "severity": "BLOCKED",
+      "workflow": "create manufactured product",
+      "screen": "/admin/products",
+      "detail": "permission denied opening /admin/products (role PRODUCTION_OFFICER should allow this)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/products?companyId=3&page=0&size=500",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "editrude-mwakalukwa"
+    },
+    {
+      "persona": "Editrude Mwakalukwa",
+      "designation": "Production Supervisor",
+      "username": "emwakalukwa",
+      "severity": "BLOCKED",
+      "workflow": "create manufactured product",
+      "screen": "/admin/products",
+      "detail": "permission denied opening /admin/products (role PRODUCTION_OFFICER should allow this)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/products?companyId=3&page=0&size=500",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "editrude-mwakalukwa"
+    },
+    {
+      "persona": "Editrude Mwakalukwa",
+      "designation": "Production Supervisor",
+      "username": "emwakalukwa",
+      "severity": "BLOCKED",
+      "workflow": "create manufactured product",
+      "screen": "/admin/products",
+      "detail": "permission denied opening /admin/products (role PRODUCTION_OFFICER should allow this)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/products?companyId=3&page=0&size=500",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "editrude-mwakalukwa"
+    },
+    {
+      "persona": "Amina Mwanga",
+      "designation": "Accountant",
+      "username": "amwanga",
+      "severity": "BLOCKED",
+      "workflow": "open Enter supplier bill",
+      "screen": "/admin/ap/supplier-bills/enter",
+      "detail": "I'm told I don't have permission to open Enter supplier bill, but it's part of my job (ACCOUNTANT)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/purchase-orders?companyId=3&page=0&size=200&status=ORDERED",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "amina-mwanga"
+    },
+    {
+      "persona": "John Komba",
+      "designation": "Cashier / Cash & Bank Officer",
+      "username": "jkomba",
+      "severity": "BLOCKED",
+      "workflow": "open Record receipt",
+      "screen": "/admin/ar/receipts/record",
+      "detail": "I'm told I don't have permission to open Record receipt, but it's part of my job (CASHIER)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/wht/types?companyId=3",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "john-komba"
+    },
+    {
+      "persona": "John Komba",
+      "designation": "Cashier / Cash & Bank Officer",
+      "username": "jkomba",
+      "severity": "BLOCKED",
+      "workflow": "open Record payment",
+      "screen": "/admin/ap/payments/record",
+      "detail": "I'm told I don't have permission to open Record payment, but it's part of my job (CASHIER)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/wht/types?companyId=3",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "john-komba"
+    },
+    {
+      "persona": "Sabina Aloyce",
+      "designation": "Salesperson",
+      "username": "saloyce",
+      "severity": "BLOCKED",
+      "workflow": "open POS sell",
+      "screen": "/admin/pos/sell",
+      "detail": "I'm told I don't have permission to open POS sell, but it's part of my job (SALES_OFFICER)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/branches?companyUid=01KW17PVFC09X1YZEG4E0VKTDN",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "sabina-aloyce"
+    },
+    {
+      "persona": "Sabina Aloyce",
+      "designation": "Salesperson",
+      "username": "saloyce",
+      "severity": "SLOW",
+      "workflow": "create price list",
+      "screen": "/admin/price-lists",
+      "detail": "could not save \"RETAIL\" (validation/409)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 409 (Conflict)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/price-lists",
+            "status": 409,
+            "method": "POST",
+            "body": "{\"data\":null,\"errors\":[\"A record with the same unique identifier already exists.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "sabina-aloyce"
+    },
+    {
+      "persona": "Saidi Karume",
+      "designation": "Storekeeper / Stock Controller",
+      "username": "skarume",
+      "severity": "BLOCKED",
+      "workflow": "open Stock on-hand",
+      "screen": "/admin/stock",
+      "detail": "I'm told I don't have permission to open Stock on-hand, but it's part of my job (STOREKEEPER)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/branches?companyUid=01KW17PVFC09X1YZEG4E0VKTDN",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "saidi-karume"
+    },
+    {
+      "persona": "Saidi Karume",
+      "designation": "Storekeeper / Stock Controller",
+      "username": "skarume",
+      "severity": "BLOCKED",
+      "workflow": "open Stock count",
+      "screen": "/admin/stock-counts/create",
+      "detail": "I'm told I don't have permission to open Stock count, but it's part of my job (STOREKEEPER)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/branches?companyUid=01KW17PVFC09X1YZEG4E0VKTDN",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "saidi-karume"
+    }
+  ]
+}

@@ -6,6 +6,7 @@ import {
   CreateRoleRequest,
   Permission,
   Role,
+  ScreenReadGap,
   SetRolePermissionsRequest,
   UpdateRoleRequest,
 } from '../models/role.model';
@@ -42,5 +43,15 @@ export class RoleService {
 
   listPermissions(): Observable<Permission[]> {
     return this.http.get<Permission[]>(`${this.base}/permissions`);
+  }
+
+  /**
+   * Advisory read-closure gaps for a role.
+   * GET /api/v1/roles/uid/{uid}/read-closure-gaps  (gated: ROLE.VIEW)
+   * Returns screens where the role holds the access permission but is missing required reads.
+   * Never used to block — informational only.
+   */
+  readClosureGaps(uid: string): Observable<ScreenReadGap[]> {
+    return this.http.get<ScreenReadGap[]>(`${this.base}/uid/${uid}/read-closure-gaps`);
   }
 }

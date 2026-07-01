@@ -63,6 +63,8 @@ export class EnterBillComponent {
   readonly poOptions = signal<UidOption[]>([]);
   /** PO line options, loaded when a PO is selected. */
   readonly poLineOptions = signal<UidOption[]>([]);
+  /** True when the PO list could not be loaded (non-fatal; PO matching is optional). */
+  readonly poListUnavailable = signal(false);
 
   // ── Company context ────────────────────────────────────────────────────────
   readonly companies = signal<Company[]>([]);
@@ -156,6 +158,7 @@ export class EnterBillComponent {
   }
 
   private loadPoOptions(companyId: string): void {
+    this.poListUnavailable.set(false);
     this.purchasesService.listOrders(companyId, undefined, 'ORDERED', 0, 200).subscribe({
       next: ({ rows }) => {
         this.poOptions.set(
@@ -166,7 +169,7 @@ export class EnterBillComponent {
           })),
         );
       },
-      error: () => {},
+      error: () => { this.poOptions.set([]); this.poListUnavailable.set(true); },
     });
   }
 
@@ -191,6 +194,7 @@ export class EnterBillComponent {
   onCompanyChange(id: string): void {
     this.selectedCompanyId.set(id);
     this.resetSupplier();
+    this.poListUnavailable.set(false);
     this.loadPoOptions(id);
   }
 

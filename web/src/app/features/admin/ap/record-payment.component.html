@@ -166,6 +166,16 @@
         </div>
       </div>
 
+      <!-- Withholding tax unavailable notice (non-blocking) -->
+      @if (whtUnavailable()) {
+        <div class="alert alert-info d-flex align-items-center gap-2 py-2 mb-3" role="note">
+          <i class="bi bi-info-circle-fill flex-shrink-0" aria-hidden="true"></i>
+          <span>
+            Withholding tax types could not be loaded. The WHT section is hidden — the payment can still be recorded. Contact your administrator if withholding tax needs to be applied.
+          </span>
+        </div>
+      }
+
       <!-- ── Withholding Tax (optional, WHT_ON_PAYMENT) ───────────────────── -->
       @if (whtTypes().length > 0) {
         <div class="erp-card mb-3">

@@ -644,8 +644,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
     private void assertCreditClearance(SalesOrder order) {
         Customer customer = customers.findById(order.getCustomerId())
                 .orElseThrow(() -> new NotFoundException(
-                        "Customer not found for order " + order.getUid()
-                                + " (id=" + order.getCustomerId() + ")"));
+                        "The customer linked to this sales order could not be found."));
 
         if (customer.getCustomerKind() != CustomerKind.CREDIT_ACCOUNT) {
             // Cash / walk-in: no credit restriction (BR-SO-CREDIT-01).
@@ -683,29 +682,25 @@ public class SalesOrderServiceImpl implements SalesOrderService {
                 ctx, "SALES.CREDIT.OVERRIDE", System.currentTimeMillis());
 
         if (!hasOverride) {
+            // ADR-0040 D-5 / SALES.CREDIT.OVERRIDE permission required for override
             // Build a clear, actionable message covering whichever conditions fired.
-            StringBuilder msg = new StringBuilder("Sales order ")
-                    .append(order.getOrderNumber())
-                    .append(" blocked by credit control for customer ")
-                    .append(customer.getUid())
-                    .append(".");
+            StringBuilder msg = new StringBuilder(
+                    "This sales order is on hold due to a credit control restriction.");
             if (statusBlocked) {
-                msg.append(" Credit status: ").append(cs.name()).append(".");
+                msg.append(" The customer's account is currently ");
+                msg.append(cs == CreditStatus.STOPPED ? "stopped" : "on hold").append(".");
             }
             if (manualBlocked) {
-                msg.append(" Manual hold is active");
+                msg.append(" A manual credit hold is active");
                 if (customer.getCreditHoldReason() != null) {
-                    msg.append(" (").append(customer.getCreditHoldReason()).append(")");
+                    msg.append(": ").append(customer.getCreditHoldReason());
                 }
                 msg.append(".");
             }
             if (limitBreached && creditLimit != null) {
-                msg.append(" Credit limit ").append(creditLimit.getAmount().toPlainString())
-                   .append(" ").append(CurrencyCode.value(creditLimit.getCurrency()))
-                   .append(" exceeded; projected balance: ")
-                   .append(projectedBalance.toPlainString()).append(".");
+                msg.append(" Confirming this order would exceed the customer's credit limit.");
             }
-            msg.append(" Requires SALES.CREDIT.OVERRIDE permission (ADR-0040 D-5).");
+            msg.append(" You do not have permission to override the credit restriction.");
             throw new ConflictException(msg.toString());
         }
 

@@ -78,8 +78,9 @@ public class CashDirectEntryServiceImpl implements CashDirectEntryService {
 
         CashBankAccount account = accounts.findByCompanyIdAndUid(companyId, req.cashBankAccountUid())
                 .orElseThrow(() -> new NotFoundException("Cash/bank account not found."));
+        // BR-CASH-08: inactive accounts cannot accept direct entries
         if (!account.isActive())
-            throw new IllegalStateException("Cash/bank account is inactive (BR-CASH-08).");
+            throw new IllegalStateException("The selected cash/bank account is inactive and cannot accept new entries.");
 
         ChartOfAccount counterGlAcct = glAccounts.findByCompanyIdAndUid(companyId, req.counterGlAccountUid())
                 .orElseThrow(() -> new NotFoundException("Counter GL account not found."));
@@ -100,10 +101,12 @@ public class CashDirectEntryServiceImpl implements CashDirectEntryService {
         }
         if (counterGlAcct.getControlType() != null
                 && counterGlAcct.getControlType().blocksManualPosting()) {
+            // ADR-0013 D-3: control accounts (AR, AP, inventory, tax, payroll clearing, FX clearing)
+            // cannot be targeted by a direct cash entry — doing so would silently corrupt the sub-ledger
             throw new com.erp.platform.common.api.ConflictException(
-                    "Counter GL account " + counterGlAcct.getAccountCode()
-                            + " is a control account (" + counterGlAcct.getControlType()
-                            + ") and cannot be targeted by a direct cash entry (ADR-0013 D-3).");
+                    "The selected counter account (" + counterGlAcct.getAccountCode()
+                            + ") is a system-controlled account and cannot be used as a counter account "
+                            + "for a direct cash entry. Please choose a regular income or expense account.");
         }
 
         Long branchId = branchId();

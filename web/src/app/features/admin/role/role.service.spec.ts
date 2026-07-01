@@ -65,4 +65,16 @@ describe('RoleService', () => {
     expect(req.request.method).toBe('DELETE');
     req.flush(null, { status: 204, statusText: 'No Content' });
   });
+
+  it('fetches read-closure gaps via GET /roles/uid/{uid}/read-closure-gaps', () => {
+    let result: unknown;
+    service.readClosureGaps('R1').subscribe((v) => { result = v; });
+    const req = httpMock.expectOne(`${base}/uid/R1/read-closure-gaps`);
+    expect(req.request.method).toBe('GET');
+    const payload = [
+      { screen: 'ar.record-receipt', accessPermission: 'AR.RECEIPT.RECORD', missingReads: ['CUSTOMER.VIEW'] },
+    ];
+    req.flush(payload);
+    expect(result).toEqual(payload);
+  });
 });
