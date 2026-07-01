@@ -120,10 +120,27 @@ const MODULE_ACTIONS = require('./module-actions.json');
 async function runModuleActions(page, buf, rec) {
   const rx = (t) => { try { return new RegExp(t, 'i'); } catch { return new RegExp(String(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'); } };
   for (const a of MODULE_ACTIONS.filter(x => x.role === persona.role)) {
-    const wf = a.operation, screen = a.path;
-    await L.goto(page, screen);
+    const wf = a.operation;
+    let screen = a.path;
+    buf.clear(); // fresh buffer so a stale 403 from a prior module can't falsely flag this one
+    if (screen.includes('/uid/{uid}')) {
+      // this action lives on a record's DETAIL page — open the list and pick the first real record
+      // (the generic driver can't invent a uid). No record yet = needs one first, not a defect.
+      const listPath = screen.replace(/\/uid\/\{uid\}.*/, '');
+      await L.goto(page, listPath);
+      rec.visited(a.module, false);
+      if (await L.looksForbidden(page, buf)) { rec.problem('BLOCKED', wf, listPath, `not allowed to open ${a.module}`, buf.snapshot()); continue; }
+      const link = page.locator('a[href*="/uid/"]').first();
+      if (!(await link.count().catch(() => 0))) continue; // no record to act on yet — skip quietly
+      await link.click().catch(() => {});
+      await page.waitForTimeout(1300);
+      buf.clear();
+      screen = page.url().replace(L.BASE, '');
+    } else {
+      await L.goto(page, screen);
+      rec.visited(a.module, false);
+    }
     const rel = page.url().replace(L.BASE, '');
-    rec.visited(a.module, false);
     if (/\/login|\/admin\/home$/.test(rel)) { rec.problem('BLOCKED', wf, screen, `bounced from ${screen} — cannot reach the ${a.module} module`, buf.snapshot()); continue; }
     if (await L.looksForbidden(page, buf)) { rec.problem('BLOCKED', wf, screen, `not allowed to open ${a.module}`, buf.snapshot()); continue; }
     try {
@@ -153,6 +170,7 @@ async function runModuleActions(page, buf, rec) {
 // ---- helpers reused from qa-ui-drive proven flow ----
 async function createOne(page, buf, rec, opts) {
   // opts: {path, openLabel, anchor, fields:[[sel,val,how]], submitField, name, workflow}
+  buf.clear(); // fresh buffer so a stale 403 from a prior action can't falsely flag this screen
   await L.goto(page, opts.path);
   if (await L.looksForbidden(page, buf)) { rec.problem('BLOCKED', opts.workflow, opts.path, `permission denied opening ${opts.path} (role ${persona.role} should allow this)`, buf.snapshot()); return false; }
   try {
@@ -224,6 +242,7 @@ async function runDeep(page, buf, rec) {
   // ACCOUNTANT / FINANCE: post a balanced 2-line manual journal (GL posting integrity)
   if (persona.role === 'ACCOUNTANT' || persona.role === 'FINANCE_DIRECTOR') {
     const wf = 'post a manual journal', screen = '/admin/gl/journals/post';
+    buf.clear(); // start fresh so a stale 403 from a prior action can't falsely flag this screen
     await L.goto(page, screen);
     if (await L.looksForbidden(page, buf)) { rec.problem('BLOCKED', wf, screen, 'not allowed to open Post Journal', buf.snapshot()); }
     else {
@@ -263,6 +282,7 @@ async function runDeep(page, buf, rec) {
   // ACCOUNTANT: enter a supplier bill (AP) against Mbasha — the daily payables intake
   if (persona.role === 'ACCOUNTANT') {
     const wf = 'enter a supplier bill', screen = '/admin/ap/supplier-bills/enter';
+    buf.clear(); // start fresh so a stale 403 from a prior action can't falsely flag this screen
     await L.goto(page, screen);
     if (await L.looksForbidden(page, buf)) { rec.problem('BLOCKED', wf, screen, 'not allowed to open Enter Supplier Bill', buf.snapshot()); }
     else {
@@ -295,6 +315,7 @@ async function runDeep(page, buf, rec) {
   // PROCUREMENT: raise a PO to Mbasha Holdings -> add a line -> place
   if (persona.role === 'PROCUREMENT_OFFICER') {
     const wf = 'raise a purchase order', screen = '/admin/purchase-orders';
+    buf.clear(); // start fresh so a stale 403 from a prior action can't falsely flag this screen
     await L.goto(page, screen);
     if (await L.looksForbidden(page, buf)) { rec.problem('BLOCKED', wf, screen, 'not allowed to open Purchase Orders', buf.snapshot()); }
     else {
@@ -381,6 +402,7 @@ async function runDeep(page, buf, rec) {
   // SALES: create a sales order for Kariakoo -> add a line
   if (persona.role === 'SALES_OFFICER') {
     const wf = 'create a sales order', screen = '/admin/sales-orders';
+    buf.clear(); // start fresh so a stale 403 from a prior action can't falsely flag this screen
     await L.goto(page, screen);
     if (await L.looksForbidden(page, buf)) { rec.problem('BLOCKED', wf, screen, 'not allowed to open Sales Orders', buf.snapshot()); }
     else {
@@ -423,6 +445,7 @@ async function runDeep(page, buf, rec) {
   // STORES: record a stock opening balance
   if (persona.role === 'STOREKEEPER' || persona.role === 'STORES_SUPERVISOR') {
     const wf = 'record stock opening balance', screen = '/admin/stock';
+    buf.clear(); // start fresh so a stale 403 from a prior action can't falsely flag this screen
     await L.goto(page, screen);
     if (await L.looksForbidden(page, buf)) { rec.problem('BLOCKED', wf, screen, 'not allowed to open Stock', buf.snapshot()); }
     else {
@@ -450,6 +473,7 @@ async function runDeep(page, buf, rec) {
   // BRANCH_MANAGER: raise an inter-branch stock transfer — daily logistics
   if (persona.role === 'BRANCH_MANAGER') {
     const wf = 'raise an inter-branch transfer', screen = '/admin/stock-transfers/create';
+    buf.clear(); // start fresh so a stale 403 from a prior action can't falsely flag this screen
     await L.goto(page, screen);
     if (await L.looksForbidden(page, buf)) { rec.problem('BLOCKED', wf, screen, 'not allowed to open Stock Transfer', buf.snapshot()); }
     else {
@@ -481,6 +505,7 @@ async function runDeep(page, buf, rec) {
   // APPROVERS (GM / branch manager / CFO): clear the approval inbox — daily oversight
   if (['GROUP_GM', 'BRANCH_MANAGER', 'FINANCE_DIRECTOR'].includes(persona.role)) {
     const wf = 'decide on pending approvals', screen = '/admin/approvals/inbox';
+    buf.clear(); // start fresh so a stale 403 from a prior action can't falsely flag this screen
     await L.goto(page, screen);
     if (await L.looksForbidden(page, buf)) { rec.problem('BLOCKED', wf, screen, 'not allowed to open the Approval Inbox', buf.snapshot()); }
     else {
@@ -506,6 +531,7 @@ async function runDeep(page, buf, rec) {
   // HR/PAYROLL: register a new employee — the daily HR intake
   if (persona.role === 'HR_PAYROLL_OFFICER') {
     const wf = 'register a new employee', screen = '/admin/hr/employees';
+    buf.clear(); // start fresh so a stale 403 from a prior action can't falsely flag this screen
     await L.goto(page, screen);
     if (await L.looksForbidden(page, buf)) { rec.problem('BLOCKED', wf, screen, 'not allowed to open Employees', buf.snapshot()); }
     else {
@@ -539,6 +565,7 @@ async function runDeep(page, buf, rec) {
   // PRODUCTION: release a work order — the core daily factory operation
   if (persona.role === 'PRODUCTION_OFFICER') {
     const wf = 'release a work order', screen = '/admin/work-orders';
+    buf.clear(); // start fresh so a stale 403 from a prior action can't falsely flag this screen
     await L.goto(page, screen);
     if (await L.looksForbidden(page, buf)) { rec.problem('BLOCKED', wf, screen, 'not allowed to open Work Orders', buf.snapshot()); }
     else {
@@ -572,6 +599,7 @@ async function runDeep(page, buf, rec) {
   // STOREKEEPER: receive goods against a PO (GRN) — the core daily warehouse operation
   if (persona.role === 'STOREKEEPER') {
     const wf = 'receive goods against a PO', screen = '/admin/goods-receipts/create';
+    buf.clear(); // start fresh so a stale 403 from a prior action can't falsely flag this screen
     await L.goto(page, screen);
     if (await L.looksForbidden(page, buf)) { rec.problem('BLOCKED', wf, screen, 'not allowed to open Goods Receipt', buf.snapshot()); }
     else {
@@ -606,6 +634,7 @@ async function runDeep(page, buf, rec) {
   // CASHIER: record an on-account customer receipt for Joseph Ulimboka
   if (persona.role === 'CASHIER') {
     const wf = 'record a customer receipt', screen = '/admin/ar/receipts/record';
+    buf.clear(); // start fresh so a stale 403 from a prior action can't falsely flag this screen
     await L.goto(page, screen);
     if (await L.looksForbidden(page, buf)) { rec.problem('BLOCKED', wf, screen, 'not allowed to open Record Receipt', buf.snapshot()); }
     else {
