@@ -565,6 +565,16 @@ async function runDeep(page, buf, rec) {
       }
       result.access.push({ path, label, outcome });
       console.log(`  ${outcome.padEnd(16)} ${path}`);
+      rec.visited(label, outcome === 'OK'); // per-component usage log
+      if (outcome === 'OK') {
+        // a user should NEVER see a raw id/uid on screen — uid belongs only in the URL. Report any leak.
+        const ids = await L.scanVisibleIds(page);
+        if (ids.hits && ids.hits.length) {
+          rec.problem('HYGIENE', 'id/uid visible in the UI', path,
+            `I can see ${ids.hits.length} raw id/uid(s) on ${label} — users should never see these (a uid belongs only in the URL). e.g. "${ids.snippet}"`,
+            { hits: ids.hits.slice(0, 6), snippet: ids.snippet });
+        }
+      }
       if (process.env.AXE && outcome === 'OK') {
         const ax = await L.runAxe(page);
         result.axe.push({ screen: label, path, device: process.env.DEVICE || 'desktop', ran: ax.ran, violations: ax.violations });
@@ -587,6 +597,7 @@ async function runDeep(page, buf, rec) {
     await L.shot(page, `${persona.slug}-FATAL`);
   } finally {
     result.created = rec.created;
+    result.usage = rec.usage; // per-component usage log for this user
     result.problemCount = rec.problems.length;
     console.log(`\n=== ${persona.fullName}: created=${JSON.stringify(rec.created)} problems=${rec.problems.length} ===`);
     L.saveResults(`operate-${persona.slug}.json`, { ...result, problems: rec.problems });

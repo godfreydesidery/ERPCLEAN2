@@ -29,8 +29,14 @@ const SIM_PASSWORD = process.env.SIM_PASSWORD || 'Tembo@2026!'; // shared person
 function makeRecorder(persona) {
   const problems = [];
   const created = {};
+  const usage = {}; // per-component (screen) usage log: { <screen>: { visited, actioned } }
   const ok = (what) => { created[what] = (created[what] || 0) + 1; };
-  // severity: BLOCKED (can't do my job) | SLOW (workaround exists) | ANNOY (cosmetic)
+  // Log that this user touched a component/screen. actioned=true when they did real work there (not just opened it).
+  const visited = (screen, actioned = false) => {
+    const u = usage[screen] || (usage[screen] = { visited: 0, actioned: 0 });
+    u.visited++; if (actioned) u.actioned++;
+  };
+  // severity: BLOCKED (can't do my job) | SLOW (workaround exists) | ANNOY (cosmetic) | HYGIENE (saw an id/uid) | UX (usability)
   const problem = (severity, workflow, screen, detail, evidence) => {
     const rec = { persona: persona.fullName, designation: persona.designation, username: persona.username,
       severity, workflow, screen, detail, evidence: evidence || null };
@@ -38,7 +44,7 @@ function makeRecorder(persona) {
     console.log(`  [${severity}] ${screen} :: ${workflow} — ${detail}${evidence ? ' | ' + JSON.stringify(evidence).slice(0, 160) : ''}`);
     return rec;
   };
-  return { problems, created, ok, problem };
+  return { problems, created, usage, ok, visited, problem };
 }
 
 // Attaches live listeners that buffer console/page/api errors so a driver can snapshot them per action.
@@ -210,6 +216,36 @@ async function runAxe(page) {
   }
 }
 
+// Users must NEVER see an id or uid in the UI — a uid belongs only in the URL. This scans the RENDERED
+// (visible) text and visible field values for ULIDs (26-char Crockford base32) or explicit "uid/id:"
+// labels. document.body.innerText is what the user actually SEES (hidden nodes excluded) and never
+// includes the address bar, so a hit here is a real leak into the UI. Returns { hits, snippet }.
+async function scanVisibleIds(page) {
+  try {
+    return await page.evaluate(() => {
+      const ULID = /\b[0-9A-HJKMNP-TV-Z]{26}\b/gi; // Crockford base32, 26 chars (ULID); case-insensitive
+      const text = (document.body && document.body.innerText) || '';
+      const hits = new Set();
+      let m; while ((m = ULID.exec(text)) !== null) hits.add(m[0]);
+      // an explicit "UID: ..." / "ID: <ulid>" label surfaced to the user
+      const lbl = /\b(uid|id)\s*[:=]\s*([0-9A-HJKMNP-TV-Z]{26})/gi;
+      while ((m = lbl.exec(text)) !== null) hits.add(m[2]);
+      // A VISIBLE text box / read-only field literally showing a uid instead of a name is a leak.
+      // EXCLUDE <select> (a uid-picker legitimately holds the uid as its value; the user sees the option
+      // label, not the value) and hidden/off-screen controls (not seen by the user).
+      document.querySelectorAll('input[type=text],input[type=search],input:not([type]),textarea,[contenteditable]').forEach(el => {
+        if (el.offsetParent === null || el.type === 'hidden') return; // not visible to the user
+        const v = ((el.value != null ? el.value : el.textContent) || '').trim();
+        if (/^[0-9A-HJKMNP-TV-Z]{26}$/i.test(v)) hits.add(v);
+      });
+      const arr = [...hits];
+      let snippet = '';
+      if (arr[0]) { const i = text.indexOf(arr[0]); snippet = text.slice(Math.max(0, i - 35), i + 40).replace(/\s+/g, ' ').trim(); }
+      return { hits: arr, snippet };
+    });
+  } catch (e) { return { hits: [], snippet: '', error: String(e.message || e).slice(0, 80) }; }
+}
+
 function saveResults(name, payload) {
   const f = path.join(OUT, name);
   fs.writeFileSync(f, JSON.stringify(payload, null, 2));
@@ -220,5 +256,5 @@ module.exports = {
   BASE, OUT, SIM_PASSWORD,
   makeRecorder, watch, launch, newSession, goto, login, shot,
   setField, pickFirstReal, pickByLabel, searchPick, ensureFormOpen, clickButton,
-  submitByEnter, waitDetached, waitCleared, looksForbidden, saveResults, runAxe,
+  submitByEnter, waitDetached, waitCleared, looksForbidden, saveResults, runAxe, scanVisibleIds,
 };
