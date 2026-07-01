@@ -217,6 +217,72 @@ every above-threshold PO is **stranded** — it can't be placed (rejected) and c
 |----|--------|----------|-------|--------|-----|
 | F25 | sim 2026-06-28 (approvals) | HIGH (feature unusable: enabling PO approval strands all over-threshold POs) | Backend PO-approval flow (submit/approve/reject + threshold gate) is fully implemented and the threshold UI exists, but the web PO detail exposes no Submit-for-Approval / Approve action and `purchasesService` has no such method — so a placed-above-threshold PO is rejected with nowhere to go. | FIXED (e170f98) | Frontend: add `submitForApproval(uid)` to the purchases service; show a **"Submit for Approval"** button on a DRAFT PO whose total ≥ the company PO-approval threshold (when approval is enabled), routing it to PENDING; surface the pending/approved/rejected status on the PO detail. Approval decision is taken in the already-wired generic Approvals inbox. No backend change, no migration. |
 
+## F26 — Two more picker read-closure defects: cash-entry counter-GL picker and sales-invoice route picker
+
+**2026-07-01 — business-operations simulation triage (CASHIER, SALES_OFFICER; non-root, narrowly-scoped roles).**
+Same F21/F22/F23 read-closure family. Two screens whose own primary gate the role holds hard-403'd
+on load because a supporting picker read the screen fires unconditionally was gated on a permission
+outside the role's grant set. Seeded codes, not tenant leaks — a role-grant vs screen-read-dependency
+closure gap. Fixed in the **gate layer** (no grant edit, no migration); service-layer tenant scoping
+is unchanged, so the read floor never widens beyond the caller's own company.
+
+| # | Source | Severity | Finding | Status | Resolution |
+|---|---|---|---|---|---|
+| F26a | sim 2026-07-01 (CASHIER) | HIGH (blocker for the cashier's core daily job) | **Record-Cash-Entry loads under `CASH.ENTRY.RECORD` but its mandatory counter-GL-account picker (`GET /api/v1/gl/accounts`, `ChartOfAccountController.list`) was gated `@perm.has('GL.VIEW')`.** A cashier holds `CASH.ENTRY.RECORD` (route-guard + POST write, seeded + granted) and `CASH.VIEW` but not `GL.VIEW`, so `RecordEntryComponent.loadGlAccounts()` 403'd and blanked the screen — the counter account is legitimately needed to post the entry, so the data is not spurious; the gate was too narrow. | FIXED | Gate-layer read-floor (no grant, no migration): list gate → `@perm.has('GL.VIEW') or @perm.has('CASH.ENTRY.RECORD') or @perm.has('CASH.VIEW')`. GL accounts are financially sensitive, so — mirroring F23 (AP.BILL.ENTER / PURCHASE.RECEIVE) — the floor is broadened only to the **adjacent cash verbs** whose own screen requires this read, NOT to plain company membership. Tenant isolation **unchanged**: `ChartOfAccountServiceImpl.list` keeps `scopeGuard.assertCanActIn(ctx, companyId)`, so any holder reads only their own company's chart of accounts. Manifest: added `cashbank.record-entry` (accessPermission=CASH.ENTRY.RECORD) to `screen-read-closure.json`, pinned by `RolePermissionClosureTest` (disjunction row GL.VIEW/CASH.ENTRY.RECORD; CASH.VIEW third disjunct noted). |
+| F26b | sim 2026-07-01 (SALES_OFFICER) | HIGH (blocker for the affected role) | **Sales-Invoices loads under `SALES.INVOICE.VIEW` (the invoice list itself returns) but its OPTIONAL route picker (`GET /api/v1/routes`, `RouteController.list`) was gated `@perm.has('ROUTE.VIEW')`.** `SalesInvoiceListComponent.loadCompanyRoutes()` fires unconditionally on load; a sales officer holds `SALES.INVOICE.VIEW` / `SALES.ORDER.VIEW` but not `ROUTE.VIEW`, so the prefetch 403'd and `looksForbidden()` flagged the whole screen forbidden. | FIXED | Gate-layer read-floor (no grant, no migration): list gate → `@perm.has('ROUTE.VIEW') or @perm.has('SALES.INVOICE.VIEW') or @perm.has('SALES.ORDER.VIEW')`. Routes are low-sensitivity company-scoped reference data (F21 branch/product/WHT tier), but the floor is kept to the **adjacent sales-read verbs** rather than plain membership to preserve least-privilege. Tenant isolation **unchanged**: `RouteServiceImpl.list` keeps `scopeGuard.assertCanActIn(ctx, companyId)`. Manifest: added `sales.invoices` (accessPermission=SALES.INVOICE.VIEW), pinned by `RolePermissionClosureTest` (disjunction row ROUTE.VIEW/SALES.INVOICE.VIEW; SALES.ORDER.VIEW third disjunct noted). |
+
+**Decision rationale.** Both follow the F23 pattern (broaden a picker read to the *adjacent transactional/read
+verb the dependent screen already requires*), NOT the F21 plain-membership floor and NOT the F22
+role-composition path. GL accounts carry financial semantics, so they are treated on the sensitive side of
+the F21 gradient — opened only to the cash verbs, never to any company member. Routes are ambient reference
+data but are opened only to the two sales-read verbs so a stock clerk or POS cashier still cannot enumerate
+them. In both cases the service `assertCanActIn` predicate is untouched, so the read floor cannot cross a
+tenant boundary and is read-only, never a write. Frontend defence-in-depth (carried from F21/F22/F23): both
+pickers should degrade to a permission-aware empty state on any future 403 rather than blanking the screen —
+flagged for frontend-engineer.
+
+## F27 — User created by a non-root admin is invisible to that admin (missing create-time company membership)
+
+**2026-07-01 — reproduced from a real end-user's screenshots on a live deployment (non-root company admin "Brayton").**
+A non-root company admin creates a user via User-management. The user saves, but (1) it does **not** appear in
+the creator's user list, (2) logging in as ROOT the user **is** visible, and (3) re-creating the same username
+returns *"Username already exists"* — a workflow dead-end (the account exists but is unreachable to the only
+admin who can see their company).
+
+**Root cause (confirmed).** `UserServiceImpl.create()` saved the `AppUser` but never created a `user_company`
+membership, so the new user belonged to **no** company. `UserServiceImpl.list()` returns, for a non-root caller,
+`findNonRootInCompanyOrderByUsername(companyId)` — only users who are members of the caller's active company —
+while ROOT takes the org-wide branch and sees everyone. A membership-less user therefore satisfies the unique
+username constraint (create is blocked on re-attempt) yet matches no company predicate (invisible in the
+company-scoped list). This is the create-time gap left by ADR-0046, which removed the auto-membership that used
+to be a side effect of role/branch grants: creation was never made an explicit membership moment.
+
+| # | Source | Severity | Finding | Status | Resolution |
+|---|---|---|---|---|---|
+| F27 | user report 2026-07-01 (non-root company admin) | HIGH (functional: a non-root admin cannot see or re-create the users they create — IAM user-management unusable for non-root admins) | `UserServiceImpl.create()` persisted the `AppUser` with no `user_company` row. Non-root `list()` is company-scoped, so the new user was invisible to its creator while ROOT saw it; the username unique index then blocked re-creation. Latent since ADR-0046 removed auto-membership. | FIXED (service-only, no migration) | `create()` now auto-establishes a `user_company` membership for the **new** user in the **creator's active company** (`RequestContext.get().companyId()`), **in the same transaction as the user save** (fail-closed: if the membership insert fails the whole create rolls back). Tenant-safe: a company admin only ever creates within their own JWT scope, and the membership is written only for their own active company. **Edge cases:** ROOT / no-company / null-principal creators leave the user unassigned exactly as before (root has no single company and sees everyone); idempotent (skips if an active membership already exists — no duplicate row). The grant is audited (`USER.COMPANY.ASSIGN` on `user_company`) mirroring `UserCompanyServiceImpl.assign`, so it shows in the append-only trail. The active-scope company is loaded via a new named finder `CompanyRepository.findScopedById` (semantically `findById`, distinct name) so the self-scope lookup does not trip `TenantScopingRulesTest`'s confused-deputy guard — the id is the caller's own JWT company, never request input. Tests: `UserServiceImplTest` (5 new `create_*` unit cases) + `UserMutatorTenantIsolationIT` (3 new create→list end-to-end cases on real Postgres). |
+
+**ADR note.** No new ADR required. This is the natural create-time analogue of ADR-0046 ("membership is explicit"):
+it makes *creation* the explicit membership moment for a brand-new user, which ADR-0046 did not address (it only
+removed the *implicit* auto-membership that role/branch grants used to trigger). A one-line note under ADR-0046
+§ (create-time membership) is warranted for traceability but is not a design change — the authoritative-membership
+invariants (assign-company-first for role/branch grants, remove-blocks-while-access-remains) are untouched.
+
+## F28 — Projects create and issue-to-project sent company uid as branchUid (always "Branch not found")
+
+**2026-07-01 — business-operations simulation (Project Manager could not create a project).**
+
+`ProjectListComponent.create()` and `ProjectDetailComponent.submitIssue()` both passed `company.uid`
+in the `branchUid` field of the create-project and issue-to-project request bodies. The backend
+`ProjectServiceImpl.create` and `IssueToProjectServiceImpl` both call
+`branches.findByUid(req.branchUid()).orElseThrow(() -> new NotFoundException("Branch not found."))` —
+a company uid never matches a branch uid, so **every project creation and every material-issue was
+broken for all users** (root and non-root alike). Root bypasses permission gates but not the branch
+lookup, so CI's EndpointAuthorizationTest and permission smoke-tests did not catch it.
+
+| # | Source | Severity | Finding | Status | Resolution |
+|---|---|---|---|---|---|
+| F28 | sim 2026-07-01 (Project Manager) | HIGH (functional: project create + material-issue broken for all users) | `ProjectListComponent.create()` sent `branchUid: company.uid`; `ProjectDetailComponent.submitIssue()` sent `branchUid: company.uid`. Backend `branches.findByUid(company.uid)` always throws "Branch not found" — a company uid can never match a branch uid. Both paths were broken end-to-end. | FIXED (web only; no backend change) | Both occurrences now read the active branch from `SessionStore.activeBranchUid()` (already injected in both components). A null/empty active branch uid is guarded: `create()` sets `formError` to "Select a branch first." and aborts; `submitIssue()` sets `issueFormError` and aborts. The misleading "branch resolved from context; will use company's default branch uid" comments removed. `project-list.component.spec.ts` updated: the "correct payload" test sets `activeBranchUid: 'BR1'` and now asserts `req.branchUid === 'BR1'`; a new "null-branch guard" case asserts `formError` is set and `create` is not called when `activeBranchUid` is null. No detail-component spec existed for `submitIssue`; the change mirrors the same guard pattern. |
+
 ## Production-gating (carried, still OPEN)
 - **G1** (Slice 2): stable RS256 signing key from a secret store — dev key is in-memory (everyone logged out on restart; not prod-safe).
 - **G2** (Slice 2): access-token denylist on logout (access token currently valid until expiry after logout).

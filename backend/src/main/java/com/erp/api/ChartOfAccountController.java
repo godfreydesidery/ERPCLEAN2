@@ -65,8 +65,15 @@ public class ChartOfAccountController {
         service.deactivate(uid);
     }
 
+    // Read-floor (F26): the counter-GL-account picker on the Record-Cash-Entry screen
+    // (@perm CASH.ENTRY.RECORD) fires this list on load. A cashier holds CASH.ENTRY.RECORD /
+    // CASH.VIEW but not GL.VIEW, so the picker hard-403'd and blanked the screen. GL accounts are
+    // financially sensitive, so — mirroring F23 (AP.BILL.ENTER / PURCHASE.RECEIVE) — the gate is
+    // broadened only to the adjacent cash verbs whose own screen requires this read, NOT to plain
+    // membership. Tenant isolation is unchanged: ChartOfAccountServiceImpl.list keeps
+    // scopeGuard.assertCanActIn(ctx, companyId), so any holder reads only their own company's CoA.
     @GetMapping
-    @PreAuthorize("@perm.has('GL.VIEW')")
+    @PreAuthorize("@perm.has('GL.VIEW') or @perm.has('CASH.ENTRY.RECORD') or @perm.has('CASH.VIEW')")
     public ApiResponse<List<AccountDto>> list(@RequestParam Long companyId, Pageable pageable) {
         Page<AccountDto> page = service.list(companyId, pageable);
         return ApiResponse.ok(page.getContent(), PageMeta.from(page));

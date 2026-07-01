@@ -41,22 +41,23 @@ const stubProject = {
   activatedAt: null, completedAt: null, cancelledAt: null,
 };
 
-function makeSessionStore(canCreate = false) {
+function makeSessionStore(canCreate = false, activeBranchUid: string | null = null) {
   return {
     hasPermission: vi.fn((code: string) => canCreate && code === 'PROJECTS.PROJECT.CREATE'),
     isAuthenticated: signal(true),
     user: signal(null),
     permissions: signal([]),
-    activeBranchUid: signal(null),
+    activeBranchUid: signal(activeBranchUid),
   };
 }
 
 function makeBed(opts: {
   listImpl?: () => any;
   canCreate?: boolean;
+  activeBranchUid?: string | null;
 } = {}) {
-  const { listImpl, canCreate = false } = opts;
-  const sessionStore = makeSessionStore(canCreate);
+  const { listImpl, canCreate = false, activeBranchUid = null } = opts;
+  const sessionStore = makeSessionStore(canCreate, activeBranchUid);
 
   TestBed.configureTestingModule({
     imports: [ProjectListComponent],
@@ -120,16 +121,14 @@ describe('ProjectListComponent — init', () => {
 // ── Create form validation ─────────────────────────────────────────────────────
 
 describe('ProjectListComponent — create form validation', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    makeBed({ canCreate: true });
-  });
   afterEach(() => {
     vi.useRealTimers();
     TestBed.resetTestingModule();
   });
 
   it('create() validation: requires name', async () => {
+    vi.useFakeTimers();
+    makeBed({ canCreate: true, activeBranchUid: 'BR1' });
     const comp = TestBed.createComponent(ProjectListComponent).componentInstance;
     const svc = TestBed.inject(ProjectsService) as any;
     await vi.runAllTimersAsync();
@@ -141,7 +140,23 @@ describe('ProjectListComponent — create form validation', () => {
     expect(svc.create).not.toHaveBeenCalled();
   });
 
-  it('create() calls projectsService.create with correct payload', async () => {
+  it('create() sets formError when activeBranchUid is null', async () => {
+    vi.useFakeTimers();
+    makeBed({ canCreate: true, activeBranchUid: null });
+    const comp = TestBed.createComponent(ProjectListComponent).componentInstance;
+    const svc = TestBed.inject(ProjectsService) as any;
+    await vi.runAllTimersAsync();
+
+    comp.fName.set('My Project');
+    comp.create();
+
+    expect(comp.formError()).toContain('branch');
+    expect(svc.create).not.toHaveBeenCalled();
+  });
+
+  it('create() calls projectsService.create with correct payload including active branch uid', async () => {
+    vi.useFakeTimers();
+    makeBed({ canCreate: true, activeBranchUid: 'BR1' });
     const comp = TestBed.createComponent(ProjectListComponent).componentInstance;
     const svc = TestBed.inject(ProjectsService) as any;
     await vi.runAllTimersAsync();
@@ -155,6 +170,7 @@ describe('ProjectListComponent — create form validation', () => {
     expect(req.name).toBe('My Project');
     expect(req.budgetAmount).toBe('50000');
     expect(req.companyUid).toBe('CO1');
+    expect(req.branchUid).toBe('BR1');
   });
 });
 

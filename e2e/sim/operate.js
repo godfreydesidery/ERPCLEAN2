@@ -15,18 +15,59 @@ if (!persona) { console.error('unknown persona slug:', slug); process.exit(2); }
 
 // ---- access targets per role: screens this role SHOULD reach (a 403 here is a real finding) ----
 const ACCESS = {
-  GROUP_GM: [['/admin/home', 'Group dashboard'], ['/admin/sales-orders', 'Sales orders'], ['/admin/purchase-orders', 'Purchase orders'], ['/admin/stock', 'Stock on-hand']],
-  FINANCE_DIRECTOR: [['/admin/gl/journals/post', 'Post journal'], ['/admin/ar/receipts/record', 'Record receipt'], ['/admin/ap/payments/record', 'Record payment'], ['/admin/ap/supplier-bills/enter', 'Enter supplier bill']],
-  BRANCH_MANAGER: [['/admin/sales-orders', 'Sales orders'], ['/admin/purchase-orders', 'Purchase orders'], ['/admin/stock', 'Stock on-hand'], ['/admin/stock-transfers/create', 'Stock transfer']],
-  ACCOUNTANT: [['/admin/gl/journals/post', 'Post journal'], ['/admin/ar/receipts/record', 'Record receipt'], ['/admin/ap/supplier-bills/enter', 'Enter supplier bill']],
-  CASHIER: [['/admin/ar/receipts/record', 'Record receipt'], ['/admin/ap/payments/record', 'Record payment']],
-  SALES_OFFICER: [['/admin/sales-orders', 'Sales orders'], ['/admin/customers', 'Customers'], ['/admin/pos/sell', 'POS sell'], ['/admin/products', 'Products']],
-  FIELD_SALES_AGENT: [['/admin/sales-orders', 'Sales orders'], ['/admin/customers', 'Customers']],
-  PROCUREMENT_OFFICER: [['/admin/purchase-orders', 'Purchase orders'], ['/admin/suppliers', 'Suppliers'], ['/admin/products', 'Products']],
-  STOREKEEPER: [['/admin/stock', 'Stock on-hand'], ['/admin/goods-receipts/create', 'Goods receipt'], ['/admin/stock-counts/create', 'Stock count']],
-  STORES_SUPERVISOR: [['/admin/stock', 'Stock on-hand'], ['/admin/stock-counts/create', 'Stock count'], ['/admin/stock-transfers/create', 'Stock transfer']],
-  PRODUCTION_OFFICER: [['/admin/work-orders', 'Work orders'], ['/admin/boms', 'Bills of materials']],
-  HR_PAYROLL_OFFICER: [['/admin/hr/employees', 'Employees']], // HR owns employees, NOT IAM system users
+  GROUP_GM: [['/admin/dashboard', 'Dashboard'], ['/admin/reporting/income-statement', 'Income statement'],
+    ['/admin/reporting/balance-sheet', 'Balance sheet'], ['/admin/reporting/cash-flow', 'Cash flow'],
+    ['/admin/approvals/inbox', 'Approval inbox'], ['/admin/approvals/policies', 'Approval policies'],
+    ['/admin/sales-orders', 'Sales orders'], ['/admin/purchase-orders', 'Purchase orders'],
+    ['/admin/stock', 'Stock on-hand'], ['/admin/budgets', 'Budgets'], ['/admin/projects', 'Projects']],
+  FINANCE_DIRECTOR: [['/admin/gl/journals/post', 'Post journal'], ['/admin/gl/accounts', 'GL accounts'],
+    ['/admin/gl/trial-balance', 'Trial balance'], ['/admin/gl/periods', 'GL periods'],
+    ['/admin/ar/invoices', 'AR invoices'], ['/admin/ar/ageing', 'AR ageing'],
+    ['/admin/ap/supplier-bills', 'Supplier bills'], ['/admin/ap/payments/record', 'Record payment'],
+    ['/admin/cash/accounts', 'Cash accounts'], ['/admin/cash/reconciliations', 'Bank reconciliation'],
+    ['/admin/tax/vat-returns', 'VAT returns'], ['/admin/tax/wht-register', 'WHT register'],
+    ['/admin/fixed-assets', 'Fixed assets'], ['/admin/depreciation-runs', 'Depreciation runs'],
+    ['/admin/fx/rates', 'FX rates'], ['/admin/fx/revaluation-runs', 'FX revaluation'],
+    ['/admin/cost-centre/dimensions', 'Cost centres'], ['/admin/budgets', 'Budgets'],
+    ['/admin/budgeting/variance', 'Budget variance'], ['/admin/approvals/inbox', 'Approval inbox']],
+  BRANCH_MANAGER: [['/admin/sales-orders', 'Sales orders'], ['/admin/purchase-orders', 'Purchase orders'],
+    ['/admin/stock', 'Stock on-hand'], ['/admin/stock-transfers/create', 'Stock transfer'],
+    ['/admin/approvals/inbox', 'Approval inbox'], ['/admin/reporting/income-statement', 'Branch P&L'],
+    ['/admin/crm/leads', 'CRM leads'], ['/admin/crm/pipeline', 'Sales pipeline'], ['/admin/routes', 'Routes']],
+  ACCOUNTANT: [['/admin/gl/journals/post', 'Post journal'], ['/admin/gl/accounts', 'GL accounts'],
+    ['/admin/gl/trial-balance', 'Trial balance'], ['/admin/ar/invoices', 'AR invoices'],
+    ['/admin/ar/receipts/record', 'Record receipt'], ['/admin/ap/supplier-bills/enter', 'Enter supplier bill'],
+    ['/admin/tax/vat-returns', 'VAT returns'], ['/admin/tax/wht-register', 'WHT register'],
+    ['/admin/cash/statement', 'Cash statement'], ['/admin/reporting/balance-sheet', 'Balance sheet']],
+  CASHIER: [['/admin/cash/entries/record', 'Record cash entry'], // cash-account master setup is Finance's (CASH.ACCOUNT.MANAGE), not the cashier's — WAD
+    ['/admin/cash/cheques', 'Cheques'], ['/admin/cash/transfers/record', 'Cash transfer'],
+    ['/admin/cash/reconciliations', 'Bank reconciliation'], ['/admin/cash/statement', 'Cash statement'],
+    ['/admin/ar/receipts/record', 'Record receipt'], ['/admin/ap/payments/record', 'Record payment']],
+  SALES_OFFICER: [['/admin/sales-orders', 'Sales orders'], ['/admin/quotations', 'Quotations'],
+    ['/admin/sales-invoices', 'Sales invoices'], ['/admin/deliveries/create', 'Delivery note'],
+    ['/admin/sales-returns/create', 'Sales return'], ['/admin/customers', 'Customers'],
+    ['/admin/pos/sell', 'POS sell'], ['/admin/blanket-orders', 'Blanket orders'],
+    ['/admin/standing-orders', 'Standing orders'], ['/admin/price-lists', 'Price lists']],
+  FIELD_SALES_AGENT: [['/admin/sales-orders', 'Sales orders'], ['/admin/customers', 'Customers'],
+    ['/admin/routes', 'Routes']], // a route agent captures van/route orders, not fixed-counter POS — WAD
+  PROCUREMENT_OFFICER: [['/admin/purchase-orders', 'Purchase orders'], ['/admin/purchase-requisitions/create', 'Requisition'],
+    ['/admin/rfqs/create', 'RFQ'], ['/admin/purchase-returns/create', 'Purchase return'],
+    ['/admin/suppliers', 'Suppliers'], ['/admin/products', 'Products'],
+    ['/admin/goods-receipts', 'Goods receipts'], ['/admin/landed-costs/create', 'Landed cost']],
+  STOREKEEPER: [['/admin/stock', 'Stock on-hand'], ['/admin/goods-receipts/create', 'Goods receipt'],
+    ['/admin/stock-counts/create', 'Stock count'], ['/admin/stock-transfers/create', 'Stock transfer'],
+    ['/admin/stock/locations', 'Stock locations'], ['/admin/stock/batches', 'Stock batches'],
+    ['/admin/stock/serials', 'Stock serials']], // units-of-measure master is admin/product setup, not the storekeeper's — WAD
+  STORES_SUPERVISOR: [['/admin/stock', 'Stock on-hand'], ['/admin/stock-counts/create', 'Stock count'],
+    ['/admin/stock-transfers/create', 'Stock transfer'], ['/admin/stock/valuation', 'Stock valuation'],
+    ['/admin/stock/valuation/opening', 'Opening valuation'], ['/admin/stock/locations', 'Stock locations']],
+  PRODUCTION_OFFICER: [['/admin/work-orders', 'Work orders'], ['/admin/boms', 'Bills of materials'],
+    ['/admin/manufacturing/wip-reconciliation', 'WIP reconciliation']],
+  HR_PAYROLL_OFFICER: [['/admin/hr/employees', 'Employees'], ['/admin/hr/contracts', 'Contracts'],
+    ['/admin/hr/departments', 'Departments'], ['/admin/hr/leave-requests', 'Leave requests'],
+    ['/admin/hr/loans', 'Staff loans'], ['/admin/hr/pay-components', 'Pay components'],
+    ['/admin/hr/payroll-runs', 'Payroll runs'], ['/admin/hr/statutory', 'Statutory deductions']],
+  PROJECT_MANAGER: [['/admin/projects', 'Projects'], ['/admin/projects/wip-report', 'Project WIP report']],
 };
 
 // SWEEP mode (SWEEP=1): every persona visits EVERY operational screen (the 15 launchpad destinations),
@@ -40,6 +81,74 @@ const SWEEP_TARGETS = [
   ['/admin/ap/payments/record', 'Record payment'], ['/admin/ap/supplier-bills/enter', 'Enter supplier bill'],
   ['/admin/gl/journals/post', 'Post journal'], ['/admin/work-orders', 'Work orders'],
 ];
+
+// DETAIL-PAGE id/uid leak scan (DETAILS=1): open each entity list, click into the first record (a
+// uid-URL detail page — the most likely place a uid renders into a header/label), and scan what the
+// user SEES. A uid in the URL is fine; a uid on the page is a leak.
+const DETAIL_LISTS = [
+  ['/admin/purchase-orders', 'Purchase order detail'], ['/admin/sales-orders', 'Sales order detail'],
+  ['/admin/customers', 'Customer detail'], ['/admin/suppliers', 'Supplier detail'],
+  ['/admin/products', 'Product detail'], ['/admin/goods-receipts', 'Goods receipt detail'],
+  ['/admin/sales-invoices', 'Sales invoice detail'], ['/admin/hr/employees', 'Employee detail'],
+  ['/admin/work-orders', 'Work order detail'], ['/admin/ap/supplier-bills', 'Supplier bill detail'],
+];
+async function runDetailScan(page, rec) {
+  for (const [listPath, label] of DETAIL_LISTS) {
+    await L.goto(page, listPath);
+    await page.waitForTimeout(500);
+    const rel = page.url().replace(L.BASE, '');
+    if (/\/login|\/admin\/home$/.test(rel)) { rec.visited(label, false); continue; } // can't reach this list
+    const link = page.locator('a[href*="/uid/"]').first();
+    if (!(await link.count().catch(() => 0))) { rec.visited(label, false); continue; } // no records to open
+    await link.click().catch(() => {});
+    await page.waitForTimeout(1300);
+    rec.visited(label, true);
+    const ids = await L.scanVisibleIds(page);
+    if (ids.hits && ids.hits.length) {
+      rec.problem('HYGIENE', 'id/uid visible in the UI', label,
+        `On the ${label.toLowerCase()} I can see ${ids.hits.length} raw id/uid(s) — a user should never see these (a uid belongs only in the URL). e.g. "${ids.snippet}"`,
+        { hits: ids.hits.slice(0, 6), snippet: ids.snippet, url: page.url().replace(L.BASE, '') });
+    }
+  }
+}
+
+// ALL-MODULES action driver (MODULES=1): each persona performs one real create/operation in EVERY module
+// its role owns, from the data-driven e2e/sim/module-actions.json spec (investigated per module). Records
+// DID_WORK (rec.ok) / BLOCKED (403/redirect) / rejected (4xx with the server message) per module — so a
+// module blocked on a missing prereq, a permission, or a validation shows up as a concrete finding.
+const MODULE_ACTIONS = require('./module-actions.json');
+async function runModuleActions(page, buf, rec) {
+  const rx = (t) => { try { return new RegExp(t, 'i'); } catch { return new RegExp(String(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'); } };
+  for (const a of MODULE_ACTIONS.filter(x => x.role === persona.role)) {
+    const wf = a.operation, screen = a.path;
+    await L.goto(page, screen);
+    const rel = page.url().replace(L.BASE, '');
+    rec.visited(a.module, false);
+    if (/\/login|\/admin\/home$/.test(rel)) { rec.problem('BLOCKED', wf, screen, `bounced from ${screen} — cannot reach the ${a.module} module`, buf.snapshot()); continue; }
+    if (await L.looksForbidden(page, buf)) { rec.problem('BLOCKED', wf, screen, `not allowed to open ${a.module}`, buf.snapshot()); continue; }
+    try {
+      if (a.open) await L.clickButton(page, rx(a.open)).catch(() => {});
+      if (a.anchor) await page.locator(a.anchor).first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+      buf.clear();
+      for (const [sel, val, how] of (a.fields || [])) {
+        if (how === 'select') await L.pickByLabel(page, sel, val).catch(() => L.pickFirstReal(page, sel).catch(() => {}));
+        else if (how === 'first') await L.pickFirstReal(page, sel).catch(() => {});
+        else if (how === 'search') await L.searchPick(page, sel, val).catch(() => {});
+        else await L.setField(page, sel, val).catch(() => {}); // text / date
+      }
+      await page.waitForTimeout(300);
+      buf.clear();
+      await L.clickButton(page, rx(a.submit));
+      await page.waitForTimeout(1600);
+      const s = buf.snapshot();
+      const bad = s.api.filter(x => x.status >= 400).sort((x, y) => y.status - x.status)[0];
+      if (s.api.some(x => x.status >= 500)) rec.problem('BLOCKED', wf, screen, `server error doing "${wf}" in ${a.module}`, s);
+      else if (bad && bad.status === 403) rec.problem('BLOCKED', wf, screen, `not allowed to "${wf}" in ${a.module}`, s);
+      else if (bad) rec.problem('SLOW', wf, screen, `"${wf}" rejected (${bad.status})${a.complexity !== 'SIMPLE' ? ' [' + a.complexity + ']' : ''}: ${(bad.body || '').replace(/\s+/g, ' ').slice(0, 70)}`, s);
+      else { rec.ok(wf); rec.visited(a.module, true); }
+    } catch (e) { rec.problem('SLOW', wf, screen, `"${wf}" in ${a.module}: ${String(e.message || e).slice(0, 70)}`, buf.snapshot()); }
+  }
+}
 
 // ---- helpers reused from qa-ui-drive proven flow ----
 async function createOne(page, buf, rec, opts) {
@@ -565,6 +674,16 @@ async function runDeep(page, buf, rec) {
       }
       result.access.push({ path, label, outcome });
       console.log(`  ${outcome.padEnd(16)} ${path}`);
+      rec.visited(label, outcome === 'OK'); // per-component usage log
+      if (outcome === 'OK') {
+        // a user should NEVER see a raw id/uid on screen — uid belongs only in the URL. Report any leak.
+        const ids = await L.scanVisibleIds(page);
+        if (ids.hits && ids.hits.length) {
+          rec.problem('HYGIENE', 'id/uid visible in the UI', path,
+            `I can see ${ids.hits.length} raw id/uid(s) on ${label} — users should never see these (a uid belongs only in the URL). e.g. "${ids.snippet}"`,
+            { hits: ids.hits.slice(0, 6), snippet: ids.snippet });
+        }
+      }
       if (process.env.AXE && outcome === 'OK') {
         const ax = await L.runAxe(page);
         result.axe.push({ screen: label, path, device: process.env.DEVICE || 'desktop', ran: ax.ran, violations: ax.violations });
@@ -575,8 +694,14 @@ async function runDeep(page, buf, rec) {
       }
     }
 
-    // ACTION missions: enter the master data I own (skipped in SWEEP — sweep is read-only access matrix)
-    if (!process.env.SWEEP) {
+    // DETAIL-PAGE id/uid leak scan (opt-in): open real records and check no uid is shown to the user
+    if (process.env.DETAILS) await runDetailScan(page, rec);
+
+    // ALL-MODULES action pass (opt-in): perform a real operation in every module this role owns
+    if (process.env.MODULES) await runModuleActions(page, buf, rec);
+
+    // ACTION missions: enter the master data I own (skipped in SWEEP/ACCESSONLY — those are read-only)
+    if (!process.env.SWEEP && !process.env.ACCESSONLY) {
       await runActions(page, buf, rec);
       // DEEP missions: actually do my transactional work (opt-in)
       if (process.env.DEEP) await runDeep(page, buf, rec);
@@ -587,6 +712,7 @@ async function runDeep(page, buf, rec) {
     await L.shot(page, `${persona.slug}-FATAL`);
   } finally {
     result.created = rec.created;
+    result.usage = rec.usage; // per-component usage log for this user
     result.problemCount = rec.problems.length;
     console.log(`\n=== ${persona.fullName}: created=${JSON.stringify(rec.created)} problems=${rec.problems.length} ===`);
     L.saveResults(`operate-${persona.slug}.json`, { ...result, problems: rec.problems });

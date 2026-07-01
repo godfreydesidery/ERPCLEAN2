@@ -219,6 +219,42 @@
           "gate": "has"
         }
       ]
+    },
+    {
+      "screen": "cashbank.record-entry",
+      "accessPermission": "CASH.ENTRY.RECORD",
+      "_notes": [
+        "F26: the counter-GL-account picker (ChartOfAccountController list handler) is gated 'GL.VIEW or CASH.ENTRY.RECORD or CASH.VIEW' — declared below as a disjunction (the gate-parser pins the first two codes; CASH.VIEW is the third disjunct and is seed-verified independently as this screen's own cashbank read companion).",
+        "GL accounts are financially sensitive, so the read-floor is broadened only to the adjacent cash verbs (F23 AP.BILL.ENTER/PURCHASE.RECEIVE precedent), NOT to plain company membership.",
+        "Tenant isolation is unchanged: ChartOfAccountServiceImpl.list keeps scopeGuard.assertCanActIn(ctx, companyId)."
+      ],
+      "reads": [
+        {
+          "controller": "ChartOfAccountController",
+          "code": "GL.VIEW",
+          "necessity": "required",
+          "gate": "disjunction",
+          "altCode": "CASH.ENTRY.RECORD"
+        }
+      ]
+    },
+    {
+      "screen": "sales.invoices",
+      "accessPermission": "SALES.INVOICE.VIEW",
+      "_notes": [
+        "F26: the optional route picker on the create form (RouteController list handler) is gated 'ROUTE.VIEW or SALES.INVOICE.VIEW or SALES.ORDER.VIEW' — declared below as a disjunction (the gate-parser pins the first two codes; SALES.ORDER.VIEW is the third disjunct, seed-verified independently).",
+        "Routes are low-sensitivity, company-scoped reference data (F21 branch/product/WHT sensitivity tier), but the read-floor is kept to the adjacent sales verbs rather than plain membership so least-privilege is preserved.",
+        "Tenant isolation is unchanged: RouteServiceImpl.list keeps scopeGuard.assertCanActIn(ctx, companyId)."
+      ],
+      "reads": [
+        {
+          "controller": "RouteController",
+          "code": "ROUTE.VIEW",
+          "necessity": "optional",
+          "gate": "disjunction",
+          "altCode": "SALES.INVOICE.VIEW"
+        }
+      ]
     }
   ]
 }

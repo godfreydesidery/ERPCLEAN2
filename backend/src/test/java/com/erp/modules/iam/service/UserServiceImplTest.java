@@ -2,14 +2,21 @@ package com.erp.modules.iam.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.erp.modules.iam.domain.dto.CreateUserRequest;
 import com.erp.modules.iam.domain.dto.UserDto;
 import com.erp.modules.iam.domain.entity.AppUser;
+import com.erp.modules.iam.domain.entity.Company;
+import com.erp.modules.iam.domain.entity.UserCompany;
 import com.erp.modules.iam.repository.AppUserRepository;
+import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.modules.iam.repository.UserCompanyRepository;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
@@ -20,6 +27,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 /**
@@ -42,16 +50,26 @@ class UserServiceImplTest {
     private static final Long   USER_ID   = 42L;
     private static final String USER_UID  = "uid-user-001";
 
-    private AppUserRepository userRepo;
-    private UserServiceImpl   service;
+    private AppUserRepository     userRepo;
+    private UserCompanyRepository userCompanyRepo;
+    private CompanyRepository     companyRepo;
+    private PasswordEncoder       passwordEncoder;
+    private PasswordPolicy        passwordPolicy;
+    private UserServiceImpl       service;
 
     @BeforeEach
     void setUp() {
-        userRepo = mock(AppUserRepository.class);
+        userRepo        = mock(AppUserRepository.class);
+        userCompanyRepo = mock(UserCompanyRepository.class);
+        companyRepo     = mock(CompanyRepository.class);
+        passwordEncoder = mock(PasswordEncoder.class);
+        passwordPolicy  = mock(PasswordPolicy.class);
         service  = new UserServiceImpl(
                 userRepo,
-                mock(PasswordEncoder.class),
-                mock(PasswordPolicy.class),
+                userCompanyRepo,
+                companyRepo,
+                passwordEncoder,
+                passwordPolicy,
                 mock(AuditService.class));
     }
 
@@ -80,6 +98,99 @@ class UserServiceImplTest {
 
     private RequestContext.Principal root() {
         return new RequestContext.Principal(1L, "root", true, null, null, "127.0.0.1");
+    }
+
+    private CreateUserRequest createReq(String username) {
+        return new CreateUserRequest(username, "Display " + username, "ValidPass1", null, null);
+    }
+
+    /** Stubs {@code users.save(..)} to return a fresh persisted-looking user with the given id. */
+    private AppUser stubSaveReturns(Long newId, String uid, String username) {
+        AppUser persisted = stubUser(newId, uid, username);
+        when(userRepo.save(any(AppUser.class))).thenReturn(persisted);
+        return persisted;
+    }
+
+    // -----------------------------------------------------------------------
+    // create() — F-bug fix: auto-establish creator-company membership (ADR-0046)
+    // -----------------------------------------------------------------------
+
+    @Test
+    void create_nonRoot_establishesMembershipInCreatorCompany() {
+        stubSaveReturns(100L, "uid-new", "newuser");
+        when(userRepo.existsByUsername("newuser")).thenReturn(false);
+        when(userCompanyRepo.existsByUserIdAndCompanyIdAndRevokedAtIsNull(100L, COMPANY_A))
+                .thenReturn(false);
+        Company companyA = mock(Company.class);
+        when(companyA.getUid()).thenReturn("uid-company-a");
+        when(companyRepo.findScopedById(COMPANY_A)).thenReturn(Optional.of(companyA));
+        // save() echoes its argument back (the audit line reads uid/id off the returned row).
+        when(userCompanyRepo.save(any(UserCompany.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+        RequestContext.set(nonRoot(COMPANY_A));
+
+        UserDto result = service.create(createReq("newuser"));
+
+        assertThat(result.uid()).isEqualTo("uid-new");
+        // A user_company membership was persisted for the new user in the creator's company.
+        ArgumentCaptor<UserCompany> captor = ArgumentCaptor.forClass(UserCompany.class);
+        verify(userCompanyRepo).save(captor.capture());
+        UserCompany membership = captor.getValue();
+        assertThat(membership.getUserId()).isEqualTo(100L);
+        assertThat(membership.getCompany()).isSameAs(companyA);
+        assertThat(membership.getAssignedBy()).isEqualTo(USER_ID); // the acting non-root admin
+        assertThat(membership.isActive()).isTrue();
+    }
+
+    @Test
+    void create_root_leavesUserUnassigned() {
+        stubSaveReturns(101L, "uid-new2", "rootmade");
+        when(userRepo.existsByUsername("rootmade")).thenReturn(false);
+        RequestContext.set(root());
+
+        service.create(createReq("rootmade"));
+
+        // Root has no single company → no membership is created (user stays unassigned).
+        verify(userCompanyRepo, never()).save(any(UserCompany.class));
+        verify(companyRepo, never()).findScopedById(anyLong());
+    }
+
+    @Test
+    void create_nonRoot_nullCompany_leavesUserUnassigned() {
+        stubSaveReturns(102L, "uid-new3", "nocompany");
+        when(userRepo.existsByUsername("nocompany")).thenReturn(false);
+        RequestContext.set(nonRoot(null));
+
+        service.create(createReq("nocompany"));
+
+        verify(userCompanyRepo, never()).save(any(UserCompany.class));
+        verify(companyRepo, never()).findScopedById(anyLong());
+    }
+
+    @Test
+    void create_nonRoot_existingMembership_isIdempotent_noDuplicate() {
+        stubSaveReturns(103L, "uid-new4", "already");
+        when(userRepo.existsByUsername("already")).thenReturn(false);
+        // Defensive path: an active membership already exists → no second row.
+        when(userCompanyRepo.existsByUserIdAndCompanyIdAndRevokedAtIsNull(103L, COMPANY_A))
+                .thenReturn(true);
+        RequestContext.set(nonRoot(COMPANY_A));
+
+        service.create(createReq("already"));
+
+        verify(userCompanyRepo, never()).save(any(UserCompany.class));
+        verify(companyRepo, never()).findScopedById(anyLong());
+    }
+
+    @Test
+    void create_nullPrincipal_leavesUserUnassigned() {
+        stubSaveReturns(104L, "uid-new5", "noprincipal");
+        when(userRepo.existsByUsername("noprincipal")).thenReturn(false);
+        // No RequestContext set → principal is null → treated as no-company (fail-safe: no membership).
+
+        service.create(createReq("noprincipal"));
+
+        verify(userCompanyRepo, never()).save(any(UserCompany.class));
     }
 
     // -----------------------------------------------------------------------
