@@ -65,6 +65,23 @@ export interface ProductModel {
   /** VAT classification — added in sales module iteration. Defaults to STANDARD. */
   vatStatus: VatStatus;
   status: ProductStatus;
+  /** Free-text department / category label. */
+  category?: string | null;
+  brand?: string | null;
+  manufacturer?: string | null;
+  purchasable?: boolean;
+  preferredSupplierId?: string | null;
+  hsCode?: string | null;
+  imageUrl?: string | null;
+  notes?: string | null;
+  lotTracked?: boolean;
+  serialTracked?: boolean;
+  expiryTracked?: boolean;
+  reorderLevel?: string | null;
+  reorderQty?: string | null;
+  safetyStock?: string | null;
+  minStock?: string | null;
+  maxStock?: string | null;
   version: string | null;
   createdAt: string | null;
   createdBy: string | null;
@@ -89,6 +106,38 @@ export interface CreateProductRequest {
   cost?: Money;
   /** VAT classification. Defaults to STANDARD on the backend if omitted. */
   vatStatus?: VatStatus;
+  /** Free-text product department / category label. No FK — not linked to HR departments. */
+  category?: string;
+  /** Optional brand / trade name. */
+  brand?: string;
+  /** Optional manufacturer name. */
+  manufacturer?: string;
+  /** Whether the product can be purchased. Default true. */
+  purchasable?: boolean;
+  /** Numeric party id (wire: string) of the preferred supplier. */
+  preferredSupplierId?: string;
+  /** HS tariff code for customs / EFD. */
+  hsCode?: string;
+  /** Public image URL for POS / catalogue display. */
+  imageUrl?: string;
+  /** Internal free-text notes. */
+  notes?: string;
+  /** Whether stock is tracked by lot number. Default false. */
+  lotTracked?: boolean;
+  /** Whether stock is tracked by serial number. Default false. */
+  serialTracked?: boolean;
+  /** Whether expiry dates are tracked. Default false. */
+  expiryTracked?: boolean;
+  /** Product-level default reorder point (units). */
+  reorderLevel?: string;
+  /** Product-level default replenishment quantity (units). */
+  reorderQty?: string;
+  /** Safety stock buffer quantity. */
+  safetyStock?: string;
+  /** Minimum allowed stock level. */
+  minStock?: string;
+  /** Maximum allowed stock level. */
+  maxStock?: string;
 }
 
 // ── UpdateProductRequest ──────────────────────────────────────────────────────
@@ -104,6 +153,23 @@ export interface UpdateProductRequest {
   cost?: Money;
   /** VAT classification. Defaults to STANDARD on the backend if omitted. */
   vatStatus?: VatStatus;
+  /** Free-text product department / category label. No FK. */
+  category?: string;
+  brand?: string;
+  manufacturer?: string;
+  purchasable?: boolean;
+  preferredSupplierId?: string;
+  hsCode?: string;
+  imageUrl?: string;
+  notes?: string;
+  lotTracked?: boolean;
+  serialTracked?: boolean;
+  expiryTracked?: boolean;
+  reorderLevel?: string;
+  reorderQty?: string;
+  safetyStock?: string;
+  minStock?: string;
+  maxStock?: string;
 }
 
 // ── ProductBarcodeDto ─────────────────────────────────────────────────────────
@@ -119,7 +185,14 @@ export interface ProductBarcodeDto {
 
 export interface AddBarcodeRequest {
   barcode: string;
-  primary: boolean;
+  /** Kept for product-detail.component compat; product-master uses isPrimary per contract. */
+  primary?: boolean;
+  /** Canonical field name per confirmed backend contract. */
+  isPrimary?: boolean;
+  /** Barcode type (EAN_13, QR, UPC_A, …). Optional. */
+  barcodeType?: string;
+  /** Unit of measure uid this barcode is keyed to. Optional. */
+  uomUid?: string;
 }
 
 // ── ProductBulkPackDto ────────────────────────────────────────────────────────
@@ -157,6 +230,8 @@ export interface ProductPriceDto {
 export interface SetProductPriceRequest {
   priceListUid: string;
   price: Money;
+  /** ISO-8601 date string. Default = today. Backend contract confirmed. */
+  effectiveFrom?: string;
 }
 
 // ── ProductComponentDto ───────────────────────────────────────────────────────
@@ -182,10 +257,22 @@ export interface ProductBranchDto {
   branchId: string;
   assignedAt: string | null;
   assignedBy: string | null;
+  /** Whether the product is active in this branch (confirmed contract). */
+  active?: boolean;
+  /** Per-branch reorder override (confirmed contract). */
+  reorderLevel?: string;
+  /** Per-branch price override (confirmed contract). */
+  branchPrice?: string;
 }
 
 export interface AssignProductBranchRequest {
   branchUid: string;
+  /** Whether the product is active/available in this branch. Default true. */
+  active?: boolean;
+  /** Per-branch reorder level override. */
+  reorderLevel?: string;
+  /** Per-branch selling price override. */
+  branchPrice?: string;
 }
 
 // ── PriceListDto ──────────────────────────────────────────────────────────────
@@ -196,6 +283,7 @@ export interface PriceListDto {
   companyId: string;
   code: string;
   name: string;
+  isDefault: boolean;
   status: string;
   version: string | null;
   createdAt: string | null;

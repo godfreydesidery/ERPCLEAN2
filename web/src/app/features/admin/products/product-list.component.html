@@ -91,6 +91,10 @@
       <div class="erp-toolbar__spacer"></div>
 
       @if (canManage()) {
+        <a routerLink="/admin/products/master" class="btn btn-outline-primary">
+          <i class="bi bi-journal-text me-1" aria-hidden="true"></i>
+          Full product form
+        </a>
         <button type="button" class="btn btn-primary"
                 (click)="toggleCreateForm()"
                 [attr.aria-expanded]="showCreateForm()"
