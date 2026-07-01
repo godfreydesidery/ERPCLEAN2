@@ -159,8 +159,10 @@ async function openDetail(page, rowText, linkText) {
           detail = (await page.locator('body').innerText().catch(() => '')) || '';
         }
 
-        // STEP 2: home branch as default
-        if (!detail.includes(u.homeBranch)) {
+        // STEP 2: home branch as default. Always ATTEMPT (dup 409 tolerated) — the old
+        // `detail.includes(homeBranch)` guard false-positive-skipped because the branch dropdown lists
+        // every branch name in the page text, so a new persona (e.g. a fresh hire) never got a branch.
+        {
           buf.clear();
           await L.pickFirstReal(page, '#assignCompany');
           await page.waitForTimeout(500);

@@ -154,12 +154,15 @@ export class ProjectListComponent {
     const company = this.companies().find((c) => c.id === this.selectedCompanyId());
     if (!company) { this.formError.set('Could not resolve selected company.'); return; }
 
+    const branchUid = this.session.activeBranchUid();
+    if (!branchUid) { this.formError.set('Select a branch first.'); return; }
+
     this.saving.set(true);
     this.formError.set(null);
 
     const request: CreateProjectRequest = {
       companyUid: company.uid,
-      branchUid: company.uid, // branch resolved from context; will use company's default branch uid
+      branchUid,
       name,
       plannedStartDate: this.fPlannedStart().trim() || undefined,
       plannedEndDate: this.fPlannedEnd().trim() || undefined,

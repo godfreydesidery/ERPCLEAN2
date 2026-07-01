@@ -5,7 +5,11 @@ import com.erp.modules.iam.domain.dto.SetPasswordRequest;
 import com.erp.modules.iam.domain.dto.UpdateUserRequest;
 import com.erp.modules.iam.domain.dto.UserDto;
 import com.erp.modules.iam.domain.entity.AppUser;
+import com.erp.modules.iam.domain.entity.Company;
+import com.erp.modules.iam.domain.entity.UserCompany;
 import com.erp.modules.iam.repository.AppUserRepository;
+import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.modules.iam.repository.UserCompanyRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -38,15 +42,21 @@ import org.springframework.transaction.annotation.Transactional;
 public class UserServiceImpl implements UserService {
 
     private final AppUserRepository users;
+    private final UserCompanyRepository userCompanies;
+    private final CompanyRepository companies;
     private final PasswordEncoder passwordEncoder;
     private final PasswordPolicy passwordPolicy;
     private final AuditService audit;
 
     public UserServiceImpl(AppUserRepository users,
+                           UserCompanyRepository userCompanies,
+                           CompanyRepository companies,
                            PasswordEncoder passwordEncoder,
                            PasswordPolicy passwordPolicy,
                            AuditService audit) {
         this.users = users;
+        this.userCompanies = userCompanies;
+        this.companies = companies;
         this.passwordEncoder = passwordEncoder;
         this.passwordPolicy = passwordPolicy;
         this.audit = audit;
@@ -70,7 +80,51 @@ public class UserServiceImpl implements UserService {
         audit.record(AuditEvent.of(AuditActions.USER_CREATE, "app_users", saved.getId(), saved.getUid())
                 .detail(Map.of("username", saved.getUsername(), "displayName", saved.getDisplayName())));
 
+        // ADR-0046 create-time analogue: a non-root admin can only create users within their own
+        // company scope, so the created user must immediately BE a member of the creator's active
+        // company — otherwise it belongs to no company and is invisible in the creator's (company-
+        // scoped) list(), while a re-create trips "Username already exists" (F-bug, user-reported).
+        // Establishing the membership in THIS transaction keeps create atomic (fail-closed: if the
+        // membership insert fails, the whole create rolls back). Root / no-company creators are left
+        // unassigned exactly as before (root has no single company and sees everyone anyway).
+        establishCreatorCompanyMembership(saved);
+
         return UserDto.from(saved);
+    }
+
+    /**
+     * Grants the newly-created {@code user} an explicit {@link UserCompany} membership in the
+     * creator's active company, in the same transaction as the user save.
+     *
+     * <p>No-op when the caller is root or has no active company context (ADR-0046: root has no
+     * single company). Idempotent — skips if an active membership already exists (defensive; a
+     * brand-new user never does). The audited grant mirrors {@link UserCompanyServiceImpl#assign}
+     * so the membership shows up in the append-only trail like any explicit assignment.
+     */
+    private void establishCreatorCompanyMembership(AppUser user) {
+        RequestContext.Principal principal = RequestContext.get();
+        if (principal == null || principal.root()) {
+            return; // root / no principal → leave unassigned (root sees all; no single company)
+        }
+        Long companyId = principal.companyId();
+        if (companyId == null) {
+            return; // no active company scope → nothing to assign
+        }
+        if (userCompanies.existsByUserIdAndCompanyIdAndRevokedAtIsNull(user.getId(), companyId)) {
+            return; // already a member — idempotent, no duplicate row
+        }
+        // findScopedById (not findById): companyId is the caller's OWN JWT scope, not request
+        // input — a self-scope lookup, exempt from the confused-deputy guard by name.
+        Company company = companies.findScopedById(companyId).orElse(null);
+        if (company == null) {
+            return; // active company vanished (shouldn't happen) → fail-open on membership only
+        }
+        UserCompany membership = new UserCompany(user.getId(), company, principal.userId());
+        UserCompany savedMembership = userCompanies.save(membership);
+
+        audit.record(AuditEvent.of(AuditActions.USER_COMPANY_ASSIGN, "user_company",
+                        savedMembership.getId(), savedMembership.getUid())
+                .detail(Map.of("userUid", user.getUid(), "companyUid", company.getUid())));
     }
 
     @Override

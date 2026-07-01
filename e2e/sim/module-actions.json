@@ -1,0 +1,893 @@
+[
+ {
+  "module": "CRM \u2013 Leads",
+  "operation": "register a lead",
+  "role": "BRANCH_MANAGER",
+  "path": "/admin/crm/leads",
+  "open": "New Lead",
+  "anchor": "#newDisplayName",
+  "fields": [
+   [
+    "#newDisplayName",
+    "Tembo Group Prospect",
+    "text"
+   ],
+   [
+    "#newLeadSource",
+    "REFERRAL",
+    "select"
+   ]
+  ],
+  "submit": "Create Lead",
+  "complexity": "SIMPLE"
+ },
+ {
+  "module": "CRM \u2013 Activities",
+  "operation": "log a CRM activity",
+  "role": "BRANCH_MANAGER",
+  "path": "/admin/crm/leads/uid/{uid}",
+  "open": "Log Activity",
+  "anchor": "#actFSubject",
+  "fields": [
+   [
+    "#actFType",
+    "CALL",
+    "select"
+   ],
+   [
+    "#actFSubject",
+    "Initial discovery call",
+    "text"
+   ]
+  ],
+  "submit": "Log Activity",
+  "complexity": "NEEDS_PREREQ"
+ },
+ {
+  "module": "Tax",
+  "operation": "create a VAT return",
+  "role": "ACCOUNTANT",
+  "path": "/admin/tax/vat-returns",
+  "open": "New VAT Return",
+  "anchor": "#newVatYear",
+  "fields": [
+   [
+    "#newVatYear",
+    "2026",
+    "text"
+   ],
+   [
+    "#newVatMonth",
+    "7",
+    "select"
+   ]
+  ],
+  "submit": "Open Return",
+  "complexity": "SIMPLE"
+ },
+ {
+  "module": "FX",
+  "operation": "add an exchange rate",
+  "role": "FINANCE_DIRECTOR",
+  "path": "/admin/fx/rates",
+  "open": "New Rate",
+  "anchor": "#fxNewFrom",
+  "fields": [
+   [
+    "#fxNewFrom",
+    "USD",
+    "select"
+   ],
+   [
+    "#fxNewTo",
+    "TZS",
+    "select"
+   ],
+   [
+    "#fxNewRate",
+    "2450.000000",
+    "text"
+   ],
+   [
+    "#fxNewDate",
+    "2026-07-01",
+    "date"
+   ]
+  ],
+  "submit": "Save Rate",
+  "complexity": "NEEDS_PREREQ"
+ },
+ {
+  "module": "Cost Centres",
+  "operation": "create a dimension value",
+  "role": "FINANCE_DIRECTOR",
+  "path": "/admin/cost-centre/values",
+  "open": "New Value",
+  "anchor": "#newValCode",
+  "fields": [
+   [
+    "#newValCode",
+    "CC001",
+    "text"
+   ],
+   [
+    "#newValName",
+    "Head Office",
+    "text"
+   ]
+  ],
+  "submit": "Create Value",
+  "complexity": "NEEDS_PREREQ"
+ },
+ {
+  "module": "Fixed Assets \u2014 Asset Categories",
+  "operation": "create an asset category",
+  "role": "FINANCE_DIRECTOR",
+  "path": "/admin/asset-categories",
+  "open": "New Category",
+  "anchor": "#newCode",
+  "fields": [
+   [
+    "#newCode",
+    "EQUIP-SIM",
+    "text"
+   ],
+   [
+    "#newName",
+    "Sim Equipment",
+    "text"
+   ],
+   [
+    "#newMethod",
+    "STRAIGHT_LINE",
+    "select"
+   ],
+   [
+    "#newLifePeriods",
+    "60",
+    "text"
+   ],
+   [
+    "#newAssetAccountId",
+    "",
+    "text"
+   ],
+   [
+    "#newAccumDepAccountId",
+    "",
+    "text"
+   ],
+   [
+    "#newDepExpenseAccountId",
+    "",
+    "text"
+   ]
+  ],
+  "submit": "Create Category",
+  "complexity": "NEEDS_PREREQ"
+ },
+ {
+  "module": "Fixed Assets \u2014 Register Asset",
+  "operation": "register a fixed asset",
+  "role": "FINANCE_DIRECTOR",
+  "path": "/admin/fixed-assets/create",
+  "open": "",
+  "anchor": "#fName",
+  "fields": [
+   [
+    "#fCategoryId",
+    "",
+    "first"
+   ],
+   [
+    "#fBranchUid",
+    "",
+    "first"
+   ],
+   [
+    "#fName",
+    "Sim Laptop Asset",
+    "text"
+   ],
+   [
+    "#fAcquisitionCost",
+    "1500000",
+    "text"
+   ],
+   [
+    "#fMethod",
+    "STRAIGHT_LINE",
+    "select"
+   ],
+   [
+    "#fLifePeriods",
+    "36",
+    "text"
+   ],
+   [
+    "#fAcquisitionDate",
+    "2026-07-01",
+    "date"
+   ],
+   [
+    "#fDepStartDate",
+    "2026-07-01",
+    "date"
+   ]
+  ],
+  "submit": "Register Asset",
+  "complexity": "NEEDS_PREREQ"
+ },
+ {
+  "module": "Budgeting",
+  "operation": "create a budget",
+  "role": "FINANCE_DIRECTOR",
+  "path": "/admin/budgets",
+  "open": "New Budget",
+  "anchor": "#fName",
+  "fields": [
+   [
+    "#fName",
+    "FY2026 Operating Budget",
+    "text"
+   ],
+   [
+    "#fFiscalYearUid select",
+    "",
+    "first"
+   ]
+  ],
+  "submit": "Create Budget",
+  "complexity": "NEEDS_PREREQ"
+ },
+ {
+  "module": "Projects",
+  "operation": "create a project",
+  "role": "PROJECT_MANAGER",
+  "path": "/admin/projects",
+  "open": "New Project",
+  "anchor": "#fName",
+  "fields": [
+   [
+    "#fName",
+    "Tembo Office Fit-Out 2026",
+    "text"
+   ],
+   [
+    "#fPlannedStart",
+    "2026-07-01",
+    "date"
+   ],
+   [
+    "#fPlannedEnd",
+    "2026-12-31",
+    "date"
+   ],
+   [
+    "#fBudget",
+    "5000000",
+    "text"
+   ]
+  ],
+  "submit": "Create Project",
+  "complexity": "SIMPLE"
+ },
+ {
+  "module": "Sales / Quotations",
+  "operation": "raise a quotation",
+  "role": "SALES_OFFICER",
+  "path": "/admin/quotations",
+  "open": "New Quotation",
+  "anchor": "#customerSearch",
+  "fields": [
+   [
+    "#customerSearch",
+    "Customer",
+    "search"
+   ],
+   [
+    "#newCurrency",
+    "TZS",
+    "first"
+   ],
+   [
+    "#newQuoteDate",
+    "2026-07-01",
+    "date"
+   ],
+   [
+    "#newValidUntil",
+    "2026-07-31",
+    "date"
+   ]
+  ],
+  "submit": "Create Quotation",
+  "complexity": "HAS_LINES"
+ },
+ {
+  "module": "Sales / Deliveries",
+  "operation": "create a delivery note",
+  "role": "SALES_OFFICER",
+  "path": "/admin/deliveries/create",
+  "open": "",
+  "anchor": "#deliveryDate",
+  "fields": [
+   [
+    "#deliveryDate",
+    "2026-07-01",
+    "date"
+   ],
+   [
+    "#deliveryNotes",
+    "Sim delivery run",
+    "text"
+   ]
+  ],
+  "submit": "Create Delivery",
+  "complexity": "NEEDS_PREREQ"
+ },
+ {
+  "module": "Sales / Sales Returns",
+  "operation": "create a sales return",
+  "role": "SALES_OFFICER",
+  "path": "/admin/sales-returns/create",
+  "open": "",
+  "anchor": "#deliveryUidInput",
+  "fields": [
+   [
+    "#deliveryUidInput",
+    "",
+    "first"
+   ],
+   [
+    "#returnDate",
+    "2026-07-01",
+    "date"
+   ]
+  ],
+  "submit": "Confirm Return",
+  "complexity": "NEEDS_PREREQ"
+ },
+ {
+  "module": "Sales / Blanket Orders",
+  "operation": "create a blanket order",
+  "role": "SALES_OFFICER",
+  "path": "/admin/blanket-orders/create",
+  "open": "",
+  "anchor": "#branchPicker",
+  "fields": [
+   [
+    "#branchPicker",
+    "",
+    "first"
+   ],
+   [
+    "#customerSearch",
+    "Customer",
+    "search"
+   ],
+   [
+    "#currency",
+    "TZS",
+    "first"
+   ],
+   [
+    "#validFrom",
+    "2026-07-01",
+    "date"
+   ],
+   [
+    "#validTo",
+    "2026-12-31",
+    "date"
+   ]
+  ],
+  "submit": "Create Blanket Order",
+  "complexity": "HAS_LINES"
+ },
+ {
+  "module": "Sales / Standing Orders",
+  "operation": "create a standing order",
+  "role": "SALES_OFFICER",
+  "path": "/admin/standing-orders/create",
+  "open": "",
+  "anchor": "#branchPicker",
+  "fields": [
+   [
+    "#branchPicker",
+    "",
+    "first"
+   ],
+   [
+    "#customerPicker",
+    "",
+    "first"
+   ],
+   [
+    "#fCurrency",
+    "TZS",
+    "first"
+   ],
+   [
+    "#fFrequency",
+    "MONTHLY",
+    "select"
+   ],
+   [
+    "#fStartDate",
+    "2026-07-01",
+    "date"
+   ],
+   [
+    "#lineProduct0",
+    "",
+    "first"
+   ],
+   [
+    "#lineUnit0",
+    "",
+    "first"
+   ],
+   [
+    "#lineQty0",
+    "10",
+    "text"
+   ],
+   [
+    "#linePrice0",
+    "5000",
+    "text"
+   ]
+  ],
+  "submit": "Create Standing Order",
+  "complexity": "HAS_LINES"
+ },
+ {
+  "module": "Purchase Requisition",
+  "operation": "create a purchase requisition",
+  "role": "PROCUREMENT_OFFICER",
+  "path": "/admin/purchase-requisitions/create",
+  "open": "",
+  "anchor": "#requiredByDate",
+  "fields": [
+   [
+    "#requiredByDate",
+    "2026-07-15",
+    "date"
+   ],
+   [
+    "select[name='product_0']",
+    "",
+    "first"
+   ],
+   [
+    "select[name='unit_0']",
+    "",
+    "first"
+   ],
+   [
+    "#reqQty_0",
+    "10",
+    "text"
+   ]
+  ],
+  "submit": "Create Requisition",
+  "complexity": "HAS_LINES"
+ },
+ {
+  "module": "RFQ",
+  "operation": "create an RFQ",
+  "role": "PROCUREMENT_OFFICER",
+  "path": "/admin/rfqs/create",
+  "open": "",
+  "anchor": "#responseDueDate",
+  "fields": [
+   [
+    "#responseDueDate",
+    "2026-07-20",
+    "date"
+   ],
+   [
+    "select[name='productUid-0']",
+    "",
+    "first"
+   ],
+   [
+    "select[name='unitUid-0']",
+    "",
+    "first"
+   ],
+   [
+    "#qty-0",
+    "5",
+    "text"
+   ],
+   [
+    "select[name='pendingSupplier']",
+    "",
+    "first"
+   ]
+  ],
+  "submit": "Create RFQ",
+  "complexity": "HAS_LINES"
+ },
+ {
+  "module": "Purchase Return",
+  "operation": "create a purchase return",
+  "role": "PROCUREMENT_OFFICER",
+  "path": "/admin/purchase-returns/create",
+  "open": "",
+  "anchor": "#reason",
+  "fields": [
+   [
+    "select[name='grPicker']",
+    "",
+    "first"
+   ],
+   [
+    "#reason",
+    "Damaged goods",
+    "text"
+   ]
+  ],
+  "submit": "Create Return",
+  "complexity": "NEEDS_PREREQ"
+ },
+ {
+  "module": "Landed Cost",
+  "operation": "create a landed cost",
+  "role": "PROCUREMENT_OFFICER",
+  "path": "/admin/landed-costs/create",
+  "open": "",
+  "anchor": "#basis",
+  "fields": [
+   [
+    "#basis",
+    "BY_VALUE",
+    "select"
+   ],
+   [
+    "select[name='grPicker']",
+    "",
+    "first"
+   ],
+   [
+    "#chargeAmt-0",
+    "150000",
+    "text"
+   ]
+  ],
+  "submit": "Create Landed Cost",
+  "complexity": "NEEDS_PREREQ"
+ },
+ {
+  "module": "Cash & Bank",
+  "operation": "record a cash entry",
+  "role": "CASHIER",
+  "path": "/admin/cash/entries/record",
+  "open": "",
+  "anchor": "#entAccount",
+  "fields": [
+   [
+    "#entAccount",
+    "",
+    "first"
+   ],
+   [
+    "#entDirection",
+    "IN",
+    "select"
+   ],
+   [
+    "#entAmount",
+    "5000",
+    "text"
+   ],
+   [
+    "#entDate",
+    "2026-07-01",
+    "date"
+   ],
+   [
+    "#entCounterGl",
+    "",
+    "first"
+   ]
+  ],
+  "submit": "Record Entry",
+  "complexity": "NEEDS_PREREQ"
+ },
+ {
+  "module": "Cash & Bank",
+  "operation": "register a cheque",
+  "role": "CASHIER",
+  "path": "/admin/cash/cheques",
+  "open": "Register Cheque",
+  "anchor": "#chqAccount",
+  "fields": [
+   [
+    "#chqAccount",
+    "",
+    "first"
+   ],
+   [
+    "#chqNumber",
+    "CHQ-0001",
+    "text"
+   ],
+   [
+    "#chqPayee",
+    "Tembo Suppliers Ltd",
+    "text"
+   ],
+   [
+    "#chqAmount",
+    "120000",
+    "text"
+   ],
+   [
+    "#chqIssueDate",
+    "2026-07-01",
+    "date"
+   ],
+   [
+    "#chqValueDate",
+    "2026-07-05",
+    "date"
+   ]
+  ],
+  "submit": "Register",
+  "complexity": "NEEDS_PREREQ"
+ },
+ {
+  "module": "Cash & Bank",
+  "operation": "record a cash transfer",
+  "role": "CASHIER",
+  "path": "/admin/cash/transfers/record",
+  "open": "",
+  "anchor": "#trSource",
+  "fields": [
+   [
+    "#trSource",
+    "",
+    "first"
+   ],
+   [
+    "#trDest",
+    "",
+    "select"
+   ],
+   [
+    "#trAmount",
+    "10000",
+    "text"
+   ],
+   [
+    "#trDate",
+    "2026-07-01",
+    "date"
+   ]
+  ],
+  "submit": "Record Transfer",
+  "complexity": "NEEDS_PREREQ"
+ },
+ {
+  "module": "HR / Departments",
+  "operation": "create a department",
+  "role": "HR_PAYROLL_OFFICER",
+  "path": "/admin/hr/departments",
+  "open": "New Department",
+  "anchor": "#fCode",
+  "fields": [
+   [
+    "#fCode",
+    "OPS",
+    "text"
+   ],
+   [
+    "#fName",
+    "Operations",
+    "text"
+   ]
+  ],
+  "submit": "Create Department",
+  "complexity": "SIMPLE"
+ },
+ {
+  "module": "HR / Pay Components",
+  "operation": "create a pay component",
+  "role": "HR_PAYROLL_OFFICER",
+  "path": "/admin/hr/pay-components",
+  "open": "New Pay Component",
+  "anchor": "#pcCode",
+  "fields": [
+   [
+    "#pcCode",
+    "BASIC",
+    "text"
+   ],
+   [
+    "#pcName",
+    "Basic Salary",
+    "text"
+   ],
+   [
+    "#pcKind",
+    "EARNING",
+    "select"
+   ],
+   [
+    "#pcBasis",
+    "FIXED",
+    "select"
+   ],
+   [
+    "#pcGlAcct",
+    "",
+    "text"
+   ]
+  ],
+  "submit": "Create",
+  "complexity": "NEEDS_PREREQ"
+ },
+ {
+  "module": "HR / Leave Requests",
+  "operation": "submit a leave request",
+  "role": "HR_PAYROLL_OFFICER",
+  "path": "/admin/hr/leave-requests",
+  "open": "Submit Leave Request",
+  "anchor": "#lrLeaveTypeId",
+  "fields": [
+   [
+    "app-uid-picker[name='lrEmpUid'] select",
+    "",
+    "first"
+   ],
+   [
+    "#lrLeaveTypeId",
+    "",
+    "text"
+   ],
+   [
+    "#lrFrom",
+    "2026-07-07",
+    "date"
+   ],
+   [
+    "#lrTo",
+    "2026-07-09",
+    "date"
+   ],
+   [
+    "#lrDays",
+    "3",
+    "text"
+   ]
+  ],
+  "submit": "Submit",
+  "complexity": "NEEDS_PREREQ"
+ },
+ {
+  "module": "HR / Staff Loans",
+  "operation": "create a staff loan",
+  "role": "HR_PAYROLL_OFFICER",
+  "path": "/admin/hr/loans",
+  "open": "New Loan",
+  "anchor": "#lnPrincipal",
+  "fields": [
+   [
+    "app-uid-picker[name='lnEmpUid'] select",
+    "",
+    "first"
+   ],
+   [
+    "#lnPrincipal",
+    "500000",
+    "text"
+   ],
+   [
+    "#lnInstalment",
+    "50000",
+    "text"
+   ],
+   [
+    "#lnGl",
+    "",
+    "text"
+   ],
+   [
+    "#lnStart",
+    "2026-07-01",
+    "date"
+   ]
+  ],
+  "submit": "Create",
+  "complexity": "NEEDS_PREREQ"
+ },
+ {
+  "module": "HR / Payroll Runs",
+  "operation": "run payroll",
+  "role": "HR_PAYROLL_OFFICER",
+  "path": "/admin/hr/payroll-runs",
+  "open": "New Payroll Run",
+  "anchor": "#prYear",
+  "fields": [
+   [
+    "#prYear",
+    "2026",
+    "text"
+   ],
+   [
+    "#prMonth",
+    "7",
+    "select"
+   ],
+   [
+    "#prPayDate",
+    "2026-07-31",
+    "date"
+   ]
+  ],
+  "submit": "Create",
+  "complexity": "SIMPLE"
+ },
+ {
+  "module": "GL / Chart of Accounts",
+  "operation": "create a GL account",
+  "role": "ACCOUNTANT",
+  "path": "/admin/gl/accounts",
+  "open": "New Account",
+  "anchor": "#newCode",
+  "fields": [
+   [
+    "#newCode",
+    "1100",
+    "text"
+   ],
+   [
+    "#newName",
+    "Cash at Bank",
+    "text"
+   ],
+   [
+    "#newAccountType",
+    "ASSET",
+    "select"
+   ]
+  ],
+  "submit": "Create",
+  "complexity": "SIMPLE"
+ },
+ {
+  "module": "Stock / Locations",
+  "operation": "create a stock location",
+  "role": "STOREKEEPER",
+  "path": "/admin/stock/locations",
+  "open": "New Location",
+  "anchor": "#fCode",
+  "fields": [
+   [
+    "#fCode",
+    "WH-MAIN",
+    "text"
+   ],
+   [
+    "#fName",
+    "Main Warehouse",
+    "text"
+   ],
+   [
+    "#fLocationType",
+    "WAREHOUSE",
+    "select"
+   ],
+   [
+    "#fBranchPicker",
+    "",
+    "first"
+   ]
+  ],
+  "submit": "Create Location",
+  "complexity": "NEEDS_PREREQ"
+ }
+]

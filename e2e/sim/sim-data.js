@@ -20,16 +20,16 @@ const ROLES = [
   { key: 'GROUP_GM', name: 'Group General Manager', desc: 'Group-wide oversight, dashboards and final approvals',
     keywords: ['sales', 'purchas', 'stock', 'inventory', 'ledger', 'gl.', 'report', 'approv', 'dashboard', 'bi.', 'customer', 'supplier', 'product', 'branch', 'view', 'read'] },
   { key: 'FINANCE_DIRECTOR', name: 'Finance Director', desc: 'Full finance: GL, AR, AP, cash/bank, tax, assets, budgeting',
-    keywords: ['ledger', 'gl.', 'journal', 'receivable', 'ar.', 'payable', 'ap.', 'cash', 'bank', 'tax', 'vat', 'asset', 'budget', 'fx', 'cost', 'report', 'approv', 'credit'],
-    extraPerms: ['CUSTOMER.VIEW', 'SUPPLIER.VIEW', 'BI.VIEW', 'BI.FINANCE.VIEW'] }, // F22 party pickers + the CFO's core job is the finance dashboard
+    keywords: ['ledger', 'gl.', 'journal', 'receivable', 'ar.', 'payable', 'ap.', 'cash', 'bank', 'tax', 'vat', 'wht', 'asset', 'fa.', 'budget', 'fx', 'currency', 'cost', 'report', 'approv', 'credit'],
+    extraPerms: ['CUSTOMER.VIEW', 'SUPPLIER.VIEW', 'BI.VIEW', 'BI.FINANCE.VIEW'] }, // F22 party pickers + CFO finance dashboard; 'fa.'/'currency'/'wht' fix the code-vs-keyword miss (FA.*/CURRENCY.*/WHT.* not 'asset'/'fx'/'tax')
   { key: 'BRANCH_MANAGER', name: 'Branch Manager', desc: 'Branch sales/purchase approvals, stock view & transfers, reports',
     keywords: ['sales', 'purchas', 'stock', 'inventory', 'transfer', 'report', 'approv', 'customer', 'supplier', 'branch'] },
   { key: 'ACCOUNTANT', name: 'Accountant', desc: 'GL postings, AR/AP invoicing, tax, period-end, financial reports',
     keywords: ['ledger', 'gl.', 'journal', 'receivable', 'ar.', 'payable', 'ap.', 'tax', 'vat', 'invoice', 'report', 'bank'],
     extraPerms: ['CUSTOMER.VIEW', 'SUPPLIER.VIEW'] }, // F22: AR/AP party pickers
   { key: 'CASHIER', name: 'Cashier / Cash & Bank Officer', desc: 'Cash & bank receipts, payments, petty cash, deposits',
-    keywords: ['cash', 'bank', 'receipt', 'payment', 'petty', 'deposit'],
-    extraPerms: ['CUSTOMER.VIEW', 'AR.VIEW'] }, // F22 read-closure of Record Receipt: customer picker + open-items query
+    keywords: ['cash', 'bank', 'cheque', 'receipt', 'payment', 'petty', 'deposit'],
+    extraPerms: ['CUSTOMER.VIEW', 'AR.VIEW'] }, // F22 Record Receipt closure; 'cheque' grants CHEQUE.MANAGE (cash officer runs the cheque register)
   { key: 'SALES_OFFICER', name: 'Sales Officer', desc: 'Quotations, sales orders/invoices, deliveries, POS, customers',
     keywords: ['sales', 'quotation', 'order', 'invoice', 'delivery', 'customer', 'party', 'pos', 'receipt'] },
   { key: 'FIELD_SALES_AGENT', name: 'Field / Route Sales Agent', desc: 'Route sales orders & invoices, cash collections',
@@ -46,6 +46,8 @@ const ROLES = [
     keywords: ['manufactur', 'work', 'bom', 'production', 'stock', 'cost'] },
   { key: 'HR_PAYROLL_OFFICER', name: 'HR / Payroll Officer', desc: 'Employees, contracts, leave, attendance, payroll, payslips',
     keywords: ['hr.', 'employee', 'contract', 'leave', 'attendance', 'payroll', 'payslip'] },
+  { key: 'PROJECT_MANAGER', name: 'Project Manager', desc: 'Projects, work-in-progress, project costing & billing',
+    keywords: ['project', 'wip', 'cost'] }, // new hire: the Projects module had no owner (coverage gap from the full-remit sweep)
 ];
 
 // 16 STAFF personas (those who log in). homeBranch must match a BRANCHES.name.
@@ -66,6 +68,7 @@ const STAFF = [
   { slug: 'hamisi-ngassa', fullName: 'Hamisi Ngassa', designation: 'Field / Route Sales Agent', username: 'hngassa', homeBranch: 'Mwanza', role: 'FIELD_SALES_AGENT' },
   { slug: 'saidi-karume', fullName: 'Saidi Karume', designation: 'Storekeeper / Stock Controller', username: 'skarume', homeBranch: 'Dar es Salaam HQ', role: 'STOREKEEPER' },
   { slug: 'yusuf-mbwana', fullName: 'Yusuf Mbwana', designation: 'Procurement Officer', username: 'ymbwana', homeBranch: 'Dar es Salaam HQ', role: 'PROCUREMENT_OFFICER' },
+  { slug: 'zawadi-lyimo', fullName: 'Zawadi Lyimo', designation: 'Project Manager', username: 'zlyimo', homeBranch: 'Dar es Salaam HQ', role: 'PROJECT_MANAGER' }, // new hire: owns the Projects module (was unowned)
 ];
 
 const PRODUCTS_SOURCED = [

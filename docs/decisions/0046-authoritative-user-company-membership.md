@@ -120,3 +120,14 @@ scoping is enforced), not a DB trigger/constraint.
    Rejected as the default: destructive and easy to fire by accident; silent access changes are a
    security smell. Blocking with a clear message is safer and reversible; an explicit confirmed
    power-action can be added later if desired.
+
+## Amendment (2026-07-01, F27) — create-time membership
+
+Creating a user **as a non-root admin** now establishes that user's membership in the **creator's
+active company**, in the same transaction as the user save (`UserServiceImpl.create`). This is the
+create-time analogue this ADR did not cover: ADR-0046 removed the *implicit, grant-triggered*
+auto-membership, but user creation is itself the explicit, deliberate moment a company admin brings a
+user into their own scope. Without it, a non-root admin's newly-created user had no company and was
+invisible in the company-scoped `list()` (visible only to root) — see finding F27. Root / no-company
+creators still leave the user unassigned. The authoritative-membership invariants (assign-company-first
+for role/branch grants; remove-blocks-while-access-remains) are unchanged.

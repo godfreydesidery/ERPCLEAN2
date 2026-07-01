@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.erp.modules.iam.domain.dto.CreateUserRequest;
 import com.erp.modules.iam.domain.dto.SetPasswordRequest;
 import com.erp.modules.iam.domain.dto.UpdateUserRequest;
+import com.erp.modules.iam.domain.dto.UserDto;
 import com.erp.modules.iam.domain.entity.AppUser;
 import com.erp.modules.iam.domain.entity.Branch;
 import com.erp.modules.iam.domain.entity.Company;
@@ -16,6 +17,7 @@ import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.repository.OrganisationRepository;
 import com.erp.modules.iam.repository.UserBranchRepository;
+import com.erp.modules.iam.repository.UserCompanyRepository;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.security.RequestContext;
@@ -69,6 +71,7 @@ class UserMutatorTenantIsolationIT extends PostgresIntegrationTest {
     @Autowired private UserService userService;
     @Autowired private AppUserRepository users;
     @Autowired private UserBranchRepository userBranches;
+    @Autowired private UserCompanyRepository userCompanies;
     @Autowired private OrganisationRepository organisations;
     @Autowired private CompanyRepository companies;
     @Autowired private BranchRepository branches;
@@ -292,5 +295,57 @@ class UserMutatorTenantIsolationIT extends PostgresIntegrationTest {
 
         AppUser reloaded = users.findByUid(bVictim.getUid()).orElseThrow();
         assertThat(reloaded.getDisplayName()).isEqualTo("Root Updated");
+    }
+
+    // ---------------------------------------------------------------
+    // create — F-bug fix (user-reported): a user created by a non-root admin must be
+    // immediately visible to that admin (auto-membership in the creator's active company).
+    // Before the fix the new user had no user_company row → invisible in the admin's
+    // company-scoped list(), and re-creating tripped "Username already exists".
+    // ---------------------------------------------------------------
+
+    @Test
+    void create_nonRootAdmin_userIsMemberOfCreatorCompany_andVisibleInList() {
+        // aAdmin (Company A, non-root) creates a fresh user.
+        UserDto created = userService.create(new CreateUserRequest(
+                "brayton_made", "Brayton Made", "ValidPass1", null, null));
+
+        // 1. An active user_company membership exists in the creator's company.
+        AppUser newUser = users.findByUid(created.uid()).orElseThrow();
+        assertThat(users.existsUserInCompany(newUser.getId(), companyA.getId()))
+                .as("new user must be a member of the creator's active company")
+                .isTrue();
+        assertThat(userCompanies.existsByUserIdAndCompanyIdAndRevokedAtIsNull(
+                newUser.getId(), companyA.getId())).isTrue();
+
+        // 2. The new user now appears in aAdmin's company-scoped list (the reported symptom).
+        assertThat(userService.list())
+                .extracting(UserDto::uid)
+                .contains(created.uid());
+    }
+
+    @Test
+    void create_nonRootAdmin_userNotLeakedIntoAnotherCompany() {
+        UserDto created = userService.create(new CreateUserRequest(
+                "scoped_user", "Scoped User", "ValidPass1", null, null));
+
+        AppUser newUser = users.findByUid(created.uid()).orElseThrow();
+        // Membership is ONLY in Company A, never Company B (tenant-safe).
+        assertThat(users.existsUserInCompany(newUser.getId(), companyB.getId())).isFalse();
+    }
+
+    @Test
+    void create_rootPrincipal_leavesUserUnassigned() {
+        RequestContext.set(new RequestContext.Principal(
+                aAdmin.getId(), "root", true, null, null, null));
+
+        UserDto created = userService.create(new CreateUserRequest(
+                "root_made", "Root Made", "ValidPass1", null, null));
+
+        AppUser newUser = users.findByUid(created.uid()).orElseThrow();
+        // Root has no single company → no membership anywhere (unassigned exactly as before the fix).
+        assertThat(userCompanies.findByUserIdAndRevokedAtIsNullOrderByAssignedAtAscIdAsc(newUser.getId()))
+                .as("a root-created user stays unassigned")
+                .isEmpty();
     }
 }
