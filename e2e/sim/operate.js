@@ -112,6 +112,44 @@ async function runDetailScan(page, rec) {
   }
 }
 
+// ALL-MODULES action driver (MODULES=1): each persona performs one real create/operation in EVERY module
+// its role owns, from the data-driven e2e/sim/module-actions.json spec (investigated per module). Records
+// DID_WORK (rec.ok) / BLOCKED (403/redirect) / rejected (4xx with the server message) per module — so a
+// module blocked on a missing prereq, a permission, or a validation shows up as a concrete finding.
+const MODULE_ACTIONS = require('./module-actions.json');
+async function runModuleActions(page, buf, rec) {
+  const rx = (t) => { try { return new RegExp(t, 'i'); } catch { return new RegExp(String(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'); } };
+  for (const a of MODULE_ACTIONS.filter(x => x.role === persona.role)) {
+    const wf = a.operation, screen = a.path;
+    await L.goto(page, screen);
+    const rel = page.url().replace(L.BASE, '');
+    rec.visited(a.module, false);
+    if (/\/login|\/admin\/home$/.test(rel)) { rec.problem('BLOCKED', wf, screen, `bounced from ${screen} — cannot reach the ${a.module} module`, buf.snapshot()); continue; }
+    if (await L.looksForbidden(page, buf)) { rec.problem('BLOCKED', wf, screen, `not allowed to open ${a.module}`, buf.snapshot()); continue; }
+    try {
+      if (a.open) await L.clickButton(page, rx(a.open)).catch(() => {});
+      if (a.anchor) await page.locator(a.anchor).first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+      buf.clear();
+      for (const [sel, val, how] of (a.fields || [])) {
+        if (how === 'select') await L.pickByLabel(page, sel, val).catch(() => L.pickFirstReal(page, sel).catch(() => {}));
+        else if (how === 'first') await L.pickFirstReal(page, sel).catch(() => {});
+        else if (how === 'search') await L.searchPick(page, sel, val).catch(() => {});
+        else await L.setField(page, sel, val).catch(() => {}); // text / date
+      }
+      await page.waitForTimeout(300);
+      buf.clear();
+      await L.clickButton(page, rx(a.submit));
+      await page.waitForTimeout(1600);
+      const s = buf.snapshot();
+      const bad = s.api.filter(x => x.status >= 400).sort((x, y) => y.status - x.status)[0];
+      if (s.api.some(x => x.status >= 500)) rec.problem('BLOCKED', wf, screen, `server error doing "${wf}" in ${a.module}`, s);
+      else if (bad && bad.status === 403) rec.problem('BLOCKED', wf, screen, `not allowed to "${wf}" in ${a.module}`, s);
+      else if (bad) rec.problem('SLOW', wf, screen, `"${wf}" rejected (${bad.status})${a.complexity !== 'SIMPLE' ? ' [' + a.complexity + ']' : ''}: ${(bad.body || '').replace(/\s+/g, ' ').slice(0, 70)}`, s);
+      else { rec.ok(wf); rec.visited(a.module, true); }
+    } catch (e) { rec.problem('SLOW', wf, screen, `"${wf}" in ${a.module}: ${String(e.message || e).slice(0, 70)}`, buf.snapshot()); }
+  }
+}
+
 // ---- helpers reused from qa-ui-drive proven flow ----
 async function createOne(page, buf, rec, opts) {
   // opts: {path, openLabel, anchor, fields:[[sel,val,how]], submitField, name, workflow}
@@ -658,6 +696,9 @@ async function runDeep(page, buf, rec) {
 
     // DETAIL-PAGE id/uid leak scan (opt-in): open real records and check no uid is shown to the user
     if (process.env.DETAILS) await runDetailScan(page, rec);
+
+    // ALL-MODULES action pass (opt-in): perform a real operation in every module this role owns
+    if (process.env.MODULES) await runModuleActions(page, buf, rec);
 
     // ACTION missions: enter the master data I own (skipped in SWEEP/ACCESSONLY — those are read-only)
     if (!process.env.SWEEP && !process.env.ACCESSONLY) {
