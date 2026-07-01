@@ -241,6 +241,32 @@ tenant boundary and is read-only, never a write. Frontend defence-in-depth (carr
 pickers should degrade to a permission-aware empty state on any future 403 rather than blanking the screen —
 flagged for frontend-engineer.
 
+## F27 — User created by a non-root admin is invisible to that admin (missing create-time company membership)
+
+**2026-07-01 — reproduced from a real end-user's screenshots on a live deployment (non-root company admin "Brayton").**
+A non-root company admin creates a user via User-management. The user saves, but (1) it does **not** appear in
+the creator's user list, (2) logging in as ROOT the user **is** visible, and (3) re-creating the same username
+returns *"Username already exists"* — a workflow dead-end (the account exists but is unreachable to the only
+admin who can see their company).
+
+**Root cause (confirmed).** `UserServiceImpl.create()` saved the `AppUser` but never created a `user_company`
+membership, so the new user belonged to **no** company. `UserServiceImpl.list()` returns, for a non-root caller,
+`findNonRootInCompanyOrderByUsername(companyId)` — only users who are members of the caller's active company —
+while ROOT takes the org-wide branch and sees everyone. A membership-less user therefore satisfies the unique
+username constraint (create is blocked on re-attempt) yet matches no company predicate (invisible in the
+company-scoped list). This is the create-time gap left by ADR-0046, which removed the auto-membership that used
+to be a side effect of role/branch grants: creation was never made an explicit membership moment.
+
+| # | Source | Severity | Finding | Status | Resolution |
+|---|---|---|---|---|---|
+| F27 | user report 2026-07-01 (non-root company admin) | HIGH (functional: a non-root admin cannot see or re-create the users they create — IAM user-management unusable for non-root admins) | `UserServiceImpl.create()` persisted the `AppUser` with no `user_company` row. Non-root `list()` is company-scoped, so the new user was invisible to its creator while ROOT saw it; the username unique index then blocked re-creation. Latent since ADR-0046 removed auto-membership. | FIXED (service-only, no migration) | `create()` now auto-establishes a `user_company` membership for the **new** user in the **creator's active company** (`RequestContext.get().companyId()`), **in the same transaction as the user save** (fail-closed: if the membership insert fails the whole create rolls back). Tenant-safe: a company admin only ever creates within their own JWT scope, and the membership is written only for their own active company. **Edge cases:** ROOT / no-company / null-principal creators leave the user unassigned exactly as before (root has no single company and sees everyone); idempotent (skips if an active membership already exists — no duplicate row). The grant is audited (`USER.COMPANY.ASSIGN` on `user_company`) mirroring `UserCompanyServiceImpl.assign`, so it shows in the append-only trail. The active-scope company is loaded via a new named finder `CompanyRepository.findScopedById` (semantically `findById`, distinct name) so the self-scope lookup does not trip `TenantScopingRulesTest`'s confused-deputy guard — the id is the caller's own JWT company, never request input. Tests: `UserServiceImplTest` (5 new `create_*` unit cases) + `UserMutatorTenantIsolationIT` (3 new create→list end-to-end cases on real Postgres). |
+
+**ADR note.** No new ADR required. This is the natural create-time analogue of ADR-0046 ("membership is explicit"):
+it makes *creation* the explicit membership moment for a brand-new user, which ADR-0046 did not address (it only
+removed the *implicit* auto-membership that role/branch grants used to trigger). A one-line note under ADR-0046
+§ (create-time membership) is warranted for traceability but is not a design change — the authoritative-membership
+invariants (assign-company-first for role/branch grants, remove-blocks-while-access-remains) are untouched.
+
 ## Production-gating (carried, still OPEN)
 - **G1** (Slice 2): stable RS256 signing key from a secret store — dev key is in-memory (everyone logged out on restart; not prod-safe).
 - **G2** (Slice 2): access-token denylist on logout (access token currently valid until expiry after logout).
