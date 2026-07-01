@@ -612,12 +612,12 @@ public class ProductServiceImpl implements ProductService {
             suppliers.findById(preferredSupplierId).ifPresentOrElse(s -> {
                 if (!s.getCompanyId().equals(companyId)) {
                     throw new com.erp.platform.common.api.NotFoundException(
-                            "Supplier not found in this company: " + preferredSupplierId);
+                            "The selected supplier was not found in this company.");
                 }
                 p.setPreferredSupplierId(preferredSupplierId);
             }, () -> {
                 throw new com.erp.platform.common.api.NotFoundException(
-                        "Supplier not found: " + preferredSupplierId);
+                        "Supplier not found.");
             });
         } else {
             p.setPreferredSupplierId(null);

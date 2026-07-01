@@ -508,8 +508,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
 
     private PurchaseOrderLine requireLine(String lineUid, Long purchaseOrderId) {
         return lines.findByUidAndPurchaseOrderId(lineUid, purchaseOrderId)
-                .orElseThrow(() -> new NotFoundException(
-                        "PurchaseOrderLine not found: " + lineUid));
+                .orElseThrow(() -> NotFoundException.of("Purchase order line", lineUid));
     }
 
     private Long resolveCompanyId(String companyUid) {

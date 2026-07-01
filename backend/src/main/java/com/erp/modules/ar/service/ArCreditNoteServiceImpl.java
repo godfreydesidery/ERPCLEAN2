@@ -140,7 +140,7 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
         if (req.arInvoiceUid() != null) {
             targetInvoice = invoices.findByCompanyIdAndUid(companyId, req.arInvoiceUid())
                     .orElseThrow(() -> new NotFoundException(
-                            "ArInvoice not found: " + req.arInvoiceUid()));
+                            "Invoice not found."));
 
             // BR-AR customer-match: credit note customer must own the target invoice (issue #1)
             assertInvoiceBelongsToCustomer(targetInvoice, customerId);
@@ -399,7 +399,7 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
         for (AllocationLineRequest line : lines) {
             ArInvoice inv = invoices.findByCompanyIdAndUid(companyId, line.arInvoiceUid())
                     .orElseThrow(() -> new NotFoundException(
-                            "ArInvoice not found: " + line.arInvoiceUid()));
+                            "Invoice not found."));
 
             // BR-AR customer-match: credit note customer must own the target invoice (issue #1)
             assertInvoiceBelongsToCustomer(inv, note.getCustomerId());

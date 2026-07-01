@@ -65,7 +65,7 @@ public class OutstandingTracker {
 
             PurchaseOrderLine line = poLines.findById(poLineId)
                     .orElseThrow(() -> new IllegalStateException(
-                            "PO line not found: " + poLineId + " — outstanding tracker inconsistency"));
+                            "Could not update the outstanding quantity for this purchase order line."));
 
             BigDecimal newReceived = line.getReceivedQtyInBase().add(delta);
             // Defensive guard (the DB CHECK is the structural backstop but we want a clear message)

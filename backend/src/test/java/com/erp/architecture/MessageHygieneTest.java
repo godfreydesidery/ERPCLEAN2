@@ -54,11 +54,15 @@ import org.junit.jupiter.api.Test;
 class MessageHygieneTest {
 
     /**
-     * Detects the opening of a throw statement that may be offending.
-     * Matches any line containing {@code throw new XxxException(} that is not a comment/log line.
+     * Detects the opening of an exception construction that may be offending.
+     * Matches any line containing {@code new XxxException(} — in a {@code throw}, a
+     * {@code .orElseThrow(() -> new ...)} lambda, or a {@code return} — and allows a
+     * fully-qualified class name (dots), e.g. {@code new com.erp.platform.common.api.ConflictException(}.
+     * The uid/id and internal-code checks below decide whether the accumulated block actually leaks,
+     * so broadening the opener never produces a false positive on a clean message.
      */
     private static final Pattern THROW_OPEN = Pattern.compile(
-            "throw\\s+new\\s+\\w+Exception\\(");
+            "new\\s+[\\w.]+Exception\\s*\\(");
 
     /**
      * Detects uid/id concatenation inside the accumulated throw-block text.

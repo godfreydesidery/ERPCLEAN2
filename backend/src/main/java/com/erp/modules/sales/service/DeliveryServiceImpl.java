@@ -154,7 +154,7 @@ public class DeliveryServiceImpl implements DeliveryService {
         for (CreateDeliveryRequest.DeliveryLineRequest lineReq : req.lines()) {
             SalesOrderLine sol = salesOrderLines.findByUid(lineReq.salesOrderLineUid())
                     .orElseThrow(() -> new NotFoundException(
-                            "SalesOrderLine not found: " + lineReq.salesOrderLineUid()));
+                            "Sales order line not found."));
 
             if (!sol.getSalesOrderId().equals(order.getId())) {
                 throw new IllegalArgumentException(
@@ -282,7 +282,7 @@ public class DeliveryServiceImpl implements DeliveryService {
 
         SalesOrder order = salesOrders.findById(delivery.getSalesOrderId())
                 .orElseThrow(() -> new NotFoundException(
-                        "SalesOrder not found id=" + delivery.getSalesOrderId()));
+                        "Sales order not found."));
 
         List<DeliveryLine> dLines = deliveryLines.findByDeliveryIdOrderByLineNo(delivery.getId());
         List<DeliveryLine> billable = dLines.stream()
@@ -333,7 +333,7 @@ public class DeliveryServiceImpl implements DeliveryService {
             for (DeliveryLine dl : billable) {
                 SalesOrderLine sol = salesOrderLines.findById(dl.getSalesOrderLineId())
                         .orElseThrow(() -> new NotFoundException(
-                                "SalesOrderLine not found id=" + dl.getSalesOrderLineId()));
+                                "Sales order line not found."));
                 BigDecimal qty = dl.openInvoiceQtyBase();
                 BigDecimal gross = sol.getUnitPriceAmount().multiply(qty);
                 BigDecimal dis = sol.getLineDiscountAmount() != null
@@ -379,7 +379,7 @@ public class DeliveryServiceImpl implements DeliveryService {
         for (DeliveryLine dl : billable) {
             SalesOrderLine sol = salesOrderLines.findById(dl.getSalesOrderLineId())
                     .orElseThrow(() -> new NotFoundException(
-                            "SalesOrderLine not found id=" + dl.getSalesOrderLineId()));
+                            "Sales order line not found."));
 
             BigDecimal qtyToInvoice = dl.openInvoiceQtyBase();
 

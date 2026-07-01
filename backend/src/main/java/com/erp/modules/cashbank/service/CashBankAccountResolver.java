@@ -42,8 +42,7 @@ public class CashBankAccountResolver {
         CashBankAccount account;
         if (cashBankAccountUid != null && !cashBankAccountUid.isBlank()) {
             account = cashAccounts.findByCompanyIdAndUid(companyId, cashBankAccountUid)
-                    .orElseThrow(() -> new NotFoundException(
-                            "Cash/bank account not found: " + cashBankAccountUid));
+                    .orElseThrow(() -> NotFoundException.of("Cash/bank account", cashBankAccountUid));
             if (!account.isActive()) {
                 // FR-CASH-07, BR-CASH-08: inactive accounts cannot be used for settlement
                 throw new IllegalStateException(

@@ -69,6 +69,6 @@ public class FixedAssetReconQuery {
         return glConfigs.findByCompanyIdAndConfigKey(companyId, key)
                 .map(c -> c.getAccountId())
                 .orElseThrow(() -> new NotFoundException(
-                        "gl_configs mapping missing for key " + key + " in company " + companyId));
+                        "General ledger account mapping is not configured."));
     }
 }

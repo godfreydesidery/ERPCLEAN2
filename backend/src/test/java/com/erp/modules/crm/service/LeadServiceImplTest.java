@@ -190,7 +190,7 @@ class LeadServiceImplTest {
 
         assertThatThrownBy(() -> service.qualify("LEAD-004", req))
                 .isInstanceOf(ConflictException.class)
-                .hasMessageContaining("already QUALIFIED");
+                .hasMessageContaining("already been qualified");
 
         // CustomerService must NOT be called — no duplicate customer creation
         verify(customerService, never()).create(any());

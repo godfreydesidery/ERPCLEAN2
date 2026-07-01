@@ -126,7 +126,7 @@ public class SalesReturnServiceImpl implements SalesReturnService {
         // Resolve SO for this delivery
         SalesOrder order = salesOrders.findById(delivery.getSalesOrderId())
                 .orElseThrow(() -> new NotFoundException(
-                        "SalesOrder not found for delivery " + req.deliveryUid()));
+                        "No sales order was found for this delivery."));
 
         // Build the SalesReturn header (status=CONFIRMED, number allocated now)
         SalesReturn ret = new SalesReturn(
@@ -177,7 +177,7 @@ public class SalesReturnServiceImpl implements SalesReturnService {
             // Resolve SO line for pricing snapshots (needed for credit-note amounts)
             SalesOrderLine sol = salesOrderLines.findById(dl.getSalesOrderLineId())
                     .orElseThrow(() -> new NotFoundException(
-                            "SalesOrderLine not found id=" + dl.getSalesOrderLineId()));
+                            "Sales order line not found."));
 
             // Compute return line amounts (HALF_UP — BR-SO-10 / ADR-0005)
             BigDecimal lineNet   = computeLineNet(sol, qtyReturnedBase);
@@ -294,12 +294,12 @@ public class SalesReturnServiceImpl implements SalesReturnService {
         String companyUid = companies.findById(delivery.getCompanyId())
                 .map(c -> c.getUid())
                 .orElseThrow(() -> new NotFoundException(
-                        "Company not found id=" + delivery.getCompanyId()));
+                        "Company not found."));
 
         String customerUid = customers.findById(delivery.getCustomerId())
                 .map(Customer::getUid)
                 .orElseThrow(() -> new NotFoundException(
-                        "Customer not found id=" + delivery.getCustomerId()));
+                        "Customer not found."));
 
         // ADR-0021 D-11: if delivery not yet invoiced (no AR open item), raise as unapplied credit.
         // v1 always raises unapplied; the credit note reduces the balance when matched.

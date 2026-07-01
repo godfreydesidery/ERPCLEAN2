@@ -261,7 +261,7 @@ public class BomExplosionServiceImpl implements BomExplosionService {
         }
         return boms.findByParentProductIdAndStatus(parentProductId, BomStatus.ACTIVE)
                 .orElseThrow(() -> new NotFoundException(
-                        "No ACTIVE BOM found for product: " + parentProductUid));
+                        "No active bill of materials found for this product."));
     }
 
     private static BigDecimal scrapInflate(BigDecimal scrapPercent) {

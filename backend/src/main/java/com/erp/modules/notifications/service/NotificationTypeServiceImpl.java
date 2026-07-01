@@ -42,7 +42,7 @@ public class NotificationTypeServiceImpl implements NotificationTypeService {
                                                     SetCompanyTypeStateRequest req, Long actorId) {
         NotificationType type = types.findByCompanyIdAndTypeKey(companyId, typeKey)
                 .orElseThrow(() -> new NotFoundException(
-                        "NotificationType not found: company=" + companyId + " typeKey=" + typeKey));
+                        "Notification type not found."));
         type.setCompanyEnabled(req.enabled());
         type.touch(Instant.now(), actorId);
         types.save(type);

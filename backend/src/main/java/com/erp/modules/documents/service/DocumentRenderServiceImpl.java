@@ -369,7 +369,7 @@ public class DocumentRenderServiceImpl implements DocumentRenderService {
         };
 
         return scopeGuard.companyIdOf(targetType, sourceUid)
-                .orElseThrow(() -> new NotFoundException("Source not found: " + type + "/" + sourceUid));
+                .orElseThrow(() -> NotFoundException.of("Source", sourceUid));
     }
 
     // -------------------------------------------------------------------------
