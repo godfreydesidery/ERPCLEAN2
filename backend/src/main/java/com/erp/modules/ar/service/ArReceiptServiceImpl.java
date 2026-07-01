@@ -234,8 +234,8 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         // 8. Guard: total allocated must not exceed receipt amount (BR-AR-04)
         if (totalAllocated.compareTo(receipt.getAmount()) > 0) {
             throw new IllegalStateException(
-                    "Total allocated " + totalAllocated
-                            + " exceeds receipt amount " + receipt.getAmount() + " (BR-AR-04).");
+                    "The total amount allocated across invoices exceeds the receipt amount."
+                    + " Please reduce your allocation lines so they do not exceed the receipt total.");
         }
 
         // 9. Update receipt unallocated_amount and status
@@ -461,8 +461,8 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         }
         if (totalAllocated.compareTo(receipt.getAmount()) > 0) {
             throw new IllegalStateException(
-                    "Re-allocation total " + totalAllocated
-                            + " exceeds receipt amount " + receipt.getAmount() + " (BR-AR-04).");
+                    "The total re-allocated amount exceeds the receipt amount."
+                    + " Please reduce your allocation lines so they do not exceed the receipt total.");
         }
 
         BigDecimal unallocated = receipt.getAmount().subtract(totalAllocated);
@@ -550,10 +550,10 @@ public class ArReceiptServiceImpl implements ArReceiptService {
      */
     private static void assertInvoiceBelongsToCustomer(ArInvoice invoice, Long expectedCustomerId) {
         if (!invoice.getCustomerId().equals(expectedCustomerId)) {
+            // BR-AR customer-match: allocation may only target an invoice belonging to the same customer as the receipt
             throw new ConflictException(
-                    "Allocation invoice belongs to a different customer"
-                    + " (invoice customerId=" + invoice.getCustomerId()
-                    + ", receipt customerId=" + expectedCustomerId + ").");
+                    "The selected invoice does not belong to this customer."
+                    + " Please choose an invoice raised for the same customer as this receipt.");
         }
     }
 

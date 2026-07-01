@@ -249,16 +249,16 @@ public class CustomerServiceImpl implements CustomerService {
                                      Boolean vatRegistered, CustomerKind kind, String displayName) {
         // BR-PARTY-04: business must have TIN
         if (partyType == PartyType.BUSINESS && (tin == null || tin.isBlank())) {
-            throw new IllegalArgumentException("A business customer must have a TIN (BR-PARTY-04).");
+            throw new IllegalArgumentException("A business customer must have a Tax Identification Number (TIN).");
         }
         // BR-PARTY-06: VRN only if vat_registered
         boolean isVatRegistered = Boolean.TRUE.equals(vatRegistered);
         if (vrn != null && !vrn.isBlank() && !isVatRegistered) {
-            throw new IllegalArgumentException("VRN may only be set when the customer is VAT-registered (BR-PARTY-06).");
+            throw new IllegalArgumentException("A VAT Registration Number (VRN) can only be entered when the customer is marked as VAT-registered.");
         }
         // BR-PARTY-07: credit customer minimum identity (business + TIN already checked above)
         if (kind == CustomerKind.CREDIT_ACCOUNT && (displayName == null || displayName.isBlank())) {
-            throw new IllegalArgumentException("A credit account customer requires a display name (BR-PARTY-07).");
+            throw new IllegalArgumentException("A credit account customer must have a display name.");
         }
     }
 

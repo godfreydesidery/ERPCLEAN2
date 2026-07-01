@@ -329,7 +329,7 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
         assertThatThrownBy(() ->
                 productService.assignBranch(dto.uid(), new AssignProductBranchRequest(branchB.getUid())))
                 .isInstanceOf(ForbiddenException.class)
-                .hasMessageContaining("BR-PROD-09");
+                .hasMessageContaining("same company");
     }
 
     // -----------------------------------------------------------------------
@@ -356,7 +356,7 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
                 productService.addComponent(composed.uid(),
                         new AddComponentRequest(componentB.uid(), new BigDecimal("1.0"))))
                 .isInstanceOf(ForbiddenException.class)
-                .hasMessageContaining("BR-PROD-06");
+                .hasMessageContaining("same company");
     }
 
     @Test
@@ -370,7 +370,7 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
                 productService.addComponent(composed.uid(),
                         new AddComponentRequest(component.uid(), new BigDecimal("1.0"))))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("BR-PROD-05");
+                .hasMessageContaining("archived");
     }
 
     @Test

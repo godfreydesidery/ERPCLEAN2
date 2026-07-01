@@ -475,6 +475,14 @@
 
     <!-- ── By Location tab ─────────────────────────────────────────────── -->
     @if (viewMode() === 'by-location') {
+      @if (branchesUnavailable()) {
+        <div class="alert alert-info d-flex align-items-center gap-2 py-2 mb-3" role="note">
+          <i class="bi bi-info-circle-fill flex-shrink-0" aria-hidden="true"></i>
+          <span>
+            Branch list could not be loaded. The by-location view requires branch access — contact your administrator.
+          </span>
+        </div>
+      }
       @if (branches().length > 0) {
         <div class="mb-3" style="max-width:260px">
           <label class="form-label small text-muted mb-1" for="branchFilter">Branch</label>

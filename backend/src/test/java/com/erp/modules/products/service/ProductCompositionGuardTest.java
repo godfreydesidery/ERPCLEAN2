@@ -49,8 +49,7 @@ class ProductCompositionGuardTest {
 
         assertThatThrownBy(() -> guard.assertCanAddComponent(p, p))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("cannot be a component of itself")
-                .hasMessageContaining("BR-PROD-05");
+                .hasMessageContaining("cannot be a component of itself");
     }
 
     @Test
@@ -74,7 +73,7 @@ class ProductCompositionGuardTest {
 
         assertThatThrownBy(() -> guard.assertCanAddComponent(composed, component))
                 .isInstanceOf(ForbiddenException.class)
-                .hasMessageContaining("BR-PROD-06");
+                .hasMessageContaining("same company");
     }
 
     // -------------------------------------------------------------------------
@@ -88,8 +87,7 @@ class ProductCompositionGuardTest {
 
         assertThatThrownBy(() -> guard.assertCanAddComponent(composed, component))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("ARCHIVED")
-                .hasMessageContaining("BR-PROD-05");
+                .hasMessageContaining("archived");
     }
 
     // -------------------------------------------------------------------------

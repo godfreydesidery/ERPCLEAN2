@@ -156,7 +156,7 @@ class CustomerServiceImplIT extends PostgresIntegrationTest {
 
         assertThatThrownBy(() -> customerService.create(req))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("BR-PARTY-04");
+                .hasMessageContaining("Tax Identification Number (TIN)");
     }
 
     // -----------------------------------------------------------------------
@@ -194,7 +194,7 @@ class CustomerServiceImplIT extends PostgresIntegrationTest {
 
         assertThatThrownBy(() -> customerService.create(req))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("BR-PARTY-06");
+                .hasMessageContaining("VAT Registration Number (VRN)");
     }
 
     // -----------------------------------------------------------------------
@@ -320,7 +320,7 @@ class CustomerServiceImplIT extends PostgresIntegrationTest {
         assertThatThrownBy(() ->
                 customerService.assignBranch(dto.uid(), new AssignPartyBranchRequest(branchB.getUid())))
                 .isInstanceOf(ForbiddenException.class)
-                .hasMessageContaining("BR-PARTY-01");
+                .hasMessageContaining("does not belong to the same company");
     }
 
     @Test

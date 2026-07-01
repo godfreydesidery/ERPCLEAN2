@@ -80,10 +80,10 @@ public class LocationResolver {
                 .findFirst()
                 .map(StockLocation::getId)
                 .orElseThrow(() -> new IllegalStateException(
-                        "No in-transit location (LocationType.OTHER) found for company=" + companyId
-                        + " branch=" + branchId
-                        + " — V37 migration may have failed to seed the in-transit location. "
-                        + "Transfer dispatch cannot proceed without an in-transit location."));
+                        // ADR-0028 D-3: an in-transit location (LocationType.OTHER) must exist per branch
+                        "No in-transit location is configured for this branch. "
+                        + "Please contact your system administrator to set up an in-transit location "
+                        + "before dispatching stock transfers."));
     }
 
     /**
@@ -108,11 +108,11 @@ public class LocationResolver {
                 .orElseThrow(() -> NotFoundException.of("StockLocation", locationUid));
         if (!loc.getCompanyId().equals(companyId)) {
             throw new com.erp.platform.common.api.ForbiddenException(
-                    "Location " + locationUid + " does not belong to company " + companyId);
+                    "The selected location does not belong to your company.");
         }
         if (loc.getStatus() != MasterStatus.ACTIVE) {
             throw new IllegalStateException(
-                    "Location " + locationUid + " is not ACTIVE (status=" + loc.getStatus() + ")");
+                    "The selected location is not active and cannot be used.");
         }
         return loc;
     }

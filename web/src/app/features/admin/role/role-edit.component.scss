@@ -37,3 +37,24 @@
   float: none;
   width: auto;
 }
+
+// Advisory read-closure gap panel
+.gap-advisory {
+  border-left: 3px solid #f59e0b; // amber — informational, not an error
+
+  &__list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  &__item {
+    padding: 0.4rem 0;
+    font-size: 0.875rem;
+    border-top: 1px solid #f3f4f6;
+
+    &:first-child {
+      border-top: none;
+    }
+  }
+}

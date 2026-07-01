@@ -83,9 +83,10 @@ public class VatReturnServiceImpl implements VatReturnService {
         short month = req.periodMonth().shortValue();
 
         if (returns.existsByCompanyIdAndPeriodYearAndPeriodMonth(companyId, year, month)) {
+            // BR-VAT-01: one return per company per period
             throw new ConflictException(
-                    "A VAT return already exists for company " + req.companyUid()
-                    + " period " + year + "-" + String.format("%02d", month) + " (BR-VAT-01).");
+                    "A VAT return for this period already exists."
+                    + " Only one return can be open per period — please use the existing one.");
         }
 
         YearMonth ym        = YearMonth.of(year, month);
@@ -128,8 +129,9 @@ public class VatReturnServiceImpl implements VatReturnService {
         scopeGuard.assertCanActIn(RequestContext.get(), vatReturn.getCompanyId());
 
         if (vatReturn.getStatus() == VatReturnStatus.FILED) {
+            // BR-VAT-02: filed returns are immutable
             throw new IllegalStateException(
-                    "Cannot recompute a FILED VAT return (BR-VAT-02): " + uid);
+                    "This VAT return has already been filed and can no longer be recomputed.");
         }
 
         vatReturn = compute(vatReturn, vatReturn.getCompanyId(),
@@ -152,17 +154,19 @@ public class VatReturnServiceImpl implements VatReturnService {
         scopeGuard.assertCanActIn(RequestContext.get(), vatReturn.getCompanyId());
 
         if (vatReturn.getStatus() == VatReturnStatus.FILED) {
+            // BR-VAT-11: a return can only be filed once
             throw new IllegalStateException(
-                    "VAT return already FILED (BR-VAT-11): " + uid);
+                    "This VAT return has already been filed and cannot be filed again.");
         }
 
         // Prior period must be FILED first (D-4 recommended default)
         var priorAny = returns.findLatestBefore(vatReturn.getCompanyId(),
                 vatReturn.getPeriodYear(), vatReturn.getPeriodMonth());
         if (priorAny.isPresent() && priorAny.get().getStatus() != VatReturnStatus.FILED) {
+            // D-4: periods must be filed in sequence
             throw new IllegalStateException(
-                    "Prior period return " + priorAny.get().getReturnNumber()
-                    + " must be FILED before this period can be filed (D-4).");
+                    "The previous period's VAT return has not yet been filed."
+                    + " Please file the earlier period first before filing this one.");
         }
 
         // Step 1: final recompute (freeze figures)

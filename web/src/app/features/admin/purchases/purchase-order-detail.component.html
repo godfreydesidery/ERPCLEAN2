@@ -32,6 +32,21 @@
                   [class.status-tag--neutral]="p.status === 'CLOSED' || p.status === 'VOID'">
                   {{ p.status }}
                 </span>
+                @if (isDraft() && effectiveApprovalStatus() === 'PENDING') {
+                  <span class="status-tag status-tag--warn" aria-live="polite">
+                    <i class="bi bi-hourglass-split me-1" aria-hidden="true"></i>Awaiting approval
+                  </span>
+                }
+                @if (isDraft() && effectiveApprovalStatus() === 'APPROVED') {
+                  <span class="status-tag status-tag--ok" aria-live="polite">
+                    <i class="bi bi-check-circle me-1" aria-hidden="true"></i>Approved
+                  </span>
+                }
+                @if (isDraft() && effectiveApprovalStatus() === 'REJECTED') {
+                  <span class="status-tag status-tag--danger" aria-live="polite">
+                    <i class="bi bi-x-circle me-1" aria-hidden="true"></i>Approval rejected
+                  </span>
+                }
               </div>
             </div>
 
@@ -70,23 +85,84 @@
             </div>
           </div>
 
+          <!-- Approval status info banners (DRAFT + approval gate in play) -->
+          @if (isDraft() && effectiveApprovalStatus() === 'PENDING') {
+            <div class="alert alert-warning d-flex align-items-start gap-2 mt-3 mb-0" role="note"
+                 aria-label="This order is awaiting approval">
+              <i class="bi bi-hourglass-split flex-shrink-0 mt-1" aria-hidden="true"></i>
+              <div>
+                <strong>Awaiting approval</strong> — this order has been submitted and is pending a
+                decision from an approver.
+                <a routerLink="/admin/approvals/inbox" class="alert-link ms-1">
+                  Go to Approvals inbox
+                </a>
+              </div>
+            </div>
+          }
+          @if (isDraft() && effectiveApprovalStatus() === 'APPROVED') {
+            <div class="alert alert-success d-flex align-items-start gap-2 mt-3 mb-0" role="note"
+                 aria-label="This order has been approved">
+              <i class="bi bi-check-circle flex-shrink-0 mt-1" aria-hidden="true"></i>
+              <div>
+                <strong>Approved</strong> — this order has been approved. You can now place it.
+              </div>
+            </div>
+          }
+          @if (isDraft() && effectiveApprovalStatus() === 'REJECTED') {
+            <div class="alert alert-danger d-flex align-items-start gap-2 mt-3 mb-0" role="note"
+                 aria-label="This order's approval was rejected">
+              <i class="bi bi-x-circle flex-shrink-0 mt-1" aria-hidden="true"></i>
+              <div>
+                <strong>Approval rejected</strong> — this order was not approved. Review the order
+                and resubmit, or void it.
+                <a routerLink="/admin/approvals/inbox" class="alert-link ms-1">
+                  View approvals inbox
+                </a>
+              </div>
+            </div>
+          }
+
           <!-- Action buttons -->
           <div class="d-flex gap-2 mt-3 flex-wrap align-items-start">
-            <!-- Place (DRAFT → ORDERED) -->
-            @if (isDraft() && canCreate()) {
+            <!-- Submit for Approval (DRAFT + approval gate requires it + not yet pending/approved) -->
+            @if (showSubmitForApproval() && canCreate()) {
+              <button type="button" class="btn btn-primary"
+                      [disabled]="!hasLines() || submitting()"
+                      (click)="submitForApproval()">
+                @if (submitting()) {
+                  <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                } @else {
+                  <i class="bi bi-send me-1" aria-hidden="true"></i>
+                }
+                Submit for Approval
+              </button>
+              @if (submitError(); as msg) {
+                <span class="text-danger small align-self-center" role="alert">{{ msg }}</span>
+              }
+            }
+
+            <!-- Place (DRAFT → ORDERED): visible only when approval not required, or already approved) -->
+            @if (isDraft() && canCreate() && canPlace()) {
               <button type="button" class="btn btn-success"
                       [disabled]="!canPlace() || placing()"
-                      (click)="place()"
-                      [attr.aria-label]="!hasLines() ? 'Add lines before placing' : 'Place order'">
+                      (click)="place()">
                 @if (placing()) {
-                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                } @else {
+                  <i class="bi bi-check-circle me-1" aria-hidden="true"></i>
                 }
-                <i class="bi bi-check-circle me-1" aria-hidden="true"></i>
                 Place Order
               </button>
               @if (placeError(); as msg) {
                 <span class="text-danger small align-self-center" role="alert">{{ msg }}</span>
               }
+            }
+            @else if (isDraft() && canCreate() && !canPlace() && requiresApproval() && effectiveApprovalStatus() !== 'PENDING') {
+              <button type="button" class="btn btn-success" disabled
+                      title="Submit for approval before placing">
+                <i class="bi bi-check-circle me-1" aria-hidden="true"></i>
+                Place Order
+              </button>
             }
 
             <!-- Receive link (ORDERED/PARTIALLY_RECEIVED/RECEIVED + PURCHASE.RECEIVE) -->
@@ -106,7 +182,7 @@
                       [disabled]="closing()"
                       (click)="close()">
                 @if (closing()) {
-                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
                 }
                 <i class="bi bi-lock me-1" aria-hidden="true"></i>
                 Close Order
@@ -132,7 +208,7 @@
                       [disabled]="printing()"
                       (click)="printPdf()">
                 @if (printing()) {
-                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
                 } @else {
                   <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>
                 }
@@ -161,7 +237,7 @@
                 <div class="d-flex gap-2">
                   <button type="submit" class="btn btn-danger" [disabled]="voiding()">
                     @if (voiding()) {
-                      <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                      <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
                     }
                     Confirm Void
                   </button>
@@ -227,7 +303,7 @@
                         aria-label="Product suggestions" style="z-index:1050;max-height:200px;overflow-y:auto;">
                       @for (p of productResults(); track p.uid) {
                         <li class="list-group-item list-group-item-action small py-1"
-                            role="option" style="cursor:pointer"
+                            role="option" [attr.aria-selected]="false" style="cursor:pointer"
                             (click)="selectProduct(p)"
                             (keydown.enter)="selectProduct(p)"
                             tabindex="0">
@@ -295,13 +371,13 @@
                 </div>
                 <!-- Add button -->
                 <div class="col-sm-1 d-flex align-items-end">
-                  <button type="submit" class="btn btn-sm btn-primary w-100" [disabled]="addingLine()">
+                  <button type="submit" class="btn btn-sm btn-primary w-100" [disabled]="addingLine()"
+                          aria-label="Add line">
                     @if (addingLine()) {
-                      <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                      <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
                     } @else {
                       <i class="bi bi-plus-lg" aria-hidden="true"></i>
                     }
-                    <span class="visually-hidden">Add line</span>
                   </button>
                 </div>
               </div>
@@ -368,7 +444,7 @@
                                 (click)="removeLine(line)"
                                 [attr.aria-label]="'Remove line ' + line.lineNo">
                           @if (rowBusyLineUid() === line.uid) {
-                            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
                           } @else {
                             <i class="bi bi-trash3" aria-hidden="true"></i>
                           }

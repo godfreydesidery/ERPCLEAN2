@@ -137,8 +137,8 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         List<SupplierBill> open = bills.findOpenByUids(companyId,
                 List.of(req.supplierBillUid()));
         if (open.isEmpty()) {
-            throw new NotFoundException(
-                    "Bill not found or not payable: " + req.supplierBillUid());
+            // supplierBillUid intentionally not surfaced (error-hygiene rule)
+            throw NotFoundException.of("SupplierBill", req.supplierBillUid());
         }
         SupplierBill bill = open.get(0);
 

@@ -50,16 +50,38 @@ public class PurchaseOrderController {
         return ApiResponse.ok(service.create(req));
     }
 
-    /** Get PO by uid. */
+    /**
+     * Get PO by uid. Readable by the purchasing viewer (PURCHASE.ORDER.VIEW) OR a storekeeper
+     * receiving against it (PURCHASE.RECEIVE) — the goods-receipt-create screen loads the chosen
+     * PO header here before recording the receipt. Both branches scope-check the loaded PO's
+     * company via {@code @perm.scoped}, so a PURCHASE.RECEIVE holder reads only their OWN company's
+     * PO (read-gate widening only, tenant scope unchanged).
+     */
     @GetMapping("/uid/{uid}")
-    @PreAuthorize("@perm.scoped(#uid, 'purchaseorder', 'PURCHASE.ORDER.VIEW')")
+    @PreAuthorize("@perm.scoped(#uid, 'purchaseorder', 'PURCHASE.ORDER.VIEW') "
+            + "or @perm.scoped(#uid, 'purchaseorder', 'PURCHASE.RECEIVE')")
     public ApiResponse<PurchaseOrderDto> getByUid(@PathVariable String uid) {
         return ApiResponse.ok(service.getByUid(uid));
     }
 
-    /** Paged list / search for a company. */
+    /**
+     * Paged list / search for a company. POs are transactional documents (amounts, suppliers), so —
+     * unlike the pure reference-data pickers — this list is NOT opened to plain company membership.
+     * It additionally accepts the adjacent transactional verbs whose own screens fire this read:
+     * <ul>
+     *   <li>{@code AP.BILL.ENTER} — the supplier-bill entry screen three-way-matches a bill against
+     *       an ORDERED PO (sim 2026-06-28, ISSUE-002).</li>
+     *   <li>{@code PURCHASE.RECEIVE} — the goods-receipt-create screen's PO picker needs to find the
+     *       open POs the storekeeper receives against; the GR write itself is already gated on
+     *       PURCHASE.RECEIVE, so the read-dependency is owned by the same verb (sim 2026-06-28,
+     *       goods-receipt read-closure / F21-family).</li>
+     * </ul>
+     * The service applies its own company-scope predicate ({@code assertCanActIn}), so a holder of
+     * any of these verbs reads only their OWN company's POs — this widens the permission gate, not
+     * the tenant scope.
+     */
     @GetMapping
-    @PreAuthorize("@perm.has('PURCHASE.ORDER.VIEW')")
+    @PreAuthorize("@perm.has('PURCHASE.ORDER.VIEW') or @perm.has('AP.BILL.ENTER') or @perm.has('PURCHASE.RECEIVE')")
     public ApiResponse<List<PurchaseOrderDto>> list(
             @RequestParam Long companyId,
             @RequestParam(required = false) String q,
@@ -102,9 +124,16 @@ public class PurchaseOrderController {
         service.removeLine(uid, lineUid);
     }
 
-    /** List all lines for a PO. */
+    /**
+     * List all lines for a PO. Readable by the purchasing viewer (PURCHASE.ORDER.VIEW) OR a
+     * storekeeper receiving against it (PURCHASE.RECEIVE) — the goods-receipt-create screen loads
+     * the chosen PO's lines here to render the receive grid. Both branches scope-check the loaded
+     * PO's company via {@code @perm.scoped}, so the receive read stays within the caller's own
+     * company (read-gate widening only).
+     */
     @GetMapping("/uid/{uid}/lines")
-    @PreAuthorize("@perm.scoped(#uid, 'purchaseorder', 'PURCHASE.ORDER.VIEW')")
+    @PreAuthorize("@perm.scoped(#uid, 'purchaseorder', 'PURCHASE.ORDER.VIEW') "
+            + "or @perm.scoped(#uid, 'purchaseorder', 'PURCHASE.RECEIVE')")
     public ApiResponse<List<PurchaseOrderLineDto>> listLines(@PathVariable String uid) {
         return ApiResponse.ok(service.listLines(uid));
     }

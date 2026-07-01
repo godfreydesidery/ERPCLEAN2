@@ -43,4 +43,46 @@ public class PermissionChecks {
         // also short-circuits for root, so calling it is safe and keeps the logic centralised.
         return principal != null && (principal.root() || scopeGuard.canActOn(principal, targetType, uid));
     }
+
+    /**
+     * Read-floor gate for low-sensitivity, company-scoped reference-data LIST/PICKER endpoints
+     * (product list, WHT-type list): allow if the caller holds {@code code} OR is a provisioned,
+     * scoped member of their active company (root counts as a member).
+     *
+     * <p>Why: operational roles are hand-curated subsets that frequently omit a screen's supporting
+     * {@code *.VIEW} read-dependency, so the picker hard-403s and blanks an otherwise-authorised
+     * screen (2026-06-28 sim, ISSUE-001..006). This widens a READ only, never a write, and does NOT
+     * weaken tenant isolation: the list service still applies its own company-scope predicate
+     * ({@code ScopeGuard.assertCanActIn}) on the {@code companyId} argument, so a member can only ever
+     * read their own company's reference data. The endpoint remains permission-gated (a non-member /
+     * unauthenticated caller is still refused), satisfying the deny-by-default coverage gate.
+     */
+    public boolean hasOrMember(String code) {
+        RequestContext.Principal principal = RequestContext.get();
+        long now = System.currentTimeMillis();
+        return permissionResolver.hasPermission(principal, code, now)
+                || permissionResolver.isMember(principal, now);
+    }
+
+    /**
+     * Company-scoped read-floor for a reference-data LIST/PICKER addressed by a company uid (the
+     * branch list): allow if the caller holds {@code code} for the target, OR is a scoped member who
+     * may act on the target company. Unlike {@link #hasOrMember(String)} the company-scope predicate
+     * lives HERE (the branch list service has no separate {@code assertCanActIn}), so the member path
+     * still goes through {@link ScopeGuard#canActOn} — a member can list branches of their OWN company
+     * only, never another tenant's. Read-widening only; the endpoint stays gated and fails closed for
+     * a non-member or a cross-company target.
+     */
+    public boolean scopedOrMember(String uid, String targetType, String code) {
+        if (scoped(uid, targetType, code)) {
+            return true;
+        }
+        RequestContext.Principal principal = RequestContext.get();
+        long now = System.currentTimeMillis();
+        if (!permissionResolver.isMember(principal, now)) {
+            return false;
+        }
+        // Member, but still must resolve to the caller's OWN company (root short-circuits inside).
+        return principal != null && (principal.root() || scopeGuard.canActOn(principal, targetType, uid));
+    }
 }

@@ -1,7 +1,7 @@
 import { Component, computed, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { Permission, Role } from '../models/role.model';
+import { Permission, Role, ScreenReadGap } from '../models/role.model';
 import { RoleService } from './role.service';
 import { AlertService } from '../../../core/feedback/alert.service';
 
@@ -47,6 +47,9 @@ export class RoleEditComponent {
   readonly savingPerms = signal(false);
   readonly permsError = signal<string | null>(null);
   readonly permsSaved = signal(false);
+
+  // Advisory read-closure gap panel — non-blocking; errors leave this empty.
+  readonly gaps = signal<ScreenReadGap[]>([]);
 
   readonly permGroups = computed<PermissionGroup[]>(() => {
     const perms = this.allPermissions();
@@ -102,6 +105,20 @@ export class RoleEditComponent {
         failed = true;
         this.state.set('error');
       },
+    });
+
+    // Non-blocking: a 403 or any error must NOT flip the screen to error state.
+    this.loadGaps();
+  }
+
+  /**
+   * Fetches the advisory read-closure gaps. Errors are swallowed — the panel simply
+   * stays empty. Never touches `state` so a 403 here does not break the edit screen.
+   */
+  private loadGaps(): void {
+    this.roleService.readClosureGaps(this.uid()).subscribe({
+      next: (gs) => this.gaps.set(gs),
+      error: () => this.gaps.set([]),
     });
   }
 
@@ -166,6 +183,8 @@ export class RoleEditComponent {
           this.savingPerms.set(false);
           this.permsSaved.set(true);
           this.alerts.success('Permissions updated');
+          // Re-fetch gaps so the advisory panel reflects the just-saved grant set.
+          this.loadGaps();
         },
         error: (err) => {
           this.permsError.set(this.messageFrom(err, 'Could not save permissions.'));
@@ -174,8 +193,54 @@ export class RoleEditComponent {
       });
   }
 
+  /**
+   * Maps a dotted screen key from screen-read-closure.json to a human-readable label.
+   * Falls back to the key itself so new manifest entries are always visible even before
+   * this lookup is extended.
+   */
+  screenLabel(key: string): string {
+    return SCREEN_LABELS[key] ?? key;
+  }
+
   private messageFrom(err: unknown, fallback: string): string {
     const errors = (err as { error?: { errors?: string[] } })?.error?.errors;
     return errors?.length ? errors[0] : fallback;
   }
 }
+
+/**
+ * Friendly labels for screen keys declared in screen-read-closure.json.
+ * Add a row here whenever a new screen is added to the manifest.
+ */
+const SCREEN_LABELS: Record<string, string> = {
+  'sales.record-receipt':        'Record Receipt',
+  'sales.sales-invoice':         'Sales Invoice',
+  'sales.sales-invoice-detail':  'Sales Invoice Detail',
+  'sales.sales-order':           'Sales Order',
+  'sales.sales-order-detail':    'Sales Order Detail',
+  'sales.delivery':              'Delivery Note',
+  'sales.quotation':             'Quotation',
+  'purchases.purchase-order':    'Purchase Order',
+  'purchases.purchase-order-detail': 'Purchase Order Detail',
+  'purchases.goods-receipt':     'Goods Receipt',
+  'purchases.goods-receipt-detail': 'Goods Receipt Detail',
+  'purchases.rfq':               'Request for Quotation',
+  'purchases.rfq-detail':        'RFQ Detail',
+  'purchases.purchase-return':   'Purchase Return',
+  'purchases.purchase-return-detail': 'Purchase Return Detail',
+  'purchases.requisition':       'Purchase Requisition',
+  'purchases.requisition-detail': 'Purchase Requisition Detail',
+  'purchases.enter-bill':        'Enter Bill',
+  'ar.record-receipt':           'AR Record Receipt',
+  'ar.receipts-list':            'AR Receipts',
+  'ap.record-payment':           'AP Record Payment',
+  'ap.payments-list':            'AP Payments',
+  'ap.supplier-statement':       'Supplier Statement',
+  'stock.stock-transfer':        'Stock Transfer',
+  'stock.stock-count':           'Stock Count',
+  'gl.post-journal':             'Post Journal Entry',
+  'gl.trial-balance':            'Trial Balance',
+  'cashbank.bank-reconciliation': 'Bank Reconciliation',
+  'cashbank.cash-account-statement': 'Cash Account Statement',
+  'cashbank.record-transfer':    'Record Transfer',
+};

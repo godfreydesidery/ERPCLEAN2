@@ -321,15 +321,16 @@ public class SupplierServiceImpl implements SupplierService {
                 bankAccounts.findByUid(uid), "SupplierBankAccount", uid);
         if (!sba.getSupplierId().equals(supplierId)) {
             throw new com.erp.platform.common.api.NotFoundException(
-                    "SupplierBankAccount " + uid + " does not belong to this supplier.");
+                    "The specified bank account does not belong to this supplier.");
         }
         return sba;
     }
 
     private static void validateBankAccountIdentifiers(String accountNo, String iban) {
+        // D-4: at least one of account number or IBAN is required
         if ((accountNo == null || accountNo.isBlank()) && (iban == null || iban.isBlank())) {
             throw new IllegalArgumentException(
-                    "At least one of accountNo or iban must be provided (D-4 account_no OR iban NOT NULL).");
+                    "Please provide at least one of: account number or IBAN.");
         }
     }
 
@@ -355,11 +356,13 @@ public class SupplierServiceImpl implements SupplierService {
 
     private void validateIdentifiers(PartyType partyType, String tin, String vrn,
                                      Boolean vatRegistered) {
+        // BR-PARTY-04
         if (partyType == PartyType.BUSINESS && (tin == null || tin.isBlank())) {
-            throw new IllegalArgumentException("A business supplier must have a TIN (BR-PARTY-04).");
+            throw new IllegalArgumentException("A business supplier must have a Tax Identification Number (TIN).");
         }
+        // BR-PARTY-06
         if (vrn != null && !vrn.isBlank() && !Boolean.TRUE.equals(vatRegistered)) {
-            throw new IllegalArgumentException("VRN may only be set when the supplier is VAT-registered (BR-PARTY-06).");
+            throw new IllegalArgumentException("A VAT Registration Number (VRN) can only be entered when the supplier is marked as VAT-registered.");
         }
     }
 

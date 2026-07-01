@@ -42,6 +42,15 @@ export interface PurchaseOrderLineDto {
 
 // ── PurchaseOrderDto ────────────────────────────────────────────────────────────
 
+/**
+ * Approval gate status for a PO (PoApprovalStatus enum on the backend).
+ * NOTE: the backend PurchaseOrderDto does not yet include this field in its record definition
+ * (the entity carries it; the DTO was not extended). The field is typed here as optional so the
+ * web model remains forward-compatible when the backend adds it. Workflow currently tracks this
+ * locally via the submittedForApproval signal on the detail component.
+ */
+export type PoApprovalStatus = 'NOT_REQUIRED' | 'PENDING' | 'APPROVED' | 'REJECTED';
+
 export interface PurchaseOrderDto {
   id: string;
   uid: string;
@@ -64,6 +73,11 @@ export interface PurchaseOrderDto {
   createdAt: string | null;
   /** Lines included on the single-PO get endpoint; null/absent on the list endpoint. */
   lines: PurchaseOrderLineDto[] | null;
+  /**
+   * Approval gate status. Optional — the backend DTO does not yet emit this field; present here
+   * for forward-compatibility. When undefined, fall back to locally tracked state.
+   */
+  approvalStatus?: PoApprovalStatus;
 }
 
 // ── GoodsReceiptLineDto ─────────────────────────────────────────────────────────

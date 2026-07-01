@@ -68,7 +68,8 @@ public class StockSerialServiceImpl implements StockSerialService {
 
         if (serial.getSerialStatus() != SerialStatus.IN_STOCK) {
             throw new IllegalStateException(
-                    "Serial " + uid + " is not IN_STOCK (status=" + serial.getSerialStatus() + ").");
+                    "This serial number cannot be issued because it is not currently in stock "
+                            + "(current status: " + serial.getSerialStatus() + ").");
         }
         serial.issue(issuedDocumentUid, principal.userId());
         serials.save(serial);
@@ -86,7 +87,8 @@ public class StockSerialServiceImpl implements StockSerialService {
 
         if (serial.getSerialStatus() != SerialStatus.ISSUED) {
             throw new IllegalStateException(
-                    "Serial " + uid + " is not ISSUED (status=" + serial.getSerialStatus() + ").");
+                    "This serial number cannot be returned because it is not currently issued "
+                            + "(current status: " + serial.getSerialStatus() + ").");
         }
         serial.returnSerial(locationId, principal.userId());
         serials.save(serial);
@@ -104,7 +106,8 @@ public class StockSerialServiceImpl implements StockSerialService {
 
         if (serial.getSerialStatus() != SerialStatus.RETURNED) {
             throw new IllegalStateException(
-                    "Serial " + uid + " is not RETURNED (status=" + serial.getSerialStatus() + ").");
+                    "This serial number cannot be restocked because it is not in a returned state "
+                            + "(current status: " + serial.getSerialStatus() + ").");
         }
         serial.restock(locationId, principal.userId());
         serials.save(serial);
@@ -122,7 +125,7 @@ public class StockSerialServiceImpl implements StockSerialService {
 
         if (serial.getSerialStatus() == SerialStatus.ISSUED) {
             throw new IllegalStateException(
-                    "Cannot move serial " + uid + " — it is currently ISSUED.");
+                    "This serial number cannot be moved to another location because it is currently issued.");
         }
         serial.moveLocation(newLocationId, principal.userId());
         serials.save(serial);
@@ -149,8 +152,7 @@ public class StockSerialServiceImpl implements StockSerialService {
         StockSerial serial = serials.findByCompanyIdAndProductIdAndSerialNumber(
                         companyId, productId, serialNumber)
                 .orElseThrow(() -> new NotFoundException(
-                        "No serial '" + serialNumber + "' for product " + productId +
-                        " in company " + companyId));
+                        "Serial number '" + serialNumber + "' was not found for the specified product."));
         return toDto(serial);
     }
 

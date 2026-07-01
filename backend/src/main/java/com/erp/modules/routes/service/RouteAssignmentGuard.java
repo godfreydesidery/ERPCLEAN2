@@ -51,8 +51,9 @@ public class RouteAssignmentGuard {
         var customer = customers.findByUid(customerUid)
                 .orElseThrow(() -> new NotFoundException("Customer not found."));
         if (!customer.getCompanyId().equals(routeCompanyId)) {
+            // BR-ROUTE-03: all assigned parties must belong to the same company as the route.
             throw new ForbiddenException(
-                    "Customer does not belong to the route's company (BR-ROUTE-03).");
+                    "This customer does not belong to the same company as the route.");
         }
         return customer.getId();
     }
@@ -71,12 +72,14 @@ public class RouteAssignmentGuard {
         var agent = agents.findByUid(agentUid)
                 .orElseThrow(() -> new NotFoundException("Agent not found."));
         if (agent.getAgentKind() == AgentKind.INTERNAL) {
+            // BR-ROUTE-02: only EXTERNAL agents may be assigned to a route.
             throw new ForbiddenException(
-                    "Only EXTERNAL agents may be assigned to a route (BR-ROUTE-02).");
+                    "Only EXTERNAL agents may be assigned to a route.");
         }
         if (!agent.getCompanyId().equals(routeCompanyId)) {
+            // BR-ROUTE-03: all assigned parties must belong to the same company as the route.
             throw new ForbiddenException(
-                    "Agent does not belong to the route's company (BR-ROUTE-03).");
+                    "This agent does not belong to the same company as the route.");
         }
         return agent.getId();
     }
@@ -95,8 +98,9 @@ public class RouteAssignmentGuard {
                 .orElseThrow(() -> new NotFoundException("Branch not found."));
         Long branchCompanyId = branch.getCompany().getId();
         if (!branchCompanyId.equals(routeCompanyId)) {
+            // BR-ROUTE-03: all assigned parties must belong to the same company as the route.
             throw new ForbiddenException(
-                    "Branch does not belong to the route's company (BR-ROUTE-03).");
+                    "This branch does not belong to the same company as the route.");
         }
         return branch.getId();
     }

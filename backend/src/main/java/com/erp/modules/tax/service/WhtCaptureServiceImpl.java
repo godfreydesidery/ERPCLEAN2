@@ -145,9 +145,10 @@ public class WhtCaptureServiceImpl implements WhtCaptureService {
                     "WHT type is inactive.");
         }
         if (whtType.getKind() != expectedKind) {
+            // WHT type uid and internal kind enum not exposed in the message
             throw new IllegalStateException(
-                    "WhtType " + whtTypeUid + " has kind " + whtType.getKind()
-                    + " but expected " + expectedKind + ".");
+                    "The selected WHT type cannot be used in this context."
+                    + " Please choose a WHT type that is configured for this transaction type.");
         }
         return whtType;
     }

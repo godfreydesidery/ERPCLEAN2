@@ -205,6 +205,9 @@ export class PriceListListComponent {
 
   private messageFrom(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {
+      if (err.status === 409) {
+        return 'A price list with that code or name already exists in this company.';
+      }
       const errors = (err.error as { errors?: string[] })?.errors;
       if (errors?.length) return errors[0];
     }

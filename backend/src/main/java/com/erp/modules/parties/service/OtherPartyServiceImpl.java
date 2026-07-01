@@ -185,11 +185,13 @@ public class OtherPartyServiceImpl implements OtherPartyService {
 
     private void validateIdentifiers(PartyType partyType, String tin, String vrn,
                                      Boolean vatRegistered) {
+        // BR-PARTY-04
         if (partyType == PartyType.BUSINESS && (tin == null || tin.isBlank())) {
-            throw new IllegalArgumentException("A business party must have a TIN (BR-PARTY-04).");
+            throw new IllegalArgumentException("A business party must have a Tax Identification Number (TIN).");
         }
+        // BR-PARTY-06
         if (vrn != null && !vrn.isBlank() && !Boolean.TRUE.equals(vatRegistered)) {
-            throw new IllegalArgumentException("VRN may only be set when the party is VAT-registered (BR-PARTY-06).");
+            throw new IllegalArgumentException("A VAT Registration Number (VRN) can only be entered when the party is marked as VAT-registered.");
         }
     }
 

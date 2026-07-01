@@ -52,8 +52,8 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
         if (project.getProjectStatus() == ProjectStatus.CANCELLED
                 || project.getProjectStatus() == ProjectStatus.COMPLETED) {
             throw new ConflictException(
-                    "Tasks cannot be created on a " + project.getProjectStatus() + " project. "
-                    + "Project " + projectUid + " must be DRAFT, ACTIVE, or ON_HOLD.");
+                    "Tasks cannot be added to a " + project.getProjectStatus() + " project. "
+                    + "The project must be in DRAFT, ACTIVE, or ON_HOLD status.");
         }
 
         var task = new ProjectTask(project.getId(), project.getCompanyId(), project.getBranchId(),

@@ -78,10 +78,10 @@ public class CashBankAccountServiceImpl implements CashBankAccountService {
 
         // Validate bank-details rule (FR-CASH-01, chk_cash_bank_account_bank_details)
         if (req.accountType() == CashBankAccountType.BANK && (req.bankName() == null || req.bankName().isBlank())) {
-            throw new IllegalArgumentException("BANK account requires bankName (FR-CASH-01).");
+            throw new IllegalArgumentException("A bank account must have a bank name.");
         }
         if (req.accountType() == CashBankAccountType.CASH && req.bankName() != null && !req.bankName().isBlank()) {
-            throw new IllegalArgumentException("CASH account must not have bank details (FR-CASH-01).");
+            throw new IllegalArgumentException("A petty-cash account cannot have bank details.");
         }
 
         // Resolve the linked GL account

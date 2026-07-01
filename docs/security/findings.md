@@ -56,6 +56,167 @@ An empirical end-to-end probe (two real tenants, every uid/id-addressed endpoint
 | F19 | IAM | HIGH | **`GET /api/v1/companies` enumerated all organisation companies** — any `COMPANY.VIEW` holder received every company's master data, regardless of membership. | FIXED | The list now applies the same **assigned-or-root** filter as `/companies/accessible` (root sees all; everyone else sees only companies they belong to). Company master data is no longer enumerable cross-tenant. |
 | F20 | (cross-cutting) | (regression guard) | No build-time fence prevented a future `..service..` class from re-introducing a bare, unscoped `findById`/`getReferenceById` (the root cause of classes (a)/(b)). | FIXED | Added ArchUnit `FreezingArchRule` **`TenantScopingRulesTest`**: a `..service..` class making a bare `findById`/`getReferenceById` on a Spring Data repository **fails the build**, forcing company-scoped finders. The **~197 pre-existing audited calls are frozen as a baseline** (`allowStoreUpdate=false`), so the baseline cannot grow. |
 
+## F21 — Reference-data picker reads hard-403 narrowly-scoped operational roles (role-grant read-closure gap)
+
+**2026-06-28 — business-operations simulation (16 real Tembo-Group personas, non-root, non-ORG_ADMIN).**
+Source: [`docs/simulation/ISSUES-REGISTER.md`](../simulation/ISSUES-REGISTER.md) ISSUE-001..006.
+
+Operational/finance roles (hand-curated permission subsets) were blocked from core screens because a
+**supporting reference-data read the screen fires on load returned 403 and blanked the whole page** —
+the role held the screen's primary verb but not the supporting `*.VIEW` read-dependency. Not phantom
+codes (all four are seeded) and not a tenant leak — a **role-grant vs screen-read-dependency closure
+gap**. The DB schema/seed is frozen, so this is fixed in the **gate layer**, not by editing grants.
+
+| # | Source | Severity | Finding | Status | Resolution |
+|---|---|---|---|---|---|
+| F21 | sim 2026-06-28 (ISSUE-001..006) | HIGH (blocker for the affected roles) | **Supporting picker reads (`GET /branches`, `GET /products`, `GET /wht/types`, `GET /purchase-orders`) 403'd narrowly-scoped operational/finance roles**, blanking Record-receipt/payment, supplier-bill, work-order/BOM, stock-transfer and POS screens. Root/ORG_ADMIN never hit it (they hold every code), so CI's gate-exists / code-seeded checks stayed green. | FIXED | Relaxed the **picker** gates to a within-tenant read floor, **without weakening isolation** (every list service keeps its own company-scope predicate; the branch gate keeps the company resolution in `scopedOrMember`): branch list → `@perm.scopedOrMember(#companyUid,'company','BRANCH.VIEW')`; product list → `@perm.hasOrMember('PRODUCT.VIEW')`; WHT-type list → `@perm.hasOrMember('WHT.VIEW')`. New `@perm` helpers back these (`PermissionChecks.hasOrMember` / `scopedOrMember`, `PermissionResolver.isMember` = caller holds ≥1 role in their active company). **PO list left transactional-gated** but broadened to `PURCHASE.ORDER.VIEW or AP.BILL.ENTER` so the supplier-bill three-way-match picker loads for bill-enterers without a blanket purchasing read. No migration; endpoints stay permission-gated (fail closed for a non-member / cross-company target). |
+
+**Decision rationale.** Branch/product/WHT lists are low-sensitivity, company-scoped reference data
+used as pickers by nearly every operational screen — a member of the company legitimately reads them.
+"Member" = the caller resolves ≥1 role in their *own* active company; membership is computed from the
+caller's own grants, and the company-scope predicate is unchanged (service `assertCanActIn`, or the
+gate's company resolution for branches), so a member can only ever read **their own** company's data —
+no cross-tenant widening, read-only, never a write. POs are transactional documents (amounts,
+suppliers), so they were NOT opened to plain membership — only to the adjacent `AP.BILL.ENTER`
+capability that the dependent screen's own primary verb already requires.
+
+**Residual / follow-ups.**
+- ISSUE-006 (PRODUCTION_OFFICER cannot view products *at all*, a core-job gap, not just a side-load):
+  the `hasOrMember` floor unblocks the product picker, but whether PRODUCTION_OFFICER should also hold
+  a product **create/manage** capability is a role-spec question for system-analyst — out of scope for
+  this gate fix.
+- ISSUE-008 (no test asserts a role's grants are closed over its screens' reference reads):
+  `RolePermissionClosureTest` is a qa-engineer deliverable; this gate fix removes the runtime blocker
+  but does not replace that guard.
+- **Frontend:** the picker reads no longer hard-403 the affected roles, but defence-in-depth still
+  wants the pickers to **degrade gracefully** on any future 403 (e.g. branch picker → user's default
+  branch) rather than blanking a screen — flagged for frontend-engineer.
+
+## F22 — Customer/supplier party-picker reads are correctly gated; the fix is role-composition (NOT a gate relaxation)
+
+**2026-06-28 — business-operations simulation deep-run (`docs/simulation/run-2026-06-28/deep-run.json`).**
+Same READ-CLOSURE family as F21, but the **opposite remediation** — recorded explicitly so the
+distinction is on the audit trail (the "no silent fix" rule) and so a future reviewer does not
+"complete" F21 by relaxing these two gates.
+
+A CASHIER (role holds cash/receipt perms, not `CUSTOMER.VIEW`) opened Record-Receipt (which loads
+after the F21 fix) but its **customer picker** hard-failed: `GET /api/v1/customers?companyId=3 → 403`
+(`@perm.has('CUSTOMER.VIEW')`, `CustomerController.list`). The analogous supplier picker is
+`SupplierController.list @perm.has('SUPPLIER.VIEW')`.
+
+| # | Source | Severity | Finding | Status | Resolution |
+|---|---|---|---|---|---|
+| F22 | sim 2026-06-28 (deep-run) | HIGH (blocker for the affected roles) | **Customer/supplier party pickers 403 narrowly-scoped cash/AR/AP roles** because the role omits `CUSTOMER.VIEW` / `SUPPLIER.VIEW`. Surfaced on Record-Receipt (cashier) and supplier-bill (AP). Same read-closure shape as F21 (the codes are seeded; not a tenant leak). | ACCEPTED (gate correct) → ROLE-SPEC fix | **The gate is NOT changed.** Customer/supplier master data (names, TIN, VRN, mobile-money account numbers, credit limits, balances, addresses) is the **most sensitive party master on the platform** — more sensitive than the branch/product/WHT reference lists F21 opened to a member read-floor, and at least as sensitive as the POs F21 deliberately **left transactional-gated**. So `CUSTOMER.VIEW` / `SUPPLIER.VIEW` stay as the gate; the read-closure gap is closed by **role composition**: a cash/AR role MUST include `CUSTOMER.VIEW` and an AP role MUST include `SUPPLIER.VIEW` as a CORE grant. No code change, no migration. |
+
+**Decision rationale — why (b) role-spec, not (a) a `hasOrMember` read-floor.**
+F21 established a sensitivity gradient and acted on it: low-sensitivity ambient reference data
+(branch/product/WHT) was opened to a within-tenant member read-floor, while transactional documents
+(POs — "amounts, suppliers") were **not** opened to plain membership and only broadened to the
+adjacent `AP.BILL.ENTER` verb. Customer/supplier master sits on the **sensitive** side of that line:
+- It carries financial + tax + payment-instrument fields (TIN, VRN, mobile-money, credit limit,
+  balance) — disclosure-grade data, not an ambient dropdown of codes/names.
+- Relaxing to `@perm.hasOrMember` would let **any** role-holder in the company (a stock clerk, a POS
+  cashier with no customer remit, a production officer) enumerate the entire customer/supplier master
+  including those financials. That is a least-privilege regression, and it would contradict the exact
+  boundary F21 drew by declining to open POs to plain membership.
+- `CUSTOMER.VIEW` / `SUPPLIER.VIEW` are *select* permissions by design (seed description: "View and
+  select customers/suppliers"). A role that records customer receipts but cannot view customers — or
+  enters supplier bills but cannot view suppliers — is **mis-specified**: the picker is the core data
+  of the task, not a supporting side-load. The gate is right; the role is incomplete.
+
+Tenant isolation is unchanged either way: `CustomerServiceImpl.list` / `SupplierServiceImpl.list`
+already call `scopeGuard.assertCanActIn(RequestContext.get(), companyId)` before querying (F12 fix),
+so a holder reads only their own company's parties regardless of the gate form.
+
+**Required action (deployment / sim onboarding — NOT a code change).**
+- Grant **`CUSTOMER.VIEW`** to every cash/AR-facing role (cashier, AR clerk, receipts/credit roles).
+- Grant **`SUPPLIER.VIEW`** to every AP-facing role (AP clerk, supplier-bill/payment roles).
+- These are seeded permission codes (`R__seed_permissions.sql` lines for `CUSTOMER.VIEW` /
+  `SUPPLIER.VIEW`); the fix is a role/provisioning grant, applied via the IAM admin UI or the
+  onboarding/provisioning seed for the simulation personas — no migration, no gate edit.
+
+**Follow-ups.**
+- Same residual as F21/ISSUE-008: a `RolePermissionClosureTest` (qa-engineer) should assert that each
+  role's grants are closed over the *core-data* reads of the screens it is meant to operate — this
+  would have flagged a receipts role missing `CUSTOMER.VIEW` at build time, not in the sim.
+- Frontend defence-in-depth (carried from F21): a party picker should degrade to a friendly,
+  permission-aware empty state on a 403 rather than blanking the whole screen.
+
+## F21/F22 follow-up — Read-closure manifest + CI guard (ADR-0047)
+
+| # | Source | Severity | Finding | Status | Resolution |
+|---|---|---|---|---|---|
+| F21-FU | F21/F22 follow-up | CLOSED | **No build-time assertion that a screen's supporting reads are correctly gated and seeded** (ISSUE-008 residual). Root/ORG_ADMIN always bypassed; CI only checked a gate exists, not that its closure was declared and seeded. | FIXED | ADR-0047: `backend/src/test/resources/security/screen-read-closure.json` (manifest, 9 screens × supporting reads) + `RolePermissionClosureTest` (surefire, no DB) asserts gate-honesty + required-closure-seeded + no-phantom. Completes the four-link parity chain. |
+| F22-FU | F21/F22 follow-up | CLOSED | **The F22 "grant CUSTOMER.VIEW / SUPPLIER.VIEW to cash/AR/AP roles" rule lived only in the findings memo** — no checked artefact kept it honest against future gate relaxation. | FIXED | ADR-0047 manifest pins `CUSTOMER.VIEW` (gate=`has`) on `ar.record-receipt` and `SUPPLIER.VIEW` (gate=`has`) on `ap.record-payment`/`ap.enter-supplier-bill`. If a reviewer relaxes either gate to `hasOrMember`, check (a) in `RolePermissionClosureTest` goes red — the manifest becomes the enforcement anchor. |
+
+## F23 — Goods-receipt-create PO read-closure: a storekeeper could open the GR screen but not read the POs it receives against
+
+**2026-06-28 — business-operations simulation (`docs/simulation/run-2026-06-28`, Saidi Karume / STOREKEEPER).**
+Same F21/F22 read-closure family. Closed the WHOLE goods-receipt-create read-dependency in one pass
+(the F22 lesson: a transactional screen's read-dependency peels one 403 layer at a time — fix them all
+together so a re-run doesn't just hit the next read).
+
+Enumerated closure of `/admin/goods-receipts/create` (storekeeper = PURCHASE.RECEIVE + the F21
+within-company read-floor): `GET /organisations/current` (`isAuthenticated()`, OK), `GET
+/companies/accessible` (`isAuthenticated()`, OK), `GET /purchase-orders` (**was 403**), `GET
+/purchase-orders/uid/{uid}` (**was 403**), `GET /purchase-orders/uid/{uid}/lines` (**was 403**),
+`POST /goods-receipts` (`PURCHASE.RECEIVE`, the write, already OK).
+
+| # | Source | Severity | Finding | Status | Resolution |
+|---|---|---|---|---|---|
+| F23 | sim 2026-06-28 (STOREKEEPER) | HIGH (blocker for the storekeeper's core daily job) | **The GR-create screen loads under PURCHASE.RECEIVE but its three PO read-dependencies were gated only on PURCHASE.ORDER.VIEW / AP.BILL.ENTER** — the PO picker list (`@perm.has('PURCHASE.ORDER.VIEW') or @perm.has('AP.BILL.ENTER')`), the chosen PO header and its lines (`@perm.scoped(..,'purchaseorder','PURCHASE.ORDER.VIEW')`). A storekeeper holding PURCHASE.RECEIVE (route-guard + GR write, parity-correct + seeded) but not PURCHASE.ORDER.VIEW could open the screen and not read the POs to receive against — picker 403, blank page. Seeded codes, not a tenant leak: a role-grant vs screen-read-dependency closure gap. | FIXED | Gate-layer read-floor (no grant, no migration): list gate → `@perm.has('PURCHASE.ORDER.VIEW') or @perm.has('AP.BILL.ENTER') or @perm.has('PURCHASE.RECEIVE')`; PO header + lines reads → `@perm.scoped(#uid,'purchaseorder','PURCHASE.ORDER.VIEW') or @perm.scoped(#uid,'purchaseorder','PURCHASE.RECEIVE')`. Tenant isolation **unchanged**: `PurchaseOrderServiceImpl.list` keeps `assertCanActIn(ctx, companyId)`, and `getByUid`/`listLines` scope from the **loaded** PO's company; both scoped gate branches run `ScopeGuard.canActOn` against the loaded PO ('purchaseorder' target type → `purchaseOrders.findCompanyIdByUid`), so a PURCHASE.RECEIVE holder reads only their OWN company's POs. POs stay transactional-gated (NOT opened to plain membership) — broadened only to the adjacent PURCHASE.RECEIVE verb whose own GR write already requires it, exactly mirroring the AP.BILL.ENTER precedent. Manifest: added `purchases.goods-receipt-create` (accessPermission=PURCHASE.RECEIVE) to `screen-read-closure.json`, pinned by `RolePermissionClosureTest`. Test: `ReferenceDataReadClosureIT` adds a PURCHASE.RECEIVE-only storekeeper → 200 on own-company PO list, 403 cross-tenant; non-member still 403. |
+
+**Decision rationale.** This is F21's PO branch extended, not F22's customer/supplier branch. POs are
+transactional documents, so they are NOT opened to plain company membership; the gate is broadened only
+to the **adjacent transactional verb** (PURCHASE.RECEIVE) whose dependent screen's own primary verb
+already requires it — the identical reasoning that previously admitted AP.BILL.ENTER to the same list.
+The read-floor is applied symmetrically to all three PO reads the screen fires (list + header + lines)
+so the closure is complete and a re-run cannot peel to a next 403. No disclosure-grade gate was relaxed.
+
+**Residual / follow-ups.**
+- Frontend defence-in-depth (carried from F21/F22): the GR-create PO picker should degrade to a
+  permission-aware empty state on any future 403 rather than blanking the screen — flagged for
+  frontend-engineer.
+- Whether STOREKEEPER should additionally hold a standalone PURCHASE.ORDER.VIEW as a role-spec matter
+  (vs. relying on the read-floor) is a role-composition question for system-analyst — out of scope.
+
+## F24 — Systemic error-message hygiene: user-facing validation messages leak internal references
+
+Found by the daily-operations simulation (Bakari/the approval flow): submitting a below-threshold PO for
+approval returns a 409 whose message — surfaced verbatim to the user in `ApiResponse.errors[]` — reads
+*"PO does not require approval (below threshold or gate disabled, **ADR-0027 D-6**). Place it directly via
+**/place**."* It leaks an internal ADR reference **and** an internal endpoint path to the end user.
+
+A backend scan shows this is **systemic, not a one-off**: ~168 user-facing validation/exception messages
+across **78 files** embed internal references — `BR-…`, `ADR-…`, `FR-…`, `D-n` rule codes (tax, budgeting,
+costing, sales, cash/bank, GL, AR/AP, …), and some additionally concatenate ULIDs/`uid`s, permission codes,
+or endpoint paths into the user message. This violates the **error-message-hygiene standing rule** (owner,
+2026-06-22): user-facing errors must be friendly and expose **no** system/internal info (no ULIDs, field
+names, BR-/ADR- codes, exception text); technical detail belongs in **logs/comments only**. Confirmed
+reaching users (the live 409 returned the ADR code in `errors[]`). Log statements (`log.*`) and code
+comments are exempt and stay as-is.
+
+| ID | Source | Severity | Issue | Status | Fix |
+|----|--------|----------|-------|--------|-----|
+| F24 | sim 2026-06-28 (approvals) | MEDIUM (UX + information hygiene; no auth/tenant impact) | ~168 user-facing validation/exception messages across 78 files leak internal rule codes (BR-/ADR-/FR-/D-n), and some leak ULIDs / permission codes / endpoint paths, into `ApiResponse.errors[]`. The business meaning is fine; the internal tags are not user-safe. | FIXED | Rewrote ~190 user-facing messages across ~65 files in plain language (no internal tag/ULID/perm-code/endpoint; rule codes kept in `//` comments; `log.*` untouched). Hardened the `MessageHygieneTest` architecture gate to block-scan **multi-line** throws and every exception-construction form (`new [\w.]+Exception(` incl. `orElseThrow` lambdas + fully-qualified names) for uid/id concatenation and internal codes — the gate is now the durable guard (green). Remaining `BR-/ADR-` references live only in comments and log statements, which are exempt. |
+
+## F25 — PO approval is unreachable from the web UI (orphaned backend feature)
+
+Found by the daily-operations simulation while wiring the approval chain end-to-end. The PO-approval
+backend is complete (ADR-0027 D-6): `PurchaseSettings` gate (`poApprovalEnabled` + threshold, with a
+wired UI at `/admin/purchase-settings`), `PoApprovalGate.requiresApproval/submit`, and
+`PurchaseOrderController` `/submit-for-approval` + `/approve` + `/reject`. **But the web client never
+wired the submit/approve actions for POs.** The PO detail has only a **"Place Order"** button; placing an
+above-threshold PO throws *"PO requires approval … Submit for approval and wait for APPROVED status
+before placing."* — yet there is **no "Submit for Approval" action** in the PO detail and **no
+`submitForApproval`/`approve` method** in `purchases` services. Net: once an admin enables PO approval,
+every above-threshold PO is **stranded** — it can't be placed (rejected) and can't be submitted (no UI).
+(The reject message also leaks `FR-PROC-13` — folded into F24.)
+
+| ID | Source | Severity | Issue | Status | Fix |
+|----|--------|----------|-------|--------|-----|
+| F25 | sim 2026-06-28 (approvals) | HIGH (feature unusable: enabling PO approval strands all over-threshold POs) | Backend PO-approval flow (submit/approve/reject + threshold gate) is fully implemented and the threshold UI exists, but the web PO detail exposes no Submit-for-Approval / Approve action and `purchasesService` has no such method — so a placed-above-threshold PO is rejected with nowhere to go. | FIXED (e170f98) | Frontend: add `submitForApproval(uid)` to the purchases service; show a **"Submit for Approval"** button on a DRAFT PO whose total ≥ the company PO-approval threshold (when approval is enabled), routing it to PENDING; surface the pending/approved/rejected status on the PO detail. Approval decision is taken in the already-wired generic Approvals inbox. No backend change, no migration. |
+
 ## Production-gating (carried, still OPEN)
 - **G1** (Slice 2): stable RS256 signing key from a secret store — dev key is in-memory (everyone logged out on restart; not prod-safe).
 - **G2** (Slice 2): access-token denylist on logout (access token currently valid until expiry after logout).

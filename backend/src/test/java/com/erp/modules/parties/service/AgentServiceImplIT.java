@@ -123,8 +123,7 @@ class AgentServiceImplIT extends PostgresIntegrationTest {
 
         assertThatThrownBy(() -> agentService.create(req))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("ACTIVE")
-                .hasMessageContaining("BR-PARTY-10");
+                .hasMessageContaining("active, belong to this company");
     }
 
     // -----------------------------------------------------------------------
@@ -141,7 +140,7 @@ class AgentServiceImplIT extends PostgresIntegrationTest {
 
         assertThatThrownBy(() -> agentService.create(req))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("BR-PARTY-10");
+                .hasMessageContaining("active, belong to this company");
     }
 
     // -----------------------------------------------------------------------
@@ -154,7 +153,7 @@ class AgentServiceImplIT extends PostgresIntegrationTest {
 
         assertThatThrownBy(() -> agentService.create(req))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("BR-PARTY-10");
+                .hasMessageContaining("must be linked to a user account");
     }
 
     // -----------------------------------------------------------------------
@@ -167,7 +166,7 @@ class AgentServiceImplIT extends PostgresIntegrationTest {
 
         assertThatThrownBy(() -> agentService.create(req))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("BR-PARTY-11");
+                .hasMessageContaining("cannot be linked to a user account");
     }
 
     // -----------------------------------------------------------------------
@@ -195,7 +194,7 @@ class AgentServiceImplIT extends PostgresIntegrationTest {
 
         assertThatThrownBy(() -> agentService.create(req))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("ACTIVE");
+                .hasMessageContaining("active, belong to this company");
     }
 
     // -----------------------------------------------------------------------
@@ -216,7 +215,7 @@ class AgentServiceImplIT extends PostgresIntegrationTest {
         CreateAgentRequest crossTenantReq = internalRequest("Cross-Tenant Agent", userInB.getId());
         assertThatThrownBy(() -> agentService.create(crossTenantReq))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("BR-PARTY-10");
+                .hasMessageContaining("active, belong to this company");
     }
 
     // -----------------------------------------------------------------------

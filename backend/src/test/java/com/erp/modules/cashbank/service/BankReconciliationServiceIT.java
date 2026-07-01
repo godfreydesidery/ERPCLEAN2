@@ -134,7 +134,7 @@ class BankReconciliationServiceIT extends PostgresIntegrationTest {
 
         assertThatThrownBy(() -> reconService.open(req))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("BR-CASH-11");
+                .hasMessageContaining("only available for bank accounts");
     }
 
     @Test
@@ -175,7 +175,7 @@ class BankReconciliationServiceIT extends PostgresIntegrationTest {
         String reconUid = recon.uid();
         assertThatThrownBy(() -> reconService.complete(reconUid))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("BR-CASH-06");
+                .hasMessageContaining("does not match the bank statement closing balance");
     }
 
     @Test
@@ -195,6 +195,6 @@ class BankReconciliationServiceIT extends PostgresIntegrationTest {
         assertThatThrownBy(() -> reconService.markCleared(reconUid,
                 new MarkClearedRequest(List.of(txn.uid()), false)))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("BR-CASH-07");
+                .hasMessageContaining("already been completed");
     }
 }

@@ -58,7 +58,7 @@ class NotificationPreferenceServiceImplTest {
 
         assertThatThrownBy(() -> service.setPreference(USER_ID, COMPANY_ID, UNKNOWN_KEY, req))
                 .isInstanceOf(NotFoundException.class)
-                .hasMessageContaining(UNKNOWN_KEY);
+                .hasMessageContaining("notification type");
     }
 
     @Test

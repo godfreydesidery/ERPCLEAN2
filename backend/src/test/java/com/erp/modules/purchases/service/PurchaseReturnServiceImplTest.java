@@ -220,10 +220,10 @@ class PurchaseReturnServiceImplTest {
         GoodsReceiptLine grLine = stubGrLine(1L, new BigDecimal("20.00"), new BigDecimal("18.00"));
         when(grLineRepo.findById(1L)).thenReturn(Optional.of(grLine));
 
-        // act + assert: should throw with a clear BR-PROC-10 message before saving the GR line
+        // act + assert: should throw before saving the GR line (BR-PROC-10 guard)
         assertThatThrownBy(() -> service.confirm("PRET-UID-RACE"))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("BR-PROC-10");
+                .hasMessageContaining("cannot exceed the original receipted quantity");
 
         // assert: GR line was NOT saved (no partial state written)
         verify(grLineRepo, org.mockito.Mockito.never()).save(grLine);

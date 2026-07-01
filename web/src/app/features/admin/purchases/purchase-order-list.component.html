@@ -211,7 +211,6 @@
                   <th scope="col">Order #</th>
                   <th scope="col">Supplier</th>
                   <th scope="col">Status</th>
-                  <th scope="col">Currency</th>
                   <th scope="col" class="num">Total</th>
                   <th scope="col">Created</th>
                   <th scope="col"><span class="visually-hidden">Actions</span></th>
@@ -231,8 +230,7 @@
                         {{ po.status }}
                       </span>
                     </td>
-                    <td class="small">{{ po.currency }}</td>
-                    <td class="num">{{ po.orderTotalAmount }}</td>
+                    <td class="num">{{ po.currency }} {{ +po.orderTotalAmount | number:'1.2-2' }}</td>
                     <td class="small text-muted">{{ po.createdAt | date:'dd/MM/yyyy' }}</td>
                     <td>
                       <a class="btn btn-sm btn-outline-primary"

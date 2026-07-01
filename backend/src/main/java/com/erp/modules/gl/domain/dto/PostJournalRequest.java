@@ -18,8 +18,8 @@ public record PostJournalRequest(
         JournalSourceType sourceType,
         String sourceRef,
         /** Must contain at least one element; bean validation also cascades into each line (#29). */
-        @NotNull(message = "lines must not be null (BR-GL-01 requires at least 2 lines)")
-        @NotEmpty(message = "lines must not be empty (BR-GL-01 requires at least 2 lines)")
+        @NotNull(message = "Journal lines are required — please provide at least two lines.")
+        @NotEmpty(message = "Journal lines must not be empty — a journal entry requires at least two lines.")
         @Valid
         List<PostJournalLineRequest> lines
 ) {}

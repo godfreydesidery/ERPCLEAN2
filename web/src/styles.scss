@@ -276,8 +276,47 @@ body {
 .erp-table th.text-end { text-align: right; }
 .erp-table .mono { font-variant-numeric: tabular-nums; color: var(--erp-text-2); }
 
-/* Wrap any table in <div class="erp-table-wrap"> for horizontal scroll on phones. */
-.erp-table-wrap { width: 100%; overflow-x: auto; border-radius: var(--erp-radius); }
+/* Wrap any table in <div class="erp-table-wrap"> for horizontal scroll on phones.
+   On small screens the table scrolls horizontally.  The last column (the row-action
+   column) is pinned with `position:sticky; right:0` so it is never clipped on phone.
+   On narrow viewports, a right-side inset box-shadow hints that more columns exist
+   off-screen; the shadow sits on the right edge of the visible container. */
+.erp-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: var(--erp-radius);
+  -webkit-overflow-scrolling: touch;  /* smooth momentum scrolling on iOS */
+}
+
+/* Right-edge scroll hint on phone/tablet — a fixed-position inset shadow on the
+   container's right edge.  Using box-shadow (inset) means it renders at the right
+   edge of the visible box, not the scrollable width, so it always signals "more
+   content to the right" without JavaScript. */
+@media (max-width: 767.98px) {
+  .erp-table-wrap {
+    box-shadow: inset -8px 0 12px -8px rgba(16, 24, 40, 0.12);
+  }
+}
+
+/* Sticky action column: last th/td in an erp-table stays visible when the row
+   scrolls horizontally.  Background must be explicitly set (not `inherit`) so
+   the cell is opaque and hides scrolled content underneath.
+   box-shadow on the left gives a subtle depth cue at the pinned edge. */
+.erp-table thead th:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  background: #fafbfc;
+  box-shadow: -2px 0 4px -2px rgba(16, 24, 40, 0.08);
+}
+.erp-table tbody td:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background: var(--erp-card);
+  box-shadow: -2px 0 4px -2px rgba(16, 24, 40, 0.08);
+}
+.erp-table tbody tr:hover td:last-child { background: #f8fafc; }
 
 /* Table footer / pagination. */
 .erp-tfoot {

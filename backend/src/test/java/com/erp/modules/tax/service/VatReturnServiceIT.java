@@ -150,7 +150,8 @@ class VatReturnServiceIT extends PostgresIntegrationTest {
         assertThatThrownBy(() ->
                 service.file(opened.uid(), new FileVatReturnRequest("TRA-REF-003", LocalDate.of(2025, 5, 15))))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("BR-VAT-11");
+                .hasMessageContaining("already been filed")
+                .hasMessageContaining("cannot be filed again");
     }
 
     // =========================================================================
@@ -179,7 +180,8 @@ class VatReturnServiceIT extends PostgresIntegrationTest {
         assertThatThrownBy(() ->
                 service.file(current.uid(), new FileVatReturnRequest("TRA-007", LocalDate.of(2025, 8, 15))))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("D-4");
+                .hasMessageContaining("previous period")
+                .hasMessageContaining("not yet been filed");
     }
 
     // =========================================================================
@@ -193,7 +195,8 @@ class VatReturnServiceIT extends PostgresIntegrationTest {
 
         assertThatThrownBy(() -> service.recompute(opened.uid()))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("BR-VAT-02");
+                .hasMessageContaining("already been filed")
+                .hasMessageContaining("can no longer be recomputed");
     }
 
     // =========================================================================

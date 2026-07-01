@@ -128,9 +128,10 @@ public class PaymentTermsServiceImpl implements PaymentTermsService {
     private void validateDiscount(Integer discountDays, java.math.BigDecimal discountPercent) {
         boolean daysSet = discountDays != null;
         boolean pctSet = discountPercent != null;
+        // D-2: discount days and discount percent must be provided together or not at all
         if (daysSet != pctSet) {
             throw new IllegalArgumentException(
-                    "discount_days and discount_percent must be both set or both null (D-2 both-null-or-both-set rule).");
+                    "Early-payment discount days and discount percentage must both be provided together, or both left empty.");
         }
     }
 

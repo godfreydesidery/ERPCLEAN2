@@ -11,7 +11,7 @@ import java.math.BigDecimal;
  */
 public record CreateBulkPackRequest(
         @NotBlank String unitUid,
-        @NotNull @DecimalMin(value = "0.000001", message = "factorToBase must be greater than zero (BR-PROD-03)")
+        @NotNull @DecimalMin(value = "0.000001", message = "Conversion factor must be greater than zero.")
         BigDecimal factorToBase
 ) {
 }

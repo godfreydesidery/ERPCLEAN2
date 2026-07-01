@@ -72,9 +72,10 @@ public class BlanketOrderController {
         // blanketUid disagrees with the URL so callers cannot silently draw against a
         // different blanket than the one the path permission was evaluated for.
         if (!uid.equals(request.blanketUid())) {
+            // uid values intentionally not surfaced (error-hygiene rule)
             throw new IllegalArgumentException(
-                    "Path uid '" + uid + "' does not match body blanketUid '"
-                            + request.blanketUid() + "'. Use the path uid as the authoritative reference.");
+                    "The blanket order identifier in the request body does not match the URL."
+                            + " Use the URL identifier as the authoritative reference.");
         }
         return blanketOrderService.drawAgainstBlanket(request);
     }

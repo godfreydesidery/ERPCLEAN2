@@ -173,9 +173,9 @@ public class BlanketOrderServiceImpl implements BlanketOrderService {
                     .orElseThrow(() -> NotFoundException.of("BlanketOrderLine", drawLine.blanketLineUid()));
             BigDecimal remaining = bLine.remainingQtyBase();
             if (drawLine.qtyBase().compareTo(remaining) > 0) {
-                throw new ConflictException("Draw quantity " + drawLine.qtyBase()
-                        + " exceeds remaining " + remaining
-                        + " on blanket line " + drawLine.blanketLineUid());
+                // blanketLineUid and qty intentionally not surfaced (error-hygiene rule)
+                throw new ConflictException(
+                        "The requested draw quantity exceeds the remaining quantity on this blanket line.");
             }
         }
 

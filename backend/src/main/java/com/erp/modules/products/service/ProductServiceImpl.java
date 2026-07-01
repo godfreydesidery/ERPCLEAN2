@@ -612,12 +612,12 @@ public class ProductServiceImpl implements ProductService {
             suppliers.findById(preferredSupplierId).ifPresentOrElse(s -> {
                 if (!s.getCompanyId().equals(companyId)) {
                     throw new com.erp.platform.common.api.NotFoundException(
-                            "Supplier not found in this company: " + preferredSupplierId);
+                            "The selected supplier was not found in this company.");
                 }
                 p.setPreferredSupplierId(preferredSupplierId);
             }, () -> {
                 throw new com.erp.platform.common.api.NotFoundException(
-                        "Supplier not found: " + preferredSupplierId);
+                        "Supplier not found.");
             });
         } else {
             p.setPreferredSupplierId(null);
@@ -630,8 +630,9 @@ public class ProductServiceImpl implements ProductService {
      */
     private static void assertServiceNotStockable(ProductType type, boolean stockable) {
         if (ProductType.SERVICE.equals(type) && stockable) {
+            // BR-PROD-01
             throw new IllegalArgumentException(
-                    "Service products cannot be stockable (BR-PROD-01).");
+                    "Service products cannot be marked as stockable.");
         }
     }
 

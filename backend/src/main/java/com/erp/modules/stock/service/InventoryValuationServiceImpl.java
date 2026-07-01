@@ -398,10 +398,8 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
                 || soh.getOnHandValue().compareTo(BigDecimal.ZERO) != 0;
         if (alreadyValued) {
             throw new IllegalStateException(
-                    "Stock on-hand uid=" + request.stockOnHandUid()
-                            + " already has a valuation (avg_cost=" + soh.getAvgCost()
-                            + " on_hand_value=" + soh.getOnHandValue()
-                            + "). Opening valuation is once-per-product (BR-INV-07).");
+                    "This product already has an opening valuation recorded. "
+                            + "Opening valuation can only be set once per product.");
         }
 
         BigDecimal openingCost  = request.openingCost();

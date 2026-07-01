@@ -23,8 +23,9 @@ class ProductServiceImplTest {
     /** Mirror of the private static guard in ProductServiceImpl. */
     private static void assertServiceNotStockable(ProductType type, boolean stockable) {
         if (ProductType.SERVICE.equals(type) && stockable) {
+            // BR-PROD-01
             throw new IllegalArgumentException(
-                    "Service products cannot be stockable (BR-PROD-01).");
+                    "Service products cannot be marked as stockable.");
         }
     }
 
@@ -36,8 +37,7 @@ class ProductServiceImplTest {
     void serviceProduct_stockableTrue_throwsIllegalArgument() {
         assertThatThrownBy(() -> assertServiceNotStockable(ProductType.SERVICE, true))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Service products cannot be stockable")
-                .hasMessageContaining("BR-PROD-01");
+                .hasMessageContaining("Service products cannot be marked as stockable");
     }
 
     // -------------------------------------------------------------------------

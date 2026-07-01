@@ -142,7 +142,8 @@ class VatAdjustmentServiceIT extends PostgresIntegrationTest {
                         new AddVatAdjustmentRequest(VatAdjustmentReason.OTHER,
                                 VatAdjustmentSign.INCREASE, new BigDecimal("100.00"), "blocked")))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("BR-VAT-09");
+                .hasMessageContaining("already been filed")
+                .hasMessageContaining("no longer be adjusted");
     }
 
     // =========================================================================
@@ -159,7 +160,7 @@ class VatAdjustmentServiceIT extends PostgresIntegrationTest {
 
         assertThatThrownBy(() -> service.removeAdjustment(ret.uid(), adj.uid()))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("BR-VAT-09");
+                .hasMessageContaining("FILED");
     }
 
     // =========================================================================

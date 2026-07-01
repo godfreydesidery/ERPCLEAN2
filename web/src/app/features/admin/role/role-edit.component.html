@@ -144,5 +144,35 @@
       </div>
     </div>
 
+    <!-- Advisory read-closure gap panel — informational only, never blocks a grant. -->
+    @if (gaps().length > 0) {
+      <div class="erp-card mt-3 gap-advisory" aria-live="polite" aria-label="Read-closure advisory">
+        <div class="erp-card__head">
+          <h2 class="d-flex align-items-center gap-2">
+            <i class="bi bi-info-circle-fill text-warning" aria-hidden="true"></i>
+            Read-closure advisory
+          </h2>
+        </div>
+        <div class="erp-card__body">
+          <p class="small text-muted mb-2">
+            The following screens will be partially blocked for users who hold only this role.
+            Grant the missing read permissions to resolve each gap.
+          </p>
+          <ul class="gap-advisory__list mb-0" aria-label="Screens with missing reads">
+            @for (gap of gaps(); track gap.screen) {
+              <li class="gap-advisory__item">
+                <i class="bi bi-exclamation-triangle-fill text-warning me-1" aria-hidden="true"></i>
+                This role can open
+                <strong>{{ screenLabel(gap.screen) }}</strong>
+                but is missing
+                <span class="font-monospace">{{ gap.missingReads.join(', ') }}</span>
+                — users with only this role will be blocked on that screen.
+              </li>
+            }
+          </ul>
+        </div>
+      </div>
+    }
+
   }
 </section>

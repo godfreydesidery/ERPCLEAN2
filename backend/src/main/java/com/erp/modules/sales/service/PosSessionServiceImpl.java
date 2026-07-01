@@ -84,8 +84,9 @@ public class PosSessionServiceImpl implements PosSessionService {
 
         // Guard: reject if till is not ACTIVE (INACTIVE/ARCHIVED tills cannot open sessions).
         if (till.getStatus() != com.erp.platform.common.domain.MasterStatus.ACTIVE) {
+            // req.tillUid() intentionally not surfaced (error-hygiene rule)
             throw new ConflictException(
-                    "Till " + req.tillUid() + " is " + till.getStatus()
+                    "This till is " + till.getStatus()
                             + " and cannot open a session. Activate the till first.");
         }
 

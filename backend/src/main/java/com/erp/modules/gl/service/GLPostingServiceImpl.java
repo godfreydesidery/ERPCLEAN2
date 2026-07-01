@@ -88,8 +88,9 @@ public class GLPostingServiceImpl implements GLPostingService {
         // 1. ≥2 lines (BR-GL-01)
         List<JournalEntryDraft.LineDraft> draftLines = draft.lines();
         if (draftLines == null || draftLines.size() < 2) {
+            // BR-GL-01: minimum 2 lines required
             throw new IllegalArgumentException(
-                    "A journal entry requires at least 2 lines (BR-GL-01). Got: "
+                    "A journal entry requires at least 2 lines. Got: "
                             + (draftLines == null ? 0 : draftLines.size()));
         }
 
@@ -129,9 +130,10 @@ public class GLPostingServiceImpl implements GLPostingService {
                 .map(l -> l.creditAmount() != null ? l.creditAmount() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         if (totalDebit.compareTo(totalCredit) != 0) {
+            // BR-GL-01: total debits must equal total credits
             throw new IllegalArgumentException(
-                    "Journal entry is unbalanced (BR-GL-01): Σ debits=" + totalDebit
-                            + ", Σ credits=" + totalCredit
+                    "Journal entry is unbalanced: total debits=" + totalDebit
+                            + ", total credits=" + totalCredit
                             + ", difference=" + totalDebit.subtract(totalCredit).toPlainString());
         }
 
@@ -218,20 +220,20 @@ public class GLPostingServiceImpl implements GLPostingService {
         // The reversed flag and reversedByEntryId are set together atomically at the end of this
         // method; checking both guards against any partial-state race.
         if (original.isReversed() || original.getReversedByEntryId() != null) {
+            // BR-GL-11a: idempotency guard — each journal entry may only be reversed once
             throw new com.erp.platform.common.api.ConflictException(
-                    "Journal entry " + originalEntryUid
-                            + " has already been reversed (BR-GL-11). "
-                            + "Create a new journal entry if a further correction is required.");
+                    "This journal entry has already been reversed."
+                            + " Create a new journal entry if a further correction is required.");
         }
 
         // BR-GL-11b: prevent reversing a reversing entry. A reversal entry (reversalOfId != null)
         // is itself the correction; reversing it would undo the correction and re-expose the original
         // error. The caller must post a fresh balanced journal if a further adjustment is needed.
         if (original.getReversalOfId() != null) {
+            // BR-GL-11b: a reversal entry cannot itself be reversed
             throw new com.erp.platform.common.api.ConflictException(
-                    "Journal entry " + originalEntryUid
-                            + " is itself a reversal entry and cannot be reversed again (BR-GL-11). "
-                            + "Post a new manual journal entry if a further correction is needed.");
+                    "This journal entry is itself a reversal and cannot be reversed again."
+                            + " Post a new manual journal entry if a further correction is needed.");
         }
 
         List<JournalLine> originalLines = lines.findByEntryIdOrderByLineNo(original.getId());
@@ -359,10 +361,11 @@ public class GLPostingServiceImpl implements GLPostingService {
                     case DIMENSION_4 -> ld.dimension4ValueId();
                 };
                 if (valueId == null) {
+                    // FR-CC-08 / BR-CC-03: mandatory dimension slot must be tagged on every line
+                    // ld.accountId() intentionally not surfaced (error-hygiene rule)
                     throw new IllegalArgumentException(
-                            "Dimension slot " + slot + " is mandatory for company " + companyId
-                                    + " (FR-CC-08 / BR-CC-03). Journal line for account "
-                                    + ld.accountId() + " is missing a value for this slot.");
+                            "The " + slot + " dimension is required on every journal line."
+                                    + " Please select a " + slot + " value for each line.");
                 }
             }
         }
@@ -387,22 +390,25 @@ public class GLPostingServiceImpl implements GLPostingService {
             ChartOfAccount account = accounts.findById(ld.accountId())
                     .orElseThrow(() -> new NotFoundException("Account not found."));
             if (account.isRequireCostCentre() && ld.costCentreValueId() == null) {
+                // ADR-0041 D4: per-account cost-centre requirement on manual journals
                 throw new com.erp.platform.common.api.ConflictException(
                         "Account " + account.getAccountCode()
-                                + " requires a cost-centre dimension on every manual journal line "
-                                + "(ADR-0041 D4). This line is missing a cost-centre value.");
+                                + " requires a cost-centre to be selected on every manual journal line."
+                                + " Please assign a cost-centre value to this line.");
             }
             if (account.isRequireDepartment() && ld.departmentValueId() == null) {
+                // ADR-0041 D4: per-account department requirement on manual journals
                 throw new com.erp.platform.common.api.ConflictException(
                         "Account " + account.getAccountCode()
-                                + " requires a department dimension on every manual journal line "
-                                + "(ADR-0041 D4). This line is missing a department value.");
+                                + " requires a department to be selected on every manual journal line."
+                                + " Please assign a department value to this line.");
             }
             if (account.isRequireProject() && ld.projectId() == null) {
+                // ADR-0041 D4: per-account project requirement on manual journals
                 throw new com.erp.platform.common.api.ConflictException(
                         "Account " + account.getAccountCode()
-                                + " requires a project dimension on every manual journal line "
-                                + "(ADR-0041 D4). This line is missing a project value.");
+                                + " requires a project to be selected on every manual journal line."
+                                + " Please assign a project to this line.");
             }
         }
     }
@@ -450,15 +456,17 @@ public class GLPostingServiceImpl implements GLPostingService {
         boolean hasDebit  = debit.compareTo(BigDecimal.ZERO) > 0;
         boolean hasCredit = credit.compareTo(BigDecimal.ZERO) > 0;
         if (!(hasDebit ^ hasCredit)) {
+            // BR-GL-08: each line must be either debit or credit, not both and not zero
             throw new IllegalArgumentException(
-                    "Journal line must have a positive debit OR a positive credit, not both or neither "
-                            + "(BR-GL-08). debit=" + debit + ", credit=" + credit);
+                    "Each journal line must have a positive debit or a positive credit — not both and not zero."
+                            + " debit=" + debit + ", credit=" + credit);
         }
 
         // Non-negative check
         if (debit.compareTo(BigDecimal.ZERO) < 0 || credit.compareTo(BigDecimal.ZERO) < 0) {
+            // BR-GL-08: negative amounts are not permitted
             throw new IllegalArgumentException(
-                    "Journal line amounts must be non-negative (BR-GL-08).");
+                    "Journal line amounts must be positive values.");
         }
 
         // Active account, same company (BR-GL-04/BR-GL-05)
@@ -469,8 +477,10 @@ public class GLPostingServiceImpl implements GLPostingService {
                     "Account " + account.getAccountCode() + " does not belong to this company.");
         }
         if (!account.isActive() && !allowInactiveAccount) {
+            // BR-GL-04: posting to inactive accounts is not allowed
             throw new IllegalArgumentException(
-                    "Account " + account.getAccountCode() + " is inactive; cannot post to it (BR-GL-04).");
+                    "Account " + account.getAccountCode() + " is inactive and cannot be posted to."
+                            + " Please select an active account.");
         }
 
         // Manual-posting gate: only user-entered MANUAL journals are subject to this check.
@@ -488,17 +498,20 @@ public class GLPostingServiceImpl implements GLPostingService {
         if (enforceManualPostingGate
                 && account.getControlType() != null
                 && account.getControlType().blocksManualPosting()) {
+            // D-1 (ADR-0013): sub-ledger control accounts block manual journal entries by design
             throw new com.erp.platform.common.api.ConflictException(
                     "Account " + account.getAccountCode()
-                            + " is a control account (" + account.getControlType()
-                            + ") and cannot be the target of a manual journal entry (D-1).");
+                            + " is a sub-ledger control account and cannot be posted to directly"
+                            + " via a manual journal entry. Use the relevant sub-ledger module instead.");
         }
 
         // Base currency (BR-GL-06, D-9)
         if (!baseCurrency.equals(ld.currency())) {
+            // BR-GL-06: journal lines must use the company's base currency
             throw new IllegalArgumentException(
                     "Journal line currency " + ld.currency()
-                            + " does not match company base currency " + baseCurrency + " (BR-GL-06).");
+                            + " does not match the company's base currency (" + baseCurrency + ")."
+                            + " All lines must use the base currency.");
         }
     }
 

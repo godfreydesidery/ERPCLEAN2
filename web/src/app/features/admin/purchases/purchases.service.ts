@@ -102,6 +102,15 @@ export class PurchasesService {
     return this.http.post<PurchaseOrderDto>(`${this.poBase}/uid/${uid}/place`, {});
   }
 
+  /**
+   * Submit a DRAFT PO to the approval engine (PURCHASE.ORDER.CREATE).
+   * The backend transitions approval_status → PENDING (or APPROVED when auto-approved).
+   * Returns 409 when the PO is already pending or does not require approval.
+   */
+  submitForApproval(uid: string): Observable<PurchaseOrderDto> {
+    return this.http.post<PurchaseOrderDto>(`${this.poBase}/uid/${uid}/submit-for-approval`, {});
+  }
+
   closeOrder(uid: string): Observable<PurchaseOrderDto> {
     return this.http.post<PurchaseOrderDto>(`${this.poBase}/uid/${uid}/close`, {});
   }

@@ -143,7 +143,7 @@ public class LeadServiceImpl implements LeadService {
 
         if (lead.getLeadStatus() == LeadStatus.QUALIFIED) {
             throw new com.erp.platform.common.api.ConflictException(
-                    "Lead is already QUALIFIED; uid=" + uid);
+                    "This lead has already been qualified.");
         }
         if (lead.getLeadStatus() == LeadStatus.CONVERTED || lead.getLeadStatus() == LeadStatus.DISQUALIFIED) {
             throw new IllegalStateException("Cannot qualify a terminal lead; current: " + lead.getLeadStatus());

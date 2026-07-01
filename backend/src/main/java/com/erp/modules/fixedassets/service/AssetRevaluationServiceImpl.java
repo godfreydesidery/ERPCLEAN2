@@ -141,7 +141,7 @@ public class AssetRevaluationServiceImpl implements AssetRevaluationService {
     private AssetCategory requireCategory(FixedAsset asset) {
         return categories.findById(asset.getCategoryId())
                 .orElseThrow(() -> new IllegalStateException(
-                        "Category not found: " + asset.getCategoryId()));
+                        "The asset's category could not be found."));
     }
 
     private Long actorId() {
