@@ -31,7 +31,9 @@ const STUB_COMPANY = { uid: 'CO1', id: '10', name: 'Main Co' };
 const STUB_ON_HAND_ROW = {
   uid: 'SOH1', id: '1',
   companyId: '10', branchId: '1', productId: '5',
-  quantity: '100', reorderLevel: '10',
+  productCode: 'P001', productName: 'Test Product',
+  quantity: '100', reorderLevel: '10', maxQty: null,
+  lastMovementAt: null, lastCountedAt: null,
   negative: false, low: false,
   version: '1', createdAt: null, createdBy: null, updatedAt: null, updatedBy: null,
 };

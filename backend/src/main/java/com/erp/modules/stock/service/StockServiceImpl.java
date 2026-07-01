@@ -27,6 +27,8 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -226,7 +228,8 @@ public class StockServiceImpl implements StockService {
                         "branchId", String.valueOf(soh.getBranchId())
                 )));
 
-        return StockOnHandDto.from(soh);
+        ProductDto product = productService.getById(soh.getProductId());
+        return StockOnHandDto.from(soh, product.code(), product.name());
     }
 
     // -------------------------------------------------------------------------
@@ -243,23 +246,31 @@ public class StockServiceImpl implements StockService {
         scopeGuard.assertCanActIn(principal, principal.companyId());
 
         if (q == null || q.isBlank()) {
-            return onHands.findByCompanyIdAndBranchId(principal.companyId(), principal.branchId(), pageable)
-                    .map(StockOnHandDto::from);
+            Page<StockOnHand> page = onHands.findByCompanyIdAndBranchId(
+                    principal.companyId(), principal.branchId(), pageable);
+            return enrichPage(page);
         }
 
         // Resolve the product ids matching the search term WITHIN company scope via the products
         // module (code/name case-insensitive contains) — no cross-module entity join (D-1 boundary).
-        List<Long> productIds = productService
+        List<ProductDto> matchedProducts = productService
                 .list(principal.companyId(), q.trim(), Pageable.unpaged())
-                .map(ProductDto::id)
                 .getContent();
-        if (productIds.isEmpty()) {
+        if (matchedProducts.isEmpty()) {
             return Page.empty(pageable);
         }
+        List<Long> productIds = matchedProducts.stream().map(ProductDto::id).toList();
+        Map<Long, ProductDto> productById = matchedProducts.stream()
+                .collect(Collectors.toMap(ProductDto::id, Function.identity()));
 
-        return onHands.findByCompanyIdAndBranchIdAndProductIdIn(
-                        principal.companyId(), principal.branchId(), productIds, pageable)
-                .map(StockOnHandDto::from);
+        Page<StockOnHand> page = onHands.findByCompanyIdAndBranchIdAndProductIdIn(
+                principal.companyId(), principal.branchId(), productIds, pageable);
+        return page.map(s -> {
+            ProductDto p = productById.get(s.getProductId());
+            return StockOnHandDto.from(s,
+                    p != null ? p.code() : null,
+                    p != null ? p.name() : null);
+        });
     }
 
     @Override
@@ -277,6 +288,36 @@ public class StockServiceImpl implements StockService {
     // -------------------------------------------------------------------------
     // Private helpers
     // -------------------------------------------------------------------------
+
+    /**
+     * Batch-enrich a page of {@link StockOnHand} rows with product code + name.
+     * Fetches each product by id via {@link ProductService#getById} — one call per distinct
+     * product on the page (typically ≤ page-size, usually 20–50). No cross-module entity join.
+     */
+    private Page<StockOnHandDto> enrichPage(Page<StockOnHand> page) {
+        // Collect distinct product ids on this page, then bulk-resolve via ProductService.
+        Map<Long, ProductDto> productById = page.getContent().stream()
+                .map(StockOnHand::getProductId)
+                .distinct()
+                .collect(Collectors.toMap(
+                        Function.identity(),
+                        id -> {
+                            try {
+                                return productService.getById(id);
+                            } catch (Exception e) {
+                                // Product was deleted after stock row was written — degrade
+                                // gracefully rather than breaking the entire list response.
+                                return null;
+                            }
+                        }
+                ));
+        return page.map(s -> {
+            ProductDto p = productById.get(s.getProductId());
+            return StockOnHandDto.from(s,
+                    p != null ? p.code() : null,
+                    p != null ? p.name() : null);
+        });
+    }
 
     /**
      * Resolve a product by uid and assert: product exists, belongs to principal's company,

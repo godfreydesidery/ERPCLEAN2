@@ -26,6 +26,11 @@ import { ProductService } from '../products/product.service';
 import { StockService, StockMovementPage, LocationOnHandPage } from './stock.service';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 
+/** Display label for an on-hand row — always built from the denormalised fields. */
+function rowProductLabel(row: StockOnHandDto): string {
+  return `${row.productCode} — ${row.productName}`;
+}
+
 const DEFAULT_SIZE = 20;
 
 interface LoadTrigger { q: string; page: number }
@@ -35,7 +40,7 @@ interface LoadTrigger { q: string; page: number }
  * Per-row actions: adjust stock (STOCK.ADJUST), set reorder level (STOCK.ADJUST).
  * Inline opening-balance form (STOCK.OPENING).
  * Per-row movements drawer (ledger history).
- * Product names resolved via a lazy lookup cache keyed by productId.
+ * Product code + name are denormalised on each StockOnHandDto row — no secondary lookup needed.
  */
 @Component({
   selector: 'app-stock-list',
@@ -69,9 +74,6 @@ export class StockListComponent {
 
   // ── Filters ───────────────────────────────────────────────────────────────────
   readonly searchQ = signal('');
-
-  // ── Product name cache (productId → name) ─────────────────────────────────────
-  readonly productNameMap = signal<Record<string, string>>({});
 
   // ── Adjust form ───────────────────────────────────────────────────────────────
   readonly adjustingUid = signal<string | null>(null);
@@ -149,7 +151,6 @@ export class StockListComponent {
           this.rows.set(rows);
           this.meta.set(meta);
           this.state.set('idle');
-          this.resolveProductNames(rows);
         },
         error: (err) =>
           this.state.set(err instanceof HttpErrorResponse && err.status === 403 ? 'forbidden' : 'error'),
@@ -191,38 +192,6 @@ export class StockListComponent {
 
     this.wireByProductSearch();
     this.loadCompanies();
-  }
-
-  // ── Product name resolution ───────────────────────────────────────────────────
-
-  private resolveProductNames(rows: StockOnHandDto[]): void {
-    const companyId = this.selectedCompanyId();
-    if (!companyId || rows.length === 0) return;
-    const existingMap = this.productNameMap();
-    const unresolvedIds = rows
-      .map((r) => r.productId)
-      .filter((id) => !existingMap[id]);
-
-    if (unresolvedIds.length === 0) return;
-
-    // Fetch a broad page keyed by companyId to build a cache.
-    // For each unresolved row we try a product lookup via the list endpoint.
-    // Since the list doesn't filter by id directly, we batch by fetching a page
-    // and caching whatever comes back.
-    this.productService.list(companyId, '', 0, 200).subscribe({
-      next: ({ rows: products }) => {
-        const updated = { ...this.productNameMap() };
-        for (const p of products) {
-          updated[p.id] = `${p.code} — ${p.name}`;
-        }
-        this.productNameMap.set(updated);
-      },
-      error: () => undefined, // non-fatal: fall back to showing productId
-    });
-  }
-
-  productLabel(productId: string): string {
-    return this.productNameMap()[productId] ?? productId;
   }
 
   // ── Company / Branch loading ──────────────────────────────────────────────────
@@ -289,32 +258,27 @@ export class StockListComponent {
   // ── Adjust form ───────────────────────────────────────────────────────────────
 
   openAdjustForm(row: StockOnHandDto): void {
+    const label = rowProductLabel(row);
     this.adjustingUid.set(row.uid);
     this.adjustQty.set('');
     this.adjustReason.set('COUNT_CORRECTION');
     this.adjustNote.set('');
     this.adjustError.set(null);
-    this.adjustSelectedProduct.set(null);
-    this.adjustProductQ.set(this.productLabel(row.productId));
-    // Pre-select the product from the row
-    this.adjustSelectedProduct.set({ uid: '', label: this.productLabel(row.productId) });
-    // We need the product uid — look it up in the product name map via id
-    // The map stores by id, but we need uid for the request. Fetch from product list if needed.
-    this.resolveProductUidForRow(row.productId);
+    // Pre-populate the search box with the product label; uid resolved via targeted search.
+    this.adjustProductQ.set(label);
+    this.adjustSelectedProduct.set({ uid: '', label });
+    // Resolve the product uid via a targeted code search (not a 200-cap full-fetch).
+    this.resolveProductUidForRow(row.productCode, label);
   }
 
-  private pendingAdjustProductUid = signal<string>('');
-
-  private resolveProductUidForRow(productId: string): void {
+  private resolveProductUidForRow(productCode: string, label: string): void {
     const companyId = this.selectedCompanyId();
     if (!companyId) return;
-    this.productService.list(companyId, '', 0, 200).subscribe({
+    this.productService.list(companyId, productCode, 0, 10).subscribe({
       next: ({ rows }) => {
-        const found = rows.find((p) => p.id === productId);
+        const found = rows.find((p) => p.code === productCode);
         if (found) {
-          this.pendingAdjustProductUid.set(found.uid);
-          this.adjustSelectedProduct.set({ uid: found.uid, label: `${found.code} — ${found.name}` });
-          this.adjustProductQ.set(`${found.code} — ${found.name}`);
+          this.adjustSelectedProduct.set({ uid: found.uid, label });
         }
       },
       error: () => undefined,
@@ -482,9 +446,9 @@ export class StockListComponent {
 
   openMovements(row: StockOnHandDto): void {
     this.movementsUid.set(row.uid);
-    this.movementsProductLabel.set(this.productLabel(row.productId));
+    this.movementsProductLabel.set(rowProductLabel(row));
     this.movementsPage.set(0);
-    this.loadMovements(row.productId, 0);
+    this.loadMovements(row.productId, row.productCode, 0);
   }
 
   closeMovements(): void {
@@ -492,13 +456,13 @@ export class StockListComponent {
     this.movementRows.set([]);
   }
 
-  private loadMovements(productId: string, page: number): void {
+  private loadMovements(productId: string, productCode: string, page: number): void {
     const companyId = this.selectedCompanyId();
     if (!companyId) return;
 
     // productId is a Long id; we need productUid for the API.
-    // Resolve uid from the cached product list, then fetch movements.
-    this.productService.list(companyId, '', 0, 200).subscribe({
+    // Resolve via a targeted code search — not a 200-cap full-fetch.
+    this.productService.list(companyId, productCode, 0, 10).subscribe({
       next: ({ rows: products }) => {
         const found = products.find((p) => p.id === productId);
         if (!found) { this.movementsState.set('error'); return; }
@@ -525,7 +489,7 @@ export class StockListComponent {
     const uid = this.movementsUid();
     if (!uid) return;
     const row = this.rows().find((r) => r.uid === uid);
-    if (row) this.loadMovements(row.productId, page);
+    if (row) this.loadMovements(row.productId, row.productCode, page);
   }
 
   movementsPrevPage(): void {
@@ -534,7 +498,7 @@ export class StockListComponent {
       const uid = this.movementsUid();
       if (!uid) return;
       const row = this.rows().find((r) => r.uid === uid);
-      if (row) this.loadMovements(row.productId, p - 1);
+      if (row) this.loadMovements(row.productId, row.productCode, p - 1);
     }
   }
 
@@ -543,7 +507,7 @@ export class StockListComponent {
       const uid = this.movementsUid();
       if (!uid) return;
       const row = this.rows().find((r) => r.uid === uid);
-      if (row) this.loadMovements(row.productId, this.movementsPage() + 1);
+      if (row) this.loadMovements(row.productId, row.productCode, this.movementsPage() + 1);
     }
   }
 

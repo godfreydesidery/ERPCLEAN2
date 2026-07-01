@@ -31,10 +31,15 @@ export interface StockOnHandDto {
   uid: string;
   companyId: string;
   branchId: string;
-  /** Foreign key — no product name on this DTO; resolve via ProductService for display. */
   productId: string;
+  /** Denormalised from the product row — always present on the wire. */
+  productCode: string;
+  productName: string;
   quantity: string;
   reorderLevel: string | null;
+  maxQty: string | null;
+  lastMovementAt: string | null;
+  lastCountedAt: string | null;
   negative: boolean;
   low: boolean;
   version: string | null;
