@@ -267,6 +267,22 @@ removed the *implicit* auto-membership that role/branch grants used to trigger).
 § (create-time membership) is warranted for traceability but is not a design change — the authoritative-membership
 invariants (assign-company-first for role/branch grants, remove-blocks-while-access-remains) are untouched.
 
+## F28 — Projects create and issue-to-project sent company uid as branchUid (always "Branch not found")
+
+**2026-07-01 — business-operations simulation (Project Manager could not create a project).**
+
+`ProjectListComponent.create()` and `ProjectDetailComponent.submitIssue()` both passed `company.uid`
+in the `branchUid` field of the create-project and issue-to-project request bodies. The backend
+`ProjectServiceImpl.create` and `IssueToProjectServiceImpl` both call
+`branches.findByUid(req.branchUid()).orElseThrow(() -> new NotFoundException("Branch not found."))` —
+a company uid never matches a branch uid, so **every project creation and every material-issue was
+broken for all users** (root and non-root alike). Root bypasses permission gates but not the branch
+lookup, so CI's EndpointAuthorizationTest and permission smoke-tests did not catch it.
+
+| # | Source | Severity | Finding | Status | Resolution |
+|---|---|---|---|---|---|
+| F28 | sim 2026-07-01 (Project Manager) | HIGH (functional: project create + material-issue broken for all users) | `ProjectListComponent.create()` sent `branchUid: company.uid`; `ProjectDetailComponent.submitIssue()` sent `branchUid: company.uid`. Backend `branches.findByUid(company.uid)` always throws "Branch not found" — a company uid can never match a branch uid. Both paths were broken end-to-end. | FIXED (web only; no backend change) | Both occurrences now read the active branch from `SessionStore.activeBranchUid()` (already injected in both components). A null/empty active branch uid is guarded: `create()` sets `formError` to "Select a branch first." and aborts; `submitIssue()` sets `issueFormError` and aborts. The misleading "branch resolved from context; will use company's default branch uid" comments removed. `project-list.component.spec.ts` updated: the "correct payload" test sets `activeBranchUid: 'BR1'` and now asserts `req.branchUid === 'BR1'`; a new "null-branch guard" case asserts `formError` is set and `create` is not called when `activeBranchUid` is null. No detail-component spec existed for `submitIssue`; the change mirrors the same guard pattern. |
+
 ## Production-gating (carried, still OPEN)
 - **G1** (Slice 2): stable RS256 signing key from a secret store — dev key is in-memory (everyone logged out on restart; not prod-safe).
 - **G2** (Slice 2): access-token denylist on logout (access token currently valid until expiry after logout).

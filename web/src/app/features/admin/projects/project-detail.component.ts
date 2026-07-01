@@ -505,12 +505,15 @@ export class ProjectDetailComponent {
     const company = this.companies()[0];
     if (!company) { this.issueFormError.set('Could not resolve company.'); return; }
 
+    const branchUid = this.session.activeBranchUid();
+    if (!branchUid) { this.issueFormError.set('Select a branch first.'); return; }
+
     this.issuingToJob.set(true);
     this.issueFormError.set(null);
 
     const request: IssueToProjectRequest = {
       companyUid: company.uid,
-      branchUid: company.uid, // branch resolved from context
+      branchUid,
       projectUid: project.uid,
       lines: lines as IssueLine[],
       issueDate: this.issueDate().trim() || undefined,
