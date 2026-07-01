@@ -39,7 +39,7 @@ const ACCESS = {
     ['/admin/ar/receipts/record', 'Record receipt'], ['/admin/ap/supplier-bills/enter', 'Enter supplier bill'],
     ['/admin/tax/vat-returns', 'VAT returns'], ['/admin/tax/wht-register', 'WHT register'],
     ['/admin/cash/statement', 'Cash statement'], ['/admin/reporting/balance-sheet', 'Balance sheet']],
-  CASHIER: [['/admin/cash/accounts', 'Cash accounts'], ['/admin/cash/entries/record', 'Record cash entry'],
+  CASHIER: [['/admin/cash/entries/record', 'Record cash entry'], // cash-account master setup is Finance's (CASH.ACCOUNT.MANAGE), not the cashier's — WAD
     ['/admin/cash/cheques', 'Cheques'], ['/admin/cash/transfers/record', 'Cash transfer'],
     ['/admin/cash/reconciliations', 'Bank reconciliation'], ['/admin/cash/statement', 'Cash statement'],
     ['/admin/ar/receipts/record', 'Record receipt'], ['/admin/ap/payments/record', 'Record payment']],
@@ -49,16 +49,15 @@ const ACCESS = {
     ['/admin/pos/sell', 'POS sell'], ['/admin/blanket-orders', 'Blanket orders'],
     ['/admin/standing-orders', 'Standing orders'], ['/admin/price-lists', 'Price lists']],
   FIELD_SALES_AGENT: [['/admin/sales-orders', 'Sales orders'], ['/admin/customers', 'Customers'],
-    ['/admin/routes', 'Routes'], ['/admin/pos/sell', 'POS sell']],
+    ['/admin/routes', 'Routes']], // a route agent captures van/route orders, not fixed-counter POS — WAD
   PROCUREMENT_OFFICER: [['/admin/purchase-orders', 'Purchase orders'], ['/admin/purchase-requisitions/create', 'Requisition'],
     ['/admin/rfqs/create', 'RFQ'], ['/admin/purchase-returns/create', 'Purchase return'],
     ['/admin/suppliers', 'Suppliers'], ['/admin/products', 'Products'],
-    ['/admin/goods-receipts', 'Goods receipts'], ['/admin/landed-costs/create', 'Landed cost'],
-    ['/admin/blanket-orders', 'Blanket orders']],
+    ['/admin/goods-receipts', 'Goods receipts'], ['/admin/landed-costs/create', 'Landed cost']],
   STOREKEEPER: [['/admin/stock', 'Stock on-hand'], ['/admin/goods-receipts/create', 'Goods receipt'],
     ['/admin/stock-counts/create', 'Stock count'], ['/admin/stock-transfers/create', 'Stock transfer'],
     ['/admin/stock/locations', 'Stock locations'], ['/admin/stock/batches', 'Stock batches'],
-    ['/admin/stock/serials', 'Stock serials'], ['/admin/units', 'Units of measure']],
+    ['/admin/stock/serials', 'Stock serials']], // units-of-measure master is admin/product setup, not the storekeeper's — WAD
   STORES_SUPERVISOR: [['/admin/stock', 'Stock on-hand'], ['/admin/stock-counts/create', 'Stock count'],
     ['/admin/stock-transfers/create', 'Stock transfer'], ['/admin/stock/valuation', 'Stock valuation'],
     ['/admin/stock/valuation/opening', 'Opening valuation'], ['/admin/stock/locations', 'Stock locations']],

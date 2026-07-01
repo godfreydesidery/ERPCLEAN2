@@ -217,6 +217,30 @@ every above-threshold PO is **stranded** — it can't be placed (rejected) and c
 |----|--------|----------|-------|--------|-----|
 | F25 | sim 2026-06-28 (approvals) | HIGH (feature unusable: enabling PO approval strands all over-threshold POs) | Backend PO-approval flow (submit/approve/reject + threshold gate) is fully implemented and the threshold UI exists, but the web PO detail exposes no Submit-for-Approval / Approve action and `purchasesService` has no such method — so a placed-above-threshold PO is rejected with nowhere to go. | FIXED (e170f98) | Frontend: add `submitForApproval(uid)` to the purchases service; show a **"Submit for Approval"** button on a DRAFT PO whose total ≥ the company PO-approval threshold (when approval is enabled), routing it to PENDING; surface the pending/approved/rejected status on the PO detail. Approval decision is taken in the already-wired generic Approvals inbox. No backend change, no migration. |
 
+## F26 — Two more picker read-closure defects: cash-entry counter-GL picker and sales-invoice route picker
+
+**2026-07-01 — business-operations simulation triage (CASHIER, SALES_OFFICER; non-root, narrowly-scoped roles).**
+Same F21/F22/F23 read-closure family. Two screens whose own primary gate the role holds hard-403'd
+on load because a supporting picker read the screen fires unconditionally was gated on a permission
+outside the role's grant set. Seeded codes, not tenant leaks — a role-grant vs screen-read-dependency
+closure gap. Fixed in the **gate layer** (no grant edit, no migration); service-layer tenant scoping
+is unchanged, so the read floor never widens beyond the caller's own company.
+
+| # | Source | Severity | Finding | Status | Resolution |
+|---|---|---|---|---|---|
+| F26a | sim 2026-07-01 (CASHIER) | HIGH (blocker for the cashier's core daily job) | **Record-Cash-Entry loads under `CASH.ENTRY.RECORD` but its mandatory counter-GL-account picker (`GET /api/v1/gl/accounts`, `ChartOfAccountController.list`) was gated `@perm.has('GL.VIEW')`.** A cashier holds `CASH.ENTRY.RECORD` (route-guard + POST write, seeded + granted) and `CASH.VIEW` but not `GL.VIEW`, so `RecordEntryComponent.loadGlAccounts()` 403'd and blanked the screen — the counter account is legitimately needed to post the entry, so the data is not spurious; the gate was too narrow. | FIXED | Gate-layer read-floor (no grant, no migration): list gate → `@perm.has('GL.VIEW') or @perm.has('CASH.ENTRY.RECORD') or @perm.has('CASH.VIEW')`. GL accounts are financially sensitive, so — mirroring F23 (AP.BILL.ENTER / PURCHASE.RECEIVE) — the floor is broadened only to the **adjacent cash verbs** whose own screen requires this read, NOT to plain company membership. Tenant isolation **unchanged**: `ChartOfAccountServiceImpl.list` keeps `scopeGuard.assertCanActIn(ctx, companyId)`, so any holder reads only their own company's chart of accounts. Manifest: added `cashbank.record-entry` (accessPermission=CASH.ENTRY.RECORD) to `screen-read-closure.json`, pinned by `RolePermissionClosureTest` (disjunction row GL.VIEW/CASH.ENTRY.RECORD; CASH.VIEW third disjunct noted). |
+| F26b | sim 2026-07-01 (SALES_OFFICER) | HIGH (blocker for the affected role) | **Sales-Invoices loads under `SALES.INVOICE.VIEW` (the invoice list itself returns) but its OPTIONAL route picker (`GET /api/v1/routes`, `RouteController.list`) was gated `@perm.has('ROUTE.VIEW')`.** `SalesInvoiceListComponent.loadCompanyRoutes()` fires unconditionally on load; a sales officer holds `SALES.INVOICE.VIEW` / `SALES.ORDER.VIEW` but not `ROUTE.VIEW`, so the prefetch 403'd and `looksForbidden()` flagged the whole screen forbidden. | FIXED | Gate-layer read-floor (no grant, no migration): list gate → `@perm.has('ROUTE.VIEW') or @perm.has('SALES.INVOICE.VIEW') or @perm.has('SALES.ORDER.VIEW')`. Routes are low-sensitivity company-scoped reference data (F21 branch/product/WHT tier), but the floor is kept to the **adjacent sales-read verbs** rather than plain membership to preserve least-privilege. Tenant isolation **unchanged**: `RouteServiceImpl.list` keeps `scopeGuard.assertCanActIn(ctx, companyId)`. Manifest: added `sales.invoices` (accessPermission=SALES.INVOICE.VIEW), pinned by `RolePermissionClosureTest` (disjunction row ROUTE.VIEW/SALES.INVOICE.VIEW; SALES.ORDER.VIEW third disjunct noted). |
+
+**Decision rationale.** Both follow the F23 pattern (broaden a picker read to the *adjacent transactional/read
+verb the dependent screen already requires*), NOT the F21 plain-membership floor and NOT the F22
+role-composition path. GL accounts carry financial semantics, so they are treated on the sensitive side of
+the F21 gradient — opened only to the cash verbs, never to any company member. Routes are ambient reference
+data but are opened only to the two sales-read verbs so a stock clerk or POS cashier still cannot enumerate
+them. In both cases the service `assertCanActIn` predicate is untouched, so the read floor cannot cross a
+tenant boundary and is read-only, never a write. Frontend defence-in-depth (carried from F21/F22/F23): both
+pickers should degrade to a permission-aware empty state on any future 403 rather than blanking the screen —
+flagged for frontend-engineer.
+
 ## Production-gating (carried, still OPEN)
 - **G1** (Slice 2): stable RS256 signing key from a secret store — dev key is in-memory (everyone logged out on restart; not prod-safe).
 - **G2** (Slice 2): access-token denylist on logout (access token currently valid until expiry after logout).

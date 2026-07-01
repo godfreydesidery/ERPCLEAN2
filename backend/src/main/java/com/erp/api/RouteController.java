@@ -48,8 +48,15 @@ public class RouteController {
     // Core CRUD
     // -------------------------------------------------------------------------
 
+    // Read-floor (F26): the optional route picker on the Sales-Invoices create form
+    // (@perm SALES.INVOICE.VIEW) fires this list on load. A sales officer holds SALES.INVOICE.VIEW /
+    // SALES.ORDER.VIEW but not ROUTE.VIEW, so the picker hard-403'd and the 403 blanked the whole
+    // screen. Routes are low-sensitivity, company-scoped reference data; mirroring F23 the gate is
+    // broadened only to the adjacent sales-read verbs whose screens legitimately need the picker,
+    // NOT to plain membership. Tenant isolation is unchanged: RouteServiceImpl.list keeps
+    // scopeGuard.assertCanActIn(ctx, companyId), so any holder lists only their own company's routes.
     @GetMapping
-    @PreAuthorize("@perm.has('ROUTE.VIEW')")
+    @PreAuthorize("@perm.has('ROUTE.VIEW') or @perm.has('SALES.INVOICE.VIEW') or @perm.has('SALES.ORDER.VIEW')")
     public ApiResponse<List<RouteDto>> list(@RequestParam Long companyId,
                                             @RequestParam(required = false) String q,
                                             Pageable pageable) {
