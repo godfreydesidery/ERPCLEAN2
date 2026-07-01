@@ -67,6 +67,7 @@ const ACCESS = {
     ['/admin/hr/departments', 'Departments'], ['/admin/hr/leave-requests', 'Leave requests'],
     ['/admin/hr/loans', 'Staff loans'], ['/admin/hr/pay-components', 'Pay components'],
     ['/admin/hr/payroll-runs', 'Payroll runs'], ['/admin/hr/statutory', 'Statutory deductions']],
+  PROJECT_MANAGER: [['/admin/projects', 'Projects'], ['/admin/projects/wip-report', 'Project WIP report']],
 };
 
 // SWEEP mode (SWEEP=1): every persona visits EVERY operational screen (the 15 launchpad destinations),

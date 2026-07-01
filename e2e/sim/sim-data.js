@@ -46,6 +46,8 @@ const ROLES = [
     keywords: ['manufactur', 'work', 'bom', 'production', 'stock', 'cost'] },
   { key: 'HR_PAYROLL_OFFICER', name: 'HR / Payroll Officer', desc: 'Employees, contracts, leave, attendance, payroll, payslips',
     keywords: ['hr.', 'employee', 'contract', 'leave', 'attendance', 'payroll', 'payslip'] },
+  { key: 'PROJECT_MANAGER', name: 'Project Manager', desc: 'Projects, work-in-progress, project costing & billing',
+    keywords: ['project', 'wip', 'cost'] }, // new hire: the Projects module had no owner (coverage gap from the full-remit sweep)
 ];
 
 // 16 STAFF personas (those who log in). homeBranch must match a BRANCHES.name.
@@ -66,6 +68,7 @@ const STAFF = [
   { slug: 'hamisi-ngassa', fullName: 'Hamisi Ngassa', designation: 'Field / Route Sales Agent', username: 'hngassa', homeBranch: 'Mwanza', role: 'FIELD_SALES_AGENT' },
   { slug: 'saidi-karume', fullName: 'Saidi Karume', designation: 'Storekeeper / Stock Controller', username: 'skarume', homeBranch: 'Dar es Salaam HQ', role: 'STOREKEEPER' },
   { slug: 'yusuf-mbwana', fullName: 'Yusuf Mbwana', designation: 'Procurement Officer', username: 'ymbwana', homeBranch: 'Dar es Salaam HQ', role: 'PROCUREMENT_OFFICER' },
+  { slug: 'zawadi-lyimo', fullName: 'Zawadi Lyimo', designation: 'Project Manager', username: 'zlyimo', homeBranch: 'Dar es Salaam HQ', role: 'PROJECT_MANAGER' }, // new hire: owns the Projects module (was unowned)
 ];
 
 const PRODUCTS_SOURCED = [
