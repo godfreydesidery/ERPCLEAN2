@@ -38,12 +38,23 @@ const emptyPage = (): SalesOrderPage => ({
 const stubOrder = {
   uid: 'SO1', id: '1', companyId: '10', branchId: '1',
   orderNumber: 'SO-0001', status: 'DRAFT' as const,
-  customerId: '5', agentId: null, currency: 'TZS', orderDate: '2025-01-01',
+  customerId: '5', customerName: 'Acme Traders', customerCode: 'ACME',
+  agentId: null, agentName: null, currency: 'TZS', orderDate: '2025-01-01',
   sourceQuotationUid: null,
   docDiscountAmount: null, docDiscountPercent: null,
   netTotalAmount: '1000', vatTotalAmount: '180', grossTotalAmount: '1180',
   confirmedAt: null, cancelledAt: null, cancelReason: null, notes: null, lines: [],
 };
+
+const mixedStatusPage = (): SalesOrderPage => ({
+  rows: [
+    { ...stubOrder, uid: 'SO1', orderNumber: 'SO-0001', status: 'DRAFT' as const },
+    { ...stubOrder, uid: 'SO2', orderNumber: 'SO-0002', status: 'CONFIRMED' as const,
+      customerName: 'Beta Supplies', customerCode: 'BETA' },
+    { ...stubOrder, uid: 'SO3', orderNumber: 'SO-0003', status: 'CANCELLED' as const },
+  ],
+  meta: { page: 0, size: 20, totalElements: 3, totalPages: 1, hasNext: false },
+});
 
 function makeSessionStore(canCreate = false) {
   return {
@@ -323,5 +334,94 @@ describe('SalesOrderListComponent — 403 forbidden', () => {
     await vi.runAllTimersAsync();
 
     expect(comp.state()).toBe('forbidden');
+  });
+});
+
+// ── Customer/agent column render (Bug A) ────────────────────────────────────────
+
+describe('SalesOrderListComponent — renders customer', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    makeBed({ listImpl: () => of(mixedStatusPage()) });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    TestBed.resetTestingModule();
+  });
+
+  it('renders the customer name and code in the list, never the raw customerId', async () => {
+    const fixture = TestBed.createComponent(SalesOrderListComponent);
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    const customerCells = Array.from(el.querySelectorAll('tbody tr')).map(
+      (row) => row.querySelectorAll('td')[1]?.textContent ?? '',
+    );
+    expect(customerCells[0]).toContain('Acme Traders');
+    expect(customerCells[0]).toContain('ACME');
+    expect(customerCells[1]).toContain('Beta Supplies');
+    // The raw numeric FK must never be shown to the user in place of the name/code.
+    expect(customerCells[0].trim()).not.toBe(stubOrder.customerId);
+  });
+});
+
+// ── Status filter narrows the list (Bug B) ──────────────────────────────────────
+
+describe('SalesOrderListComponent — status filter', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    makeBed({ listImpl: () => of(mixedStatusPage()) });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    TestBed.resetTestingModule();
+  });
+
+  it('shows all loaded rows when no status is selected', async () => {
+    const comp = TestBed.createComponent(SalesOrderListComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    expect(comp.filteredRows().length).toBe(3);
+  });
+
+  it('onStatusChange narrows filteredRows to the selected status without re-querying the server', async () => {
+    const comp = TestBed.createComponent(SalesOrderListComponent).componentInstance;
+    const svc = TestBed.inject(SalesOrdersService) as any;
+    await vi.runAllTimersAsync();
+    svc.listOrders.mockClear();
+
+    comp.onStatusChange('CONFIRMED');
+
+    expect(comp.statusFilter()).toBe('CONFIRMED');
+    expect(comp.filteredRows().length).toBe(1);
+    expect(comp.filteredRows()[0].uid).toBe('SO2');
+    // Root-cause fix: filtering is client-side over the loaded page — no extra HTTP call.
+    expect(svc.listOrders).not.toHaveBeenCalled();
+  });
+
+  it('narrows the rendered table rows in the DOM when a status is picked', async () => {
+    const fixture = TestBed.createComponent(SalesOrderListComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    let rowCount = (fixture.nativeElement as HTMLElement).querySelectorAll('tbody tr').length;
+    expect(rowCount).toBe(3);
+
+    comp.onStatusChange('CANCELLED');
+    fixture.detectChanges();
+
+    rowCount = (fixture.nativeElement as HTMLElement).querySelectorAll('tbody tr').length;
+    expect(rowCount).toBe(1);
+  });
+
+  it('isEmpty + filterHidAllRows distinguish "no orders" from "no matches for this filter"', async () => {
+    const comp = TestBed.createComponent(SalesOrderListComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.onStatusChange('PARTIALLY_INVOICED'); // no stub row has this status
+    expect(comp.isEmpty()).toBe(true);
+    expect(comp.filterHidAllRows()).toBe(true);
   });
 });

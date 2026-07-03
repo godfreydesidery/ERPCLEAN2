@@ -729,11 +729,29 @@ public class SalesOrderServiceImpl implements SalesOrderService {
     private SalesOrderDto toDto(SalesOrder o) {
         List<SalesOrderLineDto> lines = orderLines.findBySalesOrderIdOrderByLineNo(o.getId())
                 .stream().map(SalesOrderLineDto::from).toList();
-        return SalesOrderDto.from(o, lines);
+        return buildDto(o, lines);
     }
 
     private SalesOrderDto toDtoNoLines(SalesOrder o) {
-        return SalesOrderDto.from(o, List.of());
+        return buildDto(o, List.of());
+    }
+
+    /**
+     * Resolves customer/agent names at read time (mirrors SalesInvoiceServiceImpl.toDto).
+     * agentId is nullable on SalesOrder (unlike SalesInvoice), so it is guarded before lookup.
+     */
+    private SalesOrderDto buildDto(SalesOrder o, List<SalesOrderLineDto> lines) {
+        String customerName = null;
+        String customerCode = null;
+        Customer customer = customers.findById(o.getCustomerId()).orElse(null);
+        if (customer != null) {
+            customerName = customer.getDisplayName();
+            customerCode = customer.getCode();
+        }
+        String agentName = o.getAgentId() != null
+                ? agents.findById(o.getAgentId()).map(Agent::getDisplayName).orElse(null)
+                : null;
+        return SalesOrderDto.from(o, lines, customerName, customerCode, agentName);
     }
 
     private Long requireBranchId(RequestContext.Principal ctx) {
