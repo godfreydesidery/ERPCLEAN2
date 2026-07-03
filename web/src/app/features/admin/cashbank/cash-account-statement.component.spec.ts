@@ -97,15 +97,16 @@ describe('CashAccountStatementComponent', () => {
     expect(comp.currentBalance()).toBe(1500);
   });
 
-  it('fmtMoney coerces number wire value correctly', () => {
+  it('fmtMoney coerces number wire value correctly, with thousand separators (shared util)', () => {
     vi.useFakeTimers();
     makeBed();
     const comp = TestBed.createComponent(CashAccountStatementComponent).componentInstance as any;
-    expect(comp.fmtMoney(1500)).toBe('1500.00');
+    expect(comp.fmtMoney(1500)).toBe('1,500.00');
     expect(comp.fmtMoney(0)).toBe('0.00');
     expect(comp.fmtMoney(null)).toBe('0.00');
     expect(comp.fmtMoney(undefined)).toBe('0.00');
     expect(comp.fmtMoney('999.5')).toBe('999.50');
+    expect(comp.fmtMoney(2221486)).toBe('2,221,486.00');
   });
 
   it('txnsWithRunning computes running balance: IN adds, OUT subtracts', () => {

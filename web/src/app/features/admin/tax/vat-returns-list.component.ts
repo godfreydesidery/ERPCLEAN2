@@ -9,6 +9,7 @@ import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { VatReturnDto } from './models/tax.model';
 import { TaxService } from './tax.service';
+import { formatMoney } from '../../../shared/money.util';
 
 /**
  * VAT Returns list screen (FR-VAT-01 / US-VAT-01).
@@ -149,10 +150,8 @@ export class VatReturnsListComponent {
 
   // ── Display helpers ────────────────────────────────────────────────────────
 
-  fmtMoney(v: number | string | null | undefined): string {
-    const n = +(v ?? 0);
-    return Number.isFinite(n) ? n.toFixed(2) : '0.00';
-  }
+  /** Coerce + format money with thousand separators (shared util). */
+  readonly fmtMoney = formatMoney;
 
   periodLabel(ret: VatReturnDto): string {
     return `${ret.periodYear}-${String(ret.periodMonth).padStart(2, '0')}`;

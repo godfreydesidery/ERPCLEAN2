@@ -88,16 +88,16 @@ describe('VatReturnsListComponent', () => {
     expect(fixture).toBeTruthy();
   });
 
-  it('fmtMoney coerces number wire value (money arrives as number, NOT string)', () => {
+  it('fmtMoney coerces number wire value (money arrives as number, NOT string), thousand-separated', () => {
     vi.useFakeTimers();
     makeBed();
     const comp = TestBed.createComponent(VatReturnsListComponent).componentInstance as any;
-    // Numeric values (BigDecimal serialised as number)
-    expect(comp.fmtMoney(150000)).toBe('150000.00');
+    // Numeric values (BigDecimal serialised as number) — shared formatMoney util adds separators.
+    expect(comp.fmtMoney(150000)).toBe('150,000.00');
     expect(comp.fmtMoney(0)).toBe('0.00');
     expect(comp.fmtMoney(null)).toBe('0.00');
     expect(comp.fmtMoney(undefined)).toBe('0.00');
-    expect(comp.fmtMoney('70000.50')).toBe('70000.50');
+    expect(comp.fmtMoney('70000.50')).toBe('70,000.50');
     // Regression guard: calling string methods on a number would throw — fmtMoney must not
     expect(() => comp.fmtMoney(150000)).not.toThrow();
   });
@@ -145,7 +145,7 @@ describe('VatReturnsListComponent', () => {
     makeBed();
     const comp = TestBed.createComponent(VatReturnsListComponent).componentInstance as any;
     // The template uses +(ret.netVat) comparisons directly — test fmtMoney with negative value
-    expect(comp.fmtMoney(-5000)).toBe('-5000.00');
-    expect(comp.fmtMoney(70000)).toBe('70000.00');
+    expect(comp.fmtMoney(-5000)).toBe('-5,000.00');
+    expect(comp.fmtMoney(70000)).toBe('70,000.00');
   });
 });

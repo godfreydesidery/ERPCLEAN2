@@ -77,6 +77,8 @@ export interface ApprovalDecisionDto {
   approvalRequestStepId: string;
   action: DecisionAction;
   decidedBy: string;
+  /** Friendly display name for decidedBy (user id); null if not resolvable. */
+  decidedByName: string | null;
   decidedAt: string; // ISO Instant
   comment: string | null;
 }

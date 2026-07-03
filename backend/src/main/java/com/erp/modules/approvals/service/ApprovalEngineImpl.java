@@ -240,7 +240,8 @@ public class ApprovalEngineImpl implements ApprovalEngine {
                             .stream()
                             .map(d -> new ApprovalDecisionDto(d.getId(), d.getUid(),
                                     d.getApprovalRequestStepId(), d.getAction(),
-                                    d.getDecidedBy(), d.getDecidedAt(), d.getComment()))
+                                    d.getDecidedBy(), resolveUserName(d.getDecidedBy()),
+                                    d.getDecidedAt(), d.getComment()))
                             .toList();
                     return new ApprovalRequestStepDto(s.getId(), s.getUid(), s.getSequence(),
                             s.getApproverRoleCode(), resolveRoleName(s.getApproverRoleCode()),

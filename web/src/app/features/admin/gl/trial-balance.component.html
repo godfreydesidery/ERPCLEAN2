@@ -162,21 +162,21 @@
                       <td></td>
                       <td class="num mono small">
                         @if (+row.totalDebit !== 0) {
-                          {{ row.totalDebit }}
+                          {{ fmtMoney(row.totalDebit) }}
                         } @else {
                           <span class="text-muted">—</span>
                         }
                       </td>
                       <td class="num mono small">
                         @if (+row.totalCredit !== 0) {
-                          {{ row.totalCredit }}
+                          {{ fmtMoney(row.totalCredit) }}
                         } @else {
                           <span class="text-muted">—</span>
                         }
                       </td>
                       <td class="num mono small"
                           [class.text-danger]="+row.net < 0">
-                        {{ row.net }}
+                        {{ fmtMoney(row.net) }}
                       </td>
                     </tr>
                   }
@@ -186,8 +186,8 @@
               <tfoot class="erp-tfoot fw-semibold">
                 <tr>
                   <td colspan="3">Totals</td>
-                  <td class="num mono">{{ totalDebits() }}</td>
-                  <td class="num mono">{{ totalCredits() }}</td>
+                  <td class="num mono">{{ fmtMoney(totalDebits()) }}</td>
+                  <td class="num mono">{{ fmtMoney(totalCredits()) }}</td>
                   <td class="num">
                     @if (isBalanced()) {
                       <span class="status-tag status-tag--ok">

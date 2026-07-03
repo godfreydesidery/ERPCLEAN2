@@ -7,6 +7,7 @@ import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import {
   ApprovalRequestDto,
+  ApprovalRequestStepDto,
   DecideRequest,
 } from './models/approvals.model';
 import { ApprovalsService } from './approvals.service';
@@ -92,17 +93,14 @@ export class ApprovalRequestDetailComponent {
   });
 
   /**
-   * Best-effort friendly name for a step/decision actor id. The backend only enriches names for
-   * the request-level submitter/resolver (submittedByName/resolvedByName) — not per-step or
-   * per-decision actors. Match against those two known (id, name) pairs; otherwise return null so
-   * the template omits the value rather than ever rendering a raw numeric user id.
+   * Friendly name for the decision that resolved a step. Each decision now carries its own
+   * `decidedByName` from the backend — look up the decision matching the step's resolvedBy
+   * rather than guessing against the request-level submitter/resolver. Returns null (never a
+   * raw numeric id) if not resolvable.
    */
-  resolverName(userId: string | null): string | null {
-    const r = this.request();
-    if (!r || !userId) return null;
-    if (userId === r.submittedBy) return r.submittedByName;
-    if (r.resolvedBy && userId === r.resolvedBy) return r.resolvedByName;
-    return null;
+  stepResolvedByName(step: ApprovalRequestStepDto): string | null {
+    if (!step.resolvedBy) return null;
+    return step.decisions.find((d) => d.decidedBy === step.resolvedBy)?.decidedByName ?? null;
   }
 
   constructor() {
