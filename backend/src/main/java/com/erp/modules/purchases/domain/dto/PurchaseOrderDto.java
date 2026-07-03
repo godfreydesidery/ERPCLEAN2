@@ -1,6 +1,7 @@
 package com.erp.modules.purchases.domain.dto;
 
 import com.erp.modules.purchases.domain.entity.PurchaseOrder;
+import com.erp.modules.purchases.domain.enums.PoApprovalStatus;
 import com.erp.modules.purchases.domain.enums.PoBillingStatus;
 import com.erp.modules.purchases.domain.enums.PurchaseOrderStatus;
 import com.erp.platform.common.money.CurrencyCode;
@@ -38,6 +39,7 @@ public record PurchaseOrderDto(
         String     voidReason,
         Instant    closedAt,
         Instant    createdAt,
+        String     approvalStatus,
         List<PurchaseOrderLineDto> lines
 ) {
     public static PurchaseOrderDto from(PurchaseOrder po, List<PurchaseOrderLineDto> lines) {
@@ -52,6 +54,10 @@ public record PurchaseOrderDto(
                 po.getExpectedDate(), po.getNotes(),
                 po.getOrderedAt(), po.getVoidedAt(), po.getVoidReason(),
                 po.getClosedAt(), po.getCreatedAt(),
+                // NOT_REQUIRED (below threshold / gate off) collapses to null on the wire — the UI
+                // reads "needs approval?" from settings, and treats null as "no approval in play".
+                po.getApprovalStatus() != null && po.getApprovalStatus() != PoApprovalStatus.NOT_REQUIRED
+                        ? po.getApprovalStatus().name() : null,
                 lines);
     }
 }

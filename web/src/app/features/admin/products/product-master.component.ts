@@ -110,6 +110,9 @@ export type TabId = 'general' | 'pricing' | 'supplier' | 'stock' | 'branches';
  *   6. POST /stock/opening-balances (if stockable + qty>0)
  *
  * Each sub-step is independent; failures surface per-section without losing the product.
+ * If the anchor itself fails (e.g. duplicate code), that is surfaced too — formError() plus the
+ * result panel (Product section marked failed, savedUid() stays null) — never a silent no-op
+ * behind the global HTTP-error toast. "Continue editing" reopens the form to retry.
  * BR-PROD-01: SERVICE type forces stockable=false.
  */
 @Component({
@@ -259,6 +262,9 @@ export class ProductMasterComponent implements OnInit {
     const results = this.sectionResults();
     return results.length > 0 && results.every((r) => r.status === 'done');
   });
+  /** True when the anchor (product create/update) step itself failed — nothing was saved,
+   *  savedUid() is still null, and the sub-steps never ran. */
+  readonly anchorFailed = computed(() => this.sectionResults()[0]?.status === 'failed');
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -719,7 +725,13 @@ export class ProductMasterComponent implements OnInit {
         this.runSubSteps(saved.uid);
       },
       error: (err) => {
-        this.setSection(0, 'failed', this.messageFrom(err, 'Could not save the product.'));
+        // The anchor is the product itself — nothing was saved. Surface this clearly on-screen
+        // (both the inline form banner and the result panel below) rather than relying on the
+        // global HTTP-error toast/modal, which otherwise makes the Save button look inert.
+        const msg = this.messageFrom(err, 'Could not save the product.');
+        this.setSection(0, 'failed', msg);
+        this.formError.set(msg);
+        this.saveComplete.set(true);
         this.saving.set(false);
       },
     });

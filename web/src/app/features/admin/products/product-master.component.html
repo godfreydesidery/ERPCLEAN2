@@ -832,7 +832,10 @@
       <div class="erp-card mt-3" role="status" aria-live="polite">
         <div class="erp-card__head">
           <h2>
-            @if (hasAnyFailure()) {
+            @if (anchorFailed()) {
+              <i class="bi bi-x-circle-fill text-danger me-2" aria-hidden="true"></i>
+              Could not save the product.
+            } @else if (hasAnyFailure()) {
               <i class="bi bi-exclamation-triangle-fill text-warning me-2" aria-hidden="true"></i>
               Product saved. Some details need attention.
             } @else {
@@ -872,9 +875,11 @@
             }
           </ul>
           <div class="d-flex gap-2">
-            <button type="button" class="btn btn-primary" (click)="openProduct()">
-              <i class="bi bi-box-arrow-up-right me-1" aria-hidden="true"></i>Open product
-            </button>
+            @if (savedUid()) {
+              <button type="button" class="btn btn-primary" (click)="openProduct()">
+                <i class="bi bi-box-arrow-up-right me-1" aria-hidden="true"></i>Open product
+              </button>
+            }
             <a routerLink="/admin/products" class="btn btn-outline-secondary">
               Back to list
             </a>

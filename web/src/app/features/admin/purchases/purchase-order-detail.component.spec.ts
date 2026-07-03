@@ -22,6 +22,10 @@
  * 16.  submitForApproval() sets localApprovalStatus to PENDING on success.
  * 17.  submitForApproval() sets submitError on failure.
  * 18.  effectiveApprovalStatus prefers po().approvalStatus over localApprovalStatus.
+ * 19.  canPlace is true (and Place Order renders, enabled) from po().approvalStatus alone
+ *      ('APPROVED' from the DTO — no local override needed).
+ * 20.  canPlace is false and the awaiting-approval banner renders (no Place Order button) when
+ *      po().approvalStatus is 'PENDING'.
  */
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -376,5 +380,51 @@ describe('PurchaseOrderDetailComponent — Submit for Approval (F25)', () => {
     comp.localApprovalStatus.set('PENDING');
     // The DTO field should win
     expect(comp.effectiveApprovalStatus()).toBe('APPROVED');
+  });
+
+  // ── 19. canPlace true + Place Order renders from the DTO field alone (APPROVED) ─
+
+  it('canPlace is true and Place Order renders enabled when po().approvalStatus is APPROVED', async () => {
+    const { comp, fixture } = await setup({
+      settingsResponse: STUB_SETTINGS_ENABLED,
+      poOverride: { approvalStatus: 'APPROVED' } as any,
+    });
+    comp.lines.set([{ uid: 'L1' } as any]);
+    fixture.detectChanges();
+
+    expect(comp.effectiveApprovalStatus()).toBe('APPROVED');
+    expect(comp.canPlace()).toBe(true);
+
+    const buttons: HTMLButtonElement[] = Array.from(
+      fixture.nativeElement.querySelectorAll('button'),
+    );
+    const placeBtn = buttons.find((b) => b.textContent?.includes('Place Order'));
+    expect(placeBtn).toBeTruthy();
+    expect(placeBtn!.disabled).toBe(false);
+  });
+
+  // ── 20. canPlace false + awaiting-approval banner renders (PENDING, no local override) ─
+
+  it('canPlace is false and shows the awaiting-approval banner when po().approvalStatus is PENDING', async () => {
+    const { comp, fixture } = await setup({
+      settingsResponse: STUB_SETTINGS_ENABLED,
+      poOverride: { approvalStatus: 'PENDING' } as any,
+    });
+    comp.lines.set([{ uid: 'L1' } as any]);
+    fixture.detectChanges();
+
+    expect(comp.effectiveApprovalStatus()).toBe('PENDING');
+    expect(comp.canPlace()).toBe(false);
+
+    const buttons: HTMLButtonElement[] = Array.from(
+      fixture.nativeElement.querySelectorAll('button'),
+    );
+    expect(buttons.some((b) => b.textContent?.includes('Place Order'))).toBe(false);
+
+    const banner = fixture.nativeElement.querySelector(
+      '[aria-label="This order is awaiting approval"]',
+    );
+    expect(banner).toBeTruthy();
+    expect(banner.textContent).toContain('Awaiting approval');
   });
 });

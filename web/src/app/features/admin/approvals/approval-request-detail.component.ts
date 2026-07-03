@@ -10,6 +10,7 @@ import {
   DecideRequest,
 } from './models/approvals.model';
 import { ApprovalsService } from './approvals.service';
+import { documentTypeLabel, documentTypeRoute } from './document-type.util';
 
 type LoadState = 'loading' | 'idle' | 'error';
 
@@ -77,6 +78,18 @@ export class ApprovalRequestDetailComponent {
   readonly canRejectAction = computed(() => this.canDecide() && this.isPending());
   readonly canRecallAction = computed(() => this.canRecall() && this.isPending());
   readonly canCancelAction = computed(() => this.canAdmin() && !this.isTerminal());
+
+  // ── Document type + link (friendly label; route to the real business document,
+  // not the generated-PDF documents log) ────────────────────────────────────────
+  readonly docTypeLabel = computed(() => {
+    const r = this.request();
+    return r ? documentTypeLabel(r.documentType) : '';
+  });
+
+  readonly docLink = computed(() => {
+    const r = this.request();
+    return r ? documentTypeRoute(r.documentType, r.documentUid) : null;
+  });
 
   constructor() {
     queueMicrotask(() => this.init());

@@ -99,11 +99,20 @@
       <div class="col-lg-8">
         <h2 class="erp-section-title">
           Finance
+          <span class="status-tag status-tag--neutral ms-2"
+                title="Always company-wide — the Branch filter does not narrow this panel">
+            Group-wide
+          </span>
           <a routerLink="/admin/reporting/income-statement" class="ms-2 small text-muted"
              aria-label="Go to income statement">
             <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
           </a>
         </h2>
+        @if (branchScopeActive()) {
+          <p class="text-muted small mb-2">
+            <i class="bi bi-info-circle me-1" aria-hidden="true"></i>Group-wide — not affected by the branch filter above.
+          </p>
+        }
         @switch (financeState()) {
           @case ('loading') {
             <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
@@ -175,11 +184,20 @@
       <div class="col-lg-4">
         <h2 class="erp-section-title">
           Cash Position
+          <span class="status-tag status-tag--neutral ms-2"
+                title="Always company-wide — the Branch filter does not narrow this panel">
+            Group-wide
+          </span>
           <a routerLink="/admin/cash/accounts" class="ms-2 small text-muted"
              aria-label="Go to cash accounts">
             <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
           </a>
         </h2>
+        @if (branchScopeActive()) {
+          <p class="text-muted small mb-2">
+            <i class="bi bi-info-circle me-1" aria-hidden="true"></i>Group-wide — not affected by the branch filter above.
+          </p>
+        }
         @switch (financeState()) {
           @case ('loading') {
             <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
@@ -240,7 +258,18 @@
     </div>
 
     <!-- ── Working Capital row ───────────────────────────────────────────────── -->
-    <h2 class="erp-section-title">Working Capital</h2>
+    <h2 class="erp-section-title">
+      Working Capital
+      <span class="status-tag status-tag--neutral ms-2"
+            title="Always company-wide — the Branch filter does not narrow this panel">
+        Group-wide
+      </span>
+    </h2>
+    @if (branchScopeActive()) {
+      <p class="text-muted small mb-2">
+        <i class="bi bi-info-circle me-1" aria-hidden="true"></i>Group-wide — not affected by the branch filter above.
+      </p>
+    }
     @switch (workingCapitalState()) {
       @case ('loading') {
         <p class="text-muted d-flex align-items-center gap-2 mb-4" aria-live="polite">
@@ -304,11 +333,20 @@
     <!-- ── Inventory panel ───────────────────────────────────────────────────── -->
     <h2 class="erp-section-title">
       Inventory
+      <span class="status-tag status-tag--neutral ms-2"
+            title="Always company-wide — the Branch filter does not narrow this panel">
+        Group-wide
+      </span>
       <a routerLink="/admin/stock/valuation" class="ms-2 small text-muted"
          aria-label="Go to stock valuation">
         <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
       </a>
     </h2>
+    @if (branchScopeActive()) {
+      <p class="text-muted small mb-2">
+        <i class="bi bi-info-circle me-1" aria-hidden="true"></i>Group-wide — not affected by the branch filter above.
+      </p>
+    }
     @switch (inventoryState()) {
       @case ('loading') {
         <p class="text-muted d-flex align-items-center gap-2 mb-4" aria-live="polite">
@@ -357,6 +395,12 @@
     <!-- ── CRM panel ─────────────────────────────────────────────────────────── -->
     <h2 class="erp-section-title">
       CRM
+      @if (branchScopeActive()) {
+        <span class="status-tag status-tag--info ms-2"
+              title="This panel is filtered to the selected branch">
+          This branch
+        </span>
+      }
       <a routerLink="/admin/crm/pipeline" class="ms-2 small text-muted"
          aria-label="Go to CRM pipeline dashboard">
         <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
@@ -449,7 +493,18 @@
     }
 
     <!-- ── Revenue Trend (12-period CSS bars) ──────────────────────────────── -->
-    <h2 class="erp-section-title">Revenue Trend (12 periods)</h2>
+    <h2 class="erp-section-title">
+      Revenue Trend (12 periods)
+      <span class="status-tag status-tag--neutral ms-2"
+            title="Always company-wide — the Branch filter does not narrow this panel">
+        Group-wide
+      </span>
+    </h2>
+    @if (branchScopeActive()) {
+      <p class="text-muted small mb-2">
+        <i class="bi bi-info-circle me-1" aria-hidden="true"></i>Group-wide — not affected by the branch filter above.
+      </p>
+    }
     @switch (revenueTrendState()) {
       @case ('loading') {
         <p class="text-muted d-flex align-items-center gap-2 mb-4" aria-live="polite">
@@ -503,7 +558,18 @@
     }
 
     <!-- ── Net Profit Trend (12-period CSS bars) ─────────────────────────────── -->
-    <h2 class="erp-section-title mt-3">Net Profit Trend (12 periods)</h2>
+    <h2 class="erp-section-title mt-3">
+      Net Profit Trend (12 periods)
+      <span class="status-tag status-tag--neutral ms-2"
+            title="Always company-wide — the Branch filter does not narrow this panel">
+        Group-wide
+      </span>
+    </h2>
+    @if (branchScopeActive()) {
+      <p class="text-muted small mb-2">
+        <i class="bi bi-info-circle me-1" aria-hidden="true"></i>Group-wide — not affected by the branch filter above.
+      </p>
+    }
     @switch (netProfitTrendState()) {
       @case ('loading') {
         <p class="text-muted d-flex align-items-center gap-2 mb-4" aria-live="polite">
@@ -561,6 +627,12 @@
     <!-- ── Sales by Branch ──────────────────────────────────────────────────── -->
     <h2 class="erp-section-title mt-3">
       Sales by Branch
+      @if (branchScopeActive()) {
+        <span class="status-tag status-tag--info ms-2"
+              title="This panel is filtered to the selected branch">
+          This branch
+        </span>
+      }
       <a routerLink="/admin/sales-invoices" class="ms-2 small text-muted"
          aria-label="Go to sales invoices">
         <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>

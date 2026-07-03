@@ -27,7 +27,8 @@ import { SalesOrderDto } from '../models/sales-orders.model';
 const agentlessOrder: SalesOrderDto = {
   uid: 'SO1', id: '1', companyId: '10', branchId: '1',
   orderNumber: 'SO-0001', status: 'CONFIRMED' as const,
-  customerId: '5', agentId: null, currency: 'TZS', orderDate: '2025-01-01',
+  customerId: '5', customerName: 'Acme Traders', customerCode: 'ACME',
+  agentId: null, agentName: null, currency: 'TZS', orderDate: '2025-01-01',
   sourceQuotationUid: null,
   docDiscountAmount: null, docDiscountPercent: null,
   netTotalAmount: '1000', vatTotalAmount: '180', grossTotalAmount: '1180',
@@ -93,6 +94,12 @@ function createComponent(uid = 'SO1') {
   const fixture = TestBed.createComponent(SalesOrderDetailComponent);
   fixture.componentRef.setInput('uid', uid);
   return fixture.componentInstance;
+}
+
+function createFixture(uid = 'SO1') {
+  const fixture = TestBed.createComponent(SalesOrderDetailComponent);
+  fixture.componentRef.setInput('uid', uid);
+  return fixture;
 }
 
 describe('SalesOrderDetailComponent — set agent', () => {
@@ -192,5 +199,54 @@ describe('SalesOrderDetailComponent — set agent', () => {
     expect(comp.agentError()).toContain('already been invoiced');
     expect(comp.savingAgent()).toBe(false);
     expect(comp.showAgentForm()).toBe(true);
+  });
+});
+
+// ── Header: customer + agent display (Bug A) ───────────────────────────────────
+
+describe('SalesOrderDetailComponent — header shows customer and agent', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+    TestBed.resetTestingModule();
+  });
+
+  it('renders the customer name and code prominently, never the raw customerId', async () => {
+    makeBed({ order: agentlessOrder });
+    const fixture = createFixture();
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    const dts = Array.from(el.querySelectorAll('dt')).map((d) => d.textContent?.trim());
+    const customerIdx = dts.indexOf('Customer');
+    expect(customerIdx).toBeGreaterThanOrEqual(0);
+    const customerDd = el.querySelectorAll('dd')[customerIdx];
+    const customerText = customerDd.textContent ?? '';
+    expect(customerText).toContain('Acme Traders');
+    expect(customerText).toContain('ACME');
+    // The raw numeric FK must never be shown to the user in place of the name/code.
+    expect(customerText.trim()).not.toBe(agentlessOrder.customerId);
+  });
+
+  it('renders "—" for the sales agent when agentName is null', async () => {
+    makeBed({ order: agentlessOrder });
+    const fixture = createFixture();
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('Sales Agent');
+    expect(text).toContain('—');
+  });
+
+  it('renders the sales agent name when present', async () => {
+    makeBed({ order: { ...orderWithAgent, agentName: 'Jane Agent' } });
+    const fixture = createFixture();
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('Jane Agent');
   });
 });

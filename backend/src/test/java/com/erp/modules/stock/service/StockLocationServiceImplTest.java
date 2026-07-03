@@ -19,6 +19,7 @@ import com.erp.modules.stock.domain.entity.StockLocation;
 import com.erp.modules.stock.domain.enums.LocationType;
 import com.erp.modules.stock.repository.StockLocationRepository;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.ForbiddenException;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
@@ -150,6 +151,40 @@ class StockLocationServiceImplTest {
         // findByCompanyIdAndBranchIdAndIsDefaultTrue must NOT be called when makeDefault=false
         verify(locations, never()).findByCompanyIdAndBranchIdAndIsDefaultTrue(any(), any());
         verify(locations, never()).saveAndFlush(any());
+    }
+
+    // -------------------------------------------------------------------------
+    // Error-message-hygiene defect D2: duplicate code (real unique key: company_id, code —
+    // uq_stock_location_company_code) must throw a friendly ConflictException naming the
+    // clashing code, pre-checked before save, never the generic DB-constraint catch-all.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void create_duplicateCode_throwsFriendlyConflict() {
+        when(locations.existsByCompanyIdAndCode(COMPANY_ID, "LOC-001")).thenReturn(true);
+
+        CreateStockLocationRequest req = new CreateStockLocationRequest(
+                "LOC-001", "Main Warehouse", LocationType.WAREHOUSE, "BRANCH-UID", false);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.create(req))
+                .isInstanceOf(ConflictException.class)
+                .hasMessage("A stock location with code LOC-001 already exists in this company.");
+
+        verify(locations, never()).save(any());
+    }
+
+    @Test
+    void create_uniqueCode_doesNotThrow() {
+        when(locations.existsByCompanyIdAndCode(COMPANY_ID, "LOC-999")).thenReturn(false);
+        StockLocation newLoc = stubNewLocation(false);
+        when(locations.save(any(StockLocation.class))).thenReturn(newLoc);
+
+        CreateStockLocationRequest req = new CreateStockLocationRequest(
+                "LOC-999", "New Store", LocationType.STORE, "BRANCH-UID", false);
+
+        service.create(req);
+
+        verify(locations).save(any(StockLocation.class));
     }
 
     // -------------------------------------------------------------------------

@@ -218,15 +218,27 @@
         @if (isEmpty()) {
           <div class="erp-empty">
             <i class="bi bi-bag-check"></i>
-            No sales orders yet. Create one above.
+            @if (filterHidAllRows()) {
+              No orders on this page match the "{{ statusFilter() }}" status.
+            } @else {
+              No sales orders yet. Create one above.
+            }
           </div>
         } @else {
+          @if (statusFilter() && meta().totalPages > 1) {
+            <p class="text-muted small mb-2">
+              <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
+              Status filter applies to the loaded page only ({{ filteredRows().length }} of {{ rows().length }} shown). Page through for more.
+            </p>
+          }
           <div class="erp-table-wrap">
             <table class="erp-table">
               <caption class="visually-hidden">Sales orders</caption>
               <thead>
                 <tr>
                   <th scope="col">Order #</th>
+                  <th scope="col">Customer</th>
+                  <th scope="col">Agent</th>
                   <th scope="col">Status</th>
                   <th scope="col">Order Date</th>
                   <th scope="col" class="num">Total (gross)</th>
@@ -234,9 +246,16 @@
                 </tr>
               </thead>
               <tbody>
-                @for (o of rows(); track o.uid) {
+                @for (o of filteredRows(); track o.uid) {
                   <tr>
                     <td class="mono">{{ orderLabel(o) }}</td>
+                    <td>
+                      {{ o.customerName ?? '—' }}
+                      @if (o.customerCode) {
+                        <br /><span class="small text-muted mono">{{ o.customerCode }}</span>
+                      }
+                    </td>
+                    <td class="small text-muted">{{ o.agentName ?? '—' }}</td>
                     <td>
                       <span class="status-tag"
                             [class.status-tag--ok]="o.status === 'FULFILLED' || o.status === 'INVOICED'"

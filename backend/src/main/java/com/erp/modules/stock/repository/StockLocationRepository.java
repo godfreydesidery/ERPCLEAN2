@@ -16,6 +16,9 @@ public interface StockLocationRepository extends JpaRepository<StockLocation, Lo
 
     Optional<StockLocation> findByUid(String uid);
 
+    /** Duplicate-guard for create: real unique key is (company_id, code) — uq_stock_location_company_code. */
+    boolean existsByCompanyIdAndCode(Long companyId, String code);
+
     /** Tenant-scoped paged list for the location management endpoint. */
     Page<StockLocation> findByCompanyIdAndBranchId(Long companyId, Long branchId, Pageable pageable);
 

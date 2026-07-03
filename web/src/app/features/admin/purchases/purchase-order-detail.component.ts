@@ -37,11 +37,13 @@ type LoadState = 'loading' | 'idle' | 'error';
  *   CLOSED / VOID → read-only
  * Received / outstanding qty shown per line from server DTO fields — no client computation.
  *
- * Approval status note: the backend PurchaseOrderDto record does not yet include approvalStatus
- * in its serialised output. The component therefore fetches PurchaseSettings to decide whether to
- * show the Submit-for-Approval button, and tracks the current session's approval state via a local
- * signal (localApprovalStatus) so the PENDING banner persists while the user stays on the page.
- * If the DTO later gains the field, po().approvalStatus takes precedence via effectiveApprovalStatus.
+ * Approval status note: the backend PurchaseOrderDto emits `approvalStatus`, reconciled from the
+ * approval engine on every fetch (loadPo/refetchPo) — so reloading an approved/rejected PO reflects
+ * the persisted decision, even in a fresh session. The component also fetches PurchaseSettings to
+ * decide whether to show the Submit-for-Approval button. A local signal (localApprovalStatus) is
+ * set optimistically to PENDING right after a successful submit (before the refetch round-trip
+ * resolves) so the banner appears instantly; effectiveApprovalStatus always prefers the DTO field
+ * once it is available, so the persisted server truth wins.
  */
 @Component({
   selector: 'app-purchase-order-detail',
@@ -70,8 +72,8 @@ export class PurchaseOrderDetailComponent {
   readonly purchaseSettings = signal<PurchaseSettingsDto | null>(null);
 
   /**
-   * Local approval-status mirror. Seeded from po().approvalStatus if the backend ever emits it;
-   * otherwise updated when the user submits for approval in this session.
+   * Local approval-status mirror. Seeded from po().approvalStatus on load, and set optimistically
+   * when the user submits for approval in this session (ahead of the refetch confirming it).
    */
   readonly localApprovalStatus = signal<PoApprovalStatus | null>(null);
 
@@ -148,8 +150,9 @@ export class PurchaseOrderDetailComponent {
   readonly hasLines = computed(() => this.lines().length > 0);
 
   /**
-   * The effective approval status: prefer the field from the PO DTO (if the backend ever emits
-   * it), otherwise fall back to the locally tracked signal that reflects this session's action.
+   * The effective approval status: prefer the field from the PO DTO — the persisted, reconciled
+   * status — falling back to the locally tracked signal only for the brief window between a
+   * successful submit and the refetch that confirms it from the server.
    */
   readonly effectiveApprovalStatus = computed<PoApprovalStatus | null>(() => {
     const fromDto = this.po()?.approvalStatus;
@@ -227,7 +230,7 @@ export class PurchaseOrderDetailComponent {
       next: (po) => {
         this.po.set(po);
         this.poState.set('idle');
-        // Seed the local approval status from the DTO field when the backend provides it.
+        // Seed the local approval status from the reconciled DTO field.
         if (po.approvalStatus) {
           this.localApprovalStatus.set(po.approvalStatus);
         }
@@ -383,7 +386,7 @@ export class PurchaseOrderDetailComponent {
       next: () => {
         this.submitting.set(false);
         this.alerts.success('Order submitted for approval');
-        // The backend response DTO does not yet carry approvalStatus; track locally.
+        // Optimistic local update — refetchPo() below reconciles it against the persisted status.
         this.localApprovalStatus.set('PENDING');
         this.refetchPo();
       },

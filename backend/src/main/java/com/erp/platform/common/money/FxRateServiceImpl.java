@@ -9,6 +9,7 @@ import com.erp.modules.fx.repository.CurrencyRateRepository;
 import com.erp.modules.fx.repository.CurrencyRepository;
 import com.erp.modules.iam.domain.entity.Company;
 import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
@@ -118,6 +119,17 @@ public class FxRateServiceImpl implements FxRateService {
         }
 
         String rateType = req.rateType() != null ? req.rateType() : "SPOT";
+
+        // Pre-check the real unique key (uq_currency_rate: company_id, from_currency, to_currency,
+        // effective_date, rate_type) so the caller gets a specific, friendly 409 instead of the
+        // generic DB-constraint catch-all (error-message-hygiene defect D2).
+        if (rates.existsByCompanyIdAndFromCurrencyAndToCurrencyAndEffectiveDateAndRateType(
+                req.companyId(), req.fromCurrency(), req.toCurrency(), req.effectiveDate(), rateType)) {
+            throw new ConflictException(String.format(
+                    "An exchange rate for %s→%s on %s already exists.",
+                    req.fromCurrency(), req.toCurrency(), req.effectiveDate()));
+        }
+
         Long actorId = actorId();
 
         CurrencyRate rate = new CurrencyRate(

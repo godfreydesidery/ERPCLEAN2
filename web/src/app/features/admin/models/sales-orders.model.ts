@@ -122,7 +122,13 @@ export interface SalesOrderDto {
   orderNumber: string | null;
   status: SalesOrderStatus;
   customerId: string;
+  /** Display name for the customer — never render customerId to users. */
+  customerName: string | null;
+  /** Customer's short code, shown as a muted secondary alongside the name. */
+  customerCode: string | null;
   agentId: string | null;
+  /** Display name for the sales agent — never render agentId to users. */
+  agentName: string | null;
   currency: string;
   orderDate: string;
   sourceQuotationUid: string | null;

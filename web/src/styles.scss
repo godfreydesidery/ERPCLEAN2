@@ -284,6 +284,14 @@ body {
 .erp-table-wrap {
   width: 100%;
   overflow-x: auto;
+  /* Horizontal-scroll only. Declare overflow-y explicitly: with overflow-x:auto and
+     overflow-y left as `visible`, CSS forces the COMPUTED overflow-y to `auto`, which makes
+     a table that is 1px over on height (sub-pixel row rounding) register as a vertically
+     scrollable region — tripping axe's serious `scrollable-region-focusable` even though the
+     table fits and there is nothing to scroll vertically. `hidden` keeps it a horizontal-only
+     scroller (no max-height here, so nothing is actually clipped). Genuine horizontal overflow
+     is made keyboard-reachable by ScrollableRegionService (core/a11y). */
+  overflow-y: hidden;
   border-radius: var(--erp-radius);
   -webkit-overflow-scrolling: touch;  /* smooth momentum scrolling on iOS */
 }
