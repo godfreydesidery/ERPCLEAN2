@@ -307,9 +307,10 @@ class PurchaseOrderServiceImplTest {
 
     private ApprovalRequestDto engineState(String documentUid, ApprovalRequestStatus status) {
         return new ApprovalRequestDto(
-                1L, "APR-UID-1", 10L, 20L, "APR-0001", "PURCHASE_ORDER", documentUid,
+                1L, "APR-UID-1", 10L, 20L, "HQ Branch", "HQ", "APR-0001", "PURCHASE_ORDER", documentUid,
                 BigDecimal.TEN, "TZS", status, 1, false,
-                null, null, "summary", 1L, Instant.now(), Instant.now(), 1L, List.of());
+                null, null, "summary", 1L, "Submitter Name", Instant.now(), Instant.now(),
+                1L, "Resolver Name", List.of());
     }
 
     private PurchaseOrderLine stubLine() {

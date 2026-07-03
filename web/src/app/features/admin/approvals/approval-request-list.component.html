@@ -88,7 +88,9 @@
               <thead>
                 <tr>
                   <th scope="col">Request #</th>
+                  <th scope="col">Branch</th>
                   <th scope="col">Document Type</th>
+                  <th scope="col">Submitted By</th>
                   <th scope="col" class="text-end">Amount</th>
                   <th scope="col">Status</th>
                   <th scope="col">Submitted</th>
@@ -100,7 +102,26 @@
                 @for (r of rows(); track r.uid) {
                   <tr>
                     <td class="mono">{{ r.requestNumber }}</td>
+                    <td>
+                      @if (r.branchName) {
+                        {{ r.branchName }}
+                        @if (r.branchCode) {
+                          <span class="d-block text-muted small mono">{{ r.branchCode }}</span>
+                        }
+                      } @else {
+                        <span class="text-muted" aria-hidden="true">—</span>
+                        <span class="visually-hidden">No branch on record</span>
+                      }
+                    </td>
                     <td>{{ docTypeLabel(r.documentType) }}</td>
+                    <td>
+                      @if (r.submittedByName) {
+                        {{ r.submittedByName }}
+                      } @else {
+                        <span class="text-muted" aria-hidden="true">—</span>
+                        <span class="visually-hidden">Unknown submitter</span>
+                      }
+                    </td>
                     <td class="num">{{ r.currency }} {{ +r.amount | number:'1.2-2' }}</td>
                     <td>
                       <span class="status-tag"
