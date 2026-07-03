@@ -68,6 +68,13 @@
                 <div class="small text-muted">{{ w.finishedProductName }}</div>
               </div>
               <div class="col-sm-2">
+                <div class="small text-muted">Branch</div>
+                <div class="fw-semibold">{{ w.branchName ?? '—' }}</div>
+                @if (w.branchCode) {
+                  <div class="small text-muted">{{ w.branchCode }}</div>
+                }
+              </div>
+              <div class="col-sm-2">
                 <div class="small text-muted">Planned Qty</div>
                 <div class="font-monospace">{{ +w.plannedQty | number:'1.2-6' }}</div>
               </div>

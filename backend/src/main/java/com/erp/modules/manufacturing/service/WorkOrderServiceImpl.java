@@ -344,8 +344,10 @@ public class WorkOrderServiceImpl implements WorkOrderService {
     // -------------------------------------------------------------------------
 
     WorkOrderDto toDto(WorkOrder wo) {
+        Branch branch = resolveBranchQuiet(wo.getBranchId());
         return new WorkOrderDto(
                 wo.getId(), wo.getUid(), wo.getWoNumber(), wo.getCompanyId(), wo.getBranchId(),
+                branch != null ? branch.getName() : null, branch != null ? branch.getCode() : null,
                 wo.getFinishedProductId(), wo.getFinishedProductCode(), wo.getFinishedProductName(),
                 wo.getBomId(), wo.getBomUid(),
                 wo.getPlannedQty(), wo.getGoodQty(), wo.getScrapQty(),
@@ -367,8 +369,10 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         List<WorkOrderOperationDto> opDtos = operations
                 .findByWorkOrderIdOrderBySeqNoAsc(wo.getId()).stream()
                 .map(this::toOpDto).toList();
+        Branch branch = resolveBranchQuiet(wo.getBranchId());
         return new WorkOrderDto(
                 wo.getId(), wo.getUid(), wo.getWoNumber(), wo.getCompanyId(), wo.getBranchId(),
+                branch != null ? branch.getName() : null, branch != null ? branch.getCode() : null,
                 wo.getFinishedProductId(), wo.getFinishedProductCode(), wo.getFinishedProductName(),
                 wo.getBomId(), wo.getBomUid(),
                 wo.getPlannedQty(), wo.getGoodQty(), wo.getScrapQty(),
@@ -381,6 +385,14 @@ public class WorkOrderServiceImpl implements WorkOrderService {
                 wo.getClosedAt(), wo.getCancelledAt(), wo.getNotes(),
                 wo.getCreatedAt(), wo.getCreatedBy(),
                 compDtos, opDtos);
+    }
+
+    /**
+     * Resolves the branch row for name/code enrichment. Defensive: a missing row (should not
+     * happen) returns null so the DTO build never fails the read.
+     */
+    private Branch resolveBranchQuiet(Long branchId) {
+        return branches.findById(branchId).orElse(null);
     }
 
     WorkOrderComponentDto toCompDto(WorkOrderComponent c) {

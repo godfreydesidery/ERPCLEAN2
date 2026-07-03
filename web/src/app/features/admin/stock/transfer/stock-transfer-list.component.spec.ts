@@ -27,8 +27,10 @@ const STUB_TRANSFER = {
   transferNumber: 'TRF-0001',
   status: 'DRAFT' as const,
   transferMode: 'IN_TRANSIT',
-  sourceBranchId: '1', sourceLocationId: '2',
-  destBranchId: '3', destLocationId: '4',
+  sourceBranchId: '1', sourceBranchName: 'Head Office', sourceBranchCode: 'BR-01',
+  sourceLocationId: '2', sourceLocationName: 'Main Warehouse',
+  destBranchId: '3', destBranchName: 'Mwanza Branch', destBranchCode: 'BR-02',
+  destLocationId: '4', destLocationName: 'Mwanza Store',
   transferDate: '2025-01-15',
   dispatchedAt: null, receivedAt: null,
   notes: null, lines: [],
@@ -128,6 +130,43 @@ describe('StockTransferListComponent — status pill', () => {
     const pill: HTMLElement | null = fixture.nativeElement.querySelector('.status-tag');
     expect(pill).not.toBeNull();
     expect(pill!.classList).toContain(expectedClass);
+  });
+});
+
+// ── Route column render (branch-everywhere) ────────────────────────────────────
+
+describe('StockTransferListComponent — route column', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('renders a compact From→To route with branch and location names, never the raw ids', async () => {
+    makeBed();
+    const fixture = TestBed.createComponent(StockTransferListComponent);
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const row = fixture.nativeElement.querySelector('tbody tr') as HTMLElement;
+    const routeCell = row.querySelectorAll('td')[4]?.textContent ?? '';
+    expect(routeCell).toContain('Head Office');
+    expect(routeCell).toContain('Mwanza Branch');
+    expect(routeCell).toContain('Main Warehouse');
+    expect(routeCell).toContain('Mwanza Store');
+    expect(routeCell).not.toContain(STUB_TRANSFER.sourceBranchId);
+  });
+
+  it('renders "—" for a missing branch name gracefully', async () => {
+    const page = (): StockTransferPage => ({
+      rows: [{ ...STUB_TRANSFER, sourceBranchName: null, destBranchName: null }],
+      meta: { page: 0, size: 20, totalElements: 1, totalPages: 1, hasNext: false },
+    });
+    makeBed({ listImpl: () => of(page()) });
+    const fixture = TestBed.createComponent(StockTransferListComponent);
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const row = fixture.nativeElement.querySelector('tbody tr') as HTMLElement;
+    const routeCell = row.querySelectorAll('td')[4]?.textContent ?? '';
+    expect(routeCell).toContain('—');
   });
 });
 

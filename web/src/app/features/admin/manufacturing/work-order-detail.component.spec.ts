@@ -26,6 +26,7 @@ vi.useFakeTimers();
 function makeWO(overrides: Partial<WorkOrderDto> = {}): WorkOrderDto {
   return {
     id: '1', uid: 'wo-1', woNumber: 'WO-001', companyId: '10', branchId: 'br-1',
+    branchName: 'Head Office', branchCode: 'BR-01',
     finishedProductId: 'prod-1', finishedProductCode: 'SKU-001',
     finishedProductName: 'Widget A', bomId: '', bomUid: '',
     plannedQty: '100', goodQty: '0', scrapQty: '0',
@@ -132,6 +133,42 @@ describe('WorkOrderDetailComponent — load triad', () => {
     await fixture.whenStable();
 
     expect(fixture.componentInstance.woState()).toBe('error');
+  });
+});
+
+// ── Branch header field (branch-everywhere) ──────────────────────────────────
+
+describe('WorkOrderDetailComponent — branch header field', () => {
+  afterEach(() => { vi.clearAllTimers(); TestBed.resetTestingModule(); });
+
+  it('renders the branch name and code in the summary card, never the raw branchId', async () => {
+    makeBed();
+    const fixture = TestBed.createComponent(WorkOrderDetailComponent);
+    fixture.componentRef.setInput('uid', 'wo-1');
+    vi.runAllTimers();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('Head Office');
+    expect(text).toContain('BR-01');
+  });
+
+  it('renders "—" for the branch when branchName is null', async () => {
+    makeBed({ getByUid: vi.fn(() => of(makeWO({ branchName: null, branchCode: null }))) });
+    const fixture = TestBed.createComponent(WorkOrderDetailComponent);
+    fixture.componentRef.setInput('uid', 'wo-1');
+    vi.runAllTimers();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    const labels = Array.from(el.querySelectorAll('.small.text-muted')).map((d) => d.textContent?.trim());
+    const branchLabelIdx = labels.indexOf('Branch');
+    expect(branchLabelIdx).toBeGreaterThanOrEqual(0);
+    // The value sits in the sibling element right after the "Branch" label div.
+    const branchValueEl = el.querySelectorAll('.small.text-muted')[branchLabelIdx]?.nextElementSibling;
+    expect(branchValueEl?.textContent?.trim()).toBe('—');
   });
 });
 

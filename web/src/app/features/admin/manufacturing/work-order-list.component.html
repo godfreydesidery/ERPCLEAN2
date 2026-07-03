@@ -184,6 +184,7 @@
                 <thead>
                   <tr>
                     <th scope="col">WO #</th>
+                    <th scope="col">Branch</th>
                     <th scope="col">Finished Product</th>
                     <th scope="col" class="text-end">Planned Qty</th>
                     <th scope="col" class="text-end">Good Qty</th>
@@ -198,6 +199,12 @@
                   @for (wo of rows(); track wo.uid) {
                     <tr>
                       <td class="mono">{{ wo.woNumber }}</td>
+                      <td>
+                        {{ wo.branchName ?? '—' }}
+                        @if (wo.branchCode) {
+                          <br /><span class="small text-muted mono">{{ wo.branchCode }}</span>
+                        }
+                      </td>
                       <td>
                         <div class="fw-semibold">{{ wo.finishedProductCode }}</div>
                         <div class="text-muted" style="font-size:0.8rem">{{ wo.finishedProductName }}</div>

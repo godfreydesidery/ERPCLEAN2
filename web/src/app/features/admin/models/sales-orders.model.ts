@@ -119,6 +119,10 @@ export interface SalesOrderDto {
   uid: string;
   companyId: string;
   branchId: string;
+  /** Display name for the branch — never render branchId to users. */
+  branchName: string | null;
+  /** Branch short code, shown as a muted secondary alongside the name. */
+  branchCode: string | null;
   orderNumber: string | null;
   status: SalesOrderStatus;
   customerId: string;

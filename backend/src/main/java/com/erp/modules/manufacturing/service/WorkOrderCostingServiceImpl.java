@@ -17,6 +17,8 @@ import com.erp.modules.manufacturing.repository.WorkOrderComponentRepository;
 import com.erp.modules.manufacturing.repository.WorkOrderOperationRepository;
 import com.erp.modules.manufacturing.repository.WorkOrderRepository;
 import com.erp.modules.manufacturing.service.ManufacturingGlPoster.ComponentCostLeg;
+import com.erp.modules.iam.domain.entity.Branch;
+import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.products.domain.dto.BomExplosionLeafDto;
 import com.erp.modules.products.repository.ProductRepository;
 import com.erp.modules.products.service.BomExplosionService;
@@ -71,6 +73,7 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
     private final ScopeGuard                   scopeGuard;
     private final AuditService                 audit;
     private final OutboxPublisher              outbox;
+    private final BranchRepository             branches;
 
     public WorkOrderCostingServiceImpl(WorkOrderRepository workOrders,
                                         WorkOrderComponentRepository components,
@@ -83,7 +86,8 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
                                         ManufacturingGlPoster glPoster,
                                         ScopeGuard scopeGuard,
                                         AuditService audit,
-                                        OutboxPublisher outbox) {
+                                        OutboxPublisher outbox,
+                                        BranchRepository branches) {
         this.workOrders      = workOrders;
         this.components      = components;
         this.operations      = operations;
@@ -96,6 +100,7 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
         this.scopeGuard      = scopeGuard;
         this.audit           = audit;
         this.outbox          = outbox;
+        this.branches        = branches;
     }
 
     // -------------------------------------------------------------------------
@@ -520,8 +525,12 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
     }
 
     private WorkOrderDto toDto(WorkOrder wo) {
+        // Branch enrichment mirrors WorkOrderServiceImpl.toDto — defensive: a missing branch row
+        // (should not happen) degrades to null names rather than failing the read.
+        Branch branch = branches.findById(wo.getBranchId()).orElse(null);
         return new WorkOrderDto(
                 wo.getId(), wo.getUid(), wo.getWoNumber(), wo.getCompanyId(), wo.getBranchId(),
+                branch != null ? branch.getName() : null, branch != null ? branch.getCode() : null,
                 wo.getFinishedProductId(), wo.getFinishedProductCode(), wo.getFinishedProductName(),
                 wo.getBomId(), wo.getBomUid(),
                 wo.getPlannedQty(), wo.getGoodQty(), wo.getScrapQty(),

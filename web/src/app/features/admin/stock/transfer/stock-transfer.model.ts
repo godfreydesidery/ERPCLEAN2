@@ -37,9 +37,21 @@ export interface StockTransferDto {
   status: StockTransferStatus;
   transferMode: string;
   sourceBranchId: string;
+  /** Display name for the source branch — never render sourceBranchId to users. */
+  sourceBranchName: string | null;
+  /** Source branch short code, shown as a muted secondary alongside the name. */
+  sourceBranchCode: string | null;
   sourceLocationId: string;
+  /** Display name for the source location — never render sourceLocationId to users. */
+  sourceLocationName: string | null;
   destBranchId: string;
+  /** Display name for the destination branch — never render destBranchId to users. */
+  destBranchName: string | null;
+  /** Destination branch short code, shown as a muted secondary alongside the name. */
+  destBranchCode: string | null;
   destLocationId: string;
+  /** Display name for the destination location — never render destLocationId to users. */
+  destLocationName: string | null;
   transferDate: string;
   dispatchedAt: string | null;
   receivedAt: string | null;
