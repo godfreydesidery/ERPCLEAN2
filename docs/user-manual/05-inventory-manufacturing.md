@@ -21,8 +21,8 @@ Before starting, confirm that the required permission codes have been granted to
 | View stock counts | `STOCK.COUNT.VIEW` |
 | Create / enter / cancel stock counts | `STOCK.COUNT.CREATE` |
 | Post a stock count | `STOCK.COUNT.POST` |
-| View stock batches (by-location / detail) | `STOCK.BATCH.VIEW` * |
-| View stock serials (by-location / by-product / lookup) | `STOCK.SERIAL.VIEW` * |
+| View stock batches (by-location / detail) | `STOCK.VIEW` |
+| View stock serials (by-location / by-product / lookup) | `STOCK.VIEW` |
 | View expiring batches | `INVENTORY.EXPIRY.VIEW` |
 | View inventory valuation report | `INVENTORY.VALUATION.VIEW` |
 | Set opening valuation | `INVENTORY.OPENING.SET` |
@@ -33,8 +33,6 @@ Before starting, confirm that the required permission codes have been granted to
 | Complete / close a Work Order | `WORKORDER.CLOSE` |
 
 Navigation items are hidden when the corresponding permission is absent. Attempting to access a route directly without the permission shows a **Forbidden** message.
-
-\* The Stock Batches and Stock Serials screens are gated on `STOCK.BATCH.VIEW` / `STOCK.SERIAL.VIEW`, but these two codes are **not present in the seeded permission catalogue** (it seeds `INVENTORY.BATCH.VIEW` / `INVENTORY.SERIAL.VIEW` instead). As a result no ordinary role can hold them, so today these screens are reachable by the superuser (`rootadmin`) only. See the Known limitation note in section 6 and the FAQ in section 12.
 
 ---
 
@@ -154,6 +152,8 @@ A stock location is a named physical area within a branch where stock is stored 
 **Why locations exist.**
 Without locations, the business knows only how much stock is at a branch in aggregate. With locations, it can see where exactly the stock is, which is essential for efficient warehousing, picking, physical counting, and segregating goods that should not be issued until inspected. Locations are also the boundary for stock counts — a count covers one location at a time.
 
+**Finding locations across branches.** The list shows locations for one branch at a time, chosen from the **Branch** filter above the table. It defaults to your active branch (the one set by the branch switcher), and the filter lists **every** branch in the company — not only the branches you are assigned to. If you pick a branch you are not assigned to, the list responds with a **Forbidden** message (the same `STOCK.LOCATION.VIEW` scope that guards the screen). For a branch you *are* assigned to, a location created for it is no longer invisible — it simply appears once you filter to that branch. After you create a new location, the filter switches automatically to the branch it was created for, so the new row is visible immediately without an extra step.
+
 ### Location types
 
 | Type | Typical use |
@@ -243,7 +243,7 @@ On a Draft, In-transit transfer, click **Dispatch**. The status changes to **Dis
 
 The Dispatch button is only available when the transfer is in Draft status and the mode is In-transit. Dispatching requires the `STOCK.TRANSFER.CREATE` permission.
 
-**Insufficient source stock.** If the source location does not allow negative stock, dispatch is rejected (409 Conflict) when the available quantity at the source is less than the quantity being transferred — the message names the product, the available quantity, and the requested quantity. The transfer stays in Draft so you can correct the lines or top up the source. (A source location whose `allowNegative` flag is set will let the dispatch proceed and the source on-hand can go negative.)
+**Insufficient source stock.** If the source location does not allow negative stock, dispatch is rejected (409 Conflict) when the available quantity at the source is less than the quantity being transferred — the message reports the available and requested quantities and states that the source location does not allow negative stock (it does not name the product, so check the transfer's lines to see which one is short). The transfer stays in Draft so you can correct the lines or top up the source. (A source location whose `allowNegative` flag is set will let the dispatch proceed and the source on-hand can go negative.)
 
 ### 4.3 Receiving an in-transit transfer
 
@@ -381,7 +381,7 @@ Accountant supervisor Boniface Kessy wants to reconcile two fast-moving products
 
 ## 6. Batches and lot tracking
 
-Navigate to **Inventory > Stock Batches** (`/admin/stock/batches`).
+Navigate to **Inventory > Stock Batches** (`/admin/stock/batches`). Requires the `STOCK.VIEW` permission.
 
 **What a batch (lot) is.**
 A batch — also called a lot — is a group of units of the same product that were manufactured or received together and share the same identity attributes, most importantly an expiry date and a manufacture date. For example, a batch of medicines all manufactured on the same day with the same expiry date is one lot. Batch tracking allows the business to know exactly which physical batch a unit came from — critical for food, pharmaceutical, and chemical products where recall or expiry management is required.
@@ -409,13 +409,11 @@ Click the **Expiring Soon** tab. Set a horizon date (default: 30 days from today
 
 The expiring batches tab requires the `INVENTORY.EXPIRY.VIEW` permission.
 
-> **Known limitation — Batches and Serials are superuser-only.** The Stock Batches and Stock Serials screens, and the routes and navigation links that lead to them, are gated on the permission codes `STOCK.BATCH.VIEW` and `STOCK.SERIAL.VIEW`. These two codes **do not exist in the seeded permission catalogue** — the catalogue instead seeds `INVENTORY.BATCH.VIEW` and `INVENTORY.SERIAL.VIEW`. Because no role (not even ORG_ADMIN, which is granted the entire catalogue) can hold a code that is not in the table, this affects **all** of these views — the by-location batch view, the by-location / by-product / lookup serial views, and the batch/serial detail lookups — not just the detail screens. For every non-root role the **Stock Batches** and **Serial Numbers** navigation links are hidden, and visiting the routes directly shows a Forbidden message. Only the superuser (`rootadmin`), who passes all permission checks, can open these screens. The Expiring Soon tab is gated separately on `INVENTORY.EXPIRY.VIEW` (which **is** seeded) and works for ORG_ADMIN. This permission-code fix has **not** yet been deployed.
-
 ---
 
 ## 7. Serial number tracking
 
-Navigate to **Inventory > Stock Serials** (`/admin/stock/serials`).
+Navigate to **Inventory > Stock Serials** (`/admin/stock/serials`). Requires the `STOCK.VIEW` permission.
 
 **What serial number tracking is.**
 Serial number tracking assigns a unique identifier to each individual unit of a product — for example, every laptop, refrigerator, or generator has its own serial number. Unlike batches (which group many units of the same type), a serial identifies one specific physical item. The system records where each serial is, whether it is in stock, has been issued to a customer, or has been returned, giving full unit-level traceability.
@@ -753,9 +751,6 @@ Yes. The system records negative on-hand and flags the row with the Negative ind
 
 **What is the difference between an adjustment and a stock count?**
 An adjustment corrects a single product's quantity immediately. A stock count covers all products at a location, freezes the system quantities as a snapshot, lets you enter physical counts across multiple sessions, and only posts variances when you explicitly post the count.
-
-**Why do I see Forbidden on the Batches and Serials screens?**
-There is a known permission-code mismatch in the current seed data. The screens and their routes/nav links require `STOCK.BATCH.VIEW` / `STOCK.SERIAL.VIEW`, but the seeded catalogue only contains `INVENTORY.BATCH.VIEW` / `INVENTORY.SERIAL.VIEW`, so no ordinary role can hold the required codes. As a result, **every** batch/serial view (by-location, by-product, lookup, and detail) is Forbidden for non-root roles and the nav links are hidden — only the superuser (`rootadmin`) can open them, until the fix is deployed. The Expiring Batches tab is gated on `INVENTORY.EXPIRY.VIEW` and remains functional for ORG_ADMIN.
 
 **Can I have more than one active BOM for a product?**
 No. Only one BOM can be active at a time per product. Activating a new version automatically archives the previous one. Historical archived versions remain visible.

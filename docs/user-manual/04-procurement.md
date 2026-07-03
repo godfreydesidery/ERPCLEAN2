@@ -23,14 +23,13 @@ For direct purchases without a sourcing process, the chain can start at the Purc
 | Activity | Permission codes |
 |---|---|
 | Requisitions | `PURCHASE.REQUISITION.VIEW`, `PURCHASE.REQUISITION.CREATE`, `PURCHASE.REQUISITION.APPROVE` |
-| RFQ | `PURCHASE.RFQ.VIEW`, `PURCHASE.RFQ.CREATE`, `PURCHASE.RFQ.AWARD` |
-| Supplier Quotes | `PURCHASE.QUOTE.VIEW`, `PURCHASE.QUOTE.CREATE` |
+| RFQ / Supplier Quotes | `PURCHASE.RFQ.VIEW`, `PURCHASE.RFQ.MANAGE` |
 | Purchase Orders | `PURCHASE.ORDER.VIEW`, `PURCHASE.ORDER.CREATE`, `PURCHASE.ORDER.VOID`, `PURCHASE.ORDER.APPROVE` |
 | Goods Receipt | `PURCHASE.GOODS_RECEIPT.VIEW`, `PURCHASE.RECEIVE` |
-| Landed Cost | `PURCHASE.LANDED_COST.VIEW`, `PURCHASE.LANDED_COST.CREATE`, `PURCHASE.LANDED_COST.CONFIRM` |
+| Landed Cost | `PURCHASE.LANDEDCOST.VIEW`, `PURCHASE.LANDEDCOST.MANAGE` |
 | Supplier Bills / AP | `AP.VIEW`, `AP.BILL.ENTER`, `AP.BILL.MATCH` |
-| Purchase Returns | `PURCHASE.RETURN.VIEW`, `PURCHASE.RETURN.CREATE`, `PURCHASE.RETURN.CONFIRM` |
-| Purchase Settings | `PURCHASE.SETTINGS.VIEW`, `PURCHASE.SETTINGS.EDIT` |
+| Purchase Returns | `PURCHASE.RETURN.VIEW`, `PURCHASE.RETURN.CREATE` |
+| Purchase Settings | `PURCHASE.SETTINGS.MANAGE` |
 
 Contact your administrator if an expected menu item is missing.
 
@@ -61,7 +60,7 @@ A requisition starts as a DRAFT (being prepared) and must be submitted before it
 1. Navigate to **Purchasing › Purchase Requisitions** (`/admin/purchase-requisitions`).
 2. Click **New Requisition**, or go directly to `/admin/purchase-requisitions/create`.
 3. Set the **Required By** date and optionally a cost centre and notes.
-4. Add lines: for each item, pick the **Product** by name, choose a **Unit**, and enter the **Requested Quantity** and an **Estimated Unit Cost**.
+4. Add lines: for each item, pick the **Product** by name, choose a **Unit**, and enter the **Requested Quantity** and an **Estimated Unit Cost**. The **Unit** field is disabled until a product is picked; once picked, it lists only that product's configured units (its base unit and any active bulk-pack units) — not every unit in the system.
 5. Click **Create Requisition**. The requisition is saved in **DRAFT**.
 
 ### 1.2 Submit a requisition
@@ -138,7 +137,7 @@ An RFQ (Request for Quotation) is a document sent to one or more suppliers askin
 Without a sourcing step, the business might always buy from the same supplier at whatever price they name, with no mechanism to check whether better value is available elsewhere. An RFQ enforces competitive sourcing: multiple suppliers are asked the same question at the same time, their responses are recorded in the system, and the selection is documented — protecting the business from claims of favouritism and ensuring value for money.
 
 **When it is used.**
-An RFQ is used when the buying price is not already fixed by contract or catalogue and at least one competitive comparison is warranted. It is typically triggered by an approved purchase requisition (the Convert → RFQ path) or raised directly by a purchasing officer when restocking at scale. The person sending the RFQ and capturing quotes holds the `PURCHASE.RFQ.CREATE` and `PURCHASE.QUOTE.CREATE` permissions; awarding it requires `PURCHASE.RFQ.AWARD`.
+An RFQ is used when the buying price is not already fixed by contract or catalogue and at least one competitive comparison is warranted. It is typically triggered by an approved purchase requisition (the Convert → RFQ path) or raised directly by a purchasing officer when restocking at scale. The person creating and sending the RFQ, capturing quotes, and awarding it holds the `PURCHASE.RFQ.MANAGE` permission (the same permission covers all three actions); viewing an RFQ requires `PURCHASE.RFQ.VIEW`.
 
 **How it flows.**
 An RFQ is created in DRAFT with the product lines and the invited suppliers. When sent (SENT), suppliers are notified to respond. As each supplier responds with a price, a **Supplier Quote** is captured against the RFQ (QUOTES_RECEIVED). The purchasing officer then compares the quotes and awards the RFQ to the preferred supplier (AWARDED). Awarding automatically creates a Purchase Order in DRAFT at the winning quote's prices — the sourcing stage is complete and the buying stage begins.
@@ -151,8 +150,8 @@ An RFQ can be created directly or by converting an approved requisition (see sec
 
 1. Navigate to **Purchasing › RFQs / Sourcing** (`/admin/rfqs`) and click **New RFQ**, or go to `/admin/rfqs/create`.
 2. Set the **Response Due Date** and optionally add notes.
-3. In the **Invite Suppliers** section, choose a supplier in the **Add a supplier** picker and click the **+** button to add it to the invite list. Repeat for each supplier; invite at least one.
-4. Add lines: pick each product by name, choose a unit, and enter the required quantity.
+3. In the **Invite Suppliers** section, choose a supplier in the **Add a supplier** picker and click the **+** button to add it to the invite list. Repeat for each supplier; invite at least one. Each added supplier is shown by name and code — both in this list and later on the RFQ detail screen's **Invited Suppliers** panel — never as a raw reference number.
+4. Add lines: pick each product by name, choose a unit, and enter the required quantity. The unit dropdown is disabled until a product is picked, and then lists only that product's configured units.
 5. Click **Create RFQ**. The RFQ is created in **DRAFT**.
 
 ### 2.2 Send an RFQ to suppliers
@@ -235,7 +234,7 @@ A PO is raised after a purchase has been authorised. There are three ways a PO c
 - By creating one directly on the Purchase Orders list using the inline **New Order** form (see section 3.1), without a requisition or RFQ — useful for direct purchases where the supplier and prices are already known.
 
 **How a PO flows.**
-A PO starts as a DRAFT (lines can be edited freely). When the lines are finalised, the PO is placed (ORDERED), which sends it to the supplier, locks the lines, and assigns the PO number. Goods arrive and are recorded against the PO via Goods Receipts — the PO tracks how many units remain outstanding and moves through PARTIALLY_RECEIVED to RECEIVED as deliveries arrive. Once fully received (or if the business accepts a shortfall), the PO can be closed (CLOSED). If the PO is no longer needed before all goods are received, it can be voided (VOID). If a PO approval threshold is enabled in Purchase Settings, a DRAFT PO above the configured amount must be approved before it can be PLACED — the system refuses to place an over-threshold PO that has not yet been approved.
+A PO starts as a DRAFT (lines can be edited freely). If a PO approval threshold is enabled in Purchase Settings and this order's total is at or above the configured amount, the DRAFT must be submitted for approval and approved before it can be placed (section 3.3) — the system refuses to place an over-threshold PO that has not yet been approved. When the lines are finalised (and approved, if required), the PO is placed (ORDERED), which sends it to the supplier, locks the lines, and assigns the PO number. Goods arrive and are recorded against the PO via Goods Receipts — the PO tracks how many units remain outstanding and moves through PARTIALLY_RECEIVED to RECEIVED as deliveries arrive. Once fully received (or if the business accepts a shortfall), the PO can be closed (CLOSED). If the PO is no longer needed before all goods are received, it can be voided (VOID).
 
 ### 3.1 Create a Purchase Order directly
 
@@ -253,18 +252,30 @@ The Purchase Orders list (`/admin/purchase-orders`) has an inline create form fo
 1. Navigate to **Purchasing › Purchase Orders** (`/admin/purchase-orders`).
 2. Open the DRAFT PO (navigate to `/admin/purchase-orders/uid/{uid}`).
 3. While the PO is in DRAFT you can:
-   - **Add a line** — pick the product by name, choose a unit, enter the ordered quantity and unit cost.
+   - **Add a line** — pick the product by name, choose a unit, enter the ordered quantity and unit cost. The **Unit** field is disabled until a product is picked; once picked, it lists only that product's configured units (its base unit and any active bulk-pack units).
    - **Remove a line** — click the delete icon on the line row. (Lines cannot be edited in place; to change a line, remove it and add it again.)
 
-### 3.3 Place a Purchase Order
+### 3.3 Submit a Purchase Order for approval
 
-Placing the PO sends it to the supplier and locks the lines.
+If your administrator has enabled a PO approval threshold in Purchase Settings (section 8) and this order's total is at or above the configured amount, it must clear approval before it can be placed. Once submitted, the order shows an **Awaiting approval** / **Approved** / **Approval rejected** status tag next to its status.
 
-1. Open the DRAFT PO (it must have at least one line).
+1. Open the DRAFT PO (navigate to `/admin/purchase-orders/uid/{uid}`) — it must have at least one line.
+2. Click **Submit for Approval**. This button appears only when the order's total requires approval and it has not already been submitted or approved.
+3. An **Awaiting approval** banner appears, with a link to **Go to Approvals inbox**, and the **Place Order** button is removed from the screen. The order is routed to an approver as an approval request (see chapter 11, Approvals).
+
+Requires `PURCHASE.ORDER.CREATE` (the same permission used to create, add lines to, and place a PO).
+
+> **Known limitation — a PO submitted for approval cannot currently be placed from the web UI.** Submitting for approval is wired up, but the *return* path is not: the Purchase Order screen never learns the approver's decision. The **Awaiting approval** banner is a one-time reflection of your own **Submit for Approval** click in this browser tab — it never changes to **Approved** or **Approval rejected**, in this session or any other, even after an approver decides in the Approvals inbox. (The decision is recorded correctly in the background, but the PO detail response does not carry the approval status back and the screen does not poll for it.) Because **Place Order** only reappears once the screen sees an **Approved** status, an order that has been submitted for approval currently **cannot be placed through the web UI at all**. Until this is fixed, an administrator must approve and place such an order directly via the API (the admin-only `PURCHASE.ORDER.APPROVE` action, then the place endpoint). Orders whose total is *below* the approval threshold never enter this flow and place normally.
+
+### 3.4 Place a Purchase Order
+
+Placing the PO sends it to the supplier and locks the lines. If the order requires approval (section 3.3) but has not yet been submitted, **Place Order** is shown but disabled (with a *Submit for approval before placing* tooltip). Once the order has been **submitted** for approval, the **Place Order** control is removed from the screen entirely — see the Known limitation in section 3.3 for why it does not currently come back.
+
+1. Open the DRAFT PO (it must have at least one line, and be approved if approval is required).
 2. Click **Place Order**.
 3. Status → **ORDERED** and a PO number (PO-####) is assigned.
 
-### 3.4 Close a Purchase Order
+### 3.5 Close a Purchase Order
 
 Closing finalises the PO without receiving all goods (for example, if a partial shipment is accepted as complete).
 
@@ -272,19 +283,13 @@ Closing finalises the PO without receiving all goods (for example, if a partial 
 2. Click **Close Order**.
 3. Status → **CLOSED**. The PO is read-only.
 
-### 3.5 Void a Purchase Order
+### 3.6 Void a Purchase Order
 
 Voiding cancels the PO if goods have not all been received.
 
 1. Open the PO (status DRAFT, ORDERED, or PARTIALLY_RECEIVED).
 2. Click **Void Order**. An inline reason form opens — enter a mandatory reason and click **Confirm Void**.
 3. Status → **VOID**.
-
-### 3.6 PO approval (if enabled)
-
-If your administrator has enabled PO approval thresholds in Purchase Settings, a DRAFT Purchase Order whose total is at or above the configured amount cannot be placed until it is approved. An approver with `PURCHASE.ORDER.APPROVE` must approve the PO first; attempting to place an unapproved over-threshold PO is rejected with a message asking you to submit it for approval and wait for APPROVED status before placing.
-
-PO approval actions are currently only available via the API; contact your administrator or a system manager if a PO is stuck awaiting approval.
 
 ### 3.7 PO status reference
 
@@ -323,7 +328,7 @@ A Goods Receipt serves three critical purposes. First, it records what actually 
 A GR is created by the storekeeper or receiving officer each time a supplier delivers goods against an outstanding Purchase Order. If a supplier delivers in multiple shipments, a separate GR is created for each delivery. The permission required is `PURCHASE.RECEIVE`. Only placed Purchase Orders (ORDERED or PARTIALLY_RECEIVED) can have a GR raised against them.
 
 **How it flows.**
-The storekeeper picks the PO and the system shows all outstanding (unreceived) lines pre-filled with the remaining quantities. The storekeeper adjusts the quantities if the delivery is partial (and unchecks any lines not included in this delivery), optionally adds notes, and records the receipt. The GR is created with status RECEIVED, a GRN number is assigned, stock increases at the branch, and the PO's outstanding quantities are updated. The PO moves to PARTIALLY_RECEIVED or RECEIVED depending on whether all lines are now complete. A GR cannot be edited after submission; errors are corrected by voiding the GR (an API-level operation) or by raising a Purchase Return (section 7).
+The storekeeper picks the PO and the system shows all outstanding (unreceived) lines pre-filled with the remaining quantities. The storekeeper adjusts the quantities if the delivery is partial (and unchecks any lines not included in this delivery), optionally records a lot/batch number, manufacture date, expiry date, or serial numbers per line, adds notes, and records the receipt. The GR is created with status RECEIVED, a GRN number is assigned, stock increases at the branch, and the PO's outstanding quantities are updated. Any batch or serial details captured at receipt feed the read-only Stock Batches and Stock Serials screens (see the Inventory & Manufacturing chapter, sections 6–7). The PO moves to PARTIALLY_RECEIVED or RECEIVED depending on whether all lines are now complete. A GR cannot be edited after submission; errors are corrected by voiding the GR (an API-level operation) or by raising a Purchase Return (section 7).
 
 ### 4.1 Receive goods
 
@@ -331,8 +336,9 @@ The storekeeper picks the PO and the system shows all outstanding (unreceived) l
 2. Pick the **Purchase Order** by its PO number.
 3. The form lists all open (unreceived) lines, each with a tick box (included by default) and the outstanding quantity pre-filled in the **Receive Qty** field.
 4. Adjust individual quantities if you are receiving a **partial shipment**, and untick any lines not in this delivery. The quantity cannot exceed the outstanding balance on each line.
-5. Optionally add **Notes**.
-6. Click **Record Receipt**.
+5. For any line — typically a lot-tracked or serialised product — click **Batch** to expand its batch/serial details, and optionally enter the **Lot / Batch number**, **Manufacture date**, **Expiry date**, and **Serial / IMEI numbers** (one per line). The **Batch** toggle appears on every receipt line regardless of the product's tracking settings; all of these fields are optional at receipt time.
+6. Optionally add **Notes**.
+7. Click **Record Receipt**.
 
 The goods receipt is created with status **RECEIVED** and assigned a GRN-#### number. Stock is added to the branch. The PO status updates:
 
@@ -375,7 +381,7 @@ Landed cost is the total cost of getting an imported or shipped product to your 
 If only the purchase price is recorded as the inventory cost, the business undervalues its stock and understates the true cost of goods sold (COGS). For example, cement bought at TZS 14,500/bag but with TZS 2,900/bag in freight and clearing costs actually costs TZS 17,400/bag to hold. Selling it at any price below TZS 17,400 is a loss — but a business recording only TZS 14,500 would not see that loss until the end of the period. Capitalising landed costs into inventory value ensures the stock is valued at its true cost, the cost-of-goods-sold figure is accurate, and the balance sheet reflects the real investment in inventory.
 
 **When it is used.**
-A landed cost is entered after the goods have been received (a GRN exists) and the incidental charges are known — either at the time of receipt or when the freight/clearing invoice arrives. The accountant or purchasing officer enters the charges against the relevant GRN(s) and confirms the document. The permission required is `PURCHASE.LANDED_COST.CREATE` and `PURCHASE.LANDED_COST.CONFIRM`.
+A landed cost is entered after the goods have been received (a GRN exists) and the incidental charges are known — either at the time of receipt or when the freight/clearing invoice arrives. The accountant or purchasing officer enters the charges against the relevant GRN(s) and confirms the document. The permission required is `PURCHASE.LANDEDCOST.MANAGE` (covers both creating and confirming); viewing requires `PURCHASE.LANDEDCOST.VIEW`.
 
 **How it flows.**
 A landed cost document is created (DRAFT) with the allocation basis (By Value or By Quantity), linked to one or more GRNs, and the charge lines (Freight, Duty, Clearing, Insurance, Other) are entered. On confirmation (CONFIRMED), the system allocates each charge proportionally to the GR lines and capitalises the allocated amount into the inventory value of each product — raising the moving-average cost and posting the GL entry. The accounting entry at confirmation is: **DR Inventory (1300) / CR Landed Cost Clearing (2160)**. When the freight or duty invoice later arrives from the supplier and is bill-matched, the clearing account is debited back: **DR Landed Cost Clearing / CR Accounts Payable** — leaving a zero balance in the clearing account. A confirmed landed cost is immutable.
@@ -548,7 +554,7 @@ A purchase return is the formal process of sending goods back to the supplier �
 Without a formal return process, the business would need to adjust stock manually (which lacks a clear link to the supplier transaction) and would have no systematic way to claim money back from the supplier. A purchase return document creates an auditable record of what was returned, why, and at what value — forming the basis for the AP debit note that reduces the amount owed to the supplier. It also keeps inventory accurate: goods sent back should not remain in the stock count.
 
 **When it is used.**
-A purchase return is raised after a goods receipt has been confirmed (RECEIVED) and the goods in question have been identified for return — for example, after inspection reveals damage, or after a quality failure is reported. The storekeeper or purchasing manager raises the return against the specific GRN, and a purchasing manager or authorised user confirms it. The permissions required are `PURCHASE.RETURN.CREATE` and `PURCHASE.RETURN.CONFIRM`.
+A purchase return is raised after a goods receipt has been confirmed (RECEIVED) and the goods in question have been identified for return — for example, after inspection reveals damage, or after a quality failure is reported. The storekeeper or purchasing manager raises the return against the specific GRN, and a purchasing manager or authorised user confirms it. The permission required is `PURCHASE.RETURN.CREATE` (it covers both creating and confirming a return); viewing requires `PURCHASE.RETURN.VIEW`.
 
 **How it flows.**
 A purchase return starts as a DRAFT referencing the original GRN and specifying the quantities being returned (which cannot exceed what was received on that GRN). A mandatory reason must be entered. When confirmed (CONFIRMED), two things happen simultaneously: stock decreases by the returned quantity (a reversal of the original goods receipt movement at the original cost), and the AP module records a debit note against the supplier — a document that reduces the business's payable to the supplier by the value of the returned goods. A confirmed return cannot be edited.
@@ -608,7 +614,7 @@ Purchase settings control the PO approval workflow.
 
 To change these settings, navigate to **Purchasing › Purchase Settings** (`/admin/purchase-settings`), pick the **Company**, update the values, and click **Save Settings**.
 
-When PO approval is enabled, a user with `PURCHASE.ORDER.APPROVE` must approve or reject POs that exceed the threshold.
+When PO approval is enabled, an order that exceeds the threshold is submitted from its detail screen (section 3.3) and decided by an approver in the Approvals inbox (requires `APPROVALS.DECIDE`; see chapter 11, Approvals). `PURCHASE.ORDER.APPROVE` gates a separate, administrative approve/reject action on the order itself, available only via the API — see the Known limitation note in section 3.3.
 
 ---
 

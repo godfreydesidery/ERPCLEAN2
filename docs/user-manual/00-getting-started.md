@@ -73,7 +73,7 @@ When you sign in — or are redirected after trying to open a screen you cannot 
 What you see depends on your account:
 
 - **System administrators (`rootadmin`)** see a **System setup** panel — its heading reads "System setup", under the page subtitle "System administrator — configure the platform below to get started." It presents an ordered set of configuration steps as cards — *1 Companies & branches → 2 Roles & permissions → 3 Users → 4 Audit log* — for standing the platform up. Each card links straight to that area.
-- **Everyone else** sees a brief, calm welcome ("Your workspace is ready"). The home page does **not** repeat the menu — use the sidebar on the left to reach your work. (Personalised shortcuts on this page are planned for a future release.)
+- **Everyone else** sees a personalised **launchpad**: the page subtitle reads "Quick links to your most-used screens," and below it a **Quick launch** grid shows one card per screen you actually hold the permission to open, drawn from a curated set spanning the dashboard, sales, purchasing, stock, finance, and manufacturing (for example Dashboard, Sales orders, POS sell, Stock on-hand, Post journal). Each card is checked against the exact permission its target screen requires, so a card you can see is always a card you can open — there is no dead-end tile. The **Dashboard** card is always shown first when you hold `BI.VIEW`. If none of the curated destinations are open to you, you instead see a brief, calm placeholder ("Your workspace is ready.") prompting you to use the menu on the left. Either way, the home page does **not** repeat the full sidebar menu — the sidebar remains the complete map of everywhere you can go.
 
 The home page never requires a permission and never loads business data, so it is always safe to land on; this is why the system uses it as the silent redirect target for screens you cannot access.
 
@@ -152,6 +152,10 @@ Every list screen (for example, **Sales Orders** or **Users**) behaves the same 
 - A **pager** at the bottom shows page numbers and **First / Previous / Next / Last** controls. If all results fit on one page the pager hides itself.
 - Column headings may be clicked to sort the list (where supported).
 
+### Using the system on a phone or tablet
+
+The system is usable on a phone or tablet, not just a desktop browser. On a narrow screen the sidebar becomes the slide-out menu described above, and wide transaction list tables (for example Sales Orders, Purchase Orders, Customers, or Products) scroll horizontally within their own frame rather than squeezing every column to fit. The row action in the last column (**Open**, **Edit**, **Ledger**, **Adjust**, and so on) stays pinned to the right edge of that frame as you scroll, so it is always reachable — you are never stranded with the action for a row scrolled off-screen. A soft shadow on the right edge of a table hints that more columns are available if you scroll. The interface has been verified for accessibility at phone and tablet screen sizes as well as desktop — no serious or critical issues were found across the main screens when it was last checked.
+
 ### The four screen states
 
 Every data screen can be in one of four states. The system displays a distinct visual for each:
@@ -189,6 +193,8 @@ The general flow for creating or editing a record is:
 2. Fill in the form. Required fields are marked. The system validates as you go and shows inline messages if something is wrong.
 3. Click **Save** (or the specific action button, for example **Confirm** for a sales order).
 4. A brief success notification (a "toast") appears at the top of the screen to confirm the action was saved. If something went wrong, an error message appears in the form itself or as an alert — read it, correct the issue, and try again.
+
+> **Company and Branch default to where you are working.** Where a create screen has its own **Company** and/or **Branch** picker (for example New Stock Count, New Stock Transfer, or Register New Asset), it opens pre-set to your currently **active** branch and company — the same one shown in the top bar — not simply the first company in the organisation. You can still change it before saving if you are creating the record for a different branch; only the starting default changed.
 
 ### Record status and soft-delete
 

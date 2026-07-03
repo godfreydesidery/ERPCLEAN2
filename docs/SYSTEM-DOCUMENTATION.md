@@ -79,7 +79,7 @@ Every module obeys the same handful of rules. They are described fully in the co
 |---|---|
 | Backend runtime | Spring Boot 3.3.5 · Java 21 |
 | Persistence | Hibernate 6 (JPA) · Spring Data · PostgreSQL 15+ |
-| Schema management | Flyway (`ddl-auto=validate`; migrations `V1` … `V83`) |
+| Schema management | Flyway (`ddl-auto=validate`; migrations `V1` … `V78`) |
 | Authentication | In-house JWT, **RS256** signing, refresh-token rotation; Spring Security OAuth2 resource server |
 | Authorization | RBAC by permission code, enforced with `@PreAuthorize` and a `@perm` expression bean |
 | Web client | Angular 21 · standalone components (no NgModules) · signals · TypeScript strict |
@@ -196,7 +196,7 @@ A typical authenticated write request flows like this:
 2. **Security filter chain** validates the RS256 JWT (Spring Security OAuth2 resource server). A request-scoped **`RequestContext`** is built from the JWT (user, active company, default branch, `isRoot`) plus the optional `X-Branch-Uid`. If the header is present, the filter verifies the branch is in the caller's active `user_branch` assignments (else 403); the active company becomes that branch's company. Branch switching is context-only — no DB write, no re-login (ADR-0003).
 3. **Controller** (`com.erp.api`) receives the request. `@Valid` validates the request DTO. `@PreAuthorize` evaluates a permission expression — `@perm.has('SALES.INVOICE.VIEW')` for a flat permission, or `@perm.scoped(#uid, 'invoice', 'SALES.INVOICE.CREATE')` when the permission must be checked against the scope (company/branch) that the target `uid` resolves to. `ScopeGuard` maps the `uid` and its kind (`invoice`, `account`, `company`, …) to a company/branch and asserts the caller may act there. `isRoot` short-circuits to allowed, always audited.
 4. **Service** runs inside a `@Transactional` boundary. It loads aggregates through repositories, enforces invariants, mutates state, and — for cross-module side effects — calls `OutboxPublisher.publish(...)` **inside the same transaction**.
-5. **Repository** issues the query. The base interface injects the `company_id`/`branch_id` predicate from `RequestContext`, so a finder cannot accidentally read another tenant's rows.
+5. **Repository** issues the query. The base interface injects the `company_id`/`branch_id` predicate from `RequestContext`, so a finder cannot accidentally read another tenant's rows. On the IAM-admin path (where the blanket predicate is off) the service must scope explicitly — see §4: the scope-company is derived from the *loaded* entity, never a caller-supplied parameter, on both reads and writes.
 6. **Response** — the controller returns the raw `T`; a `ResponseBodyAdvice` wraps it in `ApiResponse<T>` (`data`, `errors[]`, meta). Errors are user-safe strings; internal exception text is never leaked.
 
 Identity discipline runs through the whole path: URLs address by `uid`, request/response DTOs carry both `id` and `uid`, and all `Long` ids serialise as JSON strings so 64-bit values survive JavaScript (`PROJECT-CONVENTIONS.md` §3.3).
@@ -215,7 +215,9 @@ The tenant tree is **Organisation → Company → Branch** (`DATA-MODEL.md`, ADR
 - Every transactional table carries `company_id`; tables that cross a branch boundary also carry `branch_id`.
 - `RequestContext` (request-scoped) holds the active company/branch. The branch-override header (`X-Branch-Uid`) switches branch within the caller's assignments without a re-login (ADR-0003).
 - Repository base interfaces inject the tenant predicate. A finder that bypasses the base interface is a tenant-isolation bug. IAM admin tables are exempt from the blanket predicate (administration is cross-branch); isolation there is by permission + explicit scope checks (ADR-0001 D-A).
-- The scope-company for any guarded operation is derived from the **loaded entity**, never from a caller-supplied parameter, and the same guard applies to reads and writes — this closes the confused-deputy and missing-write-scope leak classes found in the 2026-06-26 audit (see Security §3.4). An ArchUnit `FreezingArchRule` (`TenantScopingRulesTest`) bars new bare `findById`/`getReferenceById` calls from service classes.
+- **Derive the scope-company from the loaded entity, never from a caller-supplied parameter — and apply the guard to reads AND writes.** A 2026-06-26 e2e probe found 28 cross-company leaks across 11 modules from two patterns: a *confused-deputy via a secondary identifier* (the endpoint scope-checks a caller-supplied `companyId` — which the attacker sets to their own — then loads data by a separate, unverified `accountId`/`productId`/`glAccountId`/…), and a *missing write-scope* (a `uid`-addressed mutator loaded by `uid` without re-checking the loaded entity's company, so you could write a record you could not read — worst case, cross-tenant account takeover via the IAM user update/disable/enable/unlock/set-password path). All 28 are fixed in the service layer — company-scoped repository finders plus an ownership re-check derived from the loaded row; the isolation read oracle is unchanged and there is no schema change. A regression guard, the **`TenantScopingRulesTest`** ArchUnit `FreezingArchRule`, fails the build if a `..service..` class makes a bare `findById`/`getReferenceById` on a Spring Data repository, forcing company-scoped finders; ~197 pre-existing audited calls are frozen as a baseline (`allowStoreUpdate = false`).
+- **Company master data is not enumerable cross-tenant.** `GET /api/v1/companies` (the company-admin list) once returned every organisation company to any `COMPANY.VIEW` holder; it now returns only the companies the caller belongs to — the same assigned-or-root filter as `/companies/accessible` (root still sees all).
+- **`user_company` membership is an authoritative write-path prerequisite (ADR-0046, superseding the non-authoritative phase of ADR-0045).** `UserRoleService.grant` and `UserBranchService.assign` require an active `user_company` membership for the target company (else 409); the prior auto-create on grant/assign is removed, and removing a membership is blocked while the user still holds roles or branches there (no cascade). Root bypasses tenant scope but **not** the membership gate; bootstrap/seeders write entities directly and are unaffected. The read/isolation oracle stays the additive superset (role OR branch OR `user_company`) as a defensive belt. `USER.COMPANY.MANAGE` gates explicit assign/remove; coverage is guaranteed by an idempotent every-boot reconcile (`UserCompanyBackfill`), so there is no Flyway migration. BR-6 is re-decided: branch and role assignment stay independent of each other, but each now requires prior company membership.
 
 ## 5. The transactional outbox + domain-events pattern (ADR-0009)
 
@@ -291,7 +293,7 @@ Money is currency-aware from the first column (ADR-0005). The principle and the 
 - Each **company** has a configurable **base (functional) currency** (default TZS), read from config — never a hard-coded literal.
 - **The GL posts in base currency only.** When a document is in a foreign currency, it stores the document-currency amount, the **base-currency equivalent**, and the **exchange rate used**, captured at transaction time and immutable thereafter (a posted historical amount is never recomputed when rates move). The GL receives the base-currency figures; the trial balance and statements are base-currency (ADR-0013 D-9, ADR-0005 D-5).
 - Mixed-currency arithmetic is illegal at the type level: `Money.plus`/`minus`/`compareTo` throw on a currency mismatch. A "total balance" across currencies is not a scalar `SUM` — it is per-currency balances plus an explicit, rate-stamped conversion.
-- The full FX engine (effective-dated rate master, conversion, realized FX on settlement, period-end **unrealized** revaluation runs) is built (ADR-0036, V77–V80); the recording shape ADR-0005 reserved meant adding it was additive, not a migration of live posting tables.
+- The full FX engine (effective-dated rate master, conversion, realized FX on settlement, period-end **unrealized** revaluation runs) is built (ADR-0036, V61–V65); the recording shape ADR-0005 reserved meant adding it was additive, not a migration of live posting tables.
 
 On the wire, money is an object — `{ "amount": "1500.0000", "currency": "TZS", "display": "TZS 1,500.00" }` — with `amount` as a **string** (exact end-to-end; JSON numbers would lose precision in JavaScript). The Angular type is `interface Money { amount: string; currency: string; display?: string; }`.
 
@@ -309,7 +311,7 @@ This keeps `ModuleBoundaryTest` green (no module→module edge), keeps each modu
 
 ## 9. Persistence & migrations
 
-- **Flyway** owns every schema change; `ddl-auto=validate` (never `update`). Migrations are sequential and additive once shipped — `V1` (IAM baseline) through `V83`. A new module lands as a new `V<n>` file and never edits a shipped one.
+- **Flyway** owns every schema change; `ddl-auto=validate` (never `update`). Migrations are sequential and additive once shipped — `V1` (IAM baseline) through `V78`. A new module lands as a new `V<n>` file and never edits a shipped one.
 - **Optimistic locking** (`@Version`) on mutable aggregates.
 - **Append-only** posting tables (the GL, `stock_movements`, `audit_log`) — corrections are new rows.
 - **PostgreSQL-native where it pays**: `JSONB` for audit detail / tax summary / event payload; partial and expression indexes (the outbox `PENDING` index, the default-branch uniques `WHERE is_default`); `NUMERIC` for money; row-locked `code_sequence` for concurrency-safe document numbering.
@@ -346,21 +348,23 @@ These are not business modules — they are the shared infrastructure every modu
 
 The outbox has no controller, no REST surface, and no permission — it is internal plumbing.
 
-## IAM — Identity & Access (ADR-0001, ADR-0002, ADR-0003, ADR-0004)
+## IAM — Identity & Access (ADR-0001, ADR-0002, ADR-0003, ADR-0004, ADR-0046)
 
-- **Purpose.** The security spine: authentication, the org/company/branch tenant tree, users, roles, permissions, branch assignment, and the audit trail. Built first; everything hangs off it.
+- **Purpose.** The security spine: authentication, the org/company/branch tenant tree, users, roles, permissions, company/branch assignment, and the audit trail. Built first; everything hangs off it.
 - **Key entities.** `organisation`, `company`, `branch`, `app_user`, `permission`, `role`, `role_permission`, `user_role`, `user_branch`, `user_company`, `refresh_token`, `audit_log`.
+- **Company membership (assign-company-first, ADR-0046).** `user_company` is an **authoritative** write-path prerequisite (supersedes the non-authoritative phase of ADR-0045): a user must hold an active company membership before any role can be granted or branch assigned in that company (else 409) — the prior auto-create on grant/assign is removed, and a membership cannot be removed while roles/branches remain there. The read/isolation oracle stays additive (role OR branch OR membership). Root bypasses tenant scope but not the membership gate; bootstrap/seeders write directly and an every-boot `UserCompanyBackfill` reconcile guarantees coverage (no migration).
 - **Permission family.** `USER.*` (incl. `USER.COMPANY.MANAGE`), `ROLE.*`, `PERMISSION.*`, `COMPANY.*`, `BRANCH.*`, `AUDIT.*`.
 
 | Controller | Base path | Notes |
 |---|---|---|
 | `AuthController` | `/api/v1/auth` | login / refresh / logout (no permission — public/auth) |
 | `OrganisationController` | `/api/v1/organisations` | org tree root |
-| `CompanyController` | `/api/v1/companies` | legal entities; base currency; list scoped to the caller's companies (root sees all), same as `/companies/accessible` |
+| `CompanyController` | `/api/v1/companies` | legal entities; base currency. The list returns only the caller's companies (root sees all) — same assigned-or-root filter as `/companies/accessible`, not enumerable cross-tenant |
 | `BranchController` | `/api/v1/branches` | locations; set-default |
-| `UserController` | `/api/v1/users` | user CRUD, set-password, unlock; user ⇄ company membership assign/remove (`USER.COMPANY.MANAGE`); mutators scope-checked against the loaded user's company |
-| `UserBranchController` | `/api/v1/user-branches` | assign branches, set default; requires an active company membership for the branch's company (ADR-0046) |
-| `UserRoleController` | `/api/v1/user-roles` | grant/revoke roles, scoped to company/branch; grant requires an active company membership for that company (ADR-0046) |
+| `UserController` | `/api/v1/users` | user CRUD, set-password, unlock |
+| `UserCompanyController` | `/api/v1/user-companies` | assign/remove company membership (`USER.COMPANY.MANAGE`); prerequisite for role/branch assignment |
+| `UserBranchController` | `/api/v1/user-branches` | assign branches, set default — requires prior company membership |
+| `UserRoleController` | `/api/v1/user-roles` | grant/revoke roles, scoped to company/branch — requires prior company membership |
 | `RoleController` | `/api/v1/roles` | role + permission-bundle management |
 | `AuditController` | `/api/v1/audit` | read-only audit trail |
 
@@ -415,7 +419,7 @@ The outbox has no controller, no REST surface, and no permission — it is inter
 |---|---|
 | `PricingRuleController` | `/api/v1/pricing-rules` |
 
-## Point of Sale (ADR — POS, V43/V82/V83)
+## Point of Sale (ADR — POS, V37/V70/V72)
 
 - **Purpose.** Retail POS: till setup; session lifecycle (open float → sell → payout → X-read → close[count cash] → reconcile[Z-read, variance, GL]); quick checkout (session + customer + agent + line items + tender + change).
 - **Key entities.** `pos_tills`, `pos_sessions`, `pos_sales` (+ lines, tenders).
@@ -558,7 +562,7 @@ The outbox has no controller, no REST surface, and no permission — it is inter
 
 ## Reporting & BI (ADR-0018, ADR-0037)
 
-- **Purpose.** Read-only over the GL: P&L, Balance Sheet, Cash Flow (indirect), trial balance, account-ledger drill-through, server-side PDF/XLSX export; a composite BI analytics dashboard (per-panel RBAC, drill, export); analytical reports (budget variance, departmental actuals, dimension-sliced TB, project WIP/P&L, manufacturing WIP). Posts nothing, owns no business table.
+- **Purpose.** Read-only over the GL: P&L, Balance Sheet, Cash Flow (indirect), trial balance, account-ledger drill-through, server-side PDF/XLSX export; a composite BI analytics dashboard (per-panel RBAC, drill, export — including a **sales-by-branch** panel); analytical reports (budget variance, departmental actuals, dimension-sliced TB, project WIP/P&L, manufacturing WIP). Posts nothing, owns no business table.
 - **Key entities.** None of its own — pure queries over `journal_lines` and the source ledgers.
 - **Permission family.** `REPORT.*`, `BI.*`.
 
@@ -698,7 +702,7 @@ The outbox has no controller, no REST surface, and no permission — it is inter
 
 # Data Model
 
-A readable reference to the ERPCLEAN2 PostgreSQL schema: the cross-cutting models (identity, money, multi-tenancy, append-only posting, soft-delete) and a per-domain summary of the main tables. This is a map, not a DDL dump — the authoritative DDL is the Flyway migrations under `backend/src/main/resources/db/migration/` (`V1` … `V83`). Where the prose in the repo's `DATA-MODEL.md` and the shipped SQL disagree, **the SQL is ground truth**; the table names below follow the shipped migrations.
+A readable reference to the ERPCLEAN2 PostgreSQL schema: the cross-cutting models (identity, money, multi-tenancy, append-only posting, soft-delete) and a per-domain summary of the main tables. This is a map, not a DDL dump — the authoritative DDL is the Flyway migrations under `backend/src/main/resources/db/migration/` (`V1` … `V78`). Where the prose in the repo's `DATA-MODEL.md` and the shipped SQL disagree, **the SQL is ground truth**; the table names below follow the shipped migrations.
 
 ## Naming conventions (the real, shipped convention)
 
@@ -728,7 +732,7 @@ A monetary value is an inseparable `(amount, currency)` pair — never a bare nu
 
 - **Storage.** A `Money` `@Embeddable` materialises a column pair: `<field>_amount NUMERIC(19,4)` + `<field>_currency CHAR(3)` (ISO 4217 code), both NULL or both NOT NULL together. **Exchange rates** are `NUMERIC(19,8)`. Never `float`/`double`.
 - **Base currency.** Each `companies` row has a configurable base (functional) currency (default TZS), read from config — never a hard-coded literal. The GL and all statements are in base currency.
-- **Foreign currency.** A document in a non-base currency also stores the **base-currency equivalent** amount and the **exchange rate used** (the base triple), captured at transaction time and **immutable** thereafter — a posted historical amount is never recomputed when rates move (append-only discipline). The FX engine (rate master, conversion, revaluation) lives in `currencies` / `currency_rates` and the FX revaluation runs (ADR-0036, V77–V80).
+- **Foreign currency.** A document in a non-base currency also stores the **base-currency equivalent** amount and the **exchange rate used** (the base triple), captured at transaction time and **immutable** thereafter — a posted historical amount is never recomputed when rates move (append-only discipline). The FX engine (rate master, conversion, revaluation) lives in `currencies` / `currency_rates` and the FX revaluation runs (ADR-0036, V61–V65).
 - **Wire format.** Money is an object — `{ "amount": "1500.0000", "currency": "TZS", "display": "TZS 1,500.00" }` — with `amount` as a **string** (exact end-to-end). Mixed-currency arithmetic throws; a cross-currency "total" is per-currency balances plus an explicit converted roll-up, never a raw `SUM`.
 
 ## Multi-tenancy — Organisation / Company / Branch
@@ -765,9 +769,9 @@ The list below covers the main tables per domain. Owned child tables (lines, all
 | `permissions` | atomic access unit, dot-separated `code`; seeded; addressed by code |
 | `roles` | named permission bundle; `is_system` |
 | `role_permission` | junction role ⇄ permission |
-| `user_role` | role grant scoped to company, optionally one branch (NULL = all); requires an active `user_company` membership for that company (ADR-0046) |
-| `user_branch` | branch assignment; `uq_user_branch_default` (≤1 default/user); requires an active `user_company` membership for the branch's company (ADR-0046) |
-| `user_company` | authoritative user ⇄ company membership; write-path prerequisite for any role grant or branch assignment in that company (ADR-0046); gated by `USER.COMPANY.MANAGE` |
+| `user_role` | role grant scoped to company, optionally one branch (NULL = all) |
+| `user_branch` | branch assignment; `uq_user_branch_default` (≤1 default/user) |
+| `user_company` | authoritative company-membership junction (ADR-0046, `V77`); an active row is the assign-company-first prerequisite for granting any role or branch in that company |
 | `refresh_tokens` | hashed, single-use, rotated; reuse → revoke chain |
 | `audit_logs` | append-only action trail; `detail` JSONB; no UPDATE/DELETE |
 
@@ -801,7 +805,7 @@ The list below covers the main tables per domain. Owned child tables (lines, all
 | `pricing_rules` | advanced pricing |
 | blanket / standing orders | recurring + committed-volume arrangements |
 
-### POS (V43, V82, V83)
+### POS (V37, V70, V72)
 
 | Table | Purpose |
 |---|---|
@@ -882,7 +886,7 @@ The list below covers the main tables per domain. Owned child tables (lines, all
 | `wht_types` | WHT rate master |
 | WHT register | withheld-amount register / certificates |
 
-### FX / Multi-currency (V77–V80)
+### FX / Multi-currency (V61–V65)
 
 | Table | Purpose |
 |---|---|
@@ -955,7 +959,7 @@ The list below covers the main tables per domain. Owned child tables (lines, all
 
 ## Migration ordering
 
-Migrations are strictly sequential and additive once shipped — IAM (`V1`) is the baseline, and each module lands as a new `V<n>` file (`V2` Parties … `V83` POS permissions). A shipped migration is never edited; a correction is a new migration on top. Every module depends only on already-frozen tables (e.g. all FKs to `companies`/`branches`/`app_users` resolve against the frozen `V1` baseline). The current head is `V83`.
+Migrations are strictly sequential and additive once shipped — IAM (`V1`) is the baseline, and each module lands as a new `V<n>` file (`V2` Parties … `V77` `user_company` … `V78` the `sales_invoices` performance index). A shipped migration is never edited; a correction is a new migration on top. Every module depends only on already-frozen tables (e.g. all FKs to `companies`/`branches`/`app_users` resolve against the frozen `V1` baseline). The current head is `V78`.
 
 ---
 
@@ -969,11 +973,8 @@ handling actually work in the shipped system.
 The decisions behind this design are recorded in
 [ADR-0001](../decisions/0001-iam-architecture.md) (IAM architecture),
 [ADR-0002](../decisions/0002-rbac-enforcement.md) (permission AND scope enforcement),
-[ADR-0003](../decisions/0003-branch-switch-override.md) (runtime branch switch),
-[ADR-0004](../decisions/0004-iam-audit-trail.md) (audit trail), and
-[ADR-0046](../decisions/0046-authoritative-user-company-membership.md) (authoritative
-user ⇄ company membership, superseding the non-authoritative phase of
-[ADR-0045](../decisions/0045-user-company-membership.md)).
+[ADR-0003](../decisions/0003-branch-switch-override.md) (runtime branch switch), and
+[ADR-0004](../decisions/0004-iam-audit-trail.md) (audit trail).
 
 ## 1. Authentication
 
@@ -1106,7 +1107,10 @@ Permission codes are dot-separated and module-prefixed (e.g. `SALES_INVOICE.POST
 migration (PROJECT-CONVENTIONS §3.4). A new permission-gated endpoint without its seeded
 permission is a defect — see the POS prefix-mismatch defect in
 [the test-case suite](../testing/test-cases/07-pos.md) (controllers checked `POS.*` but the
-migration seeded `SALES.POS.*`).
+migration seeded `SALES.POS.*`). A surefire guard, `PermissionCodesSeededTest`, scans every
+`@perm.has` / `@perm.scoped` code in `com.erp.api` and fails the build if any gate references a
+code the repeatable seed (`R__seed_permissions.sql`) does not define — so a **phantom** code (a
+gate on a never-seeded permission, invisible to root, broken for everyone else) cannot ship.
 
 ### 2.4 Custom roles
 
@@ -1127,31 +1131,51 @@ distinct `ROOT.BYPASS` row is written when root acts **out of** its active compa
 (ADR-0004 D-9). In the dev profile the backend bootstraps `rootadmin` / `RootPass12345`
 (dev only — never a prod credential).
 
-### 2.6 Company membership (authoritative — ADR-0046)
+### 2.6 Role-grant read-closure (ADR-0047)
 
-A user's relationship to a company is an explicit, **authoritative** `user_company` row.
-This supersedes the non-authoritative phase of ADR-0045, where membership was a derived,
-auto-created convenience.
+`PermissionCodesSeededTest` proves a gate's code *exists*; it does not prove a **role's grant
+set is closed over the reads its screens fire**. The 2026-06-28 business-operations simulation
+(16 minimally-granted personas — never root, never `ORG_ADMIN`) found that 26 of 28 blockers were
+one mechanism: a custom operational role held a screen's **primary verb** but not a **supporting
+read** the same screen issues on load, so a side-load 403'd and blanked the screen — the persona
+read it as "the page won't open." Root and `ORG_ADMIN` never see it (root short-circuits RBAC; the
+seed CROSS JOINs the whole catalogue onto `ORG_ADMIN`). This is the fourth member of the parity
+family — after **phantom codes**, **route-guard ↔ endpoint parity**, and **code-seeded** — now
+**role-grant vs screen-read closure**: every code is right and every gate is right, but the role's
+grants are not closed over the reads its screens need (ADR-0047).
 
-- **Assign-company-first (write-path prerequisite).** `UserRoleService.grant` and
-  `UserBranchService.assign` now **require** an active `user_company` membership for the
-  target company; without one they reject with 409. The previous auto-create
-  (`ensureMembership` on grant/assign) is removed — membership is granted deliberately, not
-  as a side effect.
-- **No-cascade removal.** Removing a company membership is **blocked** while the user still
-  holds any role or branch assignment in that company (removal does not cascade; the caller
-  must clear roles/branches first).
-- **Read/isolation oracle stays additive.** "Belongs to company C" remains the defensive
-  superset `role-in-C OR branch-in-C OR user_company-in-C` — a read backstop, even though the
-  write path now guarantees the `user_company` row exists.
-- **Root** bypasses tenant scope but **not** the membership gate — root must still hold (or be
-  granted) a `user_company` membership to grant roles / assign branches in a company.
-- **BR-6 re-decided.** Branch assignment and role grant remain independent of each other, but
-  each now requires prior company membership.
-- **Coverage without a migration.** Explicit assign/remove are gated by `USER.COMPANY.MANAGE`.
-  Existing users are reconciled by an idempotent every-boot reconcile (`UserCompanyBackfill`),
-  not a Flyway data migration. Bootstrap and seeders write entities directly and are
-  unaffected by the gate.
+The fix is a **sensitivity gradient**, not "relax everything" or "grant everything":
+
+- **Low-sensitivity ambient pickers** (`branches`, `products`, `wht/types`) were relaxed to a
+  **within-tenant member floor** — `@perm.hasOrMember('CODE')` / `@perm.scopedOrMember(...)`, which
+  passes for any provisioned member of the company (tenant isolation unchanged). The bill-matcher's
+  PO list was broadened to `PURCHASE.ORDER.VIEW or AP.BILL.ENTER`. These reads **need no closure**.
+- **Disclosure-grade reads stay strict** — `CUSTOMER.VIEW`, `SUPPLIER.VIEW`, `AR.VIEW` guard party
+  master carrying TIN/VRN/mobile-money/credit-limit/balance, so the gate stays `@perm.has` and the
+  fix is **role composition**: the role must actually carry the read.
+
+Two artefacts keep this honest:
+
+1. **A declarative screen-read manifest** (`backend/src/main/resources/security/screen-read-closure.json`)
+   — one version-controlled file declaring, per guarded screen, the route permission that opens it
+   and the reference-data reads it fires on load, each tagged `required`/`optional` and carrying the
+   controller gate it hits. **`RolePermissionClosureTest`** (surefire, no DB) asserts the closure
+   invariant as a property of the manifest against the **live controller gates**: gate-form honesty
+   (a declared code must equal the real `@PreAuthorize` code), required-read closure reachability
+   (every strict required read is seeded, so a role *can* satisfy it), and no phantom in the
+   manifest. It reuses `PermissionCodesSeededTest`'s scanner, so there is one permission parser, and
+   it completes the four-link parity chain (reachable → guard parity → seeded → **read-closure**).
+2. **An advisory grant-time validator.** A read-only endpoint
+   `GET /api/v1/roles/uid/{uid}/read-closure-gaps` (`@perm.has('ROLE.VIEW')`) derives which screens
+   a role is *meant* to operate (it already holds the screen's `accessPermission`) and reports the
+   strict required reads it is missing. The role-edit screen renders it as an advisory panel
+   ("this role can open Record-receipt but is missing `CUSTOMER.VIEW`, `AR.VIEW`"). It is
+   **advisory, never blocking** — it informs the admin composing the role; it does not gate
+   `PUT .../permissions`. Codes are shown verbatim (an admin RBAC screen — codes are the working
+   vocabulary; the end-user error-hygiene rule that hides internals does not apply here).
+
+No migration and no new seed — all codes already exist; the guard is a manifest + a test + a
+provisioning discipline ([ADR-0047](../decisions/0047-role-permission-read-closure.md)).
 
 ## 3. Multi-tenant and branch isolation
 
@@ -1172,6 +1196,37 @@ IAM administration tables are the deliberate exception (ADR-0001 D-A): `organisa
 administering IAM is inherently cross-branch — an admin manages many branches' users, and
 root must reach every company. IAM isolation is enforced by **permission + scope checks in
 the service layer**, not a blanket row predicate.
+
+The **company admin list** `GET /api/v1/companies` is scoped accordingly: it previously
+returned **all** organisation companies to any `COMPANY.VIEW` holder, and now returns only the
+companies the caller **belongs to** (root sees all) — the same assigned-or-root filter as
+`/companies/accessible`. Company master data is no longer enumerable cross-tenant.
+
+#### Scope-from-loaded-entity rule (2026-06-26 hardening)
+
+An empirical e2e probe (2026-06-26) found **28 confirmed cross-company leaks across 11
+modules** — all fixed. They fell into two bug classes, both at the service layer:
+
+- **Confused-deputy via a secondary identifier.** An endpoint scope-checked a
+  **caller-supplied `companyId`** (the attacker passes their *own* company, so the check
+  passes) and then loaded the real data by a *separate, unverified* numeric id/uid
+  (`accountId`, `productId`, `glAccountId`, …). The scope check guarded one identifier while
+  the load used another.
+- **Missing write-scope.** uid-addressed **mutators** loaded the target by uid without
+  re-checking the loaded entity's company — so a caller could **write** a record they could
+  not **read**. Worst case: IAM user `update` / `disable` / `enable` / `unlock` /
+  `setPassword` allowed **cross-tenant account takeover** (a password reset on another
+  tenant's user).
+
+**Authoritative rule now:** derive the scope-company from the **loaded entity**, never from a
+caller-supplied parameter, and apply the **same guard to reads and writes**. Fixes are
+service-layer — company-scoped repository finders plus ownership re-checks on the loaded
+entity. The isolation **read oracle is unchanged** and there is **no schema change**.
+
+**Regression guard.** An ArchUnit `FreezingArchRule` (`TenantScopingRulesTest`) fails the
+build if a `..service..` class makes a bare `findById` / `getReferenceById` on a Spring Data
+repository, forcing a company-scoped finder instead. The ~197 pre-existing audited calls are
+frozen as a baseline (`allowStoreUpdate = false`), so no new bare lookup can slip in.
 
 ### 3.2 Branch switch via `X-Branch-Uid`
 
@@ -1213,36 +1268,30 @@ Target-op scope checks live in the gate (`@perm.scoped`). The two **body-scoped*
 body, not a path uid — call `ScopeGuard.assertCanActIn` directly in the service. Both paths
 converge on `ScopeGuard`, so root-bypass and the same-company predicate exist exactly once.
 
-### 3.4 Isolation hardening — derive scope from the loaded entity (2026-06-26 audit)
+### 3.4 Authoritative user–company membership (the membership gate)
 
-An empirical end-to-end probe found **28 confirmed cross-company leaks across 11 modules** —
-all fixed. They fell into two bug classes:
+`user_company` records which companies a user belongs to. As of **ADR-0046** (superseding the
+non-authoritative phase of [ADR-0045](../decisions/0045-user-company-membership.md)) it is a
+**write-path prerequisite**, not just a defensive read input:
 
-- **Confused-deputy via a secondary identifier.** An endpoint scope-checked a
-  *caller-supplied* `companyId` (the attacker passes their **own** company, so the check
-  passes) and then loaded the actual data by a **separate, unverified** numeric id / uid
-  (`accountId`, `productId`, `glAccountId`, …) belonging to another tenant.
-- **Missing write-scope.** A uid-addressed **mutator** loaded its target by uid without
-  re-checking the loaded entity's company — so a caller could **write** a record they could
-  not **read**. Worst case: IAM user `update` / `disable` / `enable` / `unlock` /
-  `setPassword` permitted cross-tenant **account takeover** via a password reset.
+- **Assign-company-first.** `UserRoleService.grant` and `UserBranchService.assign` now
+  **require an ACTIVE `user_company` membership** for the target company — without one they
+  fail with **409**. The previous auto-create (`ensureMembership` on grant/assign) is
+  **removed**.
+- **No silent cascade on removal.** Removing a company membership is **blocked** while the
+  user still holds any role or branch in that company.
+- **Read oracle stays additive.** The isolation oracle remains the **superset**
+  `role OR branch OR user_company` — a defensive belt-and-braces, not the authority. Only the
+  write path is gated.
+- **Root** bypasses tenant *scope* but **not** the membership gate — a user must be assigned
+  to a company before they can be granted roles or branches there.
+- **Bootstrap / seeders** write entities directly and are unaffected. Existing data coverage
+  is guaranteed by an **idempotent every-boot reconcile** (`UserCompanyBackfill`) — there is
+  **no Flyway migration**.
+- Permission **`USER.COMPANY.MANAGE`** gates the explicit assign / remove endpoints.
 
-**Authoritative rule now:** derive the scope-company from the **loaded entity**, never from a
-caller-supplied parameter, and apply the **same guard to reads and writes**. The fixes are
-service-layer — company-scoped repository finders plus ownership re-checks on the loaded
-aggregate. The read oracle of §3.3 is unchanged and there is **no schema change**.
-
-**Regression guard.** An ArchUnit `FreezingArchRule` — `TenantScopingRulesTest` — fails the
-build if a `..service..` class makes a bare `findById` / `getReferenceById` on a Spring Data
-repository, forcing the use of company-scoped finders. The ~197 pre-existing, audited calls
-are frozen as a baseline (`allowStoreUpdate = false`), so no new bare lookup can slip in.
-
-### 3.5 Company list scoping
-
-`GET /api/v1/companies` (the company-admin list) previously returned **all** organisation
-companies to any `COMPANY.VIEW` holder. It now returns only the companies the caller belongs
-to — root sees all — applying the same assigned-or-root filter as `/companies/accessible`.
-Company master data is no longer enumerable across tenants.
+**BR-6 re-decided.** Branch and role assignment remain **independent of each other**, but each
+now requires **prior company membership**.
 
 ## 4. Audit trail
 
@@ -1320,6 +1369,11 @@ CSRF is disabled — correct for a stateless, token-authenticated API with no se
 - **401/403** responses are enveloped without leaking which check failed or whether a username
   exists (no enumeration). Unexpected 500s log the full stack trace server-side but return only
   `"An unexpected error occurred."` to the client (ADR-0038 D-1).
+- **Error-message hygiene (standing rule).** User-facing `errors[]` strings are friendly and carry
+  **no internal identifiers** — no ULIDs/uids, database field names, `BR-`/`ADR-` codes, or
+  exception text; that detail goes to the logs only. Expected business validations surface calmly
+  inline, not via the generic "something went wrong" path. (Admin RBAC screens are the deliberate
+  exception — permission codes are the working vocabulary there; see §2.6.)
 - **Dependency hygiene:** Dependabot opens weekly PRs; `npm audit --audit-level=high` gates
   the web CI; the OWASP dependency-check runs on demand (see
   [docs/ops/security-sweep.md](../ops/security-sweep.md)).
@@ -1407,7 +1461,8 @@ npm run start    # ng serve on :4200
   schema is defined by V-prefixed migrations only (PROJECT-CONVENTIONS §3.6).
 - **Additive after freeze.** The IAM baseline (V1) was edited in place while the schema was
   pre-stable; after that freeze, all changes are **additive** new migrations. The migration
-  head is currently around **V83**.
+  head is currently **V78** (`V78__sales_invoices_company_status_finalised_idx` — a query
+  performance index on `sales_invoices(company, status, finalised)`).
 - **Never edit an applied migration.** A V-prefixed file that has run in any environment must
   not be changed — Flyway validates checksums on startup and a restored DB confirms the schema
   matches. Editing applied migrations is a backend-engineer call, never an ops call
@@ -1445,10 +1500,12 @@ supervisord; it activates `SPRING_PROFILES_ACTIVE=qa` (`infra/qa/application-qa.
 Hikari pool of 10 and INFO logging). The container reads the JWT signing mode from
 `ERP_JWT_SIGNING_MODE` (defaults to `dev-in-memory`).
 
-- **Data-preserving deploy** is the default: the persistent volume survives a redeploy, so QA
-  data carries across releases.
-- **Recreate / wipe:** stop and remove the container **and** drop the `erpclean2-data` volume,
-  then redeploy — the next start re-bootstraps from `qa.env` on a fresh DB.
+- **Data-preserving deploy** is the default and the standard: the persistent volume survives a
+  redeploy, so QA data carries across releases. **QA data is permanent (since 2026-06-20)** — treat
+  it like prod.
+- **Recreate / wipe** (drop the `erpclean2-data` volume, then redeploy → re-bootstraps a fresh DB
+  from `qa.env`): **destructive and non-routine** — only on a deliberate decision to rebuild the
+  environment, never as part of a normal release.
 
 The non-secret target host/user/branch live in committed `infra/qa/deploy.env`; the SSH key
 path, the GitHub PAT, and the bootstrap secrets stay out of git (`deploy.env.local`,
@@ -1670,7 +1727,7 @@ admin tables are the deliberate exception, isolated by service-layer scope check
 ## 7. Persistence discipline (C9)
 
 - **Flyway for all schema**; `ddl-auto=validate` (never `update`). Additive migrations after the
-  baseline freeze; the head is around V83. Never edit an applied migration.
+  baseline freeze; the head is V78. Never edit an applied migration.
 - **Optimistic locking** (`@Version`) on transactional aggregates.
 - **Append-only posting tables** (e.g. `stock_move`, GL postings, `audit_log`) — corrections are
   **new postings**, never updates. The GL is append-only: a posted journal is corrected by a
@@ -1786,6 +1843,18 @@ Two ArchUnit gates run in this fast phase and **fail the build** on violation:
   if any handler lacks a `@PreAuthorize` gate. The public-endpoint allowlist is exactly 4
   endpoints (see [04-security.md](04-security.md) §5). This makes deny-by-default a build
   guarantee.
+
+Two further surefire permission-parity guards run in the same fast phase and complete the parity
+chain (reachable → guard parity → seeded → read-closure):
+
+- **`PermissionCodesSeededTest`** — fails the build if any `@perm` gate references a permission
+  code the repeatable seed (`R__seed_permissions.sql`) does not define (a **phantom** code,
+  invisible to root but broken for everyone else).
+- **`RolePermissionClosureTest`** (ADR-0047) — asserts the screen-read-closure manifest
+  (`backend/src/main/resources/security/screen-read-closure.json`) stays honest against the live
+  controller gates: each declared read's gate-form and code equal the real `@PreAuthorize`, every
+  strict required read is seeded (so a role *can* be composed to satisfy it), and no manifest code
+  is a phantom. No Docker; it reuses the seeded-codes scanner.
 
 This is the **required** gate in `backend-ci.yml`'s `fast-check` job — fast, no Docker.
 

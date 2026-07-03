@@ -90,7 +90,7 @@ When you sign in — or are redirected after trying to open a screen you cannot 
 What you see depends on your account:
 
 - **System administrators (`rootadmin`)** see a **System setup** panel — its heading reads "System setup", under the page subtitle "System administrator — configure the platform below to get started." It presents an ordered set of configuration steps as cards — *1 Companies & branches → 2 Roles & permissions → 3 Users → 4 Audit log* — for standing the platform up. Each card links straight to that area.
-- **Everyone else** sees a brief, calm welcome ("Your workspace is ready"). The home page does **not** repeat the menu — use the sidebar on the left to reach your work. (Personalised shortcuts on this page are planned for a future release.)
+- **Everyone else** sees a personalised **launchpad**: the page subtitle reads "Quick links to your most-used screens," and below it a **Quick launch** grid shows one card per screen you actually hold the permission to open, drawn from a curated set spanning the dashboard, sales, purchasing, stock, finance, and manufacturing (for example Dashboard, Sales orders, POS sell, Stock on-hand, Post journal). Each card is checked against the exact permission its target screen requires, so a card you can see is always a card you can open — there is no dead-end tile. The **Dashboard** card is always shown first when you hold `BI.VIEW`. If none of the curated destinations are open to you, you instead see a brief, calm placeholder ("Your workspace is ready.") prompting you to use the menu on the left. Either way, the home page does **not** repeat the full sidebar menu — the sidebar remains the complete map of everywhere you can go.
 
 The home page never requires a permission and never loads business data, so it is always safe to land on; this is why the system uses it as the silent redirect target for screens you cannot access.
 
@@ -169,6 +169,10 @@ Every list screen (for example, **Sales Orders** or **Users**) behaves the same 
 - A **pager** at the bottom shows page numbers and **First / Previous / Next / Last** controls. If all results fit on one page the pager hides itself.
 - Column headings may be clicked to sort the list (where supported).
 
+### Using the system on a phone or tablet
+
+The system is usable on a phone or tablet, not just a desktop browser. On a narrow screen the sidebar becomes the slide-out menu described above, and wide transaction list tables (for example Sales Orders, Purchase Orders, Customers, or Products) scroll horizontally within their own frame rather than squeezing every column to fit. The row action in the last column (**Open**, **Edit**, **Ledger**, **Adjust**, and so on) stays pinned to the right edge of that frame as you scroll, so it is always reachable — you are never stranded with the action for a row scrolled off-screen. A soft shadow on the right edge of a table hints that more columns are available if you scroll. The interface has been verified for accessibility at phone and tablet screen sizes as well as desktop — no serious or critical issues were found across the main screens when it was last checked.
+
 ### The four screen states
 
 Every data screen can be in one of four states. The system displays a distinct visual for each:
@@ -206,6 +210,8 @@ The general flow for creating or editing a record is:
 2. Fill in the form. Required fields are marked. The system validates as you go and shows inline messages if something is wrong.
 3. Click **Save** (or the specific action button, for example **Confirm** for a sales order).
 4. A brief success notification (a "toast") appears at the top of the screen to confirm the action was saved. If something went wrong, an error message appears in the form itself or as an alert — read it, correct the issue, and try again.
+
+> **Company and Branch default to where you are working.** Where a create screen has its own **Company** and/or **Branch** picker (for example New Stock Count, New Stock Transfer, or Register New Asset), it opens pre-set to your currently **active** branch and company — the same one shown in the top bar — not simply the first company in the organisation. You can still change it before saving if you are creating the record for a different branch; only the starting default changed.
 
 ### Record status and soft-delete
 
@@ -270,7 +276,7 @@ Navigate to **Administration › Companies** (`/admin/companies`) in the sidebar
 
 The list shows each company's code, name, status (Active or Archived), and a **Manage branches** link in the last column. Above the list, the organisation name for this deployment is shown. The list is scoped to your access: a **root administrator** sees every company in the organisation, while everyone else (even holders of `COMPANY.VIEW`) sees only the companies they belong to — those they are assigned to via company membership, a branch, or a role. This keeps the company list from revealing companies you have no access to.
 
-> The Companies screen is intentionally lean: it lets you create a company (code and name), rename it inline (see below), and open each company's branches. There is no separate company detail screen — the company code can never be changed after creation.
+> The Companies screen is intentionally lean: it lets you create a company (code and name), rename it inline (see below), re-provision its default data (see below), and open each company's branches. There is no separate company detail screen — the company code can never be changed after creation.
 
 ### Creating a company
 
@@ -304,6 +310,21 @@ Each company row carries an **Edit** button (it appears only if you hold `COMPAN
 3. Click **Save** to keep the change, or **Cancel** to discard it.
 
 Only the name changes — the code, status, and other attributes are untouched. There is no Archive control on the Companies list. (Archiving exists in the underlying API but is not exposed in the admin UI.)
+
+### Provisioning a company's default data
+
+**What "Provision defaults" does.** A newly created company is automatically seeded, in the same transaction as its creation, with the baseline operational and reference data every module expects to find — default tax rates, GL accounts, units of measure, enabled currencies, and the like. **Provision defaults** re-runs that same seeding for an existing company, on demand. It is idempotent: anything the company already has is left alone — the action only fills in whatever is missing.
+
+**When to use it.** Use it if a company is missing expected reference data — for example, a company created before automatic provisioning existed, one whose original provisioning only partially completed, or one you simply want to heal after noticing a gap (a missing tax rate, an unset default account). It is safe to click on a company that is already fully provisioned; nothing is duplicated.
+
+**Required permission:** `COMPANY.MANAGE`
+
+Each company row carries a **Provision defaults** button alongside **Edit** (visible only if you hold `COMPANY.MANAGE`).
+
+1. On the Companies list, click **Provision defaults** on the company's row.
+2. Confirm the prompt — *"Restore the default setup (tax rates, accounts, units, …) for "\<company name\>"?"*.
+3. The button switches to **Provisioning…** while the request is in flight. The Provision-defaults and Edit actions are interlocked across the **whole** company list, not per row: while any row is being renamed the **Provision defaults** button is disabled on every row, and while a Provision-defaults request is in flight **Edit** is disabled on every row.
+4. On success, a confirmation alert ("Default setup restored") appears. On failure, an error alert explains what went wrong.
 
 ---
 
@@ -381,7 +402,7 @@ To archive a branch, click **Archive** on its row. The branch status changes to 
 
 **Why user accounts exist.** Shared logins (for example, a single "accountant" password passed around the team) make audit trails meaningless — the log shows "accountant did X" and you cannot know who actually did it. Named individual accounts mean every action is attributable to a real person, accounts can be individually disabled without disrupting others, and each person can be given exactly the permissions their job requires.
 
-**When to create a user.** Create a user when a new employee joins, when a contractor needs access, or when a role needs an automated service account. After creating the account you must **assign the user to at least one company first**, then assign at least one branch and grant at least one role; a user with no branches and no roles can log in but will see no menu and have no active branch. Company membership is the prerequisite — branches and roles can only be assigned within a company the user already belongs to (see [Assigning Companies to Users](#assigning-companies-to-users)).
+**When to create a user.** Create a user when a new employee joins, when a contractor needs access, or when a role needs an automated service account. If you create the user while acting as a non-root company administrator, the system automatically makes the new user a member of your active company in the same step — you do not need a separate action for this common case. You then still need to assign at least one branch and grant at least one role; a user with no branches and no roles can log in but will see no menu and have no active branch. (The `rootadmin` account has no single active company, so a user created while signed in as root is left with no company membership — assign one explicitly first; see [Assigning Companies to Users](#assigning-companies-to-users).) Branches and roles can only be assigned within a company the user already belongs to.
 
 **How the user lifecycle works.** A user starts `ACTIVE`. An administrator can `DISABLE` the account (status becomes `INACTIVE`) to prevent login while preserving the account and its history — for example, during a leave of absence or pending investigation. `ENABLE` restores it to `ACTIVE`. The `rootadmin` account cannot be disabled. If too many wrong-password attempts are made, the account is automatically locked for 15 minutes; an administrator can clear this with **Unlock**. User accounts are never hard-deleted.
 
@@ -394,6 +415,8 @@ Navigate to **Administration › Users** (`/admin/users`) in the sidebar.
 
 The list shows columns for **Username**, **Display name**, **Status**, **Locked**, and **Root** (a marker on the `rootadmin` account), plus a per-row action area. The actions on each row are **Disable**/**Enable**, **Unlock** (only when the account is locked), **Password** (an inline set-password form), and **Assignments** (a link that opens the user's Assignments page at `/admin/users/uid/<uid>`, where you manage the user's companies, branches, and roles). Root accounts do not show a Disable action.
 
+The list is scoped to your access: a **root administrator** sees every user in the organisation, while everyone else sees only the (non-root) users who are members of their active company — including any user they have just created, since creating a user makes it a member of the creator's active company automatically (see below, and [Assigning Companies to Users](#assigning-companies-to-users)).
+
 ### Creating a user
 
 The create form is an inline card (**Add User**) at the top of the Users list.
@@ -404,7 +427,7 @@ The create form is an inline card (**Add User**) at the top of the Users list.
    - **Temporary password** — must be at least 8 characters and contain at least one letter and one number. Common passwords (such as `password1` or `admin123`) are rejected.
 2. Click **Add user**.
 
-The user is created with status **Active** and no role or branch assignments. The create form captures only the username, display name, and temporary password — there are no email or phone fields here. Assign roles and branches next (see below).
+The user is created with status **Active** and no role or branch assignments. The create form captures only the username, display name, and temporary password — there are no email or phone fields here. Assign roles and branches next (see below). If you created the user while acting as a non-root administrator, the user is also automatically made a member of your active company — no separate step is needed, and the user immediately appears in your Users list.
 
 > Usernames are compared case-insensitively. `Alice.Smith` and `alice.smith` refer to the same account. Creating a user whose username already exists is rejected with a conflict (409) error.
 
@@ -454,7 +477,7 @@ Click **Assignments** on a user's row to open their Assignments page (`/admin/us
 **The effective permission set.** A user may hold multiple roles. Their effective permissions at any moment are the **union** of all permissions from all their active role grants in the current company and branch context. If Role A grants `GL.VIEW` and Role B grants `GL.POST`, a user with both roles has both.
 
 **Required permission to view:** `ROLE.VIEW`
-**Required permission to create / edit / set permissions:** `ROLE.MANAGE`
+**Required permission to create / edit / set permissions:** `ROLE.ADMIN` (the role catalogue itself is guarded by `ROLE.ADMIN`; the separate `ROLE.MANAGE` permission governs assigning existing roles to users — see *Assigning Roles to Users* below)
 
 Navigate to **Administration › Roles** (`/admin/roles`) in the sidebar.
 
@@ -500,6 +523,20 @@ Saving replaces the role's entire permission set with the checked selections. Re
 
 > The permission catalogue contains over 220 codes across all modules. An empty permission set is valid — it means the role grants no access.
 
+### Read-closure advisory
+
+**What it is.** Below the Permissions card, the role edit page can show a **Read-closure advisory** panel. It flags screens the role's checked permissions let a user *open* (because the role holds that screen's primary action permission) where the role is still missing one or more supporting **read** permissions the same screen needs on load — for example, a role that can create a sales order but was not also given the customer and product picker reads. The panel is advisory only: it never blocks **Save permissions**, and saving an incomplete selection is always allowed.
+
+**Why it exists.** A screen's primary action and its reference-data pickers are separate permission checks. Without this advisory, a role that is missing a picker's read looks complete to the administrator composing it (everything saves without error) but a real user holding only that role hits a partial, confusing block once they open the screen — the button they can see, but a supporting dropdown 403s. Testing as `rootadmin` never reveals this, because root holds every permission. The advisory surfaces the gap to the administrator at grant time instead.
+
+**When you see it.** The panel appears automatically on the role edit page (`/admin/roles/uid/<uid>`) whenever the role's current permission set leaves at least one reachable screen with a missing required read; it is empty and hidden otherwise. It refreshes each time you click **Save permissions**, so you can immediately confirm a fix.
+
+Each gap reads in the form:
+
+> This role can open **\<screen name\>** but is missing `<CODE>`, `<CODE>` — users with only this role will be blocked on that screen.
+
+Grant the listed codes on the Permissions panel above and click **Save permissions** again to clear the gap.
+
 ### Archiving a role
 
 There is no Archive control in the current interface. The role edit page offers only **Save details** and **Save permissions**, and the roles list has no Archive action — its only per-row action is **Edit**. (Archiving exists in the underlying API but is not exposed in the admin UI; system roles such as **ORG_ADMIN** cannot be archived in any case.)
@@ -512,7 +549,7 @@ There is no Archive control in the current interface. The role edit page offers 
 
 **Why membership is required first (assign-company-first).** Tying branch and role assignment to an explicit company membership makes "which companies is this person part of?" a single, deliberate decision rather than a side effect of the first role grant. It also keeps the company pickers on the Branches and Roles cards focused — they list only the companies the user actually belongs to, so you cannot accidentally grant access in the wrong company.
 
-**When to assign a company.** Immediately after creating a user, and whenever the user takes on responsibilities in an additional company.
+**When to assign a company.** A non-root administrator's active company is assigned automatically the moment they create the user (see [Creating a user](#creating-a-user)), so you will usually only need this screen when a user created by `rootadmin` needs their first company, or whenever an existing user takes on responsibilities in an additional company.
 
 **How removal is protected.** You cannot remove a user's company membership while they still hold any branch assignment or role grant in that company — the system blocks it with a message asking you to remove those first. This prevents leaving a user with branches or roles in a company they are no longer a member of.
 
@@ -971,7 +1008,7 @@ A **product** is any item or service that your business sells, buys, or manufact
 
 **When it is used.** A catalogue manager or product administrator creates product records before the first transaction involving those items. Products are used on every sales quotation and order (if sellable), every purchase order and goods receipt (if a goods product), every stock movement (if stockable), and every manufacturing or assembly job (if it has a recipe).
 
-**How it works.** A product is created **Active** with a `PROD-####` code (or a custom code you supply), scoped to one company, and associated with branches. Its lifecycle is Active → Archived → Active. Once created, you can add barcodes for scanning at the point of sale, define bulk-pack conversions (for example, 50 kg bags per carton), set selling prices on each of your price lists, and define a component recipe for manufactured or bundled items.
+**How it works.** A product is created **Active** with a `PROD-####` code (or a custom code you supply), scoped to one company, and associated with branches. Its lifecycle is Active → Archived → Active. Once created, you can add barcodes for scanning at the point of sale, define bulk-pack conversions (for example, 50 kg bags per carton), set selling prices on each of your price lists, and define a component recipe for manufactured or bundled items. You can also build all of this — identity, pricing, units of measure, opening stock and barcodes, and branch availability — in a single pass on the **Product Master** screen (the **Full product form** button on the products list) instead of visiting each panel separately; see *The Product Master — one screen for the whole product* below.
 
 Products are the items you sell, buy, or manufacture. Each product belongs to one company and carries a system-generated code (for example, `PROD-0001`) unless you supply your own code at creation time.
 
@@ -1010,6 +1047,29 @@ The classification is purely a label on the product record; on its own it does n
 8. Optionally enter a **Description**, then set the **VAT Status**.
 9. Enter the **Cost amount**. The **Currency** beside it is the **Currency Picker** — a dropdown of the company's enabled currencies, pre-set to the company default — not a free-text code (see **Getting Started › Common UI Patterns**).
 10. Click **Create**.
+
+### The Product Master — one screen for the whole product
+
+**What it is.** Next to **New Product** on the products list toolbar, a **Full product form** button opens the **Product Master** (`/admin/products/master`, permission `PRODUCT.MANAGE`) — one screen, organised into five tabs, that captures the whole product record in a single save: identity, pricing, supplier and units of measure, opening stock and barcodes, and branch availability.
+
+**Why it exists.** The quick create form above, followed by the separate Barcodes, Bulk Packs, Product prices, and Branch Associations panels on the product detail page, gets you there, but takes several round trips even for a straightforward new item. The Product Master orchestrates the same underlying steps from one screen: it creates the product first, then submits each section you filled in, in turn, against the new product's uid — reporting exactly which parts saved and which need attention if a step fails partway through.
+
+**How it works.** The five tabs are **General**, **Pricing**, **Supplier & UoM**, **Stock & Barcodes**, and **Branches**. Switching tabs does not save anything by itself — nothing is written until you click the save button at the bottom of the screen.
+
+1. Navigate to **Products › Products** (`/admin/products`) and click **Full product form**.
+2. If your organisation has more than one company, select the **Company** first (the picker only appears when there is more than one; it is fixed once the product is created).
+3. On the **General** tab, enter the identity fields: optionally a **Code** (blank assigns `PROD-####`; not editable once created), the required **Name**, **Type** (Goods or Service — Service forces **Stockable** off), **VAT Status**, **Description**, **Department / Category** (free text, not linked to HR departments), **Brand / Trade name**, **Manufacturer**, **HS Code**, **Image URL**, the **Sellable** / **Stockable** / **Purchasable** flags, the **Lot tracked** / **Serial tracked** / **Expiry tracked** flags (disabled when **Type** is Service), and **Internal Notes**.
+4. On the **Pricing** tab, enter the **Cost (buying) price** — an **Amount** and a **Currency** (the **Currency Picker**) — then click **Add price list** for each **Selling price** row and set its **Price list**, **Amount**, **Currency**, and optional **Effective from** date. A first selling-price row is pre-added automatically, pre-selected to the company's default price list where the system can resolve one (the list flagged as default, a list coded `DEFAULT`/`STANDARD`, or the only list that exists); otherwise it is left for you to choose.
+5. On the **Supplier & UoM** tab (headed *Supplier & Unit of Measure*), select the required **Base unit of measure**, optionally add **Pack / bulk units** — a **Unit** and a **Factor to base**, then click **Add** — the same bulk-pack conversions described under *Bulk packs* below, optionally search for and select a **Preferred supplier**, and set the **Stock planning defaults** (**Reorder level**, **Reorder qty**, **Safety stock**, **Min stock**, **Max stock** — disabled when **Type** is Service, since a Service product cannot be stockable).
+6. On the **Stock & Barcodes** tab, add any **Barcodes / Article numbers** — a **Barcode value**, optional **Type** and **Unit**, and a **Primary** checkbox (the first barcode you add is marked primary automatically even if you don't tick it) — and, if the product is stockable, an **Opening stock Quantity** and **Note**, seeded into your current active branch.
+7. On the **Branches** tab, leave **Make available in all branches** ticked (the default) to activate the product everywhere, or untick it and set each branch's own **Active** switch, **Reorder level** (stockable products only), and **Branch price** (blank inherits the price-list price).
+8. Click **Create product**.
+
+**Validation.** **Name** and **Base unit of measure** are required — leaving either blank shows an error and switches you to the tab that needs it. If you add any barcodes, exactly one must be marked **Primary**.
+
+**The save result.** If the product itself fails to save, the error is surfaced as a toast (for example a duplicate code) or, for an unexpected failure, the "Something went wrong" dialog — the form shows no inline message and the result panel below does not appear until the product has actually been created. Correct the issue and click **Create product** again. Once the product itself has saved, the screen always shows a result panel listing every section — **Product**, **Selling prices**, **Barcodes**, **Pack units**, **Branch availability**, **Opening stock** — each with a status: a check for a section that saved, a cross with the error message for one that failed, or a dash for one you left empty. Click **Retry** next to a failed section (other than **Product** itself) to resubmit just that part without repeating the whole form. From here, click **Open product** to go to the product's detail page, **Back to list** to return to the product list, or — if any section failed — **Continue editing** to go back to the form.
+
+**Editing.** The product list's **Edit** action opens the classic product detail page described in the sections below (Barcodes, Bulk packs, Product prices, Product components, Branch Associations), not the Product Master screen.
 
 ### How to set a custom code
 
@@ -1070,6 +1130,8 @@ Bulk packs define how many base units fit into a larger packaging unit (for exam
 3. Click **Add Bulk Pack**.
 4. To remove a bulk pack, click **Remove**.
 
+**A product's allowed units of measure.** A product's base unit (set when it is created) plus any bulk packs added here together form the **complete set of units this product can be transacted in**. Everywhere a line item lets you pick a unit — purchase orders, sales orders, sales invoices, sales quotations, RFQs, blanket and standing orders, purchase requisitions, CRM opportunities, and Point of Sale — the **Unit** field on that line loads only this product's configured units once you select the product, defaults to the base unit, and stays disabled until a product is chosen. You cannot pick a unit that isn't this product's base unit or one of its active bulk packs; the system rejects any other unit rather than silently mis-converting the quantity.
+
 ### Product prices
 
 A **product price** is the selling price of this product on a specific price list. A price must be set on a price list before the product can be sold at that list's rate. You can maintain different prices on different lists — for example, a higher retail price and a lower wholesale price for the same product.
@@ -1109,6 +1171,22 @@ Scenario: Catalogue manager sets up a new FMCG line before the first purchase or
 7. **Prices panel:** Select Price list `WHOLESALE — Wholesale Price List`, Amount `2200`, leave **Currency** at the default. Click **Set Price**.
 
 The product `PROD-0034 — Sugar 1kg` is now available for sale at the correct retail price and will appear in stock movements tracked in kilograms.
+
+---
+
+**Example — Set up a product in one pass with the Product Master**
+
+Scenario: Catalogue manager sets up Cooking Oil 5L from scratch using the one-screen template instead of the classic multi-panel flow.
+
+1. Navigate to **Products › Products** (`/admin/products`). Click **Full product form**.
+2. **General tab:** leave Code blank, enter Name `Cooking Oil 5L`, Type `Goods`, VAT Status `Standard`, tick **Sellable** and **Stockable**.
+3. **Pricing tab:** Cost (buying) price Amount `12000`, Currency left at the company default. On the pre-added Selling price row, leave the Price list at the resolved default and enter Amount `15500`.
+4. **Supplier & UoM tab:** Base unit of measure `LTR — Litre`. Under Pack / bulk units, select Unit `CTN — Carton`, Factor to base `4`, click **Add**.
+5. **Stock & Barcodes tab:** enter Barcode value `6009876500001` (kept as primary automatically, being the first row). Opening stock Quantity `200`.
+6. **Branches tab:** leave **Make available in all branches** ticked.
+7. Click **Create product**.
+
+The save-result panel shows **Product**, **Selling prices**, **Barcodes**, **Pack units**, **Branch availability**, and **Opening stock** all marked done. Clicking **Open product** opens the new record on the classic detail page, already carrying its retail price, its carton bulk pack, its barcode, and 200 litres of opening stock — all set up from the one screen.
 
 ---
 
@@ -1270,7 +1348,7 @@ Tomorrow, if the rate changes to `2,548.00`, simply click **New Rate** again and
 
 ## Tax Rates
 
-**Navigation:** **Sales › Tax Rates** (`/admin/tax-rates`) | **Permission to view:** `TAXRATE.VIEW` | **Permission to edit:** `TAXRATE.MANAGE`
+**Navigation:** **Sales › Tax Rates** (`/admin/tax-rates`) | **Permission to view:** `TAXRATE.VIEW` | **Permission to create / edit:** `TAXRATE.MANAGE`
 
 A **tax rate** is the percentage applied to a sale line to calculate value-added tax (VAT). VAT is a consumption tax collected by the business on behalf of the tax authority: the business charges the customer a price plus VAT, then remits the VAT element to the government. Getting the rate right on every transaction is a legal obligation, not an option.
 
@@ -1283,7 +1361,7 @@ A **tax rate** is the percentage applied to a sale line to calculate value-added
 
 **When it is used.** A finance manager or system administrator reviews and (if required) adjusts the rates when the tax authority changes them. The rates are applied automatically to every sales and purchase line based on the product's VAT status (set on the product record).
 
-**How it works.** The three bands are seeded when a company is created; you cannot add new bands or delete existing ones. You can only edit the rate of each band. The updated rate applies to all future transactions that reference that band; past transactions retain the rate that was in effect when they were created.
+**How it works.** The three bands are normally seeded automatically when a company is created, and you can only edit the rate of each one. The updated rate applies to all future transactions that reference that band; past transactions retain the rate that was in effect when they were created. If a company's seeding was skipped or only partially completed — so one or more classifications are missing — you can create the missing band(s) yourself from this screen instead of waiting on a seeder run; see *How to add a tax rate* below. There is no archive or delete on tax rates: once a band exists for a company it is permanent, and you can only ever have one row per classification.
 
 Three VAT bands are seeded per company:
 
@@ -1293,16 +1371,25 @@ Three VAT bands are seeded per company:
 | Zero-rated | 0% (0.00) |
 | Exempt | 0% (0.00) |
 
-You can edit the rate for each band. There is no create or archive on tax rates — the three bands are fixed.
-
 ### How to edit a tax rate
 
 1. Navigate to **Sales › Tax Rates** (`/admin/tax-rates`).
 2. Click **Edit** on the relevant band row.
-3. Enter the new rate as a decimal between 0 and 0.9999 (for example, `0.18` for 18%).
+3. Enter the new **Rate** as a percentage (for example, `18` for 18%). The value must be between 0 and 99.99.
 4. Click **Save**.
 
 The rate applies to all future transactions that reference this VAT band on a product.
+
+### How to add a tax rate
+
+If a company is missing one or more of the three VAT classifications, an **Add tax rate** section appears below the table.
+
+1. Navigate to **Sales › Tax Rates** (`/admin/tax-rates`).
+2. Under **Add tax rate**, select the **VAT classification** — the dropdown offers only classifications not yet configured for this company (Standard, Zero Rated, Exempt).
+3. Enter the **Rate (%)** as a percentage (for example, `18` for 18%). The value must be between 0 and 99.99.
+4. Click **Add**.
+
+The new band appears in the table immediately. Once all three classifications are configured, the **Add tax rate** section is replaced by the message *All VAT classifications are configured.* Submitting a rate for a classification that already exists is rejected with *A rate for this classification already exists.* You need the `TAXRATE.MANAGE` permission to add a rate, same as to edit one.
 
 ---
 
@@ -1455,6 +1542,8 @@ Navigate to **Sales › Quotations** (`/admin/quotations`).
 3. Choose a **Unit**, enter **Quantity**, optionally enter a **Price Override** (otherwise the list price is used), and optionally enter a **Disc %** (line discount as a percentage — the quotation and Sales Order line forms only offer a percentage discount, not a fixed amount).
 4. Click the **+** (Add line) button. The system calculates net amount, VAT, and gross from the configured price list.
 
+**Unit choices are product-scoped.** The **Unit** dropdown is disabled until a product is selected. Once a product is chosen, it lists only that product's configured units — its base unit plus any active bulk-pack units (e.g. CARTON) — never the full company unit list, and it defaults to the base unit. This applies to every line form in this chapter (quotations, sales orders, invoices, blanket orders, standing orders, and POS sales): you can no longer select a unit that is not configured on the product, which previously could silently mis-record the quantity.
+
 Repeat for each product. You can also add **Service** products; these are priced the same way but do not affect stock.
 
 To remove a line, click the delete icon on the line row. Lines can only be changed while the quotation is in DRAFT.
@@ -1529,7 +1618,7 @@ Navigate to **Sales › Sales Orders** (`/admin/sales-orders`).
 
 ### 2.2 Add lines to a Sales Order
 
-The same process as adding quotation lines. Lines can only be added, edited, or removed while the order is in DRAFT.
+The same process as adding quotation lines, including the **Unit** dropdown being scoped to the selected product's configured units (see section 1.2). Lines can only be added, edited, or removed while the order is in DRAFT.
 
 ### 2.3 Confirm an order
 
@@ -1562,7 +1651,26 @@ Cancelling an order releases any stock reservations.
 
 Cancellation is allowed from any status except **CANCELLED** and **CLOSED**.
 
-### 2.5 Order status lifecycle
+### 2.5 Set or change the agent
+
+**What the order's agent is.** Every sales order carries a sales agent — the salesperson or route agent credited with the sale — which the invoicing flow depends on. An order can be created without one (Agent is optional in section 2.1), but an invoice generated from an agentless order cannot be finalised.
+
+**Why this action exists.** Before this action, an order created with no agent (or the wrong one) had no way to be corrected in place — every attempt to invoice it would keep failing. **Assign Agent** / **Change Agent** lets an authorised user fix the agent on an existing order without recreating it.
+
+1. Open the sales order (navigate to `/admin/sales-orders/uid/{uid}`).
+2. Click **Assign Agent** if the order has no agent, or **Change Agent** if it already has one — both open the same form.
+3. In the **Agent** field, type part of the agent's name or code and select the correct entry from the suggestions list.
+4. Click **Save Agent**.
+
+The order's agent is updated immediately and a confirmation is shown.
+
+**When the action is available.** The button is shown only while the order is in a pre-invoice status — **DRAFT**, **CONFIRMED**, **PARTIALLY_FULFILLED**, or **FULFILLED**. Once the order has been invoiced (**PARTIALLY_INVOICED**, **CLOSED**) or is **CANCELLED**, the agent can no longer be changed this way.
+
+**No-agent banner.** An order with no agent shows a warning banner on its detail page: *"No agent assigned. This order cannot be invoiced until a sales agent is assigned."*
+
+**Required permission:** `SALES.ORDER.CREATE` (the same permission used to create and edit draft orders — there is no separate set-agent permission).
+
+### 2.6 Order status lifecycle
 
 | Status | Meaning |
 |---|---|
@@ -1614,6 +1722,8 @@ Once goods are delivered, you can invoice the customer for that delivery:
 2. Click **Invoice this Delivery**.
 3. A draft **Sales Invoice** is created automatically with the delivered lines. The doc discount from the source order is pro-rated to the delivered quantity.
 
+**Prerequisite: the source order must have an agent.** Invoice this Delivery reads the agent from the underlying Sales Order. If that order has no agent, the action is refused with *"The sales order has no agent assigned."* Open the Sales Order and use **Assign Agent** (section 2.5) to set one, then retry.
+
 Proceed to section 4 to finalise the invoice.
 
 ---
@@ -1648,7 +1758,7 @@ Navigate to **Sales › Invoices** (`/admin/sales-invoices`).
 
 ### 4.2 Add lines to an invoice
 
-Same process as adding lines to a quotation or order. Lines can only be added, edited, or removed while the invoice is in DRAFT.
+Same process as adding lines to a quotation or order, including the product-scoped **Unit** dropdown (see section 1.2). Lines can only be added, edited, or removed while the invoice is in DRAFT.
 
 ### 4.3 Record a payment
 
@@ -1774,7 +1884,7 @@ Navigate to **Sales › Blanket Orders** (`/admin/blanket-orders`).
 2. Select the **Company** and **Branch**.
 3. Pick the **Customer** by name.
 4. Choose the **Currency** from the Currency Picker (see *Common UI Patterns* in chapter 00 — enabled currencies only, defaulting to the company default), then set **Valid From** and **Valid To** dates.
-5. Add one or more **Lines**: for each, pick the product by name, choose a unit, and enter the committed quantity and unit price.
+5. Add one or more **Lines**: for each, pick the product by name, choose a unit (limited to that product's configured units — see section 1.2), and enter the committed quantity and unit price.
 6. Optionally add notes (up to 500 characters).
 7. Click **Create Blanket Order**.
 
@@ -1832,7 +1942,7 @@ Navigate to **Sales › Standing Orders** (`/admin/standing-orders`).
 2. Pick the **Branch** and **Customer**, then choose the **Currency** from the Currency Picker (see *Common UI Patterns* in chapter 00 — enabled currencies only, defaulting to the company default).
 3. Choose a **Frequency**: Daily, Weekly, Bi-Weekly, or Monthly.
 4. Set a **Start Date**. Optionally set an **End Date**; leave it blank for open-ended.
-5. Add lines: pick each product and unit by name, enter quantity and unit price.
+5. Add lines: pick each product by name; the unit choices are limited to that product's configured units (see section 1.2); enter quantity and unit price.
 6. Click **Create Standing Order**.
 
 The standing order is created with status **ACTIVE** and the first `Next Run Date` is set.
@@ -1963,7 +2073,7 @@ Navigate to the **Point of Sale** group in the sidebar.
 
 **What a POS sale is.** A POS sale is a cash counter transaction. It produces a finalised sales invoice with origin `POS` (it is stamped with the originating POS session), the cash payment is recorded automatically for the full amount, and revenue is posted on finalisation. The invoice number (`INV-####`) is assigned on the spot. No quotation, sales order, or delivery step is involved — POS is designed for speed at the counter.
 
-> **Note on stock.** Unlike a walk-in `DIRECT` invoice, a `POS`-origin invoice does **not** trigger the stock-issue step at finalisation under the current code — the stock-issue handler issues stock only for `DIRECT`-origin invoices. Treat POS stock movement as a known limitation pending confirmation; do not rely on a POS sale decrementing on-hand stock the way a direct walk-in invoice does.
+> **Note on stock.** A `POS`-origin invoice issues stock at finalisation exactly like a walk-in `DIRECT` invoice: finalising the invoice decrements on-hand stock for each line (the stock-issue step runs for both `DIRECT` and `POS` origins). A POS sale completed at the till therefore both posts revenue **and** reduces inventory.
 
 POS is used for face-to-face retail transactions. A **till** is a physical cash register position. Each till must be opened in a **session** before sales can be processed. The session is closed and reconciled at end of day.
 
@@ -2004,7 +2114,7 @@ A new session is created with status **OPEN**. Only one session can be open on a
 
 ### 9.4 Ring a sale
 
-**What "ringing a sale" means.** This is the cashier's checkout step: entering the products and quantities the customer is buying, taking the cash the customer hands over, and completing the transaction. The system calculates the total, computes the change due, and — on completion — records the cash payment, finalises the sales invoice, posts the revenue, and issues the receipt. (See the stock note above: a `POS`-origin invoice does not currently run the stock-issue step that a `DIRECT` walk-in invoice does.)
+**What "ringing a sale" means.** This is the cashier's checkout step: entering the products and quantities the customer is buying, taking the cash the customer hands over, and completing the transaction. The system calculates the total, computes the change due, and — on completion — records the cash payment, finalises the sales invoice, posts the revenue, and issues the receipt. (On completion a `POS`-origin invoice issues stock just like a `DIRECT` walk-in invoice — see the stock note above.)
 
 **What the tendered amount is.** The tendered amount is the cash the customer physically hands to the cashier — often a round number larger than the total. If the total is TZS 13,000 and the customer hands over TZS 20,000, the tendered amount is TZS 20,000 and the change is TZS 7,000. The system calculates the change and the cashier returns it. A sale cannot be submitted if the tendered amount is less than the total.
 
@@ -2014,7 +2124,7 @@ A new session is created with status **OPEN**. Only one session can be open on a
 4. Pick the **Customer** (type in the search box above the picker to filter the list, then select).
 5. Pick the **Agent** (search then select) — required; leaving Agent blank will cause the sale to be rejected.
 6. Choose the **Currency** from the Currency Picker (see *Common UI Patterns* in chapter 00 — enabled currencies only, defaulting to the company default).
-7. Click **Add Line**. Pick the **Product**; confirm or adjust the **Unit**, enter **Quantity** and **Unit Price**, and optionally a line **Discount** (entered as an amount).
+7. Click **Add Line**. Pick the **Product**; the **Unit** field is disabled until a product is picked and then lists only that product's configured units (defaulting to its base unit — see section 1.2), so confirm it or choose another from the list; enter **Quantity** and **Unit Price**, and optionally a line **Discount** (entered as an amount).
 8. Add further lines as needed. The **Total** updates in the footer.
 9. Enter the **Tendered Amount** (the cash handed over by the customer). The **Change** is calculated immediately. The sale cannot be submitted if the tendered amount is less than the total.
 10. Click **Complete Sale**.
@@ -2024,7 +2134,7 @@ A success receipt is displayed showing the invoice number and total. Click **Vie
 **Notes:**
 - On this checkout screen the sale is settled in cash — you enter a single **Tendered Amount** and the payment is recorded as Cash automatically. (The POS sale itself can also accept several tenders together; see *Splitting payment across tenders* below.)
 - The agent field is mandatory on the backend; leaving it blank will cause the sale to be rejected.
-- If the chosen session has been closed in the meantime, the sale is rejected with a message of the form *"POS session &lt;session-uid&gt; is not OPEN."* (the message quotes the session's internal UID, not its `POS-####` number) so you know to re-open or re-select an OPEN session.
+- If the chosen session has been closed in the meantime, the sale is rejected with **"This POS session is not OPEN."** so you know to re-open or re-select an OPEN session.
 - If a **Complete Sale** click is interrupted (network drop, slow response) and the cashier retries, the system recognises the repeat and returns the original sale instead of ringing it twice — a sale is never double-posted, so it is safe to retry.
 
 #### Splitting payment across tenders
@@ -2203,14 +2313,13 @@ For direct purchases without a sourcing process, the chain can start at the Purc
 | Activity | Permission codes |
 |---|---|
 | Requisitions | `PURCHASE.REQUISITION.VIEW`, `PURCHASE.REQUISITION.CREATE`, `PURCHASE.REQUISITION.APPROVE` |
-| RFQ | `PURCHASE.RFQ.VIEW`, `PURCHASE.RFQ.CREATE`, `PURCHASE.RFQ.AWARD` |
-| Supplier Quotes | `PURCHASE.QUOTE.VIEW`, `PURCHASE.QUOTE.CREATE` |
+| RFQ / Supplier Quotes | `PURCHASE.RFQ.VIEW`, `PURCHASE.RFQ.MANAGE` |
 | Purchase Orders | `PURCHASE.ORDER.VIEW`, `PURCHASE.ORDER.CREATE`, `PURCHASE.ORDER.VOID`, `PURCHASE.ORDER.APPROVE` |
 | Goods Receipt | `PURCHASE.GOODS_RECEIPT.VIEW`, `PURCHASE.RECEIVE` |
-| Landed Cost | `PURCHASE.LANDED_COST.VIEW`, `PURCHASE.LANDED_COST.CREATE`, `PURCHASE.LANDED_COST.CONFIRM` |
+| Landed Cost | `PURCHASE.LANDEDCOST.VIEW`, `PURCHASE.LANDEDCOST.MANAGE` |
 | Supplier Bills / AP | `AP.VIEW`, `AP.BILL.ENTER`, `AP.BILL.MATCH` |
-| Purchase Returns | `PURCHASE.RETURN.VIEW`, `PURCHASE.RETURN.CREATE`, `PURCHASE.RETURN.CONFIRM` |
-| Purchase Settings | `PURCHASE.SETTINGS.VIEW`, `PURCHASE.SETTINGS.EDIT` |
+| Purchase Returns | `PURCHASE.RETURN.VIEW`, `PURCHASE.RETURN.CREATE` |
+| Purchase Settings | `PURCHASE.SETTINGS.MANAGE` |
 
 Contact your administrator if an expected menu item is missing.
 
@@ -2239,7 +2348,7 @@ A requisition starts as a DRAFT (being prepared) and must be submitted before it
 1. Navigate to **Purchasing › Purchase Requisitions** (`/admin/purchase-requisitions`).
 2. Click **New Requisition**, or go directly to `/admin/purchase-requisitions/create`.
 3. Set the **Required By** date and optionally a cost centre and notes.
-4. Add lines: for each item, pick the **Product** by name, choose a **Unit**, and enter the **Requested Quantity** and an **Estimated Unit Cost**.
+4. Add lines: for each item, pick the **Product** by name, choose a **Unit**, and enter the **Requested Quantity** and an **Estimated Unit Cost**. The **Unit** field is disabled until a product is picked; once picked, it lists only that product's configured units (its base unit and any active bulk-pack units) — not every unit in the system.
 5. Click **Create Requisition**. The requisition is saved in **DRAFT**.
 
 ### 1.2 Submit a requisition
@@ -2314,7 +2423,7 @@ An RFQ (Request for Quotation) is a document sent to one or more suppliers askin
 Without a sourcing step, the business might always buy from the same supplier at whatever price they name, with no mechanism to check whether better value is available elsewhere. An RFQ enforces competitive sourcing: multiple suppliers are asked the same question at the same time, their responses are recorded in the system, and the selection is documented — protecting the business from claims of favouritism and ensuring value for money.
 
 **When it is used.**
-An RFQ is used when the buying price is not already fixed by contract or catalogue and at least one competitive comparison is warranted. It is typically triggered by an approved purchase requisition (the Convert → RFQ path) or raised directly by a purchasing officer when restocking at scale. The person sending the RFQ and capturing quotes holds the `PURCHASE.RFQ.CREATE` and `PURCHASE.QUOTE.CREATE` permissions; awarding it requires `PURCHASE.RFQ.AWARD`.
+An RFQ is used when the buying price is not already fixed by contract or catalogue and at least one competitive comparison is warranted. It is typically triggered by an approved purchase requisition (the Convert → RFQ path) or raised directly by a purchasing officer when restocking at scale. The person creating and sending the RFQ, capturing quotes, and awarding it holds the `PURCHASE.RFQ.MANAGE` permission (the same permission covers all three actions); viewing an RFQ requires `PURCHASE.RFQ.VIEW`.
 
 **How it flows.**
 An RFQ is created in DRAFT with the product lines and the invited suppliers. When sent (SENT), suppliers are notified to respond. As each supplier responds with a price, a **Supplier Quote** is captured against the RFQ (QUOTES_RECEIVED). The purchasing officer then compares the quotes and awards the RFQ to the preferred supplier (AWARDED). Awarding automatically creates a Purchase Order in DRAFT at the winning quote's prices — the sourcing stage is complete and the buying stage begins.
@@ -2327,8 +2436,8 @@ An RFQ can be created directly or by converting an approved requisition (see sec
 
 1. Navigate to **Purchasing › RFQs / Sourcing** (`/admin/rfqs`) and click **New RFQ**, or go to `/admin/rfqs/create`.
 2. Set the **Response Due Date** and optionally add notes.
-3. In the **Invite Suppliers** section, choose a supplier in the **Add a supplier** picker and click the **+** button to add it to the invite list. Repeat for each supplier; invite at least one.
-4. Add lines: pick each product by name, choose a unit, and enter the required quantity.
+3. In the **Invite Suppliers** section, choose a supplier in the **Add a supplier** picker and click the **+** button to add it to the invite list. Repeat for each supplier; invite at least one. Each added supplier is shown by name and code — both in this list and later on the RFQ detail screen's **Invited Suppliers** panel — never as a raw reference number.
+4. Add lines: pick each product by name, choose a unit, and enter the required quantity. The unit dropdown is disabled until a product is picked, and then lists only that product's configured units.
 5. Click **Create RFQ**. The RFQ is created in **DRAFT**.
 
 ### 2.2 Send an RFQ to suppliers
@@ -2409,7 +2518,7 @@ A PO is raised after a purchase has been authorised. There are three ways a PO c
 - By creating one directly on the Purchase Orders list using the inline **New Order** form (see section 3.1), without a requisition or RFQ — useful for direct purchases where the supplier and prices are already known.
 
 **How a PO flows.**
-A PO starts as a DRAFT (lines can be edited freely). When the lines are finalised, the PO is placed (ORDERED), which sends it to the supplier, locks the lines, and assigns the PO number. Goods arrive and are recorded against the PO via Goods Receipts — the PO tracks how many units remain outstanding and moves through PARTIALLY_RECEIVED to RECEIVED as deliveries arrive. Once fully received (or if the business accepts a shortfall), the PO can be closed (CLOSED). If the PO is no longer needed before all goods are received, it can be voided (VOID). If a PO approval threshold is enabled in Purchase Settings, a DRAFT PO above the configured amount must be approved before it can be PLACED — the system refuses to place an over-threshold PO that has not yet been approved.
+A PO starts as a DRAFT (lines can be edited freely). If a PO approval threshold is enabled in Purchase Settings and this order's total is at or above the configured amount, the DRAFT must be submitted for approval and approved before it can be placed (section 3.3) — the system refuses to place an over-threshold PO that has not yet been approved. When the lines are finalised (and approved, if required), the PO is placed (ORDERED), which sends it to the supplier, locks the lines, and assigns the PO number. Goods arrive and are recorded against the PO via Goods Receipts — the PO tracks how many units remain outstanding and moves through PARTIALLY_RECEIVED to RECEIVED as deliveries arrive. Once fully received (or if the business accepts a shortfall), the PO can be closed (CLOSED). If the PO is no longer needed before all goods are received, it can be voided (VOID).
 
 ### 3.1 Create a Purchase Order directly
 
@@ -2427,18 +2536,30 @@ The Purchase Orders list (`/admin/purchase-orders`) has an inline create form fo
 1. Navigate to **Purchasing › Purchase Orders** (`/admin/purchase-orders`).
 2. Open the DRAFT PO (navigate to `/admin/purchase-orders/uid/{uid}`).
 3. While the PO is in DRAFT you can:
-   - **Add a line** — pick the product by name, choose a unit, enter the ordered quantity and unit cost.
+   - **Add a line** — pick the product by name, choose a unit, enter the ordered quantity and unit cost. The **Unit** field is disabled until a product is picked; once picked, it lists only that product's configured units (its base unit and any active bulk-pack units).
    - **Remove a line** — click the delete icon on the line row. (Lines cannot be edited in place; to change a line, remove it and add it again.)
 
-### 3.3 Place a Purchase Order
+### 3.3 Submit a Purchase Order for approval
 
-Placing the PO sends it to the supplier and locks the lines.
+If your administrator has enabled a PO approval threshold in Purchase Settings (section 8) and this order's total is at or above the configured amount, it must clear approval before it can be placed. Once submitted, the order shows an **Awaiting approval** / **Approved** / **Approval rejected** status tag next to its status.
 
-1. Open the DRAFT PO (it must have at least one line).
+1. Open the DRAFT PO (navigate to `/admin/purchase-orders/uid/{uid}`) — it must have at least one line.
+2. Click **Submit for Approval**. This button appears only when the order's total requires approval and it has not already been submitted or approved.
+3. An **Awaiting approval** banner appears, with a link to **Go to Approvals inbox**, and the **Place Order** button is removed from the screen. The order is routed to an approver as an approval request (see chapter 11, Approvals).
+
+Requires `PURCHASE.ORDER.CREATE` (the same permission used to create, add lines to, and place a PO).
+
+> **Known limitation — a PO submitted for approval cannot currently be placed from the web UI.** Submitting for approval is wired up, but the *return* path is not: the Purchase Order screen never learns the approver's decision. The **Awaiting approval** banner is a one-time reflection of your own **Submit for Approval** click in this browser tab — it never changes to **Approved** or **Approval rejected**, in this session or any other, even after an approver decides in the Approvals inbox. (The decision is recorded correctly in the background, but the PO detail response does not carry the approval status back and the screen does not poll for it.) Because **Place Order** only reappears once the screen sees an **Approved** status, an order that has been submitted for approval currently **cannot be placed through the web UI at all**. Until this is fixed, an administrator must approve and place such an order directly via the API (the admin-only `PURCHASE.ORDER.APPROVE` action, then the place endpoint). Orders whose total is *below* the approval threshold never enter this flow and place normally.
+
+### 3.4 Place a Purchase Order
+
+Placing the PO sends it to the supplier and locks the lines. If the order requires approval (section 3.3) but has not yet been submitted, **Place Order** is shown but disabled (with a *Submit for approval before placing* tooltip). Once the order has been **submitted** for approval, the **Place Order** control is removed from the screen entirely — see the Known limitation in section 3.3 for why it does not currently come back.
+
+1. Open the DRAFT PO (it must have at least one line, and be approved if approval is required).
 2. Click **Place Order**.
 3. Status → **ORDERED** and a PO number (PO-####) is assigned.
 
-### 3.4 Close a Purchase Order
+### 3.5 Close a Purchase Order
 
 Closing finalises the PO without receiving all goods (for example, if a partial shipment is accepted as complete).
 
@@ -2446,19 +2567,13 @@ Closing finalises the PO without receiving all goods (for example, if a partial 
 2. Click **Close Order**.
 3. Status → **CLOSED**. The PO is read-only.
 
-### 3.5 Void a Purchase Order
+### 3.6 Void a Purchase Order
 
 Voiding cancels the PO if goods have not all been received.
 
 1. Open the PO (status DRAFT, ORDERED, or PARTIALLY_RECEIVED).
 2. Click **Void Order**. An inline reason form opens — enter a mandatory reason and click **Confirm Void**.
 3. Status → **VOID**.
-
-### 3.6 PO approval (if enabled)
-
-If your administrator has enabled PO approval thresholds in Purchase Settings, a DRAFT Purchase Order whose total is at or above the configured amount cannot be placed until it is approved. An approver with `PURCHASE.ORDER.APPROVE` must approve the PO first; attempting to place an unapproved over-threshold PO is rejected with a message asking you to submit it for approval and wait for APPROVED status before placing.
-
-PO approval actions are currently only available via the API; contact your administrator or a system manager if a PO is stuck awaiting approval.
 
 ### 3.7 PO status reference
 
@@ -2495,7 +2610,7 @@ A Goods Receipt serves three critical purposes. First, it records what actually 
 A GR is created by the storekeeper or receiving officer each time a supplier delivers goods against an outstanding Purchase Order. If a supplier delivers in multiple shipments, a separate GR is created for each delivery. The permission required is `PURCHASE.RECEIVE`. Only placed Purchase Orders (ORDERED or PARTIALLY_RECEIVED) can have a GR raised against them.
 
 **How it flows.**
-The storekeeper picks the PO and the system shows all outstanding (unreceived) lines pre-filled with the remaining quantities. The storekeeper adjusts the quantities if the delivery is partial (and unchecks any lines not included in this delivery), optionally adds notes, and records the receipt. The GR is created with status RECEIVED, a GRN number is assigned, stock increases at the branch, and the PO's outstanding quantities are updated. The PO moves to PARTIALLY_RECEIVED or RECEIVED depending on whether all lines are now complete. A GR cannot be edited after submission; errors are corrected by voiding the GR (an API-level operation) or by raising a Purchase Return (section 7).
+The storekeeper picks the PO and the system shows all outstanding (unreceived) lines pre-filled with the remaining quantities. The storekeeper adjusts the quantities if the delivery is partial (and unchecks any lines not included in this delivery), optionally records a lot/batch number, manufacture date, expiry date, or serial numbers per line, adds notes, and records the receipt. The GR is created with status RECEIVED, a GRN number is assigned, stock increases at the branch, and the PO's outstanding quantities are updated. Any batch or serial details captured at receipt feed the read-only Stock Batches and Stock Serials screens (see the Inventory & Manufacturing chapter, sections 6–7). The PO moves to PARTIALLY_RECEIVED or RECEIVED depending on whether all lines are now complete. A GR cannot be edited after submission; errors are corrected by voiding the GR (an API-level operation) or by raising a Purchase Return (section 7).
 
 ### 4.1 Receive goods
 
@@ -2503,8 +2618,9 @@ The storekeeper picks the PO and the system shows all outstanding (unreceived) l
 2. Pick the **Purchase Order** by its PO number.
 3. The form lists all open (unreceived) lines, each with a tick box (included by default) and the outstanding quantity pre-filled in the **Receive Qty** field.
 4. Adjust individual quantities if you are receiving a **partial shipment**, and untick any lines not in this delivery. The quantity cannot exceed the outstanding balance on each line.
-5. Optionally add **Notes**.
-6. Click **Record Receipt**.
+5. For any line — typically a lot-tracked or serialised product — click **Batch** to expand its batch/serial details, and optionally enter the **Lot / Batch number**, **Manufacture date**, **Expiry date**, and **Serial / IMEI numbers** (one per line). The **Batch** toggle appears on every receipt line regardless of the product's tracking settings; all of these fields are optional at receipt time.
+6. Optionally add **Notes**.
+7. Click **Record Receipt**.
 
 The goods receipt is created with status **RECEIVED** and assigned a GRN-#### number. Stock is added to the branch. The PO status updates:
 
@@ -2545,7 +2661,7 @@ Landed cost is the total cost of getting an imported or shipped product to your 
 If only the purchase price is recorded as the inventory cost, the business undervalues its stock and understates the true cost of goods sold (COGS). For example, cement bought at TZS 14,500/bag but with TZS 2,900/bag in freight and clearing costs actually costs TZS 17,400/bag to hold. Selling it at any price below TZS 17,400 is a loss — but a business recording only TZS 14,500 would not see that loss until the end of the period. Capitalising landed costs into inventory value ensures the stock is valued at its true cost, the cost-of-goods-sold figure is accurate, and the balance sheet reflects the real investment in inventory.
 
 **When it is used.**
-A landed cost is entered after the goods have been received (a GRN exists) and the incidental charges are known — either at the time of receipt or when the freight/clearing invoice arrives. The accountant or purchasing officer enters the charges against the relevant GRN(s) and confirms the document. The permission required is `PURCHASE.LANDED_COST.CREATE` and `PURCHASE.LANDED_COST.CONFIRM`.
+A landed cost is entered after the goods have been received (a GRN exists) and the incidental charges are known — either at the time of receipt or when the freight/clearing invoice arrives. The accountant or purchasing officer enters the charges against the relevant GRN(s) and confirms the document. The permission required is `PURCHASE.LANDEDCOST.MANAGE` (covers both creating and confirming); viewing requires `PURCHASE.LANDEDCOST.VIEW`.
 
 **How it flows.**
 A landed cost document is created (DRAFT) with the allocation basis (By Value or By Quantity), linked to one or more GRNs, and the charge lines (Freight, Duty, Clearing, Insurance, Other) are entered. On confirmation (CONFIRMED), the system allocates each charge proportionally to the GR lines and capitalises the allocated amount into the inventory value of each product — raising the moving-average cost and posting the GL entry. The accounting entry at confirmation is: **DR Inventory (1300) / CR Landed Cost Clearing (2160)**. When the freight or duty invoice later arrives from the supplier and is bill-matched, the clearing account is debited back: **DR Landed Cost Clearing / CR Accounts Payable** — leaving a zero balance in the clearing account. A confirmed landed cost is immutable.
@@ -2716,7 +2832,7 @@ A purchase return is the formal process of sending goods back to the supplier �
 Without a formal return process, the business would need to adjust stock manually (which lacks a clear link to the supplier transaction) and would have no systematic way to claim money back from the supplier. A purchase return document creates an auditable record of what was returned, why, and at what value — forming the basis for the AP debit note that reduces the amount owed to the supplier. It also keeps inventory accurate: goods sent back should not remain in the stock count.
 
 **When it is used.**
-A purchase return is raised after a goods receipt has been confirmed (RECEIVED) and the goods in question have been identified for return — for example, after inspection reveals damage, or after a quality failure is reported. The storekeeper or purchasing manager raises the return against the specific GRN, and a purchasing manager or authorised user confirms it. The permissions required are `PURCHASE.RETURN.CREATE` and `PURCHASE.RETURN.CONFIRM`.
+A purchase return is raised after a goods receipt has been confirmed (RECEIVED) and the goods in question have been identified for return — for example, after inspection reveals damage, or after a quality failure is reported. The storekeeper or purchasing manager raises the return against the specific GRN, and a purchasing manager or authorised user confirms it. The permission required is `PURCHASE.RETURN.CREATE` (it covers both creating and confirming a return); viewing requires `PURCHASE.RETURN.VIEW`.
 
 **How it flows.**
 A purchase return starts as a DRAFT referencing the original GRN and specifying the quantities being returned (which cannot exceed what was received on that GRN). A mandatory reason must be entered. When confirmed (CONFIRMED), two things happen simultaneously: stock decreases by the returned quantity (a reversal of the original goods receipt movement at the original cost), and the AP module records a debit note against the supplier — a document that reduces the business's payable to the supplier by the value of the returned goods. A confirmed return cannot be edited.
@@ -2776,7 +2892,7 @@ Purchase settings control the PO approval workflow.
 
 To change these settings, navigate to **Purchasing › Purchase Settings** (`/admin/purchase-settings`), pick the **Company**, update the values, and click **Save Settings**.
 
-When PO approval is enabled, a user with `PURCHASE.ORDER.APPROVE` must approve or reject POs that exceed the threshold.
+When PO approval is enabled, an order that exceeds the threshold is submitted from its detail screen (section 3.3) and decided by an approver in the Approvals inbox (requires `APPROVALS.DECIDE`; see chapter 11, Approvals). `PURCHASE.ORDER.APPROVE` gates a separate, administrative approve/reject action on the order itself, available only via the API — see the Known limitation note in section 3.3.
 
 ---
 
@@ -2871,8 +2987,8 @@ Before starting, confirm that the required permission codes have been granted to
 | View stock counts | `STOCK.COUNT.VIEW` |
 | Create / enter / cancel stock counts | `STOCK.COUNT.CREATE` |
 | Post a stock count | `STOCK.COUNT.POST` |
-| View stock batches (by-location / detail) | `STOCK.BATCH.VIEW` * |
-| View stock serials (by-location / by-product / lookup) | `STOCK.SERIAL.VIEW` * |
+| View stock batches (by-location / detail) | `STOCK.VIEW` |
+| View stock serials (by-location / by-product / lookup) | `STOCK.VIEW` |
 | View expiring batches | `INVENTORY.EXPIRY.VIEW` |
 | View inventory valuation report | `INVENTORY.VALUATION.VIEW` |
 | Set opening valuation | `INVENTORY.OPENING.SET` |
@@ -2883,8 +2999,6 @@ Before starting, confirm that the required permission codes have been granted to
 | Complete / close a Work Order | `WORKORDER.CLOSE` |
 
 Navigation items are hidden when the corresponding permission is absent. Attempting to access a route directly without the permission shows a **Forbidden** message.
-
-\* The Stock Batches and Stock Serials screens are gated on `STOCK.BATCH.VIEW` / `STOCK.SERIAL.VIEW`, but these two codes are **not present in the seeded permission catalogue** (it seeds `INVENTORY.BATCH.VIEW` / `INVENTORY.SERIAL.VIEW` instead). As a result no ordinary role can hold them, so today these screens are reachable by the superuser (`rootadmin`) only. See the Known limitation note in section 6 and the FAQ in section 12.
 
 ---
 
@@ -3000,6 +3114,8 @@ A stock location is a named physical area within a branch where stock is stored 
 **Why locations exist.**
 Without locations, the business knows only how much stock is at a branch in aggregate. With locations, it can see where exactly the stock is, which is essential for efficient warehousing, picking, physical counting, and segregating goods that should not be issued until inspected. Locations are also the boundary for stock counts — a count covers one location at a time.
 
+**Finding locations across branches.** The list shows locations for one branch at a time, chosen from the **Branch** filter above the table. It defaults to your active branch (the one set by the branch switcher), and the filter lists **every** branch in the company — not only the branches you are assigned to. If you pick a branch you are not assigned to, the list responds with a **Forbidden** message (the same `STOCK.LOCATION.VIEW` scope that guards the screen). For a branch you *are* assigned to, a location created for it is no longer invisible — it simply appears once you filter to that branch. After you create a new location, the filter switches automatically to the branch it was created for, so the new row is visible immediately without an extra step.
+
 ### Location types
 
 | Type | Typical use |
@@ -3087,7 +3203,7 @@ On a Draft, In-transit transfer, click **Dispatch**. The status changes to **Dis
 
 The Dispatch button is only available when the transfer is in Draft status and the mode is In-transit. Dispatching requires the `STOCK.TRANSFER.CREATE` permission.
 
-**Insufficient source stock.** If the source location does not allow negative stock, dispatch is rejected (409 Conflict) when the available quantity at the source is less than the quantity being transferred — the message names the product, the available quantity, and the requested quantity. The transfer stays in Draft so you can correct the lines or top up the source. (A source location whose `allowNegative` flag is set will let the dispatch proceed and the source on-hand can go negative.)
+**Insufficient source stock.** If the source location does not allow negative stock, dispatch is rejected (409 Conflict) when the available quantity at the source is less than the quantity being transferred — the message reports the available and requested quantities and states that the source location does not allow negative stock (it does not name the product, so check the transfer's lines to see which one is short). The transfer stays in Draft so you can correct the lines or top up the source. (A source location whose `allowNegative` flag is set will let the dispatch proceed and the source on-hand can go negative.)
 
 ### 4.3 Receiving an in-transit transfer
 
@@ -3223,7 +3339,7 @@ Accountant supervisor Boniface Kessy wants to reconcile two fast-moving products
 
 ## 6. Batches and lot tracking
 
-Navigate to **Inventory > Stock Batches** (`/admin/stock/batches`).
+Navigate to **Inventory > Stock Batches** (`/admin/stock/batches`). Requires the `STOCK.VIEW` permission.
 
 **What a batch (lot) is.**
 A batch — also called a lot — is a group of units of the same product that were manufactured or received together and share the same identity attributes, most importantly an expiry date and a manufacture date. For example, a batch of medicines all manufactured on the same day with the same expiry date is one lot. Batch tracking allows the business to know exactly which physical batch a unit came from — critical for food, pharmaceutical, and chemical products where recall or expiry management is required.
@@ -3251,13 +3367,11 @@ Click the **Expiring Soon** tab. Set a horizon date (default: 30 days from today
 
 The expiring batches tab requires the `INVENTORY.EXPIRY.VIEW` permission.
 
-> **Known limitation — Batches and Serials are superuser-only.** The Stock Batches and Stock Serials screens, and the routes and navigation links that lead to them, are gated on the permission codes `STOCK.BATCH.VIEW` and `STOCK.SERIAL.VIEW`. These two codes **do not exist in the seeded permission catalogue** — the catalogue instead seeds `INVENTORY.BATCH.VIEW` and `INVENTORY.SERIAL.VIEW`. Because no role (not even ORG_ADMIN, which is granted the entire catalogue) can hold a code that is not in the table, this affects **all** of these views — the by-location batch view, the by-location / by-product / lookup serial views, and the batch/serial detail lookups — not just the detail screens. For every non-root role the **Stock Batches** and **Serial Numbers** navigation links are hidden, and visiting the routes directly shows a Forbidden message. Only the superuser (`rootadmin`), who passes all permission checks, can open these screens. The Expiring Soon tab is gated separately on `INVENTORY.EXPIRY.VIEW` (which **is** seeded) and works for ORG_ADMIN. This permission-code fix has **not** yet been deployed.
-
 ---
 
 ## 7. Serial number tracking
 
-Navigate to **Inventory > Stock Serials** (`/admin/stock/serials`).
+Navigate to **Inventory > Stock Serials** (`/admin/stock/serials`). Requires the `STOCK.VIEW` permission.
 
 **What serial number tracking is.**
 Serial number tracking assigns a unique identifier to each individual unit of a product — for example, every laptop, refrigerator, or generator has its own serial number. Unlike batches (which group many units of the same type), a serial identifies one specific physical item. The system records where each serial is, whether it is in stock, has been issued to a customer, or has been returned, giving full unit-level traceability.
@@ -3589,9 +3703,6 @@ Yes. The system records negative on-hand and flags the row with the Negative ind
 
 **What is the difference between an adjustment and a stock count?**
 An adjustment corrects a single product's quantity immediately. A stock count covers all products at a location, freezes the system quantities as a snapshot, lets you enter physical counts across multiple sessions, and only posts variances when you explicitly post the count.
-
-**Why do I see Forbidden on the Batches and Serials screens?**
-There is a known permission-code mismatch in the current seed data. The screens and their routes/nav links require `STOCK.BATCH.VIEW` / `STOCK.SERIAL.VIEW`, but the seeded catalogue only contains `INVENTORY.BATCH.VIEW` / `INVENTORY.SERIAL.VIEW`, so no ordinary role can hold the required codes. As a result, **every** batch/serial view (by-location, by-product, lookup, and detail) is Forbidden for non-root roles and the nav links are hidden — only the superuser (`rootadmin`) can open them, until the fix is deployed. The Expiring Batches tab is gated on `INVENTORY.EXPIRY.VIEW` and remains functional for ORG_ADMIN.
 
 **Can I have more than one active BOM for a product?**
 No. Only one BOM can be active at a time per product. Activating a new version automatically archives the previous one. Historical archived versions remain visible.
@@ -4511,11 +4622,21 @@ The table shows each configuration key and the currently mapped account. The key
 
 > **UI limitation.** The **Post Journal** screen does not expose a cost-centre, department, or project picker on its lines — each line carries only an account, a debit or credit amount, and a memo. Per-line dimension tagging (and therefore posting to an account that requires a dimension) is currently an API/integration capability only; a manual post from the screen to a require-dimension account is rejected with no UI way to supply the value.
 
-**How they work.** The system seeds two built-in dimension types: **Cost Centre** and **Department**. You create the actual values (e.g. "Sales Dept", "Nairobi Branch"). A dimension type can be made **mandatory** on manual journal entries, in which case every manually posted line must carry a value for that slot — system-automated postings (sales, year-end, etc.) are exempt. The dimension-sliced trial balance groups account balances by dimension value, giving a department-level or cost-centre-level P&L.
+**How they work.** The system seeds two built-in dimension types: **Cost Centre** and **Department**. Alongside these, every company has two further, initially-unused dimension **slots** ("Dimension 3" and "Dimension 4") that a user with `COSTING.MANAGE` can manually claim for a custom dimension — see *Adding a Custom Dimension* below. Whichever type a dimension slot holds, you create the actual values under it (e.g. "Sales Dept", "Nairobi Branch"). A dimension type can be made **mandatory** on manual journal entries, in which case every manually posted line must carry a value for that slot — system-automated postings (sales, year-end, etc.) are exempt. The dimension-sliced trial balance groups account balances by dimension value, giving a department-level or cost-centre-level P&L.
 
 Navigate to **Accounting > Cost Centre > Dimensions** (`/admin/cost-centre/dimensions`).
 
-**Dimension types** are pre-seeded per company (Cost Centre and Department are built-in). You cannot create or delete dimension types; you can only toggle whether they are **mandatory** on manual journal entries. Navigate to **Accounting > Cost Centre > Values** (`/admin/cost-centre/values`) to manage the actual dimension values.
+**Dimension types** are pre-seeded per company: **Cost Centre** and **Department** are **built-in** (shown with a lock icon in the **Built-in** column) and can never be created, renamed, or deleted. A company also has two spare custom slots — while a slot is free, a user with `COSTING.MANAGE` can claim it with a custom dimension type of their own naming (see below). Every dimension type, built-in or custom, can only have its **mandatory** flag toggled afterwards — there is no rename or delete. Navigate to **Accounting > Cost Centre > Values** (`/admin/cost-centre/values`) to manage the actual dimension values.
+
+**Adding a custom dimension (requires `COSTING.MANAGE`):**
+
+**What it is.** A custom dimension is a company-defined dimension type — for example "Project" or "Region" — that claims one of the two spare slots (`DIMENSION_3`, then `DIMENSION_4`) behind the built-in Cost Centre and Department types. A company can have at most two custom dimensions.
+
+1. On the Dimensions screen, while at least one custom slot is free, an **Add Dimension** form is shown above the dimension-types table.
+2. Enter a unique **Code** and **Name** for the new dimension type, and an optional **Description**.
+3. Click **Add Dimension**. The system assigns the next free slot automatically — you do not choose the slot — and the new type appears in the table, listed with its assigned slot (`DIMENSION_3` or `DIMENSION_4`) in the **Slot** column.
+
+Once both custom slots are in use, the form is replaced by the message "Both custom dimension slots are in use. You can have at most 2 custom dimensions." If another administrator claims the last slot first (a race), submitting from an already-open form is instead rejected with a shorter inline error under the form fields: "You can have at most 2 custom dimensions."
 
 **To create a dimension value (requires `COSTING.MANAGE`):**
 
@@ -4528,7 +4649,7 @@ Navigate to **Accounting > Cost Centre > Dimensions** (`/admin/cost-centre/dimen
 
 **Per-account required dimensions:** independently of the company-wide mandatory setting, an individual Chart-of-Accounts account can be flagged to require a **cost-centre**, **department**, or **project** dimension (see *Chart of Accounts*). A manual journal line posting to such an account is rejected if it omits the required dimension, naming the account and the missing slot. As with the company-wide rule, system and event-driven postings are exempt. This lets you enforce dimension tagging on a specific expense account without making the dimension mandatory across the whole company. Because the Post Journal screen has no line-level dimension picker (see the *UI limitation* note above), such a post can only be supplied through the API.
 
-**Viewing the dimension-sliced trial balance:** Navigate to **Accounting > Cost Centre > Report** (`/admin/cost-centre/report`). Requires both `COSTING.VIEW` and `GL.VIEW`. Select a slot (Cost Centre or Department), optionally filter to a specific value, toggle **Roll up** to include descendants, and click **Run**.
+**Viewing the dimension-sliced trial balance:** Navigate to **Accounting > Cost Centre > Report** (`/admin/cost-centre/report`). Requires both `COSTING.VIEW` and `GL.VIEW`. Select a **Dimension slot** (Cost Centre, Department, Dimension 3, or Dimension 4 — the last two are offered whether or not the company has claimed them as a custom dimension), optionally filter to a specific value, toggle **Roll up** to include descendants, and click **Run**.
 
 ---
 
@@ -5934,7 +6055,7 @@ The dashboard is a composite view of key performance indicators drawn from Finan
 **Filters at the top of the page:**
 
 - **Company** — a selector appears only if your organisation has more than one company; switching company reloads its branches and re-fetches the dashboard. With a single company it is selected automatically and no selector is shown.
-- **Branch** — filter data to a specific branch (chosen as `code — name`); the dashboard re-fetches as soon as you change it.
+- **Branch** — filter data to a specific branch (chosen as `code — name`); the dashboard re-fetches as soon as you change it. Only the **CRM pipeline panel** and the **Sales by Branch panel** actually vary by branch — the Finance, Cash Position, Working Capital, and Inventory panels are anchored to the GL at company level and show the same figures regardless of which branch is selected.
 - **From / To dates** — the reporting date range. **From** defaults to the first day of the current month and **To** defaults to today. Change the dates and click the circular **refresh** button (the arrow-clockwise icon beside the To date) to re-fetch all panels.
 
 ---
@@ -5955,9 +6076,11 @@ Finance director Gideon Moshi logs in, navigates to **Analytics › Dashboard** 
 
 6. **CRM panel** — Pipeline by Stage shows 15 open deals across five stages; Win-Rate KPIs show Won, Lost, Win Rate 62%, and Avg Cycle (days); the Forecast block shows Open Opps and a Weighted Value of TZS 29,340,000. He uses the heading drill icon to open the pipeline dashboard.
 
-7. Gideon changes the **Branch** to `Arusha Branch`. The dashboard re-fetches immediately on the branch change — all panels reload and show Arusha-scoped figures. (Changing the **From / To** dates instead requires clicking the refresh button to re-fetch.)
+7. **Sales by Branch panel** — with **Branch** still on "All branches", the table lists every branch in descending order of sales: `DSM Main` leads with TZS 5,120,000 across 34 finalised invoices, followed by `Arusha Branch` with TZS 2,890,000 across 19 invoices and the remaining branches, with a **Total** row of TZS 9,715,000 across 61 invoices. (This total is sourced from finalised sales invoices, so it need not exactly match the Finance panel's GL-derived Revenue figure above.) Gideon clicks the drill icon in the **Sales by Branch** heading — this opens the sales invoices list.
 
-8. He selects format **Excel** in the export dropdown and clicks **Download**. File `dashboard.xlsx` downloads with the currently visible panel data. (Requires `BI.EXPORT`.)
+8. Gideon changes the **Branch** to `Arusha Branch`. The dashboard re-fetches immediately on the branch change. Only the **CRM panel** and the **Sales by Branch panel** actually vary by branch — the Sales by Branch table now shows a single row, for `Arusha Branch` only; the Finance, Cash Position, Working Capital, and Inventory panels stay company-level and show the same figures as before. (Changing the **From / To** dates instead requires clicking the refresh button to re-fetch.)
+
+9. He selects format **Excel** in the export dropdown and clicks **Download**. File `dashboard.xlsx` downloads with the currently visible panel data. (Requires `BI.EXPORT`.)
 
 ---
 
@@ -6001,11 +6124,19 @@ Each KPI panel on the dashboard is a self-contained summary of one operational o
 
 - Bar charts showing the last 12 periods of revenue and net profit. Each bar represents one fiscal period.
 
+**Sales by Branch panel (requires `BI.FINANCE.VIEW`):**
+
+- A table of finalised sales invoices for the selected date range, broken down by branch: **Branch** (shown as `code — name`), **Sales** (total invoiced value in the company's currency), and **Invoices** (count of finalised invoices), sorted with the highest-selling branch first. A **Total** footer row sums the sales value and invoice count across all rows shown.
+- This is the one finance-domain panel that genuinely honours the **Branch** filter at the top of the page: with the filter left on "All branches" the table shows the full per-branch breakdown; selecting a single branch narrows the table to that branch's row only. (The other finance panels above stay company-level regardless of the Branch filter — see *Filters at the top of the page*.)
+- Only **FINALISED** invoices count; draft or voided invoices are excluded.
+- If no invoices were finalised in the period, the panel shows *No finalised invoices for this period.*
+- The drill icon in the panel heading opens the sales invoices list (**Sales › Invoices**, `/admin/sales-invoices`).
+
 ---
 
 ### Drill-Through
 
-Each panel offers one or more drill links to the relevant detail screen: a small drill icon in the panel heading (Finance → Income Statement, Cash Position → Cash Accounts, Inventory → Stock Valuation, CRM → Pipeline) plus inline text links inside the panels (**View TB**, **View Receivables**, **View Payables**). Clicking a drill link takes you to the live module (AR, AP, GL, Inventory, CRM) with your current company and branch context preserved.
+Each panel offers one or more drill links to the relevant detail screen: a small drill icon in the panel heading (Finance → Income Statement, Cash Position → Cash Accounts, Inventory → Stock Valuation, CRM → Pipeline, Sales by Branch → Sales Invoices) plus inline text links inside the panels (**View TB**, **View Receivables**, **View Payables**). Clicking a drill link takes you to the live module (AR, AP, GL, Inventory, CRM, Sales) with your current company and branch context preserved.
 
 The target screen has its own permission guard. If you do not hold the necessary permission for the target screen, you will be redirected to an access-denied page.
 
@@ -6154,14 +6285,14 @@ The list shows employee number, name, job title, department name, and employment
 
 1. Click **New Employee**.
 2. Enter **First Name**, **Last Name**, and **Hire Date**.
-3. Optionally fill in **Job Title**, **Gender**, **National ID**, **Department ID**, and **Branch ID**. The **Department ID** and **Branch ID** fields are free-text numeric-id entries (each shows the placeholder "Numeric id"), not name pickers — obtain the ids from your administrator.
+3. Optionally fill in **Job Title**, **Gender**, **National ID**, **Department**, and **Branch**. **Department** and **Branch** are dropdowns — pick the department and branch by name from the lists (each defaults to "— none —" to leave unset). Departments must be set up first (see **Departments** above) for them to appear in the list.
 4. Click **Create Employee**.
 
 > TIN, NSSF number, HESLB number, and date of birth are not part of the create form; they are added later on the employee detail/edit page.
 
 The system assigns an **employee number** automatically (format `EMP-000001`). The employee's status is set to **ACTIVE** on creation.
 
-**Viewing and editing an employee:** click the **Open** action on the employee row to open the detail page. If you hold `HR.EMPLOYEE.MANAGE`, you can edit the employee's fields and save changes.
+**Viewing and editing an employee:** click the **Open** action on the employee row to open the detail page. If you hold `HR.EMPLOYEE.MANAGE`, you can edit the employee's fields — including **Department** and **Branch**, both dropdowns as on the create form — and save changes.
 
 **Archiving an employee:** on the employee detail page, click **Archive**. This changes the status to **TERMINATED** and marks the record inactive. The employee record is retained for historical and payroll purposes. There is no way to restore an archived employee through the UI — contact your system administrator if this is needed.
 

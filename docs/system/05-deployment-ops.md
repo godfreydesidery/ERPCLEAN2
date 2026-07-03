@@ -75,7 +75,8 @@ npm run start    # ng serve on :4200
   schema is defined by V-prefixed migrations only (PROJECT-CONVENTIONS §3.6).
 - **Additive after freeze.** The IAM baseline (V1) was edited in place while the schema was
   pre-stable; after that freeze, all changes are **additive** new migrations. The migration
-  head is currently around **V83**.
+  head is currently **V78** (`V78__sales_invoices_company_status_finalised_idx` — a query
+  performance index on `sales_invoices(company, status, finalised)`).
 - **Never edit an applied migration.** A V-prefixed file that has run in any environment must
   not be changed — Flyway validates checksums on startup and a restored DB confirms the schema
   matches. Editing applied migrations is a backend-engineer call, never an ops call

@@ -224,7 +224,10 @@
               <tbody>
                 @for (row of rows(); track row.uid) {
                   <tr>
-                    <td class="mono">{{ productLabel(row.productId) }}</td>
+                    <td>
+                      <span class="fw-semibold">{{ row.productCode }}</span>
+                      — {{ row.productName }}
+                    </td>
                     <td class="num">
                       <span [class.text-danger]="row.negative">{{ row.quantity }}</span>
                     </td>
@@ -233,7 +236,7 @@
                       @if (reorderEditUid() === row.uid) {
                         <form class="d-inline-flex gap-1 align-items-center"
                               (ngSubmit)="saveReorderLevel(row)"
-                              aria-label="Set reorder level for {{ productLabel(row.productId) }}">
+                              aria-label="Set reorder level for {{ row.productCode }} — {{ row.productName }}">
                           <label class="visually-hidden" [for]="'rl-' + row.uid">Reorder level</label>
                           <input [id]="'rl-' + row.uid" [name]="'rl-' + row.uid"
                                  type="number" min="0" step="any" class="form-control form-control-sm"
@@ -260,7 +263,7 @@
                         @if (canAdjust()) {
                           <button type="button" class="btn btn-link btn-sm p-0 ms-1"
                                   (click)="startReorderEdit(row)"
-                                  [attr.aria-label]="'Set reorder level for ' + productLabel(row.productId)">
+                                  [attr.aria-label]="'Set reorder level for ' + row.productCode + ' — ' + row.productName">
                             <i class="bi bi-pencil-square small" aria-hidden="true"></i>
                           </button>
                         }
@@ -282,14 +285,14 @@
                       <div class="d-flex gap-1 flex-wrap">
                         <button type="button" class="btn btn-sm btn-outline-secondary"
                                 (click)="openMovements(row)"
-                                [attr.aria-label]="'View movements for ' + productLabel(row.productId)"
+                                [attr.aria-label]="'View movements for ' + row.productCode + ' — ' + row.productName"
                                 [attr.aria-expanded]="movementsUid() === row.uid">
                           <i class="bi bi-list-ul me-1" aria-hidden="true"></i>Ledger
                         </button>
                         @if (canAdjust()) {
                           <button type="button" class="btn btn-sm btn-outline-primary"
                                   (click)="openAdjustForm(row)"
-                                  [attr.aria-label]="'Adjust stock for ' + productLabel(row.productId)">
+                                  [attr.aria-label]="'Adjust stock for ' + row.productCode + ' — ' + row.productName">
                             <i class="bi bi-plus-slash-minus me-1" aria-hidden="true"></i>Adjust
                           </button>
                         }
@@ -303,7 +306,7 @@
                       <td colspan="5">
                         <form class="erp-card mb-0"
                               (ngSubmit)="submitAdjust()"
-                              aria-label="Adjust stock for {{ productLabel(row.productId) }}">
+                              aria-label="Adjust stock for {{ row.productCode }} — {{ row.productName }}">
                           <div class="erp-card__head">
                             <h3 class="h6 mb-0">Adjust Stock</h3>
                           </div>

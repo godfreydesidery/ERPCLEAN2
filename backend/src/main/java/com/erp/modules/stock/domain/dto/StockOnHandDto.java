@@ -10,6 +10,10 @@ import java.math.BigDecimal;
  * (D-2 — negative is a flagged, queryable state, not a forbidden one; low is indicator-only).
  * Quantities serialise as strings to avoid JS precision loss (the global Long-as-string config
  * handles Long ids; BigDecimal are also serialised as strings via the same Jackson config).
+ *
+ * <p>{@code productCode} and {@code productName} are enriched by the service layer from the
+ * products module (cross-module boundary: service calls ProductService, not a repository join).
+ * They may be {@code null} only when the entity-only factory overload is used (e.g. tests).
  */
 public record StockOnHandDto(
         Long id,
@@ -17,6 +21,10 @@ public record StockOnHandDto(
         Long companyId,
         Long branchId,
         Long productId,
+        /** Product code — denormalised from the products module for display; never null in API responses. */
+        String productCode,
+        /** Product name — denormalised from the products module for display; never null in API responses. */
+        String productName,
         BigDecimal quantity,
         BigDecimal reorderLevel,
         /** Optional max-stock indicator threshold (P2-M5). */
@@ -36,7 +44,24 @@ public record StockOnHandDto(
         Long updatedBy
 ) {
 
+    /**
+     * Entity-only factory — {@code productCode} and {@code productName} will be {@code null}.
+     * Use only in contexts where the product label is not needed (e.g. internal tests that
+     * assert quantity/flags only). API responses should use
+     * {@link #from(StockOnHand, String, String)}.
+     */
     public static StockOnHandDto from(StockOnHand s) {
+        return from(s, null, null);
+    }
+
+    /**
+     * Enriched factory — carries product code + name alongside the on-hand figures.
+     * This is the factory used by all API response paths.
+     *
+     * @param productCode  the product's short code (from {@code ProductService.getById})
+     * @param productName  the product's display name (from {@code ProductService.getById})
+     */
+    public static StockOnHandDto from(StockOnHand s, String productCode, String productName) {
         boolean neg = s.getQuantity().compareTo(BigDecimal.ZERO) < 0;
         boolean low = s.getReorderLevel() != null
                 && s.getQuantity().compareTo(s.getReorderLevel()) <= 0;
@@ -46,6 +71,8 @@ public record StockOnHandDto(
                 s.getCompanyId(),
                 s.getBranchId(),
                 s.getProductId(),
+                productCode,
+                productName,
                 s.getQuantity(),
                 s.getReorderLevel(),
                 s.getMaxQty(),

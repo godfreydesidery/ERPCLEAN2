@@ -8,12 +8,12 @@ A clean-build **ERP** — a modular monolith: **Spring Boot 3.3 / Java 21 / Post
 (`backend/`) + **Angular 21** standalone-components web client (`web/`). It started as IAM only;
 it now spans 25 business modules (sales, purchases, stock, GL, AR, AP, cash/bank, tax, fixed
 assets, HR/payroll, manufacturing, projects, CRM, budgeting, FX, costing, BI, approvals, parties,
-products, reporting, routes, notifications, documents) and 77 Flyway migrations (latest V77).
+products, reporting, routes, notifications, documents) and 78 Flyway migrations (latest V78).
 
 Authoritative design docs (read the relevant one before non-trivial work — they go deeper than this file):
 - [PROJECT-CONVENTIONS.md](PROJECT-CONVENTIONS.md) — fixed stack + the engineering invariants below.
 - [ARCHITECTURE.md](ARCHITECTURE.md) · [DATA-MODEL.md](DATA-MODEL.md) (IAM-detailed; later modules in `docs/`).
-- [docs/decisions/](docs/decisions/) — 45 ADRs (0001–0045); the *why* behind most non-obvious choices.
+- [docs/decisions/](docs/decisions/) — 47 ADRs (0001–0047); the *why* behind most non-obvious choices.
 - [docs/requirements/](docs/requirements/) · [USER-STORIES.md](USER-STORIES.md) · [docs/data-model/](docs/data-model/).
 
 Note: the foundational docs (ARCHITECTURE.md, DATA-MODEL.md) describe the IAM spine in detail and

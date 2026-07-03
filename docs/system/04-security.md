@@ -142,7 +142,10 @@ Permission codes are dot-separated and module-prefixed (e.g. `SALES_INVOICE.POST
 migration (PROJECT-CONVENTIONS §3.4). A new permission-gated endpoint without its seeded
 permission is a defect — see the POS prefix-mismatch defect in
 [the test-case suite](../testing/test-cases/07-pos.md) (controllers checked `POS.*` but the
-migration seeded `SALES.POS.*`).
+migration seeded `SALES.POS.*`). A surefire guard, `PermissionCodesSeededTest`, scans every
+`@perm.has` / `@perm.scoped` code in `com.erp.api` and fails the build if any gate references a
+code the repeatable seed (`R__seed_permissions.sql`) does not define — so a **phantom** code (a
+gate on a never-seeded permission, invisible to root, broken for everyone else) cannot ship.
 
 ### 2.4 Custom roles
 
@@ -162,6 +165,52 @@ unaudited — every root **action** produces its normal audit row (actor = root)
 distinct `ROOT.BYPASS` row is written when root acts **out of** its active company
 (ADR-0004 D-9). In the dev profile the backend bootstraps `rootadmin` / `RootPass12345`
 (dev only — never a prod credential).
+
+### 2.6 Role-grant read-closure (ADR-0047)
+
+`PermissionCodesSeededTest` proves a gate's code *exists*; it does not prove a **role's grant
+set is closed over the reads its screens fire**. The 2026-06-28 business-operations simulation
+(16 minimally-granted personas — never root, never `ORG_ADMIN`) found that 26 of 28 blockers were
+one mechanism: a custom operational role held a screen's **primary verb** but not a **supporting
+read** the same screen issues on load, so a side-load 403'd and blanked the screen — the persona
+read it as "the page won't open." Root and `ORG_ADMIN` never see it (root short-circuits RBAC; the
+seed CROSS JOINs the whole catalogue onto `ORG_ADMIN`). This is the fourth member of the parity
+family — after **phantom codes**, **route-guard ↔ endpoint parity**, and **code-seeded** — now
+**role-grant vs screen-read closure**: every code is right and every gate is right, but the role's
+grants are not closed over the reads its screens need (ADR-0047).
+
+The fix is a **sensitivity gradient**, not "relax everything" or "grant everything":
+
+- **Low-sensitivity ambient pickers** (`branches`, `products`, `wht/types`) were relaxed to a
+  **within-tenant member floor** — `@perm.hasOrMember('CODE')` / `@perm.scopedOrMember(...)`, which
+  passes for any provisioned member of the company (tenant isolation unchanged). The bill-matcher's
+  PO list was broadened to `PURCHASE.ORDER.VIEW or AP.BILL.ENTER`. These reads **need no closure**.
+- **Disclosure-grade reads stay strict** — `CUSTOMER.VIEW`, `SUPPLIER.VIEW`, `AR.VIEW` guard party
+  master carrying TIN/VRN/mobile-money/credit-limit/balance, so the gate stays `@perm.has` and the
+  fix is **role composition**: the role must actually carry the read.
+
+Two artefacts keep this honest:
+
+1. **A declarative screen-read manifest** (`backend/src/main/resources/security/screen-read-closure.json`)
+   — one version-controlled file declaring, per guarded screen, the route permission that opens it
+   and the reference-data reads it fires on load, each tagged `required`/`optional` and carrying the
+   controller gate it hits. **`RolePermissionClosureTest`** (surefire, no DB) asserts the closure
+   invariant as a property of the manifest against the **live controller gates**: gate-form honesty
+   (a declared code must equal the real `@PreAuthorize` code), required-read closure reachability
+   (every strict required read is seeded, so a role *can* satisfy it), and no phantom in the
+   manifest. It reuses `PermissionCodesSeededTest`'s scanner, so there is one permission parser, and
+   it completes the four-link parity chain (reachable → guard parity → seeded → **read-closure**).
+2. **An advisory grant-time validator.** A read-only endpoint
+   `GET /api/v1/roles/uid/{uid}/read-closure-gaps` (`@perm.has('ROLE.VIEW')`) derives which screens
+   a role is *meant* to operate (it already holds the screen's `accessPermission`) and reports the
+   strict required reads it is missing. The role-edit screen renders it as an advisory panel
+   ("this role can open Record-receipt but is missing `CUSTOMER.VIEW`, `AR.VIEW`"). It is
+   **advisory, never blocking** — it informs the admin composing the role; it does not gate
+   `PUT .../permissions`. Codes are shown verbatim (an admin RBAC screen — codes are the working
+   vocabulary; the end-user error-hygiene rule that hides internals does not apply here).
+
+No migration and no new seed — all codes already exist; the guard is a manifest + a test + a
+provisioning discipline ([ADR-0047](../decisions/0047-role-permission-read-closure.md)).
 
 ## 3. Multi-tenant and branch isolation
 
@@ -355,6 +404,11 @@ CSRF is disabled — correct for a stateless, token-authenticated API with no se
 - **401/403** responses are enveloped without leaking which check failed or whether a username
   exists (no enumeration). Unexpected 500s log the full stack trace server-side but return only
   `"An unexpected error occurred."` to the client (ADR-0038 D-1).
+- **Error-message hygiene (standing rule).** User-facing `errors[]` strings are friendly and carry
+  **no internal identifiers** — no ULIDs/uids, database field names, `BR-`/`ADR-` codes, or
+  exception text; that detail goes to the logs only. Expected business validations surface calmly
+  inline, not via the generic "something went wrong" path. (Admin RBAC screens are the deliberate
+  exception — permission codes are the working vocabulary there; see §2.6.)
 - **Dependency hygiene:** Dependabot opens weekly PRs; `npm audit --audit-level=high` gates
   the web CI; the OWASP dependency-check runs on demand (see
   [docs/ops/security-sweep.md](../ops/security-sweep.md)).
