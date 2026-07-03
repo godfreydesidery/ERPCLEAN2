@@ -9,6 +9,9 @@ import com.erp.modules.routes.service.RouteService;
 import com.erp.modules.parties.repository.AgentRepository;
 import com.erp.modules.ar.domain.dto.ArBalanceDto;
 import com.erp.modules.ar.service.ArBalanceService;
+import com.erp.modules.gl.domain.entity.JournalEntry;
+import com.erp.modules.gl.domain.enums.JournalSourceType;
+import com.erp.modules.gl.repository.JournalEntryRepository;
 import com.erp.modules.parties.repository.CustomerRepository;
 import com.erp.modules.parties.repository.PaymentTermsRepository;
 import com.erp.modules.products.domain.entity.Product;
@@ -110,6 +113,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     private final FxDocumentConverter fxConverter;
     /** ADR-0041 D1: resolves customer payment terms to stamp settlement discount at finalise. */
     private final PaymentTermsRepository paymentTermsRepo;
+    /** Cross-module read: resolves the posted SALES journal entry uid for the "View Journal" link. */
+    private final JournalEntryRepository journalEntries;
 
     public SalesInvoiceServiceImpl(SalesInvoiceRepository invoices,
                                    SalesInvoiceLineRepository lines,
@@ -132,7 +137,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                                    ArBalanceService arBalanceService,
                                    PermissionResolver permissionResolver,
                                    FxDocumentConverter fxConverter,
-                                   PaymentTermsRepository paymentTermsRepo) {
+                                   PaymentTermsRepository paymentTermsRepo,
+                                   JournalEntryRepository journalEntries) {
         this.invoices = invoices;
         this.lines = lines;
         this.payments = payments;
@@ -155,6 +161,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         this.permissionResolver = permissionResolver;
         this.fxConverter = fxConverter;
         this.paymentTermsRepo = paymentTermsRepo;
+        this.journalEntries = journalEntries;
     }
 
     // -------------------------------------------------------------------------
@@ -1118,7 +1125,33 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                 routeName = r.getName();
             }
         }
-        return SalesInvoiceDto.from(inv, customerName, agentName, routeUid, routeCode, routeName);
+        String postedGlEntryUid = resolvePostedGlEntryUid(inv);
+        return SalesInvoiceDto.from(inv, customerName, agentName, routeUid, routeCode, routeName,
+                postedGlEntryUid);
+    }
+
+    /**
+     * Read-time resolution of the posted SALES journal entry for the "View Journal" link
+     * (mirrors AP SupplierBill's postedGlEntryUid). Looks up by the SAME (sourceType, sourceRef)
+     * pair {@code GLPostingSafeInvoker.postSaleInNewTx} posted under: {@code JournalSourceType.SALES}
+     * + the invoice uid (see {@code SaleVoidingHandler}, which finds the same entry to reverse it).
+     * Defensive: never throws — null when unposted (DRAFT/VOID) or not found.
+     */
+    private String resolvePostedGlEntryUid(SalesInvoice inv) {
+        if (inv.getStatus() != InvoiceStatus.FINALISED) {
+            return null;
+        }
+        try {
+            return journalEntries
+                    .findByCompanyIdAndSourceTypeAndSourceRef(
+                            inv.getCompanyId(), JournalSourceType.SALES, inv.getUid())
+                    .map(JournalEntry::getUid)
+                    .orElse(null);
+        } catch (Exception ex) {
+            log.warn("SalesInvoiceServiceImpl: failed to resolve posted GL entry for invoice uid={} — {}",
+                    inv.getUid(), ex.getMessage());
+            return null;
+        }
     }
 
     /**

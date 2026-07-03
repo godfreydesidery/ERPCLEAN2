@@ -154,7 +154,44 @@ describe('TrialBalanceComponent — numeric money (wire reality) renders', () =>
     const text = fixture.nativeElement.textContent ?? '';
     expect(text).toContain('Cash');
     expect(text).toContain('Sales Revenue');
-    expect(text).toContain('50000');
+    // Rendered via the shared formatMoney util — thousand-separated, 2dp.
+    expect(text).toContain('50,000.00');
+  });
+});
+
+// ── Money formatting: thousand-separators via the shared formatMoney util ──────
+
+describe('TrialBalanceComponent — money formatting', () => {
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('fmtMoney renders thousand-separated, 2dp amounts (shared util, not toFixed)', async () => {
+    vi.useFakeTimers();
+    makeBed();
+    const comp = TestBed.createComponent(TrialBalanceComponent).componentInstance;
+    expect(comp.fmtMoney(2221486)).toBe('2,221,486.00');
+    expect(comp.fmtMoney('2221486.00')).toBe('2,221,486.00');
+    expect(comp.fmtMoney(0)).toBe('0.00');
+    expect(comp.fmtMoney(null)).toBe('0.00');
+  });
+
+  it('renders a thousand-separated total in the footer for a large balance', async () => {
+    vi.useFakeTimers();
+    const largeTb = (): any => ({
+      rows: [
+        { accountCode: '1000', accountName: 'Cash', accountType: 'ASSET', totalDebit: 2221486, totalCredit: 0, net: 2221486 },
+        { accountCode: '4100', accountName: 'Sales Revenue', accountType: 'INCOME', totalDebit: 0, totalCredit: 2221486, net: -2221486 },
+      ],
+      totalDebits: 2221486,
+      totalCredits: 2221486,
+    });
+    makeBed({ tbImpl: () => of(largeTb()) });
+
+    const fixture = TestBed.createComponent(TrialBalanceComponent);
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent ?? '';
+    expect(text).toContain('2,221,486.00');
   });
 });
 

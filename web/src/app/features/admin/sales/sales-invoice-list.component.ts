@@ -24,6 +24,7 @@ import { RoutesService } from '../routes/routes.service';
 import { SalesService } from './sales.service';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 import { CurrencySelectComponent } from '../../../shared/currency-select/currency-select.component';
+import { formatMoney } from '../../../shared/money.util';
 
 const DEFAULT_SIZE = 20;
 
@@ -347,6 +348,9 @@ export class SalesInvoiceListComponent {
   invoiceLabel(inv: SalesInvoiceDto): string {
     return inv.invoiceNumber ?? 'DRAFT';
   }
+
+  /** Coerce + format money with thousand separators (shared util). */
+  readonly fmtMoney = formatMoney;
 
   private messageFrom(err: unknown): string {
     const errors = (err as { error?: { errors?: string[] } })?.error?.errors;

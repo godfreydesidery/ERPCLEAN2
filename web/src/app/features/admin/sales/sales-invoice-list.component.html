@@ -285,7 +285,7 @@
                       </span>
                     </td>
                     <td class="small">{{ inv.currency }}</td>
-                    <td class="num">{{ inv.grossTotalAmount }}</td>
+                    <td class="num">{{ fmtMoney(inv.grossTotalAmount) }}</td>
                     <td class="small text-muted">{{ inv.createdAt | date:'dd/MM/yyyy' }}</td>
                     <td>
                       <a class="btn btn-sm btn-outline-primary"

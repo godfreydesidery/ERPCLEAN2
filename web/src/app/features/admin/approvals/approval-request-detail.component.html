@@ -260,7 +260,7 @@
                     @if (step.approverRoleName) {
                       <span class="mono text-muted small">{{ step.approverRoleCode }}</span>
                     }
-                    @if (resolverName(step.resolvedBy); as resolvedName) {
+                    @if (stepResolvedByName(step); as resolvedName) {
                       <span class="text-muted small">by {{ resolvedName }}</span>
                     }
                     @if (step.resolvedAt) {
@@ -278,7 +278,7 @@
                                 [class.status-tag--danger]="d.action === 'REJECT'">
                             {{ d.action }}
                           </span>
-                          <span>{{ resolverName(d.decidedBy) ?? '—' }}</span>
+                          <span>{{ d.decidedByName ?? '—' }}</span>
                           <span class="text-muted">{{ d.decidedAt | date:'yyyy-MM-dd HH:mm' }}</span>
                           @if (d.comment) {
                             <span class="text-muted fst-italic">"{{ d.comment }}"</span>

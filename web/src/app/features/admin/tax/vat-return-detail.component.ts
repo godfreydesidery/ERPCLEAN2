@@ -13,6 +13,7 @@ import {
   VatReturnDto,
 } from './models/tax.model';
 import { TaxService } from './tax.service';
+import { formatMoney } from '../../../shared/money.util';
 
 /**
  * VAT Return detail / face screen (FR-VAT-02/08 / US-VAT-02/03/04).
@@ -248,10 +249,8 @@ export class VatReturnDetailComponent implements OnInit {
 
   // ── Display helpers ────────────────────────────────────────────────────────
 
-  fmtMoney(v: number | string | null | undefined): string {
-    const n = +(v ?? 0);
-    return Number.isFinite(n) ? n.toFixed(2) : '0.00';
-  }
+  /** Coerce + format money with thousand separators (shared util). */
+  readonly fmtMoney = formatMoney;
 
   adjReasonLabel(reason: VatAdjustmentReason): string {
     return this.adjReasons.find((r) => r.value === reason)?.label ?? reason;

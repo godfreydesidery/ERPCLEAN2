@@ -12,6 +12,7 @@ import {
   CashTransactionDto,
 } from './models/cashbank.model';
 import { CashbankService } from './cashbank.service';
+import { formatMoney } from '../../../shared/money.util';
 
 type LoadState = 'idle' | 'loading' | 'error' | 'forbidden';
 
@@ -157,10 +158,7 @@ export class CashAccountStatementComponent {
 
   // ── Display helpers ────────────────────────────────────────────────────────
 
-  /** Coerce money — number or string on wire — to display string. */
-  fmtMoney(v: number | string | null | undefined): string {
-    const n = +(v ?? 0);
-    return Number.isFinite(n) ? n.toFixed(2) : '0.00';
-  }
+  /** Coerce + format money with thousand separators (shared util). */
+  readonly fmtMoney = formatMoney;
 
 }

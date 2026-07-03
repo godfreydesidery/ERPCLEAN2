@@ -251,7 +251,7 @@ describe('ApprovalRequestDetailComponent — submitter/decider/branch + step rol
     expect(html).toContain('SOME_ROLE');
   });
 
-  it('resolverName() matches the request submitter/resolver ids and never leaks an unmatched id into the template', async () => {
+  it('shows decidedByName directly in the decision history, never a raw numeric id', async () => {
     makeBed(
       makeRequest({
         submittedBy: '42',
@@ -266,11 +266,13 @@ describe('ApprovalRequestDetailComponent — submitter/decider/branch + step rol
             decisions: [
               {
                 id: 'd1', uid: 'dec-1', approvalRequestStepId: '1',
-                action: 'APPROVE', decidedBy: '88', decidedAt: '2026-07-02T09:00:00Z', comment: null,
+                action: 'APPROVE', decidedBy: '999', decidedByName: null,
+                decidedAt: '2026-07-02T08:55:00Z', comment: null,
               },
               {
                 id: 'd2', uid: 'dec-2', approvalRequestStepId: '1',
-                action: 'APPROVE', decidedBy: '999', decidedAt: '2026-07-02T09:05:00Z', comment: null,
+                action: 'APPROVE', decidedBy: '88', decidedByName: 'Godfrey Desidery',
+                decidedAt: '2026-07-02T09:00:00Z', comment: null,
               },
             ],
           },
@@ -284,11 +286,13 @@ describe('ApprovalRequestDetailComponent — submitter/decider/branch + step rol
     fixture.detectChanges();
 
     const comp = fixture.componentInstance;
-    expect(comp.resolverName('42')).toBe('Jane Doe');
-    expect(comp.resolverName('88')).toBe('Godfrey Desidery');
-    expect(comp.resolverName('999')).toBeNull();
+    // stepResolvedByName looks up the decision matching the step's resolvedBy — not a
+    // request-level submitter/resolver guess.
+    expect(comp.stepResolvedByName(comp.request()!.steps[0])).toBe('Godfrey Desidery');
 
     const html: string = fixture.nativeElement.textContent;
+    expect(html).toContain('Godfrey Desidery');
+    // Decision with no resolvable name renders the em-dash fallback, never the raw id.
     expect(html).not.toContain('999');
   });
 });

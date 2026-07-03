@@ -4,8 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 import com.erp.modules.approvals.domain.dto.ApprovalRequestDto;
+import com.erp.modules.approvals.domain.entity.ApprovalDecision;
 import com.erp.modules.approvals.domain.entity.ApprovalRequest;
 import com.erp.modules.approvals.domain.entity.ApprovalRequestStep;
+import com.erp.modules.approvals.domain.enums.DecisionAction;
 import com.erp.modules.approvals.repository.ApprovalDecisionRepository;
 import com.erp.modules.approvals.repository.ApprovalPolicyStepRepository;
 import com.erp.modules.approvals.repository.ApprovalRequestRepository;
@@ -110,6 +112,80 @@ class ApprovalEngineImplTest {
         assertThat(dto.steps()).hasSize(1);
         assertThat(dto.steps().get(0).approverRoleCode()).isEqualTo("PURCHASING_MANAGER");
         assertThat(dto.steps().get(0).approverRoleName()).isEqualTo("Purchasing Manager");
+    }
+
+    @Test
+    void toDto_resolvesDecidedByNameOnDecisionHistory() {
+        ApprovalRequest request = new ApprovalRequest(
+                COMPANY_ID, BRANCH_ID, "PURCHASE_ORDER", "po-uid-3",
+                new BigDecimal("3000000"), "TZS", null, null, "PO to Gamma",
+                SUBMITTER_ID, SUBMITTER_ID);
+        ReflectionTestUtils.setField(request, "id", 502L);
+        ReflectionTestUtils.setField(request, "uid", "APRUID000000000000000003");
+        request.setResolvedBy(RESOLVER_ID);
+
+        ApprovalRequestStep step = new ApprovalRequestStep(
+                502L, COMPANY_ID, BRANCH_ID, (short) 1, "PURCHASING_MANAGER", SUBMITTER_ID);
+        ReflectionTestUtils.setField(step, "id", 902L);
+        ReflectionTestUtils.setField(step, "uid", "STEPUID0000000000000003");
+
+        ApprovalDecision decision = new ApprovalDecision(502L, 902L, COMPANY_ID, BRANCH_ID,
+                DecisionAction.APPROVE, RESOLVER_ID, "Looks good", RESOLVER_ID);
+        ReflectionTestUtils.setField(decision, "id", 950L);
+        ReflectionTestUtils.setField(decision, "uid", "DECUID0000000000000001");
+
+        when(stepRepo.findByApprovalRequestIdOrderBySequence(502L)).thenReturn(List.of(step));
+        when(decisionRepo.findByApprovalRequestStepIdOrderByDecidedAt(902L))
+                .thenReturn(List.of(decision));
+        when(branchRepo.findById(BRANCH_ID)).thenReturn(Optional.of(branchOf("HQ", "Head Office")));
+        when(userRepo.findById(SUBMITTER_ID))
+                .thenReturn(Optional.of(userOf(SUBMITTER_ID, "buyer1", "Jane Buyer")));
+        when(userRepo.findById(RESOLVER_ID))
+                .thenReturn(Optional.of(userOf(RESOLVER_ID, "pm1", "Peter Manager")));
+        when(roleRepo.findByCode("PURCHASING_MANAGER"))
+                .thenReturn(Optional.of(new Role("PURCHASING_MANAGER", "Purchasing Manager")));
+
+        ApprovalRequestDto dto = engine.toDto(request);
+
+        assertThat(dto.steps()).hasSize(1);
+        assertThat(dto.steps().get(0).decisions()).hasSize(1);
+        assertThat(dto.steps().get(0).decisions().get(0).decidedBy()).isEqualTo(RESOLVER_ID);
+        assertThat(dto.steps().get(0).decisions().get(0).decidedByName())
+                .isEqualTo("Peter Manager");
+    }
+
+    @Test
+    void toDto_decidedByNameNull_whenDecidingUserNoLongerExists() {
+        ApprovalRequest request = new ApprovalRequest(
+                COMPANY_ID, BRANCH_ID, "PURCHASE_ORDER", "po-uid-4",
+                new BigDecimal("1000000"), "TZS", null, null, "PO to Delta",
+                SUBMITTER_ID, SUBMITTER_ID);
+        ReflectionTestUtils.setField(request, "id", 503L);
+        ReflectionTestUtils.setField(request, "uid", "APRUID000000000000000004");
+
+        ApprovalRequestStep step = new ApprovalRequestStep(
+                503L, COMPANY_ID, BRANCH_ID, (short) 1, "PURCHASING_MANAGER", SUBMITTER_ID);
+        ReflectionTestUtils.setField(step, "id", 903L);
+        ReflectionTestUtils.setField(step, "uid", "STEPUID0000000000000004");
+
+        Long ghostUserId = 999L;
+        ApprovalDecision decision = new ApprovalDecision(503L, 903L, COMPANY_ID, BRANCH_ID,
+                DecisionAction.REJECT, ghostUserId, "No longer valid", ghostUserId);
+        ReflectionTestUtils.setField(decision, "id", 951L);
+        ReflectionTestUtils.setField(decision, "uid", "DECUID0000000000000002");
+
+        when(stepRepo.findByApprovalRequestIdOrderBySequence(503L)).thenReturn(List.of(step));
+        when(decisionRepo.findByApprovalRequestStepIdOrderByDecidedAt(903L))
+                .thenReturn(List.of(decision));
+        when(branchRepo.findById(BRANCH_ID)).thenReturn(Optional.empty());
+        when(userRepo.findById(SUBMITTER_ID)).thenReturn(Optional.empty());
+        when(userRepo.findById(ghostUserId)).thenReturn(Optional.empty());
+        when(roleRepo.findByCode("PURCHASING_MANAGER")).thenReturn(Optional.empty());
+
+        ApprovalRequestDto dto = engine.toDto(request);
+
+        assertThat(dto.steps().get(0).decisions().get(0).decidedBy()).isEqualTo(ghostUserId);
+        assertThat(dto.steps().get(0).decisions().get(0).decidedByName()).isNull();
     }
 
     @Test

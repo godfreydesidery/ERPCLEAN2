@@ -31,7 +31,7 @@ const STUB_INVOICE = {
   routeCode: null, routeName: null,
   currency: 'TZS', netTotalAmount: '0', vatTotalAmount: '0', grossTotalAmount: '0',
   notes: null, finalisedAt: null, finalisedBy: null,
-  voidReason: null, createdAt: null,
+  voidReason: null, postedGlEntryUid: null as string | null, createdAt: null,
 };
 
 const STUB_UNITS = [
@@ -46,9 +46,11 @@ const STUB_PRODUCT = {
 
 function makeBed(overrides: {
   listProductUnitsSpy?: ReturnType<typeof vi.fn>;
+  invoice?: typeof STUB_INVOICE;
 } = {}) {
   const listProductUnitsSpy =
     overrides.listProductUnitsSpy ?? vi.fn(() => of(STUB_UNITS));
+  const invoice = overrides.invoice ?? STUB_INVOICE;
 
   TestBed.configureTestingModule({
     imports: [SalesInvoiceDetailComponent],
@@ -59,7 +61,7 @@ function makeBed(overrides: {
       {
         provide: SalesService,
         useValue: {
-          getByUid: vi.fn(() => of(STUB_INVOICE)),
+          getByUid: vi.fn(() => of(invoice)),
           listLines: vi.fn(() => of([])),
           listPayments: vi.fn(() => of([])),
           addLine: vi.fn(() => of({})),
@@ -198,5 +200,36 @@ describe('SalesInvoiceDetailComponent — product-scoped unit picker', () => {
     await vi.runAllTimersAsync();
 
     expect(comp.lineUnitsState()).toBe('error');
+  });
+});
+
+// ── View Journal link (UPR: mirror AP bill-detail's posted-GL-entry link) ──────
+
+describe('SalesInvoiceDetailComponent — View Journal link', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('shows the View Journal link when postedGlEntryUid is set', async () => {
+    makeBed({ invoice: { ...STUB_INVOICE, status: 'FINALISED', postedGlEntryUid: 'GL-UID-9' } });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const anchors: HTMLAnchorElement[] = Array.from(fixture.nativeElement.querySelectorAll('a'));
+    const journalLink = anchors.find((a) => a.textContent?.includes('View Journal'));
+    expect(journalLink).toBeTruthy();
+    expect(journalLink?.getAttribute('href')).toBe('/admin/gl/journals/uid/GL-UID-9');
+  });
+
+  it('does not show the View Journal link when postedGlEntryUid is null', async () => {
+    makeBed({ invoice: { ...STUB_INVOICE, postedGlEntryUid: null } });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const anchors: HTMLAnchorElement[] = Array.from(fixture.nativeElement.querySelectorAll('a'));
+    expect(anchors.some((a) => a.textContent?.includes('View Journal'))).toBe(false);
   });
 });

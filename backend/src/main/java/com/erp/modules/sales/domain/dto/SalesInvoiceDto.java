@@ -20,6 +20,8 @@ public record SalesInvoiceDto(
         DocumentType documentType,
         String invoiceNumber,
         InvoiceStatus status,
+        // Read-time resolution of the posted SALES journal entry (null when not finalised/posted)
+        String postedGlEntryUid,
         Long customerId,
         String customerName,
         Long agentId,
@@ -58,6 +60,17 @@ public record SalesInvoiceDto(
     /** Build from entity with enriched customer, agent, and optional route fields. */
     public static SalesInvoiceDto from(SalesInvoice inv, String customerName, String agentName,
                                        String routeUid, String routeCode, String routeName) {
+        return from(inv, customerName, agentName, routeUid, routeCode, routeName, null);
+    }
+
+    /**
+     * Build from entity with enriched customer, agent, route, and posted-journal fields.
+     * {@code postedGlEntryUid} is resolved read-time by the service (null when the invoice isn't
+     * finalised/posted, or when no matching journal entry is found).
+     */
+    public static SalesInvoiceDto from(SalesInvoice inv, String customerName, String agentName,
+                                       String routeUid, String routeCode, String routeName,
+                                       String postedGlEntryUid) {
         return new SalesInvoiceDto(
                 inv.getId(),
                 inv.getUid(),
@@ -66,6 +79,7 @@ public record SalesInvoiceDto(
                 inv.getDocumentType(),
                 inv.getInvoiceNumber(),
                 inv.getStatus(),
+                postedGlEntryUid,
                 inv.getCustomerId(),
                 customerName,
                 inv.getAgentId(),
