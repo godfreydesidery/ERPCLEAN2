@@ -44,12 +44,12 @@ export interface PurchaseOrderLineDto {
 
 /**
  * Approval gate status for a PO (PoApprovalStatus enum on the backend).
- * NOTE: the backend PurchaseOrderDto does not yet include this field in its record definition
- * (the entity carries it; the DTO was not extended). The field is typed here as optional so the
- * web model remains forward-compatible when the backend adds it. Workflow currently tracks this
- * locally via the submittedForApproval signal on the detail component.
+ * The backend PurchaseOrderDto emits this field once the PO has been through the approval gate
+ * (submitted/approved/rejected); it is `null`/absent when the PO never required approval
+ * (gate disabled or below threshold — the backend's NOT_REQUIRED state collapses to null on the
+ * wire rather than being serialised as a string).
  */
-export type PoApprovalStatus = 'NOT_REQUIRED' | 'PENDING' | 'APPROVED' | 'REJECTED';
+export type PoApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
 export interface PurchaseOrderDto {
   id: string;
@@ -74,10 +74,10 @@ export interface PurchaseOrderDto {
   /** Lines included on the single-PO get endpoint; null/absent on the list endpoint. */
   lines: PurchaseOrderLineDto[] | null;
   /**
-   * Approval gate status. Optional — the backend DTO does not yet emit this field; present here
-   * for forward-compatibility. When undefined, fall back to locally tracked state.
+   * Approval gate status, reconciled from the approval engine on every fetch. `null`/absent when
+   * the PO has no approval status (gate disabled or below threshold).
    */
-  approvalStatus?: PoApprovalStatus;
+  approvalStatus?: PoApprovalStatus | null;
 }
 
 // ── GoodsReceiptLineDto ─────────────────────────────────────────────────────────
