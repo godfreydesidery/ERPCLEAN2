@@ -12,6 +12,7 @@ import com.erp.modules.stock.repository.StockLocationRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.security.RequestContext;
@@ -58,6 +59,15 @@ public class StockLocationServiceImpl implements StockLocationService {
                 .orElseThrow(() -> NotFoundException.of("Branch", request.branchUid()));
         if (!branch.getCompany().getId().equals(principal.companyId())) {
             throw com.erp.platform.common.api.ForbiddenException.notPermitted();
+        }
+
+        // Pre-check the real unique key (uq_stock_location_company_code: company_id, code — the
+        // code is unique company-wide, not just within the branch) so the caller gets a specific,
+        // friendly 409 instead of the generic DB-constraint catch-all (error-message-hygiene
+        // defect D2).
+        if (locations.existsByCompanyIdAndCode(principal.companyId(), request.code())) {
+            throw new ConflictException(
+                    "A stock location with code " + request.code() + " already exists in this company.");
         }
 
         // If makeDefault, clear any existing default first and FLUSH immediately.

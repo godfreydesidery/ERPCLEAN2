@@ -1,0 +1,1184 @@
+{
+  "totals": {
+    "problems": 11,
+    "bySeverity": {
+      "SLOW": 11
+    }
+  },
+  "perPersona": [
+    {
+      "persona": "Bakari Mbaga",
+      "slug": "bakari-mbaga",
+      "ran": true,
+      "loggedIn": true,
+      "role": "GROUP_GM",
+      "access": [
+        {
+          "path": "/admin/dashboard",
+          "label": "Dashboard",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/reporting/income-statement",
+          "label": "Income statement",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/reporting/balance-sheet",
+          "label": "Balance sheet",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/reporting/cash-flow",
+          "label": "Cash flow",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/approvals/inbox",
+          "label": "Approval inbox",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/approvals/policies",
+          "label": "Approval policies",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/sales-orders",
+          "label": "Sales orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/purchase-orders",
+          "label": "Purchase orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/stock",
+          "label": "Stock on-hand",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/budgets",
+          "label": "Budgets",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/projects",
+          "label": "Projects",
+          "outcome": "OK"
+        }
+      ],
+      "created": {
+        "approval inbox open (nothing pending to decide)": 1
+      },
+      "problemCount": 0
+    },
+    {
+      "persona": "Grace Mhina",
+      "slug": "grace-mhina",
+      "ran": true,
+      "loggedIn": true,
+      "role": "FINANCE_DIRECTOR",
+      "access": [
+        {
+          "path": "/admin/gl/journals/post",
+          "label": "Post journal",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/gl/accounts",
+          "label": "GL accounts",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/gl/trial-balance",
+          "label": "Trial balance",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/gl/periods",
+          "label": "GL periods",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/ar/invoices",
+          "label": "AR invoices",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/ar/ageing",
+          "label": "AR ageing",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/ap/supplier-bills",
+          "label": "Supplier bills",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/ap/payments/record",
+          "label": "Record payment",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/cash/accounts",
+          "label": "Cash accounts",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/cash/reconciliations",
+          "label": "Bank reconciliation",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/tax/vat-returns",
+          "label": "VAT returns",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/tax/wht-register",
+          "label": "WHT register",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/fixed-assets",
+          "label": "Fixed assets",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/depreciation-runs",
+          "label": "Depreciation runs",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/fx/rates",
+          "label": "FX rates",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/fx/revaluation-runs",
+          "label": "FX revaluation",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/cost-centre/dimensions",
+          "label": "Cost centres",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/budgets",
+          "label": "Budgets",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/budgeting/variance",
+          "label": "Budget variance",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/approvals/inbox",
+          "label": "Approval inbox",
+          "outcome": "OK"
+        }
+      ],
+      "created": {
+        "create an asset category": 1,
+        "register a fixed asset": 1,
+        "create a budget": 1,
+        "post journal": 1,
+        "approval inbox open (nothing pending to decide)": 1
+      },
+      "problemCount": 3
+    },
+    {
+      "persona": "Halima Juma",
+      "slug": "halima-juma",
+      "ran": true,
+      "loggedIn": true,
+      "role": "BRANCH_MANAGER",
+      "access": [
+        {
+          "path": "/admin/sales-orders",
+          "label": "Sales orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/purchase-orders",
+          "label": "Purchase orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/stock",
+          "label": "Stock on-hand",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/stock-transfers/create",
+          "label": "Stock transfer",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/approvals/inbox",
+          "label": "Approval inbox",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/reporting/income-statement",
+          "label": "Branch P&L",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/crm/leads",
+          "label": "CRM leads",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/crm/pipeline",
+          "label": "Sales pipeline",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/routes",
+          "label": "Routes",
+          "outcome": "OK"
+        }
+      ],
+      "created": {
+        "register a lead": 1,
+        "raise inter-branch transfer": 1,
+        "approval inbox open (nothing pending to decide)": 1
+      },
+      "problemCount": 0
+    },
+    {
+      "persona": "Emanuel Mushi",
+      "slug": "emanuel-mushi",
+      "ran": true,
+      "loggedIn": true,
+      "role": "BRANCH_MANAGER",
+      "access": [
+        {
+          "path": "/admin/sales-orders",
+          "label": "Sales orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/purchase-orders",
+          "label": "Purchase orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/stock",
+          "label": "Stock on-hand",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/stock-transfers/create",
+          "label": "Stock transfer",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/approvals/inbox",
+          "label": "Approval inbox",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/reporting/income-statement",
+          "label": "Branch P&L",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/crm/leads",
+          "label": "CRM leads",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/crm/pipeline",
+          "label": "Sales pipeline",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/routes",
+          "label": "Routes",
+          "outcome": "OK"
+        }
+      ],
+      "created": {
+        "register a lead": 1,
+        "raise inter-branch transfer": 1,
+        "approval inbox open (nothing pending to decide)": 1
+      },
+      "problemCount": 0
+    },
+    {
+      "persona": "Daudi Kessy",
+      "slug": "daudi-kessy",
+      "ran": true,
+      "loggedIn": true,
+      "role": "BRANCH_MANAGER",
+      "access": [
+        {
+          "path": "/admin/sales-orders",
+          "label": "Sales orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/purchase-orders",
+          "label": "Purchase orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/stock",
+          "label": "Stock on-hand",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/stock-transfers/create",
+          "label": "Stock transfer",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/approvals/inbox",
+          "label": "Approval inbox",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/reporting/income-statement",
+          "label": "Branch P&L",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/crm/leads",
+          "label": "CRM leads",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/crm/pipeline",
+          "label": "Sales pipeline",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/routes",
+          "label": "Routes",
+          "outcome": "OK"
+        }
+      ],
+      "created": {
+        "register a lead": 1,
+        "raise inter-branch transfer": 1,
+        "approval inbox open (nothing pending to decide)": 1
+      },
+      "problemCount": 0
+    },
+    {
+      "persona": "Rehema Salum",
+      "slug": "rehema-salum",
+      "ran": true,
+      "loggedIn": true,
+      "role": "PROCUREMENT_OFFICER",
+      "access": [
+        {
+          "path": "/admin/purchase-orders",
+          "label": "Purchase orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/purchase-requisitions/create",
+          "label": "Requisition",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/rfqs/create",
+          "label": "RFQ",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/purchase-returns/create",
+          "label": "Purchase return",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/suppliers",
+          "label": "Suppliers",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/products",
+          "label": "Products",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/goods-receipts",
+          "label": "Goods receipts",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/landed-costs/create",
+          "label": "Landed cost",
+          "outcome": "OK"
+        }
+      ],
+      "created": {
+        "create a purchase requisition": 1,
+        "create an RFQ": 1,
+        "create a purchase return": 1,
+        "create a landed cost": 1,
+        "register supplier": 5,
+        "register product master data": 11,
+        "raise PO + line": 1,
+        "place PO": 1,
+        "price product": 1
+      },
+      "problemCount": 0
+    },
+    {
+      "persona": "Editha Mhagama",
+      "slug": "editha-mhagama",
+      "ran": true,
+      "loggedIn": true,
+      "role": "PRODUCTION_OFFICER",
+      "access": [
+        {
+          "path": "/admin/work-orders",
+          "label": "Work orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/boms",
+          "label": "Bills of materials",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/manufacturing/wip-reconciliation",
+          "label": "WIP reconciliation",
+          "outcome": "OK"
+        }
+      ],
+      "created": {
+        "release work order": 1
+      },
+      "problemCount": 0
+    },
+    {
+      "persona": "Neema Kileo",
+      "slug": "neema-kileo",
+      "ran": true,
+      "loggedIn": true,
+      "role": "HR_PAYROLL_OFFICER",
+      "access": [
+        {
+          "path": "/admin/hr/employees",
+          "label": "Employees",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/hr/contracts",
+          "label": "Contracts",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/hr/departments",
+          "label": "Departments",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/hr/leave-requests",
+          "label": "Leave requests",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/hr/loans",
+          "label": "Staff loans",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/hr/pay-components",
+          "label": "Pay components",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/hr/payroll-runs",
+          "label": "Payroll runs",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/hr/statutory",
+          "label": "Statutory deductions",
+          "outcome": "OK"
+        }
+      ],
+      "created": {
+        "create a pay component": 1,
+        "submit a leave request": 1,
+        "create a staff loan": 1,
+        "run payroll": 1,
+        "register employee": 1
+      },
+      "problemCount": 1
+    },
+    {
+      "persona": "Frank Materu",
+      "slug": "frank-materu",
+      "ran": true,
+      "loggedIn": true,
+      "role": "STORES_SUPERVISOR",
+      "access": [
+        {
+          "path": "/admin/stock",
+          "label": "Stock on-hand",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/stock-counts/create",
+          "label": "Stock count",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/stock-transfers/create",
+          "label": "Stock transfer",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/stock/valuation",
+          "label": "Stock valuation",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/stock/valuation/opening",
+          "label": "Opening valuation",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/stock/locations",
+          "label": "Stock locations",
+          "outcome": "OK"
+        }
+      ],
+      "created": {},
+      "problemCount": 1
+    },
+    {
+      "persona": "Editrude Mwakalukwa",
+      "slug": "editrude-mwakalukwa",
+      "ran": true,
+      "loggedIn": true,
+      "role": "PRODUCTION_OFFICER",
+      "access": [
+        {
+          "path": "/admin/work-orders",
+          "label": "Work orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/boms",
+          "label": "Bills of materials",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/manufacturing/wip-reconciliation",
+          "label": "WIP reconciliation",
+          "outcome": "OK"
+        }
+      ],
+      "created": {
+        "release work order": 1
+      },
+      "problemCount": 0
+    },
+    {
+      "persona": "Amina Mwanga",
+      "slug": "amina-mwanga",
+      "ran": true,
+      "loggedIn": true,
+      "role": "ACCOUNTANT",
+      "access": [
+        {
+          "path": "/admin/gl/journals/post",
+          "label": "Post journal",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/gl/accounts",
+          "label": "GL accounts",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/gl/trial-balance",
+          "label": "Trial balance",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/ar/invoices",
+          "label": "AR invoices",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/ar/receipts/record",
+          "label": "Record receipt",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/ap/supplier-bills/enter",
+          "label": "Enter supplier bill",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/tax/vat-returns",
+          "label": "VAT returns",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/tax/wht-register",
+          "label": "WHT register",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/cash/statement",
+          "label": "Cash statement",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/reporting/balance-sheet",
+          "label": "Balance sheet",
+          "outcome": "OK"
+        }
+      ],
+      "created": {
+        "post journal": 1,
+        "enter supplier bill": 1
+      },
+      "problemCount": 2
+    },
+    {
+      "persona": "John Komba",
+      "slug": "john-komba",
+      "ran": true,
+      "loggedIn": true,
+      "role": "CASHIER",
+      "access": [
+        {
+          "path": "/admin/cash/entries/record",
+          "label": "Record cash entry",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/cash/cheques",
+          "label": "Cheques",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/cash/transfers/record",
+          "label": "Cash transfer",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/cash/reconciliations",
+          "label": "Bank reconciliation",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/cash/statement",
+          "label": "Cash statement",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/ar/receipts/record",
+          "label": "Record receipt",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/ap/payments/record",
+          "label": "Record payment",
+          "outcome": "OK"
+        }
+      ],
+      "created": {
+        "record a cash entry": 1,
+        "register a cheque": 1,
+        "record a cash transfer": 1,
+        "record receipt": 1
+      },
+      "problemCount": 0
+    },
+    {
+      "persona": "Sabina Aloyce",
+      "slug": "sabina-aloyce",
+      "ran": true,
+      "loggedIn": true,
+      "role": "SALES_OFFICER",
+      "access": [
+        {
+          "path": "/admin/sales-orders",
+          "label": "Sales orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/quotations",
+          "label": "Quotations",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/sales-invoices",
+          "label": "Sales invoices",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/deliveries/create",
+          "label": "Delivery note",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/sales-returns/create",
+          "label": "Sales return",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/customers",
+          "label": "Customers",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/pos/sell",
+          "label": "POS sell",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/blanket-orders",
+          "label": "Blanket orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/standing-orders",
+          "label": "Standing orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/price-lists",
+          "label": "Price lists",
+          "outcome": "OK"
+        }
+      ],
+      "created": {
+        "raise a quotation": 1,
+        "create a delivery note": 1,
+        "create a sales return": 1,
+        "create a blanket order": 1,
+        "create a standing order": 1,
+        "register customer": 5,
+        "create SO + line": 1
+      },
+      "problemCount": 1
+    },
+    {
+      "persona": "Hamisi Ngassa",
+      "slug": "hamisi-ngassa",
+      "ran": true,
+      "loggedIn": true,
+      "role": "FIELD_SALES_AGENT",
+      "access": [
+        {
+          "path": "/admin/sales-orders",
+          "label": "Sales orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/customers",
+          "label": "Customers",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/routes",
+          "label": "Routes",
+          "outcome": "OK"
+        }
+      ],
+      "created": {
+        "register route customer": 1
+      },
+      "problemCount": 0
+    },
+    {
+      "persona": "Saidi Karume",
+      "slug": "saidi-karume",
+      "ran": true,
+      "loggedIn": true,
+      "role": "STOREKEEPER",
+      "access": [
+        {
+          "path": "/admin/stock",
+          "label": "Stock on-hand",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/goods-receipts/create",
+          "label": "Goods receipt",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/stock-counts/create",
+          "label": "Stock count",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/stock-transfers/create",
+          "label": "Stock transfer",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/stock/locations",
+          "label": "Stock locations",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/stock/batches",
+          "label": "Stock batches",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/stock/serials",
+          "label": "Stock serials",
+          "outcome": "OK"
+        }
+      ],
+      "created": {},
+      "problemCount": 3
+    },
+    {
+      "persona": "Yusuf Mbwana",
+      "slug": "yusuf-mbwana",
+      "ran": true,
+      "loggedIn": true,
+      "role": "PROCUREMENT_OFFICER",
+      "access": [
+        {
+          "path": "/admin/purchase-orders",
+          "label": "Purchase orders",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/purchase-requisitions/create",
+          "label": "Requisition",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/rfqs/create",
+          "label": "RFQ",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/purchase-returns/create",
+          "label": "Purchase return",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/suppliers",
+          "label": "Suppliers",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/products",
+          "label": "Products",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/goods-receipts",
+          "label": "Goods receipts",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/landed-costs/create",
+          "label": "Landed cost",
+          "outcome": "OK"
+        }
+      ],
+      "created": {
+        "create a purchase requisition": 1,
+        "create an RFQ": 1,
+        "create a purchase return": 1,
+        "create a landed cost": 1,
+        "register supplier": 5,
+        "register product master data": 11,
+        "raise PO + line": 1,
+        "place PO": 1,
+        "price product": 1
+      },
+      "problemCount": 0
+    },
+    {
+      "persona": "Zawadi Lyimo",
+      "slug": "zawadi-lyimo",
+      "ran": true,
+      "loggedIn": true,
+      "role": "PROJECT_MANAGER",
+      "access": [
+        {
+          "path": "/admin/projects",
+          "label": "Projects",
+          "outcome": "OK"
+        },
+        {
+          "path": "/admin/projects/wip-report",
+          "label": "Project WIP report",
+          "outcome": "OK"
+        }
+      ],
+      "created": {
+        "create a project": 1
+      },
+      "problemCount": 0
+    }
+  ],
+  "problems": [
+    {
+      "persona": "Grace Mhina",
+      "designation": "Finance Director (CFO)",
+      "username": "gmhina",
+      "severity": "SLOW",
+      "workflow": "a11y on Cash accounts",
+      "screen": "/admin/cash/accounts",
+      "detail": "serious a11y: scrollable-region-focusable — Scrollable region must have keyboard access (1 node(s))",
+      "evidence": {
+        "axe": {
+          "id": "scrollable-region-focusable",
+          "impact": "serious",
+          "help": "Scrollable region must have keyboard access",
+          "n": 1,
+          "sample": ".erp-table-wrap"
+        }
+      },
+      "slug": "grace-mhina"
+    },
+    {
+      "persona": "Grace Mhina",
+      "designation": "Finance Director (CFO)",
+      "username": "gmhina",
+      "severity": "SLOW",
+      "workflow": "add an exchange rate",
+      "screen": "/admin/fx/rates",
+      "detail": "\"add an exchange rate\" rejected (409) [NEEDS_PREREQ]: {\"data\":null,\"errors\":[\"A record with the same unique identifier alrea",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 409 (Conflict)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/fx/rates",
+            "status": 409,
+            "method": "POST",
+            "body": "{\"data\":null,\"errors\":[\"A record with the same unique identifier already exists.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "grace-mhina"
+    },
+    {
+      "persona": "Grace Mhina",
+      "designation": "Finance Director (CFO)",
+      "username": "gmhina",
+      "severity": "SLOW",
+      "workflow": "create a dimension value",
+      "screen": "/admin/cost-centre/values",
+      "detail": "\"create a dimension value\" rejected (409) [NEEDS_PREREQ]: {\"data\":null,\"errors\":[\"A record with the same unique identifier alrea",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 409 (Conflict)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/dimension-values",
+            "status": 409,
+            "method": "POST",
+            "body": "{\"data\":null,\"errors\":[\"A record with the same unique identifier already exists.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "grace-mhina"
+    },
+    {
+      "persona": "Neema Kileo",
+      "designation": "HR & Payroll Manager",
+      "username": "nkileo",
+      "severity": "SLOW",
+      "workflow": "create a department",
+      "screen": "/admin/hr/departments",
+      "detail": "\"create a department\" rejected (409): {\"data\":null,\"errors\":[\"Department code already exists: OPS\"],\"meta\":n",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 409 (Conflict)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/hr/departments",
+            "status": 409,
+            "method": "POST",
+            "body": "{\"data\":null,\"errors\":[\"Department code already exists: OPS\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "neema-kileo"
+    },
+    {
+      "persona": "Frank Materu",
+      "designation": "Stores / Warehouse Supervisor",
+      "username": "fmateru",
+      "severity": "SLOW",
+      "workflow": "record stock opening balance",
+      "screen": "/admin/stock",
+      "detail": "opening balance rejected (409)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 409 (Conflict)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/stock/opening-balances",
+            "status": 409,
+            "method": "POST",
+            "body": "{\"data\":null,\"errors\":[\"An on-hand record already exists for this product at the active branch. Use an ADJUSTMENT to correct an existing level.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "frank-materu"
+    },
+    {
+      "persona": "Amina Mwanga",
+      "designation": "Accountant",
+      "username": "amwanga",
+      "severity": "SLOW",
+      "workflow": "create a VAT return",
+      "screen": "/admin/tax/vat-returns",
+      "detail": "\"create a VAT return\" rejected (409): {\"data\":null,\"errors\":[\"A VAT return for this period already exists. O",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 409 (Conflict)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/vat/returns",
+            "status": 409,
+            "method": "POST",
+            "body": "{\"data\":null,\"errors\":[\"A VAT return for this period already exists. Only one return can be open per period — please use the existing one.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "amina-mwanga"
+    },
+    {
+      "persona": "Amina Mwanga",
+      "designation": "Accountant",
+      "username": "amwanga",
+      "severity": "SLOW",
+      "workflow": "create a GL account",
+      "screen": "/admin/gl/accounts",
+      "detail": "\"create a GL account\" rejected (409): {\"data\":null,\"errors\":[\"Account code 1100 already exists in this compa",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 409 (Conflict)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/gl/accounts",
+            "status": 409,
+            "method": "POST",
+            "body": "{\"data\":null,\"errors\":[\"Account code 1100 already exists in this company.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "amina-mwanga"
+    },
+    {
+      "persona": "Sabina Aloyce",
+      "designation": "Salesperson",
+      "username": "saloyce",
+      "severity": "SLOW",
+      "workflow": "create price list",
+      "screen": "/admin/price-lists",
+      "detail": "could not save \"RETAIL\" (validation/409)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 409 (Conflict)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/price-lists",
+            "status": 409,
+            "method": "POST",
+            "body": "{\"data\":null,\"errors\":[\"A record with the same unique identifier already exists.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "sabina-aloyce"
+    },
+    {
+      "persona": "Saidi Karume",
+      "designation": "Storekeeper / Stock Controller",
+      "username": "skarume",
+      "severity": "SLOW",
+      "workflow": "create a stock location",
+      "screen": "/admin/stock/locations",
+      "detail": "\"create a stock location\" rejected (409) [NEEDS_PREREQ]: {\"data\":null,\"errors\":[\"A record with the same unique identifier alrea",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 409 (Conflict)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/stock-locations",
+            "status": 409,
+            "method": "POST",
+            "body": "{\"data\":null,\"errors\":[\"A record with the same unique identifier already exists.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "saidi-karume"
+    },
+    {
+      "persona": "Saidi Karume",
+      "designation": "Storekeeper / Stock Controller",
+      "username": "skarume",
+      "severity": "SLOW",
+      "workflow": "record stock opening balance",
+      "screen": "/admin/stock",
+      "detail": "opening balance rejected (409)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 409 (Conflict)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/stock/opening-balances",
+            "status": 409,
+            "method": "POST",
+            "body": "{\"data\":null,\"errors\":[\"An on-hand record already exists for this product at the active branch. Use an ADJUSTMENT to correct an existing level.\"],\"meta\":null}"
+          }
+        ]
+      },
+      "slug": "saidi-karume"
+    },
+    {
+      "persona": "Saidi Karume",
+      "designation": "Storekeeper / Stock Controller",
+      "username": "skarume",
+      "severity": "SLOW",
+      "workflow": "receive goods against a PO",
+      "screen": "/admin/goods-receipts/create",
+      "detail": "PO selected but no receivable lines appeared",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      },
+      "slug": "saidi-karume"
+    }
+  ]
+}

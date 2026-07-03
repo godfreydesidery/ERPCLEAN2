@@ -15,6 +15,9 @@ public interface DimensionValueRepository extends JpaRepository<DimensionValue, 
 
     Optional<DimensionValue> findByCompanyIdAndUid(Long companyId, String uid);
 
+    /** Duplicate-guard for create: real unique key is (dimension_id, code) — uq_dimension_value_dim_code. */
+    boolean existsByDimensionIdAndCode(Long dimensionId, String code);
+
     Page<DimensionValue> findByDimensionId(Long dimensionId, Pageable pageable);
 
     List<DimensionValue> findByDimensionIdAndActiveTrue(Long dimensionId);

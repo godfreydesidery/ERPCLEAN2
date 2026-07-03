@@ -14,6 +14,7 @@ import com.erp.modules.costing.repository.DimensionValueRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.security.RequestContext;
@@ -134,6 +135,14 @@ public class DimensionServiceImpl implements DimensionService {
         Dimension dim = dimensions.findByUid(request.dimensionUid())
                 .orElseThrow(() -> NotFoundException.of("Dimension", request.dimensionUid()));
         scopeGuard.assertCanActIn(RequestContext.get(), dim.getCompanyId());
+
+        // Pre-check the real unique key (uq_dimension_value_dim_code: dimension_id, code) so the
+        // caller gets a specific, friendly 409 instead of the generic DB-constraint catch-all
+        // (error-message-hygiene defect D2).
+        if (values.existsByDimensionIdAndCode(dim.getId(), request.code())) {
+            throw new ConflictException(
+                    dim.getName() + " value " + request.code() + " already exists.");
+        }
 
         Long parentId = resolveParentId(dim, request.parentUid());
 

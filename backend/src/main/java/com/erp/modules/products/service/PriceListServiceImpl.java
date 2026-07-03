@@ -11,6 +11,7 @@ import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.repository.Lookups;
@@ -50,6 +51,13 @@ public class PriceListServiceImpl implements PriceListService {
     public PriceListDto create(CreatePriceListRequest req) {
         Long companyId = resolveCompanyId(req.companyUid());
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+
+        // Pre-check the real unique key (uq_price_list_company_code: company_id, code) so the
+        // caller gets a specific, friendly 409 instead of the generic DB-constraint catch-all
+        // (error-message-hygiene defect D2).
+        if (priceLists.existsByCompanyIdAndCode(companyId, req.code())) {
+            throw new ConflictException("A price list with code " + req.code() + " already exists.");
+        }
 
         PriceList pl = new PriceList(companyId, req.code(), req.name(), actorId());
         applyMetadata(pl, req.currency(), req.effectiveFrom(), req.effectiveTo(),
