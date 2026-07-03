@@ -106,7 +106,7 @@ admin tables are the deliberate exception, isolated by service-layer scope check
 ## 7. Persistence discipline (C9)
 
 - **Flyway for all schema**; `ddl-auto=validate` (never `update`). Additive migrations after the
-  baseline freeze; the head is around V83. Never edit an applied migration.
+  baseline freeze; the head is V78. Never edit an applied migration.
 - **Optimistic locking** (`@Version`) on transactional aggregates.
 - **Append-only posting tables** (e.g. `stock_move`, GL postings, `audit_log`) — corrections are
   **new postings**, never updates. The GL is append-only: a posted journal is corrected by a

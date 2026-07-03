@@ -37,7 +37,7 @@ Navigate to **Administration › Companies** (`/admin/companies`) in the sidebar
 
 The list shows each company's code, name, status (Active or Archived), and a **Manage branches** link in the last column. Above the list, the organisation name for this deployment is shown. The list is scoped to your access: a **root administrator** sees every company in the organisation, while everyone else (even holders of `COMPANY.VIEW`) sees only the companies they belong to — those they are assigned to via company membership, a branch, or a role. This keeps the company list from revealing companies you have no access to.
 
-> The Companies screen is intentionally lean: it lets you create a company (code and name), rename it inline (see below), and open each company's branches. There is no separate company detail screen — the company code can never be changed after creation.
+> The Companies screen is intentionally lean: it lets you create a company (code and name), rename it inline (see below), re-provision its default data (see below), and open each company's branches. There is no separate company detail screen — the company code can never be changed after creation.
 
 ### Creating a company
 
@@ -71,6 +71,21 @@ Each company row carries an **Edit** button (it appears only if you hold `COMPAN
 3. Click **Save** to keep the change, or **Cancel** to discard it.
 
 Only the name changes — the code, status, and other attributes are untouched. There is no Archive control on the Companies list. (Archiving exists in the underlying API but is not exposed in the admin UI.)
+
+### Provisioning a company's default data
+
+**What "Provision defaults" does.** A newly created company is automatically seeded, in the same transaction as its creation, with the baseline operational and reference data every module expects to find — default tax rates, GL accounts, units of measure, enabled currencies, and the like. **Provision defaults** re-runs that same seeding for an existing company, on demand. It is idempotent: anything the company already has is left alone — the action only fills in whatever is missing.
+
+**When to use it.** Use it if a company is missing expected reference data — for example, a company created before automatic provisioning existed, one whose original provisioning only partially completed, or one you simply want to heal after noticing a gap (a missing tax rate, an unset default account). It is safe to click on a company that is already fully provisioned; nothing is duplicated.
+
+**Required permission:** `COMPANY.MANAGE`
+
+Each company row carries a **Provision defaults** button alongside **Edit** (visible only if you hold `COMPANY.MANAGE`).
+
+1. On the Companies list, click **Provision defaults** on the company's row.
+2. Confirm the prompt — *"Restore the default setup (tax rates, accounts, units, …) for "\<company name\>"?"*.
+3. The button switches to **Provisioning…** while the request is in flight. The Provision-defaults and Edit actions are interlocked across the **whole** company list, not per row: while any row is being renamed the **Provision defaults** button is disabled on every row, and while a Provision-defaults request is in flight **Edit** is disabled on every row.
+4. On success, a confirmation alert ("Default setup restored") appears. On failure, an error alert explains what went wrong.
 
 ---
 
@@ -150,7 +165,7 @@ To archive a branch, click **Archive** on its row. The branch status changes to 
 
 **Why user accounts exist.** Shared logins (for example, a single "accountant" password passed around the team) make audit trails meaningless — the log shows "accountant did X" and you cannot know who actually did it. Named individual accounts mean every action is attributable to a real person, accounts can be individually disabled without disrupting others, and each person can be given exactly the permissions their job requires.
 
-**When to create a user.** Create a user when a new employee joins, when a contractor needs access, or when a role needs an automated service account. After creating the account you must **assign the user to at least one company first**, then assign at least one branch and grant at least one role; a user with no branches and no roles can log in but will see no menu and have no active branch. Company membership is the prerequisite — branches and roles can only be assigned within a company the user already belongs to (see [Assigning Companies to Users](#assigning-companies-to-users)).
+**When to create a user.** Create a user when a new employee joins, when a contractor needs access, or when a role needs an automated service account. If you create the user while acting as a non-root company administrator, the system automatically makes the new user a member of your active company in the same step — you do not need a separate action for this common case. You then still need to assign at least one branch and grant at least one role; a user with no branches and no roles can log in but will see no menu and have no active branch. (The `rootadmin` account has no single active company, so a user created while signed in as root is left with no company membership — assign one explicitly first; see [Assigning Companies to Users](#assigning-companies-to-users).) Branches and roles can only be assigned within a company the user already belongs to.
 
 **How the user lifecycle works.** A user starts `ACTIVE`. An administrator can `DISABLE` the account (status becomes `INACTIVE`) to prevent login while preserving the account and its history — for example, during a leave of absence or pending investigation. `ENABLE` restores it to `ACTIVE`. The `rootadmin` account cannot be disabled. If too many wrong-password attempts are made, the account is automatically locked for 15 minutes; an administrator can clear this with **Unlock**. User accounts are never hard-deleted.
 
@@ -165,6 +180,8 @@ Navigate to **Administration › Users** (`/admin/users`) in the sidebar.
 
 The list shows columns for **Username**, **Display name**, **Status**, **Locked**, and **Root** (a marker on the `rootadmin` account), plus a per-row action area. The actions on each row are **Disable**/**Enable**, **Unlock** (only when the account is locked), **Password** (an inline set-password form), and **Assignments** (a link that opens the user's Assignments page at `/admin/users/uid/<uid>`, where you manage the user's companies, branches, and roles). Root accounts do not show a Disable action.
 
+The list is scoped to your access: a **root administrator** sees every user in the organisation, while everyone else sees only the (non-root) users who are members of their active company — including any user they have just created, since creating a user makes it a member of the creator's active company automatically (see below, and [Assigning Companies to Users](#assigning-companies-to-users)).
+
 ### Creating a user
 
 The create form is an inline card (**Add User**) at the top of the Users list.
@@ -175,7 +192,7 @@ The create form is an inline card (**Add User**) at the top of the Users list.
    - **Temporary password** — must be at least 8 characters and contain at least one letter and one number. Common passwords (such as `password1` or `admin123`) are rejected.
 2. Click **Add user**.
 
-The user is created with status **Active** and no role or branch assignments. The create form captures only the username, display name, and temporary password — there are no email or phone fields here. Assign roles and branches next (see below).
+The user is created with status **Active** and no role or branch assignments. The create form captures only the username, display name, and temporary password — there are no email or phone fields here. Assign roles and branches next (see below). If you created the user while acting as a non-root administrator, the user is also automatically made a member of your active company — no separate step is needed, and the user immediately appears in your Users list.
 
 > Usernames are compared case-insensitively. `Alice.Smith` and `alice.smith` refer to the same account. Creating a user whose username already exists is rejected with a conflict (409) error.
 
@@ -225,7 +242,7 @@ Click **Assignments** on a user's row to open their Assignments page (`/admin/us
 **The effective permission set.** A user may hold multiple roles. Their effective permissions at any moment are the **union** of all permissions from all their active role grants in the current company and branch context. If Role A grants `GL.VIEW` and Role B grants `GL.POST`, a user with both roles has both.
 
 **Required permission to view:** `ROLE.VIEW`
-**Required permission to create / edit / set permissions:** `ROLE.MANAGE`
+**Required permission to create / edit / set permissions:** `ROLE.ADMIN` (the role catalogue itself is guarded by `ROLE.ADMIN`; the separate `ROLE.MANAGE` permission governs assigning existing roles to users — see *Assigning Roles to Users* below)
 
 Navigate to **Administration › Roles** (`/admin/roles`) in the sidebar.
 
@@ -273,6 +290,20 @@ Saving replaces the role's entire permission set with the checked selections. Re
 
 > The permission catalogue contains over 220 codes across all modules. An empty permission set is valid — it means the role grants no access.
 
+### Read-closure advisory
+
+**What it is.** Below the Permissions card, the role edit page can show a **Read-closure advisory** panel. It flags screens the role's checked permissions let a user *open* (because the role holds that screen's primary action permission) where the role is still missing one or more supporting **read** permissions the same screen needs on load — for example, a role that can create a sales order but was not also given the customer and product picker reads. The panel is advisory only: it never blocks **Save permissions**, and saving an incomplete selection is always allowed.
+
+**Why it exists.** A screen's primary action and its reference-data pickers are separate permission checks. Without this advisory, a role that is missing a picker's read looks complete to the administrator composing it (everything saves without error) but a real user holding only that role hits a partial, confusing block once they open the screen — the button they can see, but a supporting dropdown 403s. Testing as `rootadmin` never reveals this, because root holds every permission. The advisory surfaces the gap to the administrator at grant time instead.
+
+**When you see it.** The panel appears automatically on the role edit page (`/admin/roles/uid/<uid>`) whenever the role's current permission set leaves at least one reachable screen with a missing required read; it is empty and hidden otherwise. It refreshes each time you click **Save permissions**, so you can immediately confirm a fix.
+
+Each gap reads in the form:
+
+> This role can open **\<screen name\>** but is missing `<CODE>`, `<CODE>` — users with only this role will be blocked on that screen.
+
+Grant the listed codes on the Permissions panel above and click **Save permissions** again to clear the gap.
+
 ### Archiving a role
 
 There is no Archive control in the current interface. The role edit page offers only **Save details** and **Save permissions**, and the roles list has no Archive action — its only per-row action is **Edit**. (Archiving exists in the underlying API but is not exposed in the admin UI; system roles such as **ORG_ADMIN** cannot be archived in any case.)
@@ -285,7 +316,7 @@ There is no Archive control in the current interface. The role edit page offers 
 
 **Why membership is required first (assign-company-first).** Tying branch and role assignment to an explicit company membership makes "which companies is this person part of?" a single, deliberate decision rather than a side effect of the first role grant. It also keeps the company pickers on the Branches and Roles cards focused — they list only the companies the user actually belongs to, so you cannot accidentally grant access in the wrong company.
 
-**When to assign a company.** Immediately after creating a user, and whenever the user takes on responsibilities in an additional company.
+**When to assign a company.** A non-root administrator's active company is assigned automatically the moment they create the user (see [Creating a user](#creating-a-user)), so you will usually only need this screen when a user created by `rootadmin` needs their first company, or whenever an existing user takes on responsibilities in an additional company.
 
 **How removal is protected.** You cannot remove a user's company membership while they still hold any branch assignment or role grant in that company — the system blocks it with a message asking you to remove those first. This prevents leaving a user with branches or roles in a company they are no longer a member of.
 

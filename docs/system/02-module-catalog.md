@@ -91,7 +91,7 @@ The outbox has no controller, no REST surface, and no permission — it is inter
 |---|---|
 | `PricingRuleController` | `/api/v1/pricing-rules` |
 
-## Point of Sale (ADR — POS, V43/V82/V83)
+## Point of Sale (ADR — POS, V37/V70/V72)
 
 - **Purpose.** Retail POS: till setup; session lifecycle (open float → sell → payout → X-read → close[count cash] → reconcile[Z-read, variance, GL]); quick checkout (session + customer + agent + line items + tender + change).
 - **Key entities.** `pos_tills`, `pos_sessions`, `pos_sales` (+ lines, tenders).
@@ -234,7 +234,7 @@ The outbox has no controller, no REST surface, and no permission — it is inter
 
 ## Reporting & BI (ADR-0018, ADR-0037)
 
-- **Purpose.** Read-only over the GL: P&L, Balance Sheet, Cash Flow (indirect), trial balance, account-ledger drill-through, server-side PDF/XLSX export; a composite BI analytics dashboard (per-panel RBAC, drill, export); analytical reports (budget variance, departmental actuals, dimension-sliced TB, project WIP/P&L, manufacturing WIP). Posts nothing, owns no business table.
+- **Purpose.** Read-only over the GL: P&L, Balance Sheet, Cash Flow (indirect), trial balance, account-ledger drill-through, server-side PDF/XLSX export; a composite BI analytics dashboard (per-panel RBAC, drill, export — including a **sales-by-branch** panel); analytical reports (budget variance, departmental actuals, dimension-sliced TB, project WIP/P&L, manufacturing WIP). Posts nothing, owns no business table.
 - **Key entities.** None of its own — pure queries over `journal_lines` and the source ledgers.
 - **Permission family.** `REPORT.*`, `BI.*`.
 

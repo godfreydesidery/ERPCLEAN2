@@ -71,6 +71,8 @@ Navigate to **Sales › Quotations** (`/admin/quotations`).
 3. Choose a **Unit**, enter **Quantity**, optionally enter a **Price Override** (otherwise the list price is used), and optionally enter a **Disc %** (line discount as a percentage — the quotation and Sales Order line forms only offer a percentage discount, not a fixed amount).
 4. Click the **+** (Add line) button. The system calculates net amount, VAT, and gross from the configured price list.
 
+**Unit choices are product-scoped.** The **Unit** dropdown is disabled until a product is selected. Once a product is chosen, it lists only that product's configured units — its base unit plus any active bulk-pack units (e.g. CARTON) — never the full company unit list, and it defaults to the base unit. This applies to every line form in this chapter (quotations, sales orders, invoices, blanket orders, standing orders, and POS sales): you can no longer select a unit that is not configured on the product, which previously could silently mis-record the quantity.
+
 Repeat for each product. You can also add **Service** products; these are priced the same way but do not affect stock.
 
 To remove a line, click the delete icon on the line row. Lines can only be changed while the quotation is in DRAFT.
@@ -147,7 +149,7 @@ Navigate to **Sales › Sales Orders** (`/admin/sales-orders`).
 
 ### 2.2 Add lines to a Sales Order
 
-The same process as adding quotation lines. Lines can only be added, edited, or removed while the order is in DRAFT.
+The same process as adding quotation lines, including the **Unit** dropdown being scoped to the selected product's configured units (see section 1.2). Lines can only be added, edited, or removed while the order is in DRAFT.
 
 ### 2.3 Confirm an order
 
@@ -180,7 +182,26 @@ Cancelling an order releases any stock reservations.
 
 Cancellation is allowed from any status except **CANCELLED** and **CLOSED**.
 
-### 2.5 Order status lifecycle
+### 2.5 Set or change the agent
+
+**What the order's agent is.** Every sales order carries a sales agent — the salesperson or route agent credited with the sale — which the invoicing flow depends on. An order can be created without one (Agent is optional in section 2.1), but an invoice generated from an agentless order cannot be finalised.
+
+**Why this action exists.** Before this action, an order created with no agent (or the wrong one) had no way to be corrected in place — every attempt to invoice it would keep failing. **Assign Agent** / **Change Agent** lets an authorised user fix the agent on an existing order without recreating it.
+
+1. Open the sales order (navigate to `/admin/sales-orders/uid/{uid}`).
+2. Click **Assign Agent** if the order has no agent, or **Change Agent** if it already has one — both open the same form.
+3. In the **Agent** field, type part of the agent's name or code and select the correct entry from the suggestions list.
+4. Click **Save Agent**.
+
+The order's agent is updated immediately and a confirmation is shown.
+
+**When the action is available.** The button is shown only while the order is in a pre-invoice status — **DRAFT**, **CONFIRMED**, **PARTIALLY_FULFILLED**, or **FULFILLED**. Once the order has been invoiced (**PARTIALLY_INVOICED**, **CLOSED**) or is **CANCELLED**, the agent can no longer be changed this way.
+
+**No-agent banner.** An order with no agent shows a warning banner on its detail page: *"No agent assigned. This order cannot be invoiced until a sales agent is assigned."*
+
+**Required permission:** `SALES.ORDER.CREATE` (the same permission used to create and edit draft orders — there is no separate set-agent permission).
+
+### 2.6 Order status lifecycle
 
 | Status | Meaning |
 |---|---|
@@ -234,6 +255,8 @@ Once goods are delivered, you can invoice the customer for that delivery:
 2. Click **Invoice this Delivery**.
 3. A draft **Sales Invoice** is created automatically with the delivered lines. The doc discount from the source order is pro-rated to the delivered quantity.
 
+**Prerequisite: the source order must have an agent.** Invoice this Delivery reads the agent from the underlying Sales Order. If that order has no agent, the action is refused with *"The sales order has no agent assigned."* Open the Sales Order and use **Assign Agent** (section 2.5) to set one, then retry.
+
 Proceed to section 4 to finalise the invoice.
 
 ---
@@ -270,7 +293,7 @@ Navigate to **Sales › Invoices** (`/admin/sales-invoices`).
 
 ### 4.2 Add lines to an invoice
 
-Same process as adding lines to a quotation or order. Lines can only be added, edited, or removed while the invoice is in DRAFT.
+Same process as adding lines to a quotation or order, including the product-scoped **Unit** dropdown (see section 1.2). Lines can only be added, edited, or removed while the invoice is in DRAFT.
 
 ### 4.3 Record a payment
 
@@ -400,7 +423,7 @@ Navigate to **Sales › Blanket Orders** (`/admin/blanket-orders`).
 2. Select the **Company** and **Branch**.
 3. Pick the **Customer** by name.
 4. Choose the **Currency** from the Currency Picker (see *Common UI Patterns* in chapter 00 — enabled currencies only, defaulting to the company default), then set **Valid From** and **Valid To** dates.
-5. Add one or more **Lines**: for each, pick the product by name, choose a unit, and enter the committed quantity and unit price.
+5. Add one or more **Lines**: for each, pick the product by name, choose a unit (limited to that product's configured units — see section 1.2), and enter the committed quantity and unit price.
 6. Optionally add notes (up to 500 characters).
 7. Click **Create Blanket Order**.
 
@@ -458,7 +481,7 @@ Navigate to **Sales › Standing Orders** (`/admin/standing-orders`).
 2. Pick the **Branch** and **Customer**, then choose the **Currency** from the Currency Picker (see *Common UI Patterns* in chapter 00 — enabled currencies only, defaulting to the company default).
 3. Choose a **Frequency**: Daily, Weekly, Bi-Weekly, or Monthly.
 4. Set a **Start Date**. Optionally set an **End Date**; leave it blank for open-ended.
-5. Add lines: pick each product and unit by name, enter quantity and unit price.
+5. Add lines: pick each product by name; the unit choices are limited to that product's configured units (see section 1.2); enter quantity and unit price.
 6. Click **Create Standing Order**.
 
 The standing order is created with status **ACTIVE** and the first `Next Run Date` is set.
@@ -589,7 +612,7 @@ Navigate to the **Point of Sale** group in the sidebar.
 
 **What a POS sale is.** A POS sale is a cash counter transaction. It produces a finalised sales invoice with origin `POS` (it is stamped with the originating POS session), the cash payment is recorded automatically for the full amount, and revenue is posted on finalisation. The invoice number (`INV-####`) is assigned on the spot. No quotation, sales order, or delivery step is involved — POS is designed for speed at the counter.
 
-> **Note on stock.** Unlike a walk-in `DIRECT` invoice, a `POS`-origin invoice does **not** trigger the stock-issue step at finalisation under the current code — the stock-issue handler issues stock only for `DIRECT`-origin invoices. Treat POS stock movement as a known limitation pending confirmation; do not rely on a POS sale decrementing on-hand stock the way a direct walk-in invoice does.
+> **Note on stock.** A `POS`-origin invoice issues stock at finalisation exactly like a walk-in `DIRECT` invoice: finalising the invoice decrements on-hand stock for each line (the stock-issue step runs for both `DIRECT` and `POS` origins). A POS sale completed at the till therefore both posts revenue **and** reduces inventory.
 
 POS is used for face-to-face retail transactions. A **till** is a physical cash register position. Each till must be opened in a **session** before sales can be processed. The session is closed and reconciled at end of day.
 
@@ -632,7 +655,7 @@ A new session is created with status **OPEN**. Only one session can be open on a
 
 ### 9.4 Ring a sale
 
-**What "ringing a sale" means.** This is the cashier's checkout step: entering the products and quantities the customer is buying, taking the cash the customer hands over, and completing the transaction. The system calculates the total, computes the change due, and — on completion — records the cash payment, finalises the sales invoice, posts the revenue, and issues the receipt. (See the stock note above: a `POS`-origin invoice does not currently run the stock-issue step that a `DIRECT` walk-in invoice does.)
+**What "ringing a sale" means.** This is the cashier's checkout step: entering the products and quantities the customer is buying, taking the cash the customer hands over, and completing the transaction. The system calculates the total, computes the change due, and — on completion — records the cash payment, finalises the sales invoice, posts the revenue, and issues the receipt. (On completion a `POS`-origin invoice issues stock just like a `DIRECT` walk-in invoice — see the stock note above.)
 
 **What the tendered amount is.** The tendered amount is the cash the customer physically hands to the cashier — often a round number larger than the total. If the total is TZS 13,000 and the customer hands over TZS 20,000, the tendered amount is TZS 20,000 and the change is TZS 7,000. The system calculates the change and the cashier returns it. A sale cannot be submitted if the tendered amount is less than the total.
 
@@ -644,7 +667,7 @@ A new session is created with status **OPEN**. Only one session can be open on a
 4. Pick the **Customer** (type in the search box above the picker to filter the list, then select).
 5. Pick the **Agent** (search then select) — required; leaving Agent blank will cause the sale to be rejected.
 6. Choose the **Currency** from the Currency Picker (see *Common UI Patterns* in chapter 00 — enabled currencies only, defaulting to the company default).
-7. Click **Add Line**. Pick the **Product**; confirm or adjust the **Unit**, enter **Quantity** and **Unit Price**, and optionally a line **Discount** (entered as an amount).
+7. Click **Add Line**. Pick the **Product**; the **Unit** field is disabled until a product is picked and then lists only that product's configured units (defaulting to its base unit — see section 1.2), so confirm it or choose another from the list; enter **Quantity** and **Unit Price**, and optionally a line **Discount** (entered as an amount).
 8. Add further lines as needed. The **Total** updates in the footer.
 9. Enter the **Tendered Amount** (the cash handed over by the customer). The **Change** is calculated immediately. The sale cannot be submitted if the tendered amount is less than the total.
 10. Click **Complete Sale**.
@@ -654,7 +677,7 @@ A success receipt is displayed showing the invoice number and total. Click **Vie
 **Notes:**
 - On this checkout screen the sale is settled in cash — you enter a single **Tendered Amount** and the payment is recorded as Cash automatically. (The POS sale itself can also accept several tenders together; see *Splitting payment across tenders* below.)
 - The agent field is mandatory on the backend; leaving it blank will cause the sale to be rejected.
-- If the chosen session has been closed in the meantime, the sale is rejected with a message of the form *"POS session &lt;session-uid&gt; is not OPEN."* (the message quotes the session's internal UID, not its `POS-####` number) so you know to re-open or re-select an OPEN session.
+- If the chosen session has been closed in the meantime, the sale is rejected with **"This POS session is not OPEN."** so you know to re-open or re-select an OPEN session.
 - If a **Complete Sale** click is interrupted (network drop, slow response) and the cashier retries, the system recognises the repeat and returns the original sale instead of ringing it twice — a sale is never double-posted, so it is safe to retry.
 
 #### Splitting payment across tenders
