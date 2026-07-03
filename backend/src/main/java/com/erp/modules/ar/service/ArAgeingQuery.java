@@ -1,6 +1,7 @@
 package com.erp.modules.ar.service;
 
 import com.erp.modules.ar.domain.dto.ArAgeingRowDto;
+import com.erp.modules.ar.domain.dto.ArCustomerAgeingRowDto;
 import com.erp.modules.ar.domain.dto.ArStatementDto;
 import com.erp.modules.ar.domain.dto.ArInvoiceDto;
 import com.erp.modules.ar.domain.dto.ArReceiptDto;
@@ -10,6 +11,7 @@ import com.erp.modules.ar.repository.ArInvoiceRepository;
 import com.erp.modules.ar.repository.ArReceiptAllocationRepository;
 import com.erp.modules.ar.repository.ArReceiptRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.modules.parties.domain.entity.Customer;
 import com.erp.modules.parties.repository.CustomerRepository;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.RequestContext;
@@ -18,9 +20,12 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -110,6 +115,56 @@ public class ArAgeingQuery {
 
         return new ArStatementDto(companyId, customerId, asAt, total, currency,
                 ageingRows, openDtos, receiptDtos);
+    }
+
+    /**
+     * Per-customer ageing breakdown for the AR Ageing screen (CFO credit-limit view).
+     * Unlike {@link #ageing(Long, Long, LocalDate)} (a 5-row company-wide bucket summary), this
+     * returns one row per customer that has open items, each carrying all five bucket amounts.
+     */
+    public List<ArCustomerAgeingRowDto> customerAgeing(Long companyId, LocalDate asAt) {
+        scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        String currency = companies.findById(companyId)
+                .map(c -> c.getBaseCurrency())
+                .orElseThrow(() -> NotFoundException.of("Company", String.valueOf(companyId)));
+
+        List<ArInvoice> openItems = invoices.findOpenForCompany(companyId);
+
+        Map<Long, Map<AgeingBucket, BigDecimal>> byCustomer = new LinkedHashMap<>();
+        for (ArInvoice inv : openItems) {
+            Map<AgeingBucket, BigDecimal> buckets = byCustomer.computeIfAbsent(
+                    inv.getCustomerId(), id -> new EnumMap<>(AgeingBucket.class));
+            AgeingBucket bucket = classify(inv.getDueDate(), asAt);
+            buckets.merge(bucket, inv.getOutstandingAmount(), BigDecimal::add);
+        }
+
+        List<ArCustomerAgeingRowDto> rows = new ArrayList<>();
+        for (Map.Entry<Long, Map<AgeingBucket, BigDecimal>> entry : byCustomer.entrySet()) {
+            Long custId = entry.getKey();
+            Map<AgeingBucket, BigDecimal> buckets = entry.getValue();
+
+            BigDecimal current  = buckets.getOrDefault(AgeingBucket.CURRENT,  BigDecimal.ZERO);
+            BigDecimal d1to30   = buckets.getOrDefault(AgeingBucket.D1_30,    BigDecimal.ZERO);
+            BigDecimal d31to60  = buckets.getOrDefault(AgeingBucket.D31_60,   BigDecimal.ZERO);
+            BigDecimal d61to90  = buckets.getOrDefault(AgeingBucket.D61_90,   BigDecimal.ZERO);
+            BigDecimal d91plus  = buckets.getOrDefault(AgeingBucket.D90_PLUS, BigDecimal.ZERO);
+            BigDecimal total    = current.add(d1to30).add(d31to60).add(d61to90).add(d91plus);
+
+            Optional<Customer> customer = customers.findById(custId);
+            String code = customer.map(Customer::getCode).orElse(null);
+            String name = customer.map(Customer::getDisplayName).orElse(null);
+
+            rows.add(new ArCustomerAgeingRowDto(custId, code, name,
+                    current, d1to30, d31to60, d61to90, d91plus, total, currency));
+        }
+
+        rows.sort(Comparator
+                .comparing(ArCustomerAgeingRowDto::customerName,
+                        Comparator.nullsLast(String::compareTo))
+                .thenComparing(ArCustomerAgeingRowDto::customerCode,
+                        Comparator.nullsLast(String::compareTo)));
+
+        return rows;
     }
 
     /**

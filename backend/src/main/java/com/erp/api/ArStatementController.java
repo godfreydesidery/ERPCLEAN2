@@ -2,6 +2,7 @@ package com.erp.api;
 
 import com.erp.modules.ar.domain.dto.ArAgeingRowDto;
 import com.erp.modules.ar.domain.dto.ArBalanceDto;
+import com.erp.modules.ar.domain.dto.ArCustomerAgeingRowDto;
 import com.erp.modules.ar.domain.dto.ArStatementDto;
 import com.erp.modules.ar.service.ArAgeingQuery;
 import com.erp.modules.ar.service.ArBalanceService;
@@ -60,6 +61,20 @@ public class ArStatementController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asAt) {
         return ageingQuery.ageing(companyId, customerId,
                 asAt != null ? asAt : LocalDate.now());
+    }
+
+    /**
+     * Per-customer ageing breakdown (CFO credit-limit view) as at a given date — one row per
+     * customer with open items, each carrying all five bucket amounts + total. Distinct from
+     * {@link #ageing} which returns a 5-row company-wide bucket summary.
+     */
+    @GetMapping("/ageing/by-customer")
+    @PreAuthorize("@perm.has('AR.STATEMENT.VIEW')")
+    public List<ArCustomerAgeingRowDto> ageingByCustomer(
+            @RequestParam Long companyId,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asAt) {
+        return ageingQuery.customerAgeing(companyId, asAt != null ? asAt : LocalDate.now());
     }
 
     /**

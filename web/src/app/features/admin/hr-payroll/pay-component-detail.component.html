@@ -88,13 +88,13 @@
 
             <div class="d-flex flex-wrap gap-3 mb-3">
               <div class="form-check mb-0">
-                <input class="form-check-input" type="checkbox" id="dPcTaxable"
+                <input class="form-check-input" type="checkbox" id="dPcTaxable" name="dPcTaxable"
                        [ngModel]="fTaxable()" (ngModelChange)="fTaxable.set($event)"
                        [disabled]="saving()" />
                 <label class="form-check-label small" for="dPcTaxable">Taxable</label>
               </div>
               <div class="form-check mb-0">
-                <input class="form-check-input" type="checkbox" id="dPcPens"
+                <input class="form-check-input" type="checkbox" id="dPcPens" name="dPcPens"
                        [ngModel]="fPensionable()" (ngModelChange)="fPensionable.set($event)"
                        [disabled]="saving()" />
                 <label class="form-check-label small" for="dPcPens">Pensionable</label>
