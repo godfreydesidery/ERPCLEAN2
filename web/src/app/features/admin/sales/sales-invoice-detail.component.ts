@@ -1,11 +1,12 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, computed, inject, input, signal } from '@angular/core';
+import { Component, computed, DestroyRef, inject, input, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { debounceTime, distinctUntilChanged, Subject, switchMap } from 'rxjs';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
+import { blobErrorMessage } from '../../../core/api/blob-error';
 import { ProductModel } from '../models/product.model';
 import {
   AddInvoiceLineRequest,
@@ -18,6 +19,7 @@ import {
 } from '../models/sales.model';
 import { UnitOfMeasureDto } from '../models/product.model';
 import { ProductService } from '../products/product.service';
+import { DocumentsService } from '../documents/documents.service';
 import { SalesService } from './sales.service';
 
 type LoadState = 'loading' | 'idle' | 'error';
@@ -41,7 +43,9 @@ type LoadState = 'loading' | 'idle' | 'error';
 export class SalesInvoiceDetailComponent {
   private readonly salesService = inject(SalesService);
   private readonly productService = inject(ProductService);
+  private readonly documentsService = inject(DocumentsService);
   private readonly alerts = inject(AlertService);
+  private readonly destroyRef = inject(DestroyRef);
   protected readonly session = inject(SessionStore);
 
   /** Route input bound via withComponentInputBinding. */
@@ -97,10 +101,15 @@ export class SalesInvoiceDetailComponent {
   readonly voiding = signal(false);
   readonly voidError = signal<string | null>(null);
 
+  // ── Print PDF ────────────────────────────────────────────────────────────
+  readonly printing = signal(false);
+  readonly printError = signal<string | null>(null);
+
   // ── Permissions ────────────────────────────────────────────────────────────
   readonly canCreate = computed(() => this.session.hasPermission('SALES.INVOICE.CREATE'));
   readonly canSettle = computed(() => this.session.hasPermission('SALES.INVOICE.SETTLE'));
   readonly canVoid = computed(() => this.session.hasPermission('SALES.INVOICE.VOID'));
+  readonly canPrint = computed(() => this.session.hasPermission('DOCUMENT.RENDER'));
 
   // ── Derived state ──────────────────────────────────────────────────────────
   readonly isDraft = computed(() => this.invoice()?.status === 'DRAFT');
@@ -405,6 +414,37 @@ export class SalesInvoiceDetailComponent {
     });
   }
 
+  // ── Print PDF ────────────────────────────────────────────────────────────
+
+  /**
+   * Render the invoice as a PDF and trigger a browser download.
+   * Mirrors the documents-module pattern (DocumentsService.renderBlob →
+   * triggerBlobDownload). Hidden for DRAFT invoices in the template — the backend
+   * only renders FINALISED or VOID invoices (an unfinalised invoice has no
+   * numbers to hand over).
+   */
+  printPdf(): void {
+    if (this.printing()) return;
+    this.printing.set(true);
+    this.printError.set(null);
+    this.documentsService
+      .renderBlob('INVOICE', this.uid())
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (blob) => {
+          this.printing.set(false);
+          const name = `invoice-${this.invoice()?.invoiceNumber ?? this.uid()}.pdf`;
+          triggerBlobDownload(blob, name);
+        },
+        error: (err) => {
+          this.printing.set(false);
+          // The error body is a Blob (responseType: 'blob'), so read the friendly server message
+          // out of it; falls back to a generic line if it isn't a JSON error envelope.
+          void blobErrorMessage(err, 'Could not generate the PDF.').then((m) => this.printError.set(m));
+        },
+      });
+  }
+
   // ── Display helpers ────────────────────────────────────────────────────────
 
   private messageFrom(err: unknown, fallback: string): string {
@@ -414,4 +454,14 @@ export class SalesInvoiceDetailComponent {
     }
     return fallback;
   }
+}
+
+/** Create an object URL for a blob and click a synthetic anchor to download it. */
+function triggerBlobDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
