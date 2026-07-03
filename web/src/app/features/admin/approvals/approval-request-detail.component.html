@@ -163,11 +163,18 @@
             <div class="erp-form-grid">
               <div class="erp-field">
                 <span class="erp-field__label-text">Document Type</span>
-                <span class="mono">{{ r.documentType }}</span>
+                <span>{{ docTypeLabel() }}</span>
               </div>
               <div class="erp-field">
                 <span class="erp-field__label-text">Document</span>
-                <a [routerLink]="['/admin/documents/uid', r.documentUid]">{{ r.documentType }}</a>
+                @if (docLink(); as link) {
+                  <a [routerLink]="link">{{ docTypeLabel() }}</a>
+                } @else {
+                  <span class="text-muted">
+                    {{ docTypeLabel() }}
+                    <span class="small">(no detail screen available yet)</span>
+                  </span>
+                }
               </div>
               <div class="erp-field">
                 <span class="erp-field__label-text">Amount</span>

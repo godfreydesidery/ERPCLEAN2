@@ -6,6 +6,12 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
+/**
+ * Full response DTO for a SalesOrder header.
+ * Carries both {@code id} (JSON string via global Long-as-string config) and {@code uid}.
+ * customerName/customerCode/agentName are enrichment fields resolved at read time by the
+ * service (mirrors SalesInvoiceDto) so the frontend never has to display a raw numeric FK.
+ */
 public record SalesOrderDto(
         Long id,
         String uid,
@@ -14,7 +20,10 @@ public record SalesOrderDto(
         String orderNumber,
         String status,
         Long customerId,
+        String customerName,
+        String customerCode,
         Long agentId,
+        String agentName,
         String currency,
         LocalDate orderDate,
         String customerPoNumber,
@@ -38,13 +47,16 @@ public record SalesOrderDto(
         String billToAddressText,
         List<SalesOrderLineDto> lines
 ) {
-    public static SalesOrderDto from(SalesOrder o, List<SalesOrderLineDto> lines) {
+    /** Build from entity with enriched customer and agent fields (mirrors SalesInvoiceDto.from). */
+    public static SalesOrderDto from(SalesOrder o, List<SalesOrderLineDto> lines,
+                                     String customerName, String customerCode, String agentName) {
         return new SalesOrderDto(
                 o.getId(), o.getUid(),
                 o.getCompanyId(), o.getBranchId(),
                 o.getOrderNumber(),
                 o.getStatus().name(),
-                o.getCustomerId(), o.getAgentId(),
+                o.getCustomerId(), customerName, customerCode,
+                o.getAgentId(), agentName,
                 o.getCurrency().value(),
                 o.getOrderDate(),
                 o.getCustomerPoNumber(), o.getRequestedDeliveryDate(), o.getPromisedDate(),

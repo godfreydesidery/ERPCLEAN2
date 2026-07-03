@@ -56,7 +56,15 @@ export class SalesOrderListComponent {
   readonly currentPage = signal(0);
 
   // ── Filters ──────────────────────────────────────────────────────────────────
+  // The list endpoint (GET /sales-orders) does not accept a status query param — it only
+  // takes companyId + Pageable (unlike /sales-invoices, which does support ?status=).
+  // So the status filter is applied client-side over the currently loaded page.
   readonly statusFilter = signal('');
+  readonly filteredRows = computed(() => {
+    const status = this.statusFilter();
+    const all = this.rows();
+    return status ? all.filter((o) => o.status === status) : all;
+  });
 
   // ── Create form ─────────────────────────────────────────────────────────────
   readonly showCreateForm = signal(false);
@@ -81,7 +89,12 @@ export class SalesOrderListComponent {
   private readonly agentSearch$ = new Subject<string>();
 
   readonly canCreate = computed(() => this.session.hasPermission('SALES.ORDER.CREATE'));
-  readonly isEmpty = computed(() => this.state() === 'idle' && this.rows().length === 0);
+  readonly isEmpty = computed(() => this.state() === 'idle' && this.filteredRows().length === 0);
+  // True when a status is picked but it filtered out every row on the loaded page —
+  // distinct from "no orders at all", so the empty-state message can say which happened.
+  readonly filterHidAllRows = computed(() =>
+    this.isEmpty() && !!this.statusFilter() && this.rows().length > 0,
+  );
 
   readonly statusOptions: Array<{ value: SalesOrderStatus | ''; label: string }> = [
     { value: '', label: 'All statuses' },
@@ -185,8 +198,9 @@ export class SalesOrderListComponent {
   }
 
   onStatusChange(status: string): void {
+    // Client-side only — see the statusFilter/filteredRows comment above. No re-fetch:
+    // the loaded page's rows narrow immediately via the filteredRows computed.
     this.statusFilter.set(status);
-    this.load(0);
   }
 
   load(page: number): void {

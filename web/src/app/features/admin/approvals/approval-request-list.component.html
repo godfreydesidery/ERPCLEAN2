@@ -100,7 +100,7 @@
                 @for (r of rows(); track r.uid) {
                   <tr>
                     <td class="mono">{{ r.requestNumber }}</td>
-                    <td class="mono">{{ r.documentType }}</td>
+                    <td>{{ docTypeLabel(r.documentType) }}</td>
                     <td class="num">{{ r.currency }} {{ +r.amount | number:'1.2-2' }}</td>
                     <td>
                       <span class="status-tag"

@@ -44,6 +44,15 @@
 
             <!-- Metadata -->
             <dl class="row g-1 mb-0 flex-grow-1" style="font-size:0.875rem">
+              <dt class="col-sm-3 text-muted fw-normal">Customer</dt>
+              <dd class="col-sm-9 mb-0">
+                {{ o.customerName ?? '—' }}
+                @if (o.customerCode) {
+                  <span class="text-muted small"> ({{ o.customerCode }})</span>
+                }
+              </dd>
+              <dt class="col-sm-3 text-muted fw-normal">Sales Agent</dt>
+              <dd class="col-sm-9 mb-0">{{ o.agentName ?? '—' }}</dd>
               <dt class="col-sm-3 text-muted fw-normal">Currency</dt>
               <dd class="col-sm-9 mb-0">{{ o.currency }}</dd>
               <dt class="col-sm-3 text-muted fw-normal">Order Date</dt>
