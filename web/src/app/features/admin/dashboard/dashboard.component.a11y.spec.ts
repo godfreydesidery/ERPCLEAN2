@@ -142,4 +142,16 @@ describe('DashboardComponent — a11y', () => {
     fixture.detectChanges();
     await assertA11y(fixture);
   }, 20_000);
+
+  it('has no axe violations with a specific branch selected (Group-wide notes + This-branch badges visible)', async () => {
+    makeBed(FULL_DTO);
+    vi.useFakeTimers();
+    const fixture = TestBed.createComponent(DashboardComponent);
+    await vi.runAllTimersAsync();
+    (fixture.componentInstance as any).onBranchChange('100');
+    await vi.runAllTimersAsync();
+    vi.useRealTimers();
+    fixture.detectChanges();
+    await assertA11y(fixture);
+  }, 20_000);
 });

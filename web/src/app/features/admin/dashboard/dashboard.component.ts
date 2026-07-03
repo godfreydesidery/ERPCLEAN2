@@ -92,6 +92,20 @@ export class DashboardComponent {
   readonly canCrm = computed(() => this.session.hasPermission('BI.CRM.VIEW'));
   readonly canExport = computed(() => this.session.hasPermission('BI.EXPORT'));
 
+  // ── Derived: branch-filter scope (honesty labelling — UPR "silently doesn't
+  // scope most panels") ────────────────────────────────────────────────────────
+  // Backend wiring (BiDashboardController): only /crm-summary and /sales-by-branch
+  // accept branchId. /finance-summary, /working-capital, /inventory, /revenue-trend
+  // and /net-profit-trend never take a branchId — they are always company-wide.
+  readonly branchScopeActive = computed(() => this.selectedBranchId() !== '');
+
+  readonly selectedBranchLabel = computed(() => {
+    const id = this.selectedBranchId();
+    if (!id) return '';
+    const b = this.branches().find((x) => x.id === id);
+    return b ? `${b.code} — ${b.name}` : '';
+  });
+
   // ── Derived: trend max for CSS bar scaling ───────────────────────────────────
   readonly revenueTrendMax = computed(() => {
     const pts = this.revenueTrend()?.points ?? [];

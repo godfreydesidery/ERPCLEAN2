@@ -402,4 +402,80 @@ describe('DashboardComponent', () => {
     TestBed.flushEffects();
     expect(comp.salesByBranchState()).toBe('forbidden');
   });
+
+  // ── Branch-filter honesty labelling (UPR "silently doesn't scope most panels") ──
+  // Backend wiring: only /crm-summary and /sales-by-branch accept branchId; finance,
+  // working-capital, inventory and the two trend endpoints are always company-wide.
+
+  // 13. branchScopeActive reflects the branch picker
+  it('branchScopeActive is false for "All branches", true once a branch is picked', () => {
+    vi.useFakeTimers();
+    makeBed(of(MOCK_DTO));
+    const comp = TestBed.createComponent(DashboardComponent).componentInstance as any;
+    TestBed.flushEffects();
+    expect(comp.branchScopeActive()).toBe(false);
+    comp.onBranchChange('100');
+    expect(comp.branchScopeActive()).toBe(true);
+  });
+
+  // 14. "Group-wide" badge is always present on the company-wide panels, regardless
+  // of branch selection — the reader should never have to guess.
+  it('renders a "Group-wide" badge on Finance, Cash Position, Working Capital, Inventory and both Trend panels', () => {
+    vi.useFakeTimers();
+    makeBed(of(MOCK_DTO));
+    const fixture = TestBed.createComponent(DashboardComponent);
+    TestBed.flushEffects();
+    fixture.detectChanges();
+    const badges = Array.from(
+      fixture.nativeElement.querySelectorAll('h2 .status-tag'),
+    ) as HTMLElement[];
+    const groupWide = badges.filter((b) => b.textContent?.trim() === 'Group-wide');
+    // Finance, Cash Position, Working Capital, Inventory, Revenue Trend, Net Profit Trend
+    expect(groupWide.length).toBe(6);
+  });
+
+  // 15. Once a specific branch is selected, the company-wide panels also carry an
+  // explicit inline note (belt-and-braces beyond the badge).
+  it('selecting a specific branch shows the "not affected by the branch filter" note on company-wide panels', () => {
+    vi.useFakeTimers();
+    makeBed(of(MOCK_DTO));
+    const fixture = TestBed.createComponent(DashboardComponent);
+    const comp = fixture.componentInstance as any;
+    TestBed.flushEffects();
+    fixture.detectChanges();
+
+    let notes = Array.from(fixture.nativeElement.querySelectorAll('p')) as HTMLElement[];
+    expect(notes.some((p) => p.textContent?.includes('not affected by the branch filter'))).toBe(false);
+
+    comp.onBranchChange('100');
+    TestBed.flushEffects();
+    fixture.detectChanges();
+
+    notes = Array.from(fixture.nativeElement.querySelectorAll('p')) as HTMLElement[];
+    const scopeNotes = notes.filter((p) => p.textContent?.includes('not affected by the branch filter'));
+    expect(scopeNotes.length).toBe(6);
+  });
+
+  // 16. CRM and Sales-by-Branch DO react to the branch filter — label them "This branch"
+  // only once a specific branch is picked (no ambiguity when "All branches" is active).
+  it('shows "This branch" badge on CRM and Sales by Branch only once a branch is selected', () => {
+    vi.useFakeTimers();
+    makeBed(of(MOCK_DTO));
+    const fixture = TestBed.createComponent(DashboardComponent);
+    const comp = fixture.componentInstance as any;
+    TestBed.flushEffects();
+    fixture.detectChanges();
+
+    let thisBranchBadges = Array.from(fixture.nativeElement.querySelectorAll('h2 .status-tag'))
+      .filter((b: any) => b.textContent?.trim() === 'This branch');
+    expect(thisBranchBadges.length).toBe(0);
+
+    comp.onBranchChange('100');
+    TestBed.flushEffects();
+    fixture.detectChanges();
+
+    thisBranchBadges = Array.from(fixture.nativeElement.querySelectorAll('h2 .status-tag'))
+      .filter((b: any) => b.textContent?.trim() === 'This branch');
+    expect(thisBranchBadges.length).toBe(2); // CRM + Sales by Branch
+  });
 });
