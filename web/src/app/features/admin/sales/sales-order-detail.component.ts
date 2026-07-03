@@ -389,7 +389,7 @@ export class SalesOrderDetailComponent {
         this.savingAgent.set(false);
         this.showAgentForm.set(false);
         this.order.set(updated);
-        this.alerts.success('Agent assigned');
+        this.alerts.success('Agent assigned', `${agent.label} is now the sales agent on this order.`);
       },
       error: (err: unknown) => {
         this.agentError.set(this.messageFrom(err, 'Could not assign agent.'));

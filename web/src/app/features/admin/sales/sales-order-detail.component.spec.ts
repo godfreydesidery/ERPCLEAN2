@@ -190,7 +190,10 @@ describe('SalesOrderDetailComponent — set agent', () => {
     comp.submitAgent();
     await vi.runAllTimersAsync();
 
-    expect(alerts.success).toHaveBeenCalledWith('Agent assigned');
+    expect(alerts.success).toHaveBeenCalledWith(
+      'Agent assigned',
+      'Agent B is now the sales agent on this order.',
+    );
   });
 
   it('submitAgent() surfaces a friendly API error and keeps the form open', async () => {
