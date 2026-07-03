@@ -9,6 +9,9 @@ import java.util.List;
 /**
  * Response DTO for a work order header + component lines + operations (ADR-0035 D-1 API).
  * Includes both {@code id} (serialised as JSON string) and {@code uid} per PROJECT-CONVENTIONS.
+ * branchName/branchCode are enrichment fields resolved at read time by the service (mirrors
+ * SalesOrderDto's branch enrichment) so a branch manager can see which branch a work order
+ * belongs to — only the internal branchId travelled before.
  */
 public record WorkOrderDto(
         Long id,
@@ -16,6 +19,8 @@ public record WorkOrderDto(
         String woNumber,
         Long companyId,
         Long branchId,
+        String branchName,
+        String branchCode,
         Long finishedProductId,
         String finishedProductCode,
         String finishedProductName,

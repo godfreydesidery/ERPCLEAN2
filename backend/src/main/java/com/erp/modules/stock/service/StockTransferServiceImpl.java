@@ -1,5 +1,7 @@
 package com.erp.modules.stock.service;
 
+import com.erp.modules.iam.domain.entity.Branch;
+import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.products.domain.dto.ProductDto;
 import com.erp.modules.products.service.ProductService;
 import com.erp.modules.stock.domain.dto.CreateStockTransferRequest;
@@ -14,6 +16,7 @@ import com.erp.modules.stock.domain.entity.StockTransferLine;
 import com.erp.modules.stock.domain.enums.MovementType;
 import com.erp.modules.stock.domain.enums.StockTransferMode;
 import com.erp.modules.stock.domain.enums.StockTransferStatus;
+import com.erp.modules.stock.repository.StockLocationRepository;
 import com.erp.modules.stock.repository.StockOnHandRepository;
 import com.erp.modules.stock.repository.StockTransferLineRepository;
 import com.erp.modules.stock.repository.StockTransferRepository;
@@ -62,6 +65,8 @@ public class StockTransferServiceImpl implements StockTransferService {
     private final OutboxPublisher              outbox;
     private final ScopeGuard                   scopeGuard;
     private final AuditService                 audit;
+    private final BranchRepository             branches;
+    private final StockLocationRepository      locations;
 
     public StockTransferServiceImpl(StockTransferRepository transfers,
                                      StockTransferLineRepository transferLines,
@@ -73,7 +78,9 @@ public class StockTransferServiceImpl implements StockTransferService {
                                      WarehouseNumberGenerator numberGenerator,
                                      OutboxPublisher outbox,
                                      ScopeGuard scopeGuard,
-                                     AuditService audit) {
+                                     AuditService audit,
+                                     BranchRepository branches,
+                                     StockLocationRepository locations) {
         this.transfers        = transfers;
         this.transferLines    = transferLines;
         this.onHands          = onHands;
@@ -85,6 +92,8 @@ public class StockTransferServiceImpl implements StockTransferService {
         this.outbox           = outbox;
         this.scopeGuard       = scopeGuard;
         this.audit            = audit;
+        this.branches         = branches;
+        this.locations        = locations;
     }
 
     @Override
@@ -377,7 +386,12 @@ public class StockTransferServiceImpl implements StockTransferService {
                 .orElse(null);
     }
 
-    private static StockTransferDto toDto(StockTransfer t, List<StockTransferLine> lines) {
+    /**
+     * Resolves source/dest branch and location names at read time (mirrors
+     * SalesOrderServiceImpl.buildDto's customer/branch enrichment). Defensive: a missing branch or
+     * location row (should not happen) degrades to null names rather than failing the read.
+     */
+    private StockTransferDto toDto(StockTransfer t, List<StockTransferLine> lines) {
         List<StockTransferLineDto> lineDtos = lines.stream()
                 .map(l -> new StockTransferLineDto(
                         l.getId(), l.getUid(), l.getLineNo(),
@@ -385,11 +399,25 @@ public class StockTransferServiceImpl implements StockTransferService {
                         l.getUnitName(), l.getQtyTransferred(), l.getQtyTransferredBase(),
                         l.getValueAmount(), l.getCurrency()))
                 .toList();
+
+        Branch srcBranch = branches.findById(t.getSourceBranchId()).orElse(null);
+        Branch dstBranch = branches.findById(t.getDestBranchId()).orElse(null);
+        String sourceLocationName = locations.findById(t.getSourceLocationId())
+                .map(StockLocation::getName).orElse(null);
+        String destLocationName = locations.findById(t.getDestLocationId())
+                .map(StockLocation::getName).orElse(null);
+
         return new StockTransferDto(
                 t.getId(), t.getUid(), t.getCompanyId(), t.getTransferNumber(),
                 t.getStatus(), t.getTransferMode(),
-                t.getSourceBranchId(), t.getSourceLocationId(),
-                t.getDestBranchId(), t.getDestLocationId(),
+                t.getSourceBranchId(),
+                srcBranch != null ? srcBranch.getName() : null,
+                srcBranch != null ? srcBranch.getCode() : null,
+                t.getSourceLocationId(), sourceLocationName,
+                t.getDestBranchId(),
+                dstBranch != null ? dstBranch.getName() : null,
+                dstBranch != null ? dstBranch.getCode() : null,
+                t.getDestLocationId(), destLocationName,
                 t.getTransferDate(), t.getExpectedArrivalDate(),
                 t.getDispatchedAt(), t.getDispatchedBy(),
                 t.getReceivedAt(), t.getReceivedBy(),

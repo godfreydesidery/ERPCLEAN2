@@ -3,6 +3,8 @@ package com.erp.modules.sales.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
+import com.erp.modules.iam.domain.entity.Branch;
+import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.parties.domain.entity.Agent;
 import com.erp.modules.parties.domain.entity.Customer;
 import com.erp.modules.parties.domain.enums.AgentKind;
@@ -33,11 +35,13 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
 /**
- * Unit tests for {@link SalesOrderServiceImpl} customer/agent name enrichment.
+ * Unit tests for {@link SalesOrderServiceImpl} customer/agent/branch name enrichment.
  *
  * <p>A top UX complaint: sales orders showed only the raw numeric {@code customerId} — never the
  * customer's name — so approvers could not see who an order was for. Fixed by resolving
  * customerName/customerCode/agentName at read time, mirroring {@code SalesInvoiceServiceImpl}.
+ * branchName/branchCode are resolved the same way so a branch manager can see which branch a
+ * sales order belongs to (only the internal branchId travelled before).
  *
  * <p>Only the enrichment path is exercised here (getByUid + list); the rest of
  * {@link SalesOrderServiceImpl} is covered by {@link SalesOrderServiceIT} et al.
@@ -54,6 +58,7 @@ class SalesOrderServiceImplTest {
     @Mock com.erp.modules.parties.repository.PaymentTermsRepository paymentTermsRepo;
     @Mock AgentRepository agents;
     @Mock com.erp.modules.iam.repository.CompanyRepository companies;
+    @Mock BranchRepository branches;
     @Mock com.erp.modules.products.repository.ProductRepository products;
     @Mock com.erp.modules.products.repository.UnitOfMeasureRepository units;
     @Mock com.erp.modules.products.repository.ProductPriceRepository prices;
@@ -88,6 +93,8 @@ class SalesOrderServiceImplTest {
                 customer(CUSTOMER_ID, "CUST-0001", "Acme Traders")));
         when(agents.findById(AGENT_ID)).thenReturn(Optional.of(
                 agent(AGENT_ID, "AGT-0001", "Jane Agent")));
+        when(branches.findById(BRANCH_ID)).thenReturn(Optional.of(
+                branch("BR-01", "Head Office")));
 
         SalesOrderDto dto = service.getByUid("SOUID000000000000000001");
 
@@ -96,6 +103,25 @@ class SalesOrderServiceImplTest {
         assertThat(dto.customerCode()).isEqualTo("CUST-0001");
         assertThat(dto.agentId()).isEqualTo(AGENT_ID);
         assertThat(dto.agentName()).isEqualTo("Jane Agent");
+        assertThat(dto.branchId()).isEqualTo(BRANCH_ID);
+        assertThat(dto.branchName()).isEqualTo("Head Office");
+        assertThat(dto.branchCode()).isEqualTo("BR-01");
+    }
+
+    @Test
+    void getByUid_branchNamesNull_whenBranchRowMissing() {
+        SalesOrder order = orderWithId(503L, "SOUID000000000000000004", CUSTOMER_ID, null);
+        when(orders.findByUid("SOUID000000000000000004")).thenReturn(Optional.of(order));
+        when(orderLines.findBySalesOrderIdOrderByLineNo(503L)).thenReturn(List.of());
+        when(customers.findById(CUSTOMER_ID)).thenReturn(Optional.of(
+                customer(CUSTOMER_ID, "CUST-0001", "Acme Traders")));
+        when(branches.findById(BRANCH_ID)).thenReturn(Optional.empty());
+
+        SalesOrderDto dto = service.getByUid("SOUID000000000000000004");
+
+        assertThat(dto.branchName()).isNull();
+        assertThat(dto.branchCode()).isNull();
+        // never throws — a missing branch row degrades to null names, it never fails the read.
     }
 
     @Test
@@ -141,16 +167,21 @@ class SalesOrderServiceImplTest {
                 customer(201L, "CUST-0002", "Beta Stores")));
         when(agents.findById(AGENT_ID)).thenReturn(Optional.of(
                 agent(AGENT_ID, "AGT-0001", "Jane Agent")));
+        when(branches.findById(BRANCH_ID)).thenReturn(Optional.of(
+                branch("BR-01", "Head Office")));
 
         Page<SalesOrderDto> page = service.list(COMPANY_ID, Pageable.unpaged());
 
         assertThat(page.getContent()).hasSize(2);
         assertThat(page.getContent().get(0).customerName()).isEqualTo("Acme Traders");
         assertThat(page.getContent().get(0).agentName()).isEqualTo("Jane Agent");
+        assertThat(page.getContent().get(0).branchName()).isEqualTo("Head Office");
+        assertThat(page.getContent().get(0).branchCode()).isEqualTo("BR-01");
         assertThat(page.getContent().get(1).customerName()).isEqualTo("Beta Stores");
         assertThat(page.getContent().get(1).agentName()).isNull();
         // list rows are resolved one findById per row (no batch fetch) — same N+1 shape as
-        // SalesInvoiceServiceImpl.list/toDto; see handoff notes.
+        // SalesInvoiceServiceImpl.list/toDto; see handoff notes. Applies to both customer/agent
+        // AND the new branch lookup added here.
     }
 
     // -------------------------------------------------------------------------
@@ -173,5 +204,10 @@ class SalesOrderServiceImplTest {
     private static Agent agent(Long companyId, String code, String displayName) {
         return new Agent(companyId, code, PartyType.INDIVIDUAL, displayName,
                 AgentKind.EXTERNAL, 1L);
+    }
+
+    /** Company param intentionally null — only name/code are read by the enrichment path. */
+    private static Branch branch(String code, String name) {
+        return new Branch(null, code, name);
     }
 }

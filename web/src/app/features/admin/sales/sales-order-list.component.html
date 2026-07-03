@@ -239,6 +239,7 @@
                   <th scope="col">Order #</th>
                   <th scope="col">Customer</th>
                   <th scope="col">Agent</th>
+                  <th scope="col">Branch</th>
                   <th scope="col">Status</th>
                   <th scope="col">Order Date</th>
                   <th scope="col" class="num">Total (gross)</th>
@@ -256,6 +257,12 @@
                       }
                     </td>
                     <td class="small text-muted">{{ o.agentName ?? '—' }}</td>
+                    <td>
+                      {{ o.branchName ?? '—' }}
+                      @if (o.branchCode) {
+                        <br /><span class="small text-muted mono">{{ o.branchCode }}</span>
+                      }
+                    </td>
                     <td>
                       <span class="status-tag"
                             [class.status-tag--ok]="o.status === 'FULFILLED' || o.status === 'INVOICED'"

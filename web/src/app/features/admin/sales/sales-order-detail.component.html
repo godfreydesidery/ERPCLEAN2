@@ -53,6 +53,13 @@
               </dd>
               <dt class="col-sm-3 text-muted fw-normal">Sales Agent</dt>
               <dd class="col-sm-9 mb-0">{{ o.agentName ?? '—' }}</dd>
+              <dt class="col-sm-3 text-muted fw-normal">Branch</dt>
+              <dd class="col-sm-9 mb-0">
+                {{ o.branchName ?? '—' }}
+                @if (o.branchCode) {
+                  <span class="text-muted small"> ({{ o.branchCode }})</span>
+                }
+              </dd>
               <dt class="col-sm-3 text-muted fw-normal">Currency</dt>
               <dd class="col-sm-9 mb-0">{{ o.currency }}</dd>
               <dt class="col-sm-3 text-muted fw-normal">Order Date</dt>

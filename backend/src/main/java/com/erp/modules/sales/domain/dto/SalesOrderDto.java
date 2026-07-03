@@ -9,14 +9,17 @@ import java.util.List;
 /**
  * Full response DTO for a SalesOrder header.
  * Carries both {@code id} (JSON string via global Long-as-string config) and {@code uid}.
- * customerName/customerCode/agentName are enrichment fields resolved at read time by the
- * service (mirrors SalesInvoiceDto) so the frontend never has to display a raw numeric FK.
+ * customerName/customerCode/agentName/branchName/branchCode are enrichment fields resolved at
+ * read time by the service (mirrors SalesInvoiceDto) so the frontend never has to display a raw
+ * numeric FK.
  */
 public record SalesOrderDto(
         Long id,
         String uid,
         Long companyId,
         Long branchId,
+        String branchName,
+        String branchCode,
         String orderNumber,
         String status,
         Long customerId,
@@ -47,12 +50,15 @@ public record SalesOrderDto(
         String billToAddressText,
         List<SalesOrderLineDto> lines
 ) {
-    /** Build from entity with enriched customer and agent fields (mirrors SalesInvoiceDto.from). */
+    /**
+     * Build from entity with enriched customer/agent/branch fields (mirrors SalesInvoiceDto.from).
+     */
     public static SalesOrderDto from(SalesOrder o, List<SalesOrderLineDto> lines,
-                                     String customerName, String customerCode, String agentName) {
+                                     String customerName, String customerCode, String agentName,
+                                     String branchName, String branchCode) {
         return new SalesOrderDto(
                 o.getId(), o.getUid(),
-                o.getCompanyId(), o.getBranchId(),
+                o.getCompanyId(), o.getBranchId(), branchName, branchCode,
                 o.getOrderNumber(),
                 o.getStatus().name(),
                 o.getCustomerId(), customerName, customerCode,

@@ -45,6 +45,12 @@
             </span>
           </div>
           <div class="erp-card__body">
+            <p class="mb-3 fw-semibold" style="font-size:0.95rem">
+              <i class="bi bi-signpost-2 me-1 text-muted" aria-hidden="true"></i>
+              From: {{ t.sourceBranchName ?? '—' }} &middot; {{ t.sourceLocationName ?? locationLabel(t.sourceLocationId) }}
+              <i class="bi bi-arrow-right mx-2 text-muted" aria-hidden="true"></i>
+              To: {{ t.destBranchName ?? '—' }} &middot; {{ t.destLocationName ?? locationLabel(t.destLocationId) }}
+            </p>
             <dl class="row g-3 mb-0">
               <div class="col-sm-6 col-lg-3">
                 <dt class="text-muted small mb-1">Transfer #</dt>
@@ -59,12 +65,24 @@
                 <dd class="mb-0">{{ t.transferDate | date:'yyyy-MM-dd' }}</dd>
               </div>
               <div class="col-sm-6 col-lg-3">
-                <dt class="text-muted small mb-1">Source Location</dt>
-                <dd class="mb-0">{{ locationLabel(t.sourceLocationId) }}</dd>
+                <dt class="text-muted small mb-1">Source</dt>
+                <dd class="mb-0">
+                  {{ t.sourceBranchName ?? '—' }}
+                  @if (t.sourceBranchCode) {
+                    <span class="text-muted small mono"> ({{ t.sourceBranchCode }})</span>
+                  }
+                  <br /><span class="text-muted small">{{ t.sourceLocationName ?? locationLabel(t.sourceLocationId) }}</span>
+                </dd>
               </div>
               <div class="col-sm-6 col-lg-3">
-                <dt class="text-muted small mb-1">Destination Location</dt>
-                <dd class="mb-0">{{ locationLabel(t.destLocationId) }}</dd>
+                <dt class="text-muted small mb-1">Destination</dt>
+                <dd class="mb-0">
+                  {{ t.destBranchName ?? '—' }}
+                  @if (t.destBranchCode) {
+                    <span class="text-muted small mono"> ({{ t.destBranchCode }})</span>
+                  }
+                  <br /><span class="text-muted small">{{ t.destLocationName ?? locationLabel(t.destLocationId) }}</span>
+                </dd>
               </div>
               @if (t.dispatchedAt) {
                 <div class="col-sm-6 col-lg-3">

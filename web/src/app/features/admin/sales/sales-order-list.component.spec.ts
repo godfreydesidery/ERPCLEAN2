@@ -37,6 +37,7 @@ const emptyPage = (): SalesOrderPage => ({
 
 const stubOrder = {
   uid: 'SO1', id: '1', companyId: '10', branchId: '1',
+  branchName: 'Head Office', branchCode: 'BR-01',
   orderNumber: 'SO-0001', status: 'DRAFT' as const,
   customerId: '5', customerName: 'Acme Traders', customerCode: 'ACME',
   agentId: null, agentName: null, currency: 'TZS', orderDate: '2025-01-01',
@@ -363,6 +364,20 @@ describe('SalesOrderListComponent — renders customer', () => {
     expect(customerCells[1]).toContain('Beta Supplies');
     // The raw numeric FK must never be shown to the user in place of the name/code.
     expect(customerCells[0].trim()).not.toBe(stubOrder.customerId);
+  });
+
+  it('renders the branch name and code in the list, never the raw branchId', async () => {
+    const fixture = TestBed.createComponent(SalesOrderListComponent);
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    const branchCells = Array.from(el.querySelectorAll('tbody tr')).map(
+      (row) => row.querySelectorAll('td')[3]?.textContent ?? '',
+    );
+    expect(branchCells[0]).toContain('Head Office');
+    expect(branchCells[0]).toContain('BR-01');
+    expect(branchCells[0].trim()).not.toBe(stubOrder.branchId);
   });
 });
 

@@ -26,6 +26,7 @@ import { SalesOrderDto } from '../models/sales-orders.model';
 
 const agentlessOrder: SalesOrderDto = {
   uid: 'SO1', id: '1', companyId: '10', branchId: '1',
+  branchName: 'Head Office', branchCode: 'BR-01',
   orderNumber: 'SO-0001', status: 'CONFIRMED' as const,
   customerId: '5', customerName: 'Acme Traders', customerCode: 'ACME',
   agentId: null, agentName: null, currency: 'TZS', orderDate: '2025-01-01',
@@ -264,5 +265,35 @@ describe('SalesOrderDetailComponent — header shows customer and agent', () => 
 
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
     expect(text).toContain('Jane Agent');
+  });
+
+  it('renders the branch name and code prominently, never the raw branchId', async () => {
+    makeBed({ order: agentlessOrder });
+    const fixture = createFixture();
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    const dts = Array.from(el.querySelectorAll('dt')).map((d) => d.textContent?.trim());
+    const branchIdx = dts.indexOf('Branch');
+    expect(branchIdx).toBeGreaterThanOrEqual(0);
+    const branchDd = el.querySelectorAll('dd')[branchIdx];
+    const branchText = branchDd.textContent ?? '';
+    expect(branchText).toContain('Head Office');
+    expect(branchText).toContain('BR-01');
+    expect(branchText.trim()).not.toBe(agentlessOrder.branchId);
+  });
+
+  it('renders "—" for the branch when branchName is null', async () => {
+    makeBed({ order: { ...agentlessOrder, branchName: null, branchCode: null } });
+    const fixture = createFixture();
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    const dts = Array.from(el.querySelectorAll('dt')).map((d) => d.textContent?.trim());
+    const branchIdx = dts.indexOf('Branch');
+    const branchDd = el.querySelectorAll('dd')[branchIdx];
+    expect(branchDd.textContent?.trim()).toBe('—');
   });
 });

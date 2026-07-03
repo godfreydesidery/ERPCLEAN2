@@ -2,6 +2,8 @@ package com.erp.modules.sales.service;
 
 import com.erp.modules.ar.domain.dto.ArBalanceDto;
 import com.erp.modules.ar.service.ArBalanceService;
+import com.erp.modules.iam.domain.entity.Branch;
+import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.parties.domain.entity.Agent;
 import com.erp.modules.parties.domain.entity.Customer;
@@ -76,6 +78,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
     private final PaymentTermsRepository   paymentTermsRepo;
     private final AgentRepository          agents;
     private final CompanyRepository        companies;
+    private final BranchRepository         branches;
     private final ProductRepository        products;
     private final UnitOfMeasureRepository  units;
     private final ProductPriceRepository   prices;
@@ -99,6 +102,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
                                  PaymentTermsRepository paymentTermsRepo,
                                  AgentRepository agents,
                                  CompanyRepository companies,
+                                 BranchRepository branches,
                                  ProductRepository products,
                                  UnitOfMeasureRepository units,
                                  ProductPriceRepository prices,
@@ -120,6 +124,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         this.paymentTermsRepo = paymentTermsRepo;
         this.agents           = agents;
         this.companies        = companies;
+        this.branches         = branches;
         this.products         = products;
         this.units            = units;
         this.prices           = prices;
@@ -737,8 +742,10 @@ public class SalesOrderServiceImpl implements SalesOrderService {
     }
 
     /**
-     * Resolves customer/agent names at read time (mirrors SalesInvoiceServiceImpl.toDto).
+     * Resolves customer/agent/branch names at read time (mirrors SalesInvoiceServiceImpl.toDto).
      * agentId is nullable on SalesOrder (unlike SalesInvoice), so it is guarded before lookup.
+     * Branch lookup is defensive: a missing row (should not happen) yields null names rather than
+     * failing the read.
      */
     private SalesOrderDto buildDto(SalesOrder o, List<SalesOrderLineDto> lines) {
         String customerName = null;
@@ -751,7 +758,15 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         String agentName = o.getAgentId() != null
                 ? agents.findById(o.getAgentId()).map(Agent::getDisplayName).orElse(null)
                 : null;
-        return SalesOrderDto.from(o, lines, customerName, customerCode, agentName);
+        String branchName = null;
+        String branchCode = null;
+        Branch branch = branches.findById(o.getBranchId()).orElse(null);
+        if (branch != null) {
+            branchName = branch.getName();
+            branchCode = branch.getCode();
+        }
+        return SalesOrderDto.from(o, lines, customerName, customerCode, agentName,
+                branchName, branchCode);
     }
 
     private Long requireBranchId(RequestContext.Principal ctx) {
