@@ -22,6 +22,8 @@ import { OpportunityCreateComponent } from './opportunity-create.component';
 const stubCompany = { uid: 'CO1', id: '10', name: 'Main Co', status: 'ACTIVE' };
 const stubStage = { uid: 'STG1', id: '1', name: 'Qualification', companyId: '10', displayOrder: '10', defaultProbability: '50', active: true };
 const stubOpp = { uid: 'OPP1', id: '1', opportunityNumber: 'OPP-0001' };
+const customerA = { uid: 'CUST1', code: 'CUST-001', displayName: 'Joseph Ulimboka' };
+const customerB = { uid: 'CUST2', code: 'CUST-002', displayName: 'Joseph Ulimboka' };
 
 function makeSessionStore() {
   return {
@@ -43,7 +45,7 @@ function makeBed() {
       { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: { get: () => null } } } },
       { provide: OrganisationService, useValue: { current: vi.fn(() => of({ uid: 'ORG1', id: '1', name: 'Acme Org' })) } },
       { provide: CompanyService, useValue: { list: vi.fn(() => of([stubCompany])) } },
-      { provide: CustomerService, useValue: { list: vi.fn(() => of({ rows: [] })) } },
+      { provide: CustomerService, useValue: { list: vi.fn(() => of({ rows: [customerA, customerB] })) } },
       {
         provide: CrmService,
         useValue: {
@@ -102,5 +104,22 @@ describe('OpportunityCreateComponent — numeric field coercion', () => {
     const body = svc.createOpportunity.mock.calls[0][0];
     expect(body.estimatedValueAmount).toBeUndefined();
     expect(body.winProbability).toBeUndefined();
+  });
+});
+
+// ── customer-picker disambiguation ────────────────────────────────────────────
+
+describe('OpportunityCreateComponent — customer picker disambiguation', () => {
+  beforeEach(() => { vi.useFakeTimers(); makeBed(); });
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('carries the customer code as the picker hint for two same-named customers', async () => {
+    const comp = TestBed.createComponent(OpportunityCreateComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    const options = comp.customerOptions();
+    expect(options).toHaveLength(2);
+    expect(options.every((o) => !!o.hint)).toBe(true);
+    expect(options.map((o) => o.hint)).toEqual(['CUST-001', 'CUST-002']);
   });
 });

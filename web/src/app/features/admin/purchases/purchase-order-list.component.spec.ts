@@ -11,7 +11,7 @@ import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
@@ -58,7 +58,8 @@ function makeBed(overrides: {
     providers: [
       provideHttpClient(),
       provideHttpClientTesting(),
-      provideRouter([]),
+      // Wildcard route so the post-create router.navigate() resolves (avoids NG04002).
+      provideRouter([{ path: '**', children: [] }]),
       {
         provide: PurchasesService,
         useValue: { listOrders: listOrdersSpy, createOrder: createOrderSpy },
@@ -165,6 +166,27 @@ describe('PurchaseOrderListComponent', () => {
     expect(req.supplierUid).toBe('SUP-UID-1');
     expect(req.currency).toBe('TZS');
     expect(req.notes).toBe('Test notes');
+  });
+
+  // ── 4b. Create — success navigates to the new PO detail ──────────────────
+
+  it('navigates to the new purchase order detail after a successful create', async () => {
+    makeBed();
+    const fixture = TestBed.createComponent(PurchaseOrderListComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigate');
+
+    comp.showCreateForm.set(true);
+    comp.selectedSupplier.set({ uid: 'SUP-UID-1', label: 'SUP001 — Supplier A' });
+    comp.newCurrency.set('TZS');
+
+    comp.create();
+    await vi.runAllTimersAsync();
+
+    expect(navigateSpy).toHaveBeenCalledWith(['/admin/purchase-orders/uid', STUB_PO.uid]);
   });
 
   // ── 5. 403 → forbidden ────────────────────────────────────────────────────
