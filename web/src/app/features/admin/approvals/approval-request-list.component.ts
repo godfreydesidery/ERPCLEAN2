@@ -14,6 +14,7 @@ import { ApprovalsService } from './approvals.service';
 import type { ApprovalRequestPage } from './approvals.service';
 import { ApprovalRequestDto, ApprovalRequestStatus } from './models/approvals.model';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
+import { documentTypeLabel } from './document-type.util';
 
 const DEFAULT_SIZE = 20;
 
@@ -134,4 +135,7 @@ export class ApprovalRequestListComponent {
   prevPage(): void { if (this.currentPage() > 0) this.load(this.currentPage() - 1); }
   nextPage(): void { if (this.meta().hasNext) this.load(this.currentPage() + 1); }
 
+  docTypeLabel(documentType: string): string {
+    return documentTypeLabel(documentType);
+  }
 }
