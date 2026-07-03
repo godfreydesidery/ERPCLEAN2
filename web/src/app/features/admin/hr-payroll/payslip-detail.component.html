@@ -1,0 +1,123 @@
+<section class="admin-page">
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <nav aria-label="breadcrumb">
+        <ol class="breadcrumb small mb-1">
+          <li class="breadcrumb-item"><a routerLink="/admin/hr/payroll-runs">Payroll Runs</a></li>
+          <li class="breadcrumb-item active" aria-current="page">
+            @if (payslip(); as p) { {{ p.payslipNumber }} } @else { Loading… }
+          </li>
+        </ol>
+      </nav>
+      <h1>
+        @if (payslip(); as p) { Payslip {{ p.payslipNumber }} } @else { Payslip }
+      </h1>
+    </div>
+  </header>
+
+  @switch (state()) {
+    @case ('loading') {
+      <output class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
+      </output>
+    }
+    @case ('error') {
+      <output class="d-block text-danger" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load payslip. Please try again.
+      </output>
+    }
+    @default {
+      @if (payslip(); as p) {
+        <!-- Employee / pay period -->
+        <div class="erp-card mb-3">
+          <div class="erp-card__head">
+            <h2>Payslip</h2>
+          </div>
+          <div class="erp-card__body">
+            <dl class="row small mb-0">
+              <dt class="col-sm-3">Payslip Number</dt>
+              <dd class="col-sm-3 mono">{{ p.payslipNumber }}</dd>
+              <dt class="col-sm-3">Pay Date</dt>
+              <dd class="col-sm-3">{{ p.payDate }}</dd>
+              <dt class="col-sm-3">Employee</dt>
+              <dd class="col-sm-3">{{ p.employeeName }}</dd>
+              <dt class="col-sm-3">Employee #</dt>
+              <dd class="col-sm-3 mono">{{ p.employeeNumber }}</dd>
+            </dl>
+          </div>
+        </div>
+
+        <!-- Gross / deductions / net / employer cost -->
+        <div class="erp-card mb-3">
+          <div class="erp-card__head">
+            <h2>Earnings &amp; Deductions</h2>
+          </div>
+          <div class="erp-card__body">
+            <div class="row g-3">
+              <div class="col-sm-3">
+                <div class="erp-kpi">
+                  <span class="erp-kpi__label">Gross</span>
+                  <span class="erp-kpi__value mono">{{ fmtMoney(p.grossAmount) }}</span>
+                </div>
+              </div>
+              <div class="col-sm-3">
+                <div class="erp-kpi">
+                  <span class="erp-kpi__label">Deductions</span>
+                  <span class="erp-kpi__value mono">{{ fmtMoney(p.deductionAmount) }}</span>
+                </div>
+              </div>
+              <div class="col-sm-3">
+                <div class="erp-kpi">
+                  <span class="erp-kpi__label">Net</span>
+                  <span class="erp-kpi__value mono">{{ fmtMoney(p.netAmount) }}</span>
+                </div>
+              </div>
+              <div class="col-sm-3">
+                <div class="erp-kpi">
+                  <span class="erp-kpi__label">Employer Cost</span>
+                  <span class="erp-kpi__value mono">{{ fmtMoney(p.employerCostAmount) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Year-to-date -->
+        <div class="erp-card mb-3">
+          <div class="erp-card__head">
+            <h2>Year-to-Date</h2>
+          </div>
+          <div class="erp-card__body">
+            <div class="row g-3">
+              <div class="col-sm-3">
+                <div class="erp-kpi">
+                  <span class="erp-kpi__label">YTD Gross</span>
+                  <span class="erp-kpi__value mono">{{ fmtMoney(p.ytdGross) }}</span>
+                </div>
+              </div>
+              <div class="col-sm-3">
+                <div class="erp-kpi">
+                  <span class="erp-kpi__label">YTD PAYE</span>
+                  <span class="erp-kpi__value mono">{{ fmtMoney(p.ytdPaye) }}</span>
+                </div>
+              </div>
+              <div class="col-sm-3">
+                <div class="erp-kpi">
+                  <span class="erp-kpi__label">YTD NSSF (Employee)</span>
+                  <span class="erp-kpi__value mono">{{ fmtMoney(p.ytdNssfEmployee) }}</span>
+                </div>
+              </div>
+              <div class="col-sm-3">
+                <div class="erp-kpi">
+                  <span class="erp-kpi__label">YTD Net</span>
+                  <span class="erp-kpi__value mono">{{ fmtMoney(p.ytdNet) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      }
+    }
+  }
+</section>
