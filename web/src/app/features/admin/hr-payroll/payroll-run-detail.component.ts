@@ -5,8 +5,9 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
+import { formatMoney } from '../../../shared/money.util';
 import { HrPayrollService } from './hr-payroll.service';
-import { DisburseRequest, PayrollLineDto, PayrollRunDto } from './models/hr-payroll.model';
+import { DisburseRequest, PayrollLineDto, PayrollRunDto, PayslipDto } from './models/hr-payroll.model';
 
 /**
  * Payroll run detail screen with full lifecycle actions:
@@ -31,6 +32,12 @@ export class PayrollRunDetailComponent {
 
   readonly lines = signal<PayrollLineDto[]>([]);
   readonly linesState = signal<'loading' | 'idle' | 'error'>('idle');
+
+  readonly payslips = signal<PayslipDto[]>([]);
+  readonly payslipsState = signal<'loading' | 'idle' | 'error'>('idle');
+
+  /** Coerce + format money with thousand separators (shared util). */
+  readonly fmtMoney = formatMoney;
 
   // ── Disburse form ────────────────────────────────────────────────────────────
   readonly showDisburseForm = signal(false);
@@ -86,6 +93,7 @@ export class PayrollRunDetailComponent {
         this.run.set(r);
         this.state.set('idle');
         this.loadLines();
+        this.loadPayslips();
       },
       error: () => this.state.set('error'),
     });
@@ -99,6 +107,17 @@ export class PayrollRunDetailComponent {
         this.linesState.set('idle');
       },
       error: () => this.linesState.set('error'),
+    });
+  }
+
+  private loadPayslips(): void {
+    this.payslipsState.set('loading');
+    this.hrService.listPayslipsByRun(this.uid()).subscribe({
+      next: (payslips) => {
+        this.payslips.set(payslips);
+        this.payslipsState.set('idle');
+      },
+      error: () => this.payslipsState.set('error'),
     });
   }
 

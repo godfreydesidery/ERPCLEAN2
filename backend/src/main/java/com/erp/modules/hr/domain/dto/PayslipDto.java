@@ -19,5 +19,9 @@ public record PayslipDto(
         BigDecimal ytdGross,
         BigDecimal ytdPaye,
         BigDecimal ytdNssfEmployee,
-        BigDecimal ytdNet
+        BigDecimal ytdNet,
+        // Read-time enrichment (employee name/number are not stored on Payslip; resolved via
+        // EmployeeRepository at query time). Null-safe: null if the employee record is gone.
+        String employeeName,
+        String employeeNumber
 ) {}

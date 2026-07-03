@@ -755,6 +755,12 @@ export const ADMIN_ROUTES: Routes = [
       import('./hr-payroll/payroll-run-detail.component').then((m) => m.PayrollRunDetailComponent),
   },
   {
+    path: 'hr/payslips/uid/:uid',
+    canActivate: [requirePermission('HR.PAYROLL.VIEW')],
+    loadComponent: () =>
+      import('./hr-payroll/payslip-detail.component').then((m) => m.PayslipDetailComponent),
+  },
+  {
     path: 'hr/leave-requests',
     canActivate: [requirePermission('HR.LEAVE.VIEW')],
     loadComponent: () =>

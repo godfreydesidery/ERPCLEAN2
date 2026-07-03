@@ -143,6 +143,33 @@ export interface DisburseRequest {
   txnDate?: string;
 }
 
+// ── Payslips ───────────────────────────────────────────────────────────────────
+
+/**
+ * Read-only payslip snapshot generated off a posted payroll run + line.
+ * Money fields arrive as number|string on the wire — coerce with formatMoney()/+v, never string ops.
+ */
+export interface PayslipDto {
+  id: string;
+  uid: string;
+  companyId: string;
+  payrollRunId: string;
+  payrollLineId: string;
+  employeeId: string;
+  employeeName: string;
+  employeeNumber: string;
+  payslipNumber: string;
+  payDate: string;
+  grossAmount: number | string;
+  deductionAmount: number | string;
+  netAmount: number | string;
+  employerCostAmount: number | string;
+  ytdGross: number | string;
+  ytdPaye: number | string;
+  ytdNssfEmployee: number | string;
+  ytdNet: number | string;
+}
+
 // ── Leave Requests ─────────────────────────────────────────────────────────────
 
 export type LeaveRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
