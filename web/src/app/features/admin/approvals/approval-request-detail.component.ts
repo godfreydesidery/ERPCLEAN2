@@ -91,6 +91,20 @@ export class ApprovalRequestDetailComponent {
     return r ? documentTypeRoute(r.documentType, r.documentUid) : null;
   });
 
+  /**
+   * Best-effort friendly name for a step/decision actor id. The backend only enriches names for
+   * the request-level submitter/resolver (submittedByName/resolvedByName) — not per-step or
+   * per-decision actors. Match against those two known (id, name) pairs; otherwise return null so
+   * the template omits the value rather than ever rendering a raw numeric user id.
+   */
+  resolverName(userId: string | null): string | null {
+    const r = this.request();
+    if (!r || !userId) return null;
+    if (userId === r.submittedBy) return r.submittedByName;
+    if (r.resolvedBy && userId === r.resolvedBy) return r.resolvedByName;
+    return null;
+  }
+
   constructor() {
     queueMicrotask(() => this.init());
   }

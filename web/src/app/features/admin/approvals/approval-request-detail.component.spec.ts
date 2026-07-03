@@ -27,6 +27,8 @@ function makeRequest(overrides: Partial<ApprovalRequestDto> = {}): ApprovalReque
     uid: 'req-1',
     companyId: '10',
     branchId: '100',
+    branchName: 'Dar Es Salaam HQ',
+    branchCode: 'DSM-HQ',
     requestNumber: 'APR-000001',
     documentType: 'PURCHASE_ORDER',
     documentUid: 'PO-UID-1',
@@ -37,10 +39,12 @@ function makeRequest(overrides: Partial<ApprovalRequestDto> = {}): ApprovalReque
     sourcePolicyId: null,
     sourcePolicyUid: null,
     summary: null,
-    submittedBy: 'jdoe',
+    submittedBy: '42',
+    submittedByName: 'Jane Doe',
     submittedAt: '2026-07-01T10:00:00Z',
     resolvedAt: null,
     resolvedBy: null,
+    resolvedByName: null,
     steps: [],
     ...overrides,
   };
@@ -144,5 +148,147 @@ describe('ApprovalRequestDetailComponent — document type label + link', () => 
       fixture.nativeElement.querySelectorAll('a'),
     );
     expect(anchors.some((a) => a.getAttribute('href')?.includes('/admin/documents/uid'))).toBe(false);
+  });
+});
+
+describe('ApprovalRequestDetailComponent — submitter/decider/branch + step role name (GM/procurement/branch-manager UPR)', () => {
+  afterEach(() => { vi.clearAllTimers(); TestBed.resetTestingModule(); });
+
+  it('shows Submitted By, Decided By and Branch as friendly names, never a bare numeric id', async () => {
+    makeBed(
+      makeRequest({
+        status: 'APPROVED',
+        branchName: 'Arusha Branch',
+        branchCode: 'ARS-01',
+        submittedBy: '77',
+        submittedByName: 'Amina Hassan',
+        resolvedAt: '2026-07-02T09:00:00Z',
+        resolvedBy: '88',
+        resolvedByName: 'Godfrey Desidery',
+      }),
+    );
+    const fixture = TestBed.createComponent(ApprovalRequestDetailComponent);
+    fixture.componentRef.setInput('uid', 'req-1');
+    vi.runAllTimers();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const html: string = fixture.nativeElement.textContent;
+    expect(html).toContain('Arusha Branch');
+    expect(html).toContain('ARS-01');
+    expect(html).toContain('Amina Hassan');
+    expect(html).toContain('Godfrey Desidery');
+    expect(html).not.toContain('77');
+    expect(html).not.toContain('88');
+  });
+
+  it('does not show a Decided By field while the request is still pending', async () => {
+    makeBed(makeRequest({ status: 'PENDING', resolvedBy: null, resolvedByName: null, resolvedAt: null }));
+    const fixture = TestBed.createComponent(ApprovalRequestDetailComponent);
+    fixture.componentRef.setInput('uid', 'req-1');
+    vi.runAllTimers();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const html: string = fixture.nativeElement.textContent;
+    expect(html).not.toContain('Decided By');
+  });
+
+  it('falls back to an em dash when submitter/branch names are absent', async () => {
+    makeBed(makeRequest({ submittedByName: null, branchName: null, branchCode: null }));
+    const fixture = TestBed.createComponent(ApprovalRequestDetailComponent);
+    fixture.componentRef.setInput('uid', 'req-1');
+    vi.runAllTimers();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const html: string = fixture.nativeElement.textContent;
+    expect(html).toContain('—');
+  });
+
+  it('shows the step\'s friendly approverRoleName as the primary label, with the raw code as secondary text', async () => {
+    makeBed(
+      makeRequest({
+        steps: [
+          {
+            id: '1', uid: 'step-1', sequence: '1',
+            approverRoleCode: 'PROCUREMENT_MGR', approverRoleName: 'Procurement Manager',
+            status: 'PENDING', resolvedBy: null, resolvedAt: null, decisions: [],
+          },
+        ],
+      }),
+    );
+    const fixture = TestBed.createComponent(ApprovalRequestDetailComponent);
+    fixture.componentRef.setInput('uid', 'req-1');
+    vi.runAllTimers();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const html: string = fixture.nativeElement.textContent;
+    expect(html).toContain('Procurement Manager');
+    expect(html).toContain('PROCUREMENT_MGR');
+  });
+
+  it('falls back to the raw approverRoleCode when approverRoleName is not resolvable', async () => {
+    makeBed(
+      makeRequest({
+        steps: [
+          {
+            id: '1', uid: 'step-1', sequence: '1',
+            approverRoleCode: 'SOME_ROLE', approverRoleName: null,
+            status: 'PENDING', resolvedBy: null, resolvedAt: null, decisions: [],
+          },
+        ],
+      }),
+    );
+    const fixture = TestBed.createComponent(ApprovalRequestDetailComponent);
+    fixture.componentRef.setInput('uid', 'req-1');
+    vi.runAllTimers();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const html: string = fixture.nativeElement.textContent;
+    expect(html).toContain('SOME_ROLE');
+  });
+
+  it('resolverName() matches the request submitter/resolver ids and never leaks an unmatched id into the template', async () => {
+    makeBed(
+      makeRequest({
+        submittedBy: '42',
+        submittedByName: 'Jane Doe',
+        resolvedBy: '88',
+        resolvedByName: 'Godfrey Desidery',
+        steps: [
+          {
+            id: '1', uid: 'step-1', sequence: '1',
+            approverRoleCode: 'PROCUREMENT_MGR', approverRoleName: 'Procurement Manager',
+            status: 'APPROVED', resolvedBy: '88', resolvedAt: '2026-07-02T09:00:00Z',
+            decisions: [
+              {
+                id: 'd1', uid: 'dec-1', approvalRequestStepId: '1',
+                action: 'APPROVE', decidedBy: '88', decidedAt: '2026-07-02T09:00:00Z', comment: null,
+              },
+              {
+                id: 'd2', uid: 'dec-2', approvalRequestStepId: '1',
+                action: 'APPROVE', decidedBy: '999', decidedAt: '2026-07-02T09:05:00Z', comment: null,
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    const fixture = TestBed.createComponent(ApprovalRequestDetailComponent);
+    fixture.componentRef.setInput('uid', 'req-1');
+    vi.runAllTimers();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const comp = fixture.componentInstance;
+    expect(comp.resolverName('42')).toBe('Jane Doe');
+    expect(comp.resolverName('88')).toBe('Godfrey Desidery');
+    expect(comp.resolverName('999')).toBeNull();
+
+    const html: string = fixture.nativeElement.textContent;
+    expect(html).not.toContain('999');
   });
 });
