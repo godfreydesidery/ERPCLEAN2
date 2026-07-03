@@ -48,6 +48,13 @@ public record SalesOrderDto(
         Long billToAddressId,
         String shipToAddressText,
         String billToAddressText,
+        /**
+         * Nullable engine-derived approval status ({@code ApprovalRequestStatus.name()}) —
+         * null means the order has never been submitted for approval. Resolved at read time by
+         * the service via {@code ApprovalEngine.getApprovalState("SALES_ORDER", uid, companyId)};
+         * nothing is persisted on the SalesOrder entity itself (the engine is the source of truth).
+         */
+        String approvalStatus,
         List<SalesOrderLineDto> lines
 ) {
     /**
@@ -55,7 +62,7 @@ public record SalesOrderDto(
      */
     public static SalesOrderDto from(SalesOrder o, List<SalesOrderLineDto> lines,
                                      String customerName, String customerCode, String agentName,
-                                     String branchName, String branchCode) {
+                                     String branchName, String branchCode, String approvalStatus) {
         return new SalesOrderDto(
                 o.getId(), o.getUid(),
                 o.getCompanyId(), o.getBranchId(), branchName, branchCode,
@@ -75,6 +82,7 @@ public record SalesOrderDto(
                 o.getNotes(),
                 o.getShipToAddressId(), o.getBillToAddressId(),
                 o.getShipToAddressText(), o.getBillToAddressText(),
+                approvalStatus,
                 lines);
     }
 }

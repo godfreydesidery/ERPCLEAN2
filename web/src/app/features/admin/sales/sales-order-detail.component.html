@@ -33,6 +33,31 @@
                       [class.status-tag--neutral]="o.status === 'CLOSED'">
                   {{ o.status }}
                 </span>
+                @if (o.approvalStatus === 'PENDING') {
+                  <span class="status-tag status-tag--warn" aria-label="Awaiting approval">
+                    <i class="bi bi-hourglass-split me-1" aria-hidden="true"></i>Awaiting approval
+                  </span>
+                }
+                @if (o.approvalStatus === 'APPROVED') {
+                  <span class="status-tag status-tag--ok" aria-label="Approved">
+                    <i class="bi bi-check-circle me-1" aria-hidden="true"></i>Approved
+                  </span>
+                }
+                @if (o.approvalStatus === 'REJECTED') {
+                  <span class="status-tag status-tag--danger" aria-label="Rejected">
+                    <i class="bi bi-x-circle me-1" aria-hidden="true"></i>Rejected
+                  </span>
+                }
+                @if (o.approvalStatus === 'CANCELLED') {
+                  <span class="status-tag status-tag--neutral" aria-label="Approval cancelled">
+                    <i class="bi bi-slash-circle me-1" aria-hidden="true"></i>Approval cancelled
+                  </span>
+                }
+                @if (o.approvalStatus === 'RECALLED') {
+                  <span class="status-tag status-tag--neutral" aria-label="Approval withdrawn">
+                    <i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i>Approval withdrawn
+                  </span>
+                }
                 @if (o.sourceQuotationUid) {
                   <a class="small text-muted"
                      [routerLink]="['/admin/quotations/uid', o.sourceQuotationUid]">
@@ -111,6 +136,29 @@
 
           <!-- Action buttons -->
           <div class="d-flex gap-2 mt-3 flex-wrap align-items-start">
+            @if (canSubmitForApprovalNow()) {
+              <button type="button" class="btn btn-primary"
+                      [disabled]="submittingForApproval()"
+                      (click)="submitForApproval()">
+                @if (submittingForApproval()) {
+                  <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                } @else {
+                  <i class="bi bi-send me-1" aria-hidden="true"></i>
+                }
+                Submit for Approval
+              </button>
+              @if (submitForApprovalError(); as msg) {
+                <span class="text-danger small align-self-center" role="alert">{{ msg }}</span>
+              }
+            }
+
+            @if (approvalClosed()) {
+              <output class="small text-muted align-self-center">
+                <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
+                This order's approval is closed. Cancel it and raise a new order to submit for approval again.
+              </output>
+            }
+
             @if (isDraft() && canConfirm()) {
               <button type="button" class="btn btn-success"
                       [disabled]="!canConfirmNow() || confirming()"
@@ -119,6 +167,9 @@
                 <i class="bi bi-check-circle me-1" aria-hidden="true"></i>
                 Confirm Order
               </button>
+              @if (isApprovalPending()) {
+                <span class="small text-muted align-self-center">Awaiting approval before it can be confirmed.</span>
+              }
               @if (confirmError(); as msg) {
                 <span class="text-danger small align-self-center" role="alert">{{ msg }}</span>
               }
@@ -306,7 +357,7 @@
         <p class="text-danger" role="alert">Could not load order lines.</p>
       }
       @default {
-        @if (isDraft() && canCreate()) {
+        @if (canEditLines()) {
           <div class="erp-card erp-card--overflow-visible mb-3">
             <div class="erp-card__head"><h3>Add Line</h3></div>
             <div class="erp-card__body">
@@ -431,7 +482,7 @@
         @if (lines().length === 0) {
           <div class="erp-empty">
             <i class="bi bi-list-ul"></i>
-            No lines yet.@if (isDraft() && canCreate()) { Add a line above.}
+            No lines yet.@if (canEditLines()) { Add a line above.}
           </div>
         } @else {
           <div class="erp-table-wrap">
@@ -451,7 +502,7 @@
                   <th scope="col" class="num">Disc %</th>
                   <th scope="col" class="num">Net</th>
                   <th scope="col" class="num">Gross</th>
-                  @if (isDraft() && canCreate()) {
+                  @if (canEditLines()) {
                     <th scope="col"><span class="visually-hidden">Actions</span></th>
                   }
                 </tr>
@@ -477,7 +528,7 @@
                     <td class="num">{{ line.lineDiscountPercent ? (+line.lineDiscountPercent | number:'1.2-2') : '—' }}</td>
                     <td class="num">{{ +line.netAmount | number:'1.2-2' }}</td>
                     <td class="num">{{ +line.grossAmount | number:'1.2-2' }}</td>
-                    @if (isDraft() && canCreate()) {
+                    @if (canEditLines()) {
                       <td>
                         <button type="button" class="btn btn-sm btn-outline-danger"
                                 [disabled]="rowBusyLineUid() === line.uid"

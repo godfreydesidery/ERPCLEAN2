@@ -241,6 +241,7 @@
                   <th scope="col">Agent</th>
                   <th scope="col">Branch</th>
                   <th scope="col">Status</th>
+                  <th scope="col">Approval</th>
                   <th scope="col">Order Date</th>
                   <th scope="col" class="num">Total (gross)</th>
                   <th scope="col"><span class="visually-hidden">Actions</span></th>
@@ -272,6 +273,21 @@
                             [class.status-tag--neutral]="o.status === 'CLOSED'">
                         {{ o.status }}
                       </span>
+                    </td>
+                    <td>
+                      @if (o.approvalStatus === 'PENDING') {
+                        <span class="status-tag status-tag--warn" aria-label="Awaiting approval">Awaiting approval</span>
+                      } @else if (o.approvalStatus === 'APPROVED') {
+                        <span class="status-tag status-tag--ok" aria-label="Approved">Approved</span>
+                      } @else if (o.approvalStatus === 'REJECTED') {
+                        <span class="status-tag status-tag--danger" aria-label="Rejected">Rejected</span>
+                      } @else if (o.approvalStatus === 'CANCELLED') {
+                        <span class="status-tag status-tag--neutral" aria-label="Approval cancelled">Approval cancelled</span>
+                      } @else if (o.approvalStatus === 'RECALLED') {
+                        <span class="status-tag status-tag--neutral" aria-label="Approval withdrawn">Approval withdrawn</span>
+                      } @else {
+                        <span class="text-muted small" aria-hidden="true">—</span>
+                      }
                     </td>
                     <td>{{ o.orderDate }}</td>
                     <td class="num">{{ o.currency }} {{ +o.grossTotalAmount | number:'1.2-2' }}</td>

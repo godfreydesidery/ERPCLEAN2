@@ -24,6 +24,18 @@ export type SalesOrderStatus =
   | 'CLOSED'
   | 'CANCELLED';
 
+/**
+ * Sales-order approval-gate status (approval engine, submit-for-approval flow).
+ * `null`/absent when the order was never submitted for approval. Confirming an order whose
+ * approval is PENDING or REJECTED is rejected by the backend with a friendly error.
+ */
+export type SalesOrderApprovalStatus =
+  | 'PENDING'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'RECALLED'
+  | 'CANCELLED';
+
 export type DeliveryStatus =
   | 'DRAFT'
   | 'CONFIRMED'
@@ -146,6 +158,11 @@ export interface SalesOrderDto {
   cancelReason: string | null;
   notes: string | null;
   lines: SalesOrderLineDto[];
+  /**
+   * Approval gate status, reconciled from the approval engine on every fetch. `null`/absent
+   * when the order was never submitted for approval.
+   */
+  approvalStatus?: SalesOrderApprovalStatus | null;
 }
 
 // ── DeliveryLineDto ───────────────────────────────────────────────────────────────

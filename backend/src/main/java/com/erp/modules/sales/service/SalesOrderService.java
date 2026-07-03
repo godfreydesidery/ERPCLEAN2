@@ -26,6 +26,14 @@ public interface SalesOrderService {
     /** Transitions DRAFT → CONFIRMED; reserves stock for all lines. */
     SalesOrderDto confirm(String orderUid);
 
+    /**
+     * Submits a DRAFT order to the approvals engine (document type {@code SALES_ORDER}).
+     * Idempotent: a re-call while a PENDING request already exists is a no-op that just returns
+     * the current dto. Nothing is persisted on the SalesOrder entity — the engine is the source
+     * of truth for approval state (surfaced back via {@link SalesOrderDto#approvalStatus()}).
+     */
+    SalesOrderDto submitForApproval(String orderUid);
+
     /** Transitions to CANCELLED; releases remaining reservations. */
     void cancel(String orderUid, CancelSalesOrderRequest req);
 
