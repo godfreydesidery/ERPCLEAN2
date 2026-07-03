@@ -209,7 +209,7 @@ The dashboard is a composite view of key performance indicators drawn from Finan
 **Filters at the top of the page:**
 
 - **Company** — a selector appears only if your organisation has more than one company; switching company reloads its branches and re-fetches the dashboard. With a single company it is selected automatically and no selector is shown.
-- **Branch** — filter data to a specific branch (chosen as `code — name`); the dashboard re-fetches as soon as you change it.
+- **Branch** — filter data to a specific branch (chosen as `code — name`); the dashboard re-fetches as soon as you change it. Only the **CRM pipeline panel** and the **Sales by Branch panel** actually vary by branch — the Finance, Cash Position, Working Capital, and Inventory panels are anchored to the GL at company level and show the same figures regardless of which branch is selected.
 - **From / To dates** — the reporting date range. **From** defaults to the first day of the current month and **To** defaults to today. Change the dates and click the circular **refresh** button (the arrow-clockwise icon beside the To date) to re-fetch all panels.
 
 ---
@@ -230,9 +230,11 @@ Finance director Gideon Moshi logs in, navigates to **Analytics › Dashboard** 
 
 6. **CRM panel** — Pipeline by Stage shows 15 open deals across five stages; Win-Rate KPIs show Won, Lost, Win Rate 62%, and Avg Cycle (days); the Forecast block shows Open Opps and a Weighted Value of TZS 29,340,000. He uses the heading drill icon to open the pipeline dashboard.
 
-7. Gideon changes the **Branch** to `Arusha Branch`. The dashboard re-fetches immediately on the branch change — all panels reload and show Arusha-scoped figures. (Changing the **From / To** dates instead requires clicking the refresh button to re-fetch.)
+7. **Sales by Branch panel** — with **Branch** still on "All branches", the table lists every branch in descending order of sales: `DSM Main` leads with TZS 5,120,000 across 34 finalised invoices, followed by `Arusha Branch` with TZS 2,890,000 across 19 invoices and the remaining branches, with a **Total** row of TZS 9,715,000 across 61 invoices. (This total is sourced from finalised sales invoices, so it need not exactly match the Finance panel's GL-derived Revenue figure above.) Gideon clicks the drill icon in the **Sales by Branch** heading — this opens the sales invoices list.
 
-8. He selects format **Excel** in the export dropdown and clicks **Download**. File `dashboard.xlsx` downloads with the currently visible panel data. (Requires `BI.EXPORT`.)
+8. Gideon changes the **Branch** to `Arusha Branch`. The dashboard re-fetches immediately on the branch change. Only the **CRM panel** and the **Sales by Branch panel** actually vary by branch — the Sales by Branch table now shows a single row, for `Arusha Branch` only; the Finance, Cash Position, Working Capital, and Inventory panels stay company-level and show the same figures as before. (Changing the **From / To** dates instead requires clicking the refresh button to re-fetch.)
+
+9. He selects format **Excel** in the export dropdown and clicks **Download**. File `dashboard.xlsx` downloads with the currently visible panel data. (Requires `BI.EXPORT`.)
 
 ---
 
@@ -276,11 +278,19 @@ Each KPI panel on the dashboard is a self-contained summary of one operational o
 
 - Bar charts showing the last 12 periods of revenue and net profit. Each bar represents one fiscal period.
 
+**Sales by Branch panel (requires `BI.FINANCE.VIEW`):**
+
+- A table of finalised sales invoices for the selected date range, broken down by branch: **Branch** (shown as `code — name`), **Sales** (total invoiced value in the company's currency), and **Invoices** (count of finalised invoices), sorted with the highest-selling branch first. A **Total** footer row sums the sales value and invoice count across all rows shown.
+- This is the one finance-domain panel that genuinely honours the **Branch** filter at the top of the page: with the filter left on "All branches" the table shows the full per-branch breakdown; selecting a single branch narrows the table to that branch's row only. (The other finance panels above stay company-level regardless of the Branch filter — see *Filters at the top of the page*.)
+- Only **FINALISED** invoices count; draft or voided invoices are excluded.
+- If no invoices were finalised in the period, the panel shows *No finalised invoices for this period.*
+- The drill icon in the panel heading opens the sales invoices list (**Sales › Invoices**, `/admin/sales-invoices`).
+
 ---
 
 ### Drill-Through
 
-Each panel offers one or more drill links to the relevant detail screen: a small drill icon in the panel heading (Finance → Income Statement, Cash Position → Cash Accounts, Inventory → Stock Valuation, CRM → Pipeline) plus inline text links inside the panels (**View TB**, **View Receivables**, **View Payables**). Clicking a drill link takes you to the live module (AR, AP, GL, Inventory, CRM) with your current company and branch context preserved.
+Each panel offers one or more drill links to the relevant detail screen: a small drill icon in the panel heading (Finance → Income Statement, Cash Position → Cash Accounts, Inventory → Stock Valuation, CRM → Pipeline, Sales by Branch → Sales Invoices) plus inline text links inside the panels (**View TB**, **View Receivables**, **View Payables**). Clicking a drill link takes you to the live module (AR, AP, GL, Inventory, CRM, Sales) with your current company and branch context preserved.
 
 The target screen has its own permission guard. If you do not hold the necessary permission for the target screen, you will be redirected to an access-denied page.
 

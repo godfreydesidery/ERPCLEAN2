@@ -149,7 +149,7 @@ Money is currency-aware from the first column (ADR-0005). The principle and the 
 - Each **company** has a configurable **base (functional) currency** (default TZS), read from config — never a hard-coded literal.
 - **The GL posts in base currency only.** When a document is in a foreign currency, it stores the document-currency amount, the **base-currency equivalent**, and the **exchange rate used**, captured at transaction time and immutable thereafter (a posted historical amount is never recomputed when rates move). The GL receives the base-currency figures; the trial balance and statements are base-currency (ADR-0013 D-9, ADR-0005 D-5).
 - Mixed-currency arithmetic is illegal at the type level: `Money.plus`/`minus`/`compareTo` throw on a currency mismatch. A "total balance" across currencies is not a scalar `SUM` — it is per-currency balances plus an explicit, rate-stamped conversion.
-- The full FX engine (effective-dated rate master, conversion, realized FX on settlement, period-end **unrealized** revaluation runs) is built (ADR-0036, V77–V80); the recording shape ADR-0005 reserved meant adding it was additive, not a migration of live posting tables.
+- The full FX engine (effective-dated rate master, conversion, realized FX on settlement, period-end **unrealized** revaluation runs) is built (ADR-0036, V61–V65); the recording shape ADR-0005 reserved meant adding it was additive, not a migration of live posting tables.
 
 On the wire, money is an object — `{ "amount": "1500.0000", "currency": "TZS", "display": "TZS 1,500.00" }` — with `amount` as a **string** (exact end-to-end; JSON numbers would lose precision in JavaScript). The Angular type is `interface Money { amount: string; currency: string; display?: string; }`.
 
@@ -167,7 +167,7 @@ This keeps `ModuleBoundaryTest` green (no module→module edge), keeps each modu
 
 ## 9. Persistence & migrations
 
-- **Flyway** owns every schema change; `ddl-auto=validate` (never `update`). Migrations are sequential and additive once shipped — `V1` (IAM baseline) through `V83`. A new module lands as a new `V<n>` file and never edits a shipped one.
+- **Flyway** owns every schema change; `ddl-auto=validate` (never `update`). Migrations are sequential and additive once shipped — `V1` (IAM baseline) through `V78`. A new module lands as a new `V<n>` file and never edits a shipped one.
 - **Optimistic locking** (`@Version`) on mutable aggregates.
 - **Append-only** posting tables (the GL, `stock_movements`, `audit_log`) — corrections are new rows.
 - **PostgreSQL-native where it pays**: `JSONB` for audit detail / tax summary / event payload; partial and expression indexes (the outbox `PENDING` index, the default-branch uniques `WHERE is_default`); `NUMERIC` for money; row-locked `code_sequence` for concurrency-safe document numbering.

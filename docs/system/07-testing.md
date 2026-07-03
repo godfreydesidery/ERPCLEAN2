@@ -42,6 +42,18 @@ Two ArchUnit gates run in this fast phase and **fail the build** on violation:
   endpoints (see [04-security.md](04-security.md) §5). This makes deny-by-default a build
   guarantee.
 
+Two further surefire permission-parity guards run in the same fast phase and complete the parity
+chain (reachable → guard parity → seeded → read-closure):
+
+- **`PermissionCodesSeededTest`** — fails the build if any `@perm` gate references a permission
+  code the repeatable seed (`R__seed_permissions.sql`) does not define (a **phantom** code,
+  invisible to root but broken for everyone else).
+- **`RolePermissionClosureTest`** (ADR-0047) — asserts the screen-read-closure manifest
+  (`backend/src/main/resources/security/screen-read-closure.json`) stays honest against the live
+  controller gates: each declared read's gate-form and code equal the real `@PreAuthorize`, every
+  strict required read is seeded (so a role *can* be composed to satisfy it), and no manifest code
+  is a phantom. No Docker; it reuses the seeded-codes scanner.
+
 This is the **required** gate in `backend-ci.yml`'s `fast-check` job — fast, no Docker.
 
 ## 3. Backend — integration tests (Testcontainers)

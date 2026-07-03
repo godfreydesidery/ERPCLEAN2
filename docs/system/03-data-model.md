@@ -1,6 +1,6 @@
 # Data Model
 
-A readable reference to the ERPCLEAN2 PostgreSQL schema: the cross-cutting models (identity, money, multi-tenancy, append-only posting, soft-delete) and a per-domain summary of the main tables. This is a map, not a DDL dump — the authoritative DDL is the Flyway migrations under `backend/src/main/resources/db/migration/` (`V1` … `V83`). Where the prose in the repo's `DATA-MODEL.md` and the shipped SQL disagree, **the SQL is ground truth**; the table names below follow the shipped migrations.
+A readable reference to the ERPCLEAN2 PostgreSQL schema: the cross-cutting models (identity, money, multi-tenancy, append-only posting, soft-delete) and a per-domain summary of the main tables. This is a map, not a DDL dump — the authoritative DDL is the Flyway migrations under `backend/src/main/resources/db/migration/` (`V1` … `V78`). Where the prose in the repo's `DATA-MODEL.md` and the shipped SQL disagree, **the SQL is ground truth**; the table names below follow the shipped migrations.
 
 ## Naming conventions (the real, shipped convention)
 
@@ -30,7 +30,7 @@ A monetary value is an inseparable `(amount, currency)` pair — never a bare nu
 
 - **Storage.** A `Money` `@Embeddable` materialises a column pair: `<field>_amount NUMERIC(19,4)` + `<field>_currency CHAR(3)` (ISO 4217 code), both NULL or both NOT NULL together. **Exchange rates** are `NUMERIC(19,8)`. Never `float`/`double`.
 - **Base currency.** Each `companies` row has a configurable base (functional) currency (default TZS), read from config — never a hard-coded literal. The GL and all statements are in base currency.
-- **Foreign currency.** A document in a non-base currency also stores the **base-currency equivalent** amount and the **exchange rate used** (the base triple), captured at transaction time and **immutable** thereafter — a posted historical amount is never recomputed when rates move (append-only discipline). The FX engine (rate master, conversion, revaluation) lives in `currencies` / `currency_rates` and the FX revaluation runs (ADR-0036, V77–V80).
+- **Foreign currency.** A document in a non-base currency also stores the **base-currency equivalent** amount and the **exchange rate used** (the base triple), captured at transaction time and **immutable** thereafter — a posted historical amount is never recomputed when rates move (append-only discipline). The FX engine (rate master, conversion, revaluation) lives in `currencies` / `currency_rates` and the FX revaluation runs (ADR-0036, V61–V65).
 - **Wire format.** Money is an object — `{ "amount": "1500.0000", "currency": "TZS", "display": "TZS 1,500.00" }` — with `amount` as a **string** (exact end-to-end). Mixed-currency arithmetic throws; a cross-currency "total" is per-currency balances plus an explicit converted roll-up, never a raw `SUM`.
 
 ## Multi-tenancy — Organisation / Company / Branch
@@ -69,6 +69,7 @@ The list below covers the main tables per domain. Owned child tables (lines, all
 | `role_permission` | junction role ⇄ permission |
 | `user_role` | role grant scoped to company, optionally one branch (NULL = all) |
 | `user_branch` | branch assignment; `uq_user_branch_default` (≤1 default/user) |
+| `user_company` | authoritative company-membership junction (ADR-0046, `V77`); an active row is the assign-company-first prerequisite for granting any role or branch in that company |
 | `refresh_tokens` | hashed, single-use, rotated; reuse → revoke chain |
 | `audit_logs` | append-only action trail; `detail` JSONB; no UPDATE/DELETE |
 
@@ -102,7 +103,7 @@ The list below covers the main tables per domain. Owned child tables (lines, all
 | `pricing_rules` | advanced pricing |
 | blanket / standing orders | recurring + committed-volume arrangements |
 
-### POS (V43, V82, V83)
+### POS (V37, V70, V72)
 
 | Table | Purpose |
 |---|---|
@@ -183,7 +184,7 @@ The list below covers the main tables per domain. Owned child tables (lines, all
 | `wht_types` | WHT rate master |
 | WHT register | withheld-amount register / certificates |
 
-### FX / Multi-currency (V77–V80)
+### FX / Multi-currency (V61–V65)
 
 | Table | Purpose |
 |---|---|
@@ -256,4 +257,4 @@ The list below covers the main tables per domain. Owned child tables (lines, all
 
 ## Migration ordering
 
-Migrations are strictly sequential and additive once shipped — IAM (`V1`) is the baseline, and each module lands as a new `V<n>` file (`V2` Parties … `V83` POS permissions). A shipped migration is never edited; a correction is a new migration on top. Every module depends only on already-frozen tables (e.g. all FKs to `companies`/`branches`/`app_users` resolve against the frozen `V1` baseline). The current head is `V83`.
+Migrations are strictly sequential and additive once shipped — IAM (`V1`) is the baseline, and each module lands as a new `V<n>` file (`V2` Parties … `V77` `user_company` … `V78` the `sales_invoices` performance index). A shipped migration is never edited; a correction is a new migration on top. Every module depends only on already-frozen tables (e.g. all FKs to `companies`/`branches`/`app_users` resolve against the frozen `V1` baseline). The current head is `V78`.

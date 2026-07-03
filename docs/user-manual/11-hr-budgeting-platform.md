@@ -65,14 +65,14 @@ The list shows employee number, name, job title, department name, and employment
 
 1. Click **New Employee**.
 2. Enter **First Name**, **Last Name**, and **Hire Date**.
-3. Optionally fill in **Job Title**, **Gender**, **National ID**, **Department ID**, and **Branch ID**. The **Department ID** and **Branch ID** fields are free-text numeric-id entries (each shows the placeholder "Numeric id"), not name pickers — obtain the ids from your administrator.
+3. Optionally fill in **Job Title**, **Gender**, **National ID**, **Department**, and **Branch**. **Department** and **Branch** are dropdowns — pick the department and branch by name from the lists (each defaults to "— none —" to leave unset). Departments must be set up first (see **Departments** above) for them to appear in the list.
 4. Click **Create Employee**.
 
 > TIN, NSSF number, HESLB number, and date of birth are not part of the create form; they are added later on the employee detail/edit page.
 
 The system assigns an **employee number** automatically (format `EMP-000001`). The employee's status is set to **ACTIVE** on creation.
 
-**Viewing and editing an employee:** click the **Open** action on the employee row to open the detail page. If you hold `HR.EMPLOYEE.MANAGE`, you can edit the employee's fields and save changes.
+**Viewing and editing an employee:** click the **Open** action on the employee row to open the detail page. If you hold `HR.EMPLOYEE.MANAGE`, you can edit the employee's fields — including **Department** and **Branch**, both dropdowns as on the create form — and save changes.
 
 **Archiving an employee:** on the employee detail page, click **Archive**. This changes the status to **TERMINATED** and marks the record inactive. The employee record is retained for historical and payroll purposes. There is no way to restore an archived employee through the UI — contact your system administrator if this is needed.
 

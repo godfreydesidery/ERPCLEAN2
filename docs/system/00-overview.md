@@ -62,7 +62,7 @@ Every module obeys the same handful of rules. They are described fully in the co
 |---|---|
 | Backend runtime | Spring Boot 3.3.5 · Java 21 |
 | Persistence | Hibernate 6 (JPA) · Spring Data · PostgreSQL 15+ |
-| Schema management | Flyway (`ddl-auto=validate`; migrations `V1` … `V83`) |
+| Schema management | Flyway (`ddl-auto=validate`; migrations `V1` … `V78`) |
 | Authentication | In-house JWT, **RS256** signing, refresh-token rotation; Spring Security OAuth2 resource server |
 | Authorization | RBAC by permission code, enforced with `@PreAuthorize` and a `@perm` expression bean |
 | Web client | Angular 21 · standalone components (no NgModules) · signals · TypeScript strict |
