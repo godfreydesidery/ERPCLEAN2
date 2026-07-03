@@ -188,10 +188,6 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
                                       RequestContext.Principal principal, List<ComponentCostLeg> costLegs) {
         int count = 0;
         for (IssueComponentLine line : lines) {
-            if (line.qty() == null || line.qty().compareTo(BigDecimal.ZERO) <= 0) {
-                throw new IllegalArgumentException(
-                        "The quantity to issue for component " + line.componentUid() + " must be greater than zero.");
-            }
             WorkOrderComponent comp = compLines.stream()
                     .filter(c -> c.getUid().equals(line.componentUid()))
                     .findFirst()
@@ -200,6 +196,11 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
             if (comp.getStatus() == ComponentLineStatus.ISSUED) {
                 throw new IllegalStateException(
                         "Component " + comp.getComponentProductCode() + " has already been fully issued.");
+            }
+            if (line.qty() == null || line.qty().compareTo(BigDecimal.ZERO) <= 0) {
+                throw new IllegalArgumentException(
+                        "The quantity to issue for component " + comp.getComponentProductCode()
+                                + " must be greater than zero.");
             }
             issueOneLine(wo, comp, line.qty(), locationId, principal, costLegs);
             count++;
