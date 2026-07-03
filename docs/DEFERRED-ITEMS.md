@@ -6,6 +6,24 @@ decision (ADR) and/or a schema migration, so they are tracked here rather than r
 > Process: before implementing any of these, present the proposed approach + DDL + version number
 > to the owner for approval (per the migration-approval standing rule), and write the ADR.
 
+## Migration status (2026-07-04)
+
+Draft migration SQL for the schema-bound items lives in
+[proposed-migrations/](proposed-migrations/). Build order (owner-approved): **D-4 → D-1 → D-6 → D-7 → D-8**.
+
+| Item | Migration? | Version | State |
+|------|-----------|---------|-------|
+| D-1 · multi-unit pricing | yes (2) | `V80`, `V81` (provisional) | draft in proposed-migrations |
+| D-2 · GRN batch/serial reversal | **no** | — | code-only |
+| D-3 · requisition Convert | **no** | — | code-only — `purchase_requisitions.converted_to_uid`/`converted_to_type` already exist (V32) |
+| D-4 · SO auto-threshold | yes (1) | **`V79`** | **built (pending review)** — `V79__sales_settings.sql` in the active folder |
+| D-5 · default agent to user | **no** | — | code-only — `agents.app_user_id` **already exists** (the old note below is wrong) |
+| D-6 · EFD/fiscal receipt | yes (1) | `V82` (provisional) | draft |
+| D-7 · cash count + petty cash | yes (2) | `V83`, `V84` (provisional) | draft |
+| D-8 · van reconciliation | yes (1) | `V85` (provisional) | draft — reduced: `stock_locations.location_type` already includes `VAN`, so only the reconciliation table + an `agent_id` link |
+
+Provisional versions shift if built out of order or if other migrations land first — re-verify next-free vs `origin/develop` at build time.
+
 ---
 
 ## D-1 · Per-pack / multi-unit pricing (weight/volume goods)
@@ -56,7 +74,7 @@ handler symmetrically with the forward path:
 
 ## D-3 · Requisition "Convert" that actually creates the RFQ / PO
 
-**Deferred:** 2026-07-03 (round-2 persona interviews — Yusuf). **Effort:** M. **Needs:** design (ADR); likely no schema.
+**Deferred:** 2026-07-03 (round-2 persona interviews — Yusuf). **Effort:** M. **Needs:** design (ADR); **no migration** (confirmed).
 
 **The gap.** The purchase-requisition **Convert** action (`RequisitionServiceImpl.convert`) sets
 the requisition status to `CONVERTED` and returns a success toast, **but never creates the target
@@ -67,9 +85,8 @@ document does not exist.
 supplier quote) or a PO directly? Either way it needs a **supplier** (Convert must prompt for one,
 or convert per-supplier) and a **line mapping** (requisition lines → RFQ/PO lines with qty + UoM).
 Create the target document in the same TX, set `convertedToUid`, and only then flip status +
-toast. Add a service test asserting the target doc is actually persisted. The RFQ/PO tables already
-exist, so this is likely **no migration** — but confirm `convertedToUid` columns exist on both
-sides before starting.
+toast. Add a service test asserting the target doc is actually persisted. **No migration** — the
+RFQ/PO tables and `purchase_requisitions.converted_to_uid`/`converted_to_type` already exist (V32).
 
 **Key files:** `RequisitionServiceImpl.convert`, `RfqServiceImpl` / `PurchaseOrderServiceImpl`
 (create paths), the requisition detail web component (Convert button + dead link).
@@ -78,7 +95,10 @@ sides before starting.
 
 ## D-4 · Sales-order approval — automatic threshold gate
 
-**Deferred:** 2026-07-03 (round-2 persona interviews — Bakari/Halima/Emanuel). **Effort:** M. **Needs:** migration + ADR.
+**Deferred:** 2026-07-03. **Effort:** M. **Needs:** migration (`V79`) + ADR.
+**Status (2026-07-04): BUILT, pending owner review** — `V79__sales_settings.sql` + `SalesSettings` +
+`SalesApprovalGate` wired into `SalesOrderServiceImpl.doConfirm` + a Sales Settings UI, on branch
+`feat/sales-order-approval-threshold` (not yet committed/merged).
 
 **The gap.** A **manual, no-schema** sales-order approval flow shipped this session (a
 "Submit for approval" action routes to the generic approval engine as document type `SALES_ORDER`;
@@ -100,16 +120,16 @@ approved instead of relying on a manual click.
 
 ## D-5 · Default the sales agent to the logged-in user
 
-**Deferred:** 2026-07-03 (round-2 persona interviews — Hamisi). **Effort:** S–M. **Needs:** migration + design.
+**Deferred:** 2026-07-03 (round-2 persona interviews — Hamisi). **Effort:** S. **Needs:** **NO migration** — code-only.
 
 **The gap.** Route agents want a new sales order / invoice to pre-fill the **agent = themselves**.
-There is **no link between `app_user` and `agent`** in the schema (`app_user` has no `agent_id`;
-`agent` has no `user_id`), so the app cannot resolve "the current user's agent record" to default it.
 
-**Way forward (outline).** Add a nullable `user_id` on `agent` (or `agent_id` on `app_user`) with a
-uniqueness/backfill decision (an agent maps to at most one login; some users are not agents). On new
-SO/invoice, if the current user has a linked agent, pre-select it (still editable). Expand→backfill→
-constrain across migrations per the durable-DB rules.
+**Correction (2026-07-04):** the schema **already has the link** — `agents.app_user_id` exists (the
+original note claiming "no link" was wrong). So this is **code-only, no migration**: (1) populate
+`app_user_id` when an agent is created/linked to a login, and (2) on new SO/invoice, resolve the
+current user's agent via `app_user_id` and pre-select it (still editable). A uniqueness guard (one
+login ↔ at most one agent) can be enforced in code, or later as an additive partial unique index if
+wanted.
 
 **Key files:** `Agent` entity + migration, `SalesOrderServiceImpl.create` / `SalesInvoiceServiceImpl.create`
 (default resolution), the SO/invoice create web forms.
@@ -150,15 +170,18 @@ cash & bank module and reporting.
 
 ## D-8 · Van-stock reconciliation (route sales)
 
-**Deferred:** 2026-07-03 (round-2 persona interviews — Hamisi). **Effort:** L. **Needs:** ADR + migration.
+**Deferred:** 2026-07-03 (round-2 persona interviews — Hamisi). **Effort:** L. **Needs:** ADR + migration (`V85`, reduced).
 
 **The gap.** Route agents load stock onto a van, sell off it on the round, and must **reconcile van
-stock** (loaded − sold − returned = on-van) at day end. There is no mobile/van stock location model
-or reconciliation flow.
+stock** (loaded − sold − returned = on-van) at day end. There is no reconciliation flow.
 
-**Way forward (outline).** Model the van as a (mobile) stock location per agent; load = transfer to
-van, route sales issue from the van location, day-end reconciliation posts variances. Integrates
-stock + sales + the route module.
+**Correction (2026-07-04):** `stock_locations.location_type` **already includes `VAN`**, so no
+location-type migration is needed — the only new schema (proposed `V85`) is the reconciliation
+session table (+lines) and an optional `stock_locations.agent_id` link.
+
+**Way forward (outline).** Use a VAN stock location per agent; load = transfer to van, route sales
+issue from the van location, day-end reconciliation posts variances. Integrates stock + sales + the
+route module.
 
 **Key files:** stock location model (van type), `StockTransfer*`, route-sales issue path, new
 van-reconciliation service + web screen.
