@@ -42,4 +42,12 @@ public interface BranchRepository extends JpaRepository<Branch, Long> {
      * acquireFromBill / transfer (tenant-isolation site 2 &amp; 3).
      */
     boolean existsByIdAndCompany_Id(Long id, Long companyId);
+
+    /**
+     * Company-scoped PK lookup. Tenant-safe finder for a service resolving a branch by the id
+     * carried on an already-scoped entity (e.g. {@code order.getBranchId()}) — avoids a bare
+     * {@code findById}, which {@code TenantScopingRulesTest} flags as confused-deputy-prone. Uses
+     * the {@code Company_Id} underscore escape to traverse the {@code @ManyToOne Company}.
+     */
+    Optional<Branch> findByIdAndCompany_Id(Long id, Long companyId);
 }

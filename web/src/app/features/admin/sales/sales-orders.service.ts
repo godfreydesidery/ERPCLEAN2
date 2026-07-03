@@ -147,6 +147,15 @@ export class SalesOrdersService {
     return this.http.put<void>(`${this.orderBase}/uid/${uid}/confirm`, {});
   }
 
+  /**
+   * Submits a DRAFT order into the approval engine (approval_status → PENDING, or APPROVED when
+   * auto-approved). Confirming an order whose approval is PENDING or REJECTED is rejected by the
+   * backend with a friendly error.
+   */
+  submitForApproval(uid: string): Observable<SalesOrderDto> {
+    return this.http.put<SalesOrderDto>(`${this.orderBase}/uid/${uid}/submit-for-approval`, {});
+  }
+
   cancelOrder(uid: string, request?: CancelSalesOrderRequest): Observable<void> {
     return this.http.put<void>(`${this.orderBase}/uid/${uid}/cancel`, request ?? {});
   }

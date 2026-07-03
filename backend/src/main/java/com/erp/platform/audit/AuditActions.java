@@ -211,6 +211,7 @@ public final class AuditActions {
     public static final String SO_CONFIRM         = "SALES.ORDER.CONFIRM";
     public static final String SO_CANCEL          = "SALES.ORDER.CANCEL";
     public static final String SO_SET_AGENT       = "SALES.ORDER.SET_AGENT";
+    public static final String SO_SUBMIT_FOR_APPROVAL = "SALES.ORDER.SUBMIT_FOR_APPROVAL";
     public static final String DELIVERY_CREATE    = "SALES.DELIVERY.CREATE";
     public static final String DELIVERY_INVOICE   = "SALES.DELIVERY.INVOICE";
     public static final String RETURN_CREATE      = "SALES.RETURN.CREATE";
