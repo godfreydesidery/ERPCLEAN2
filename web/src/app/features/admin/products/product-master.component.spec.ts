@@ -277,6 +277,37 @@ describe('ProductMasterComponent — anchor failure', () => {
     expect(svc['setPrice']).not.toHaveBeenCalled();
     expect(svc['assignBranch']).not.toHaveBeenCalled();
   });
+
+  it('surfaces the anchor failure on-screen instead of a silent no-op: saveComplete + formError set, saving reset, no product uid', async () => {
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.fName.set('Widget');
+    comp.fBaseUnitUid.set('U1');
+    comp.save();
+    await vi.runAllTimersAsync();
+
+    // Visible feedback: the result panel renders (Product section failed) and/or the inline
+    // form banner is set — either way, the screen must show something, and the button must
+    // become clickable again (not stuck spinning).
+    expect(comp.saveComplete()).toBe(true);
+    expect(comp.sectionResults()[0].status).toBe('failed');
+    expect(comp.anchorFailed()).toBe(true);
+    expect(comp.formError()).toBe('Name already taken');
+    expect(comp.saving()).toBe(false);
+    // No product was actually created — savedUid must stay null so "Open product" can't be a
+    // dead link and a retry re-attempts a real create.
+    expect(comp.savedUid()).toBeNull();
+
+    fixture.detectChanges();
+    const html = (fixture.nativeElement as HTMLElement).innerHTML;
+    expect(html).toContain('Name already taken');
+    // "Open product" must not render when nothing was saved.
+    expect(html).not.toContain('Open product');
+    // "Continue editing" must be available to get back to an editable form.
+    expect(html).toContain('Continue editing');
+  });
 });
 
 // ── 4. Sub-step price failure ─────────────────────────────────────────────────

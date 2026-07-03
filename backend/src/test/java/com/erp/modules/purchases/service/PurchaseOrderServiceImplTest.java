@@ -1,6 +1,8 @@
 package com.erp.modules.purchases.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
@@ -8,6 +10,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.erp.modules.approvals.domain.dto.ApprovalRequestDto;
+import com.erp.modules.approvals.domain.enums.ApprovalRequestStatus;
 import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.parties.repository.PaymentTermsRepository;
@@ -15,6 +19,7 @@ import com.erp.modules.parties.repository.SupplierRepository;
 import com.erp.modules.products.repository.ProductBulkPackRepository;
 import com.erp.modules.products.repository.ProductRepository;
 import com.erp.modules.products.repository.UnitOfMeasureRepository;
+import com.erp.modules.purchases.domain.dto.PurchaseOrderDto;
 import com.erp.modules.purchases.domain.dto.VoidPurchaseOrderRequest;
 import com.erp.modules.purchases.domain.entity.PurchaseOrder;
 import com.erp.modules.purchases.domain.entity.PurchaseOrderLine;
@@ -28,6 +33,7 @@ import com.erp.modules.purchases.repository.SupplierQuoteRepository;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -150,6 +156,72 @@ class PurchaseOrderServiceImplTest {
     }
 
     // -------------------------------------------------------------------------
+    // Approval-engine reconciliation (dead-end fix): an inbox decision only lands on the engine's
+    // own approval_request row; the PO stays PENDING forever unless this is reconciled back.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void getByUid_pendingApproval_engineNowApproved_reconcilesStatusAndDto() {
+        PurchaseOrder po = stubPendingApprovalPo(8L, "PO-UID-8", 10L, new BigDecimal("50000.00"),
+                "APR-UID-1");
+        when(orders.findByUid("PO-UID-8")).thenReturn(Optional.of(po));
+        when(lines.findByPurchaseOrderIdOrderByLineNo(8L)).thenReturn(List.of());
+        when(approvalGate.queryState("PO-UID-8", 10L))
+                .thenReturn(Optional.of(engineState("PO-UID-8", ApprovalRequestStatus.APPROVED)));
+
+        PurchaseOrderDto dto = service.getByUid("PO-UID-8");
+
+        verify(po).setApprovalStatus(PoApprovalStatus.APPROVED);
+        assertThat(dto.approvalStatus()).isEqualTo("APPROVED");
+    }
+
+    @Test
+    void getByUid_pendingApproval_engineStillPending_leavesStatusUntouched() {
+        // Defensive: an in-flight (or unreadable) engine state must never be mistaken for a decision.
+        PurchaseOrder po = stubPendingApprovalPo(11L, "PO-UID-11", 10L, new BigDecimal("50000.00"),
+                "APR-UID-3");
+        when(orders.findByUid("PO-UID-11")).thenReturn(Optional.of(po));
+        when(lines.findByPurchaseOrderIdOrderByLineNo(11L)).thenReturn(List.of());
+        when(approvalGate.queryState("PO-UID-11", 10L))
+                .thenReturn(Optional.of(engineState("PO-UID-11", ApprovalRequestStatus.PENDING)));
+
+        PurchaseOrderDto dto = service.getByUid("PO-UID-11");
+
+        verify(po, never()).setApprovalStatus(any(PoApprovalStatus.class));
+        assertThat(dto.approvalStatus()).isEqualTo("PENDING");
+    }
+
+    @Test
+    void placeOrder_approvalRequired_storedPending_engineNowApproved_reconcilesAndSucceeds() {
+        // The critical unblock: the inbox approved this PO (engine state), but the stored
+        // approval_status on the PO row was never updated — placeOrder must still succeed.
+        PurchaseOrder po = stubPendingApprovalPo(9L, "PO-UID-9", 10L, new BigDecimal("50000.00"),
+                "APR-UID-2");
+        PurchaseOrderLine line = stubLine();
+        when(orders.findByUid("PO-UID-9")).thenReturn(Optional.of(po));
+        when(lines.findByPurchaseOrderIdOrderByLineNo(9L)).thenReturn(List.of(line));
+        when(approvalGate.requiresApproval(po, null)).thenReturn(true);
+        when(approvalGate.queryState("PO-UID-9", 10L))
+                .thenReturn(Optional.of(engineState("PO-UID-9", ApprovalRequestStatus.APPROVED)));
+        when(numberGen.nextPurchaseOrder(10L)).thenReturn("PO-0003");
+
+        service.placeOrder("PO-UID-9");
+
+        verify(po).setApprovalStatus(PoApprovalStatus.APPROVED);
+        verify(po).setStatus(PurchaseOrderStatus.ORDERED);
+    }
+
+    @Test
+    void purchaseOrderDto_from_carriesApprovalStatusEnumName() {
+        PurchaseOrder po = new PurchaseOrder(10L, 20L, 1L, "SUP-01", "Acme", "TZS", 1L);
+        po.setApprovalStatus(PoApprovalStatus.REJECTED);
+
+        PurchaseOrderDto dto = PurchaseOrderDto.from(po, List.of());
+
+        assertThat(dto.approvalStatus()).isEqualTo("REJECTED");
+    }
+
+    // -------------------------------------------------------------------------
     // voidOrder — FLOW-PROCURE-TO-PAY-035: null reason → 400; DRAFT assigns number first
     // -------------------------------------------------------------------------
 
@@ -214,6 +286,30 @@ class PurchaseOrderServiceImplTest {
         when(po.getOrderTotalAmount()).thenReturn(total);
         when(po.getApprovalStatus()).thenReturn(PoApprovalStatus.NOT_REQUIRED);
         return po;
+    }
+
+    /**
+     * A DRAFT PO already submitted for approval (PENDING, with an approval_request_uid) whose
+     * mocked {@code setApprovalStatus}/{@code getApprovalStatus} are wired together so that a
+     * reconcile call is observable on subsequent getter reads — mirrors the real entity's field.
+     */
+    private PurchaseOrder stubPendingApprovalPo(long id, String uid, long companyId, BigDecimal total,
+                                                String approvalRequestUid) {
+        PurchaseOrder po = stubDraftPo(id, uid, companyId, total);
+        when(po.getApprovalRequestUid()).thenReturn(approvalRequestUid);
+        when(po.getApprovalStatus()).thenReturn(PoApprovalStatus.PENDING);
+        doAnswer(inv -> {
+            when(po.getApprovalStatus()).thenReturn(inv.getArgument(0, PoApprovalStatus.class));
+            return null;
+        }).when(po).setApprovalStatus(any(PoApprovalStatus.class));
+        return po;
+    }
+
+    private ApprovalRequestDto engineState(String documentUid, ApprovalRequestStatus status) {
+        return new ApprovalRequestDto(
+                1L, "APR-UID-1", 10L, 20L, "APR-0001", "PURCHASE_ORDER", documentUid,
+                BigDecimal.TEN, "TZS", status, 1, false,
+                null, null, "summary", 1L, Instant.now(), Instant.now(), 1L, List.of());
     }
 
     private PurchaseOrderLine stubLine() {

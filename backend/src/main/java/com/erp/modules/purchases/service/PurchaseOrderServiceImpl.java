@@ -1,5 +1,7 @@
 package com.erp.modules.purchases.service;
 
+import com.erp.modules.approvals.domain.dto.ApprovalRequestDto;
+import com.erp.modules.approvals.domain.enums.ApprovalRequestStatus;
 import com.erp.modules.iam.domain.entity.Branch;
 import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
@@ -173,10 +175,14 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     // -------------------------------------------------------------------------
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public PurchaseOrderDto getByUid(String uid) {
         PurchaseOrder po = requireOrder(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), po.getCompanyId());
+        // Lazy "poll on read": pull the live decision from the approval engine so a PO approved
+        // (or rejected) via the generic Approvals inbox shows up on the very next detail read
+        // instead of staying PENDING forever (see reconcileApprovalStatus).
+        reconcileApprovalStatus(po);
         return toDto(po);
     }
 
@@ -323,6 +329,11 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
 
         // Freeze totals
         totals.recompute(po, lineList);
+
+        // Reconcile against the approval engine BEFORE gating: an approver may have decided via
+        // the generic Approvals inbox, which writes only to the engine's own request row, not to
+        // this PO. Without this, a PENDING PO stays blocked here forever even after approval.
+        reconcileApprovalStatus(po);
 
         // Approval gate check (ADR-0027 D-6, FR-PROC-13): block DRAFT→ORDERED if over-threshold
         // and not yet approved.  requiresApproval() reads PurchaseSettings; returns false when gate
@@ -614,6 +625,54 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         List<PurchaseOrderLineDto> lineDtos = lines.findByPurchaseOrderIdOrderByLineNo(po.getId())
                 .stream().map(PurchaseOrderLineDto::from).toList();
         return PurchaseOrderDto.from(po, lineDtos);
+    }
+
+    /**
+     * Reconciles {@code po.approval_status} against the approval engine's live state (ADR-0027 D-6,
+     * APPROVALS-047 follow-up).
+     *
+     * <p>A decision made in the generic Approvals inbox is written only to the engine's own
+     * {@code approval_request} row — never back onto the PO — so without this, a PENDING PO stays
+     * PENDING forever regardless of what the approver decided (dead-end: the web UI can never place
+     * it again). This is the lazy "poll on read" seam {@link PoApprovalGate#queryState} and
+     * {@link PoApprovalGate#fromEngineStatus} were built for but never wired up to.
+     *
+     * <p>No-op when the PO isn't PENDING, has no {@code approvalRequestUid} yet, or when the engine
+     * state can't be read — this must never fail a read or block placement on its own account; the
+     * stored status is simply left untouched and re-checked on the next call.
+     */
+    private void reconcileApprovalStatus(PurchaseOrder po) {
+        if (po.getApprovalStatus() != PoApprovalStatus.PENDING || po.getApprovalRequestUid() == null) {
+            return;
+        }
+
+        Optional<ApprovalRequestDto> state;
+        try {
+            state = approvalGate.queryState(po.getUid(), po.getCompanyId());
+        } catch (RuntimeException ex) {
+            return; // engine unavailable — leave the stored status untouched
+        }
+        if (state.isEmpty()) {
+            return; // not (yet) known to the engine — leave the stored status untouched
+        }
+
+        ApprovalRequestStatus engineStatus = state.get().status();
+        if (engineStatus != ApprovalRequestStatus.APPROVED
+                && engineStatus != ApprovalRequestStatus.REJECTED) {
+            return; // still in flight (or a terminal state we don't mirror, e.g. RECALLED/CANCELLED)
+        }
+
+        PoApprovalStatus resolved = PoApprovalGate.fromEngineStatus(engineStatus);
+        po.setApprovalStatus(resolved);
+        po.setUpdatedAt(Instant.now());
+        po.setUpdatedBy(actorId());
+
+        audit.record(AuditEvent.of(
+                        resolved == PoApprovalStatus.APPROVED ? AuditActions.PO_APPROVE : AuditActions.PO_REJECT,
+                        "purchase_orders", po.getId(), po.getUid())
+                .detail(Map.of(
+                        "action", "reconciled_from_approval_engine",
+                        "engineStatus", engineStatus.name())));
     }
 
     private Long actorId() {
