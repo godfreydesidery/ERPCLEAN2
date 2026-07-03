@@ -130,10 +130,13 @@ export class ArService {
 
   // ── Ageing ────────────────────────────────────────────────────────────────
 
-  getAgeing(companyId: string, customerUid?: string): Observable<ArAgeingRowDto[]> {
-    let params = new HttpParams().set('companyId', companyId);
-    if (customerUid?.trim()) params = params.set('customerUid', customerUid.trim());
-    return this.http.get<ArAgeingRowDto[]>(`${this.base}/ageing`, { params });
+  /**
+   * Per-customer ageing (one row per customer with open items).
+   * Backed by GET /api/v1/ar/ageing/by-customer — company-wide, not per-customer-filtered.
+   */
+  getAgeing(companyId: string): Observable<ArAgeingRowDto[]> {
+    const params = new HttpParams().set('companyId', companyId);
+    return this.http.get<ArAgeingRowDto[]>(`${this.base}/ageing/by-customer`, { params });
   }
 
   // ── Balance ───────────────────────────────────────────────────────────────

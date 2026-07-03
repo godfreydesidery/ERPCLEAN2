@@ -19,6 +19,7 @@ import {
 } from './models/ap.model';
 import { ApService } from './ap.service';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
+import { formatMoney } from '../../../shared/money.util';
 
 const DEFAULT_SIZE = 20;
 
@@ -308,10 +309,8 @@ export class SupplierBillsListComponent {
     return bill.status === 'DRAFT' || bill.status === 'HELD';
   }
 
-  fmtMoney(v: number | string | null | undefined): string {
-    const n = +(v ?? 0);
-    return Number.isFinite(n) ? n.toFixed(2) : '0.00';
-  }
+  /** Coerce + format money with thousand separators (shared util). */
+  readonly fmtMoney = formatMoney;
 
   private messageFrom(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {

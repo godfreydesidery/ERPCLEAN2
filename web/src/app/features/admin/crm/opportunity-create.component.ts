@@ -45,7 +45,7 @@ export class OpportunityCreateComponent {
   readonly leads = signal<LeadDto[]>([]);
 
   readonly customerOptions = computed<UidOption[]>(() =>
-    this.customers().map((c) => ({ uid: c.uid, label: c.displayName })),
+    this.customers().map((c) => ({ uid: c.uid, label: c.displayName, hint: c.code })),
   );
   readonly sourceLeadOptions = computed<UidOption[]>(() =>
     this.leads().map((l) => ({ uid: l.uid, label: l.displayName, hint: l.leadNumber })),

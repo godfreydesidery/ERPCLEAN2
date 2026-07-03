@@ -14,6 +14,13 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
 
     Optional<Customer> findByCompanyIdAndUid(Long companyId, String uid);
 
+    /**
+     * Company-scoped PK lookup. Tenant-safe finder for a service resolving a customer by the id
+     * carried on an already-scoped entity (e.g. {@code order.getCustomerId()}) — avoids a bare
+     * {@code findById}, which {@code TenantScopingRulesTest} flags as confused-deputy-prone.
+     */
+    Optional<Customer> findByCompanyIdAndId(Long companyId, Long id);
+
     boolean existsByCompanyIdAndCode(Long companyId, String code);
 
     Page<Customer> findByCompanyId(Long companyId, Pageable pageable);

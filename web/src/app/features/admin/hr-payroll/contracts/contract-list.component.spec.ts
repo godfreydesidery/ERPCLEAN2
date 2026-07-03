@@ -161,4 +161,50 @@ describe('ContractListComponent', () => {
     expect(req.baseSalaryAmount).toBe('750000');
     expect(typeof req.baseSalaryAmount).toBe('string');
   });
+
+  // ── Template-render regression: checkbox `name` attribute ───────────────────
+  //
+  // The PAYE/NSSF/HESLB/WCF/SDL checkboxes use ngModel inside a template-driven <form>.
+  // Without a `name` attribute (or standalone ngModelOptions), Angular throws NG01352 during
+  // change detection — aborting the CD pass before it reaches the formError banner further down
+  // the template, so a real server validation error never became visible on screen.
+
+  it('renders the create form (PAYE/NSSF/HESLB/WCF/SDL checkboxes) without throwing NG01352', () => {
+    const { fixture, comp } = makeBed();
+    comp.onEmployeePick('emp-uid-1');
+    comp.toggleCreateForm();
+    expect(() => fixture.detectChanges()).not.toThrow();
+    const html = (fixture.nativeElement as HTMLElement).innerHTML;
+    expect(html).toContain('fPayeResident');
+    expect(html).toContain('fNssfMember');
+    expect(html).toContain('fHeslbBorrower');
+    expect(html).toContain('fWcfCovered');
+    expect(html).toContain('fSdlCounted');
+  });
+
+  it('a server validation error on create renders the on-screen banner (not silently swallowed)', () => {
+    const { fixture, comp, cSvc } = makeBed({
+      create: vi.fn(() =>
+        throwError(
+          () =>
+            new HttpErrorResponse({ status: 422, error: { errors: ['GlAccount not found.'] } }),
+        ),
+      ),
+    });
+    comp.onEmployeePick('emp-uid-1');
+    comp.toggleCreateForm();
+    fixture.detectChanges();
+
+    comp.fContractType.set('PERMANENT');
+    comp.fBaseSalary.set('500000');
+    comp.fStartDate.set('2024-01-01');
+    comp.create();
+    fixture.detectChanges();
+
+    expect(cSvc.create).toHaveBeenCalledOnce();
+    expect(comp.formError()).toBe('GlAccount not found.');
+
+    const html = (fixture.nativeElement as HTMLElement).innerHTML;
+    expect(html).toContain('GlAccount not found.');
+  });
 });

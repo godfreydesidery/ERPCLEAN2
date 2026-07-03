@@ -17,6 +17,7 @@ import {
   PayComponentDto,
   PayrollLineDto,
   PayrollRunDto,
+  PayslipDto,
   SubmitLeaveRequest,
 } from './models/hr-payroll.model';
 
@@ -55,6 +56,7 @@ export class HrPayrollService {
   private readonly payRunBase = `${environment.apiBaseUrl}/hr/payroll-runs`;
   private readonly leaveBase = `${environment.apiBaseUrl}/hr/leave-requests`;
   private readonly loanBase = `${environment.apiBaseUrl}/hr/loans`;
+  private readonly payslipBase = `${environment.apiBaseUrl}/hr/payslips`;
 
   // ── Employees ─────────────────────────────────────────────────────────────────
 
@@ -163,6 +165,17 @@ export class HrPayrollService {
 
   reversePayrollRun(uid: string): Observable<PayrollRunDto> {
     return this.http.post<PayrollRunDto>(`${this.payRunBase}/uid/${uid}/reverse`, {});
+  }
+
+  // ── Payslips ───────────────────────────────────────────────────────────────────
+
+  /** Raw list — no ApiResponse wrapper, not paginated. Payslips generated for a posted run. */
+  listPayslipsByRun(runUid: string): Observable<PayslipDto[]> {
+    return this.http.get<PayslipDto[]>(`${this.payRunBase}/uid/${runUid}/payslips`);
+  }
+
+  getPayslipByUid(uid: string): Observable<PayslipDto> {
+    return this.http.get<PayslipDto>(`${this.payslipBase}/uid/${uid}`);
   }
 
   // ── Leave Requests ─────────────────────────────────────────────────────────────

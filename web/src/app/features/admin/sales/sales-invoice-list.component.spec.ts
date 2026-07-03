@@ -274,6 +274,37 @@ describe('SalesInvoiceListComponent — create form', () => {
   });
 });
 
+// ── Money formatting ─────────────────────────────────────────────────────────
+
+describe('SalesInvoiceListComponent — money formatting', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    TestBed.resetTestingModule();
+  });
+
+  it('renders Gross Total with thousand separators (shared formatMoney, not toFixed)', async () => {
+    vi.useFakeTimers();
+    const row = {
+      id: '1', uid: 'INV1', companyId: '10', branchId: '100', documentType: 'INVOICE',
+      invoiceNumber: 'INV-0001', status: 'FINALISED', customerId: '1', customerName: 'Acme Ltd',
+      agentId: null, agentName: null, routeUid: null, routeCode: null, routeName: null,
+      currency: 'TZS', docDiscountAmount: null, docDiscountPercent: null,
+      netTotalAmount: '2221486.00', vatTotalAmount: '0.00', grossTotalAmount: 2221486,
+      taxSummary: null, finalisedAt: null, finalisedBy: null, voidedAt: null, voidedBy: null,
+      voidReason: null, notes: null, version: null, createdAt: null, createdBy: null,
+      updatedAt: null, updatedBy: null,
+    };
+    makeBed({ listImpl: () => of({ rows: [row], meta: { page: 0, size: 20, totalElements: 1, totalPages: 1, hasNext: false } }) });
+
+    const fixture = TestBed.createComponent(SalesInvoiceListComponent);
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent ?? '';
+    expect(text).toContain('2,221,486.00');
+  });
+});
+
 // ── 403 forbidden ──────────────────────────────────────────────────────────────
 
 describe('SalesInvoiceListComponent — 403 forbidden', () => {

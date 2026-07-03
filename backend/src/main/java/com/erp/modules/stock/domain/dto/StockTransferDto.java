@@ -8,6 +8,11 @@ import java.util.List;
 
 /**
  * Response DTO for a stock transfer (ADR-0028 D-5).
+ *
+ * <p>sourceBranchName/sourceBranchCode/destBranchName/destBranchCode/sourceLocationName/
+ * destLocationName are enrichment fields resolved at read time by the service (mirrors
+ * SalesOrderDto's customer/branch enrichment) so a branch manager can see which branch/location a
+ * transfer is between — only the internal ids travelled before.
  */
 public record StockTransferDto(
         Long id,
@@ -17,9 +22,15 @@ public record StockTransferDto(
         StockTransferStatus status,
         StockTransferMode transferMode,
         Long sourceBranchId,
+        String sourceBranchName,
+        String sourceBranchCode,
         Long sourceLocationId,
+        String sourceLocationName,
         Long destBranchId,
+        String destBranchName,
+        String destBranchCode,
         Long destLocationId,
+        String destLocationName,
         LocalDate transferDate,
         LocalDate expectedArrivalDate,
         Instant dispatchedAt,

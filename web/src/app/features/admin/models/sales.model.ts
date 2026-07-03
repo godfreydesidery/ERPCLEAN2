@@ -22,6 +22,8 @@ export interface SalesInvoiceDto {
   /** Null until finalised (e.g. INV-0001). */
   invoiceNumber: string | null;
   status: InvoiceStatus;
+  /** Read-time resolution of the posted SALES journal entry; null when not finalised/posted. */
+  postedGlEntryUid: string | null;
   customerId: string;
   customerName: string;
   agentId: string | null;

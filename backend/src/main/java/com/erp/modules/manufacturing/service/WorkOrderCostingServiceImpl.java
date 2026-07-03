@@ -3,6 +3,7 @@ package com.erp.modules.manufacturing.service;
 import com.erp.modules.manufacturing.domain.dto.ApplyCostRequest;
 import com.erp.modules.manufacturing.domain.dto.CloseWorkOrderRequest;
 import com.erp.modules.manufacturing.domain.dto.CompleteWorkOrderRequest;
+import com.erp.modules.manufacturing.domain.dto.IssueComponentLine;
 import com.erp.modules.manufacturing.domain.dto.IssueComponentsRequest;
 import com.erp.modules.manufacturing.domain.dto.WorkOrderCostReportDto;
 import com.erp.modules.manufacturing.domain.dto.WorkOrderComponentDto;
@@ -17,6 +18,8 @@ import com.erp.modules.manufacturing.repository.WorkOrderComponentRepository;
 import com.erp.modules.manufacturing.repository.WorkOrderOperationRepository;
 import com.erp.modules.manufacturing.repository.WorkOrderRepository;
 import com.erp.modules.manufacturing.service.ManufacturingGlPoster.ComponentCostLeg;
+import com.erp.modules.iam.domain.entity.Branch;
+import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.products.domain.dto.BomExplosionLeafDto;
 import com.erp.modules.products.repository.ProductRepository;
 import com.erp.modules.products.service.BomExplosionService;
@@ -71,6 +74,7 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
     private final ScopeGuard                   scopeGuard;
     private final AuditService                 audit;
     private final OutboxPublisher              outbox;
+    private final BranchRepository             branches;
 
     public WorkOrderCostingServiceImpl(WorkOrderRepository workOrders,
                                         WorkOrderComponentRepository components,
@@ -83,7 +87,8 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
                                         ManufacturingGlPoster glPoster,
                                         ScopeGuard scopeGuard,
                                         AuditService audit,
-                                        OutboxPublisher outbox) {
+                                        OutboxPublisher outbox,
+                                        BranchRepository branches) {
         this.workOrders      = workOrders;
         this.components      = components;
         this.operations      = operations;
@@ -96,6 +101,7 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
         this.scopeGuard      = scopeGuard;
         this.audit           = audit;
         this.outbox          = outbox;
+        this.branches        = branches;
     }
 
     // -------------------------------------------------------------------------
@@ -119,70 +125,42 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
             compLines = materialiseComponents(wo, principal.userId());
         }
 
-        // Resolve target component lines
-        List<WorkOrderComponent> targets;
-        if (req.full()) {
-            targets = compLines.stream()
-                    .filter(c -> c.getStatus() != ComponentLineStatus.ISSUED)
-                    .toList();
-        } else if (req.componentUids() != null && !req.componentUids().isEmpty()) {
-            targets = compLines.stream()
-                    .filter(c -> req.componentUids().contains(c.getUid()))
-                    .toList();
-        } else {
-            // default: all unissued lines
-            targets = compLines.stream()
-                    .filter(c -> c.getStatus() != ComponentLineStatus.ISSUED)
-                    .toList();
-        }
-
-        if (targets.isEmpty()) {
-            throw new IllegalStateException("No unissued component lines to process.");
-        }
-
         Long locationId = locationResolver.defaultLocationId(wo.getCompanyId(), wo.getBranchId());
         List<ComponentCostLeg> costLegs = new ArrayList<>();
+        int linesIssued;
 
-        for (WorkOrderComponent comp : targets) {
-            BigDecimal qtyToIssue = comp.getPlannedQty().subtract(comp.getIssuedQty());
-            if (qtyToIssue.compareTo(BigDecimal.ZERO) <= 0) continue;
-
-            // Stock posting: PRODUCTION_ISSUE (negative qty from on-hand)
-            BigDecimal issuedValue = valuation.costIssue(
-                    wo.getCompanyId(), wo.getBranchId(), comp.getComponentProductId(), qtyToIssue);
-
-            BigDecimal unitCost = null;
-            if (issuedValue != null) {
-                unitCost = issuedValue.divide(qtyToIssue, SCALE, RoundingMode.HALF_UP);
-                stockPosting.post(
-                        wo.getCompanyId(), wo.getBranchId(), locationId,
-                        comp.getComponentProductId(),
-                        qtyToIssue.negate(),
-                        MovementType.PRODUCTION_ISSUE,
-                        null, "WORK_ORDER", wo.getUid(),
-                        null, "WO " + wo.getWoNumber() + " component issue",
-                        Instant.now(), principal.userId(),
-                        unitCost, issuedValue.negate());
-
-                comp.recordIssue(qtyToIssue, issuedValue, unitCost, principal.userId());
-                wo.accumulateWipDebit(issuedValue, principal.userId());
-                costLegs.add(new ComponentCostLeg(comp.getComponentProductCode(), issuedValue));
+        if (req.lines() != null && !req.lines().isEmpty()) {
+            // Per-line actual-quantity issue (feat/production-actual-issue-qty) — takes
+            // precedence over full/componentUids when present (see IssueComponentsRequest#lines).
+            linesIssued = issueNamedQuantities(wo, compLines, req.lines(), locationId, principal, costLegs);
+        } else {
+            // Resolve target component lines (pre-existing remaining-planned behaviour)
+            List<WorkOrderComponent> targets;
+            if (req.full()) {
+                targets = compLines.stream()
+                        .filter(c -> c.getStatus() != ComponentLineStatus.ISSUED)
+                        .toList();
+            } else if (req.componentUids() != null && !req.componentUids().isEmpty()) {
+                targets = compLines.stream()
+                        .filter(c -> req.componentUids().contains(c.getUid()))
+                        .toList();
             } else {
-                // avg_cost is NULL — cost-skip (BR-MFG-06)
-                stockPosting.post(
-                        wo.getCompanyId(), wo.getBranchId(), locationId,
-                        comp.getComponentProductId(),
-                        qtyToIssue.negate(),
-                        MovementType.PRODUCTION_ISSUE,
-                        null, "WORK_ORDER", wo.getUid(),
-                        null, "WO " + wo.getWoNumber() + " component issue (no cost)",
-                        Instant.now(), principal.userId(),
-                        null, null);
-                comp.markCostSkipped(qtyToIssue, principal.userId());
-                wo.flagIncompleteCost();
-                log.warn("WorkOrderCostingService: avg_cost NULL for product {} on WO {} — cost skipped (BR-MFG-06).",
-                        comp.getComponentProductCode(), wo.getWoNumber());
+                // default: all unissued lines
+                targets = compLines.stream()
+                        .filter(c -> c.getStatus() != ComponentLineStatus.ISSUED)
+                        .toList();
             }
+
+            if (targets.isEmpty()) {
+                throw new IllegalStateException("No unissued component lines to process.");
+            }
+
+            for (WorkOrderComponent comp : targets) {
+                BigDecimal qtyToIssue = comp.getPlannedQty().subtract(comp.getIssuedQty());
+                if (qtyToIssue.compareTo(BigDecimal.ZERO) <= 0) continue;
+                issueOneLine(wo, comp, qtyToIssue, locationId, principal, costLegs);
+            }
+            linesIssued = targets.size();
         }
 
         // GL: DR WIP / CR Inventory (only for costed legs)
@@ -196,8 +174,81 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
         }
 
         audit.record(AuditEvent.of(AuditActions.WORKORDER_ISSUE_COMPONENTS, "work_orders", wo.getId(), wo.getUid())
-                .detail(Map.of("linesIssued", targets.size())));
+                .detail(Map.of("linesIssued", linesIssued)));
         return toDto(wo);
+    }
+
+    /**
+     * Per-line actual-issue quantities: each named component line is issued exactly its
+     * requested {@code qty} (feat/production-actual-issue-qty). Over-issue vs remaining planned
+     * is allowed (BR call — flows to WIP, surfaces as a material variance at close).
+     */
+    private int issueNamedQuantities(WorkOrder wo, List<WorkOrderComponent> compLines,
+                                      List<IssueComponentLine> lines, Long locationId,
+                                      RequestContext.Principal principal, List<ComponentCostLeg> costLegs) {
+        int count = 0;
+        for (IssueComponentLine line : lines) {
+            WorkOrderComponent comp = compLines.stream()
+                    .filter(c -> c.getUid().equals(line.componentUid()))
+                    .findFirst()
+                    .orElseThrow(() -> new NotFoundException(
+                            "Component line not found on this work order."));
+            if (comp.getStatus() == ComponentLineStatus.ISSUED) {
+                throw new IllegalStateException(
+                        "Component " + comp.getComponentProductCode() + " has already been fully issued.");
+            }
+            if (line.qty() == null || line.qty().compareTo(BigDecimal.ZERO) <= 0) {
+                throw new IllegalArgumentException(
+                        "The quantity to issue for component " + comp.getComponentProductCode()
+                                + " must be greater than zero.");
+            }
+            issueOneLine(wo, comp, line.qty(), locationId, principal, costLegs);
+            count++;
+        }
+        return count;
+    }
+
+    /**
+     * Cost + post a single component-line issue of {@code qtyToIssue} (may be less than, equal
+     * to, or greater than the line's remaining planned quantity — the caller decides).
+     */
+    private void issueOneLine(WorkOrder wo, WorkOrderComponent comp, BigDecimal qtyToIssue, Long locationId,
+                               RequestContext.Principal principal, List<ComponentCostLeg> costLegs) {
+        // Stock posting: PRODUCTION_ISSUE (negative qty from on-hand)
+        BigDecimal issuedValue = valuation.costIssue(
+                wo.getCompanyId(), wo.getBranchId(), comp.getComponentProductId(), qtyToIssue);
+
+        if (issuedValue != null) {
+            BigDecimal unitCost = issuedValue.divide(qtyToIssue, SCALE, RoundingMode.HALF_UP);
+            stockPosting.post(
+                    wo.getCompanyId(), wo.getBranchId(), locationId,
+                    comp.getComponentProductId(),
+                    qtyToIssue.negate(),
+                    MovementType.PRODUCTION_ISSUE,
+                    null, "WORK_ORDER", wo.getUid(),
+                    null, "WO " + wo.getWoNumber() + " component issue",
+                    Instant.now(), principal.userId(),
+                    unitCost, issuedValue.negate());
+
+            comp.recordIssue(qtyToIssue, issuedValue, unitCost, principal.userId());
+            wo.accumulateWipDebit(issuedValue, principal.userId());
+            costLegs.add(new ComponentCostLeg(comp.getComponentProductCode(), issuedValue));
+        } else {
+            // avg_cost is NULL — cost-skip (BR-MFG-06)
+            stockPosting.post(
+                    wo.getCompanyId(), wo.getBranchId(), locationId,
+                    comp.getComponentProductId(),
+                    qtyToIssue.negate(),
+                    MovementType.PRODUCTION_ISSUE,
+                    null, "WORK_ORDER", wo.getUid(),
+                    null, "WO " + wo.getWoNumber() + " component issue (no cost)",
+                    Instant.now(), principal.userId(),
+                    null, null);
+            comp.markCostSkipped(qtyToIssue, principal.userId());
+            wo.flagIncompleteCost();
+            log.warn("WorkOrderCostingService: avg_cost NULL for product {} on WO {} — cost skipped (BR-MFG-06).",
+                    comp.getComponentProductCode(), wo.getWoNumber());
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -520,8 +571,12 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
     }
 
     private WorkOrderDto toDto(WorkOrder wo) {
+        // Branch enrichment mirrors WorkOrderServiceImpl.toDto — defensive: a missing branch row
+        // (should not happen) degrades to null names rather than failing the read.
+        Branch branch = branches.findById(wo.getBranchId()).orElse(null);
         return new WorkOrderDto(
                 wo.getId(), wo.getUid(), wo.getWoNumber(), wo.getCompanyId(), wo.getBranchId(),
+                branch != null ? branch.getName() : null, branch != null ? branch.getCode() : null,
                 wo.getFinishedProductId(), wo.getFinishedProductCode(), wo.getFinishedProductName(),
                 wo.getBomId(), wo.getBomUid(),
                 wo.getPlannedQty(), wo.getGoodQty(), wo.getScrapQty(),

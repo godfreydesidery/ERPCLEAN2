@@ -120,31 +120,31 @@
 
           <div class="d-flex flex-wrap gap-3 mt-2 mb-2">
             <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="fPayeResident"
+              <input class="form-check-input" type="checkbox" id="fPayeResident" name="fPayeResident"
                      [ngModel]="fPayeResident()" (ngModelChange)="fPayeResident.set($event)"
                      [disabled]="saving()" />
               <label class="form-check-label small" for="fPayeResident">PAYE Resident</label>
             </div>
             <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="fNssfMember"
+              <input class="form-check-input" type="checkbox" id="fNssfMember" name="fNssfMember"
                      [ngModel]="fNssfMember()" (ngModelChange)="fNssfMember.set($event)"
                      [disabled]="saving()" />
               <label class="form-check-label small" for="fNssfMember">NSSF Member</label>
             </div>
             <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="fHeslbBorrower"
+              <input class="form-check-input" type="checkbox" id="fHeslbBorrower" name="fHeslbBorrower"
                      [ngModel]="fHeslbBorrower()" (ngModelChange)="fHeslbBorrower.set($event)"
                      [disabled]="saving()" />
               <label class="form-check-label small" for="fHeslbBorrower">HESLB Borrower</label>
             </div>
             <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="fWcfCovered"
+              <input class="form-check-input" type="checkbox" id="fWcfCovered" name="fWcfCovered"
                      [ngModel]="fWcfCovered()" (ngModelChange)="fWcfCovered.set($event)"
                      [disabled]="saving()" />
               <label class="form-check-label small" for="fWcfCovered">WCF Covered</label>
             </div>
             <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="fSdlCounted"
+              <input class="form-check-input" type="checkbox" id="fSdlCounted" name="fSdlCounted"
                      [ngModel]="fSdlCounted()" (ngModelChange)="fSdlCounted.set($event)"
                      [disabled]="saving()" />
               <label class="form-check-label small" for="fSdlCounted">SDL Counted</label>

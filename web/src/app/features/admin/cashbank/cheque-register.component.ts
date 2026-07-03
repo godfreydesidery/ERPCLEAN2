@@ -237,7 +237,7 @@ export class ChequeRegisterComponent {
       },
       error: (err) => {
         this.actionUid.set(null);
-        this.alerts.success('Error', this.messageFrom(err, 'Could not clear cheque.'));
+        this.alerts.error('Clear failed', this.messageFrom(err, 'Could not clear cheque.'));
       },
     });
   }
@@ -253,7 +253,7 @@ export class ChequeRegisterComponent {
       },
       error: (err) => {
         this.actionUid.set(null);
-        this.alerts.success('Error', this.messageFrom(err, 'Could not cancel cheque.'));
+        this.alerts.error('Cancel failed', this.messageFrom(err, 'Could not cancel cheque.'));
       },
     });
   }

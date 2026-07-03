@@ -3,7 +3,7 @@ import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { debounceTime, distinctUntilChanged, map, merge, skip, Subject, switchMap } from 'rxjs';
 import { PageMeta } from '../../../core/api/api-response.model';
 import { AlertService } from '../../../core/feedback/alert.service';
@@ -41,6 +41,7 @@ export class PurchaseOrderListComponent {
   private readonly organisationService = inject(OrganisationService);
   private readonly supplierService = inject(SupplierService);
   private readonly alerts = inject(AlertService);
+  private readonly router = inject(Router);
   protected readonly session = inject(SessionStore);
 
   // ── Company context ────────────────────────────────────────────────────────
@@ -233,7 +234,7 @@ export class PurchaseOrderListComponent {
         this.resetCreateForm();
         this.showCreateForm.set(false);
         this.alerts.success('Purchase order created', this.orderLabel(created));
-        this.load(this.currentPage());
+        this.router.navigate(['/admin/purchase-orders/uid', created.uid]);
       },
       error: (err) => {
         this.formError.set(this.messageFrom(err, 'Could not create purchase order.'));

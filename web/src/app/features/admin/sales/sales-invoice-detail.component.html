@@ -58,6 +58,15 @@
                 <dt class="col-sm-3 text-muted fw-normal">Finalised</dt>
                 <dd class="col-sm-9 mb-0">{{ inv.finalisedAt }} by {{ inv.finalisedBy }}</dd>
               }
+              @if (inv.postedGlEntryUid) {
+                <dt class="col-sm-3 text-muted fw-normal">GL Entry</dt>
+                <dd class="col-sm-9 mb-0">
+                  <a [routerLink]="['/admin/gl/journals/uid', inv.postedGlEntryUid]"
+                     class="small text-decoration-none">
+                    <i class="bi bi-journal-text me-1" aria-hidden="true"></i>View Journal
+                  </a>
+                </dd>
+              }
               @if (inv.voidReason) {
                 <dt class="col-sm-3 text-muted fw-normal">Void reason</dt>
                 <dd class="col-sm-9 mb-0 text-danger">{{ inv.voidReason }}</dd>
@@ -112,6 +121,23 @@
                 <i class="bi bi-x-circle me-1" aria-hidden="true"></i>
                 Void Invoice
               </button>
+            }
+
+            <!-- Print PDF (FINALISED or VOID + DOCUMENT.RENDER — a DRAFT has no rendered document) -->
+            @if (!isDraft() && canPrint()) {
+              <button type="button" class="btn btn-outline-secondary"
+                      [disabled]="printing()"
+                      (click)="printPdf()">
+                @if (printing()) {
+                  <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                } @else {
+                  <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>
+                }
+                Print PDF
+              </button>
+              @if (printError(); as msg) {
+                <span class="text-danger small align-self-center" role="alert">{{ msg }}</span>
+              }
             }
           </div>
 

@@ -288,6 +288,63 @@
             }
           }
         }
+
+        <!-- Payslips -->
+        <h2 class="erp-section-title mt-4 mb-2">Payslips</h2>
+
+        @switch (payslipsState()) {
+          @case ('loading') {
+            <output class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+              <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading payslips…
+            </output>
+          }
+          @case ('error') {
+            <output class="d-block text-danger small" role="alert">Could not load payslips.</output>
+          }
+          @default {
+            @if (payslips().length === 0) {
+              <div class="erp-empty">
+                <i class="bi bi-receipt" aria-hidden="true"></i>
+                No payslips yet — payslips are generated once the run is posted.
+              </div>
+            } @else {
+              <div class="erp-table-wrap">
+                <table class="erp-table">
+                  <caption class="visually-hidden">Payslips</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Employee</th>
+                      <th scope="col" class="num">Gross</th>
+                      <th scope="col" class="num">Deductions</th>
+                      <th scope="col" class="num">Net</th>
+                      <th scope="col"><span class="visually-hidden">Actions</span></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (p of payslips(); track p.uid) {
+                      <tr>
+                        <td>
+                          {{ p.employeeName }}
+                          <span class="text-muted small d-block">{{ p.employeeNumber }}</span>
+                        </td>
+                        <td class="num mono">{{ fmtMoney(p.grossAmount) }}</td>
+                        <td class="num mono">{{ fmtMoney(p.deductionAmount) }}</td>
+                        <td class="num mono">{{ fmtMoney(p.netAmount) }}</td>
+                        <td>
+                          <a class="btn btn-sm btn-outline-primary"
+                             [routerLink]="['/admin/hr/payslips/uid', p.uid]"
+                             [attr.aria-label]="'View payslip for ' + p.employeeName">
+                            <i class="bi bi-eye me-1" aria-hidden="true"></i>View
+                          </a>
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          }
+        }
       }
     }
   }

@@ -71,6 +71,10 @@ export class SalesOrderDetailComponent {
   readonly addingLine = signal(false);
   readonly lineFormError = signal<string | null>(null);
 
+  // ── Submit for Approval ────────────────────────────────────────────────────────
+  readonly submittingForApproval = signal(false);
+  readonly submitForApprovalError = signal<string | null>(null);
+
   // ── Confirm ───────────────────────────────────────────────────────────────────
   readonly confirming = signal(false);
   readonly confirmError = signal<string | null>(null);
@@ -111,8 +115,53 @@ export class SalesOrderDetailComponent {
     this.canCancel() && !this.isCancelled() && !this.isClosed(),
   );
   readonly canConfirmNow = computed(() =>
-    this.isDraft() && this.canConfirm() && this.lines().length > 0,
+    this.isDraft() && this.canConfirm() && this.lines().length > 0 && !this.approvalBlocksConfirm(),
   );
+
+  // ── Approval status ────────────────────────────────────────────────────────────
+  readonly isApprovalPending = computed(() => this.order()?.approvalStatus === 'PENDING');
+
+  /**
+   * The backend confirm-gate blocks BOTH pending and rejected approvals permanently. Mirror it in
+   * the UI so Confirm is pre-disabled in both cases.
+   */
+  readonly approvalBlocksConfirm = computed(() => {
+    const status = this.order()?.approvalStatus;
+    return status === 'PENDING' || status === 'REJECTED';
+  });
+
+  /**
+   * "Submit for Approval" shows ONLY on a DRAFT order that was never submitted (no engine state).
+   * The approvals engine enforces one lifecycle per document uid: a terminal request
+   * (REJECTED/CANCELLED/RECALLED) cannot be reopened, so re-submitting the same order would 409 —
+   * the recovery path is to cancel and raise a new order (see {@link approvalClosed}). Gated on the
+   * same permission that creates/edits the order (SALES.ORDER.CREATE).
+   */
+  readonly canSubmitForApprovalNow = computed(() => {
+    if (!this.isDraft() || !this.canCreate()) return false;
+    return this.order()?.approvalStatus == null;
+  });
+
+  /**
+   * True when the order's approval reached a terminal-but-not-approved state — it cannot be
+   * re-submitted or confirmed; the user must cancel and raise a new order. Drives the guidance note
+   * shown in place of the (now-hidden) "Submit for Approval" button.
+   */
+  readonly approvalClosed = computed(() => {
+    const status = this.order()?.approvalStatus;
+    return status === 'REJECTED' || status === 'CANCELLED' || status === 'RECALLED';
+  });
+
+  /**
+   * Lines may be added/removed only while the order is editable AND not in the approval flow.
+   * Mirrors the backend content-freeze: once PENDING or APPROVED, the lines are locked so the
+   * confirmed order matches what the approver saw.
+   */
+  readonly canEditLines = computed(() => {
+    if (!this.isDraft() || !this.canCreate()) return false;
+    const status = this.order()?.approvalStatus;
+    return status !== 'PENDING' && status !== 'APPROVED';
+  });
 
   // ── Agent state ────────────────────────────────────────────────────────────────
   readonly hasAgent = computed(() => this.order()?.agentId != null);
@@ -303,6 +352,28 @@ export class SalesOrderDetailComponent {
     });
   }
 
+  // ── Submit for Approval ──────────────────────────────────────────────────────────
+
+  submitForApproval(): void {
+    if (this.submittingForApproval()) return;
+    this.submittingForApproval.set(true);
+    this.submitForApprovalError.set(null);
+    this.soService.submitForApproval(this.uid()).subscribe({
+      next: (updated) => {
+        this.submittingForApproval.set(false);
+        this.order.set(updated);
+        this.alerts.success(
+          'Submitted for approval',
+          `${updated.orderNumber ?? 'This order'} is now awaiting approval.`,
+        );
+      },
+      error: (err: unknown) => {
+        this.submitForApprovalError.set(this.messageFrom(err, 'Could not submit order for approval.'));
+        this.submittingForApproval.set(false);
+      },
+    });
+  }
+
   // ── Confirm ────────────────────────────────────────────────────────────────────
 
   toggleConfirmDialog(): void {
@@ -389,7 +460,7 @@ export class SalesOrderDetailComponent {
         this.savingAgent.set(false);
         this.showAgentForm.set(false);
         this.order.set(updated);
-        this.alerts.success('Agent assigned');
+        this.alerts.success('Agent assigned', `${agent.label} is now the sales agent on this order.`);
       },
       error: (err: unknown) => {
         this.agentError.set(this.messageFrom(err, 'Could not assign agent.'));

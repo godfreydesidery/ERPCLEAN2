@@ -16,6 +16,7 @@ import { ArService } from './ar.service';
 import { debounceTime, distinctUntilChanged, Subject as RxSubject } from 'rxjs';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 import { CurrencySelectComponent } from '../../../shared/currency-select/currency-select.component';
+import { formatMoney } from '../../../shared/money.util';
 
 const DEFAULT_SIZE = 20;
 
@@ -354,11 +355,8 @@ export class ArInvoicesListComponent {
     return this.customerMap().get(String(customerId)) ?? String(customerId);
   }
 
-  /** Coerce money to display string — handles both number and string on the wire. */
-  fmtMoney(v: number | string | null | undefined): string {
-    const n = +(v ?? 0);
-    return Number.isFinite(n) ? n.toFixed(2) : '0.00';
-  }
+  /** Coerce + format money with thousand separators (shared util). */
+  readonly fmtMoney = formatMoney;
 
   private messageFrom(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {

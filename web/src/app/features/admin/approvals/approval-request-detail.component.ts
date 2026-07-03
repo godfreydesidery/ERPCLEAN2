@@ -7,6 +7,7 @@ import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import {
   ApprovalRequestDto,
+  ApprovalRequestStepDto,
   DecideRequest,
 } from './models/approvals.model';
 import { ApprovalsService } from './approvals.service';
@@ -90,6 +91,17 @@ export class ApprovalRequestDetailComponent {
     const r = this.request();
     return r ? documentTypeRoute(r.documentType, r.documentUid) : null;
   });
+
+  /**
+   * Friendly name for the decision that resolved a step. Each decision now carries its own
+   * `decidedByName` from the backend — look up the decision matching the step's resolvedBy
+   * rather than guessing against the request-level submitter/resolver. Returns null (never a
+   * raw numeric id) if not resolvable.
+   */
+  stepResolvedByName(step: ApprovalRequestStepDto): string | null {
+    if (!step.resolvedBy) return null;
+    return step.decisions.find((d) => d.decidedBy === step.resolvedBy)?.decidedByName ?? null;
+  }
 
   constructor() {
     queueMicrotask(() => this.init());

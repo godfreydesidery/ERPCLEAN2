@@ -1,7 +1,13 @@
 package com.erp.modules.sales.service;
 
+import com.erp.modules.approvals.domain.dto.ApprovalRequestDto;
+import com.erp.modules.approvals.domain.dto.SubmitForApprovalRequest;
+import com.erp.modules.approvals.domain.enums.ApprovalRequestStatus;
+import com.erp.modules.approvals.service.ApprovalEngine;
 import com.erp.modules.ar.domain.dto.ArBalanceDto;
 import com.erp.modules.ar.service.ArBalanceService;
+import com.erp.modules.iam.domain.entity.Branch;
+import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.parties.domain.entity.Agent;
 import com.erp.modules.parties.domain.entity.Customer;
@@ -67,6 +73,9 @@ public class SalesOrderServiceImpl implements SalesOrderService {
 
     private static final Logger log = LoggerFactory.getLogger(SalesOrderServiceImpl.class);
 
+    /** Document type key registered with the approvals engine for sales orders. */
+    private static final String APPROVAL_DOC_TYPE = "SALES_ORDER";
+
     private final SalesOrderRepository     orders;
     private final SalesOrderLineRepository orderLines;
     private final QuotationRepository      quotations;
@@ -76,6 +85,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
     private final PaymentTermsRepository   paymentTermsRepo;
     private final AgentRepository          agents;
     private final CompanyRepository        companies;
+    private final BranchRepository         branches;
     private final ProductRepository        products;
     private final UnitOfMeasureRepository  units;
     private final ProductPriceRepository   prices;
@@ -89,6 +99,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
     /** ADR-0040 D-5: credit-limit + status check at SO confirm (mirrors SalesInvoiceServiceImpl). */
     private final ArBalanceService         arBalanceService;
     private final PermissionResolver       permissionResolver;
+    private final ApprovalEngine           approvalEngine;
 
     public SalesOrderServiceImpl(SalesOrderRepository orders,
                                  SalesOrderLineRepository orderLines,
@@ -99,6 +110,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
                                  PaymentTermsRepository paymentTermsRepo,
                                  AgentRepository agents,
                                  CompanyRepository companies,
+                                 BranchRepository branches,
                                  ProductRepository products,
                                  UnitOfMeasureRepository units,
                                  ProductPriceRepository prices,
@@ -110,7 +122,8 @@ public class SalesOrderServiceImpl implements SalesOrderService {
                                  ScopeGuard scopeGuard,
                                  AuditService audit,
                                  ArBalanceService arBalanceService,
-                                 PermissionResolver permissionResolver) {
+                                 PermissionResolver permissionResolver,
+                                 ApprovalEngine approvalEngine) {
         this.orders           = orders;
         this.orderLines       = orderLines;
         this.quotations       = quotations;
@@ -120,6 +133,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         this.paymentTermsRepo = paymentTermsRepo;
         this.agents           = agents;
         this.companies        = companies;
+        this.branches         = branches;
         this.products         = products;
         this.units            = units;
         this.prices           = prices;
@@ -132,6 +146,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         this.audit            = audit;
         this.arBalanceService = arBalanceService;
         this.permissionResolver = permissionResolver;
+        this.approvalEngine   = approvalEngine;
     }
 
     @Override
@@ -190,6 +205,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         SalesOrder order = require(orderUid);
         scopeGuard.assertCanActIn(RequestContext.get(), order.getCompanyId());
         assertDraft(order);
+        assertNotInApproval(order);
 
         Product product = resolveProduct(order.getCompanyId(), req.productUid());
         assertSellable(product);
@@ -235,6 +251,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         SalesOrder order = require(orderUid);
         scopeGuard.assertCanActIn(RequestContext.get(), order.getCompanyId());
         assertDraft(order);
+        assertNotInApproval(order);
         SalesOrderLine line = orderLines.findByUidAndSalesOrderId(lineUid, order.getId())
                 .orElseThrow(() -> new NotFoundException("Order line not found."));
         orderLines.delete(line);
@@ -266,6 +283,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
     private SalesOrderDto doConfirm(String orderUid) {
         SalesOrder order = require(orderUid);
         scopeGuard.assertCanActIn(RequestContext.get(), order.getCompanyId());
+        assertApprovalClearance(order);
         assertDraft(order);
 
         List<SalesOrderLine> lines = orderLines.findBySalesOrderIdOrderByLineNo(order.getId());
@@ -304,6 +322,75 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         audit.record(AuditEvent.of(AuditActions.SO_CONFIRM, "sales_orders",
                 order.getId(), order.getUid())
                 .detail(Map.of("orderNumber", order.getOrderNumber())));
+        return toDto(order);
+    }
+
+    /**
+     * Submits a DRAFT order to the approvals engine (ADR-0022 D-7 seam). Nothing is persisted on
+     * the SalesOrder entity — the engine (queried by {@code documentType}/{@code documentUid}) is
+     * the source of truth; {@link #buildDto} resolves the current status back onto the response.
+     */
+    @Override
+    public SalesOrderDto submitForApproval(String orderUid) {
+        SalesOrder order = require(orderUid);
+        scopeGuard.assertCanActIn(RequestContext.get(), order.getCompanyId());
+
+        if (order.getStatus() != SalesOrderStatus.DRAFT) {
+            throw new IllegalStateException(
+                    "Only a draft order can be submitted for approval; this order is already "
+                            + order.getStatus() + ".");
+        }
+
+        Optional<ApprovalRequestDto> existing = approvalEngine.getApprovalState(
+                APPROVAL_DOC_TYPE, order.getUid(), order.getCompanyId());
+        if (existing.isPresent()) {
+            // The approvals engine enforces one lifecycle per document uid (BR-APR-07/08): a
+            // terminal request cannot be reopened, and re-submitting one would surface a raw 409.
+            // Handle each existing state with clear guidance instead.
+            ApprovalRequestStatus st = existing.get().status();
+            if (st == ApprovalRequestStatus.PENDING) {
+                // Already awaiting a decision — idempotent no-op, don't double-submit.
+                return toDto(order);
+            }
+            if (st == ApprovalRequestStatus.APPROVED) {
+                throw new IllegalStateException("This order has already been approved.");
+            }
+            // REJECTED / CANCELLED / RECALLED — closed and cannot be reopened for the same order.
+            throw new IllegalStateException(
+                    "This order's previous approval is closed and cannot be reopened. "
+                            + "Cancel this order and raise a new one to submit for approval again.");
+        }
+
+        // Resolve branch uid + customer name via COMPANY-SCOPED finders (not bare findById) — the
+        // ids come from the already-scope-checked order, and the scoped finders keep
+        // TenantScopingRulesTest green without touching its frozen store.
+        String branchUid = branches.findByIdAndCompany_Id(order.getBranchId(), order.getCompanyId())
+                .map(Branch::getUid).orElse(null);
+        String customerName = customers.findByCompanyIdAndId(order.getCompanyId(), order.getCustomerId())
+                .map(Customer::getDisplayName).orElse(null);
+        BigDecimal amount = order.getGrossTotalAmount() != null
+                ? order.getGrossTotalAmount() : BigDecimal.ZERO;
+        Long actorId = actorId();
+
+        String summary = customerName != null
+                ? "SO " + order.getOrderNumber() + " — " + customerName
+                : "SO " + order.getOrderNumber();
+        SubmitForApprovalRequest req = new SubmitForApprovalRequest(
+                APPROVAL_DOC_TYPE,
+                order.getUid(),
+                amount,
+                order.getCurrency().value(),
+                order.getCompanyId(),
+                branchUid,
+                actorId != null ? actorId : 0L,
+                summary);
+
+        approvalEngine.submitForApproval(req);
+
+        audit.record(AuditEvent.of(AuditActions.SO_SUBMIT_FOR_APPROVAL, "sales_orders",
+                order.getId(), order.getUid())
+                .detail(Map.of("orderNumber", order.getOrderNumber())));
+
         return toDto(order);
     }
 
@@ -501,6 +588,48 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         if (order.getStatus() != SalesOrderStatus.DRAFT) {
             throw new IllegalStateException(
                     "Cannot modify a non-DRAFT sales order; current: " + order.getStatus());
+        }
+    }
+
+    /**
+     * Content-freeze gate (ADR-0022 D-7 seam): while an order is in the approval flow (PENDING) or
+     * already APPROVED, its lines must not change — otherwise the order that gets confirmed could
+     * differ from the one the approver saw, defeating amount-threshold approval policies. Since the
+     * order stays DRAFT for the whole approval cycle (status is engine-derived, not persisted), the
+     * plain {@link #assertDraft} check is not enough on the content mutators. Terminal-closed states
+     * (REJECTED/CANCELLED/RECALLED) and never-submitted orders stay editable.
+     */
+    private void assertNotInApproval(SalesOrder order) {
+        approvalEngine.getApprovalState(APPROVAL_DOC_TYPE, order.getUid(), order.getCompanyId())
+                .map(ApprovalRequestDto::status)
+                .filter(s -> s == ApprovalRequestStatus.PENDING || s == ApprovalRequestStatus.APPROVED)
+                .ifPresent(s -> {
+                    throw new IllegalStateException(
+                            "This order is in the approval process and its lines cannot be changed. "
+                                    + "Cancel it and raise a new order to make changes.");
+                });
+    }
+
+    /**
+     * Approvals-engine gate at confirm (ADR-0022 D-7 seam): a PENDING request blocks confirm
+     * outright, a REJECTED one blocks it permanently. APPROVED, CANCELLED, RECALLED, or never
+     * submitted (empty) all proceed unchanged — backward compatible with orders that never went
+     * through {@link #submitForApproval(String)}.
+     */
+    private void assertApprovalClearance(SalesOrder order) {
+        Optional<ApprovalRequestDto> state = approvalEngine.getApprovalState(
+                APPROVAL_DOC_TYPE, order.getUid(), order.getCompanyId());
+        if (state.isEmpty()) {
+            return;
+        }
+        ApprovalRequestStatus status = state.get().status();
+        if (status == ApprovalRequestStatus.PENDING) {
+            throw new IllegalStateException(
+                    "This order is awaiting approval and cannot be confirmed yet.");
+        }
+        if (status == ApprovalRequestStatus.REJECTED) {
+            throw new IllegalStateException(
+                    "This order's approval was rejected and it cannot be confirmed.");
         }
     }
 
@@ -737,8 +866,10 @@ public class SalesOrderServiceImpl implements SalesOrderService {
     }
 
     /**
-     * Resolves customer/agent names at read time (mirrors SalesInvoiceServiceImpl.toDto).
+     * Resolves customer/agent/branch names at read time (mirrors SalesInvoiceServiceImpl.toDto).
      * agentId is nullable on SalesOrder (unlike SalesInvoice), so it is guarded before lookup.
+     * Branch lookup is defensive: a missing row (should not happen) yields null names rather than
+     * failing the read.
      */
     private SalesOrderDto buildDto(SalesOrder o, List<SalesOrderLineDto> lines) {
         String customerName = null;
@@ -751,7 +882,20 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         String agentName = o.getAgentId() != null
                 ? agents.findById(o.getAgentId()).map(Agent::getDisplayName).orElse(null)
                 : null;
-        return SalesOrderDto.from(o, lines, customerName, customerCode, agentName);
+        String branchName = null;
+        String branchCode = null;
+        Branch branch = branches.findById(o.getBranchId()).orElse(null);
+        if (branch != null) {
+            branchName = branch.getName();
+            branchCode = branch.getCode();
+        }
+        // Engine-derived, not persisted (D-7 seam): null when never submitted for approval.
+        String approvalStatus = approvalEngine
+                .getApprovalState(APPROVAL_DOC_TYPE, o.getUid(), o.getCompanyId())
+                .map(r -> r.status().name())
+                .orElse(null);
+        return SalesOrderDto.from(o, lines, customerName, customerCode, agentName,
+                branchName, branchCode, approvalStatus);
     }
 
     private Long requireBranchId(RequestContext.Principal ctx) {

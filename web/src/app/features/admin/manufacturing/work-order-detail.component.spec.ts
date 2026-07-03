@@ -26,6 +26,7 @@ vi.useFakeTimers();
 function makeWO(overrides: Partial<WorkOrderDto> = {}): WorkOrderDto {
   return {
     id: '1', uid: 'wo-1', woNumber: 'WO-001', companyId: '10', branchId: 'br-1',
+    branchName: 'Head Office', branchCode: 'BR-01',
     finishedProductId: 'prod-1', finishedProductCode: 'SKU-001',
     finishedProductName: 'Widget A', bomId: '', bomUid: '',
     plannedQty: '100', goodQty: '0', scrapQty: '0',
@@ -38,6 +39,16 @@ function makeWO(overrides: Partial<WorkOrderDto> = {}): WorkOrderDto {
     closedAt: '', cancelledAt: '',
     createdAt: '2024-01-01T00:00:00Z', createdBy: 'admin',
     components: [], operations: [],
+    ...overrides,
+  };
+}
+
+function makeComponent(overrides: Partial<WorkOrderDto['components'][number]> = {}) {
+  return {
+    id: '1', uid: 'comp-1', workOrderId: '1', lineNo: '1',
+    componentProductId: 'p-1', componentProductCode: 'RM-001', componentProductName: 'Raw Material A',
+    plannedQty: '10', issuedQty: '0', issuedValue: '0', unitCostAtIssue: '0',
+    costSkipped: false, status: 'PLANNED' as const,
     ...overrides,
   };
 }
@@ -132,6 +143,42 @@ describe('WorkOrderDetailComponent — load triad', () => {
     await fixture.whenStable();
 
     expect(fixture.componentInstance.woState()).toBe('error');
+  });
+});
+
+// ── Branch header field (branch-everywhere) ──────────────────────────────────
+
+describe('WorkOrderDetailComponent — branch header field', () => {
+  afterEach(() => { vi.clearAllTimers(); TestBed.resetTestingModule(); });
+
+  it('renders the branch name and code in the summary card, never the raw branchId', async () => {
+    makeBed();
+    const fixture = TestBed.createComponent(WorkOrderDetailComponent);
+    fixture.componentRef.setInput('uid', 'wo-1');
+    vi.runAllTimers();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('Head Office');
+    expect(text).toContain('BR-01');
+  });
+
+  it('renders "—" for the branch when branchName is null', async () => {
+    makeBed({ getByUid: vi.fn(() => of(makeWO({ branchName: null, branchCode: null }))) });
+    const fixture = TestBed.createComponent(WorkOrderDetailComponent);
+    fixture.componentRef.setInput('uid', 'wo-1');
+    vi.runAllTimers();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    const labels = Array.from(el.querySelectorAll('.small.text-muted')).map((d) => d.textContent?.trim());
+    const branchLabelIdx = labels.indexOf('Branch');
+    expect(branchLabelIdx).toBeGreaterThanOrEqual(0);
+    // The value sits in the sibling element right after the "Branch" label div.
+    const branchValueEl = el.querySelectorAll('.small.text-muted')[branchLabelIdx]?.nextElementSibling;
+    expect(branchValueEl?.textContent?.trim()).toBe('—');
   });
 });
 
@@ -387,5 +434,183 @@ describe('WorkOrderDetailComponent — issueComponents action', () => {
     expect(svc.issueComponents).toHaveBeenCalledOnce();
     expect(comp.wo()?.status).toBe('IN_PROGRESS');
     expect(comp.issuing()).toBe(false);
+  });
+
+  it('issueComponents() sends { full: true, postingDate } — no lines', async () => {
+    const svc = makeBed({ getByUid: vi.fn(() => of(makeWO({ status: 'RELEASED' }))) });
+    const fixture = TestBed.createComponent(WorkOrderDetailComponent);
+    fixture.componentRef.setInput('uid', 'wo-1');
+    vi.runAllTimers();
+    await fixture.whenStable();
+
+    const comp = fixture.componentInstance;
+    comp.issuePostingDate.set('2024-06-15');
+    comp.issueComponents();
+    vi.runAllTimers();
+    await fixture.whenStable();
+
+    const req = svc.issueComponents.mock.calls[0][1];
+    expect(req).toEqual({ full: true, postingDate: '2024-06-15' });
+  });
+});
+
+// ── Per-line "Issue Entered Quantities" action ────────────────────────────────
+
+describe('WorkOrderDetailComponent — issueEnteredQuantities action', () => {
+  afterEach(() => { vi.clearAllTimers(); TestBed.resetTestingModule(); });
+
+  it('pre-fills lineQtys with the remaining planned qty (plannedQty − issuedQty) on load', async () => {
+    const wo = makeWO({
+      status: 'RELEASED',
+      components: [
+        makeComponent({ uid: 'comp-1', plannedQty: '10', issuedQty: '4', status: 'PARTIAL' }),
+        makeComponent({ uid: 'comp-2', plannedQty: '5', issuedQty: '5', status: 'ISSUED' }),
+      ],
+    });
+    makeBed({ getByUid: vi.fn(() => of(wo)) });
+    const fixture = TestBed.createComponent(WorkOrderDetailComponent);
+    fixture.componentRef.setInput('uid', 'wo-1');
+    vi.runAllTimers();
+    await fixture.whenStable();
+
+    const comp = fixture.componentInstance;
+    expect(comp.lineQtys()['comp-1']).toBe('6');
+    // Fully-issued lines are not pre-filled (no input is shown for them).
+    expect(comp.lineQtys()['comp-2']).toBeUndefined();
+  });
+
+  it('sets issueError when posting date is blank', async () => {
+    const wo = makeWO({
+      status: 'RELEASED',
+      components: [makeComponent({ uid: 'comp-1', plannedQty: '10', issuedQty: '0' })],
+    });
+    makeBed({ getByUid: vi.fn(() => of(wo)) });
+    const fixture = TestBed.createComponent(WorkOrderDetailComponent);
+    fixture.componentRef.setInput('uid', 'wo-1');
+    vi.runAllTimers();
+    await fixture.whenStable();
+
+    const comp = fixture.componentInstance;
+    comp.issuePostingDate.set('');
+    comp.issueEnteredQuantities();
+
+    expect(comp.issueError()).toBe('Posting date is required.');
+  });
+
+  it('rejects a non-positive entered qty client-side without posting', async () => {
+    const wo = makeWO({
+      status: 'RELEASED',
+      components: [makeComponent({ uid: 'comp-1', componentProductCode: 'RM-001', plannedQty: '10', issuedQty: '0' })],
+    });
+    const svc = makeBed({ getByUid: vi.fn(() => of(wo)) });
+    const fixture = TestBed.createComponent(WorkOrderDetailComponent);
+    fixture.componentRef.setInput('uid', 'wo-1');
+    vi.runAllTimers();
+    await fixture.whenStable();
+
+    const comp = fixture.componentInstance;
+    comp.issuePostingDate.set('2024-06-15');
+    comp.onLineQtyChange('comp-1', '0');
+    comp.issueEnteredQuantities();
+
+    expect(comp.issueError()).toMatch(/positive number/);
+    expect(svc.issueComponents).not.toHaveBeenCalled();
+  });
+
+  it('rejects a negative entered qty client-side without posting', async () => {
+    const wo = makeWO({
+      status: 'RELEASED',
+      components: [makeComponent({ uid: 'comp-1', plannedQty: '10', issuedQty: '0' })],
+    });
+    const svc = makeBed({ getByUid: vi.fn(() => of(wo)) });
+    const fixture = TestBed.createComponent(WorkOrderDetailComponent);
+    fixture.componentRef.setInput('uid', 'wo-1');
+    vi.runAllTimers();
+    await fixture.whenStable();
+
+    const comp = fixture.componentInstance;
+    comp.issuePostingDate.set('2024-06-15');
+    comp.onLineQtyChange('comp-1', '-3');
+    comp.issueEnteredQuantities();
+
+    expect(comp.issueError()).toMatch(/positive number/);
+    expect(svc.issueComponents).not.toHaveBeenCalled();
+  });
+
+  it('sets issueError when no lines have a positive entered qty', async () => {
+    const wo = makeWO({
+      status: 'RELEASED',
+      components: [makeComponent({ uid: 'comp-1', plannedQty: '10', issuedQty: '0' })],
+    });
+    const svc = makeBed({ getByUid: vi.fn(() => of(wo)) });
+    const fixture = TestBed.createComponent(WorkOrderDetailComponent);
+    fixture.componentRef.setInput('uid', 'wo-1');
+    vi.runAllTimers();
+    await fixture.whenStable();
+
+    const comp = fixture.componentInstance;
+    comp.issuePostingDate.set('2024-06-15');
+    comp.onLineQtyChange('comp-1', '');
+    comp.issueEnteredQuantities();
+
+    expect(comp.issueError()).toBe('Enter at least one actual quantity to issue.');
+    expect(svc.issueComponents).not.toHaveBeenCalled();
+  });
+
+  it('POSTs only the non-empty lines as { componentUid, qty } plus postingDate (no full flag)', async () => {
+    const wo = makeWO({
+      status: 'RELEASED',
+      components: [
+        makeComponent({ uid: 'comp-1', plannedQty: '10', issuedQty: '4', status: 'PARTIAL' }),
+        makeComponent({ uid: 'comp-2', plannedQty: '5', issuedQty: '0', status: 'PLANNED' }),
+      ],
+    });
+    const svc = makeBed({ getByUid: vi.fn(() => of(wo)) });
+    const fixture = TestBed.createComponent(WorkOrderDetailComponent);
+    fixture.componentRef.setInput('uid', 'wo-1');
+    vi.runAllTimers();
+    await fixture.whenStable();
+
+    const comp = fixture.componentInstance;
+    comp.issuePostingDate.set('2024-06-15');
+    // Supervisor overrides comp-1 to 8 (more than the 6 remaining) and leaves comp-2 blank.
+    comp.onLineQtyChange('comp-1', '8');
+    comp.onLineQtyChange('comp-2', '');
+    comp.issueEnteredQuantities();
+    vi.runAllTimers();
+    await fixture.whenStable();
+
+    expect(svc.issueComponents).toHaveBeenCalledOnce();
+    const req = svc.issueComponents.mock.calls[0][1];
+    expect(req).toEqual({
+      postingDate: '2024-06-15',
+      lines: [{ componentUid: 'comp-1', qty: '8' }],
+    });
+    expect(comp.issuingLines()).toBe(false);
+  });
+
+  it('sets issueError on failure and does not clear issuingLines prematurely', async () => {
+    const wo = makeWO({
+      status: 'RELEASED',
+      components: [makeComponent({ uid: 'comp-1', plannedQty: '10', issuedQty: '0' })],
+    });
+    makeBed({
+      getByUid: vi.fn(() => of(wo)),
+      issueComponents: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 409 }))),
+    });
+    const fixture = TestBed.createComponent(WorkOrderDetailComponent);
+    fixture.componentRef.setInput('uid', 'wo-1');
+    vi.runAllTimers();
+    await fixture.whenStable();
+
+    const comp = fixture.componentInstance;
+    comp.issuePostingDate.set('2024-06-15');
+    comp.onLineQtyChange('comp-1', '5');
+    comp.issueEnteredQuantities();
+    vi.runAllTimers();
+    await fixture.whenStable();
+
+    expect(comp.issueError()).toBeTruthy();
+    expect(comp.issuingLines()).toBe(false);
   });
 });

@@ -12,6 +12,7 @@ import {
   TrialBalanceRowDto,
 } from './models/gl.model';
 import { GlService } from './gl.service';
+import { formatMoney } from '../../../shared/money.util';
 
 type LoadState = 'idle' | 'loading' | 'error' | 'forbidden';
 
@@ -161,4 +162,7 @@ export class TrialBalanceComponent {
   rowsForType(type: AccountType): TrialBalanceRowDto[] {
     return this.groupedByType().get(type) ?? [];
   }
+
+  /** Coerce + format money with thousand separators (shared util). */
+  readonly fmtMoney = formatMoney;
 }

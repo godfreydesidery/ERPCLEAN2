@@ -19,11 +19,12 @@ const EMPTY_META: PageMeta = { page: 0, size: 20, totalElements: 0, totalPages: 
 function makeRequest(overrides: Partial<ApprovalRequestDto> = {}): ApprovalRequestDto {
   return {
     id: '1', uid: 'req-1', companyId: '10', branchId: '100',
+    branchName: 'Dar Es Salaam HQ', branchCode: 'DSM-HQ',
     requestNumber: 'APR-000001', documentType: 'PURCHASE_ORDER', documentUid: 'PO-UID-1',
     amount: '50000', currency: 'TZS', status: 'PENDING', autoApproved: false,
     sourcePolicyId: null, sourcePolicyUid: null, summary: null,
-    submittedBy: 'jdoe', submittedAt: '2026-07-01T10:00:00Z',
-    resolvedAt: null, resolvedBy: null, steps: [],
+    submittedBy: '42', submittedByName: 'Jane Doe', submittedAt: '2026-07-01T10:00:00Z',
+    resolvedAt: null, resolvedBy: null, resolvedByName: null, steps: [],
     ...overrides,
   };
 }
@@ -69,5 +70,60 @@ describe('ApprovalInboxComponent — document type friendly label', () => {
 
     const html: string = fixture.nativeElement.textContent;
     expect(html).toContain('Purchase Order');
+  });
+});
+
+describe('ApprovalInboxComponent — branch + submitter visibility (GM/procurement/branch-manager UPR)', () => {
+  afterEach(() => { vi.clearAllTimers(); TestBed.resetTestingModule(); });
+
+  it('shows the branch name and submitter name, never a bare numeric id', async () => {
+    makeBed([
+      makeRequest({
+        branchName: 'Arusha Branch', branchCode: 'ARS-01',
+        submittedBy: '77', submittedByName: 'Amina Hassan',
+      }),
+    ]);
+    const fixture = TestBed.createComponent(ApprovalInboxComponent);
+    vi.runAllTimers();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const html: string = fixture.nativeElement.textContent;
+    expect(html).toContain('Arusha Branch');
+    expect(html).toContain('ARS-01');
+    expect(html).toContain('Amina Hassan');
+    expect(html).not.toContain('77');
+  });
+
+  it('falls back to an em dash when branch/submitter names are absent', async () => {
+    makeBed([makeRequest({ branchName: null, branchCode: null, submittedByName: null })]);
+    const fixture = TestBed.createComponent(ApprovalInboxComponent);
+    vi.runAllTimers();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const html: string = fixture.nativeElement.textContent;
+    expect(html).toContain('—');
+  });
+
+  it('shows the current step\'s friendly role name, not the raw role code, when both are present', async () => {
+    makeBed([
+      makeRequest({
+        steps: [
+          {
+            id: '1', uid: 'step-1', sequence: '1',
+            approverRoleCode: 'PROCUREMENT_MGR', approverRoleName: 'Procurement Manager',
+            status: 'PENDING', resolvedBy: null, resolvedAt: null, decisions: [],
+          },
+        ],
+      }),
+    ]);
+    const fixture = TestBed.createComponent(ApprovalInboxComponent);
+    vi.runAllTimers();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const html: string = fixture.nativeElement.textContent;
+    expect(html).toContain('Procurement Manager');
   });
 });

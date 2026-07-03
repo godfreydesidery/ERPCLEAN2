@@ -181,8 +181,21 @@
                 <span class="mono">{{ r.currency }} {{ +r.amount | number:'1.2-2' }}</span>
               </div>
               <div class="erp-field">
+                <span class="erp-field__label-text">Branch</span>
+                @if (r.branchName) {
+                  <span>
+                    {{ r.branchName }}
+                    @if (r.branchCode) {
+                      <span class="text-muted small mono">({{ r.branchCode }})</span>
+                    }
+                  </span>
+                } @else {
+                  <span class="text-muted">—</span>
+                }
+              </div>
+              <div class="erp-field">
                 <span class="erp-field__label-text">Submitted By</span>
-                <span>{{ r.submittedBy }}</span>
+                <span>{{ r.submittedByName ?? '—' }}</span>
               </div>
               <div class="erp-field">
                 <span class="erp-field__label-text">Submitted At</span>
@@ -196,8 +209,8 @@
               }
               @if (r.resolvedBy) {
                 <div class="erp-field">
-                  <span class="erp-field__label-text">Resolved By</span>
-                  <span>{{ r.resolvedBy }}</span>
+                  <span class="erp-field__label-text">Decided By</span>
+                  <span>{{ r.resolvedByName ?? '—' }}</span>
                 </div>
               }
               @if (r.summary) {
@@ -243,9 +256,12 @@
                           [class.status-tag--neutral]="step.status === 'SKIPPED'">
                       <span class="status-tag__dot" aria-hidden="true"></span>{{ step.status }}
                     </span>
-                    <span class="mono text-muted small">{{ step.approverRoleCode }}</span>
-                    @if (step.resolvedBy) {
-                      <span class="text-muted small">by {{ step.resolvedBy }}</span>
+                    <span class="fw-semibold small">{{ step.approverRoleName ?? step.approverRoleCode }}</span>
+                    @if (step.approverRoleName) {
+                      <span class="mono text-muted small">{{ step.approverRoleCode }}</span>
+                    }
+                    @if (stepResolvedByName(step); as resolvedName) {
+                      <span class="text-muted small">by {{ resolvedName }}</span>
                     }
                     @if (step.resolvedAt) {
                       <span class="text-muted small">at {{ step.resolvedAt | date:'yyyy-MM-dd HH:mm' }}</span>
@@ -262,7 +278,7 @@
                                 [class.status-tag--danger]="d.action === 'REJECT'">
                             {{ d.action }}
                           </span>
-                          <span>{{ d.decidedBy }}</span>
+                          <span>{{ d.decidedByName ?? '—' }}</span>
                           <span class="text-muted">{{ d.decidedAt | date:'yyyy-MM-dd HH:mm' }}</span>
                           @if (d.comment) {
                             <span class="text-muted fst-italic">"{{ d.comment }}"</span>

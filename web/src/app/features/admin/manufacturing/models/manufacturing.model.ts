@@ -54,6 +54,10 @@ export interface WorkOrderDto {
   woNumber: string;
   companyId: string;
   branchId: string;
+  /** Display name for the branch — never render branchId to users. */
+  branchName: string | null;
+  /** Branch short code, shown as a muted secondary alongside the name. */
+  branchCode: string | null;
   finishedProductId: string;
   finishedProductCode: string;
   finishedProductName: string;
@@ -143,10 +147,22 @@ export interface ReleaseWorkOrderRequest {
 
 // ── Request: IssueComponentsRequest ─────────────────────────────────────────
 
+/**
+ * Per-line actual quantity to issue for a single component — the supervisor may
+ * enter more or less than the planned recipe qty. Ignored unless `lines` is set.
+ */
+export interface IssueComponentLineRequest {
+  componentUid: string;
+  qty: string;
+}
+
 export interface IssueComponentsRequest {
-  full: boolean;
+  /** true = issue the full remaining planned qty for all un-issued components. */
+  full?: boolean;
   componentUids?: string[];
   postingDate: string;
+  /** Per-line actual quantities; when present, only these named lines are issued. */
+  lines?: IssueComponentLineRequest[];
 }
 
 // ── Request: ApplyCostRequest ────────────────────────────────────────────────

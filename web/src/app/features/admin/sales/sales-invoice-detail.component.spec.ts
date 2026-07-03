@@ -1,15 +1,22 @@
 /**
- * SalesInvoiceDetailComponent — product-scoped unit picker specs.
+ * SalesInvoiceDetailComponent — product-scoped unit picker + Print PDF specs.
  *
- * Covers:
+ * Suite A — product-scoped unit picker:
  *  1. Selecting a product calls listProductUnits(productUid).
  *  2. Unit dropdown is populated with ONLY the returned units.
  *  3. First returned unit (base unit) is pre-selected after product pick.
  *  4. Unit list is cleared when a new product search starts.
  *  5. lineUnitsState transitions loading → idle.
  *  6. lineUnitsState set to 'error' when listProductUnits fails.
+ *
+ * Suite C — Print PDF (mirrors PurchaseOrderDetailComponent's pattern):
+ *  1. printPdf() calls DocumentsService.renderBlob('INVOICE', uid).
+ *  2. Button hidden on DRAFT (a draft has no rendered document).
+ *  3. Button shown on FINALISED and on VOID.
+ *  4. Button hidden without DOCUMENT.RENDER.
+ *  5. printError surfaces the friendly server message on failure.
  */
-import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClient, HttpErrorResponse } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
@@ -18,6 +25,7 @@ import { of, throwError } from 'rxjs';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import { ProductService } from '../products/product.service';
+import { DocumentsService } from '../documents/documents.service';
 import { SalesService } from './sales.service';
 import { SalesInvoiceDetailComponent } from './sales-invoice-detail.component';
 
@@ -31,7 +39,7 @@ const STUB_INVOICE = {
   routeCode: null, routeName: null,
   currency: 'TZS', netTotalAmount: '0', vatTotalAmount: '0', grossTotalAmount: '0',
   notes: null, finalisedAt: null, finalisedBy: null,
-  voidReason: null, createdAt: null,
+  voidReason: null, postedGlEntryUid: null as string | null, createdAt: null,
 };
 
 const STUB_UNITS = [
@@ -46,9 +54,15 @@ const STUB_PRODUCT = {
 
 function makeBed(overrides: {
   listProductUnitsSpy?: ReturnType<typeof vi.fn>;
+  invoice?: typeof STUB_INVOICE;
+  renderBlobSpy?: ReturnType<typeof vi.fn>;
+  hasPermission?: ReturnType<typeof vi.fn>;
 } = {}) {
   const listProductUnitsSpy =
     overrides.listProductUnitsSpy ?? vi.fn(() => of(STUB_UNITS));
+  const invoice = overrides.invoice ?? STUB_INVOICE;
+  const renderBlobSpy = overrides.renderBlobSpy ?? vi.fn(() => of(new Blob(['%PDF'])));
+  const hasPermission = overrides.hasPermission ?? vi.fn(() => true);
 
   TestBed.configureTestingModule({
     imports: [SalesInvoiceDetailComponent],
@@ -59,7 +73,7 @@ function makeBed(overrides: {
       {
         provide: SalesService,
         useValue: {
-          getByUid: vi.fn(() => of(STUB_INVOICE)),
+          getByUid: vi.fn(() => of(invoice)),
           listLines: vi.fn(() => of([])),
           listPayments: vi.fn(() => of([])),
           addLine: vi.fn(() => of({})),
@@ -78,13 +92,17 @@ function makeBed(overrides: {
         },
       },
       {
+        provide: DocumentsService,
+        useValue: { renderBlob: renderBlobSpy },
+      },
+      {
         provide: AlertService,
         useValue: { success: vi.fn(), error: vi.fn() },
       },
       {
         provide: SessionStore,
         useValue: {
-          hasPermission: vi.fn(() => true),
+          hasPermission,
           isAuthenticated: signal(true),
           user: signal(null),
           permissions: signal([]),
@@ -94,7 +112,7 @@ function makeBed(overrides: {
     ],
   });
 
-  return { listProductUnitsSpy };
+  return { listProductUnitsSpy, renderBlobSpy };
 }
 
 // ── Specs ──────────────────────────────────────────────────────────────────────
@@ -198,5 +216,124 @@ describe('SalesInvoiceDetailComponent — product-scoped unit picker', () => {
     await vi.runAllTimersAsync();
 
     expect(comp.lineUnitsState()).toBe('error');
+  });
+});
+
+// ── View Journal link (UPR: mirror AP bill-detail's posted-GL-entry link) ──────
+
+describe('SalesInvoiceDetailComponent — View Journal link', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('shows the View Journal link when postedGlEntryUid is set', async () => {
+    makeBed({ invoice: { ...STUB_INVOICE, status: 'FINALISED', postedGlEntryUid: 'GL-UID-9' } });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const anchors: HTMLAnchorElement[] = Array.from(fixture.nativeElement.querySelectorAll('a'));
+    const journalLink = anchors.find((a) => a.textContent?.includes('View Journal'));
+    expect(journalLink).toBeTruthy();
+    expect(journalLink?.getAttribute('href')).toBe('/admin/gl/journals/uid/GL-UID-9');
+  });
+
+  it('does not show the View Journal link when postedGlEntryUid is null', async () => {
+    makeBed({ invoice: { ...STUB_INVOICE, postedGlEntryUid: null } });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const anchors: HTMLAnchorElement[] = Array.from(fixture.nativeElement.querySelectorAll('a'));
+    expect(anchors.some((a) => a.textContent?.includes('View Journal'))).toBe(false);
+  });
+});
+
+// ── Print PDF (salesperson ask: hand over a rendered invoice) ──────────────────
+
+describe('SalesInvoiceDetailComponent — Print PDF', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('calls DocumentsService.renderBlob with INVOICE + the invoice uid on click', async () => {
+    const { renderBlobSpy } = makeBed({ invoice: { ...STUB_INVOICE, status: 'FINALISED' } });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.printPdf();
+
+    expect(renderBlobSpy).toHaveBeenCalledWith('INVOICE', 'INV-UID-1');
+  });
+
+  it('hides the Print PDF button on a DRAFT invoice', async () => {
+    makeBed({ invoice: { ...STUB_INVOICE, status: 'DRAFT' } });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const buttons: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
+    expect(buttons.some((b) => b.textContent?.includes('Print PDF'))).toBe(false);
+  });
+
+  it('shows the Print PDF button on a FINALISED invoice', async () => {
+    makeBed({ invoice: { ...STUB_INVOICE, status: 'FINALISED' } });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const buttons: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
+    expect(buttons.some((b) => b.textContent?.includes('Print PDF'))).toBe(true);
+  });
+
+  it('shows the Print PDF button on a VOID invoice', async () => {
+    makeBed({ invoice: { ...STUB_INVOICE, status: 'VOID' } });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const buttons: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
+    expect(buttons.some((b) => b.textContent?.includes('Print PDF'))).toBe(true);
+  });
+
+  it('hides the Print PDF button when the user lacks DOCUMENT.RENDER', async () => {
+    makeBed({
+      invoice: { ...STUB_INVOICE, status: 'FINALISED' },
+      hasPermission: vi.fn((code: string) => code !== 'DOCUMENT.RENDER'),
+    });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const buttons: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
+    expect(buttons.some((b) => b.textContent?.includes('Print PDF'))).toBe(false);
+  });
+
+  it('sets printError with the friendly server message when renderBlob fails', async () => {
+    const errResponse = new HttpErrorResponse({
+      error: new Blob([JSON.stringify({ errors: ['Document templates aren’t set up.'] })],
+        { type: 'application/json' }),
+      status: 409,
+    });
+    makeBed({
+      invoice: { ...STUB_INVOICE, status: 'FINALISED' },
+      renderBlobSpy: vi.fn(() => throwError(() => errResponse)),
+    });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.printPdf();
+    await vi.runAllTimersAsync();
+
+    expect(comp.printing()).toBe(false);
+    expect(comp.printError()).toBe('Document templates aren’t set up.');
   });
 });

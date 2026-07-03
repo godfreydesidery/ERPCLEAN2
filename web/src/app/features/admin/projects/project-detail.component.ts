@@ -143,7 +143,7 @@ export class ProjectDetailComponent {
   );
 
   readonly customerOptions = computed<UidOption[]>(() =>
-    this.pickerCustomers().map((c) => ({ uid: c.uid, label: c.displayName })),
+    this.pickerCustomers().map((c) => ({ uid: c.uid, label: c.displayName, hint: c.code })),
   );
   readonly userOptions = computed<UidOption[]>(() =>
     this.pickerUsers().map((u) => ({ uid: u.uid, label: u.displayName, hint: u.username })),

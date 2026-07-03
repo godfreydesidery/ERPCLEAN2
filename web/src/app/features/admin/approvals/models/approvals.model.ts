@@ -77,6 +77,8 @@ export interface ApprovalDecisionDto {
   approvalRequestStepId: string;
   action: DecisionAction;
   decidedBy: string;
+  /** Friendly display name for decidedBy (user id); null if not resolvable. */
+  decidedByName: string | null;
   decidedAt: string; // ISO Instant
   comment: string | null;
 }
@@ -86,6 +88,8 @@ export interface ApprovalRequestStepDto {
   uid: string;
   sequence: string; // int serialised as string
   approverRoleCode: string;
+  /** Friendly name for approverRoleCode (e.g. "Procurement Manager"); null if not resolvable. */
+  approverRoleName: string | null;
   status: ApprovalStepStatus;
   resolvedBy: string | null;
   resolvedAt: string | null; // ISO Instant
@@ -108,9 +112,17 @@ export interface ApprovalRequestDto {
   sourcePolicyUid: string | null;
   summary: string | null;
   submittedBy: string;
+  /** Friendly display name for submittedBy (user id); null if not resolvable. */
+  submittedByName: string | null;
   submittedAt: string; // ISO Instant
   resolvedAt: string | null; // ISO Instant
   resolvedBy: string | null;
+  /** Friendly display name for resolvedBy (user id); null if not resolvable / not yet resolved. */
+  resolvedByName: string | null;
+  /** Friendly name for branchId; null if not resolvable. */
+  branchName: string | null;
+  /** Short code for branchId; null if not resolvable. */
+  branchCode: string | null;
   steps: ApprovalRequestStepDto[];
 }
 

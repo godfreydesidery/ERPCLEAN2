@@ -1,11 +1,14 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { DatePipe, DecimalPipe } from '@angular/common';
-import { Component, computed, inject, input, signal } from '@angular/core';
+import { Component, computed, DestroyRef, inject, input, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
+import { blobErrorMessage } from '../../../core/api/blob-error';
 import { DeliveryDto, SalesReturnDto } from '../models/sales-orders.model';
 import { SalesInvoiceDto } from '../models/sales.model';
+import { DocumentsService } from '../documents/documents.service';
 import { SalesOrdersService } from './sales-orders.service';
 
 type LoadState = 'loading' | 'idle' | 'error';
@@ -25,8 +28,10 @@ type LoadState = 'loading' | 'idle' | 'error';
 })
 export class DeliveryDetailComponent {
   private readonly soService = inject(SalesOrdersService);
+  private readonly documentsService = inject(DocumentsService);
   private readonly alerts = inject(AlertService);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
   protected readonly session = inject(SessionStore);
 
   readonly uid = input.required<string>();
@@ -47,9 +52,14 @@ export class DeliveryDetailComponent {
   // ── Returns for this delivery ────────────────────────────────────────────────
   readonly existingReturns = signal<SalesReturnDto[]>([]);
 
+  // ── Print PDF ────────────────────────────────────────────────────────────
+  readonly printing = signal(false);
+  readonly printError = signal<string | null>(null);
+
   // ── Permissions ──────────────────────────────────────────────────────────────
   readonly canCreate = computed(() => this.session.hasPermission('SALES.DELIVERY.CREATE'));
   readonly canCreateReturn = computed(() => this.session.hasPermission('SALES.RETURN.CREATE'));
+  readonly canPrint = computed(() => this.session.hasPermission('DOCUMENT.RENDER'));
 
   // ── Derived ──────────────────────────────────────────────────────────────────
   readonly isDraft = computed(() => this.delivery()?.status === 'DRAFT');
@@ -136,6 +146,36 @@ export class DeliveryDetailComponent {
     });
   }
 
+  // ── Print PDF ────────────────────────────────────────────────────────────
+
+  /**
+   * Render the delivery note as a PDF and trigger a browser download.
+   * Mirrors the documents-module pattern (DocumentsService.renderBlob →
+   * triggerBlobDownload). Unlike invoices/POs the backend has no renderable-state
+   * guard for DELIVERY_NOTE — available regardless of delivery status.
+   */
+  printPdf(): void {
+    if (this.printing()) return;
+    this.printing.set(true);
+    this.printError.set(null);
+    this.documentsService
+      .renderBlob('DELIVERY_NOTE', this.uid())
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (blob) => {
+          this.printing.set(false);
+          const name = `delivery-note-${this.delivery()?.deliveryNumber ?? this.uid()}.pdf`;
+          triggerBlobDownload(blob, name);
+        },
+        error: (err) => {
+          this.printing.set(false);
+          // The error body is a Blob (responseType: 'blob'), so read the friendly server message
+          // out of it; falls back to a generic line if it isn't a JSON error envelope.
+          void blobErrorMessage(err, 'Could not generate the PDF.').then((m) => this.printError.set(m));
+        },
+      });
+  }
+
   private messageFrom(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {
       const errors = (err.error as { errors?: string[] })?.errors;
@@ -143,4 +183,14 @@ export class DeliveryDetailComponent {
     }
     return fallback;
   }
+}
+
+/** Create an object URL for a blob and click a synthetic anchor to download it. */
+function triggerBlobDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }

@@ -11,6 +11,7 @@ import { CustomerModel } from '../models/party.model';
 import { CustomerService } from '../parties/customer.service';
 import { ArAgeingRowDto, ArBalanceDto } from './models/ar.model';
 import { ArService } from './ar.service';
+import { formatMoney } from '../../../shared/money.util';
 
 type LoadState = 'idle' | 'loading' | 'error' | 'forbidden';
 
@@ -148,8 +149,6 @@ export class ArAgeingComponent {
 
   // ── Display helpers ────────────────────────────────────────────────────────
 
-  fmtMoney(v: number | string | null | undefined): string {
-    const n = +(v ?? 0);
-    return Number.isFinite(n) ? n.toFixed(2) : '0.00';
-  }
+  /** Coerce + format money with thousand separators (shared util). */
+  readonly fmtMoney = formatMoney;
 }

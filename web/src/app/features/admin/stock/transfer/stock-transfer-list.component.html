@@ -43,8 +43,7 @@
                 <th scope="col">Date</th>
                 <th scope="col">Mode</th>
                 <th scope="col">Status</th>
-                <th scope="col">Source Loc.</th>
-                <th scope="col">Dest Loc.</th>
+                <th scope="col">Route</th>
                 <th scope="col"><span class="visually-hidden">Actions</span></th>
               </tr>
             </thead>
@@ -64,8 +63,19 @@
                       <span class="status-tag__dot" aria-hidden="true"></span>{{ row.status }}
                     </span>
                   </td>
-                  <td>{{ locationLabel(row.sourceLocationId) }}</td>
-                  <td>{{ locationLabel(row.destLocationId) }}</td>
+                  <td>
+                    <span class="small">
+                      {{ row.sourceBranchName ?? '—' }}
+                      <i class="bi bi-arrow-right mx-1 text-muted" aria-hidden="true"></i>
+                      {{ row.destBranchName ?? '—' }}
+                    </span>
+                    <br />
+                    <span class="small text-muted">
+                      {{ row.sourceLocationName ?? locationLabel(row.sourceLocationId) }}
+                      &rarr;
+                      {{ row.destLocationName ?? locationLabel(row.destLocationId) }}
+                    </span>
+                  </td>
                   <td class="text-end">
                     <a [routerLink]="['/admin/stock-transfers/uid', row.uid]"
                        class="btn btn-sm btn-outline-secondary"

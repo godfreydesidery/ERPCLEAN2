@@ -15,7 +15,12 @@ import com.erp.modules.approvals.repository.ApprovalDecisionRepository;
 import com.erp.modules.approvals.repository.ApprovalPolicyStepRepository;
 import com.erp.modules.approvals.repository.ApprovalRequestRepository;
 import com.erp.modules.approvals.repository.ApprovalRequestStepRepository;
+import com.erp.modules.iam.domain.entity.AppUser;
+import com.erp.modules.iam.domain.entity.Branch;
+import com.erp.modules.iam.domain.entity.Role;
+import com.erp.modules.iam.repository.AppUserRepository;
 import com.erp.modules.iam.repository.BranchRepository;
+import com.erp.modules.iam.repository.RoleRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -51,6 +56,8 @@ public class ApprovalEngineImpl implements ApprovalEngine {
     private final ApprovalDecisionRepository    decisionRepo;
     private final ApprovalPolicyStepRepository  policyStepRepo;
     private final BranchRepository              branchRepo;
+    private final AppUserRepository             userRepo;
+    private final RoleRepository                roleRepo;
     private final ApprovalPolicyMatcher         matcher;
     private final ApprovalNumberGenerator       numberGen;
     private final ScopeGuard                    scopeGuard;
@@ -62,6 +69,8 @@ public class ApprovalEngineImpl implements ApprovalEngine {
                               ApprovalDecisionRepository decisionRepo,
                               ApprovalPolicyStepRepository policyStepRepo,
                               BranchRepository branchRepo,
+                              AppUserRepository userRepo,
+                              RoleRepository roleRepo,
                               ApprovalPolicyMatcher matcher,
                               ApprovalNumberGenerator numberGen,
                               ScopeGuard scopeGuard,
@@ -72,6 +81,8 @@ public class ApprovalEngineImpl implements ApprovalEngine {
         this.decisionRepo   = decisionRepo;
         this.policyStepRepo = policyStepRepo;
         this.branchRepo     = branchRepo;
+        this.userRepo       = userRepo;
+        this.roleRepo       = roleRepo;
         this.matcher        = matcher;
         this.numberGen      = numberGen;
         this.scopeGuard     = scopeGuard;
@@ -229,20 +240,64 @@ public class ApprovalEngineImpl implements ApprovalEngine {
                             .stream()
                             .map(d -> new ApprovalDecisionDto(d.getId(), d.getUid(),
                                     d.getApprovalRequestStepId(), d.getAction(),
-                                    d.getDecidedBy(), d.getDecidedAt(), d.getComment()))
+                                    d.getDecidedBy(), resolveUserName(d.getDecidedBy()),
+                                    d.getDecidedAt(), d.getComment()))
                             .toList();
                     return new ApprovalRequestStepDto(s.getId(), s.getUid(), s.getSequence(),
-                            s.getApproverRoleCode(), s.getStatus(),
-                            s.getResolvedBy(), s.getResolvedAt(), decisionDtos);
+                            s.getApproverRoleCode(), resolveRoleName(s.getApproverRoleCode()),
+                            s.getStatus(), s.getResolvedBy(), s.getResolvedAt(), decisionDtos);
                 })
                 .toList();
+
+        Branch branch = r.getBranchId() != null ? branchRepo.findById(r.getBranchId()).orElse(null) : null;
+
         return new ApprovalRequestDto(
                 r.getId(), r.getUid(), r.getCompanyId(), r.getBranchId(),
+                branch != null ? branch.getName() : null,
+                branch != null ? branch.getCode() : null,
                 r.getRequestNumber(), r.getDocumentType(), r.getDocumentUid(),
                 r.getAmount(), r.getCurrency().value(), r.getStatus(),
                 r.getCurrentStepSequence(), r.isAutoApproved(),
                 r.getSourcePolicyId(), r.getSourcePolicyUid(), r.getSummary(),
-                r.getSubmittedBy(), r.getSubmittedAt(), r.getResolvedAt(), r.getResolvedBy(),
+                r.getSubmittedBy(), resolveUserName(r.getSubmittedBy()), r.getSubmittedAt(),
+                r.getResolvedAt(), r.getResolvedBy(), resolveUserName(r.getResolvedBy()),
                 stepDtos);
+    }
+
+    // ------------------------------------------------------------------
+    // Read-time name resolution (managers' inbox complaint: raw ids/codes, no names) — a missing
+    // user/branch/role row is not an error here, it simply yields null; the read must never fail.
+    // ------------------------------------------------------------------
+
+    /**
+     * Resolves an {@code app_user} id to a display name (falls back to username when the display
+     * name is blank). Returns {@code null} when the id is {@code null} or the user no longer exists.
+     *
+     * <p>NOTE — N+1: called once per submittedBy/resolvedBy per request. Acceptable for the current
+     * inbox page size (matches the module's existing per-row resolution style, e.g.
+     * {@code SalesOrderServiceImpl.buildDto}); revisit with a batch lookup if inbox pages grow large.
+     */
+    private String resolveUserName(Long userId) {
+        if (userId == null) {
+            return null;
+        }
+        return userRepo.findById(userId).map(this::displayNameOrUsername).orElse(null);
+    }
+
+    private String displayNameOrUsername(AppUser user) {
+        String displayName = user.getDisplayName();
+        return (displayName != null && !displayName.isBlank()) ? displayName : user.getUsername();
+    }
+
+    /**
+     * Resolves an approver role code (frozen on the step at submit time) to the role's friendly
+     * display name. Returns {@code null} when the code is {@code null} or no longer matches a role
+     * (e.g. the role was deleted after the step was snapshotted).
+     */
+    private String resolveRoleName(String approverRoleCode) {
+        if (approverRoleCode == null) {
+            return null;
+        }
+        return roleRepo.findByCode(approverRoleCode).map(Role::getName).orElse(null);
     }
 }

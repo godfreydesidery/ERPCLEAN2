@@ -4,7 +4,9 @@ import com.erp.modules.hr.domain.dto.CreatePayrollRunRequest;
 import com.erp.modules.hr.domain.dto.DisburseRequest;
 import com.erp.modules.hr.domain.dto.PayrollLineDto;
 import com.erp.modules.hr.domain.dto.PayrollRunDto;
+import com.erp.modules.hr.domain.dto.PayslipDto;
 import com.erp.modules.hr.service.PayrollRunService;
+import com.erp.modules.hr.service.PayslipService;
 import com.erp.platform.common.api.ApiResponse;
 import com.erp.platform.common.api.PageMeta;
 import com.erp.platform.security.RequestContext;
@@ -31,11 +33,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class HrPayrollController {
 
     private final PayrollRunService service;
+    private final PayslipService    payslipService;
     private final ScopeGuard        scopeGuard;
 
-    public HrPayrollController(PayrollRunService service, ScopeGuard scopeGuard) {
-        this.service    = service;
-        this.scopeGuard = scopeGuard;
+    public HrPayrollController(PayrollRunService service, PayslipService payslipService,
+                                ScopeGuard scopeGuard) {
+        this.service        = service;
+        this.payslipService = payslipService;
+        this.scopeGuard     = scopeGuard;
     }
 
     @GetMapping
@@ -63,6 +68,13 @@ public class HrPayrollController {
     @PreAuthorize("@perm.scoped(#uid,'payrollrun','HR.PAYROLL.VIEW')")
     public List<PayrollLineDto> lines(@PathVariable String uid) {
         return service.listLines(uid);
+    }
+
+    /** Payslips generated for this run (posted onward), name-enriched, ordered by employee name. */
+    @GetMapping("/uid/{uid}/payslips")
+    @PreAuthorize("@perm.scoped(#uid,'payrollrun','HR.PAYROLL.VIEW')")
+    public List<PayslipDto> payslips(@PathVariable String uid) {
+        return payslipService.listByPayrollRunUid(uid);
     }
 
     @PostMapping("/uid/{uid}/calculate")

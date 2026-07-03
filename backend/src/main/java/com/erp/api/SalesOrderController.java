@@ -99,6 +99,17 @@ public class SalesOrderController {
         salesOrderService.confirm(uid);
     }
 
+    /**
+     * Submits a DRAFT order to the approvals engine (ADR-0022 D-7 seam, document type
+     * {@code SALES_ORDER}). Reuses {@code SALES.ORDER.CREATE} — the same scope-key already
+     * registered for this resource (see {@link #addLine}) — no new permission code.
+     */
+    @PutMapping("/uid/{uid}/submit-for-approval")
+    @PreAuthorize("@perm.scoped(#uid,'salesorder','SALES.ORDER.CREATE')")
+    public SalesOrderDto submitForApproval(@PathVariable String uid) {
+        return salesOrderService.submitForApproval(uid);
+    }
+
     @PutMapping("/uid/{uid}/cancel")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("@perm.scoped(#uid,'salesorder','SALES.ORDER.CANCEL')")
