@@ -44,7 +44,7 @@ export class LeadDetailComponent {
   // ── Customer picker ────────────────────────────────────────────────────────
   readonly customers = signal<CustomerModel[]>([]);
   readonly customerOptions = computed<UidOption[]>(() =>
-    this.customers().map((c) => ({ uid: c.uid, label: c.displayName })),
+    this.customers().map((c) => ({ uid: c.uid, label: c.displayName, hint: c.code })),
   );
 
   readonly uid = input.required<string>();
