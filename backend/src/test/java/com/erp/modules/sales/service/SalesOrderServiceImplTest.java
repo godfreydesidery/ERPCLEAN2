@@ -85,6 +85,7 @@ class SalesOrderServiceImplTest {
     @Mock com.erp.modules.ar.service.ArBalanceService arBalanceService;
     @Mock com.erp.platform.security.PermissionResolver permissionResolver;
     @Mock ApprovalEngine approvalEngine;
+    @Mock SalesApprovalGate salesApprovalGate;
 
     @InjectMocks SalesOrderServiceImpl service;
 
@@ -415,6 +416,117 @@ class SalesOrderServiceImplTest {
     }
 
     // -------------------------------------------------------------------------
+    // D-4 — automatic amount-threshold approval gate at confirm (extends PR #189)
+    // -------------------------------------------------------------------------
+
+    @Test
+    void confirm_overThreshold_noPriorRequest_autoSubmits_andThrowsFriendlyMessage_whenEnginePending() {
+        SalesOrder order = orderWithId(800L, "SOUID000000000000000030", CUSTOMER_ID, AGENT_ID);
+        when(orders.findByUid("SOUID000000000000000030")).thenReturn(Optional.of(order));
+        when(approvalEngine.getApprovalState(DOC_TYPE, "SOUID000000000000000030", COMPANY_ID))
+                .thenReturn(Optional.empty());
+        when(branches.findByIdAndCompany_Id(BRANCH_ID, COMPANY_ID))
+                .thenReturn(Optional.of(branchWithUid("BRUID0000000000000000001", "BR-01", "Head Office")));
+        when(salesApprovalGate.requiresApproval(order, "BRUID0000000000000000001")).thenReturn(true);
+        when(salesApprovalGate.submit(order, "BRUID0000000000000000001"))
+                .thenReturn(approvalRequest("SOUID000000000000000030", ApprovalRequestStatus.PENDING));
+
+        assertThatThrownBy(() -> service.confirm("SOUID000000000000000030"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("exceeds the approval threshold");
+
+        verify(salesApprovalGate).submit(order, "BRUID0000000000000000001");
+        assertThat(order.getStatus()).isEqualTo(SalesOrderStatus.DRAFT);
+    }
+
+    @Test
+    void confirm_overThreshold_noPriorRequest_engineAutoApproves_confirmProceeds() {
+        SalesOrder order = orderWithId(801L, "SOUID000000000000000031", CUSTOMER_ID, AGENT_ID);
+        when(orders.findByUid("SOUID000000000000000031")).thenReturn(Optional.of(order));
+        when(approvalEngine.getApprovalState(DOC_TYPE, "SOUID000000000000000031", COMPANY_ID))
+                .thenReturn(Optional.empty());
+        when(branches.findByIdAndCompany_Id(BRANCH_ID, COMPANY_ID))
+                .thenReturn(Optional.of(branchWithUid("BRUID0000000000000000001", "BR-01", "Head Office")));
+        when(salesApprovalGate.requiresApproval(order, "BRUID0000000000000000001")).thenReturn(true);
+        when(salesApprovalGate.submit(order, "BRUID0000000000000000001"))
+                .thenReturn(approvalRequest("SOUID000000000000000031", ApprovalRequestStatus.APPROVED));
+        SalesOrderLine line = new SalesOrderLine(801L, COMPANY_ID, BRANCH_ID, (short) 1,
+                400L, "PRD-01", "Widget",
+                500L, "EA",
+                BigDecimal.TEN, BigDecimal.TEN,
+                BigDecimal.ONE, BigDecimal.ONE,
+                VatStatus.STANDARD, BigDecimal.ZERO,
+                "TZS", 1L);
+        when(orderLines.findBySalesOrderIdOrderByLineNo(801L)).thenReturn(List.of(line));
+        when(customers.findById(CUSTOMER_ID)).thenReturn(Optional.of(
+                customer(CUSTOMER_ID, "CUST-0001", "Acme Traders")));
+        when(agents.findById(AGENT_ID)).thenReturn(Optional.of(
+                agent(AGENT_ID, "AGT-0001", "Jane Agent")));
+
+        SalesOrderDto dto = service.confirm("SOUID000000000000000031");
+
+        assertThat(dto.status()).isEqualTo("CONFIRMED");
+        verify(salesApprovalGate).submit(order, "BRUID0000000000000000001");
+    }
+
+    @Test
+    void confirm_belowThreshold_gateNotTriggered_confirmProceedsUnchanged() {
+        SalesOrder order = orderWithId(802L, "SOUID000000000000000032", CUSTOMER_ID, AGENT_ID);
+        when(orders.findByUid("SOUID000000000000000032")).thenReturn(Optional.of(order));
+        when(approvalEngine.getApprovalState(DOC_TYPE, "SOUID000000000000000032", COMPANY_ID))
+                .thenReturn(Optional.empty());
+        when(branches.findByIdAndCompany_Id(BRANCH_ID, COMPANY_ID))
+                .thenReturn(Optional.of(branchWithUid("BRUID0000000000000000001", "BR-01", "Head Office")));
+        when(salesApprovalGate.requiresApproval(order, "BRUID0000000000000000001")).thenReturn(false);
+        SalesOrderLine line = new SalesOrderLine(802L, COMPANY_ID, BRANCH_ID, (short) 1,
+                400L, "PRD-01", "Widget",
+                500L, "EA",
+                BigDecimal.TEN, BigDecimal.TEN,
+                BigDecimal.ONE, BigDecimal.ONE,
+                VatStatus.STANDARD, BigDecimal.ZERO,
+                "TZS", 1L);
+        when(orderLines.findBySalesOrderIdOrderByLineNo(802L)).thenReturn(List.of(line));
+        when(customers.findById(CUSTOMER_ID)).thenReturn(Optional.of(
+                customer(CUSTOMER_ID, "CUST-0001", "Acme Traders")));
+        when(agents.findById(AGENT_ID)).thenReturn(Optional.of(
+                agent(AGENT_ID, "AGT-0001", "Jane Agent")));
+
+        SalesOrderDto dto = service.confirm("SOUID000000000000000032");
+
+        assertThat(dto.status()).isEqualTo("CONFIRMED");
+        verify(salesApprovalGate, never()).submit(any(), any());
+    }
+
+    @Test
+    void confirm_manuallyApprovedOrder_gateSkipped_stillConfirms() {
+        // A prior manual submitForApproval (#189) already produced an APPROVED request — the D-4
+        // gate must not double-submit; assertApprovalClearance lets APPROVED through unchanged.
+        SalesOrder order = orderWithId(803L, "SOUID000000000000000033", CUSTOMER_ID, AGENT_ID);
+        when(orders.findByUid("SOUID000000000000000033")).thenReturn(Optional.of(order));
+        when(approvalEngine.getApprovalState(DOC_TYPE, "SOUID000000000000000033", COMPANY_ID))
+                .thenReturn(Optional.of(
+                        approvalRequest("SOUID000000000000000033", ApprovalRequestStatus.APPROVED)));
+        SalesOrderLine line = new SalesOrderLine(803L, COMPANY_ID, BRANCH_ID, (short) 1,
+                400L, "PRD-01", "Widget",
+                500L, "EA",
+                BigDecimal.TEN, BigDecimal.TEN,
+                BigDecimal.ONE, BigDecimal.ONE,
+                VatStatus.STANDARD, BigDecimal.ZERO,
+                "TZS", 1L);
+        when(orderLines.findBySalesOrderIdOrderByLineNo(803L)).thenReturn(List.of(line));
+        when(customers.findById(CUSTOMER_ID)).thenReturn(Optional.of(
+                customer(CUSTOMER_ID, "CUST-0001", "Acme Traders")));
+        when(agents.findById(AGENT_ID)).thenReturn(Optional.of(
+                agent(AGENT_ID, "AGT-0001", "Jane Agent")));
+
+        SalesOrderDto dto = service.confirm("SOUID000000000000000033");
+
+        assertThat(dto.status()).isEqualTo("CONFIRMED");
+        verify(salesApprovalGate, never()).requiresApproval(any(), any());
+        verify(salesApprovalGate, never()).submit(any(), any());
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
@@ -452,5 +564,12 @@ class SalesOrderServiceImplTest {
     /** Company param intentionally null — only name/code are read by the enrichment path. */
     private static Branch branch(String code, String name) {
         return new Branch(null, code, name);
+    }
+
+    /** Branch fixture with an explicit uid, for D-4 tests that resolve branchUid for the gate. */
+    private static Branch branchWithUid(String uid, String code, String name) {
+        Branch b = new Branch(null, code, name);
+        ReflectionTestUtils.setField(b, "uid", uid);
+        return b;
     }
 }

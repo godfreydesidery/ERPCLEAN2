@@ -1107,6 +1107,13 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./sales/pricing/pricing-rules.component').then((m) => m.PricingRulesComponent),
   },
+  // ── Sales Settings (D-4: SO approval threshold) ───────────────────────────
+  {
+    path: 'sales-settings',
+    canActivate: [requirePermission('SALES.SETTINGS.MANAGE')],
+    loadComponent: () =>
+      import('./sales/settings/sales-settings.component').then((m) => m.SalesSettingsComponent),
+  },
   // ── Other Parties ─────────────────────────────────────────────────────────
   {
     path: 'other-parties',

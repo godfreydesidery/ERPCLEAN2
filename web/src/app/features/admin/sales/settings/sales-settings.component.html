@@ -1,0 +1,125 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Sales Settings</h1>
+    <p class="subtitle">
+      <i class="bi bi-gear me-1" aria-hidden="true"></i>
+      Configure SO approval threshold per company.
+    </p>
+  </header>
+
+  @switch (companyState()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mb-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load companies.
+      </p>
+    }
+    @default {
+      <div class="mb-3" style="max-width:320px">
+        <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+        <select id="companyPicker" name="companyPicker" class="form-select"
+                [ngModel]="selectedCompanyUid()"
+                (ngModelChange)="onCompanyChange($event)">
+          @for (c of companies(); track c.uid) {
+            <option [value]="c.uid">{{ c.name }}</option>
+          }
+        </select>
+      </div>
+
+      @switch (state()) {
+        @case ('loading') {
+          <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading settings…
+          </p>
+        }
+        @case ('error') {
+          <p class="text-danger" role="alert">
+            <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+            Could not load sales settings.
+          </p>
+        }
+        @case ('forbidden') {
+          <div class="erp-empty">
+            <i class="bi bi-shield-lock"></i>
+            You don't have permission to view sales settings.
+          </div>
+        }
+        @default {
+          @if (settings()) {
+            <div class="erp-card" style="max-width:560px">
+              <div class="erp-card__head">
+                <h2>SO Approval</h2>
+              </div>
+              <div class="erp-card__body">
+                <form (ngSubmit)="save()" aria-label="Sales settings">
+
+                  <div class="mb-3">
+                    <div class="form-check form-switch">
+                      <input class="form-check-input" type="checkbox" role="switch"
+                             id="soApprovalEnabled"
+                             [ngModel]="fSoApprovalEnabled()"
+                             (ngModelChange)="fSoApprovalEnabled.set($event)"
+                             name="soApprovalEnabled"
+                             [disabled]="saving() || !canEdit()" />
+                      <label class="form-check-label" for="soApprovalEnabled">
+                        Enable SO Approval Workflow
+                      </label>
+                    </div>
+                  </div>
+
+                  @if (fSoApprovalEnabled()) {
+                    <div class="erp-form-grid mb-3">
+                      <div class="erp-field">
+                        <label class="form-label small text-muted mb-1" for="threshold">
+                          Approval Threshold Amount
+                        </label>
+                        <input id="threshold" name="threshold" type="number"
+                               class="form-control"
+                               placeholder="0.00"
+                               [ngModel]="fThresholdAmount()"
+                               (ngModelChange)="fThresholdAmount.set(String($event ?? ''))"
+                               min="0" step="any"
+                               [disabled]="saving() || !canEdit()" />
+                        <span class="hint">Sales orders above this value require approval.</span>
+                      </div>
+                      <div class="erp-field">
+                        <label class="form-label small text-muted mb-1" for="currency">Currency</label>
+                        <app-currency-select id="currency" name="currency"
+                                             [(ngModel)]="fCurrency"
+                                             [companyUid]="selectedCompanyUid()"
+                                             [disabled]="saving() || !canEdit()" />
+                      </div>
+                    </div>
+                  }
+
+                  @if (saveError(); as msg) {
+                    <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
+                  }
+
+                  @if (canEdit()) {
+                    <div>
+                      <button type="submit" class="btn btn-primary" [disabled]="saving()">
+                        @if (saving()) {
+                          <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                          Saving…
+                        } @else {
+                          <i class="bi bi-save me-1" aria-hidden="true"></i>Save Settings
+                        }
+                      </button>
+                    </div>
+                  }
+
+                </form>
+              </div>
+            </div>
+          }
+        }
+      }
+    }
+  }
+</section>
