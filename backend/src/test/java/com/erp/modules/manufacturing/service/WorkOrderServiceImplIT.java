@@ -183,7 +183,7 @@ class WorkOrderServiceImplIT extends PostgresIntegrationTest {
 
         // 3. Issue components (2 RM001 × 5 = 10 units at avg_cost 50.00 = 500.00 total)
         WorkOrderDto issued = costingService.issueComponents(released.uid(),
-                new IssueComponentsRequest(true, null, LocalDate.now()));
+                new IssueComponentsRequest(true, null, LocalDate.now(), null));
         assertThat(issued.status()).isEqualTo(WorkOrderStatus.IN_PROGRESS);
         assertThat(issued.wipDebitTotal())
                 .usingComparator(BigDecimal::compareTo)
@@ -223,7 +223,7 @@ class WorkOrderServiceImplIT extends PostgresIntegrationTest {
 
         // 2. Issue components (WIP GL +500)
         WorkOrderDto issued = costingService.issueComponents(released.uid(),
-                new IssueComponentsRequest(true, null, LocalDate.now()));
+                new IssueComponentsRequest(true, null, LocalDate.now(), null));
         assertThat(issued.wipDebitTotal())
                 .usingComparator(BigDecimal::compareTo).isGreaterThan(BigDecimal.ZERO);
 
@@ -304,11 +304,11 @@ class WorkOrderServiceImplIT extends PostgresIntegrationTest {
 
         // First issue — OK
         costingService.issueComponents(released.uid(),
-                new IssueComponentsRequest(true, null, LocalDate.now()));
+                new IssueComponentsRequest(true, null, LocalDate.now(), null));
 
         // Second full issue — all lines are already ISSUED; service must throw
         assertThatThrownBy(() -> costingService.issueComponents(released.uid(),
-                new IssueComponentsRequest(true, null, LocalDate.now())))
+                new IssueComponentsRequest(true, null, LocalDate.now(), null)))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("No unissued component lines");
     }
@@ -338,7 +338,7 @@ class WorkOrderServiceImplIT extends PostgresIntegrationTest {
                 null, LocalDate.now().plusDays(2), null, null));
         WorkOrderDto released = workOrderService.release(created.uid(), new ReleaseWorkOrderRequest(null));
         WorkOrderDto issued   = costingService.issueComponents(released.uid(),
-                new IssueComponentsRequest(true, null, LocalDate.now()));
+                new IssueComponentsRequest(true, null, LocalDate.now(), null));
 
         BigDecimal wipDebit = issued.wipDebitTotal();
         assertThat(wipDebit).usingComparator(BigDecimal::compareTo).isGreaterThan(BigDecimal.ZERO);
