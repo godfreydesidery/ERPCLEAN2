@@ -100,6 +100,8 @@ public class SalesOrderServiceImpl implements SalesOrderService {
     private final ArBalanceService         arBalanceService;
     private final PermissionResolver       permissionResolver;
     private final ApprovalEngine           approvalEngine;
+    /** D-4: automatic amount-threshold approval gate (extends the PR #189 engine-derived flow). */
+    private final SalesApprovalGate        salesApprovalGate;
 
     public SalesOrderServiceImpl(SalesOrderRepository orders,
                                  SalesOrderLineRepository orderLines,
@@ -123,7 +125,8 @@ public class SalesOrderServiceImpl implements SalesOrderService {
                                  AuditService audit,
                                  ArBalanceService arBalanceService,
                                  PermissionResolver permissionResolver,
-                                 ApprovalEngine approvalEngine) {
+                                 ApprovalEngine approvalEngine,
+                                 SalesApprovalGate salesApprovalGate) {
         this.orders           = orders;
         this.orderLines       = orderLines;
         this.quotations       = quotations;
@@ -147,6 +150,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         this.arBalanceService = arBalanceService;
         this.permissionResolver = permissionResolver;
         this.approvalEngine   = approvalEngine;
+        this.salesApprovalGate = salesApprovalGate;
     }
 
     @Override
@@ -283,6 +287,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
     private SalesOrderDto doConfirm(String orderUid) {
         SalesOrder order = require(orderUid);
         scopeGuard.assertCanActIn(RequestContext.get(), order.getCompanyId());
+        autoSubmitForApprovalIfOverThreshold(order);
         assertApprovalClearance(order);
         assertDraft(order);
 
@@ -630,6 +635,43 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         if (status == ApprovalRequestStatus.REJECTED) {
             throw new IllegalStateException(
                     "This order's approval was rejected and it cannot be confirmed.");
+        }
+    }
+
+    /**
+     * D-4: automatic amount-threshold approval gate, run BEFORE {@link #assertApprovalClearance}.
+     * Only acts when there is NO existing engine request for this order — if one already exists
+     * (submitted manually via {@link #submitForApproval(String)}, or by a previous confirm attempt),
+     * this is a no-op and {@link #assertApprovalClearance} governs the outcome, so we never
+     * double-submit.
+     *
+     * <p>When {@link SalesApprovalGate#requiresApproval} says the order is over-threshold, submits
+     * it to the engine. If the engine had no matching policy it auto-approves the request
+     * (BR-APR-09) and confirm proceeds; otherwise the request is PENDING and confirm is blocked
+     * with a friendly message directing the operator to wait for the decision.
+     */
+    private void autoSubmitForApprovalIfOverThreshold(SalesOrder order) {
+        Optional<ApprovalRequestDto> existing = approvalEngine.getApprovalState(
+                APPROVAL_DOC_TYPE, order.getUid(), order.getCompanyId());
+        if (existing.isPresent()) {
+            return;
+        }
+
+        String branchUid = branches.findByIdAndCompany_Id(order.getBranchId(), order.getCompanyId())
+                .map(Branch::getUid).orElse(null);
+        if (!salesApprovalGate.requiresApproval(order, branchUid)) {
+            return;
+        }
+
+        ApprovalRequestDto result = salesApprovalGate.submit(order, branchUid);
+        audit.record(AuditEvent.of(AuditActions.SO_SUBMIT_FOR_APPROVAL, "sales_orders",
+                order.getId(), order.getUid())
+                .detail(Map.of("orderNumber", order.getOrderNumber(), "trigger", "auto_threshold")));
+
+        if (result.status() != ApprovalRequestStatus.APPROVED) {
+            throw new IllegalStateException(
+                    "This order exceeds the approval threshold and has been submitted for "
+                            + "approval. It can be confirmed once it is approved.");
         }
     }
 

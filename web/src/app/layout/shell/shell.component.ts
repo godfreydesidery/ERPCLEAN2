@@ -153,6 +153,7 @@ export class ShellComponent {
         { label: 'Blanket Orders', route: '/admin/blanket-orders', icon: 'bi-file-earmark-ruled', available: true, permission: 'SALES.BLANKET.VIEW' },
         { label: 'Standing Orders', route: '/admin/standing-orders', icon: 'bi-arrow-repeat', available: true, permission: 'SALES.STANDING.VIEW' },
         { label: 'Pricing Rules', route: '/admin/pricing-rules', icon: 'bi-tags-fill', available: true, permission: 'SALES.PRICING.RULE.VIEW' },
+        { label: 'Sales Settings', route: '/admin/sales-settings', icon: 'bi-gear', available: true, permission: 'SALES.SETTINGS.MANAGE' },
       ],
     },
     {

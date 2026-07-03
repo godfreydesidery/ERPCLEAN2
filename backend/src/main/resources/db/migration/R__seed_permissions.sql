@@ -205,6 +205,7 @@ INSERT INTO permissions (code, module, description) VALUES
     ('SALES.QUOTE.VIEW', 'sales', 'View quotations'),
     ('SALES.RETURN.CREATE', 'sales', 'Create a sales return against a delivery (stock back in + credit note)'),
     ('SALES.RETURN.VIEW', 'sales', 'View sales returns / RMA'),
+    ('SALES.SETTINGS.MANAGE', 'sales', 'Set the SO approval threshold and enable flag'),
     ('SALES.STANDING.CREATE', 'sales', 'Create standing / recurring orders'),
     ('SALES.STANDING.GENERATE', 'sales', 'Trigger generation of the next child SO from a standing order'),
     ('SALES.STANDING.MANAGE', 'sales', 'Pause/resume/cancel/trigger standing orders'),

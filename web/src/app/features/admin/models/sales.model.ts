@@ -162,3 +162,27 @@ export interface CreateTaxRateRequest {
   vatStatus: VatStatus;
   rate: string;
 }
+
+// ── Sales Settings DTOs / requests (D-4: SO approval threshold) ──────────────
+//
+// NOTE: unlike most amount fields on this page (typed `string` per the legacy
+// convention above), the backend SalesSettingsDto serialises
+// soApprovalThresholdAmount as a BigDecimal, which Jackson emits as a JSON
+// *number* (per the wire contract — only Long ids are stringified). Type it
+// `number` to match the real wire shape.
+
+export interface SalesSettingsDto {
+  id: string;
+  uid: string;
+  companyId: string;
+  soApprovalEnabled: boolean;
+  soApprovalThresholdAmount: number | null;
+  currency: string;
+}
+
+export interface UpdateSalesSettingsRequest {
+  companyUid: string;
+  soApprovalEnabled: boolean;
+  soApprovalThresholdAmount: number | null;
+  currency: string;
+}
