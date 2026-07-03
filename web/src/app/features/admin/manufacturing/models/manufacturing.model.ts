@@ -147,10 +147,22 @@ export interface ReleaseWorkOrderRequest {
 
 // ── Request: IssueComponentsRequest ─────────────────────────────────────────
 
+/**
+ * Per-line actual quantity to issue for a single component — the supervisor may
+ * enter more or less than the planned recipe qty. Ignored unless `lines` is set.
+ */
+export interface IssueComponentLineRequest {
+  componentUid: string;
+  qty: string;
+}
+
 export interface IssueComponentsRequest {
-  full: boolean;
+  /** true = issue the full remaining planned qty for all un-issued components. */
+  full?: boolean;
   componentUids?: string[];
   postingDate: string;
+  /** Per-line actual quantities; when present, only these named lines are issued. */
+  lines?: IssueComponentLineRequest[];
 }
 
 // ── Request: ApplyCostRequest ────────────────────────────────────────────────

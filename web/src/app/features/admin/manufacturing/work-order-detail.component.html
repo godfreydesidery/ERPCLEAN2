@@ -240,10 +240,13 @@
             <!-- Issue components -->
             @if (canIssue()) {
               <div>
-                <h3 class="erp-section-title">Issue Components (Full)</h3>
+                <h3 class="erp-section-title">Issue Components</h3>
                 <p class="small text-muted mb-2">
-                  Posts PRODUCTION_ISSUE movements for all un-issued component lines
-                  (DR WIP 1320 / CR Inventory 1300). First issue transitions RELEASED → IN_PROGRESS.
+                  Posts PRODUCTION_ISSUE movements (DR WIP 1320 / CR Inventory 1300). First issue
+                  transitions RELEASED → IN_PROGRESS. Use <strong>Issue All Components</strong> to post
+                  the full planned recipe qty, or enter an actual qty per line in the table below
+                  (defaulted to the remaining planned qty) and use
+                  <strong>Issue Entered Quantities</strong> to post those amounts instead.
                 </p>
                 <div class="d-flex gap-2 align-items-end flex-wrap">
                   <div class="erp-field" style="max-width:200px">
@@ -252,14 +255,21 @@
                     </label>
                     <input id="issuePostingDate" name="issuePostingDate" type="date" class="form-control form-control-sm"
                            [ngModel]="issuePostingDate()" (ngModelChange)="issuePostingDate.set($event)"
-                           [disabled]="issuing()" />
+                           [disabled]="issuing() || issuingLines()" />
                   </div>
                   <button type="button" class="btn btn-info text-white"
-                          (click)="issueComponents()" [disabled]="issuing()">
+                          (click)="issueComponents()" [disabled]="issuing() || issuingLines()">
                     @if (issuing()) {
                       <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
                     }
                     <i class="bi bi-arrow-down-square me-1" aria-hidden="true"></i>Issue All Components
+                  </button>
+                  <button type="button" class="btn btn-outline-info"
+                          (click)="issueEnteredQuantities()" [disabled]="issuing() || issuingLines()">
+                    @if (issuingLines()) {
+                      <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                    }
+                    <i class="bi bi-pencil-square me-1" aria-hidden="true"></i>Issue Entered Quantities
                   </button>
                 </div>
                 @if (issueError(); as msg) {
@@ -456,6 +466,9 @@
                       <th scope="col">Product</th>
                       <th scope="col" class="text-end">Planned Qty</th>
                       <th scope="col" class="text-end">Issued Qty</th>
+                      @if (canIssue()) {
+                        <th scope="col" class="text-end">Actual Qty</th>
+                      }
                       <th scope="col" class="text-end">Issued Value</th>
                       <th scope="col" class="text-end">Unit Cost@Issue</th>
                       <th scope="col">Status</th>
@@ -471,6 +484,22 @@
                         </td>
                         <td class="num">{{ +comp.plannedQty | number:'1.2-6' }}</td>
                         <td class="num">{{ +comp.issuedQty | number:'1.2-6' }}</td>
+                        @if (canIssue()) {
+                          <td class="num">
+                            @if (comp.status !== 'ISSUED') {
+                              <input type="number"
+                                     class="form-control form-control-sm text-end"
+                                     style="width:110px; min-width:90px"
+                                     step="0.000001" min="0.000001"
+                                     [ngModel]="lineQtys()[comp.uid]"
+                                     (ngModelChange)="onLineQtyChange(comp.uid, $event)"
+                                     [disabled]="issuing() || issuingLines()"
+                                     [attr.aria-label]="'Actual qty to issue for ' + comp.componentProductCode" />
+                            } @else {
+                              <span class="text-muted">—</span>
+                            }
+                          </td>
+                        }
                         <td class="num">{{ +comp.issuedValue | number:'1.2-4' }}</td>
                         <td class="num"
                             [class.text-danger]="comp.costSkipped">

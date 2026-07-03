@@ -13,6 +13,7 @@ import {
   ApplyCostRequest,
   CloseWorkOrderRequest,
   CompleteWorkOrderRequest,
+  IssueComponentLineRequest,
   IssueComponentsRequest,
   ReleaseWorkOrderRequest,
   UpdateWorkOrderRequest,
@@ -86,7 +87,10 @@ export class WorkOrderDetailComponent {
   // ── Issue components action ───────────────────────────────────────────────
   readonly issuePostingDate = signal('');
   readonly issuing = signal(false);
+  readonly issuingLines = signal(false);
   readonly issueError = signal<string | null>(null);
+  /** Map componentUid → supervisor-entered actual qty, pre-filled with the remaining planned qty. */
+  readonly lineQtys = signal<Record<string, string>>({});
 
   // ── Apply cost action ─────────────────────────────────────────────────────
   readonly costLabourAmount = signal('');
@@ -182,6 +186,7 @@ export class WorkOrderDetailComponent {
         this.wo.set(w);
         this.woState.set('idle');
         this.patchForm(w);
+        this.initLineQtys(w);
         this.loadBranchOptions(w);
       },
       error: () => this.woState.set('error'),
@@ -220,6 +225,24 @@ export class WorkOrderDetailComponent {
     this.fBranchUid.set(w.branchId ?? '');
     this.fPlannedDate.set(w.plannedDate ?? '');
     this.fNotes.set(w.notes ?? '');
+  }
+
+  /** Pre-fill each un-fully-issued component line's actual-qty input with (plannedQty − issuedQty). */
+  private initLineQtys(w: WorkOrderDto): void {
+    const qtys: Record<string, string> = {};
+    for (const comp of w.components) {
+      if (comp.status === 'ISSUED') continue;
+      const remaining = Number(comp.plannedQty) - Number(comp.issuedQty);
+      qtys[comp.uid] = remaining > 0 ? String(Number(remaining.toFixed(6))) : '';
+    }
+    this.lineQtys.set(qtys);
+  }
+
+  onLineQtyChange(componentUid: string, val: unknown): void {
+    this.lineQtys.update((m) => ({
+      ...m,
+      [componentUid]: val === null || val === undefined ? '' : String(val),
+    }));
   }
 
   // ── Save (update) ─────────────────────────────────────────────────────────
@@ -289,12 +312,62 @@ export class WorkOrderDetailComponent {
     this.mfgService.issueComponents(this.uid(), request).subscribe({
       next: (updated) => {
         this.wo.set(updated);
+        this.initLineQtys(updated);
         this.issuing.set(false);
         this.alerts.success('Components issued', updated.woNumber);
       },
       error: (err: unknown) => {
         this.issueError.set(this.messageFrom(err, 'Could not issue components.'));
         this.issuing.set(false);
+      },
+    });
+  }
+
+  /**
+   * Issue only the per-line quantities the supervisor entered (may be less or more
+   * than the planned recipe amount). Blank inputs are skipped; a non-positive or
+   * non-numeric entry blocks the whole submission with a friendly inline error.
+   */
+  issueEnteredQuantities(): void {
+    const postingDate = this.issuePostingDate().trim();
+    if (!postingDate) {
+      this.issueError.set('Posting date is required.');
+      return;
+    }
+    const qtys = this.lineQtys();
+    const components = this.wo()?.components ?? [];
+    const lines: IssueComponentLineRequest[] = [];
+    for (const comp of components) {
+      const raw = qtys[comp.uid];
+      if (raw === undefined || raw === null) continue;
+      const trimmed = String(raw).trim();
+      if (trimmed === '') continue;
+      if (isNaN(Number(trimmed)) || Number(trimmed) <= 0) {
+        this.issueError.set(
+          `Actual qty for ${comp.componentProductCode} must be a positive number.`,
+        );
+        return;
+      }
+      lines.push({ componentUid: comp.uid, qty: trimmed });
+    }
+    if (lines.length === 0) {
+      this.issueError.set('Enter at least one actual quantity to issue.');
+      return;
+    }
+
+    this.issuingLines.set(true);
+    this.issueError.set(null);
+    const request: IssueComponentsRequest = { postingDate, lines };
+    this.mfgService.issueComponents(this.uid(), request).subscribe({
+      next: (updated) => {
+        this.wo.set(updated);
+        this.initLineQtys(updated);
+        this.issuingLines.set(false);
+        this.alerts.success('Components issued', updated.woNumber);
+      },
+      error: (err: unknown) => {
+        this.issueError.set(this.messageFrom(err, 'Could not issue components.'));
+        this.issuingLines.set(false);
       },
     });
   }
