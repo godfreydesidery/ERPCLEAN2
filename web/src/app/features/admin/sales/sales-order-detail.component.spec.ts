@@ -180,6 +180,19 @@ describe('SalesOrderDetailComponent — set agent', () => {
     expect(comp.showAgentForm()).toBe(false);
   });
 
+  it('submitAgent() success shows a confirmation toast — Daudi should not have to reload to confirm it stuck', async () => {
+    makeBed();
+    const comp = createComponent();
+    const alerts = TestBed.inject(AlertService) as unknown as { success: ReturnType<typeof vi.fn> };
+    await vi.runAllTimersAsync();
+
+    comp.selectedAgent.set({ uid: 'AGT1', label: 'Agent B' });
+    comp.submitAgent();
+    await vi.runAllTimersAsync();
+
+    expect(alerts.success).toHaveBeenCalledWith('Agent assigned');
+  });
+
   it('submitAgent() surfaces a friendly API error and keeps the form open', async () => {
     makeBed({
       setAgentImpl: () =>
