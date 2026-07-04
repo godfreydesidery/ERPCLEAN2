@@ -35,6 +35,25 @@ public interface StockBatchService {
                               BigDecimal qty, Long actorId);
 
     /**
+     * Reverse a prior lot receipt (D-2 — Goods Receipt void symmetry): finds the existing batch row
+     * by its natural key and applies the negated quantity delta. Never creates a batch row that does
+     * not already exist — if the lot is not found, logs a WARN and returns {@code null} (the qty/GL
+     * reversal must never be poisoned by a missing/pre-V76 batch row).
+     *
+     * @param companyId  tenant
+     * @param branchId   branch
+     * @param locationId the location the original receipt used
+     * @param productId  product
+     * @param lotNumber  lot/batch number (natural key component; use the same "UNTRACKED" sentinel
+     *                   convention as the forward path when the original receipt had none)
+     * @param qty        positive quantity to reverse (the delta applied is {@code qty.negate()})
+     * @param actorId    user performing the action (nullable — SYSTEM)
+     * @return DTO of the updated batch row, or {@code null} if no matching batch was found
+     */
+    StockBatchDto reverseReceiptQty(Long companyId, Long branchId, Long locationId, Long productId,
+                                     String lotNumber, BigDecimal qty, Long actorId);
+
+    /**
      * Consume quantity using FEFO: deduct from the earliest-expiring lots first (BR-INVD-10).
      * Called by the issue service after the primary stock movement.
      *

@@ -1,12 +1,16 @@
 package com.erp.modules.stock.events;
 
 import com.erp.modules.stock.domain.dto.StockReceiptVoidedPayload;
+import com.erp.modules.stock.domain.entity.StockLocation;
 import com.erp.modules.stock.domain.entity.StockMovement;
 import com.erp.modules.stock.domain.enums.MovementType;
+import com.erp.modules.stock.repository.StockLocationRepository;
 import com.erp.modules.stock.repository.StockMovementRepository;
 import com.erp.modules.stock.service.InventoryGlPoster;
 import com.erp.modules.stock.service.InventoryValuationService;
+import com.erp.modules.stock.service.StockBatchService;
 import com.erp.modules.stock.service.StockPostingService;
+import com.erp.modules.stock.service.StockSerialService;
 import com.erp.platform.events.DomainEvent;
 import com.erp.platform.events.DomainEventHandler;
 import com.erp.platform.events.DomainEventType;
@@ -15,7 +19,11 @@ import com.erp.platform.security.RequestContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -26,13 +34,27 @@ import org.springframework.transaction.annotation.Transactional;
  * Consumes {@code STOCK.RECEIPT.VOIDED} — reverses GOODS_RECEIPT movements from the ledger
  * (ADR-0010 D-5, the buying-side mirror of {@link SaleReversalStockHandler}).
  *
- * <p>V76 — batch/serial reversal: TODO. Neither {@code StockBatchService} nor
- * {@code StockSerialService} currently exposes a purpose-built "receipt-reversal" API:
- * batch reversal needs a {@code reverseReceiptQty(companyId, branchId, locationId, productId,
- * lotNumber, qty)} method, and serial reversal needs a {@code removeReceived(companyId, productId,
- * serialNumber)} method that finds the row by natural key and deletes / marks it RETURNED.
- * Adding those without a dedicated ADR is out of scope here. The existing qty/GL reversal is
- * unaffected; batch/serial rows will retain their original receipt values until this is addressed.
+ * <p>D-2 — batch/serial reversal: after the qty movement for each line is posted, backs out
+ * {@code stock_batches}/{@code stock_serials} rows written on receipt (symmetric with
+ * {@link GoodsReceiptStockHandler}). Batch/serial writes are looked up from the payload lines
+ * (matched to the ledger movement by {@code productId}, best-effort in the rare case of two GR
+ * lines for the same product) and are entirely soft: a lookup miss, a moved-on serial, or any
+ * write exception is logged at WARN and skipped — the qty/GL reversal above is never poisoned by a
+ * tracking hiccup.
+ *
+ * <p>FIX A: the reversal QUANTITY is sourced from the same payload line that supplies the LOT
+ * (never from the ledger movement's own quantity) — the movement finder has no {@code ORDER BY},
+ * so for two GR lines of the same product in different lots, pairing a movement's quantity with a
+ * best-effort-matched line's lot could decrement the wrong lot by the wrong amount.
+ *
+ * <p>FIX B: batch reversal fires when the payload line carries lot/expiry data OR the line's
+ * {@code lotTracked} flag is set (mirrors {@link GoodsReceiptStockHandler#writeBatchTracking}'s
+ * {@code shouldWrite}) — so a lot-tracked product received with a blank lot (the forward path's
+ * {@code "UNTRACKED"} sentinel) is correctly reversed instead of silently skipped.
+ *
+ * <p>FIX C: batch reversal targets the iterated {@link StockMovement}'s OWN receipt-time
+ * {@code locationId}, not a location re-resolved at void time — a branch default-location change
+ * between receipt and void must not cause the reversal to miss the batch row.
  *
  * <p>ADR-0020: for each original GOODS_RECEIPT movement, reads the stored {@code value_amount}
  * (cost at time of receipt) and calls {@link InventoryValuationService#reverseReceipt} to back
@@ -54,6 +76,9 @@ public class GoodsReceiptReversalStockHandler implements DomainEventHandler {
     private final StockMovementRepository    movementRepository;
     private final InventoryValuationService  valuation;
     private final InventoryGlPoster          glPoster;
+    private final StockBatchService          batchService;
+    private final StockSerialService         serialService;
+    private final StockLocationRepository    locationRepo;
     private final ObjectMapper               objectMapper;
 
     public GoodsReceiptReversalStockHandler(IdempotencyGuard guard,
@@ -61,12 +86,18 @@ public class GoodsReceiptReversalStockHandler implements DomainEventHandler {
                                              StockMovementRepository movementRepository,
                                              InventoryValuationService valuation,
                                              InventoryGlPoster glPoster,
+                                             StockBatchService batchService,
+                                             StockSerialService serialService,
+                                             StockLocationRepository locationRepo,
                                              ObjectMapper objectMapper) {
         this.guard              = guard;
         this.posting            = posting;
         this.movementRepository = movementRepository;
         this.valuation          = valuation;
         this.glPoster           = glPoster;
+        this.batchService       = batchService;
+        this.serialService      = serialService;
+        this.locationRepo       = locationRepo;
         this.objectMapper       = objectMapper;
     }
 
@@ -105,6 +136,14 @@ public class GoodsReceiptReversalStockHandler implements DomainEventHandler {
             BigDecimal totalOriginalValue = BigDecimal.ZERO;
             boolean anyCostNull = false;
 
+            // D-2: resolve the branch default location once — used for batch/serial reversal
+            // writes, mirroring GoodsReceiptStockHandler's resolveDefaultLocationId. Null (with a
+            // WARN) if none exists; tracking reversal is then skipped (soft), qty/GL proceed.
+            Long defaultLocationId = resolveDefaultLocationId(
+                    event.getCompanyId(), event.getBranchId(), payload.receiptUid());
+            Map<Long, Deque<StockReceiptVoidedPayload.LineItem>> linesByProduct =
+                    groupLinesByProduct(payload.lines());
+
             for (StockMovement original : received) {
                 BigDecimal originalValue = original.getValueAmount();
                 // Original GOODS_RECEIPT quantity is positive; reversal posts negative.
@@ -135,6 +174,22 @@ public class GoodsReceiptReversalStockHandler implements DomainEventHandler {
                         null,
                         original.getUnitCostAmount(),
                         originalValue);
+
+                // D-2: batch/serial reversal — soft, never fails the dispatch.
+                // FIX C: prefer the movement's OWN receipt-time location; fall back to the
+                // re-resolved branch default only if the movement itself carries no location.
+                Long batchLocationId = original.getLocationId() != null
+                        ? original.getLocationId() : defaultLocationId;
+                StockReceiptVoidedPayload.LineItem matchedLine =
+                        pollLineForProduct(linesByProduct, original.getProductId());
+                if (matchedLine != null) {
+                    // FIX A: qty comes from the SAME line that supplies the lot — never from the
+                    // ledger's originalQty (see class Javadoc).
+                    if (batchLocationId != null) {
+                        reverseBatchTracking(event, matchedLine, batchLocationId, matchedLine.qtyInBase());
+                    }
+                    reverseSerialTracking(event, matchedLine, payload.receiptUid());
+                }
             }
 
             // Post one GL journal DR GRNI / CR INVENTORY for the entire receipt reversal (D-5).
@@ -170,5 +225,101 @@ public class GoodsReceiptReversalStockHandler implements DomainEventHandler {
         } catch (Exception ex) {
             throw new IllegalArgumentException("Cannot deserialise StockReceiptVoidedPayload: " + ex.getMessage(), ex);
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // D-2 helpers — batch and serial reversal (all soft: exceptions are caught + warned)
+    // -------------------------------------------------------------------------
+
+    /** Groups payload lines by productId, preserving declaration order (best-effort correlation
+     * with ledger movements for the rare case of two GR lines on the same product). */
+    private Map<Long, Deque<StockReceiptVoidedPayload.LineItem>> groupLinesByProduct(
+            List<StockReceiptVoidedPayload.LineItem> lines) {
+        Map<Long, Deque<StockReceiptVoidedPayload.LineItem>> byProduct = new HashMap<>();
+        if (lines == null) {
+            return byProduct;
+        }
+        for (StockReceiptVoidedPayload.LineItem line : lines) {
+            byProduct.computeIfAbsent(line.productId(), k -> new ArrayDeque<>()).add(line);
+        }
+        return byProduct;
+    }
+
+    /** Pops the next unmatched payload line for a product id, or null if none remain. */
+    private StockReceiptVoidedPayload.LineItem pollLineForProduct(
+            Map<Long, Deque<StockReceiptVoidedPayload.LineItem>> byProduct, Long productId) {
+        Deque<StockReceiptVoidedPayload.LineItem> queue = byProduct.get(productId);
+        return queue != null ? queue.poll() : null;
+    }
+
+    /**
+     * Reverses a {@code stock_batches} row when the product is lot-tracked OR the payload line
+     * carries lot/expiry data — mirrors the forward {@code writeBatchTracking}'s {@code shouldWrite}
+     * (FIX B), including its {@code "UNTRACKED"} sentinel when the lot number is blank.
+     */
+    private void reverseBatchTracking(DomainEvent event, StockReceiptVoidedPayload.LineItem line,
+                                       Long locationId, BigDecimal qty) {
+        boolean hasLotData = (line.lotNumber() != null && !line.lotNumber().isBlank())
+                || line.expiryDate() != null;
+        boolean shouldReverse = line.lotTracked() || hasLotData;
+        if (!shouldReverse || qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+        String lotNumber = (line.lotNumber() != null && !line.lotNumber().isBlank())
+                ? line.lotNumber().trim()
+                : "UNTRACKED";
+        try {
+            batchService.reverseReceiptQty(
+                    event.getCompanyId(), event.getBranchId(), locationId, line.productId(),
+                    lotNumber, qty, null /* actorId — SYSTEM */);
+            log.debug("GoodsReceiptReversalStockHandler: batch reversed lot='{}' product={} qty=-{} " +
+                            "receipt={}", lotNumber, line.productId(), qty, event.getUid());
+        } catch (Exception ex) {
+            log.warn("GoodsReceiptReversalStockHandler: batch reversal failed for lot='{}' product={} " +
+                             "receipt={} — skipping (soft); cause: {}",
+                    lotNumber, line.productId(), event.getUid(), ex.getMessage());
+        }
+    }
+
+    /**
+     * Removes each {@code stock_serials} row recorded by this exact receipt, IF it is still
+     * IN_STOCK (never touches an ISSUED/RETURNED serial) — delegates the guard to
+     * {@link StockSerialService#removeReceived}.
+     */
+    private void reverseSerialTracking(DomainEvent event, StockReceiptVoidedPayload.LineItem line,
+                                        String receiptUid) {
+        List<String> serials = line.serialNumbers();
+        if (serials == null || serials.isEmpty()) {
+            return;
+        }
+        for (String serial : serials) {
+            if (serial == null || serial.isBlank()) continue;
+            try {
+                serialService.removeReceived(
+                        event.getCompanyId(), line.productId(), serial.trim(), receiptUid);
+                log.debug("GoodsReceiptReversalStockHandler: serial removal attempted serial='{}' " +
+                                "product={} receipt={}", serial, line.productId(), event.getUid());
+            } catch (Exception ex) {
+                log.warn("GoodsReceiptReversalStockHandler: serial removal failed serial='{}' product={} " +
+                                 "receipt={} — skipping (soft); cause: {}",
+                        serial, line.productId(), event.getUid(), ex.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Resolve the branch default stock location id (mirrors
+     * {@code GoodsReceiptStockHandler.resolveDefaultLocationId}).
+     * Returns null (with a WARN) if none exists — callers treat null as "skip tracking reversal".
+     */
+    private Long resolveDefaultLocationId(Long companyId, Long branchId, String receiptUid) {
+        return locationRepo.findByCompanyIdAndBranchIdAndIsDefaultTrue(companyId, branchId)
+                .map(StockLocation::getId)
+                .orElseGet(() -> {
+                    log.warn("GoodsReceiptReversalStockHandler: no default stock location for company={} " +
+                                     "branch={} receipt={} — batch/serial reversal skipped (D-2 soft)",
+                            companyId, branchId, receiptUid);
+                    return null;
+                });
     }
 }

@@ -1,5 +1,6 @@
 package com.erp.modules.purchases.service;
 
+import com.erp.modules.purchases.domain.dto.ConvertRequisitionRequest;
 import com.erp.modules.purchases.domain.dto.CreatePurchaseRequisitionRequest;
 import com.erp.modules.purchases.domain.dto.PurchaseRequisitionDto;
 import org.springframework.data.domain.Page;
@@ -27,10 +28,11 @@ public interface PurchaseRequisitionService {
 
     /**
      * APPROVED → CONVERTED.
-     * convertToType: "PURCHASE_ORDER" or "RFQ".
-     * Returns the uid of the created document.
+     * Creates the target document (RFQ or Purchase Order) from the requisition's lines in the same
+     * transaction, sets {@code convertedToUid}/{@code convertedToType} on the requisition, and
+     * returns the uid of the created document (D-3).
      */
-    String convert(String uid, String convertToType);
+    String convert(String uid, ConvertRequisitionRequest req);
 
     /** DRAFT/SUBMITTED → CANCELLED. */
     PurchaseRequisitionDto cancel(String uid, String reason);

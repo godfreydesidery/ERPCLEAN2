@@ -1,5 +1,6 @@
 package com.erp.api;
 
+import com.erp.modules.purchases.domain.dto.ConvertRequisitionRequest;
 import com.erp.modules.purchases.domain.dto.CreatePurchaseRequisitionRequest;
 import com.erp.modules.purchases.domain.dto.PurchaseRequisitionDto;
 import com.erp.modules.purchases.service.PurchaseRequisitionService;
@@ -79,13 +80,16 @@ public class PurchaseRequisitionController {
         return ApiResponse.ok(service.reject(uid, reason));
     }
 
-    /** Convert to RFQ or PO (APPROVED → CONVERTED). Returns uid of the created document. */
+    /**
+     * Convert to RFQ or PO (APPROVED → CONVERTED). Actually creates the target document (D-3) and
+     * returns its uid.
+     */
     @PostMapping("/uid/{uid}/convert")
     @PreAuthorize("@perm.scoped(#uid, 'requisition', 'PURCHASE.REQUISITION.APPROVE')")
     public ApiResponse<String> convert(
             @PathVariable String uid,
-            @RequestParam String targetType) {
-        return ApiResponse.ok(service.convert(uid, targetType));
+            @Valid @RequestBody ConvertRequisitionRequest req) {
+        return ApiResponse.ok(service.convert(uid, req));
     }
 
     /** Cancel (any non-final state → CANCELLED). */

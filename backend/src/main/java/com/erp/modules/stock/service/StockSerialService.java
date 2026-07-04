@@ -30,6 +30,20 @@ public interface StockSerialService {
                            String serialNumber, String receivedDocumentUid, Long actorId);
 
     /**
+     * Reverse a prior serial receipt (D-2 — Goods Receipt void symmetry): deletes the
+     * {@code stock_serials} row IF AND ONLY IF it exists, is still {@code IN_STOCK}, and was
+     * received by this exact document (natural-key + status + provenance guard). A serial that has
+     * already moved on (ISSUED/RETURNED) — or was received by a different document — is left alone
+     * and a WARN is logged; the qty/GL reversal must never be poisoned by a stale/moved serial.
+     *
+     * @param companyId   tenant
+     * @param productId   product
+     * @param serialNumber the serial number (natural key component with company+product)
+     * @param receiptUid  the goods-receipt uid that must match {@code received_document_uid}
+     */
+    void removeReceived(Long companyId, Long productId, String serialNumber, String receiptUid);
+
+    /**
      * Issue a serial (sale/delivery): ISSUED + clear location.
      *
      * @param uid                serial uid

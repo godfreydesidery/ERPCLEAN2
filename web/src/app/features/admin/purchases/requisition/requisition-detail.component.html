@@ -260,16 +260,90 @@
                   <option value="RFQ">Request for Quotation (RFQ)</option>
                 </select>
               </div>
-              <div class="d-flex gap-2">
+
+              @if (convertTargetType() === 'RFQ') {
+                <!-- Multi-supplier invite list (add/remove), mirrors rfq-create.component -->
+                <p class="small text-muted mb-1">
+                  Invite suppliers <span class="text-danger" aria-hidden="true">*</span>
+                </p>
+                @if (convertSupplierUids().length > 0) {
+                  <ul class="list-group list-group-flush mb-2" aria-label="Invited suppliers" style="max-width:480px">
+                    @for (supplierUid of convertSupplierUids(); track supplierUid) {
+                      <li class="list-group-item d-flex align-items-center justify-content-between py-1 px-0">
+                        <span class="small">{{ convertSupplierLabel(supplierUid) }}</span>
+                        <button type="button" class="btn btn-sm btn-outline-danger"
+                                (click)="removeConvertSupplier(supplierUid)"
+                                [disabled]="actionBusy()"
+                                [attr.aria-label]="'Remove supplier ' + convertSupplierLabel(supplierUid)">
+                          <i class="bi bi-x" aria-hidden="true"></i>
+                        </button>
+                      </li>
+                    }
+                  </ul>
+                }
+                <div class="d-flex gap-2 align-items-end mb-2" style="max-width:480px">
+                  <div class="flex-grow-1">
+                    <label class="form-label small text-muted mb-1" for="convertPendingSupplier">
+                      Add a supplier
+                    </label>
+                    <app-uid-picker
+                      id="convertPendingSupplier"
+                      [ngModel]="convertPendingSupplierUid()"
+                      (ngModelChange)="convertPendingSupplierUid.set($event)"
+                      name="convertPendingSupplier"
+                      [options]="availableConvertSupplierOptions()"
+                      placeholder="Select supplier to add"
+                      [disabled]="actionBusy()" />
+                  </div>
+                  <button type="button" class="btn btn-outline-secondary"
+                          (click)="addConvertSupplier()"
+                          [disabled]="!convertPendingSupplierUid() || actionBusy()"
+                          aria-label="Add supplier to invite list">
+                    <i class="bi bi-plus-lg" aria-hidden="true"></i>
+                  </button>
+                </div>
+                @if (convertSupplierUids().length === 0) {
+                  <p class="small text-muted mb-2">At least one supplier is required for an RFQ.</p>
+                }
+              } @else {
+                <!-- Single supplier + optional currency override -->
+                <div class="erp-field mb-2" style="max-width:320px">
+                  <label class="form-label small text-muted mb-1" for="convertSupplier">
+                    Supplier <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <app-uid-picker
+                    id="convertSupplier"
+                    [ngModel]="convertSupplierUid()"
+                    (ngModelChange)="convertSupplierUid.set($event)"
+                    name="convertSupplier"
+                    [options]="supplierOptions()"
+                    placeholder="Select supplier"
+                    [required]="true"
+                    [disabled]="actionBusy()" />
+                </div>
+                <div class="erp-field mb-2" style="max-width:320px">
+                  <label class="form-label small text-muted mb-1" for="convertCurrency">
+                    Currency (optional)
+                  </label>
+                  <input id="convertCurrency" name="convertCurrency" type="text" class="form-control"
+                         [ngModel]="convertCurrency()"
+                         (ngModelChange)="convertCurrency.set($event)"
+                         [disabled]="actionBusy()"
+                         maxlength="3"
+                         placeholder="Leave blank for company default" />
+                </div>
+              }
+
+              <div class="d-flex gap-2 mt-1">
                 <button type="button" class="btn btn-info btn-sm text-white"
-                        (click)="confirmConvert()" [disabled]="actionBusy()">
+                        (click)="confirmConvert()" [disabled]="actionBusy() || !canConfirmConvert()">
                   @if (actionBusy()) {
                     <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
                   }
                   Confirm Convert
                 </button>
                 <button type="button" class="btn btn-outline-secondary btn-sm"
-                        (click)="showConvertForm.set(false)" [disabled]="actionBusy()">
+                        (click)="cancelConvertForm()" [disabled]="actionBusy()">
                   Cancel
                 </button>
               </div>

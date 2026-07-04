@@ -48,6 +48,16 @@ export class AgentService {
     return this.http.get<AgentModel>(`${this.base}/uid/${uid}`);
   }
 
+  /**
+   * D-5: resolves the ACTIVE INTERNAL agent linked to the current user, for the SO/Invoice
+   * create-form UX pre-fill (the backend already auto-defaults the agent on save when none is
+   * sent — this is purely so the route agent SEES agent = themselves, still fully editable).
+   * `data` is `null` (never a 404) when the caller has no linked internal agent (e.g. root).
+   */
+  myAgent(companyUid: string): Observable<AgentModel | null> {
+    return this.http.get<AgentModel | null>(`${this.base}/mine`, { params: { companyUid } });
+  }
+
   create(request: CreateAgentRequest): Observable<AgentModel> {
     return this.http.post<AgentModel>(this.base, request);
   }

@@ -10,6 +10,7 @@ import com.erp.platform.common.api.ApiResponse;
 import com.erp.platform.common.api.PageMeta;
 import jakarta.validation.Valid;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -51,6 +52,21 @@ public class AgentController {
     @PreAuthorize("@perm.has('AGENT.VIEW')")
     public AgentDto get(@PathVariable String uid) {
         return agents.getByUid(uid);
+    }
+
+    /**
+     * D-5: resolves the ACTIVE INTERNAL agent linked to the current user, so the web can pre-select
+     * "my agent" on SO/SI/POS forms (the backend already auto-resolves this on save when no agentUid
+     * is passed — this endpoint just lets the UI show the same choice up front). Reuses the same
+     * permission as {@link #list} (no new permission code). {@code data} is {@code null} (200 OK)
+     * when the caller is root or has no linked internal agent — never a 404, since "no agent" is a
+     * perfectly normal outcome here, not an error.
+     */
+    @GetMapping("/mine")
+    @PreAuthorize("@perm.has('AGENT.VIEW')")
+    public ApiResponse<AgentDto> mine(@RequestParam String companyUid) {
+        Optional<AgentDto> agent = agents.myAgent(companyUid);
+        return ApiResponse.ok(agent.orElse(null));
     }
 
     @PostMapping
