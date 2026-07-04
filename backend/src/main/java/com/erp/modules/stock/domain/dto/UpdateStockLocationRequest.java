@@ -10,5 +10,11 @@ import jakarta.validation.constraints.Size;
  */
 public record UpdateStockLocationRequest(
         @NotBlank @Size(max = 120) String name,
-        @NotNull LocationType locationType
+        @NotNull LocationType locationType,
+        /**
+         * Optional route-agent uid (ADR-0051 D-8.4). Only valid when {@code locationType} is
+         * {@code VAN}; the agent must belong to the same company and have no other ACTIVE van.
+         * Pass {@code null} to leave the current assignment unchanged, or an empty string to clear it.
+         */
+        String agentUid
 ) {}

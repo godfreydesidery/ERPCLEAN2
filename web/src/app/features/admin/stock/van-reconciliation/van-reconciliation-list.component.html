@@ -1,0 +1,88 @@
+<section class="admin-page" aria-label="Van-Stock Reconciliations">
+  <div class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1><i class="bi bi-truck me-2" aria-hidden="true"></i>Van-Stock Reconciliations</h1>
+      <p class="subtitle">Day-end route worksheet: loaded − sold − returned = expected on van.</p>
+    </div>
+    <div class="erp-page-head__actions">
+      @if (canManage()) {
+        <a class="btn btn-primary btn-sm" routerLink="/admin/van-reconciliations/new">
+          <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+          New Reconciliation
+        </a>
+      }
+    </div>
+  </div>
+
+  @switch (state()) {
+    @case ('loading') {
+      <div class="erp-empty" aria-live="polite">
+        <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+        Loading van reconciliations…
+      </div>
+    }
+    @case ('forbidden') {
+      <div class="erp-empty" role="alert">
+        <i class="bi bi-lock me-1" aria-hidden="true"></i>
+        You do not have permission to view van reconciliations.
+      </div>
+    }
+    @case ('error') {
+      <div class="erp-empty" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load van reconciliations. Is the API running?
+      </div>
+    }
+    @default {
+      @if (isEmpty()) {
+        <div class="erp-empty">
+          <i class="bi bi-truck"></i>
+          No van reconciliations found. Create the first one.
+        </div>
+      } @else {
+        <div class="erp-table-wrap">
+          <table class="erp-table">
+            <caption class="visually-hidden">Van-stock reconciliations</caption>
+            <thead>
+              <tr>
+                <th scope="col">Recon #</th>
+                <th scope="col">Van</th>
+                <th scope="col">Agent</th>
+                <th scope="col">Business Date</th>
+                <th scope="col">Status</th>
+                <th scope="col"><span class="visually-hidden">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of rows(); track row.uid) {
+                <tr>
+                  <td class="mono">{{ row.reconNumber }}</td>
+                  <td>{{ row.vanLocationName }}</td>
+                  <td>{{ row.agentName ?? '—' }}</td>
+                  <td>{{ row.businessDate }}</td>
+                  <td>
+                    <span class="status-tag"
+                          [class.status-tag--warn]="row.status === 'OPEN'"
+                          [class.status-tag--ok]="row.status === 'RECONCILED'"
+                          [class.status-tag--danger]="row.status === 'CANCELLED'">
+                      <span class="status-tag__dot" aria-hidden="true"></span>{{ row.status }}
+                    </span>
+                  </td>
+                  <td class="text-end">
+                    <a [routerLink]="['/admin/van-reconciliations/uid', row.uid]"
+                       class="btn btn-sm btn-outline-secondary"
+                       [attr.aria-label]="'View van reconciliation ' + row.reconNumber">
+                      <i class="bi bi-eye" aria-hidden="true"></i>
+                    </a>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <app-paginator [meta]="meta()" [label]="'Van Reconciliation'" (pageChange)="goToPage($event)" />
+      }
+    }
+  }
+</section>

@@ -15,5 +15,10 @@ public record CreateStockLocationRequest(
         /** The owning branch uid. */
         @NotBlank String branchUid,
         /** If true, this location becomes the branch default (clears any existing default). */
-        boolean makeDefault
+        boolean makeDefault,
+        /**
+         * Optional route-agent uid (ADR-0051 D-8.4). Only valid when {@code locationType} is
+         * {@code VAN}; the agent must belong to the same company and have no other ACTIVE van.
+         */
+        String agentUid
 ) {}

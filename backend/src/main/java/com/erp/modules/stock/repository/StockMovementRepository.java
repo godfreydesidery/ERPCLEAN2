@@ -1,7 +1,9 @@
 package com.erp.modules.stock.repository;
 
+import com.erp.modules.stock.domain.dto.VanMovementSumRowDto;
 import com.erp.modules.stock.domain.entity.StockMovement;
 import com.erp.modules.stock.domain.enums.MovementType;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -69,4 +71,29 @@ public interface StockMovementRepository extends JpaRepository<StockMovement, Lo
      * (Spring Data does not generate an {@code IS NULL} predicate with a non-null parameter).
      */
     boolean existsBySourceEventUidAndProductId(String sourceEventUid, Long productId);
+
+    /**
+     * Per-product sum of a single movement type at a location within a business-time window
+     * (ADR-0051 D-8.6) — the van-reconciliation derivation query. {@code loaded_qty} =
+     * {@code sumByLocationTypeAndWindow(..., TRANSFER_IN, ...)}; {@code returned_qty} =
+     * {@code -sumByLocationTypeAndWindow(..., TRANSFER_OUT, ...)} (TRANSFER_OUT rows are already
+     * signed negative). The {@code [from, to)} window is the business date at UTC day boundaries.
+     */
+    @Query("""
+            SELECT new com.erp.modules.stock.domain.dto.VanMovementSumRowDto(
+                m.productId, COALESCE(SUM(m.quantity), 0))
+            FROM StockMovement m
+            WHERE m.companyId = :companyId AND m.branchId = :branchId
+              AND m.locationId = :locationId
+              AND m.movementType = :type
+              AND m.occurredAt >= :from AND m.occurredAt < :to
+            GROUP BY m.productId
+            """)
+    List<VanMovementSumRowDto> sumByLocationTypeAndWindow(
+            @Param("companyId") Long companyId,
+            @Param("branchId") Long branchId,
+            @Param("locationId") Long locationId,
+            @Param("type") MovementType type,
+            @Param("from") Instant from,
+            @Param("to") Instant to);
 }

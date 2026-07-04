@@ -19,6 +19,7 @@ public class WarehouseNumberGenerator {
 
     private static final String KIND_TRANSFER = "STOCK_TRANSFER";
     private static final String KIND_COUNT    = "STOCK_COUNT";
+    private static final String KIND_VAN_RECON = "VAN_RECON";
 
     private final CodeSequenceRepository sequences;
 
@@ -36,6 +37,12 @@ public class WarehouseNumberGenerator {
     @Transactional(propagation = Propagation.REQUIRED)
     public String nextCount(Long companyId) {
         return format("CNT", allocate(companyId, KIND_COUNT));
+    }
+
+    /** Allocates the next van-reconciliation number: {@code VR-0001} (ADR-0051 D-8). */
+    @Transactional(propagation = Propagation.REQUIRED)
+    public String nextVanRecon(Long companyId) {
+        return format("VR", allocate(companyId, KIND_VAN_RECON));
     }
 
     private long allocate(Long companyId, String kind) {

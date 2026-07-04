@@ -6,23 +6,22 @@ decision (ADR) and/or a schema migration, so they are tracked here rather than r
 > Process: before implementing any of these, present the proposed approach + DDL + version number
 > to the owner for approval (per the migration-approval standing rule), and write the ADR.
 
-## Migration status (2026-07-04)
+## Migration status (updated 2026-07-04)
 
-Draft migration SQL for the schema-bound items lives in
-[proposed-migrations/](proposed-migrations/). Build order (owner-approved): **D-4 → D-1 → D-6 → D-7 → D-8**.
+**All schema-bound deferred items are BUILT and merged to `develop`** (build order D-4 → D-1 → D-6 → D-7 → D-8). The `proposed-migrations/` folder is now empty of drafts.
 
 | Item | Migration? | Version | State |
 |------|-----------|---------|-------|
-| D-1 · multi-unit pricing | yes (2) | `V80`, `V81` (provisional) | draft in proposed-migrations |
-| D-2 · GRN batch/serial reversal | **no** | — | code-only |
-| D-3 · requisition Convert | **no** | — | code-only — `purchase_requisitions.converted_to_uid`/`converted_to_type` already exist (V32) |
-| D-4 · SO auto-threshold | yes (1) | **`V79`** | **built (pending review)** — `V79__sales_settings.sql` in the active folder |
-| D-5 · default agent to user | **no** | — | code-only — `agents.app_user_id` **already exists** (the old note below is wrong) |
-| D-6 · EFD/fiscal receipt | yes (1) | `V82` (provisional) | draft |
-| D-7 · cash count + petty cash | yes (2) | `V83`, `V84` (provisional) | draft |
-| D-8 · van reconciliation | yes (1) | `V85` (provisional) | draft — reduced: `stock_locations.location_type` already includes `VAN`, so only the reconciliation table + an `agent_id` link |
+| D-1 · multi-unit pricing | yes (2) | `V80`, `V81` | ✅ **built** (ADR-0048, PR #198) |
+| D-2 · GRN batch/serial reversal | **no** | — | code-only — not yet built |
+| D-3 · requisition Convert | **no** | — | code-only — `purchase_requisitions.converted_to_uid`/`type` already exist (V32); not yet built |
+| D-4 · SO auto-threshold | yes (1) | `V79` | ✅ **built** (PR #192) |
+| D-5 · default agent to user | **no** | — | code-only — `agents.app_user_id` **already exists**; not yet built |
+| D-6 · EFD/fiscal receipt | yes (1) | `V82` | ✅ **built** (ADR-0049, PR #199) |
+| D-7 · cash count + petty cash | yes (2) | `V83`, `V84` | ✅ **built** (ADR-0050, PR #200 + #201) |
+| D-8 · van reconciliation | yes (1) | `V85` | ✅ **built** (ADR-0051, this PR) — record-only worksheet; `VAN` location type already existed |
 
-Provisional versions shift if built out of order or if other migrations land first — re-verify next-free vs `origin/develop` at build time.
+**Still open (no migration, not yet built):** D-2 (GRN batch/serial reversal), D-3 (requisition Convert), D-5 (default agent to user).
 
 ---
 

@@ -14,6 +14,13 @@ public interface AgentRepository extends JpaRepository<Agent, Long> {
 
     Optional<Agent> findByCompanyIdAndUid(Long companyId, String uid);
 
+    /**
+     * Company-scoped numeric lookup (TenantScopingRulesTest) — for cross-module callers that hold
+     * an agentId and the caller's already-established company scope, so a foreign company's row is
+     * never loaded (ADR-0051 D-8.4 van/agent enrichment).
+     */
+    Optional<Agent> findByCompanyIdAndId(Long companyId, Long id);
+
     boolean existsByCompanyIdAndCode(Long companyId, String code);
 
     /** Tenant-scoped existence check for the numeric default-agent FK on customer records. */

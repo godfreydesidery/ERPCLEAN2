@@ -483,4 +483,10 @@ public final class AuditActions {
     public static final String FISCAL_RECEIPT_ISSUED        = "FISCAL.RECEIPT.ISSUED";
     /** Emitted when the provider returns FAILED or NOT_CONFIGURED. */
     public static final String FISCAL_RECEIPT_FAILED        = "FISCAL.RECEIPT.FAILED";
+
+    // ---- Van-stock reconciliation (D-8, ADR-0051; target_type = van_reconciliations) ----
+    public static final String VAN_RECON_CREATE    = "VAN_RECON.CREATE";
+    public static final String VAN_RECON_ENTER     = "VAN_RECON.ENTER";
+    public static final String VAN_RECON_RECONCILE = "VAN_RECON.RECONCILE";
+    public static final String VAN_RECON_CANCEL    = "VAN_RECON.CANCEL";
 }

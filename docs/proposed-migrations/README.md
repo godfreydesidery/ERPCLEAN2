@@ -11,22 +11,23 @@ These are **draft** Flyway migrations for the deferred items in
   folder and its proposal is removed here; the remaining proposals keep their projected numbers.
   Still **re-verify the next-free `V<n>` against `origin/develop`** at build time.
 
-**Build progress:** ✅ **D-4** (`V79`) · ✅ **D-1** (`V80`/`V81`, ADR-0048) · ✅ **D-6** (`V82`,
-ADR-0049) · ✅ **D-7** (`V83` cash count + `V84` petty cash, ADR-0050 PR-A/PR-B) — all in the active
-folder, their proposals removed. **Only `V85` (D-8) remains.**
+**Build progress: ✅ ALL DONE.** Every schema-bound deferred item is built and in the active
+migration folder (see the table below). No proposals remain — this folder is now an empty roadmap
+kept for reference.
 
-**Process (migration-approval rule):** before any of these moves into the active migration folder,
-the DDL + the assigned `V<n>` is presented for owner approval, an ADR is written, and it ships in
-the same PR as the entity/service/UI that uses it.
+**Process (migration-approval rule) — kept for future items:** before any new migration moves into
+the active folder, the DDL + the assigned `V<n>` is presented for owner approval, an ADR is written,
+and it ships in the same PR as the entity/service/UI that uses it.
 
-## Files (remaining)
+## Built (all in the active migration folder)
 
-| Item | File(s) | Adds |
-|------|---------|------|
-| D-8 | `V85__…` | `stock_locations.agent_id` + `van_reconciliations`(+lines) |
-
-**Built (now in the active migration folder):** D-4 → `V79`; D-1 → `V80`/`V81`; D-6 → `V82`;
-D-7 → `V83` (cash count) + `V84` (petty cash).
+| Item | Migration(s) | ADR |
+|------|-------------|-----|
+| D-4 SO auto-threshold | `V79` | — |
+| D-1 multi-unit pricing | `V80`, `V81` | 0048 |
+| D-6 EFD/fiscal receipts | `V82` | 0049 |
+| D-7 cash count + petty cash | `V83`, `V84` | 0050 |
+| D-8 van reconciliation | `V85` | 0051 |
 
 **No migration needed:** D-2 (reversal methods only), D-3 (`purchase_requisitions.converted_to_uid`
 already exists), **D-5** (`agents.app_user_id` already exists — the DEFERRED-ITEMS.md note is wrong).
