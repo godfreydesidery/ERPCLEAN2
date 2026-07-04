@@ -1,6 +1,6 @@
-import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpContext, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, map } from 'rxjs';
+import { Observable, catchError, map, of, throwError } from 'rxjs';
 import { ApiResponse, PageMeta } from '../../../core/api/api-response.model';
 import { SKIP_UNWRAP } from '../../../core/api/http-context.tokens';
 import { environment } from '../../../../environments/environment';
@@ -10,6 +10,7 @@ import {
   CreateSalesInvoiceRequest,
   CreateTaxRateRequest,
   FinaliseInvoiceRequest,
+  FiscalReceiptDto,
   SalesInvoiceDto,
   SalesInvoiceLineDto,
   SalesInvoicePaymentDto,
@@ -119,5 +120,22 @@ export class SalesService {
 
   createTaxRate(request: CreateTaxRateRequest): Observable<TaxRateDto> {
     return this.http.post<TaxRateDto>(this.taxRateBase, request);
+  }
+
+  // ── Fiscal receipt (D-6: EFD, ADR-0049) ──────────────────────────────────
+
+  /** No receipt issued yet → backend 404, mapped here to `null` (not an error). */
+  getFiscalReceipt(uid: string): Observable<FiscalReceiptDto | null> {
+    return this.http.get<FiscalReceiptDto>(`${this.base}/uid/${uid}/fiscal-receipt`).pipe(
+      catchError((err: unknown) => {
+        if (err instanceof HttpErrorResponse && err.status === 404) return of(null);
+        return throwError(() => err);
+      }),
+    );
+  }
+
+  /** Issues or retries the invoice's fiscal receipt (idempotent per ADR-0049 §4). */
+  issueFiscalReceipt(uid: string): Observable<FiscalReceiptDto> {
+    return this.http.post<FiscalReceiptDto>(`${this.base}/uid/${uid}/fiscal-receipt`, {});
   }
 }

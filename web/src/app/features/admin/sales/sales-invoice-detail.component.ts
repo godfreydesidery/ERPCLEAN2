@@ -11,6 +11,7 @@ import { ProductModel } from '../models/product.model';
 import {
   AddInvoiceLineRequest,
   AddPaymentRequest,
+  FiscalReceiptDto,
   SalesInvoiceDto,
   SalesInvoiceLineDto,
   SalesInvoicePaymentDto,
@@ -105,11 +106,18 @@ export class SalesInvoiceDetailComponent {
   readonly printing = signal(false);
   readonly printError = signal<string | null>(null);
 
+  // ── Fiscal receipt (D-6: EFD, ADR-0049) ─────────────────────────────────────
+  readonly fiscalReceipt = signal<FiscalReceiptDto | null>(null);
+  readonly fiscalReceiptState = signal<LoadState>('idle');
+  readonly issuingFiscal = signal(false);
+
   // ── Permissions ────────────────────────────────────────────────────────────
   readonly canCreate = computed(() => this.session.hasPermission('SALES.INVOICE.CREATE'));
   readonly canSettle = computed(() => this.session.hasPermission('SALES.INVOICE.SETTLE'));
   readonly canVoid = computed(() => this.session.hasPermission('SALES.INVOICE.VOID'));
   readonly canPrint = computed(() => this.session.hasPermission('DOCUMENT.RENDER'));
+  readonly canViewFiscal = computed(() => this.session.hasPermission('FISCAL.VIEW'));
+  readonly canManageFiscal = computed(() => this.session.hasPermission('FISCAL.MANAGE'));
 
   // ── Derived state ──────────────────────────────────────────────────────────
   readonly isDraft = computed(() => this.invoice()?.status === 'DRAFT');
@@ -123,6 +131,17 @@ export class SalesInvoiceDetailComponent {
   });
 
   readonly hasLines = computed(() => this.lines().length > 0);
+
+  /** ISSUED is terminal (never re-fiscalised) and VOID is blocked server-side (409) — no button. */
+  readonly canShowFiscalIssue = computed(() => {
+    const status = this.fiscalReceipt()?.status;
+    return this.canManageFiscal() && status !== 'ISSUED' && status !== 'VOID';
+  });
+
+  /** A row already exists (any status) → this is a retry, not a first attempt. */
+  readonly fiscalIssueLabel = computed(() =>
+    this.fiscalReceipt() ? 'Retry EFD receipt' : 'Issue EFD receipt',
+  );
 
   /** Running paid total from server-returned payment amounts. */
   readonly totalPaid = computed(() =>
@@ -180,6 +199,7 @@ export class SalesInvoiceDetailComponent {
       next: (inv) => {
         this.invoice.set(inv);
         this.invoiceState.set('idle');
+        if (inv.status === 'FINALISED' && this.canViewFiscal()) this.loadFiscalReceipt();
       },
       error: () => this.invoiceState.set('error'),
     });
@@ -443,6 +463,64 @@ export class SalesInvoiceDetailComponent {
           void blobErrorMessage(err, 'Could not generate the PDF.').then((m) => this.printError.set(m));
         },
       });
+  }
+
+  // ── Fiscal receipt (D-6: EFD, ADR-0049) ─────────────────────────────────────
+
+  /** Loads the invoice's fiscal receipt; absence (backend 404) resolves to `null`, not an error. */
+  loadFiscalReceipt(): void {
+    this.fiscalReceiptState.set('loading');
+    this.salesService.getFiscalReceipt(this.uid()).subscribe({
+      next: (receipt) => {
+        this.fiscalReceipt.set(receipt);
+        this.fiscalReceiptState.set('idle');
+      },
+      error: () => this.fiscalReceiptState.set('error'),
+    });
+  }
+
+  /**
+   * Issue or retry the invoice's fiscal receipt — a single idempotent endpoint (ADR-0049 §4):
+   * no prior row issues one, a FAILED/NOT_CONFIGURED/PENDING row retries in place, an ISSUED
+   * row is a no-op that just re-returns itself.
+   */
+  issueFiscalReceipt(): void {
+    if (this.issuingFiscal()) return;
+    this.issuingFiscal.set(true);
+    this.salesService.issueFiscalReceipt(this.uid()).subscribe({
+      next: (receipt) => {
+        this.fiscalReceipt.set(receipt);
+        this.fiscalReceiptState.set('idle');
+        this.issuingFiscal.set(false);
+        // The endpoint returns 200 for every outcome — only ISSUED is a success. FAILED /
+        // NOT_CONFIGURED (and any non-issued state) did not produce a receipt, so surface them as an
+        // error the user must acknowledge, not an auto-dismissing green toast.
+        const message = this.fiscalOutcomeMessage(receipt);
+        if (receipt.status === 'ISSUED') {
+          this.alerts.success(message);
+        } else {
+          this.alerts.error(message);
+        }
+      },
+      error: (err) => {
+        this.issuingFiscal.set(false);
+        this.alerts.error('Could not issue the fiscal receipt.', this.messageFrom(err, ''));
+      },
+    });
+  }
+
+  /** Friendly, non-technical echo of the outcome status — surfaced via the alert service. */
+  private fiscalOutcomeMessage(receipt: FiscalReceiptDto): string {
+    switch (receipt.status) {
+      case 'ISSUED':
+        return `Fiscal receipt issued — number ${receipt.fiscalNumber}`;
+      case 'NOT_CONFIGURED':
+        return 'No EFD device is configured for this company yet.';
+      case 'FAILED':
+        return receipt.errorDetail ?? 'The fiscal receipt attempt failed. You can retry.';
+      default:
+        return 'Fiscal receipt status updated.';
+    }
   }
 
   // ── Display helpers ────────────────────────────────────────────────────────
