@@ -469,6 +469,7 @@
                   <thead>
                     <tr>
                       <th scope="col">Price list</th>
+                      <th scope="col">Unit</th>
                       <th scope="col" class="num">Price</th>
                       @if (canManage()) {
                         <th scope="col"><span class="sr-only">Actions</span></th>
@@ -479,13 +480,14 @@
                     @for (pp of prices(); track pp.id) {
                       <tr>
                         <td>{{ priceListLabel(pp) }}</td>
+                        <td>{{ priceUnitLabel(pp) }}</td>
                         <td class="num mono">{{ pp.price.amount }} {{ pp.price.currency }}</td>
                         @if (canManage()) {
                           <td>
                             <button type="button" class="btn btn-sm btn-outline-danger"
                                     [disabled]="rowBusyPriceId() !== null"
                                     (click)="removePrice(pp)"
-                                    [attr.aria-label]="'Remove price for ' + priceListLabel(pp)">
+                                    [attr.aria-label]="'Remove ' + priceUnitLabel(pp) + ' price for ' + priceListLabel(pp)">
                               @if (rowBusyPriceId() === pp.id) {
                                 <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
                               }
@@ -516,7 +518,7 @@
               }
               @default {
                 <div class="row g-2 align-items-end">
-                  <div class="col-sm-4">
+                  <div class="col-sm-3">
                     <label class="form-label small text-muted mb-1" for="newPriceList">
                       Price list <span class="text-danger" aria-hidden="true">*</span>
                     </label>
@@ -529,7 +531,18 @@
                       }
                     </select>
                   </div>
-                  <div class="col-sm-3">
+                  <div class="col-sm-2">
+                    <label class="form-label small text-muted mb-1" for="newPriceUnit">Unit</label>
+                    <select id="newPriceUnit" name="newPriceUnit" class="form-select"
+                            [ngModel]="newPriceUnitUid()" (ngModelChange)="newPriceUnitUid.set($event)"
+                            [disabled]="settingPrice()">
+                      <option value="">Base unit</option>
+                      @for (bp of bulkPacks(); track bp.uid) {
+                        <option [value]="bp.unitUid">{{ bp.unitName }}</option>
+                      }
+                    </select>
+                  </div>
+                  <div class="col-sm-2">
                     <label class="form-label small text-muted mb-1" for="newPriceAmount">
                       Amount <span class="text-danger" aria-hidden="true">*</span>
                     </label>

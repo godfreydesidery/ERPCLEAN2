@@ -47,6 +47,16 @@ public class ProductPrice {
     private Long companyId;
 
     /**
+     * The unit this price applies to (ADR-0048 D-1). NULL = the base-unit price (every row
+     * before this column existed, and still the default today). Set = a per-unit (pack-specific,
+     * possibly non-linear) price override. FK → units_of_measure(id); immutable once set —
+     * a price row is deleted and recreated to change its unit, never repointed.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "unit_id", updatable = false)
+    private UnitOfMeasure unit;
+
+    /**
      * The price — bare @Embedded, columns are "amount" and "currency" per Money defaults.
      * NOT NULL together (the row exists only to hold a price — no null-together CHECK needed).
      */
@@ -82,10 +92,21 @@ public class ProductPrice {
         // JPA
     }
 
+    /** Base-unit price row (unit = NULL) — the historical, pre-ADR-0048 shape. */
     public ProductPrice(Product product, PriceList priceList, Money price, Long createdBy) {
+        this(product, priceList, null, price, createdBy);
+    }
+
+    /**
+     * Per-unit price row (ADR-0048 D-1). Pass {@code unit = null} for the base-unit row —
+     * equivalent to the three-arg constructor.
+     */
+    public ProductPrice(Product product, PriceList priceList, UnitOfMeasure unit, Money price,
+                        Long createdBy) {
         this.product = product;
         this.priceList = priceList;
         this.companyId = product.getCompanyId();  // denormalise at construction
+        this.unit = unit;
         this.price = price;
         this.createdBy = createdBy;
     }

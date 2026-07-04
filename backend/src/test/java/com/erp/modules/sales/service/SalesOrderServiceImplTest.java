@@ -20,10 +20,17 @@ import com.erp.modules.parties.domain.enums.CustomerKind;
 import com.erp.modules.parties.domain.enums.PartyType;
 import com.erp.modules.parties.repository.AgentRepository;
 import com.erp.modules.parties.repository.CustomerRepository;
+import com.erp.modules.products.domain.entity.Product;
+import com.erp.modules.products.domain.entity.ProductBulkPack;
+import com.erp.modules.products.domain.entity.UnitOfMeasure;
+import com.erp.modules.products.domain.enums.ProductType;
 import com.erp.modules.products.domain.enums.VatStatus;
+import com.erp.modules.sales.domain.dto.AddSalesOrderLineRequest;
 import com.erp.modules.sales.domain.dto.SalesOrderDto;
+import com.erp.modules.sales.domain.dto.SalesOrderLineDto;
 import com.erp.modules.sales.domain.entity.SalesOrder;
 import com.erp.modules.sales.domain.entity.SalesOrderLine;
+import com.erp.modules.sales.domain.entity.TaxRate;
 import com.erp.modules.sales.domain.enums.SalesOrderStatus;
 import com.erp.modules.sales.repository.QuotationLineRepository;
 import com.erp.modules.sales.repository.QuotationRepository;
@@ -74,7 +81,7 @@ class SalesOrderServiceImplTest {
     @Mock BranchRepository branches;
     @Mock com.erp.modules.products.repository.ProductRepository products;
     @Mock com.erp.modules.products.repository.UnitOfMeasureRepository units;
-    @Mock com.erp.modules.products.repository.ProductPriceRepository prices;
+    @Mock com.erp.modules.products.service.PriceResolutionService priceResolutionService;
     @Mock com.erp.modules.products.repository.ProductBulkPackRepository bulkPacks;
     @Mock com.erp.modules.sales.repository.TaxRateRepository taxRates;
     @Mock com.erp.modules.stock.service.StockReservationService reservationService;
@@ -311,6 +318,86 @@ class SalesOrderServiceImplTest {
         verify(orderLines, never()).save(any());
     }
 
+    // -------------------------------------------------------------------------
+    // ADR-0048 D-1: multi-unit / per-pack pricing — addLine now delegates to
+    // PriceResolutionService.resolveUnitListPrice instead of the old company-wide
+    // "first price row found" scan that ignored the line's unit.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void addLine_baseUnit_pricesAtListAmount_regressionGuardForUnderChargeFix() {
+        SalesOrder order = orderWithId(720L, "SOUID000000000000000030", CUSTOMER_ID, AGENT_ID);
+        when(orders.findByUid("SOUID000000000000000030")).thenReturn(Optional.of(order));
+        when(approvalEngine.getApprovalState(DOC_TYPE, "SOUID000000000000000030", COMPANY_ID))
+                .thenReturn(Optional.empty());
+
+        UnitOfMeasure baseUnit = unitWithId(910L, "BASEUID0000000000000001", "PCS");
+        Product product = productWithId(900L, "PRODUID00000000000000001", "PROD-0001", "Widget", baseUnit);
+        when(products.findByCompanyIdAndUid(COMPANY_ID, "PRODUID00000000000000001"))
+                .thenReturn(Optional.of(product));
+        when(units.findByCompanyIdAndUid(COMPANY_ID, "BASEUID0000000000000001"))
+                .thenReturn(Optional.of(baseUnit));
+        when(priceResolutionService.resolveUnitListPrice(COMPANY_ID, 900L, 910L))
+                .thenReturn(new BigDecimal("100.0000"));
+        when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
+                .thenReturn(Optional.of(new TaxRate(COMPANY_ID, VatStatus.STANDARD,
+                        new BigDecimal("0.1800"), 1L)));
+        when(orderLines.findMaxLineNo(720L)).thenReturn(0);
+        when(orderLines.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(orderLines.findBySalesOrderIdOrderByLineNo(720L)).thenReturn(List.of());
+
+        AddSalesOrderLineRequest req = new AddSalesOrderLineRequest(
+                "PRODUID00000000000000001", "BASEUID0000000000000001", BigDecimal.TEN, null, null, null);
+
+        SalesOrderLineDto dto = service.addLine("SOUID000000000000000030", req);
+
+        assertThat(dto.unitPriceAmount()).isEqualByComparingTo("100.0000");
+        assertThat(dto.qtyOrderedBase()).isEqualByComparingTo(BigDecimal.TEN);
+        verify(priceResolutionService).resolveUnitListPrice(COMPANY_ID, 900L, 910L);
+    }
+
+    @Test
+    void addLine_packUnit_pricesAtExplicitPackPrice_notUnderChargedAtBaseRate() {
+        // A pack (BOX, factor 12) line must price at the resolver's answer for the pack unit —
+        // never at the base-unit amount × qty_in_pack_units (the latent under-charge bug D-1 fixes).
+        SalesOrder order = orderWithId(721L, "SOUID000000000000000031", CUSTOMER_ID, AGENT_ID);
+        when(orders.findByUid("SOUID000000000000000031")).thenReturn(Optional.of(order));
+        when(approvalEngine.getApprovalState(DOC_TYPE, "SOUID000000000000000031", COMPANY_ID))
+                .thenReturn(Optional.empty());
+
+        UnitOfMeasure productBaseUnit = unitWithId(915L, "PCSUID0000000000000002", "PCS");
+        UnitOfMeasure boxUnit = unitWithId(920L, "BOXUID00000000000000001", "BOX");
+        Product product = productWithId(901L, "PRODUID00000000000000002", "PROD-0002", "Soap",
+                productBaseUnit);
+        when(products.findByCompanyIdAndUid(COMPANY_ID, "PRODUID00000000000000002"))
+                .thenReturn(Optional.of(product));
+        when(units.findByCompanyIdAndUid(COMPANY_ID, "BOXUID00000000000000001"))
+                .thenReturn(Optional.of(boxUnit));
+        // Base price is 100; the BOX pack is explicitly priced at 1150 (non-linear override) —
+        // NOT 100 (the bug) and not necessarily 1200 (100 x factor 12) either.
+        when(priceResolutionService.resolveUnitListPrice(COMPANY_ID, 901L, 920L))
+                .thenReturn(new BigDecimal("1150.0000"));
+        when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
+                .thenReturn(Optional.of(new TaxRate(COMPANY_ID, VatStatus.STANDARD,
+                        new BigDecimal("0.1800"), 1L)));
+        ProductBulkPack boxPack = new ProductBulkPack(product, boxUnit, new BigDecimal("12"), 1L);
+        when(bulkPacks.findByProductId(901L)).thenReturn(List.of(boxPack));
+        when(orderLines.findMaxLineNo(721L)).thenReturn(0);
+        when(orderLines.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(orderLines.findBySalesOrderIdOrderByLineNo(721L)).thenReturn(List.of());
+
+        AddSalesOrderLineRequest req = new AddSalesOrderLineRequest(
+                "PRODUID00000000000000002", "BOXUID00000000000000001", BigDecimal.ONE, null, null, null);
+
+        SalesOrderLineDto dto = service.addLine("SOUID000000000000000031", req);
+
+        assertThat(dto.unitPriceAmount()).isEqualByComparingTo("1150.0000");
+        // qtyInBase still scales by the pack factor — pricing and base-quantity conversion are
+        // independent concerns (D-1 only changes the price, not computeQtyInBase's math).
+        assertThat(dto.qtyOrderedBase()).isEqualByComparingTo(new BigDecimal("12"));
+        verify(priceResolutionService).resolveUnitListPrice(COMPANY_ID, 901L, 920L);
+    }
+
     @Test
     void removeLine_whileApproved_isBlocked() {
         SalesOrder order = orderWithId(713L, "SOUID000000000000000029", CUSTOMER_ID, AGENT_ID);
@@ -539,6 +626,22 @@ class SalesOrderServiceImplTest {
         // set a fixture value so confirm()/submitForApproval() audit calls don't blow up.
         order.setOrderNumber("SO-" + id);
         return order;
+    }
+
+    private static UnitOfMeasure unitWithId(Long id, String uid, String code) {
+        UnitOfMeasure unit = new UnitOfMeasure(COMPANY_ID, code, code, 1L);
+        ReflectionTestUtils.setField(unit, "id", id);
+        ReflectionTestUtils.setField(unit, "uid", uid);
+        return unit;
+    }
+
+    private static Product productWithId(Long id, String uid, String code, String name,
+                                         UnitOfMeasure baseUnit) {
+        Product product = new Product(COMPANY_ID, code, name, ProductType.GOODS,
+                true, true, baseUnit, 1L);
+        ReflectionTestUtils.setField(product, "id", id);
+        ReflectionTestUtils.setField(product, "uid", uid);
+        return product;
     }
 
     /** Minimal ApprovalRequestDto stub — only status (and documentUid) matter to these tests. */
