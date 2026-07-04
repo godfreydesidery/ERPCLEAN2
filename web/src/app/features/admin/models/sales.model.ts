@@ -186,3 +186,25 @@ export interface UpdateSalesSettingsRequest {
   soApprovalThresholdAmount: number | null;
   currency: string;
 }
+
+// ── FiscalReceiptDto (D-6: EFD / fiscal receipts, ADR-0049) ───────────────────
+//
+// One receipt row per FINALISED invoice. GET returns 404 (mapped to `null` by
+// the service) when no receipt has been issued yet — absence is not an error.
+
+export type FiscalReceiptStatus = 'PENDING' | 'ISSUED' | 'FAILED' | 'NOT_CONFIGURED' | 'VOID';
+
+export interface FiscalReceiptDto {
+  uid: string;
+  invoiceUid: string;
+  status: FiscalReceiptStatus;
+  providerCode: string | null;
+  fiscalNumber: string | null;
+  verificationUrl: string | null;
+  deviceSerial: string | null;
+  issuedAt: string | null;
+  attemptCount: number;
+  errorDetail: string | null;
+  version: string;
+  createdAt: string;
+}

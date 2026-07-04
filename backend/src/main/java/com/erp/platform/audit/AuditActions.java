@@ -463,4 +463,12 @@ public final class AuditActions {
     public static final String SYMBOLOGY_RULE_CREATE  = "SYMBOLOGY.RULE.CREATE";
     public static final String SYMBOLOGY_RULE_UPDATE  = "SYMBOLOGY.RULE.UPDATE";
     public static final String SYMBOLOGY_RULE_ARCHIVE = "SYMBOLOGY.RULE.ARCHIVE";
+
+    // ---- EFD / Fiscal receipts (ADR-0049 D-6; target_type = fiscal_receipts) ----
+    /** Emitted before the provider is called, on every issue/retry attempt. */
+    public static final String FISCAL_RECEIPT_ISSUE_ATTEMPT = "FISCAL.RECEIPT.ISSUE_ATTEMPT";
+    /** Emitted when the provider returns ISSUED. */
+    public static final String FISCAL_RECEIPT_ISSUED        = "FISCAL.RECEIPT.ISSUED";
+    /** Emitted when the provider returns FAILED or NOT_CONFIGURED. */
+    public static final String FISCAL_RECEIPT_FAILED        = "FISCAL.RECEIPT.FAILED";
 }

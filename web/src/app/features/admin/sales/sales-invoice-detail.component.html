@@ -537,5 +537,84 @@
         }
       </div>
     </div>
+
+    <!-- Fiscal receipt panel (D-6: EFD, ADR-0049 — FINALISED only, FISCAL.VIEW) -->
+    @if (isFinalised() && canViewFiscal()) {
+      <div class="erp-card mb-3">
+        <div class="erp-card__head"><h2>Fiscal Receipt</h2></div>
+        <div class="erp-card__body">
+          @switch (fiscalReceiptState()) {
+            @case ('loading') {
+              <output class="text-muted small d-flex align-items-center gap-2">
+                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading fiscal receipt…
+              </output>
+            }
+            @case ('error') {
+              <p class="text-danger small mb-0" role="alert">
+                <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+                Could not load the fiscal receipt.
+              </p>
+            }
+            @default {
+              <div class="d-flex flex-wrap align-items-center gap-3">
+                @if (fiscalReceipt(); as fr) {
+                  <span class="status-tag"
+                        [class.status-tag--ok]="fr.status === 'ISSUED'"
+                        [class.status-tag--danger]="fr.status === 'FAILED'"
+                        [class.status-tag--neutral]="fr.status === 'NOT_CONFIGURED' || fr.status === 'PENDING' || fr.status === 'VOID'">
+                    {{ fr.status }}
+                  </span>
+                } @else {
+                  <span class="status-tag status-tag--neutral">Not issued</span>
+                }
+
+                @if (canShowFiscalIssue()) {
+                  <button type="button" class="btn btn-sm btn-outline-primary"
+                          [disabled]="issuingFiscal()"
+                          (click)="issueFiscalReceipt()">
+                    @if (issuingFiscal()) {
+                      <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                    } @else {
+                      <i class="bi bi-receipt me-1" aria-hidden="true"></i>
+                    }
+                    {{ fiscalIssueLabel() }}
+                  </button>
+                }
+              </div>
+
+              @if (fiscalReceipt(); as fr) {
+                @if (fr.status === 'NOT_CONFIGURED') {
+                  <output class="d-block text-muted small mt-2" aria-live="polite" aria-atomic="true">
+                    <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
+                    No EFD device is configured for this company yet.
+                  </output>
+                }
+                @if (fr.status === 'FAILED') {
+                  <output class="d-block text-danger small mt-2" aria-live="polite" aria-atomic="true">
+                    <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+                    {{ fr.errorDetail ?? 'The last fiscal receipt attempt failed.' }}
+                  </output>
+                }
+                @if (fr.status === 'ISSUED') {
+                  <dl class="row g-1 mb-0 mt-2" style="font-size:0.875rem">
+                    <dt class="col-sm-3 text-muted fw-normal">Fiscal number</dt>
+                    <dd class="col-sm-9 mb-0 mono">{{ fr.fiscalNumber }}</dd>
+                    @if (fr.verificationUrl) {
+                      <dt class="col-sm-3 text-muted fw-normal">Verification</dt>
+                      <dd class="col-sm-9 mb-0">
+                        <a [href]="fr.verificationUrl" target="_blank" rel="noopener">
+                          {{ fr.verificationUrl }}
+                          <span class="visually-hidden"> (opens in a new tab)</span>
+                        </a>
+                      </dd>
+                    }
+                  </dl>
+                }
+              }
+            }
+          }
+        </div>
+      </div>
+    }
   }
 </section>

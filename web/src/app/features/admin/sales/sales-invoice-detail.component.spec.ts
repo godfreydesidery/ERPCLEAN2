@@ -52,17 +52,48 @@ const STUB_PRODUCT = {
   status: 'ACTIVE', companyId: '10',
 };
 
+// ── Fiscal receipt stubs (D-6: EFD, ADR-0049) ───────────────────────────────────
+
+const STUB_FISCAL_ISSUED = {
+  uid: 'FR-UID-1', invoiceUid: 'INV-UID-1', status: 'ISSUED',
+  providerCode: 'SIMULATED', fiscalNumber: 'EFD-000123',
+  verificationUrl: 'https://verify.example.tra/EFD-000123',
+  deviceSerial: 'DEV-1', issuedAt: '2026-07-04T10:00:00Z',
+  attemptCount: 1, errorDetail: null, version: '0', createdAt: '2026-07-04T10:00:00Z',
+};
+
+const STUB_FISCAL_NOT_CONFIGURED = {
+  uid: 'FR-UID-2', invoiceUid: 'INV-UID-1', status: 'NOT_CONFIGURED',
+  providerCode: 'NOT_CONFIGURED', fiscalNumber: null, verificationUrl: null,
+  deviceSerial: null, issuedAt: null,
+  attemptCount: 1, errorDetail: 'No EFD device is configured for this company yet.',
+  version: '0', createdAt: '2026-07-04T10:00:00Z',
+};
+
+const STUB_FISCAL_FAILED = {
+  uid: 'FR-UID-3', invoiceUid: 'INV-UID-1', status: 'FAILED',
+  providerCode: 'TRA_VFD', fiscalNumber: null, verificationUrl: null,
+  deviceSerial: null, issuedAt: null,
+  attemptCount: 2, errorDetail: 'The device could not be reached.',
+  version: '1', createdAt: '2026-07-04T10:00:00Z',
+};
+
 function makeBed(overrides: {
   listProductUnitsSpy?: ReturnType<typeof vi.fn>;
   invoice?: typeof STUB_INVOICE;
   renderBlobSpy?: ReturnType<typeof vi.fn>;
   hasPermission?: ReturnType<typeof vi.fn>;
+  getFiscalReceiptSpy?: ReturnType<typeof vi.fn>;
+  issueFiscalReceiptSpy?: ReturnType<typeof vi.fn>;
 } = {}) {
   const listProductUnitsSpy =
     overrides.listProductUnitsSpy ?? vi.fn(() => of(STUB_UNITS));
   const invoice = overrides.invoice ?? STUB_INVOICE;
   const renderBlobSpy = overrides.renderBlobSpy ?? vi.fn(() => of(new Blob(['%PDF'])));
   const hasPermission = overrides.hasPermission ?? vi.fn(() => true);
+  const getFiscalReceiptSpy = overrides.getFiscalReceiptSpy ?? vi.fn(() => of(null));
+  const issueFiscalReceiptSpy = overrides.issueFiscalReceiptSpy ?? vi.fn(() => of(STUB_FISCAL_ISSUED));
+  const alertsSpy = { success: vi.fn(), error: vi.fn() };
 
   TestBed.configureTestingModule({
     imports: [SalesInvoiceDetailComponent],
@@ -82,6 +113,8 @@ function makeBed(overrides: {
           removePayment: vi.fn(() => of(undefined)),
           finalise: vi.fn(() => of(STUB_INVOICE)),
           void: vi.fn(() => of(STUB_INVOICE)),
+          getFiscalReceipt: getFiscalReceiptSpy,
+          issueFiscalReceipt: issueFiscalReceiptSpy,
         },
       },
       {
@@ -97,7 +130,7 @@ function makeBed(overrides: {
       },
       {
         provide: AlertService,
-        useValue: { success: vi.fn(), error: vi.fn() },
+        useValue: alertsSpy,
       },
       {
         provide: SessionStore,
@@ -112,7 +145,7 @@ function makeBed(overrides: {
     ],
   });
 
-  return { listProductUnitsSpy, renderBlobSpy };
+  return { listProductUnitsSpy, renderBlobSpy, getFiscalReceiptSpy, issueFiscalReceiptSpy, alertsSpy };
 }
 
 // ── Specs ──────────────────────────────────────────────────────────────────────
@@ -335,5 +368,191 @@ describe('SalesInvoiceDetailComponent — Print PDF', () => {
 
     expect(comp.printing()).toBe(false);
     expect(comp.printError()).toBe('Document templates aren’t set up.');
+  });
+});
+
+// ── Fiscal receipt panel (D-6: EFD, ADR-0049) ──────────────────────────────────
+
+describe('SalesInvoiceDetailComponent — Fiscal receipt panel', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('hides the panel on a DRAFT invoice', async () => {
+    makeBed({ invoice: { ...STUB_INVOICE, status: 'DRAFT' } });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).not.toContain('Fiscal Receipt');
+  });
+
+  it('loads the receipt for a FINALISED invoice and shows "Not issued" + Issue button when absent', async () => {
+    const { getFiscalReceiptSpy } = makeBed({ invoice: { ...STUB_INVOICE, status: 'FINALISED' } });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    expect(getFiscalReceiptSpy).toHaveBeenCalledWith('INV-UID-1');
+    expect(fixture.nativeElement.textContent).toContain('Not issued');
+    const buttons: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
+    expect(buttons.some((b) => b.textContent?.includes('Issue EFD receipt'))).toBe(true);
+  });
+
+  it('shows a neutral badge + guidance for NOT_CONFIGURED', async () => {
+    makeBed({
+      invoice: { ...STUB_INVOICE, status: 'FINALISED' },
+      getFiscalReceiptSpy: vi.fn(() => of(STUB_FISCAL_NOT_CONFIGURED)),
+    });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('NOT_CONFIGURED');
+    expect(fixture.nativeElement.textContent).toContain('No EFD device is configured for this company yet.');
+    const buttons: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
+    expect(buttons.some((b) => b.textContent?.includes('Retry EFD receipt'))).toBe(true);
+  });
+
+  it('shows a danger badge + friendly error + Retry for FAILED', async () => {
+    makeBed({
+      invoice: { ...STUB_INVOICE, status: 'FINALISED' },
+      getFiscalReceiptSpy: vi.fn(() => of(STUB_FISCAL_FAILED)),
+    });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const badge = fixture.nativeElement.querySelector('.status-tag--danger');
+    expect(badge?.textContent).toContain('FAILED');
+    expect(fixture.nativeElement.textContent).toContain('The device could not be reached.');
+    const buttons: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
+    expect(buttons.some((b) => b.textContent?.includes('Retry EFD receipt'))).toBe(true);
+  });
+
+  it('shows fiscal number + verification link for ISSUED, with no issue/retry button', async () => {
+    makeBed({
+      invoice: { ...STUB_INVOICE, status: 'FINALISED' },
+      getFiscalReceiptSpy: vi.fn(() => of(STUB_FISCAL_ISSUED)),
+    });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    // Two `.status-tag--ok` badges exist (header invoice-status FINALISED + fiscal ISSUED) —
+    // find the one carrying the fiscal status text specifically.
+    const badges: HTMLElement[] = Array.from(fixture.nativeElement.querySelectorAll('.status-tag--ok'));
+    expect(badges.some((b) => b.textContent?.includes('ISSUED'))).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('EFD-000123');
+
+    const link: HTMLAnchorElement | null = fixture.nativeElement.querySelector(
+      'a[href="https://verify.example.tra/EFD-000123"]',
+    );
+    expect(link).toBeTruthy();
+    expect(link?.getAttribute('target')).toBe('_blank');
+    expect(link?.getAttribute('rel')).toBe('noopener');
+
+    const buttons: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
+    expect(buttons.some((b) => b.textContent?.includes('EFD receipt'))).toBe(false);
+  });
+
+  it('hides the Issue/Retry button without FISCAL.MANAGE', async () => {
+    makeBed({
+      invoice: { ...STUB_INVOICE, status: 'FINALISED' },
+      hasPermission: vi.fn((code: string) => code !== 'FISCAL.MANAGE'),
+    });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    // Panel itself still renders (FISCAL.VIEW granted) but with no action button.
+    expect(fixture.nativeElement.textContent).toContain('Fiscal Receipt');
+    const buttons: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
+    expect(buttons.some((b) => b.textContent?.includes('EFD receipt'))).toBe(false);
+  });
+
+  it('hides the whole panel without FISCAL.VIEW', async () => {
+    makeBed({
+      invoice: { ...STUB_INVOICE, status: 'FINALISED' },
+      hasPermission: vi.fn((code: string) => code !== 'FISCAL.VIEW'),
+    });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).not.toContain('Fiscal Receipt');
+  });
+
+  it('clicking Issue calls issueFiscalReceipt, updates the panel, and shows a success alert', async () => {
+    const { issueFiscalReceiptSpy, alertsSpy } = makeBed({
+      invoice: { ...STUB_INVOICE, status: 'FINALISED' },
+      getFiscalReceiptSpy: vi.fn(() => of(null)),
+    });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    comp.issueFiscalReceipt();
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    expect(issueFiscalReceiptSpy).toHaveBeenCalledWith('INV-UID-1');
+    expect(comp.fiscalReceipt()?.status).toBe('ISSUED');
+    expect(alertsSpy.success).toHaveBeenCalled();
+    expect(fixture.nativeElement.textContent).toContain('EFD-000123');
+  });
+
+  it('shows an error alert (not success) when the issue returns a non-ISSUED outcome (200 NOT_CONFIGURED)', async () => {
+    // The endpoint returns 200 for every outcome — a NOT_CONFIGURED/FAILED result did NOT produce a
+    // receipt and must not surface as a green success toast (D-6 review fix).
+    const { alertsSpy } = makeBed({
+      invoice: { ...STUB_INVOICE, status: 'FINALISED' },
+      getFiscalReceiptSpy: vi.fn(() => of(null)),
+      issueFiscalReceiptSpy: vi.fn(() => of(STUB_FISCAL_NOT_CONFIGURED)),
+    });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    comp.issueFiscalReceipt();
+    await vi.runAllTimersAsync();
+
+    expect(comp.fiscalReceipt()?.status).toBe('NOT_CONFIGURED');
+    expect(alertsSpy.error).toHaveBeenCalled();
+    expect(alertsSpy.success).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a friendly alert.error when the issue call fails', async () => {
+    const errResponse = new HttpErrorResponse({
+      error: { errors: ['Could not reach the invoice.'] },
+      status: 500,
+    });
+    const { alertsSpy } = makeBed({
+      invoice: { ...STUB_INVOICE, status: 'FINALISED' },
+      issueFiscalReceiptSpy: vi.fn(() => throwError(() => errResponse)),
+    });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.issueFiscalReceipt();
+    await vi.runAllTimersAsync();
+
+    expect(comp.issuingFiscal()).toBe(false);
+    expect(alertsSpy.error).toHaveBeenCalledWith(
+      'Could not issue the fiscal receipt.',
+      'Could not reach the invoice.',
+    );
   });
 });

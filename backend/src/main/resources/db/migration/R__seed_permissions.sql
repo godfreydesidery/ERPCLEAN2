@@ -88,6 +88,8 @@ INSERT INTO permissions (code, module, description) VALUES
     ('FA.REGISTER.MANAGE', 'fixedassets', 'Register, edit, place-in-service and transfer assets'),
     ('FA.VERIFY', 'fixedassets', 'Verify / flag a fixed asset (reserved)'),
     ('FA.VIEW', 'fixedassets', 'View fixed asset register, schedules and reconciliation'),
+    ('FISCAL.MANAGE', 'sales', 'Issue, retry and void an EFD/fiscal receipt for a finalised invoice'),
+    ('FISCAL.VIEW', 'sales', 'View the fiscal (EFD) receipt / status of an invoice'),
     ('FX.EXPOSURE.VIEW', 'fx', 'View FX exposure report and document FX detail'),
     ('FX.REVALUE', 'fx', 'Preview and post the period-end FX revaluation run'),
     ('GL.MANAGE', 'gl', 'Maintain the chart of accounts and the gl_configs account mapping'),
