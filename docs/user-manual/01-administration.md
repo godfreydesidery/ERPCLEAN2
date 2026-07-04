@@ -465,6 +465,70 @@ This example walks through the complete new-staff onboarding flow for Amina Juma
 
 ---
 
+## Sales Settings — sales-order approval threshold
+
+**What this screen is.** Sales Settings is a per-company configuration screen that controls whether large **sales orders** must be approved before they can be confirmed, and above what value that approval kicks in. It holds one setting group per company.
+
+**Why it exists.** Many businesses want a manager to sign off on unusually large orders — an unusually big customer order can tie up stock, extend a lot of credit, or signal an error in data entry. Rather than force approval on every order (which slows the counter down), you set a **threshold**: orders at or above it route to approval automatically, while smaller everyday orders confirm straight through. The check happens automatically at the moment an order is confirmed, so nobody has to remember to submit large orders manually.
+
+**When to configure it.** During initial setup for each company that wants order approval, or whenever the threshold needs to change. The workflow is **off by default** — a brand-new company confirms every sales order without approval until you turn this on.
+
+**Required permission:** `SALES.SETTINGS.MANAGE` (the same permission both opens the screen and allows saving — there is no view-only tier). If you lack it the menu item is hidden and the screen shows *"You don't have permission to view sales settings."*
+
+Navigate to **Sales › Sales Settings** (`/admin/sales-settings`) in the sidebar.
+
+### Setting the sales-order approval threshold
+
+1. On the Sales Settings screen, choose the **Company** from the picker at the top. The settings below load for that company. (Each company is configured independently; switching the picker reloads its own settings.)
+2. In the **SO Approval** card, use the **Enable SO Approval Workflow** switch:
+   - **Off** (default) — every sales order confirms immediately, with no approval step. When the switch is off, no other fields are shown.
+   - **On** — the threshold fields appear and the approval check becomes active for this company.
+3. With the workflow enabled, fill in:
+   - **Approval Threshold Amount** — the order value at or above which approval is required. The hint beneath the field reads *"Sales orders above this value require approval."* An order whose gross total is **below** this amount confirms straight through; an order **at or above** it is routed to approval when confirmed.
+   - **Currency** — the currency the threshold amount is expressed in (defaults to `TZS`).
+4. Click **Save Settings**. A confirmation *"Sales settings saved"* appears.
+
+**What happens next.** Once enabled, the check runs automatically every time someone confirms a sales order for this company (including orders placed through the counter/POS path). Orders that meet or exceed the threshold are handed to the approvals engine and wait for a decision instead of confirming; orders below it are unaffected. Turning the switch back off removes the check entirely — subsequent orders confirm without approval.
+
+> **A zero or empty threshold catches everything.** If the workflow is enabled and you leave the threshold at `0`, every order (any value) requires approval. The amount must be zero or positive — a negative value is rejected with *"Threshold amount must be zero or positive."*
+
+> **The threshold is per company, not per branch.** All branches of the selected company share the same threshold. Configure each company separately.
+
+---
+
+## Fiscal / EFD Configuration
+
+**What this is.** In markets that require it (for example Tanzania's TRA), a finalised sales invoice must produce a **fiscal / EFD receipt** — a tax-authority-registered receipt number and verification link. The system has a fiscalisation *seam*: a pluggable provider that talks to the fiscal device or service. Which provider is active is a **deployment-level setting an administrator/IT sets at the server**, not a screen inside the app — but the result of that setting is visible to operators on every finalised invoice, so administrators need to understand it.
+
+**Why it is a deployment setting, not an in-app form.** A real fiscal device integration needs credentials and a certified adapter that are configured once per environment, not per user. The system deliberately **never fabricates** a fiscal number: until a real device is wired, it reports honestly that none is configured rather than inventing a receipt that would look like a filed tax document but is not.
+
+**The provider options.** IT selects the active provider (`erp.fiscal.provider`) when deploying:
+
+- **`none`** (the default) — no device is wired. Every fiscalisation attempt returns the honest status **NOT_CONFIGURED**; nothing is invented.
+- **`simulated`** — a demo provider that produces a clearly-marked fake number, for **development and QA only**. The application **refuses to start in production** with this setting, so a demo receipt can never masquerade as a real one.
+- **`tra`** (future) — the real tax-authority adapter, dropped in when it ships; selecting it is a configuration change, not an app change.
+
+**Required permissions (operator side).**
+- `FISCAL.VIEW` — see the Fiscal Receipt panel on an invoice.
+- `FISCAL.MANAGE` — issue or retry a fiscal receipt.
+
+These codes are seeded and granted to **ORG_ADMIN** automatically.
+
+### Where operators see fiscal status
+
+Fiscalisation happens on a **finalised** sales invoice (a draft has no invoice number or frozen totals yet; a voided invoice is not fiscalised). Open the invoice at **Sales › Invoices** and scroll to the **Fiscal Receipt** panel (shown only on finalised invoices, and only to holders of `FISCAL.VIEW`).
+
+The panel shows a status tag and, for holders of `FISCAL.MANAGE`, an **Issue EFD receipt** button (labelled **Retry EFD receipt** once an attempt already exists):
+
+- **NOT_CONFIGURED** — no EFD device is configured for this company yet. The panel reads *"No EFD device is configured for this company yet."* This is expected whenever the provider is `none`; the attempt can be retried later once a device is wired.
+- **ISSUED** — a real fiscal number and verification link were obtained; both are shown, with the verification URL opening in a new tab. This is terminal — an issued receipt is never re-issued (re-issuing would double-report to the tax authority), so no button is offered.
+- **FAILED** — a device was attempted but errored (offline, rejected, timeout); a friendly reason is shown and you can **Retry**.
+- **PENDING / VOID** — transitional/reserved states shown as a neutral tag.
+
+> **NOT_CONFIGURED and FAILED are surfaced as errors, not silent successes.** Clicking Issue on a company with no device wired does not produce a receipt — the system tells you so plainly rather than pretending it worked. To actually issue real receipts, IT must configure a fiscal provider for the environment.
+
+---
+
 ## Audit Trail
 
 **What the audit trail is.** The audit trail is a chronological, append-only log of every significant action performed in the system. Each record captures who did it (the actor), what they did (the action code), which record was affected (the target), in which company and branch, and when. It cannot be edited, backdated, or deleted — not even by `rootadmin`.
